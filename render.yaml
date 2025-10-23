@@ -19,7 +19,7 @@ services:
     env: static
     plan: starter
     region: oregon
-    buildCommand: cd frontend && npm ci && npm run build
+    buildCommand: cd frontend && chmod +x build.sh && ./build.sh
     staticPublishPath: frontend/build
     envVars:
       - key: REACT_APP_API_URL

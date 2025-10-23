@@ -1,0 +1,12 @@
+services:
+  # Frontend only - simplified configuration
+  - type: web
+    name: dialadrink-frontend
+    env: static
+    plan: starter
+    region: oregon
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: frontend/build
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://dialadrink-backend.onrender.com/api

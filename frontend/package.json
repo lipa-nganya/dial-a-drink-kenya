@@ -24,7 +24,8 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "postbuild": "echo 'Frontend build completed successfully'"
+    "postbuild": "echo 'Frontend build completed successfully'",
+    "prebuild": "echo 'Starting frontend build...' && ls -la public/ && echo 'index.html exists:' && test -f public/index.html && echo 'YES' || echo 'NO'"
   },
   "eslintConfig": {
     "extends": [
