@@ -16,7 +16,10 @@ const getApiUrl = () => {
   return 'http://localhost:5001/api';
 };
 
-const API_BASE_URL = getApiUrl();
+// Force the correct URL for production
+const API_BASE_URL = process.env.NODE_ENV === 'production' 
+  ? 'https://dialadrink-backend.onrender.com/api'
+  : getApiUrl();
 
 // Debug logging
 console.log('API_BASE_URL:', API_BASE_URL);
