@@ -15,7 +15,8 @@ module.exports = {
         require: true,
         rejectUnauthorized: false
       }
-    }
+    },
+    logging: false // Disable SQL logging in production
   }
 };
 
