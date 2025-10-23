@@ -1,6 +1,27 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+// Determine API URL based on environment
+const getApiUrl = () => {
+  // If environment variable is set, use it
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  
+  // If we're on Render frontend, use Render backend
+  if (window.location.hostname.includes('onrender.com')) {
+    return 'https://dialadrink-backend.onrender.com/api';
+  }
+  
+  // Default to local development
+  return 'http://localhost:5001/api';
+};
+
+const API_BASE_URL = getApiUrl();
+
+// Debug logging
+console.log('API_BASE_URL:', API_BASE_URL);
+console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+console.log('Current hostname:', window.location.hostname);
 
 const api = axios.create({
   baseURL: API_BASE_URL,
