@@ -24,8 +24,11 @@ const AdminDashboard = () => {
   const [socket, setSocket] = useState(null);
 
   useEffect(() => {
-    // Initialize socket connection
-    const newSocket = io('http://localhost:5001');
+    // Initialize socket connection - use production URL
+    const socketUrl = window.location.hostname.includes('onrender.com') 
+      ? 'https://dialadrink-backend.onrender.com'
+      : 'http://localhost:5001';
+    const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
     
     newSocket.on('new-order', (data) => {
@@ -79,20 +82,43 @@ const AdminDashboard = () => {
   };
 
   const playNotificationSound = () => {
-    // Create a simple beep sound
-    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    const oscillator = audioContext.createOscillator();
-    const gainNode = audioContext.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(audioContext.destination);
-    
-    oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-    gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-    
-    oscillator.start(audioContext.currentTime);
-    oscillator.stop(audioContext.currentTime + 0.5);
+    try {
+      // Create a simple beep sound with better browser compatibility
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // Resume audio context if suspended (required for autoplay policies)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      // Create a more noticeable notification sound
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+      oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
+      oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.6);
+      
+      console.log('🔔 Notification sound played');
+    } catch (error) {
+      console.warn('Could not play notification sound:', error);
+      // Fallback: show browser notification if sound fails
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('New Order Received!', {
+          body: 'A new order has been placed',
+          icon: '/favicon.ico'
+        });
+      }
+    }
   };
 
   const updateDrinkAvailability = async (drinkId, isAvailable) => {
@@ -106,10 +132,13 @@ const AdminDashboard = () => {
 
   const updateOrderStatus = async (orderId, status) => {
     try {
-      await api.patch(`/admin/orders/${orderId}/status`, { status });
+      console.log(`Updating order ${orderId} to status: ${status}`);
+      const response = await api.patch(`/admin/orders/${orderId}/status`, { status });
+      console.log('Order status updated successfully:', response.data);
       fetchOrders();
     } catch (error) {
       console.error('Error updating order status:', error);
+      console.error('Error details:', error.response?.data || error.message);
     }
   };
 
