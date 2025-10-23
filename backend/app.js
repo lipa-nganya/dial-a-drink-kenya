@@ -46,7 +46,7 @@ app.use((err, req, res, next) => {
 });
 
 // 404 handler for all unmatched routes
-app.use('*', (req, res) => {
+app.use((req, res) => {
   if (req.originalUrl.startsWith('/api')) {
     res.status(404).json({ error: 'API route not found' });
   } else {
