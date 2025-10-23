@@ -1,8 +1,24 @@
 const app = require('./app');
 const db = require('./models');
 const seedData = require('./seed');
+const http = require('http');
+const { Server } = require('socket.io');
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
+
+// Create HTTP server
+const server = http.createServer(app);
+
+// Initialize Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3001",
+    methods: ["GET", "POST"]
+  }
+});
+
+// Make io available globally
+app.set('io', io);
 
 // Sync database and start server
 const startServer = async () => {
@@ -23,8 +39,22 @@ const startServer = async () => {
       console.log('Database seeded successfully.');
     }
     
+    // Socket.IO connection handling
+    io.on('connection', (socket) => {
+      console.log('Admin connected:', socket.id);
+      
+      socket.on('join-admin', () => {
+        socket.join('admin');
+        console.log('Admin joined admin room');
+      });
+      
+      socket.on('disconnect', () => {
+        console.log('Admin disconnected:', socket.id);
+      });
+    });
+    
     // Start server
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
     });
   } catch (error) {

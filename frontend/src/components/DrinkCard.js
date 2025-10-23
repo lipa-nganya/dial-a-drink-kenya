@@ -69,7 +69,7 @@ const DrinkCard = ({ drink }) => {
           color="primary"
           sx={{ fontWeight: 'bold' }}
         >
-          KES {drink.price.toFixed(2)}
+          KES {Number(drink.price).toFixed(2)}
         </Typography>
       </CardContent>
       

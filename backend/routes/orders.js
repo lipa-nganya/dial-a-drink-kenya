@@ -61,6 +61,16 @@ router.post('/', async (req, res) => {
       }]
     });
     
+    // Emit notification to admin dashboard
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('new-order', {
+        order: completeOrder,
+        timestamp: new Date(),
+        message: `New order #${completeOrder.id} from ${completeOrder.customerName}`
+      });
+    }
+    
     res.status(201).json(completeOrder);
   } catch (error) {
     res.status(500).json({ error: error.message });

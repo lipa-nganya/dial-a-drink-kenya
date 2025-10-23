@@ -1,57 +1,179 @@
-import React from 'react';
-import { AppBar, Toolbar, Typography, Button, Badge, Box } from '@mui/material';
-import { ShoppingCart, LocalBar } from '@mui/icons-material';
+import React, { useState } from 'react';
+import { 
+  AppBar, 
+  Toolbar, 
+  Typography, 
+  Button, 
+  Badge, 
+  Box, 
+  IconButton,
+  Drawer,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon,
+  useMediaQuery,
+  useTheme
+} from '@mui/material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 
 const Header = () => {
   const navigate = useNavigate();
   const { getTotalItems } = useCart();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  return (
-    <AppBar position="sticky" sx={{ backgroundColor: '#FF6B6B' }}>
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
+  const handleNavigation = (path) => {
+    navigate(path);
+    setMobileOpen(false);
+  };
+
+  const drawer = (
+    <Box sx={{ width: 250 }}>
       <Toolbar>
         <LocalBar sx={{ mr: 2 }} />
-        <Typography
-          variant="h6"
-          component="div"
-          sx={{ flexGrow: 1, cursor: 'pointer' }}
-          onClick={() => navigate('/')}
-        >
+        <Typography variant="h6" component="div">
           Dial A Drink Kenya
         </Typography>
-        
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            color="inherit"
+      </Toolbar>
+      <List>
+        <ListItem button onClick={() => handleNavigation('/')}>
+          <ListItemIcon>
+            <Home />
+          </ListItemIcon>
+          <ListItemText primary="Home" />
+        </ListItem>
+        <ListItem button onClick={() => handleNavigation('/menu')}>
+          <ListItemIcon>
+            <Restaurant />
+          </ListItemIcon>
+          <ListItemText primary="Menu" />
+        </ListItem>
+        <ListItem button onClick={() => handleNavigation('/cart')}>
+          <ListItemIcon>
+            <Badge badgeContent={getTotalItems()} color="secondary">
+              <ShoppingCart />
+            </Badge>
+          </ListItemIcon>
+          <ListItemText primary="Cart" />
+        </ListItem>
+        <ListItem button onClick={() => handleNavigation('/admin')}>
+          <ListItemIcon>
+            <LocalBar />
+          </ListItemIcon>
+          <ListItemText primary="Admin" />
+        </ListItem>
+      </List>
+    </Box>
+  );
+
+  return (
+    <>
+      <AppBar position="sticky" sx={{ backgroundColor: '#FF6B6B' }}>
+        <Toolbar>
+          {isMobile && (
+            <IconButton
+              color="inherit"
+              aria-label="open drawer"
+              edge="start"
+              onClick={handleDrawerToggle}
+              sx={{ mr: 2 }}
+            >
+              <MenuIcon />
+            </IconButton>
+          )}
+          
+          <LocalBar sx={{ mr: 2 }} />
+          <Typography
+            variant="h6"
+            component="div"
+            sx={{ 
+              flexGrow: 1, 
+              cursor: 'pointer',
+              fontSize: isMobile ? '1rem' : '1.25rem'
+            }}
             onClick={() => navigate('/')}
-            sx={{ textTransform: 'none' }}
           >
-            Home
-          </Button>
-          <Button
-            color="inherit"
-            onClick={() => navigate('/menu')}
-            sx={{ textTransform: 'none' }}
-          >
-            Menu
-          </Button>
-          <Button
-            color="inherit"
-            onClick={() => navigate('/cart')}
-            startIcon={
+            {isMobile ? 'Dial A Drink' : 'Dial A Drink Kenya'}
+          </Typography>
+          
+          {!isMobile && (
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Button
+                color="inherit"
+                onClick={() => navigate('/')}
+                sx={{ textTransform: 'none' }}
+              >
+                Home
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => navigate('/menu')}
+                sx={{ textTransform: 'none' }}
+              >
+                Menu
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => navigate('/cart')}
+                startIcon={
+                  <Badge badgeContent={getTotalItems()} color="secondary">
+                    <ShoppingCart />
+                  </Badge>
+                }
+                sx={{ textTransform: 'none' }}
+              >
+                Cart
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => navigate('/admin')}
+                sx={{ textTransform: 'none' }}
+              >
+                Admin
+              </Button>
+            </Box>
+          )}
+          
+          {isMobile && (
+            <IconButton
+              color="inherit"
+              onClick={() => navigate('/cart')}
+              sx={{ ml: 2 }}
+            >
               <Badge badgeContent={getTotalItems()} color="secondary">
                 <ShoppingCart />
               </Badge>
-            }
-            sx={{ textTransform: 'none' }}
-          >
-            Cart
-          </Button>
-        </Box>
-      </Toolbar>
-    </AppBar>
+            </IconButton>
+          )}
+        </Toolbar>
+      </AppBar>
+      
+      <Drawer
+        variant="temporary"
+        anchor="left"
+        open={mobileOpen}
+        onClose={handleDrawerToggle}
+        ModalProps={{
+          keepMounted: true,
+        }}
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 250 },
+        }}
+      >
+        {drawer}
+      </Drawer>
+    </>
   );
 };
 
 export default Header;
+

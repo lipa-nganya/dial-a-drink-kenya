@@ -79,19 +79,28 @@ const Cart = () => {
 
   if (items.length === 0) {
     return (
-      <Container maxWidth="md" sx={{ py: 4 }}>
+      <Container maxWidth="md" sx={{ py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 2 } }}>
         <Box textAlign="center">
-          <ShoppingCart sx={{ fontSize: 80, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h5" gutterBottom>
+          <ShoppingCart sx={{ fontSize: { xs: 60, sm: 80 }, color: 'text.secondary', mb: 2 }} />
+          <Typography 
+            variant="h5" 
+            gutterBottom
+            sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+          >
             Your cart is empty
           </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          <Typography 
+            variant="body1" 
+            color="text.secondary" 
+            sx={{ mb: 3, fontSize: { xs: '0.9rem', sm: '1rem' } }}
+          >
             Add some drinks to get started!
           </Typography>
           <Button
             variant="contained"
             size="large"
             onClick={() => navigate('/menu')}
+            sx={{ px: { xs: 3, sm: 4 } }}
           >
             Browse Menu
           </Button>
@@ -101,12 +110,20 @@ const Cart = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
+    <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 2 } }}>
+      <Typography 
+        variant="h4" 
+        component="h1" 
+        gutterBottom
+        sx={{ 
+          fontSize: { xs: '1.75rem', sm: '2.125rem' },
+          textAlign: { xs: 'center', sm: 'left' }
+        }}
+      >
         Your Cart
       </Typography>
 
-      <Grid container spacing={4}>
+      <Grid container spacing={{ xs: 2, sm: 4 }}>
         {/* Cart Items */}
         <Grid item xs={12} md={8}>
           <Paper sx={{ p: 3 }}>
@@ -135,7 +152,7 @@ const Cart = () => {
                       {item.drink.name}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      KES {item.price.toFixed(2)} each
+                      KES {Number(item.price).toFixed(2)} each
                     </Typography>
                   </Box>
 
@@ -168,7 +185,7 @@ const Cart = () => {
                   </Box>
 
                   <Typography variant="h6" sx={{ minWidth: 80, textAlign: 'right' }}>
-                    KES {(item.price * item.quantity).toFixed(2)}
+                    KES {(Number(item.price) * item.quantity).toFixed(2)}
                   </Typography>
                 </Box>
                 <Divider />

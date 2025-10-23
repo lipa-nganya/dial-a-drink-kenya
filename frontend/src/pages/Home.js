@@ -62,11 +62,26 @@ const Home = () => {
         }}
       >
         <Container maxWidth="md">
-          <LocalBar sx={{ fontSize: 60, mb: 2 }} />
-          <Typography variant="h2" component="h1" gutterBottom>
+          <LocalBar sx={{ fontSize: { xs: 40, sm: 60 }, mb: 2 }} />
+          <Typography 
+            variant="h2" 
+            component="h1" 
+            gutterBottom
+            sx={{ 
+              fontSize: { xs: '2rem', sm: '3rem', md: '3.75rem' },
+              lineHeight: 1.2
+            }}
+          >
             Dial A Drink Kenya
           </Typography>
-          <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography 
+            variant="h5" 
+            sx={{ 
+              mb: 4, 
+              opacity: 0.9,
+              fontSize: { xs: '1.1rem', sm: '1.5rem' }
+            }}
+          >
             Premium drinks delivered to your doorstep
           </Typography>
           <Button
@@ -75,6 +90,9 @@ const Home = () => {
             sx={{
               backgroundColor: 'white',
               color: '#FF6B6B',
+              px: { xs: 3, sm: 4 },
+              py: { xs: 1.5, sm: 2 },
+              fontSize: { xs: '0.9rem', sm: '1rem' },
               '&:hover': {
                 backgroundColor: '#f5f5f5'
               }
@@ -87,16 +105,22 @@ const Home = () => {
       </Box>
 
       {/* Features Section */}
-      <Container maxWidth="lg" sx={{ py: 6 }}>
-        <Typography variant="h4" component="h2" textAlign="center" gutterBottom>
+      <Container maxWidth="lg" sx={{ py: { xs: 4, sm: 6 } }}>
+        <Typography 
+          variant="h4" 
+          component="h2" 
+          textAlign="center" 
+          gutterBottom
+          sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
+        >
           Why Choose Us?
         </Typography>
-        <Grid container spacing={4} sx={{ mt: 2 }}>
+        <Grid container spacing={{ xs: 2, sm: 4 }} sx={{ mt: 2 }}>
           {features.map((feature, index) => (
-            <Grid item xs={12} md={4} key={index}>
+            <Grid item xs={12} sm={6} md={4} key={index}>
               <Paper
                 sx={{
-                  p: 3,
+                  p: { xs: 2, sm: 3 },
                   textAlign: 'center',
                   height: '100%',
                   display: 'flex',
@@ -104,13 +128,21 @@ const Home = () => {
                   alignItems: 'center'
                 }}
               >
-                <Box sx={{ color: '#FF6B6B', mb: 2 }}>
+                <Box sx={{ color: '#FF6B6B', mb: 2, fontSize: { xs: 32, sm: 40 } }}>
                   {feature.icon}
                 </Box>
-                <Typography variant="h6" gutterBottom>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                >
                   {feature.title}
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                >
                   {feature.description}
                 </Typography>
               </Paper>
@@ -120,12 +152,18 @@ const Home = () => {
       </Container>
 
       {/* Categories Section */}
-      <Box sx={{ backgroundColor: '#F8F9FA', py: 6 }}>
+      <Box sx={{ backgroundColor: '#F8F9FA', py: { xs: 4, sm: 6 } }}>
         <Container maxWidth="lg">
-          <Typography variant="h4" component="h2" textAlign="center" gutterBottom>
+          <Typography 
+            variant="h4" 
+            component="h2" 
+            textAlign="center" 
+            gutterBottom
+            sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
+          >
             Browse by Category
           </Typography>
-          <Grid container spacing={4} sx={{ mt: 2 }}>
+          <Grid container spacing={{ xs: 2, sm: 4 }} sx={{ mt: 2 }}>
             {loading ? (
               <Grid item xs={12}>
                 <Typography textAlign="center">Loading categories...</Typography>
@@ -145,3 +183,4 @@ const Home = () => {
 };
 
 export default Home;
+

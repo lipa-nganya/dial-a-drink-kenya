@@ -8,6 +8,7 @@ import Home from './pages/Home';
 import Menu from './pages/Menu';
 import Cart from './pages/Cart';
 import OrderSuccess from './pages/OrderSuccess';
+import AdminDashboard from './pages/AdminDashboard';
 import './App.css';
 
 const theme = createTheme({
@@ -46,6 +47,7 @@ function App() {
               <Route path="/menu" element={<Menu />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/order-success" element={<OrderSuccess />} />
+              <Route path="/admin" element={<AdminDashboard />} />
             </Routes>
           </div>
         </Router>
