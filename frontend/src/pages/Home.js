@@ -58,7 +58,7 @@ const Home = () => {
       {/* Hero Section */}
       <Box
         sx={{
-          background: 'linear-gradient(135deg, #FF6B6B 0%, #4ECDC4 100%)',
+          background: 'linear-gradient(135deg, #00E0B8 0%, #FF3366 100%)',
           color: 'white',
           py: 8,
           textAlign: 'center'
@@ -92,12 +92,15 @@ const Home = () => {
             size="large"
             sx={{
               backgroundColor: 'white',
-              color: '#FF6B6B',
+              color: '#0D0D0D',
               px: { xs: 3, sm: 4 },
               py: { xs: 1.5, sm: 2 },
               fontSize: { xs: '0.9rem', sm: '1rem' },
+              fontWeight: 600,
               '&:hover': {
-                backgroundColor: '#f5f5f5'
+                backgroundColor: '#f5f5f5',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 4px 12px rgba(0, 224, 184, 0.3)'
               }
             }}
             href="/menu"
@@ -131,7 +134,7 @@ const Home = () => {
                   alignItems: 'center'
                 }}
               >
-                <Box sx={{ color: '#FF6B6B', mb: 2, fontSize: { xs: 32, sm: 40 } }}>
+                <Box sx={{ color: '#00E0B8', mb: 2, fontSize: { xs: 32, sm: 40 } }}>
                   {feature.icon}
                 </Box>
                 <Typography 
@@ -155,7 +158,7 @@ const Home = () => {
       </Container>
 
       {/* Categories Section */}
-      <Box sx={{ backgroundColor: '#F8F9FA', py: { xs: 4, sm: 6 } }}>
+      <Box sx={{ backgroundColor: '#121212', py: { xs: 4, sm: 6 } }}>
         <Container maxWidth="lg">
           <Typography 
             variant="h4" 

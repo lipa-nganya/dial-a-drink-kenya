@@ -76,7 +76,7 @@ const Header = () => {
 
   return (
     <>
-      <AppBar position="sticky" sx={{ backgroundColor: '#FF6B6B' }}>
+      <AppBar position="sticky" sx={{ backgroundColor: '#121212', boxShadow: '0 2px 8px rgba(0, 224, 184, 0.1)' }}>
         <Toolbar>
           {isMobile && (
             <IconButton
