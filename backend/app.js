@@ -45,9 +45,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// 404 handler - only for API routes
-app.use('/api/*', (req, res) => {
-  res.status(404).json({ error: 'API route not found' });
+// 404 handler for all unmatched routes
+app.use('*', (req, res) => {
+  if (req.originalUrl.startsWith('/api')) {
+    res.status(404).json({ error: 'API route not found' });
+  } else {
+    res.status(404).json({ error: 'Route not found' });
+  }
 });
 
 module.exports = app;
