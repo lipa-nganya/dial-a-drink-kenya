@@ -24,21 +24,46 @@ app.set('io', io);
 // Sync database and start server
 const startServer = async () => {
   try {
-    // Test database connection
-    await db.sequelize.authenticate();
-    console.log('Database connection established successfully.');
+    console.log('Starting server initialization...');
     
-    // Sync database (create tables if they don't exist)
-    await db.sequelize.sync({ force: false });
-    console.log('Database synchronized successfully.');
+    // Test database connection with timeout
+    const dbTimeout = setTimeout(() => {
+      console.log('Database connection timeout - continuing with startup');
+    }, 10000);
     
-    // Seed database if empty
-    const categoryCount = await db.Category.count();
-    if (categoryCount === 0) {
-      console.log('Seeding database...');
-      await seedData();
-      console.log('Database seeded successfully.');
+    try {
+      await db.sequelize.authenticate();
+      console.log('Database connection established successfully.');
+      clearTimeout(dbTimeout);
+    } catch (dbError) {
+      console.warn('Database connection failed:', dbError.message);
+      clearTimeout(dbTimeout);
+      // Continue startup even if database fails initially
     }
+    
+    // Sync database (create tables if they don't exist) - non-blocking
+    db.sequelize.sync({ force: false })
+      .then(() => {
+        console.log('Database synchronized successfully.');
+        
+        // Seed database if empty - non-blocking
+        db.Category.count()
+          .then(categoryCount => {
+            if (categoryCount === 0) {
+              console.log('Seeding database...');
+              return seedData();
+            }
+          })
+          .then(() => {
+            console.log('Database seeded successfully.');
+          })
+          .catch(seedError => {
+            console.warn('Database seeding failed:', seedError.message);
+          });
+      })
+      .catch(syncError => {
+        console.warn('Database sync failed:', syncError.message);
+      });
     
     // Socket.IO connection handling
     io.on('connection', (socket) => {
@@ -54,9 +79,10 @@ const startServer = async () => {
       });
     });
     
-    // Start server
+    // Start server immediately
     server.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
+      console.log(`Health check available at: http://localhost:${PORT}/api/health`);
     });
   } catch (error) {
     console.error('Unable to start server:', error);
