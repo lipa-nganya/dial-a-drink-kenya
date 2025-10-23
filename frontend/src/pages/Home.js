@@ -23,10 +23,13 @@ const Home = () => {
 
   const fetchCategories = async () => {
     try {
+      console.log('Fetching categories from:', process.env.REACT_APP_API_URL || 'http://localhost:5001/api');
       const response = await api.get('/categories');
+      console.log('Categories response:', response.data);
       setCategories(response.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
+      console.error('Error details:', error.response?.data || error.message);
     } finally {
       setLoading(false);
     }
@@ -168,12 +171,25 @@ const Home = () => {
               <Grid item xs={12}>
                 <Typography textAlign="center">Loading categories...</Typography>
               </Grid>
+            ) : categories.length === 0 ? (
+              <Grid item xs={12}>
+                <Typography textAlign="center" color="error">
+                  No categories found. Check console for errors.
+                </Typography>
+              </Grid>
             ) : (
-              categories.map((category) => (
-                <Grid item xs={12} sm={6} md={4} key={category.id}>
-                  <CategoryCard category={category} />
+              <>
+                <Grid item xs={12}>
+                  <Typography textAlign="center" color="success.main">
+                    Found {categories.length} categories
+                  </Typography>
                 </Grid>
-              ))
+                {categories.map((category) => (
+                  <Grid item xs={12} sm={6} md={4} key={category.id}>
+                    <CategoryCard category={category} />
+                  </Grid>
+                ))}
+              </>
             )}
           </Grid>
         </Container>

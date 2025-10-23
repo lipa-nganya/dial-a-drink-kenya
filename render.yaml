@@ -12,6 +12,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: FRONTEND_URL
+        value: https://dialadrink-frontend.onrender.com
 
   # Frontend
   - type: web
@@ -23,7 +25,4 @@ services:
     staticPublishPath: frontend/build
     envVars:
       - key: REACT_APP_API_URL
-        fromService:
-          type: web
-          name: dialadrink-backend
-          property: host
+        value: https://dialadrink-backend.onrender.com/api
