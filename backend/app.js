@@ -18,6 +18,22 @@ app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'Dial A Drink Kenya API', 
+    version: '1.0.0',
+    status: 'running',
+    endpoints: {
+      health: '/api/health',
+      categories: '/api/categories',
+      drinks: '/api/drinks',
+      orders: '/api/orders',
+      admin: '/api/admin'
+    }
+  });
+});
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Dial A Drink API is running' });
@@ -29,9 +45,9 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Something went wrong!' });
 });
 
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// 404 handler - only for API routes
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: 'API route not found' });
 });
 
 module.exports = app;
