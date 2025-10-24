@@ -15,7 +15,7 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material';
-import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant } from '@mui/icons-material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 
@@ -55,6 +55,12 @@ const Header = () => {
             <Restaurant />
           </ListItemIcon>
           <ListItemText primary="Menu" />
+        </ListItem>
+        <ListItem button onClick={() => handleNavigation('/offers')}>
+          <ListItemIcon>
+            <LocalOffer />
+          </ListItemIcon>
+          <ListItemText primary="Offers" />
         </ListItem>
         <ListItem button onClick={() => handleNavigation('/cart')}>
           <ListItemIcon>
@@ -120,6 +126,13 @@ const Header = () => {
                 sx={{ textTransform: 'none' }}
               >
                 Menu
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => navigate('/offers')}
+                sx={{ textTransform: 'none' }}
+              >
+                Offers
               </Button>
               <Button
                 color="inherit"
