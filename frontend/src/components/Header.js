@@ -90,36 +90,20 @@ const Header = () => {
             </IconButton>
           )}
           
-          <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
-            <img 
-              src="/assets/images/logo/logo.png" 
-              alt="Dial A Drink Kenya Logo" 
-              style={{ 
-                height: '40px', 
-                width: 'auto',
-                marginRight: '12px',
-                cursor: 'pointer'
-              }}
-              onClick={() => navigate('/')}
-              onError={(e) => {
-                // Fallback to SVG if PNG doesn't exist
-                e.target.src = '/assets/images/logo.svg';
-              }}
-            />
-            <Typography
-              variant="h6"
-              component="div"
-              sx={{ 
-                cursor: 'pointer',
-                fontWeight: 700,
-                fontSize: isMobile ? '1rem' : '1.25rem',
-                display: { xs: 'none', sm: 'block' }
-              }}
-              onClick={() => navigate('/')}
-            >
-              {isMobile ? 'Dial A Drink' : 'Dial A Drink Kenya'}
-            </Typography>
-          </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+                <Typography
+                  variant="h6"
+                  component="div"
+                  sx={{ 
+                    cursor: 'pointer',
+                    fontWeight: 700,
+                    fontSize: isMobile ? '1rem' : '1.25rem'
+                  }}
+                  onClick={() => navigate('/')}
+                >
+                  {isMobile ? 'Dial A Drink' : 'Dial A Drink Kenya'}
+                </Typography>
+              </Box>
           
           {!isMobile && (
             <Box sx={{ display: 'flex', gap: 2 }}>
