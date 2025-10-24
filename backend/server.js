@@ -13,7 +13,8 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-      process.env.FRONTEND_URL || "http://localhost:3001",
+      process.env.FRONTEND_URL || "http://localhost:3000",
+      "http://localhost:3001",
       "https://dialadrink-frontend.onrender.com"
     ],
     methods: ["GET", "POST"],
