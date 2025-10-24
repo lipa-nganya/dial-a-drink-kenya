@@ -16,15 +16,17 @@ const getApiUrl = () => {
   return 'http://localhost:5001/api';
 };
 
-// Force the correct URL for production - hardcode to avoid any issues
-const API_BASE_URL = 'https://dialadrink-backend.onrender.com/api';
+// Use local backend for development, Render backend for production
+const API_BASE_URL = window.location.hostname.includes('onrender.com') 
+  ? 'https://dialadrink-backend.onrender.com/api'
+  : 'http://localhost:5001/api';
 
 // Debug logging
 console.log('=== API CONFIGURATION ===');
 console.log('API_BASE_URL:', API_BASE_URL);
 console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
 console.log('Current hostname:', window.location.hostname);
-console.log('Version: 2.0 - Hardcoded URL');
+console.log('Version: 3.0 - Dynamic URL based on hostname');
 console.log('========================');
 
 const api = axios.create({
