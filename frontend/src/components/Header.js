@@ -92,7 +92,7 @@ const Header = () => {
           
           <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
             <img 
-              src="/assets/images/logo.svg" 
+              src="/assets/images/logo/logo.png" 
               alt="Dial A Drink Kenya Logo" 
               style={{ 
                 height: '40px', 
@@ -101,6 +101,10 @@ const Header = () => {
                 cursor: 'pointer'
               }}
               onClick={() => navigate('/')}
+              onError={(e) => {
+                // Fallback to SVG if PNG doesn't exist
+                e.target.src = '/assets/images/logo.svg';
+              }}
             />
             <Typography
               variant="h6"
