@@ -42,6 +42,7 @@ router.get('/', async (req, res) => {
 // Get drinks on offer
 router.get('/offers', async (req, res) => {
   try {
+    console.log('Fetching offers...');
     const drinks = await db.Drink.findAll({
       where: { 
         isAvailable: true,
@@ -54,8 +55,10 @@ router.get('/offers', async (req, res) => {
       order: [['name', 'ASC']]
     });
     
+    console.log('Offers found:', drinks.length);
     res.json(drinks);
   } catch (error) {
+    console.error('Error fetching offers:', error);
     res.status(500).json({ error: error.message });
   }
 });
