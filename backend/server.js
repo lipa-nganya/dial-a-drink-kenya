@@ -68,6 +68,12 @@ const addMissingColumns = async () => {
 
     await db.sequelize.query(`
       ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "capacityPricing" JSON;
+    `);
+    console.log('✅ Capacity pricing column checked/added (JSON type)');
+
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
       ADD COLUMN IF NOT EXISTS "abv" DECIMAL(5,2);
     `);
     console.log('✅ ABV column checked/added');

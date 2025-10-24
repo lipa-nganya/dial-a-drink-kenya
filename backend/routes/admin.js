@@ -71,6 +71,7 @@ router.put('/drinks/:id', async (req, res) => {
           image,
           categoryId,
           capacity,
+          capacityPricing,
           abv
         } = req.body;
     
@@ -90,6 +91,7 @@ router.put('/drinks/:id', async (req, res) => {
         drink.image = image;
         drink.categoryId = categoryId;
         drink.capacity = capacity;
+        drink.capacityPricing = capacityPricing;
         drink.abv = abv;
     
     // Handle original price for offers
@@ -118,7 +120,7 @@ router.patch('/drinks/:id', async (req, res) => {
         const allowedFields = [
           'name', 'description', 'price', 'originalPrice', 
           'isAvailable', 'isPopular', 'isOnOffer', 'image', 'categoryId',
-          'capacity', 'abv'
+          'capacity', 'capacityPricing', 'abv'
         ];
     
     for (const field of allowedFields) {
