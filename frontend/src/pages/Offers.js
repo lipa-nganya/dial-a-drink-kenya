@@ -226,7 +226,7 @@ const Offers = () => {
                       }
                     }}
                   >
-                    Limited Offers
+                    ADD TO CART
                   </Button>
                 </CardContent>
               </Card>
