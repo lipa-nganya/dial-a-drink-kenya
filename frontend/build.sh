@@ -34,4 +34,13 @@ npm ci
 echo "Building React app..."
 npm run build
 
+# Copy _redirects file to build directory for client-side routing
+if [ -f "public/_redirects" ]; then
+    echo "Copying _redirects file to build directory..."
+    cp public/_redirects build/
+    echo "_redirects file copied successfully"
+else
+    echo "WARNING: _redirects file not found in public directory"
+fi
+
 echo "Build completed successfully!"
