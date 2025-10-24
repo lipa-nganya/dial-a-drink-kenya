@@ -83,6 +83,12 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
   const handleImageChange = (event) => {
     const file = event.target.files[0];
     if (file) {
+      // Check file size (limit to 2MB)
+      if (file.size > 2 * 1024 * 1024) {
+        setError('Image file is too large. Please choose an image smaller than 2MB.');
+        return;
+      }
+
       const reader = new FileReader();
       reader.onload = (e) => {
         setImagePreview(e.target.result);
@@ -295,6 +301,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                   Upload
                 </Button>
               </label>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Max file size: 2MB. For best performance, use image URLs instead of file uploads.
+              </Typography>
             </Box>
             {imagePreview && (
               <Box sx={{ mt: 2, textAlign: 'center' }}>
