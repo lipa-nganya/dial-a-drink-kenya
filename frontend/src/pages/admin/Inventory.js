@@ -28,7 +28,7 @@ import {
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 
-const Inventory = () => {
+const InventoryPage = () => {
   const [drinks, setDrinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -312,4 +312,4 @@ const Inventory = () => {
   );
 };
 
-export default Inventory;
+export default InventoryPage;
