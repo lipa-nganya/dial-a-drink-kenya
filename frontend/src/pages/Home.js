@@ -77,16 +77,33 @@ const Home = () => {
           >
             Dial A Drink Kenya
           </Typography>
-          <Typography 
-            variant="h5" 
-            sx={{ 
-              mb: 4, 
-              opacity: 0.9,
-              fontSize: { xs: '1.1rem', sm: '1.5rem' }
+          {/* Advertising Image */}
+          <Box
+            sx={{
+              mb: 4,
+              maxWidth: '100%',
+              height: { xs: '200px', sm: '300px', md: '400px' },
+              borderRadius: 2,
+              overflow: 'hidden',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
+              position: 'relative'
             }}
           >
-            Premium drinks delivered to your doorstep
-          </Typography>
+            <img
+              src="/assets/images/ads/hero-ad.jpg"
+              alt="Special Offer - Premium Drinks"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center'
+              }}
+              onError={(e) => {
+                // Fallback to placeholder if image doesn't exist
+                e.target.src = 'https://via.placeholder.com/1200x400/00E0B8/FFFFFF?text=Special+Offer';
+              }}
+            />
+          </Box>
           <Button
             variant="contained"
             size="large"
@@ -103,9 +120,9 @@ const Home = () => {
                 boxShadow: '0 4px 12px rgba(0, 224, 184, 0.3)'
               }
             }}
-            href="/menu"
+            href="/menu" // Update this URL to your offer page
           >
-            Browse Menu
+            Buy Now
           </Button>
         </Container>
       </Box>
