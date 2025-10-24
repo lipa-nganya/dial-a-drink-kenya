@@ -60,18 +60,68 @@ router.patch('/drinks/:id/availability', async (req, res) => {
 // Update drink details
 router.put('/drinks/:id', async (req, res) => {
   try {
-    const { name, description, price, isAvailable, isPopular } = req.body;
+    const { 
+      name, 
+      description, 
+      price, 
+      originalPrice,
+      isAvailable, 
+      isPopular, 
+      isOnOffer,
+      image,
+      categoryId 
+    } = req.body;
+    
     const drink = await db.Drink.findByPk(req.params.id);
     
     if (!drink) {
       return res.status(404).json({ error: 'Drink not found' });
     }
     
+    // Update basic fields
     drink.name = name;
     drink.description = description;
     drink.price = price;
     drink.isAvailable = isAvailable;
     drink.isPopular = isPopular;
+    drink.isOnOffer = isOnOffer;
+    drink.image = image;
+    drink.categoryId = categoryId;
+    
+    // Handle original price for offers
+    if (originalPrice) {
+      drink.originalPrice = originalPrice;
+    }
+    
+    await drink.save();
+    
+    res.json(drink);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Alternative PATCH endpoint for partial updates
+router.patch('/drinks/:id', async (req, res) => {
+  try {
+    const drink = await db.Drink.findByPk(req.params.id);
+    
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+    
+    // Update only provided fields
+    const allowedFields = [
+      'name', 'description', 'price', 'originalPrice', 
+      'isAvailable', 'isPopular', 'isOnOffer', 'image', 'categoryId'
+    ];
+    
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        drink[field] = req.body[field];
+      }
+    }
+    
     await drink.save();
     
     res.json(drink);
