@@ -65,6 +65,7 @@ const DrinkCard = ({ drink }) => {
         </Typography>
 
         {/* Capacity Pricing Display */}
+        {console.log('DrinkCard - drink data:', { id: drink.id, name: drink.name, capacityPricing: drink.capacityPricing })}
         {Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0 ? (
           <Box sx={{ mb: 2 }}>
             {drink.capacityPricing.map((pricing, index) => (
