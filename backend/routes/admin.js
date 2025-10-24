@@ -123,8 +123,12 @@ router.patch('/drinks/:id', async (req, res) => {
           'capacity', 'capacityPricing', 'abv'
         ];
     
+    console.log('Received request body:', req.body);
+    console.log('Capacity pricing received:', req.body.capacityPricing);
+    
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
+        console.log(`Updating field ${field}:`, req.body[field]);
         drink[field] = req.body[field];
       }
     }

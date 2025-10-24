@@ -33,6 +33,12 @@ router.get('/', async (req, res) => {
       order: [['name', 'ASC']]
     });
     
+    console.log('Returning drinks with capacity pricing:', drinks.map(d => ({ 
+      id: d.id, 
+      name: d.name, 
+      capacityPricing: d.capacityPricing 
+    })));
+    
     res.json(drinks);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -56,6 +62,12 @@ router.get('/offers', async (req, res) => {
     });
     
     console.log('Offers found:', drinks.length);
+    console.log('Offers with capacity pricing:', drinks.map(d => ({ 
+      id: d.id, 
+      name: d.name, 
+      capacityPricing: d.capacityPricing 
+    })));
+    
     res.json(drinks);
   } catch (error) {
     console.error('Error fetching offers:', error);

@@ -140,7 +140,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         isPopular: formData.isPopular,
         isOnOffer: formData.isOnOffer,
         image: formData.image,
-        categoryId: formData.categoryId
+        categoryId: formData.categoryId,
+        capacity: formData.capacity,
+        capacityPricing: formData.capacityPricing,
+        abv: formData.abv
       };
 
       // If setting as offer, store original price
@@ -148,7 +151,12 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         updateData.originalPrice = formData.originalPrice;
       }
 
+      console.log('Sending update data:', updateData);
+      console.log('Capacity pricing:', formData.capacityPricing);
+      
       await api.patch(`/admin/drinks/${drink.id}`, updateData);
+      console.log('Drink updated successfully');
+      
       onSave();
       onClose();
     } catch (error) {
