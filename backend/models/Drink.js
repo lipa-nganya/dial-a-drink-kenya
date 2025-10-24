@@ -44,6 +44,14 @@ module.exports = (sequelize, DataTypes) => {
     originalPrice: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true
+    },
+    capacity: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    abv: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true
     }
   }, {
     tableName: 'drinks',

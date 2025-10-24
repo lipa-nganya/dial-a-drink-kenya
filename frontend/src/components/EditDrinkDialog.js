@@ -36,7 +36,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     isPopular: false,
     isOnOffer: false,
     image: '',
-    categoryId: ''
+    categoryId: '',
+    capacity: '',
+    abv: ''
   });
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -54,7 +56,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         isPopular: drink.isPopular || false,
         isOnOffer: drink.isOnOffer || false,
         image: drink.image || '',
-        categoryId: drink.categoryId || ''
+        categoryId: drink.categoryId || '',
+        capacity: drink.capacity || '',
+        abv: drink.abv || ''
       });
       setImagePreview(drink.image || '');
     }
@@ -358,6 +362,61 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
               type="number"
               value={formData.price}
               onChange={(e) => handleInputChange('price', e.target.value)}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: '#00E0B8' },
+                  '&:hover fieldset': { borderColor: '#00E0B8' },
+                  '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                }
+              }}
+            />
+          </Grid>
+
+          {/* Capacity and ABV */}
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              select
+              label="Capacity"
+              value={formData.capacity}
+              onChange={(e) => handleInputChange('capacity', e.target.value)}
+              SelectProps={{ native: true }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: '#00E0B8' },
+                  '&:hover fieldset': { borderColor: '#00E0B8' },
+                  '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                }
+              }}
+            >
+              <option value="">Select Capacity</option>
+              <option value="1 litre">1 litre</option>
+              <option value="750ml">750ml</option>
+              <option value="700ml">700ml</option>
+              <option value="6pack">6pack</option>
+              <option value="twin pack">twin pack</option>
+              <option value="12 pack">12 pack</option>
+              <option value="300ml">300ml</option>
+              <option value="330ml">330ml</option>
+              <option value="Packet">Packet</option>
+              <option value="Kingsize Slim">Kingsize Slim</option>
+              <option value="Single Wide">Single Wide</option>
+              <option value="1 piece">1 piece</option>
+              <option value="20 pouches">20 pouches</option>
+              <option value="2500 Puffs">2500 Puffs</option>
+              <option value="1500 Puffs">1500 Puffs</option>
+              <option value="2600 Puffs">2600 Puffs</option>
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="ABV (%)"
+              type="number"
+              inputProps={{ step: "0.1", min: "0", max: "100" }}
+              value={formData.abv}
+              onChange={(e) => handleInputChange('abv', e.target.value)}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   '& fieldset': { borderColor: '#00E0B8' },

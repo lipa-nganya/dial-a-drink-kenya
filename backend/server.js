@@ -59,6 +59,19 @@ const addMissingColumns = async () => {
     `);
     console.log('✅ Image column updated to TEXT type');
 
+    // Add capacity and ABV columns if they don't exist
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "capacity" VARCHAR(50);
+    `);
+    console.log('✅ Capacity column checked/added');
+
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "abv" DECIMAL(5,2);
+    `);
+    console.log('✅ ABV column checked/added');
+
     return true;
   } catch (error) {
     console.warn('Column migration failed:', error.message);

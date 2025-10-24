@@ -63,6 +63,35 @@ const DrinkCard = ({ drink }) => {
         >
           {drink.description}
         </Typography>
+
+        {/* Capacity and ABV */}
+        {(drink.capacity || drink.abv) && (
+          <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            {drink.capacity && (
+              <Chip
+                label={drink.capacity}
+                size="small"
+                sx={{
+                  backgroundColor: '#121212',
+                  color: '#00E0B8',
+                  border: '1px solid #00E0B8',
+                  fontSize: '0.75rem'
+                }}
+              />
+            )}
+            {drink.abv && (
+              <Chip
+                label={`${Number(drink.abv)}% ABV`}
+                size="small"
+                sx={{
+                  backgroundColor: '#FF3366',
+                  color: '#F5F5F5',
+                  fontSize: '0.75rem'
+                }}
+              />
+            )}
+          </Box>
+        )}
         
         <Typography
           variant="h6"

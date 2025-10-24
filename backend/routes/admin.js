@@ -60,17 +60,19 @@ router.patch('/drinks/:id/availability', async (req, res) => {
 // Update drink details
 router.put('/drinks/:id', async (req, res) => {
   try {
-    const { 
-      name, 
-      description, 
-      price, 
-      originalPrice,
-      isAvailable, 
-      isPopular, 
-      isOnOffer,
-      image,
-      categoryId 
-    } = req.body;
+        const { 
+          name, 
+          description, 
+          price, 
+          originalPrice,
+          isAvailable, 
+          isPopular, 
+          isOnOffer,
+          image,
+          categoryId,
+          capacity,
+          abv
+        } = req.body;
     
     const drink = await db.Drink.findByPk(req.params.id);
     
@@ -78,15 +80,17 @@ router.put('/drinks/:id', async (req, res) => {
       return res.status(404).json({ error: 'Drink not found' });
     }
     
-    // Update basic fields
-    drink.name = name;
-    drink.description = description;
-    drink.price = price;
-    drink.isAvailable = isAvailable;
-    drink.isPopular = isPopular;
-    drink.isOnOffer = isOnOffer;
-    drink.image = image;
-    drink.categoryId = categoryId;
+        // Update basic fields
+        drink.name = name;
+        drink.description = description;
+        drink.price = price;
+        drink.isAvailable = isAvailable;
+        drink.isPopular = isPopular;
+        drink.isOnOffer = isOnOffer;
+        drink.image = image;
+        drink.categoryId = categoryId;
+        drink.capacity = capacity;
+        drink.abv = abv;
     
     // Handle original price for offers
     if (originalPrice) {
@@ -110,11 +114,12 @@ router.patch('/drinks/:id', async (req, res) => {
       return res.status(404).json({ error: 'Drink not found' });
     }
     
-    // Update only provided fields
-    const allowedFields = [
-      'name', 'description', 'price', 'originalPrice', 
-      'isAvailable', 'isPopular', 'isOnOffer', 'image', 'categoryId'
-    ];
+        // Update only provided fields
+        const allowedFields = [
+          'name', 'description', 'price', 'originalPrice', 
+          'isAvailable', 'isPopular', 'isOnOffer', 'image', 'categoryId',
+          'capacity', 'abv'
+        ];
     
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
