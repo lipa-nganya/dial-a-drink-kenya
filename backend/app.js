@@ -35,7 +35,8 @@ app.get('/', (req, res) => {
       categories: '/api/categories',
       drinks: '/api/drinks',
       orders: '/api/orders',
-      admin: '/api/admin'
+      admin: '/api/admin',
+      countdown: '/api/countdown'
     }
   });
 });
