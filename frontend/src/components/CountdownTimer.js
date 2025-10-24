@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Typography, Box } from '@mui/material';
 import { api } from '../services/api';
 
@@ -9,9 +9,12 @@ const CountdownTimer = () => {
 
   useEffect(() => {
     fetchCountdown();
+  }, []);
+
+  useEffect(() => {
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [updateCountdown]);
 
   const fetchCountdown = async () => {
     try {
@@ -20,7 +23,11 @@ const CountdownTimer = () => {
       console.log('Countdown response:', response.data);
       setCountdown(response.data);
       if (response.data.active) {
-        setTimeRemaining(response.data.timeRemaining);
+        // Calculate time remaining on frontend for real-time updates
+        const now = new Date();
+        const endDate = new Date(response.data.endDate);
+        const remaining = endDate.getTime() - now.getTime();
+        setTimeRemaining(Math.max(0, remaining));
       }
     } catch (error) {
       console.error('Error fetching countdown:', error);
@@ -30,11 +37,18 @@ const CountdownTimer = () => {
     }
   };
 
-  const updateCountdown = () => {
+  const updateCountdown = useCallback(() => {
     if (countdown && countdown.active) {
       const now = new Date();
       const endDate = new Date(countdown.endDate);
       const remaining = endDate.getTime() - now.getTime();
+      
+      console.log('Countdown update:', {
+        now: now.toISOString(),
+        endDate: endDate.toISOString(),
+        remaining: remaining,
+        remainingHours: Math.floor(remaining / (1000 * 60 * 60))
+      });
       
       if (remaining <= 0) {
         setTimeRemaining(0);
@@ -44,7 +58,7 @@ const CountdownTimer = () => {
         setTimeRemaining(remaining);
       }
     }
-  };
+  }, [countdown]);
 
   const formatTime = (milliseconds) => {
     const totalSeconds = Math.floor(milliseconds / 1000);
