@@ -71,7 +71,8 @@ const CountdownTimer = () => {
           fontSize: { xs: '2rem', sm: '3rem', md: '3.75rem' },
           lineHeight: 1.2,
           pt: 4,
-          pb: 2
+          pb: 2,
+          color: '#F5F5F5'
         }}
       >
         Dial A Drink Kenya
@@ -89,7 +90,8 @@ const CountdownTimer = () => {
           fontSize: { xs: '2rem', sm: '3rem', md: '3.75rem' },
           lineHeight: 1.2,
           pt: 4,
-          pb: 2
+          pb: 2,
+          color: '#F5F5F5'
         }}
       >
         Dial A Drink Kenya
@@ -100,125 +102,199 @@ const CountdownTimer = () => {
   const time = formatTime(timeRemaining);
 
   return (
-    <Box sx={{ pt: 4, pb: 2 }}>
+    <Box sx={{ pt: 4, pb: 3 }}>
+      {/* Countdown Title */}
       <Typography 
-        variant="h4" 
+        variant="h3" 
         component="h2" 
         gutterBottom
         sx={{ 
-          fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' },
+          fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.75rem' },
           lineHeight: 1.2,
-          mb: 3,
-          color: '#00E0B8'
+          mb: 2,
+          color: '#00E0B8',
+          fontWeight: 700,
+          textShadow: '0 0 10px rgba(0, 224, 184, 0.3)'
         }}
       >
-        Offer Ends in
+        ⏰ {countdown.title} Ends in
       </Typography>
       
+      {/* Countdown Display */}
       <Box 
         sx={{ 
           display: 'flex', 
           justifyContent: 'center', 
-          gap: { xs: 1, sm: 2 },
-          flexWrap: 'wrap'
+          gap: { xs: 1, sm: 2, md: 3 },
+          flexWrap: 'wrap',
+          mb: 2
         }}
       >
-        <Box sx={{ textAlign: 'center' }}>
+        <Box sx={{ textAlign: 'center', minWidth: { xs: '60px', sm: '80px' } }}>
           <Typography 
-            variant="h2" 
+            variant="h1" 
             sx={{ 
-              fontSize: { xs: '2rem', sm: '3rem', md: '4rem' },
+              fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
               fontWeight: 'bold',
               color: '#FF3366',
-              lineHeight: 1
+              lineHeight: 1,
+              textShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+              fontFamily: 'monospace'
             }}
           >
             {time.days}
           </Typography>
-          <Typography variant="body2" sx={{ color: '#B0B0B0' }}>Days</Typography>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: '#B0B0B0',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+          >
+            Days
+          </Typography>
         </Box>
         
         <Typography 
-          variant="h2" 
+          variant="h1" 
           sx={{ 
-            fontSize: { xs: '2rem', sm: '3rem', md: '4rem' },
+            fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
             fontWeight: 'bold',
             color: '#F5F5F5',
-            lineHeight: 1
+            lineHeight: 1,
+            opacity: 0.8
           }}
         >
           :
         </Typography>
         
-        <Box sx={{ textAlign: 'center' }}>
+        <Box sx={{ textAlign: 'center', minWidth: { xs: '60px', sm: '80px' } }}>
           <Typography 
-            variant="h2" 
+            variant="h1" 
             sx={{ 
-              fontSize: { xs: '2rem', sm: '3rem', md: '4rem' },
+              fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
               fontWeight: 'bold',
               color: '#FF3366',
-              lineHeight: 1
+              lineHeight: 1,
+              textShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+              fontFamily: 'monospace'
             }}
           >
             {time.hours}
           </Typography>
-          <Typography variant="body2" sx={{ color: '#B0B0B0' }}>Hours</Typography>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: '#B0B0B0',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+          >
+            Hours
+          </Typography>
         </Box>
         
         <Typography 
-          variant="h2" 
+          variant="h1" 
           sx={{ 
-            fontSize: { xs: '2rem', sm: '3rem', md: '4rem' },
+            fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
             fontWeight: 'bold',
             color: '#F5F5F5',
-            lineHeight: 1
+            lineHeight: 1,
+            opacity: 0.8
           }}
         >
           :
         </Typography>
         
-        <Box sx={{ textAlign: 'center' }}>
+        <Box sx={{ textAlign: 'center', minWidth: { xs: '60px', sm: '80px' } }}>
           <Typography 
-            variant="h2" 
+            variant="h1" 
             sx={{ 
-              fontSize: { xs: '2rem', sm: '3rem', md: '4rem' },
+              fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
               fontWeight: 'bold',
               color: '#FF3366',
-              lineHeight: 1
+              lineHeight: 1,
+              textShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+              fontFamily: 'monospace'
             }}
           >
             {time.minutes}
           </Typography>
-          <Typography variant="body2" sx={{ color: '#B0B0B0' }}>Minutes</Typography>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: '#B0B0B0',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+          >
+            Minutes
+          </Typography>
         </Box>
         
         <Typography 
-          variant="h2" 
+          variant="h1" 
           sx={{ 
-            fontSize: { xs: '2rem', sm: '3rem', md: '4rem' },
+            fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
             fontWeight: 'bold',
             color: '#F5F5F5',
-            lineHeight: 1
+            lineHeight: 1,
+            opacity: 0.8
           }}
         >
           :
         </Typography>
         
-        <Box sx={{ textAlign: 'center' }}>
+        <Box sx={{ textAlign: 'center', minWidth: { xs: '60px', sm: '80px' } }}>
           <Typography 
-            variant="h2" 
+            variant="h1" 
             sx={{ 
-              fontSize: { xs: '2rem', sm: '3rem', md: '4rem' },
+              fontSize: { xs: '2.5rem', sm: '3.5rem', md: '4.5rem' },
               fontWeight: 'bold',
               color: '#FF3366',
-              lineHeight: 1
+              lineHeight: 1,
+              textShadow: '0 0 15px rgba(255, 51, 102, 0.4)',
+              fontFamily: 'monospace'
             }}
           >
             {time.seconds}
           </Typography>
-          <Typography variant="body2" sx={{ color: '#B0B0B0' }}>Seconds</Typography>
+          <Typography 
+            variant="body1" 
+            sx={{ 
+              color: '#B0B0B0',
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px'
+            }}
+          >
+            Seconds
+          </Typography>
         </Box>
       </Box>
+      
+      {/* Urgency Message */}
+      <Typography 
+        variant="h6" 
+        sx={{ 
+          color: '#00E0B8',
+          fontSize: { xs: '1rem', sm: '1.25rem' },
+          fontWeight: 600,
+          textShadow: '0 0 8px rgba(0, 224, 184, 0.3)',
+          mb: 2
+        }}
+      >
+        🔥 Don't Miss Out! Limited Time Offer
+      </Typography>
     </Box>
   );
 };

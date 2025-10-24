@@ -65,7 +65,9 @@ const Home = () => {
         }}
       >
         <Container maxWidth="lg">
+          {/* Countdown Timer Above Image */}
           <CountdownTimer />
+          
           {/* Advertising Image - Full Size */}
           <Box
             sx={{
