@@ -116,6 +116,7 @@ function App() {
               <Route path="/cart" element={<Cart />} />
               <Route path="/order-success" element={<OrderSuccess />} />
               <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
             </Routes>
           </div>
         </Router>
