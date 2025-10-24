@@ -8,7 +8,9 @@ import {
   Button,
   Grid,
   Alert,
-  CircularProgress
+  CircularProgress,
+  TextField,
+  Chip
 } from '@mui/material';
 import {
   Dashboard,
@@ -20,7 +22,10 @@ import {
   TrendingUp,
   TrendingDown,
   Security,
-  Notifications
+  Notifications,
+  Add,
+  Delete,
+  LocalOffer
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
@@ -32,6 +37,13 @@ const AdminOverview = () => {
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [countdowns, setCountdowns] = useState([]);
+  const [showCountdownForm, setShowCountdownForm] = useState(false);
+  const [countdownForm, setCountdownForm] = useState({
+    title: '',
+    startDate: '',
+    endDate: ''
+  });
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -57,6 +69,7 @@ const AdminOverview = () => {
 
     // Fetch initial data
     fetchStats();
+    fetchCountdowns();
 
     return () => {
       newSocket.close();
@@ -72,6 +85,41 @@ const AdminOverview = () => {
       setError(error.response?.data?.error || error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchCountdowns = async () => {
+    try {
+      console.log('Fetching countdowns...');
+      const response = await api.get('/countdown');
+      console.log('Countdowns response:', response.data);
+      setCountdowns(response.data);
+    } catch (error) {
+      console.error('Error fetching countdowns:', error);
+      console.error('Error details:', error.response?.data || error.message);
+    }
+  };
+
+  const createCountdown = async () => {
+    try {
+      console.log('Creating countdown with data:', countdownForm);
+      const response = await api.post('/countdown', countdownForm);
+      console.log('Countdown created successfully:', response.data);
+      setCountdownForm({ title: '', startDate: '', endDate: '' });
+      setShowCountdownForm(false);
+      fetchCountdowns();
+    } catch (error) {
+      console.error('Error creating countdown:', error);
+      console.error('Error details:', error.response?.data || error.message);
+    }
+  };
+
+  const deleteCountdown = async (id) => {
+    try {
+      await api.delete(`/countdown/${id}`);
+      fetchCountdowns();
+    } catch (error) {
+      console.error('Error deleting countdown:', error);
     }
   };
 
@@ -273,6 +321,152 @@ const AdminOverview = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Countdown Management */}
+      <Box sx={{ mb: 4 }}>
+        <Box 
+          display="flex" 
+          justifyContent="space-between" 
+          alignItems="center" 
+          sx={{ mb: 2 }}
+        >
+          <Typography 
+            variant="h5" 
+            sx={{ color: '#00E0B8', fontWeight: 600 }}
+          >
+            ⏰ Countdown Offers
+          </Typography>
+          <Button 
+            variant="contained" 
+            onClick={() => setShowCountdownForm(!showCountdownForm)}
+            startIcon={<Add />}
+            sx={{
+              backgroundColor: '#00E0B8',
+              color: '#0D0D0D',
+              '&:hover': { backgroundColor: '#00C4A3' }
+            }}
+          >
+            {showCountdownForm ? 'Cancel' : 'New Countdown'}
+          </Button>
+        </Box>
+
+        {showCountdownForm && (
+          <Card sx={{ mb: 3, backgroundColor: '#121212' }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom sx={{ color: '#00E0B8' }}>
+                Create New Countdown
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Offer Title"
+                    value={countdownForm.title}
+                    onChange={(e) => setCountdownForm({...countdownForm, title: e.target.value})}
+                    size="small"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        '& fieldset': { borderColor: '#00E0B8' },
+                        '&:hover fieldset': { borderColor: '#00E0B8' },
+                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="Start Date & Time"
+                    type="datetime-local"
+                    value={countdownForm.startDate}
+                    onChange={(e) => setCountdownForm({...countdownForm, startDate: e.target.value})}
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        '& fieldset': { borderColor: '#00E0B8' },
+                        '&:hover fieldset': { borderColor: '#00E0B8' },
+                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="End Date & Time"
+                    type="datetime-local"
+                    value={countdownForm.endDate}
+                    onChange={(e) => setCountdownForm({...countdownForm, endDate: e.target.value})}
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        '& fieldset': { borderColor: '#00E0B8' },
+                        '&:hover fieldset': { borderColor: '#00E0B8' },
+                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button 
+                    variant="contained" 
+                    onClick={createCountdown}
+                    disabled={!countdownForm.startDate || !countdownForm.endDate}
+                    startIcon={<LocalOffer />}
+                    sx={{
+                      backgroundColor: '#00E0B8',
+                      color: '#0D0D0D',
+                      '&:hover': { backgroundColor: '#00C4A3' }
+                    }}
+                  >
+                    Create Countdown
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        )}
+
+        {countdowns.map((countdown) => (
+          <Card key={countdown.id} sx={{ mb: 2, backgroundColor: '#121212' }}>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between" alignItems="center">
+                <Box>
+                  <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+                    {countdown.title}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Start: {new Date(countdown.startDate).toLocaleString()}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    End: {new Date(countdown.endDate).toLocaleString()}
+                  </Typography>
+                  <Chip 
+                    label={countdown.isActive ? 'Active' : 'Inactive'} 
+                    color={countdown.isActive ? 'success' : 'default'}
+                    size="small"
+                    sx={{ mt: 1 }}
+                  />
+                </Box>
+                <Button 
+                  color="error" 
+                  onClick={() => deleteCountdown(countdown.id)}
+                  size="small"
+                  startIcon={<Delete />}
+                  sx={{
+                    color: '#FF3366',
+                    '&:hover': { backgroundColor: 'rgba(255, 51, 102, 0.1)' }
+                  }}
+                >
+                  Delete
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
 
       {/* Notification Alert */}
       {notification && (
