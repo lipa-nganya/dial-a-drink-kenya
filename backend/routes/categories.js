@@ -6,42 +6,66 @@ const db = require('../models');
 router.get('/', async (req, res) => {
   try {
     const categories = await db.Category.findAll({
-      where: { isActive: true },
-      include: [{
-        model: db.Drink,
-        as: 'drinks',
-        where: { isAvailable: true },
-        required: false
-      }],
       order: [['name', 'ASC']]
     });
     res.json(categories);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching categories:', error);
+    res.status(500).json({ error: 'Failed to fetch categories' });
   }
 });
 
-// Get category by ID
-router.get('/:id', async (req, res) => {
+// Add new categories (admin endpoint)
+router.post('/add-all', async (req, res) => {
   try {
-    const category = await db.Category.findByPk(req.params.id, {
-      include: [{
-        model: db.Drink,
-        as: 'drinks',
-        where: { isAvailable: true },
-        required: false
-      }]
-    });
-    
-    if (!category) {
-      return res.status(404).json({ error: 'Category not found' });
+    const categories = [
+      'Whisky',
+      'Vodka', 
+      'Wine',
+      'Champagne',
+      'Vapes',
+      'Brandy',
+      'Cognac',
+      'Beer',
+      'Tequila',
+      'Rum',
+      'Gin',
+      'Liqueur',
+      'Soft Drinks',
+      'Smokes'
+    ];
+
+    const addedCategories = [];
+    const existingCategories = [];
+
+    for (const categoryName of categories) {
+      // Check if category already exists
+      const existing = await db.Category.findOne({
+        where: { name: categoryName }
+      });
+
+      if (!existing) {
+        // Insert new category
+        const newCategory = await db.Category.create({
+          name: categoryName
+        });
+        addedCategories.push(newCategory);
+        console.log(`✅ Added category: ${categoryName}`);
+      } else {
+        existingCategories.push(existing);
+        console.log(`⏭️  Category already exists: ${categoryName}`);
+      }
     }
     
-    res.json(category);
+    res.json({ 
+      message: 'Categories processed successfully',
+      added: addedCategories,
+      existing: existingCategories
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error adding categories:', error);
+    res.status(500).json({ error: 'Failed to add categories' });
   }
 });
 
 module.exports = router;
-
