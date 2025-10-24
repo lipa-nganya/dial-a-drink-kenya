@@ -5,6 +5,9 @@ const { Countdown, Drink } = require('../models');
 // Get current active countdown
 router.get('/current', async (req, res) => {
   try {
+    // First check for expired countdowns and revert offers
+    await checkExpiredCountdowns();
+    
     const countdown = await Countdown.findOne({
       where: { isActive: true },
       order: [['createdAt', 'DESC']]
@@ -32,6 +35,10 @@ router.get('/current', async (req, res) => {
     }
 
     if (now > endDate) {
+      // Countdown has ended - revert all offers and deactivate countdown
+      await revertAllOffers();
+      await countdown.update({ isActive: false });
+      
       return res.json({
         active: false,
         message: 'Countdown has ended',
@@ -167,9 +174,45 @@ async function revertAllOffers() {
         });
       }
     }
+    console.log(`✅ Reverted ${offerDrinks.length} offers to original prices`);
   } catch (error) {
     console.error('Error reverting offers:', error);
   }
 }
+
+// Function to check and handle expired countdowns
+async function checkExpiredCountdowns() {
+  try {
+    const activeCountdowns = await Countdown.findAll({
+      where: { isActive: true }
+    });
+
+    const now = new Date();
+    
+    for (const countdown of activeCountdowns) {
+      const endDate = new Date(countdown.endDate);
+      
+      if (now > endDate) {
+        console.log(`⏰ Countdown "${countdown.title}" has expired, reverting offers...`);
+        await revertAllOffers();
+        await countdown.update({ isActive: false });
+        console.log(`✅ Countdown "${countdown.title}" deactivated and offers reverted`);
+      }
+    }
+  } catch (error) {
+    console.error('Error checking expired countdowns:', error);
+  }
+}
+
+// Manual endpoint to check and revert expired countdowns
+router.post('/check-expired', async (req, res) => {
+  try {
+    await checkExpiredCountdowns();
+    res.json({ message: 'Expired countdowns checked and offers reverted if necessary' });
+  } catch (error) {
+    console.error('Error checking expired countdowns:', error);
+    res.status(500).json({ error: 'Failed to check expired countdowns' });
+  }
+});
 
 module.exports = router;

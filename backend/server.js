@@ -139,3 +139,43 @@ const startServer = async () => {
 };
 
 startServer();
+
+// Set up periodic check for expired countdowns (every minute)
+setInterval(async () => {
+  try {
+    const { Countdown, Drink } = require('./models');
+    
+    const activeCountdowns = await Countdown.findAll({
+      where: { isActive: true }
+    });
+
+    const now = new Date();
+    
+    for (const countdown of activeCountdowns) {
+      const endDate = new Date(countdown.endDate);
+      
+      if (now > endDate) {
+        console.log(`⏰ Countdown "${countdown.title}" has expired, reverting offers...`);
+        
+        // Revert all offers
+        const offerDrinks = await Drink.findAll({
+          where: { isOnOffer: true }
+        });
+
+        for (const drink of offerDrinks) {
+          if (drink.originalPrice) {
+            await drink.update({
+              isOnOffer: false,
+              price: drink.originalPrice
+            });
+          }
+        }
+        
+        await countdown.update({ isActive: false });
+        console.log(`✅ Countdown "${countdown.title}" deactivated and ${offerDrinks.length} offers reverted`);
+      }
+    }
+  } catch (error) {
+    console.error('Error in periodic countdown check:', error);
+  }
+}, 60000); // Check every minute
