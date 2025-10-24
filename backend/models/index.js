@@ -18,6 +18,7 @@ const Category = require('./Category')(sequelize, Sequelize.DataTypes);
 const Drink = require('./Drink')(sequelize, Sequelize.DataTypes);
 const Order = require('./Order')(sequelize, Sequelize.DataTypes);
 const OrderItem = require('./OrderItem')(sequelize, Sequelize.DataTypes);
+const Countdown = require('./Countdown')(sequelize, Sequelize.DataTypes);
 
 // Define associations
 Category.hasMany(Drink, { foreignKey: 'categoryId', as: 'drinks' });
@@ -31,6 +32,7 @@ db.Category = Category;
 db.Drink = Drink;
 db.Order = Order;
 db.OrderItem = OrderItem;
+db.Countdown = Countdown;
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 

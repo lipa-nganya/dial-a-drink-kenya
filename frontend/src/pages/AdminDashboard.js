@@ -11,7 +11,8 @@ import {
   FormControlLabel,
   Chip,
   Alert,
-  Snackbar
+  Snackbar,
+  TextField
 } from '@mui/material';
 import { io } from 'socket.io-client';
 import { api } from '../services/api';
@@ -22,6 +23,13 @@ const AdminDashboard = () => {
   const [stats, setStats] = useState({});
   const [notification, setNotification] = useState(null);
   const [socket, setSocket] = useState(null);
+  const [countdowns, setCountdowns] = useState([]);
+  const [showCountdownForm, setShowCountdownForm] = useState(false);
+  const [countdownForm, setCountdownForm] = useState({
+    title: '',
+    startDate: '',
+    endDate: ''
+  });
 
   useEffect(() => {
     // Initialize socket connection - use production URL
@@ -48,6 +56,7 @@ const AdminDashboard = () => {
     fetchOrders();
     fetchDrinks();
     fetchStats();
+    fetchCountdowns();
 
     return () => {
       newSocket.close();
@@ -139,6 +148,35 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error updating order status:', error);
       console.error('Error details:', error.response?.data || error.message);
+    }
+  };
+
+  const fetchCountdowns = async () => {
+    try {
+      const response = await api.get('/countdown');
+      setCountdowns(response.data);
+    } catch (error) {
+      console.error('Error fetching countdowns:', error);
+    }
+  };
+
+  const createCountdown = async () => {
+    try {
+      await api.post('/countdown', countdownForm);
+      setCountdownForm({ title: '', startDate: '', endDate: '' });
+      setShowCountdownForm(false);
+      fetchCountdowns();
+    } catch (error) {
+      console.error('Error creating countdown:', error);
+    }
+  };
+
+  const deleteCountdown = async (id) => {
+    try {
+      await api.delete(`/countdown/${id}`);
+      fetchCountdowns();
+    } catch (error) {
+      console.error('Error deleting countdown:', error);
     }
   };
 
@@ -249,6 +287,116 @@ const AdminDashboard = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Countdown Management */}
+      <Box sx={{ mb: { xs: 3, sm: 4 } }}>
+        <Box 
+          display="flex" 
+          justifyContent="space-between" 
+          alignItems="center" 
+          sx={{ mb: 2 }}
+        >
+          <Typography 
+            variant="h5" 
+            sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+          >
+            Countdown Offers
+          </Typography>
+          <Button 
+            variant="contained" 
+            onClick={() => setShowCountdownForm(!showCountdownForm)}
+            sx={{ 
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              px: { xs: 2, sm: 3 }
+            }}
+          >
+            {showCountdownForm ? 'Cancel' : 'New Countdown'}
+          </Button>
+        </Box>
+
+        {showCountdownForm && (
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                Create New Countdown
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    fullWidth
+                    label="Offer Title"
+                    value={countdownForm.title}
+                    onChange={(e) => setCountdownForm({...countdownForm, title: e.target.value})}
+                    size="small"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="Start Date & Time"
+                    type="datetime-local"
+                    value={countdownForm.startDate}
+                    onChange={(e) => setCountdownForm({...countdownForm, startDate: e.target.value})}
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={3}>
+                  <TextField
+                    fullWidth
+                    label="End Date & Time"
+                    type="datetime-local"
+                    value={countdownForm.endDate}
+                    onChange={(e) => setCountdownForm({...countdownForm, endDate: e.target.value})}
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <Button 
+                    variant="contained" 
+                    onClick={createCountdown}
+                    disabled={!countdownForm.startDate || !countdownForm.endDate}
+                  >
+                    Create Countdown
+                  </Button>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        )}
+
+        {countdowns.map((countdown) => (
+          <Card key={countdown.id} sx={{ mb: 2 }}>
+            <CardContent>
+              <Box display="flex" justifyContent="space-between" alignItems="center">
+                <Box>
+                  <Typography variant="h6">{countdown.title}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Start: {new Date(countdown.startDate).toLocaleString()}
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    End: {new Date(countdown.endDate).toLocaleString()}
+                  </Typography>
+                  <Chip 
+                    label={countdown.isActive ? 'Active' : 'Inactive'} 
+                    color={countdown.isActive ? 'success' : 'default'}
+                    size="small"
+                    sx={{ mt: 1 }}
+                  />
+                </Box>
+                <Button 
+                  color="error" 
+                  onClick={() => deleteCountdown(countdown.id)}
+                  size="small"
+                >
+                  Delete
+                </Button>
+              </Box>
+            </CardContent>
+          </Card>
+        ))}
+      </Box>
 
       {/* Recent Orders */}
       <Box sx={{ mb: { xs: 3, sm: 4 } }}>

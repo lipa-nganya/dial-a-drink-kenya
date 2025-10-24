@@ -22,6 +22,7 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/countdown', require('./routes/countdown'));
 
 // Root endpoint
 app.get('/', (req, res) => {

@@ -11,6 +11,7 @@ import {
 } from '@mui/material';
 import { Search, LocalBar, Speed, Security, Support } from '@mui/icons-material';
 import CategoryCard from '../components/CategoryCard';
+import CountdownTimer from '../components/CountdownTimer';
 import { api } from '../services/api';
 
 const Home = () => {
@@ -64,19 +65,7 @@ const Home = () => {
         }}
       >
         <Container maxWidth="lg">
-          <Typography 
-            variant="h2" 
-            component="h1" 
-            gutterBottom
-            sx={{ 
-              fontSize: { xs: '2rem', sm: '3rem', md: '3.75rem' },
-              lineHeight: 1.2,
-              pt: 4,
-              pb: 2
-            }}
-          >
-            Dial A Drink Kenya
-          </Typography>
+          <CountdownTimer />
           {/* Advertising Image - Full Size */}
           <Box
             sx={{
