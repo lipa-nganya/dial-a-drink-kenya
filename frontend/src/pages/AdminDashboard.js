@@ -153,21 +153,27 @@ const AdminDashboard = () => {
 
   const fetchCountdowns = async () => {
     try {
+      console.log('Fetching countdowns...');
       const response = await api.get('/countdown');
+      console.log('Countdowns response:', response.data);
       setCountdowns(response.data);
     } catch (error) {
       console.error('Error fetching countdowns:', error);
+      console.error('Error details:', error.response?.data || error.message);
     }
   };
 
   const createCountdown = async () => {
     try {
-      await api.post('/countdown', countdownForm);
+      console.log('Creating countdown with data:', countdownForm);
+      const response = await api.post('/countdown', countdownForm);
+      console.log('Countdown created successfully:', response.data);
       setCountdownForm({ title: '', startDate: '', endDate: '' });
       setShowCountdownForm(false);
       fetchCountdowns();
     } catch (error) {
       console.error('Error creating countdown:', error);
+      console.error('Error details:', error.response?.data || error.message);
     }
   };
 

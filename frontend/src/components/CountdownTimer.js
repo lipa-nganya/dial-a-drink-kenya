@@ -15,13 +15,16 @@ const CountdownTimer = () => {
 
   const fetchCountdown = async () => {
     try {
+      console.log('Fetching current countdown...');
       const response = await api.get('/countdown/current');
+      console.log('Countdown response:', response.data);
       setCountdown(response.data);
       if (response.data.active) {
         setTimeRemaining(response.data.timeRemaining);
       }
     } catch (error) {
       console.error('Error fetching countdown:', error);
+      console.error('Error details:', error.response?.data || error.message);
     } finally {
       setLoading(false);
     }
