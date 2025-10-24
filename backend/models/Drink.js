@@ -50,6 +50,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: []
     },
+    capacityPricing: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: []
+    },
     abv: {
       type: DataTypes.DECIMAL(5, 2),
       allowNull: true

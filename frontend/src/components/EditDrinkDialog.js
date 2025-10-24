@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import CapacityManager from './CapacityManager';
+import CapacityPricingManager from './CapacityPricingManager';
 
 const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
   const [formData, setFormData] = useState({
@@ -39,6 +40,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     image: '',
     categoryId: '',
     capacity: [],
+    capacityPricing: [],
     abv: ''
   });
   const [categories, setCategories] = useState([]);
@@ -59,6 +61,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         image: drink.image || '',
         categoryId: drink.categoryId || '',
           capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
+        capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || ''
       });
       setImagePreview(drink.image || '');
@@ -378,6 +381,14 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             <CapacityManager
               capacities={formData.capacity}
               onChange={(capacities) => handleInputChange('capacity', capacities)}
+            />
+          </Grid>
+
+          {/* Capacity Pricing Management */}
+          <Grid item xs={12}>
+            <CapacityPricingManager
+              capacityPricing={formData.capacityPricing}
+              onChange={(pricing) => handleInputChange('capacityPricing', pricing)}
             />
           </Grid>
 
