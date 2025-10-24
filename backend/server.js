@@ -52,6 +52,13 @@ const addMissingColumns = async () => {
     `);
     console.log('✅ originalPrice set for existing drinks');
 
+    // Update image column to TEXT type for longer URLs
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
+      ALTER COLUMN "image" TYPE TEXT;
+    `);
+    console.log('✅ Image column updated to TEXT type');
+
     return true;
   } catch (error) {
     console.warn('Column migration failed:', error.message);
