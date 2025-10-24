@@ -15,7 +15,7 @@ import {
   useMediaQuery,
   useTheme
 } from '@mui/material';
-import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer } from '@mui/icons-material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Assignment, Inventory, Dashboard } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 
@@ -72,9 +72,21 @@ const Header = () => {
         </ListItem>
         <ListItem button onClick={() => handleNavigation('/admin')}>
           <ListItemIcon>
-            <LocalBar />
+            <Dashboard />
           </ListItemIcon>
-          <ListItemText primary="Admin" />
+          <ListItemText primary="Admin Dashboard" />
+        </ListItem>
+        <ListItem button onClick={() => handleNavigation('/admin/orders')}>
+          <ListItemIcon>
+            <Assignment />
+          </ListItemIcon>
+          <ListItemText primary="Orders" />
+        </ListItem>
+        <ListItem button onClick={() => handleNavigation('/admin/inventory')}>
+          <ListItemIcon>
+            <Inventory />
+          </ListItemIcon>
+          <ListItemText primary="Inventory" />
         </ListItem>
       </List>
     </Box>
@@ -151,7 +163,21 @@ const Header = () => {
                 onClick={() => navigate('/admin')}
                 sx={{ textTransform: 'none' }}
               >
-                Admin
+                Admin Dashboard
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => navigate('/admin/orders')}
+                sx={{ textTransform: 'none' }}
+              >
+                Orders
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => navigate('/admin/inventory')}
+                sx={{ textTransform: 'none' }}
+              >
+                Inventory
               </Button>
             </Box>
           )}

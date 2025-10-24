@@ -11,6 +11,9 @@ import Offers from './pages/Offers';
 import Cart from './pages/Cart';
 import OrderSuccess from './pages/OrderSuccess';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminOverview from './pages/admin/AdminOverview';
+import Orders from './pages/admin/Orders';
+import Inventory from './pages/admin/Inventory';
 import './App.css';
 
 const theme = createTheme({
@@ -115,7 +118,10 @@ function App() {
               <Route path="/test-offers" element={<TestOffers />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/order-success" element={<OrderSuccess />} />
-              <Route path="/admin" element={<AdminDashboard />} />
+                  <Route path="/admin" element={<AdminOverview />} />
+                  <Route path="/admin/orders" element={<Orders />} />
+                  <Route path="/admin/inventory" element={<Inventory />} />
+                  <Route path="/admin/legacy" element={<AdminDashboard />} />
               <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
             </Routes>
           </div>
