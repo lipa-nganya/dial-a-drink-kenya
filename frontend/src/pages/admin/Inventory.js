@@ -27,11 +27,14 @@ import {
   TrendingDown
 } from '@mui/icons-material';
 import { api } from '../../services/api';
+import EditDrinkDialog from '../../components/EditDrinkDialog';
 
 const InventoryPage = () => {
   const [drinks, setDrinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedDrink, setSelectedDrink] = useState(null);
 
   useEffect(() => {
     fetchDrinks();
@@ -66,6 +69,20 @@ const InventoryPage = () => {
 
   const getAvailabilityIcon = (isAvailable) => {
     return isAvailable ? <CheckCircle /> : <Cancel />;
+  };
+
+  const handleEditDrink = (drink) => {
+    setSelectedDrink(drink);
+    setEditDialogOpen(true);
+  };
+
+  const handleCloseEditDialog = () => {
+    setEditDialogOpen(false);
+    setSelectedDrink(null);
+  };
+
+  const handleSaveDrink = () => {
+    fetchDrinks(); // Refresh the drinks list
   };
 
   if (loading) {
@@ -151,9 +168,26 @@ const InventoryPage = () => {
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                       {drink.description}
                     </Typography>
-                    <Typography variant="h6" sx={{ color: '#FF3366', fontWeight: 700 }}>
-                      KES {Number(drink.price).toFixed(2)}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      {drink.isOnOffer && drink.originalPrice ? (
+                        <>
+                          <Typography 
+                            variant="body2" 
+                            color="text.secondary" 
+                            sx={{ textDecoration: 'line-through' }}
+                          >
+                            KES {Number(drink.originalPrice).toFixed(2)}
+                          </Typography>
+                          <Typography variant="h6" sx={{ color: '#FF3366', fontWeight: 700 }}>
+                            KES {Number(drink.price).toFixed(2)}
+                          </Typography>
+                        </>
+                      ) : (
+                        <Typography variant="h6" sx={{ color: '#FF3366', fontWeight: 700 }}>
+                          KES {Number(drink.price).toFixed(2)}
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
 
                   {/* Category */}
@@ -234,7 +268,11 @@ const InventoryPage = () => {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Edit Drink">
-                      <IconButton size="small" color="secondary">
+                      <IconButton 
+                        size="small" 
+                        color="secondary"
+                        onClick={() => handleEditDrink(drink)}
+                      >
                         <Edit />
                       </IconButton>
                     </Tooltip>
@@ -308,6 +346,14 @@ const InventoryPage = () => {
           </Grid>
         </Grid>
       </Box>
+
+      {/* Edit Drink Dialog */}
+      <EditDrinkDialog
+        open={editDialogOpen}
+        onClose={handleCloseEditDialog}
+        drink={selectedDrink}
+        onSave={handleSaveDrink}
+      />
     </Container>
   );
 };
