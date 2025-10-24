@@ -7,15 +7,6 @@ const CountdownTimer = () => {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchCountdown();
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
-  }, [updateCountdown]);
-
   const fetchCountdown = async () => {
     try {
       console.log('Fetching current countdown...');
@@ -59,6 +50,15 @@ const CountdownTimer = () => {
       }
     }
   }, [countdown]);
+
+  useEffect(() => {
+    fetchCountdown();
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [updateCountdown]);
 
   const formatTime = (milliseconds) => {
     const totalSeconds = Math.floor(milliseconds / 1000);
