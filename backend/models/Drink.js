@@ -36,6 +36,14 @@ module.exports = (sequelize, DataTypes) => {
     isPopular: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
+    },
+    isOnOffer: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    originalPrice: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true
     }
   }, {
     tableName: 'drinks',

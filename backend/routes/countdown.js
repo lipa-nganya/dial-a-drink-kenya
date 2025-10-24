@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Countdown } = require('../models');
+const { Countdown, Drink } = require('../models');
 
 // Get current active countdown
 router.get('/current', async (req, res) => {
@@ -83,11 +83,14 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'End date must be after start date' });
     }
 
-    // Deactivate all existing countdowns
+    // Deactivate all existing countdowns and revert offers
     await Countdown.update(
       { isActive: false },
       { where: { isActive: true } }
     );
+
+    // Revert all offers when creating new countdown
+    await revertAllOffers();
 
     const countdown = await Countdown.create({
       startDate: start,
@@ -138,6 +141,9 @@ router.delete('/:id', async (req, res) => {
       return res.status(404).json({ error: 'Countdown not found' });
     }
 
+    // Revert all offers when deleting countdown
+    await revertAllOffers();
+
     await countdown.destroy();
     res.json({ message: 'Countdown deleted successfully' });
   } catch (error) {
@@ -145,5 +151,25 @@ router.delete('/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to delete countdown' });
   }
 });
+
+// Helper function to revert all offers
+async function revertAllOffers() {
+  try {
+    const offerDrinks = await Drink.findAll({
+      where: { isOnOffer: true }
+    });
+
+    for (const drink of offerDrinks) {
+      if (drink.originalPrice) {
+        await drink.update({
+          isOnOffer: false,
+          price: drink.originalPrice
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error reverting offers:', error);
+  }
+}
 
 module.exports = router;

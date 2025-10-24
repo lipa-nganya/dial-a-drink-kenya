@@ -39,6 +39,27 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get drinks on offer
+router.get('/offers', async (req, res) => {
+  try {
+    const drinks = await db.Drink.findAll({
+      where: { 
+        isAvailable: true,
+        isOnOffer: true
+      },
+      include: [{
+        model: db.Category,
+        as: 'category'
+      }],
+      order: [['name', 'ASC']]
+    });
+    
+    res.json(drinks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get drink by ID
 router.get('/:id', async (req, res) => {
   try {
