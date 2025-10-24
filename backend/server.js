@@ -25,6 +25,40 @@ const io = new Server(server, {
 // Make io available globally
 app.set('io', io);
 
+// Function to add missing columns for offers system
+const addMissingColumns = async () => {
+  try {
+    console.log('Checking for missing columns...');
+    
+    // Add isOnOffer column if it doesn't exist
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "isOnOffer" BOOLEAN DEFAULT false;
+    `);
+    console.log('✅ isOnOffer column checked/added');
+
+    // Add originalPrice column if it doesn't exist
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "originalPrice" DECIMAL(10,2);
+    `);
+    console.log('✅ originalPrice column checked/added');
+
+    // Set originalPrice for existing drinks
+    await db.sequelize.query(`
+      UPDATE "drinks" 
+      SET "originalPrice" = "price" 
+      WHERE "originalPrice" IS NULL;
+    `);
+    console.log('✅ originalPrice set for existing drinks');
+
+    return true;
+  } catch (error) {
+    console.warn('Column migration failed:', error.message);
+    return false;
+  }
+};
+
 // Sync database and start server
 const startServer = async () => {
   try {
@@ -50,23 +84,26 @@ const startServer = async () => {
       .then(() => {
         console.log('Database synchronized successfully.');
         
-        // Seed database if empty - non-blocking
-        db.Category.count()
-          .then(categoryCount => {
-            if (categoryCount === 0) {
-              console.log('Seeding database...');
-              return seedData();
-            }
-          })
-          .then(() => {
-            console.log('Database seeded successfully.');
-          })
-          .catch(seedError => {
-            console.warn('Database seeding failed:', seedError.message);
-          });
+        // Add missing columns for offers system
+        return addMissingColumns();
       })
-      .catch(syncError => {
-        console.warn('Database sync failed:', syncError.message);
+      .then(() => {
+        console.log('Database columns updated successfully.');
+        
+        // Seed database if empty - non-blocking
+        return db.Category.count();
+      })
+      .then(categoryCount => {
+        if (categoryCount === 0) {
+          console.log('Seeding database...');
+          return seedData();
+        }
+      })
+      .then(() => {
+        console.log('Database setup completed.');
+      })
+      .catch(error => {
+        console.warn('Database setup failed:', error.message);
       });
     
     // Socket.IO connection handling
