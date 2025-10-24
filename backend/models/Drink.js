@@ -46,8 +46,9 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     capacity: {
-      type: DataTypes.STRING,
-      allowNull: true
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: []
     },
     abv: {
       type: DataTypes.DECIMAL(5, 2),

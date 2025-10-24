@@ -176,11 +176,12 @@ const Offers = () => {
                   </Typography>
 
                   {/* Capacity and ABV */}
-                  {(drink.capacity || drink.abv) && (
+                  {((Array.isArray(drink.capacity) && drink.capacity.length > 0) || drink.abv) && (
                     <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      {drink.capacity && (
+                      {Array.isArray(drink.capacity) && drink.capacity.length > 0 && drink.capacity.map((cap, index) => (
                         <Chip
-                          label={drink.capacity}
+                          key={index}
+                          label={cap}
                           size="small"
                           sx={{
                             backgroundColor: '#121212',
@@ -189,7 +190,7 @@ const Offers = () => {
                             fontSize: '0.75rem'
                           }}
                         />
-                      )}
+                      ))}
                       {drink.abv && (
                         <Chip
                           label={`${Number(drink.abv)}% ABV`}

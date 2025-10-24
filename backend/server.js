@@ -62,9 +62,9 @@ const addMissingColumns = async () => {
     // Add capacity and ABV columns if they don't exist
     await db.sequelize.query(`
       ALTER TABLE "drinks" 
-      ADD COLUMN IF NOT EXISTS "capacity" VARCHAR(50);
+      ADD COLUMN IF NOT EXISTS "capacity" JSON;
     `);
-    console.log('✅ Capacity column checked/added');
+    console.log('✅ Capacity column checked/added (JSON type)');
 
     await db.sequelize.query(`
       ALTER TABLE "drinks" 
