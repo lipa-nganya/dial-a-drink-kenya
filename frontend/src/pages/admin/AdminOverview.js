@@ -102,8 +102,18 @@ const AdminOverview = () => {
 
   const createCountdown = async () => {
     try {
-      console.log('Creating countdown with data:', countdownForm);
-      const response = await api.post('/countdown', countdownForm);
+      // Convert local datetime to ISO string for backend
+      const startDate = new Date(countdownForm.startDate).toISOString();
+      const endDate = new Date(countdownForm.endDate).toISOString();
+      
+      const countdownData = {
+        title: countdownForm.title,
+        startDate: startDate,
+        endDate: endDate
+      };
+      
+      console.log('Creating countdown with data:', countdownData);
+      const response = await api.post('/countdown', countdownData);
       console.log('Countdown created successfully:', response.data);
       setCountdownForm({ title: '', startDate: '', endDate: '' });
       setShowCountdownForm(false);
@@ -438,10 +448,26 @@ const AdminOverview = () => {
                     {countdown.title}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Start: {new Date(countdown.startDate).toLocaleString()}
+                    Start: {new Date(countdown.startDate).toLocaleString('en-GB', {
+                      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    End: {new Date(countdown.endDate).toLocaleString()}
+                    End: {new Date(countdown.endDate).toLocaleString('en-GB', {
+                      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
                   </Typography>
                   <Chip 
                     label={countdown.isActive ? 'Active' : 'Inactive'} 
