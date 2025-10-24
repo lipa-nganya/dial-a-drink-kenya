@@ -10,6 +10,7 @@ import {
   Button
 } from '@mui/material';
 import { Search, LocalBar, Speed, Security, Support } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import CategoryCard from '../components/CategoryCard';
 import CountdownTimer from '../components/CountdownTimer';
 import { api } from '../services/api';
@@ -17,6 +18,7 @@ import { api } from '../services/api';
 const Home = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchCategories();
@@ -108,7 +110,7 @@ const Home = () => {
                 boxShadow: '0 4px 12px rgba(0, 224, 184, 0.3)'
               }
             }}
-            href="/offers" // Link to offers page
+            onClick={() => navigate('/offers')}
           >
             Limited Offers
           </Button>
