@@ -6,6 +6,8 @@ import { CartProvider } from './contexts/CartContext';
 import Header from './components/Header';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
+import Offers from './pages/Offers';
+import TestOffers from './pages/TestOffers';
 import Cart from './pages/Cart';
 import OrderSuccess from './pages/OrderSuccess';
 import AdminDashboard from './pages/AdminDashboard';
@@ -109,6 +111,8 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/menu" element={<Menu />} />
+              <Route path="/offers" element={<Offers />} />
+              <Route path="/test-offers" element={<TestOffers />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/order-success" element={<OrderSuccess />} />
               <Route path="/admin" element={<AdminDashboard />} />
