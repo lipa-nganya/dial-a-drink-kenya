@@ -58,45 +58,41 @@ const Home = () => {
       {/* Hero Section */}
       <Box
         sx={{
-          background: 'linear-gradient(135deg, #00E0B8 0%, #FF3366 100%)',
+          backgroundColor: '#0D0D0D',
           color: 'white',
-          py: 8,
           textAlign: 'center'
         }}
       >
-        <Container maxWidth="md">
-          <LocalBar sx={{ fontSize: { xs: 40, sm: 60 }, mb: 2 }} />
+        <Container maxWidth="lg">
           <Typography 
             variant="h2" 
             component="h1" 
             gutterBottom
             sx={{ 
               fontSize: { xs: '2rem', sm: '3rem', md: '3.75rem' },
-              lineHeight: 1.2
+              lineHeight: 1.2,
+              pt: 4,
+              pb: 2
             }}
           >
             Dial A Drink Kenya
           </Typography>
-          {/* Advertising Image */}
+          {/* Advertising Image - Full Size */}
           <Box
             sx={{
               mb: 4,
-              maxWidth: '100%',
-              height: { xs: '200px', sm: '300px', md: '400px' },
-              borderRadius: 2,
-              overflow: 'hidden',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.3)',
-              position: 'relative'
+              width: '100%',
+              display: 'flex',
+              justifyContent: 'center'
             }}
           >
             <img
               src="/assets/images/ads/hero-ad.png"
               alt="Special Offer - Premium Drinks"
               style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                objectPosition: 'center'
+                maxWidth: '100%',
+                height: 'auto',
+                display: 'block'
               }}
               onError={(e) => {
                 // Fallback to placeholder if image doesn't exist
@@ -108,14 +104,15 @@ const Home = () => {
             variant="contained"
             size="large"
             sx={{
-              backgroundColor: 'white',
+              backgroundColor: '#00E0B8',
               color: '#0D0D0D',
               px: { xs: 3, sm: 4 },
               py: { xs: 1.5, sm: 2 },
               fontSize: { xs: '0.9rem', sm: '1rem' },
               fontWeight: 600,
+              mb: 4,
               '&:hover': {
-                backgroundColor: '#f5f5f5',
+                backgroundColor: '#00C4A3',
                 transform: 'translateY(-2px)',
                 boxShadow: '0 4px 12px rgba(0, 224, 184, 0.3)'
               }
