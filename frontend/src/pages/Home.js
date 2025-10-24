@@ -108,9 +108,9 @@ const Home = () => {
                 boxShadow: '0 4px 12px rgba(0, 224, 184, 0.3)'
               }
             }}
-            href="/menu" // Update this URL to your offer page
+            href="/offers" // Link to offers page
           >
-            Buy Now
+            Limited Offers
           </Button>
         </Container>
       </Box>
