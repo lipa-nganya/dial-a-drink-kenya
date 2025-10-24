@@ -1,0 +1,18 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="200" height="200" fill="#121212"/>
+  
+  <!-- Glass outline -->
+  <path d="M50 50 L50 150 L70 170 L130 170 L150 150 L150 50 L50 50 Z" stroke="#00E0B8" stroke-width="3" fill="none"/>
+  
+  <!-- Liquid -->
+  <path d="M60 100 L60 140 L70 150 L130 150 L140 140 L140 100 L60 100 Z" fill="#FF3366" opacity="0.8"/>
+  
+  <!-- Bubbles -->
+  <circle cx="80" cy="120" r="3" fill="#F5F5F5" opacity="0.6"/>
+  <circle cx="100" cy="110" r="2" fill="#F5F5F5" opacity="0.8"/>
+  <circle cx="120" cy="115" r="2.5" fill="#F5F5F5" opacity="0.7"/>
+  
+  <!-- Text -->
+  <text x="100" y="180" font-family="Lato, sans-serif" font-size="12" font-weight="400" fill="#B0B0B0" text-anchor="middle">Drink Image</text>
+</svg>

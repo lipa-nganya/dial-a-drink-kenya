@@ -90,19 +90,32 @@ const Header = () => {
             </IconButton>
           )}
           
-          <LocalBar sx={{ mr: 2 }} />
-          <Typography
-            variant="h6"
-            component="div"
-            sx={{ 
-              flexGrow: 1, 
-              cursor: 'pointer',
-              fontSize: isMobile ? '1rem' : '1.25rem'
-            }}
-            onClick={() => navigate('/')}
-          >
-            {isMobile ? 'Dial A Drink' : 'Dial A Drink Kenya'}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1 }}>
+            <img 
+              src="/assets/images/logo.svg" 
+              alt="Dial A Drink Kenya Logo" 
+              style={{ 
+                height: '40px', 
+                width: 'auto',
+                marginRight: '12px',
+                cursor: 'pointer'
+              }}
+              onClick={() => navigate('/')}
+            />
+            <Typography
+              variant="h6"
+              component="div"
+              sx={{ 
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: isMobile ? '1rem' : '1.25rem',
+                display: { xs: 'none', sm: 'block' }
+              }}
+              onClick={() => navigate('/')}
+            >
+              {isMobile ? 'Dial A Drink' : 'Dial A Drink Kenya'}
+            </Typography>
+          </Box>
           
           {!isMobile && (
             <Box sx={{ display: 'flex', gap: 2 }}>
