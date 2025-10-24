@@ -90,7 +90,7 @@ const Home = () => {
             }}
           >
             <img
-              src="/assets/images/ads/hero-ad.jpg"
+              src="/assets/images/ads/hero-ad.png"
               alt="Special Offer - Premium Drinks"
               style={{
                 width: '100%',
