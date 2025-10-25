@@ -29,9 +29,9 @@ const Cart = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
-  const handleQuantityChange = (drinkId, newQuantity) => {
+  const handleQuantityChange = (drinkId, newQuantity, selectedCapacity = null) => {
     if (newQuantity <= 0) {
-      removeFromCart(drinkId);
+      removeFromCart(drinkId, selectedCapacity);
     } else {
       updateQuantity(drinkId, newQuantity);
     }
@@ -151,6 +151,11 @@ const Cart = () => {
                     <Typography variant="h6">
                       {item.drink.name}
                     </Typography>
+                    {item.selectedCapacity && (
+                      <Typography variant="body2" color="primary" sx={{ fontWeight: 'bold' }}>
+                        Capacity: {item.selectedCapacity}
+                      </Typography>
+                    )}
                     <Typography variant="body2" color="text.secondary">
                       KES {Number(item.price).toFixed(2)} each
                     </Typography>
@@ -158,7 +163,7 @@ const Cart = () => {
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <IconButton
-                      onClick={() => handleQuantityChange(item.drinkId, item.quantity - 1)}
+                      onClick={() => handleQuantityChange(item.drinkId, item.quantity - 1, item.selectedCapacity)}
                       size="small"
                     >
                       <Remove />
@@ -169,14 +174,14 @@ const Cart = () => {
                     </Typography>
                     
                     <IconButton
-                      onClick={() => handleQuantityChange(item.drinkId, item.quantity + 1)}
+                      onClick={() => handleQuantityChange(item.drinkId, item.quantity + 1, item.selectedCapacity)}
                       size="small"
                     >
                       <Add />
                     </IconButton>
                     
                     <IconButton
-                      onClick={() => removeFromCart(item.drinkId)}
+                      onClick={() => removeFromCart(item.drinkId, item.selectedCapacity)}
                       color="error"
                       size="small"
                     >

@@ -5,12 +5,21 @@ const CartContext = createContext();
 const cartReducer = (state, action) => {
   switch (action.type) {
     case 'ADD_TO_CART':
-      const existingItem = state.items.find(item => item.drinkId === action.payload.drinkId);
+      // Create a unique key that includes capacity to differentiate items with different capacities
+      const itemKey = action.payload.selectedCapacity 
+        ? `${action.payload.drinkId}-${action.payload.selectedCapacity}`
+        : action.payload.drinkId;
+      
+      const existingItem = state.items.find(item => 
+        item.drinkId === action.payload.drinkId && 
+        item.selectedCapacity === action.payload.selectedCapacity
+      );
+      
       if (existingItem) {
         return {
           ...state,
           items: state.items.map(item =>
-            item.drinkId === action.payload.drinkId
+            item.drinkId === action.payload.drinkId && item.selectedCapacity === action.payload.selectedCapacity
               ? { ...item, quantity: item.quantity + action.payload.quantity }
               : item
           )
@@ -24,7 +33,10 @@ const cartReducer = (state, action) => {
     case 'REMOVE_FROM_CART':
       return {
         ...state,
-        items: state.items.filter(item => item.drinkId !== action.payload)
+        items: state.items.filter(item => 
+          item.drinkId !== action.payload.drinkId || 
+          (action.payload.selectedCapacity && item.selectedCapacity !== action.payload.selectedCapacity)
+        )
       };
     
     case 'UPDATE_QUANTITY':
@@ -58,15 +70,16 @@ export const CartProvider = ({ children }) => {
         drinkId: drink.id,
         drink: drink,
         quantity: quantity,
-        price: drink.price
+        price: drink.selectedPrice || drink.price,
+        selectedCapacity: drink.selectedCapacity || null
       }
     });
   };
 
-  const removeFromCart = (drinkId) => {
+  const removeFromCart = (drinkId, selectedCapacity = null) => {
     dispatch({
       type: 'REMOVE_FROM_CART',
-      payload: drinkId
+      payload: { drinkId, selectedCapacity }
     });
   };
 
