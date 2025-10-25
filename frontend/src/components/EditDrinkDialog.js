@@ -76,8 +76,11 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
   }, []);
 
   useEffect(() => {
+    console.log('Category changed to:', formData.categoryId);
     if (formData.categoryId) {
       fetchSubcategories(formData.categoryId);
+    } else {
+      setSubcategories([]);
     }
   }, [formData.categoryId]);
 
@@ -92,7 +95,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
 
   const fetchSubcategories = async (categoryId) => {
     try {
+      console.log('Fetching subcategories for categoryId:', categoryId);
       const response = await api.get(`/subcategories/category/${categoryId}`);
+      console.log('Subcategories response:', response.data);
       setSubcategories(response.data);
     } catch (error) {
       console.error('Error fetching subcategories:', error);
@@ -287,6 +292,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
               }}
             >
               <option value="">Select Sub Category</option>
+              {console.log('Available subcategories:', subcategories)}
               {subcategories.map(subcategory => (
                 <option key={subcategory.id} value={subcategory.id}>
                   {subcategory.name}
