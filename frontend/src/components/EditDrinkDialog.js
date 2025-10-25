@@ -299,6 +299,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                 </option>
               ))}
             </TextField>
+            {/* Debug info */}
+            <Typography variant="caption" sx={{ color: 'text.secondary', mt: 1, display: 'block' }}>
+              Debug: {subcategories.length} subcategories loaded for category {formData.categoryId}
+            </Typography>
           </Grid>
 
           <Grid item xs={12}>
