@@ -39,11 +39,13 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     isOnOffer: false,
     image: '',
     categoryId: '',
+    subCategoryId: '',
     capacity: [],
     capacityPricing: [],
     abv: ''
   });
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -60,6 +62,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         isOnOffer: drink.isOnOffer || false,
         image: drink.image || '',
         categoryId: drink.categoryId || '',
+        subCategoryId: drink.subCategoryId || '',
           capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || ''
@@ -72,12 +75,27 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     fetchCategories();
   }, []);
 
+  useEffect(() => {
+    if (formData.categoryId) {
+      fetchSubcategories(formData.categoryId);
+    }
+  }, [formData.categoryId]);
+
   const fetchCategories = async () => {
     try {
       const response = await api.get('/categories');
       setCategories(response.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchSubcategories = async (categoryId) => {
+    try {
+      const response = await api.get(`/subcategories/category/${categoryId}`);
+      setSubcategories(response.data);
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
     }
   };
 
@@ -141,6 +159,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         isOnOffer: formData.isOnOffer,
         image: formData.image,
         categoryId: formData.categoryId,
+        subCategoryId: formData.subCategoryId,
         capacity: formData.capacity,
         capacityPricing: formData.capacityPricing,
         abv: formData.abv
@@ -246,6 +265,31 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
               {categories.map(category => (
                 <option key={category.id} value={category.id}>
                   {category.name}
+                </option>
+              ))}
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              select
+              label="Sub Category"
+              value={formData.subCategoryId}
+              onChange={(e) => handleInputChange('subCategoryId', e.target.value)}
+              SelectProps={{ native: true }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: '#00E0B8' },
+                  '&:hover fieldset': { borderColor: '#00E0B8' },
+                  '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                }
+              }}
+            >
+              <option value="">Select Sub Category</option>
+              {subcategories.map(subcategory => (
+                <option key={subcategory.id} value={subcategory.id}>
+                  {subcategory.name}
                 </option>
               ))}
             </TextField>

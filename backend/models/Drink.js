@@ -29,6 +29,14 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    subCategoryId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'subcategories',
+        key: 'id'
+      }
+    },
     isAvailable: {
       type: DataTypes.BOOLEAN,
       defaultValue: true

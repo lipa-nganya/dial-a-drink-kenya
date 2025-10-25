@@ -78,6 +78,26 @@ const addMissingColumns = async () => {
     `);
     console.log('✅ ABV column checked/added');
 
+    // Create subcategories table if it doesn't exist
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS "subcategories" (
+        "id" SERIAL PRIMARY KEY,
+        "name" VARCHAR(255) NOT NULL UNIQUE,
+        "categoryId" INTEGER NOT NULL REFERENCES "categories"("id"),
+        "isActive" BOOLEAN DEFAULT true,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+    `);
+    console.log('✅ subcategories table checked/created');
+
+    // Add subCategoryId column to drinks table if it doesn't exist
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "subCategoryId" INTEGER REFERENCES "subcategories"("id");
+    `);
+    console.log('✅ subCategoryId column checked/added');
+
     return true;
   } catch (error) {
     console.warn('Column migration failed:', error.message);

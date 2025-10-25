@@ -29,6 +29,9 @@ router.get('/', async (req, res) => {
       include: [{
         model: db.Category,
         as: 'category'
+      }, {
+        model: db.SubCategory,
+        as: 'subCategory'
       }],
       order: [['name', 'ASC']]
     });
@@ -57,6 +60,9 @@ router.get('/offers', async (req, res) => {
       include: [{
         model: db.Category,
         as: 'category'
+      }, {
+        model: db.SubCategory,
+        as: 'subCategory'
       }],
       order: [['name', 'ASC']]
     });

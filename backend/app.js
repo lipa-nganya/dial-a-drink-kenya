@@ -20,6 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/categories', require('./routes/categories'));
+app.use('/api/subcategories', require('./routes/subcategories'));
 app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
@@ -35,6 +36,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/api/health',
       categories: '/api/categories',
+      subcategories: '/api/subcategories',
       drinks: '/api/drinks',
       orders: '/api/orders',
       admin: '/api/admin',
