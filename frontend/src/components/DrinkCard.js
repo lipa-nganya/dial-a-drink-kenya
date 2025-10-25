@@ -8,10 +8,10 @@ import {
   Button,
   Box,
   Chip,
-  FormControl,
-  Select,
-  MenuItem,
-  InputLabel
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl
 } from '@mui/material';
 import { AddShoppingCart, Star } from '@mui/icons-material';
 import { useCart } from '../contexts/CartContext';
@@ -96,23 +96,17 @@ const DrinkCard = ({ drink }) => {
           {drink.description}
         </Typography>
 
-        {/* Capacity Selection */}
+        {/* Capacity Selection with Radio Buttons */}
         {availableCapacities.length > 0 ? (
           <Box sx={{ mb: 2 }}>
-            <FormControl fullWidth size="small">
-              <InputLabel sx={{ color: '#00E0B8' }}>Select Capacity</InputLabel>
-              <Select
+            <Typography variant="subtitle2" sx={{ color: '#00E0B8', fontWeight: 'bold', mb: 1 }}>
+              Select Capacity:
+            </Typography>
+            <FormControl component="fieldset">
+              <RadioGroup
                 value={selectedCapacity}
                 onChange={(e) => setSelectedCapacity(e.target.value)}
-                label="Select Capacity"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    '& fieldset': { borderColor: '#00E0B8' },
-                    '&:hover fieldset': { borderColor: '#00E0B8' },
-                    '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                  },
-                  '& .MuiSelect-select': { color: '#F5F5F5' }
-                }}
+                sx={{ gap: 1 }}
               >
                 {availableCapacities.map((capacity) => {
                   const pricing = Array.isArray(drink.capacityPricing) 
@@ -120,42 +114,74 @@ const DrinkCard = ({ drink }) => {
                     : null;
                   const price = pricing ? pricing.currentPrice : drink.price;
                   const originalPrice = pricing ? pricing.originalPrice : drink.originalPrice;
+                  const discount = originalPrice && originalPrice > price 
+                    ? Math.round(((originalPrice - price) / originalPrice) * 100)
+                    : 0;
                   
                   return (
-                    <MenuItem key={capacity} value={capacity}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                        <Typography variant="body2">{capacity}</Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          {originalPrice && originalPrice > price ? (
-                            <>
-                              <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary', fontSize: '0.75rem' }}>
-                                KES {originalPrice.toFixed(2)}
-                              </Typography>
-                              <Typography variant="body2" sx={{ color: '#FF3366', fontWeight: 'bold' }}>
+                    <FormControlLabel
+                      key={capacity}
+                      value={capacity}
+                      control={
+                        <Radio 
+                          sx={{ 
+                            color: '#00E0B8',
+                            '&.Mui-checked': { color: '#00E0B8' }
+                          }} 
+                        />
+                      }
+                      label={
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', ml: 1 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                              {capacity}
+                            </Typography>
+                            {discount > 0 && (
+                              <Chip
+                                label={`${discount}% OFF`}
+                                size="small"
+                                sx={{
+                                  backgroundColor: '#FF3366',
+                                  color: '#F5F5F5',
+                                  fontSize: '0.65rem',
+                                  height: '20px'
+                                }}
+                              />
+                            )}
+                          </Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            {originalPrice && originalPrice > price ? (
+                              <>
+                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary', fontSize: '0.75rem' }}>
+                                  KES {originalPrice.toFixed(2)}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: '#FF3366', fontWeight: 'bold' }}>
+                                  KES {price.toFixed(2)}
+                                </Typography>
+                              </>
+                            ) : (
+                              <Typography variant="body2" sx={{ color: '#00E0B8', fontWeight: 'bold' }}>
                                 KES {price.toFixed(2)}
                               </Typography>
-                            </>
-                          ) : (
-                            <Typography variant="body2" sx={{ color: '#00E0B8', fontWeight: 'bold' }}>
-                              KES {price.toFixed(2)}
-                            </Typography>
-                          )}
+                            )}
+                          </Box>
                         </Box>
-                      </Box>
-                    </MenuItem>
+                      }
+                      sx={{
+                        border: selectedCapacity === capacity ? '1px solid #00E0B8' : '1px solid #333',
+                        borderRadius: 1,
+                        backgroundColor: selectedCapacity === capacity ? '#121212' : 'transparent',
+                        p: 1,
+                        m: 0,
+                        '&:hover': {
+                          backgroundColor: '#1a1a1a'
+                        }
+                      }}
+                    />
                   );
                 })}
-              </Select>
+              </RadioGroup>
             </FormControl>
-            
-            {/* Display selected capacity price */}
-            {selectedCapacity && (
-              <Box sx={{ mt: 1, p: 1, backgroundColor: '#121212', borderRadius: 1, border: '1px solid #00E0B8' }}>
-                <Typography variant="body2" sx={{ color: '#00E0B8', fontWeight: 'bold' }}>
-                  {selectedCapacity} - KES {getPriceForCapacity(selectedCapacity).toFixed(2)}
-                </Typography>
-              </Box>
-            )}
           </Box>
         ) : (
           /* Fallback to old pricing display */
