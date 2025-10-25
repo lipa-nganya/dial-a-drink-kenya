@@ -145,7 +145,7 @@ const InventoryPage = () => {
                   {/* Drink Image */}
                   <Box sx={{ mb: 2, textAlign: 'center' }}>
                     <img
-                      src={drink.image || 'https://via.placeholder.com/200x200/0D0D0D/FFFFFF?text=No+Image'}
+                      src={drink.image || ''}
                       alt={drink.name}
                       style={{
                         width: '100%',
@@ -155,7 +155,7 @@ const InventoryPage = () => {
                         backgroundColor: '#121212'
                       }}
                       onError={(e) => {
-                        e.target.src = 'https://via.placeholder.com/200x200/0D0D0D/FFFFFF?text=No+Image';
+                        e.target.src = '';
                       }}
                     />
                   </Box>

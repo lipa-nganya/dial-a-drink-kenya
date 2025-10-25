@@ -89,7 +89,7 @@ const Home = () => {
               }}
               onError={(e) => {
                 // Fallback to placeholder if image doesn't exist
-                e.target.src = 'https://via.placeholder.com/1200x400/00E0B8/FFFFFF?text=Special+Offer';
+                e.target.src = '';
               }}
             />
           </Box>

@@ -152,7 +152,7 @@ const Offers = () => {
                 <CardMedia
                   component="img"
                   height="200"
-                  image={drink.image || 'https://via.placeholder.com/300x200/00E0B8/FFFFFF?text=Drink'}
+                  image={drink.image || ''}
                   alt={drink.name}
                   sx={{ objectFit: 'cover' }}
                 />
