@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardMedia,
@@ -7,16 +7,48 @@ import {
   Typography,
   Button,
   Box,
-  Chip
+  Chip,
+  FormControl,
+  Select,
+  MenuItem,
+  InputLabel
 } from '@mui/material';
 import { AddShoppingCart, Star } from '@mui/icons-material';
 import { useCart } from '../contexts/CartContext';
 
 const DrinkCard = ({ drink }) => {
   const { addToCart } = useCart();
+  const [selectedCapacity, setSelectedCapacity] = useState('');
+
+  // Get available capacities from capacityPricing or fallback to capacity array
+  const availableCapacities = Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0 
+    ? drink.capacityPricing.map(pricing => pricing.capacity)
+    : Array.isArray(drink.capacity) && drink.capacity.length > 0 
+    ? drink.capacity 
+    : [];
+
+  // Get price for selected capacity
+  const getPriceForCapacity = (capacity) => {
+    if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
+      const pricing = drink.capacityPricing.find(p => p.capacity === capacity);
+      return pricing ? pricing.currentPrice : drink.price;
+    }
+    return drink.price;
+  };
 
   const handleAddToCart = () => {
-    addToCart(drink, 1);
+    if (availableCapacities.length > 0 && !selectedCapacity) {
+      alert('Please select a capacity first');
+      return;
+    }
+    
+    const drinkToAdd = {
+      ...drink,
+      selectedCapacity: selectedCapacity,
+      selectedPrice: selectedCapacity ? getPriceForCapacity(selectedCapacity) : drink.price
+    };
+    
+    addToCart(drinkToAdd, 1);
   };
 
   return (
@@ -64,53 +96,66 @@ const DrinkCard = ({ drink }) => {
           {drink.description}
         </Typography>
 
-        {/* Capacity Pricing Display */}
-        {console.log('DrinkCard - drink data:', { id: drink.id, name: drink.name, capacityPricing: drink.capacityPricing })}
-        {Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0 ? (
+        {/* Capacity Selection */}
+        {availableCapacities.length > 0 ? (
           <Box sx={{ mb: 2 }}>
-            {drink.capacityPricing.map((pricing, index) => (
-              <Box key={index} sx={{ mb: 1, p: 1, backgroundColor: '#121212', borderRadius: 1, border: '1px solid #333' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                  <Chip
-                    label={pricing.capacity}
-                    size="small"
-                    sx={{
-                      backgroundColor: '#00E0B8',
-                      color: '#0D0D0D',
-                      fontSize: '0.7rem',
-                      fontWeight: 'bold'
-                    }}
-                  />
-                  {pricing.originalPrice > pricing.currentPrice && (
-                    <Chip
-                      label={`${Math.round(((pricing.originalPrice - pricing.currentPrice) / pricing.originalPrice) * 100)}% OFF`}
-                      size="small"
-                      sx={{
-                        backgroundColor: '#FF3366',
-                        color: '#F5F5F5',
-                        fontSize: '0.65rem'
-                      }}
-                    />
-                  )}
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  {pricing.originalPrice > pricing.currentPrice ? (
-                    <>
-                      <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary', fontSize: '0.75rem' }}>
-                        KES {pricing.originalPrice.toFixed(2)}
-                      </Typography>
-                      <Typography variant="body1" sx={{ color: '#FF3366', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                        KES {pricing.currentPrice.toFixed(2)}
-                      </Typography>
-                    </>
-                  ) : (
-                    <Typography variant="body1" sx={{ color: '#00E0B8', fontWeight: 'bold', fontSize: '0.9rem' }}>
-                      KES {pricing.currentPrice.toFixed(2)}
-                    </Typography>
-                  )}
-                </Box>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: '#00E0B8' }}>Select Capacity</InputLabel>
+              <Select
+                value={selectedCapacity}
+                onChange={(e) => setSelectedCapacity(e.target.value)}
+                label="Select Capacity"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: '#00E0B8' },
+                    '&:hover fieldset': { borderColor: '#00E0B8' },
+                    '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                  },
+                  '& .MuiSelect-select': { color: '#F5F5F5' }
+                }}
+              >
+                {availableCapacities.map((capacity) => {
+                  const pricing = Array.isArray(drink.capacityPricing) 
+                    ? drink.capacityPricing.find(p => p.capacity === capacity)
+                    : null;
+                  const price = pricing ? pricing.currentPrice : drink.price;
+                  const originalPrice = pricing ? pricing.originalPrice : drink.originalPrice;
+                  
+                  return (
+                    <MenuItem key={capacity} value={capacity}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                        <Typography variant="body2">{capacity}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {originalPrice && originalPrice > price ? (
+                            <>
+                              <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary', fontSize: '0.75rem' }}>
+                                KES {originalPrice.toFixed(2)}
+                              </Typography>
+                              <Typography variant="body2" sx={{ color: '#FF3366', fontWeight: 'bold' }}>
+                                KES {price.toFixed(2)}
+                              </Typography>
+                            </>
+                          ) : (
+                            <Typography variant="body2" sx={{ color: '#00E0B8', fontWeight: 'bold' }}>
+                              KES {price.toFixed(2)}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+            
+            {/* Display selected capacity price */}
+            {selectedCapacity && (
+              <Box sx={{ mt: 1, p: 1, backgroundColor: '#121212', borderRadius: 1, border: '1px solid #00E0B8' }}>
+                <Typography variant="body2" sx={{ color: '#00E0B8', fontWeight: 'bold' }}>
+                  {selectedCapacity} - KES {getPriceForCapacity(selectedCapacity).toFixed(2)}
+                </Typography>
               </Box>
-            ))}
+            )}
           </Box>
         ) : (
           /* Fallback to old pricing display */
@@ -154,7 +199,7 @@ const DrinkCard = ({ drink }) => {
             }
           }}
         >
-          Add to Cart
+          {availableCapacities.length > 0 ? 'Add to Cart' : 'Add to Cart'}
         </Button>
       </CardActions>
     </Card>
