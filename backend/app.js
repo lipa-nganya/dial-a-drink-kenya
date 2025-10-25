@@ -26,6 +26,7 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/countdown', require('./routes/countdown'));
 app.use('/api/set-offers', require('./routes/set-offers'));
+app.use('/api/seed', require('./routes/seed-subcategories'));
 
 // Root endpoint
 app.get('/', (req, res) => {
