@@ -119,7 +119,7 @@ router.patch('/drinks/:id', async (req, res) => {
         // Update only provided fields
         const allowedFields = [
           'name', 'description', 'price', 'originalPrice', 
-          'isAvailable', 'isPopular', 'isOnOffer', 'image', 'categoryId',
+          'isAvailable', 'isPopular', 'isOnOffer', 'image', 'categoryId', 'subCategoryId',
           'capacity', 'capacityPricing', 'abv'
         ];
     
