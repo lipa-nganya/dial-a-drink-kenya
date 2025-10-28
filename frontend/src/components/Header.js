@@ -44,25 +44,25 @@ const Header = () => {
         </Typography>
       </Toolbar>
       <List>
-        <ListItem button onClick={() => handleNavigation('/')}>
+        <ListItem component="button" onClick={() => handleNavigation('/')}>
           <ListItemIcon>
             <Home />
           </ListItemIcon>
           <ListItemText primary="Home" />
         </ListItem>
-        <ListItem button onClick={() => handleNavigation('/menu')}>
+        <ListItem component="button" onClick={() => handleNavigation('/menu')}>
           <ListItemIcon>
             <Restaurant />
           </ListItemIcon>
           <ListItemText primary="Menu" />
         </ListItem>
-        <ListItem button onClick={() => handleNavigation('/offers')}>
+        <ListItem component="button" onClick={() => handleNavigation('/offers')}>
           <ListItemIcon>
             <LocalOffer />
           </ListItemIcon>
           <ListItemText primary="Offers" />
         </ListItem>
-        <ListItem button onClick={() => handleNavigation('/cart')}>
+        <ListItem component="button" onClick={() => handleNavigation('/cart')}>
           <ListItemIcon>
             <Badge badgeContent={getTotalItems()} color="secondary">
               <ShoppingCart />
@@ -70,19 +70,19 @@ const Header = () => {
           </ListItemIcon>
           <ListItemText primary="Cart" />
         </ListItem>
-        <ListItem button onClick={() => handleNavigation('/admin')}>
+        <ListItem component="button" onClick={() => handleNavigation('/admin')}>
           <ListItemIcon>
             <Dashboard />
           </ListItemIcon>
           <ListItemText primary="Admin Dashboard" />
         </ListItem>
-        <ListItem button onClick={() => handleNavigation('/admin/orders')}>
+        <ListItem component="button" onClick={() => handleNavigation('/admin/orders')}>
           <ListItemIcon>
             <Assignment />
           </ListItemIcon>
           <ListItemText primary="Orders" />
         </ListItem>
-        <ListItem button onClick={() => handleNavigation('/admin/inventory')}>
+        <ListItem component="button" onClick={() => handleNavigation('/admin/inventory')}>
           <ListItemIcon>
             <Inventory />
           </ListItemIcon>

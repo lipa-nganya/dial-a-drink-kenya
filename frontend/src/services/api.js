@@ -13,13 +13,13 @@ const getApiUrl = () => {
   }
   
   // Default to local development
-  return 'http://localhost:5001/api';
+  return 'http://localhost:4001/api';
 };
 
 // Use local backend for development, Render backend for production
 const API_BASE_URL = window.location.hostname.includes('onrender.com') 
   ? 'https://dialadrink-backend.onrender.com/api'
-  : 'http://localhost:5001/api';
+  : 'http://localhost:4001/api';
 
 // Debug logging
 console.log('=== API CONFIGURATION ===');
