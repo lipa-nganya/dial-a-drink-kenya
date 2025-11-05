@@ -319,13 +319,20 @@ const HomeScreen = ({ route, navigation }) => {
       console.log('📦 Order status updated via socket:', data);
       if (data.orderId) {
         // Update the order in the orders list without refresh
-        setOrders(prevOrders => 
-          prevOrders.map(order => 
-            order.id === data.orderId 
-              ? { ...order, status: data.status, paymentStatus: data.paymentStatus }
-              : order
-          )
-        );
+        // If order is delivered or completed, remove it from active orders
+        setOrders(prevOrders => {
+          if (data.status === 'delivered' || data.status === 'completed') {
+            // Remove delivered/completed orders from active orders
+            return prevOrders.filter(order => order.id !== data.orderId);
+          } else {
+            // Update order status
+            return prevOrders.map(order => 
+              order.id === data.orderId 
+                ? { ...order, status: data.status, paymentStatus: data.paymentStatus }
+                : order
+            );
+          }
+        });
         console.log('✅ Order card updated without refresh');
       }
     });
@@ -376,9 +383,11 @@ const HomeScreen = ({ route, navigation }) => {
         if (driverResponse.data.id) {
           try {
             const ordersResponse = await api.get(`/driver-orders/${driverResponse.data.id}`);
-            // Filter to only show accepted orders (exclude rejected ones)
+            // Filter to only show accepted orders (exclude rejected ones and delivered orders)
             const filteredOrders = (ordersResponse.data || []).filter(order => 
-              order.driverAccepted !== false // Show accepted (true) or pending (null), hide rejected (false)
+              order.driverAccepted !== false && // Show accepted (true) or pending (null), hide rejected (false)
+              order.status !== 'delivered' && // Remove delivered orders from active orders
+              order.status !== 'completed' // Also remove completed orders
             );
             // Sort by oldest first (ascending by createdAt)
             filteredOrders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
