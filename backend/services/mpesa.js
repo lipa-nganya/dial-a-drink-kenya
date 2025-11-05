@@ -1,0 +1,287 @@
+const crypto = require('crypto');
+
+// M-Pesa Sandbox credentials
+const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || 'FHZFIBqOrkVQRROotlEhiit3LWycwhsg2GgIxeS1BaE46Ecf';
+const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET || 'BDosKnRkJOXzY2oIeAMp12g5mQHxjkPCA1k5drdUmrqsd2A9W3APkmgx5ThkLjws';
+const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || '174379'; // Sandbox test shortcode
+const MPESA_PASSKEY = process.env.MPESA_PASSKEY || 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'; // Sandbox passkey
+// Determine callback URL based on environment
+const getCallbackUrl = () => {
+  let callbackUrl = process.env.MPESA_CALLBACK_URL;
+  
+  // Priority 1: If MPESA_CALLBACK_URL is explicitly set, use it (for ngrok or custom URLs)
+  if (callbackUrl) {
+    // Validate it's a proper URL
+    if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
+      console.warn('⚠️  Localhost callback URL detected. M-Pesa requires a publicly accessible URL.');
+      console.warn('⚠️  Please use ngrok or set a public URL. Falling back to production URL.');
+      callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/callback';
+    } else {
+      console.log(`✅ Using callback URL from environment: ${callbackUrl}`);
+      return callbackUrl;
+    }
+  }
+  
+  // Priority 2: Check for ngrok URL in environment (common ngrok env var)
+  const ngrokUrl = process.env.NGROK_URL;
+  if (ngrokUrl && !callbackUrl) {
+    callbackUrl = `${ngrokUrl}/api/mpesa/callback`;
+    console.log(`✅ Using ngrok URL for callbacks: ${callbackUrl}`);
+    return callbackUrl;
+  }
+  
+  // Priority 3: Check if we're in production
+  if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+    callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/callback';
+    console.log(`✅ Using production callback URL: ${callbackUrl}`);
+    return callbackUrl;
+  }
+  
+  // Priority 4: Local development - use production URL as fallback
+  // This is a fallback - ideally you should use ngrok
+  console.warn('⚠️  No callback URL configured for local development.');
+  console.warn('⚠️  To use ngrok:');
+  console.warn('   1. Install ngrok: https://ngrok.com/download');
+  console.warn('   2. Run: ngrok http 5001');
+  console.warn('   3. Set MPESA_CALLBACK_URL in .env to: https://your-ngrok-url.ngrok.io/api/mpesa/callback');
+  console.warn('⚠️  Falling back to production URL (callbacks will go to production server, not local).');
+  callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/callback';
+  
+  return callbackUrl;
+};
+
+// Get callback URL function - call at runtime to ensure environment is loaded
+const getMpesaCallbackUrl = () => getCallbackUrl();
+
+const MPESA_ENVIRONMENT = process.env.MPESA_ENVIRONMENT || 'sandbox'; // 'sandbox' or 'production'
+
+// M-Pesa API endpoints
+const MPESA_BASE_URL = MPESA_ENVIRONMENT === 'production'
+  ? 'https://api.safaricom.co.ke'
+  : 'https://sandbox.safaricom.co.ke';
+
+let accessToken = null;
+let tokenExpiry = null;
+
+/**
+ * Get M-Pesa access token
+ */
+async function getAccessToken() {
+  try {
+    // Check if we have a valid cached token
+    if (accessToken && tokenExpiry && Date.now() < tokenExpiry) {
+      return accessToken;
+    }
+
+    const auth = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString('base64');
+    
+    const response = await fetch(`${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Basic ${auth}`
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to get access token: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    accessToken = data.access_token;
+    // Set expiry to 55 minutes (tokens expire in 1 hour, but we refresh earlier)
+    tokenExpiry = Date.now() + (55 * 60 * 1000);
+    
+    return accessToken;
+  } catch (error) {
+    console.error('Error getting M-Pesa access token:', error);
+    throw error;
+  }
+}
+
+/**
+ * Generate password for M-Pesa API
+ */
+function generatePassword() {
+  const timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, -3);
+  const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString('base64');
+  return { password, timestamp };
+}
+
+/**
+ * Format phone number to M-Pesa format (254XXXXXXXXX)
+ */
+function formatPhoneNumber(phone) {
+  if (!phone || typeof phone !== 'string') {
+    throw new Error('Phone number is required');
+  }
+
+  // Remove all non-digit characters
+  let cleaned = phone.replace(/\D/g, '');
+  
+  // Handle different formats
+  if (cleaned.startsWith('0')) {
+    // Convert 07... to 2547... (replace leading 0 with 254)
+    cleaned = '254' + cleaned.substring(1);
+  } else if (cleaned.startsWith('254')) {
+    // Already in correct format (254XXXXXXXXX)
+    cleaned = cleaned;
+  } else if (cleaned.startsWith('7') && cleaned.length === 9) {
+    // 7XXXXXXXX format (9 digits starting with 7)
+    cleaned = '254' + cleaned;
+  } else if (cleaned.length === 9 && cleaned.startsWith('7')) {
+    // 7XXXXXXXX format (9 digits)
+    cleaned = '254' + cleaned;
+  } else {
+    // If it doesn't match any pattern, try to fix it
+    // If it's 10 digits starting with 0, remove the 0 and add 254
+    if (cleaned.length === 10 && cleaned.startsWith('0')) {
+      cleaned = '254' + cleaned.substring(1);
+    } else {
+      // For other cases, assume it needs 254 prefix if it's 9 digits
+      if (cleaned.length === 9) {
+        cleaned = '254' + cleaned;
+      }
+    }
+  }
+  
+  // Ensure it's 12 digits (254 + 9 digits)
+  if (cleaned.length !== 12 || !cleaned.startsWith('254')) {
+    throw new Error(`Invalid phone number format: ${phone}. Expected format: 0712345678 or 254712345678. Got: ${cleaned} (${cleaned.length} digits)`);
+  }
+  
+  return cleaned;
+}
+
+/**
+ * Initiate M-Pesa STK Push
+ * @param {string} phoneNumber - Customer phone number (Safaricom)
+ * @param {number} amount - Amount to charge
+ * @param {string} accountReference - Reference for the transaction
+ * @param {string} transactionDesc - Description of the transaction
+ */
+async function initiateSTKPush(phoneNumber, amount, accountReference, transactionDesc) {
+  try {
+    // Format phone number first to catch any formatting errors early
+    let formattedPhone;
+    try {
+      formattedPhone = formatPhoneNumber(phoneNumber);
+      console.log(`Phone number formatted: ${phoneNumber} -> ${formattedPhone}`);
+    } catch (formatError) {
+      console.error('Phone number formatting error:', formatError);
+      throw new Error(`Invalid phone number: ${formatError.message}`);
+    }
+
+    const token = await getAccessToken();
+    const { password, timestamp } = generatePassword();
+
+    // Get callback URL at runtime
+    const callbackUrl = getMpesaCallbackUrl();
+    
+    const payload = {
+      BusinessShortCode: MPESA_SHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      TransactionType: 'CustomerPayBillOnline',
+      Amount: Math.ceil(amount), // M-Pesa requires integer amounts
+      PartyA: formattedPhone,
+      PartyB: MPESA_SHORTCODE,
+      PhoneNumber: formattedPhone,
+      CallBackURL: callbackUrl,
+      AccountReference: accountReference,
+      TransactionDesc: transactionDesc
+    };
+
+    console.log('M-Pesa STK Push Request:', {
+      BusinessShortCode: MPESA_SHORTCODE,
+      PhoneNumber: formattedPhone,
+      Amount: Math.ceil(amount),
+      CallBackURL: callbackUrl,
+      AccountReference: accountReference,
+      Environment: MPESA_ENVIRONMENT,
+      BaseURL: MPESA_BASE_URL
+    });
+    
+    // Validate callback URL format
+    if (!callbackUrl.startsWith('https://') && !callbackUrl.startsWith('http://')) {
+      throw new Error(`Invalid callback URL format: ${callbackUrl}. Must start with http:// or https://`);
+    }
+    
+    // Ensure callback URL is publicly accessible (not localhost)
+    if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
+      throw new Error(`Callback URL cannot be localhost: ${callbackUrl}. M-Pesa requires a publicly accessible URL.`);
+    }
+
+    console.log('Sending STK Push request to M-Pesa...');
+    const response = await fetch(`${MPESA_BASE_URL}/mpesa/stkpush/v1/processrequest`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    console.log('M-Pesa STK Push response status:', response.status);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('M-Pesa STK Push error response:', errorData);
+      throw new Error(`M-Pesa STK Push failed: ${response.status} ${JSON.stringify(errorData)}`);
+    }
+
+    const data = await response.json();
+    console.log('M-Pesa STK Push success response:', JSON.stringify(data, null, 2));
+    console.log('ResponseCode:', data.ResponseCode);
+    console.log('CheckoutRequestID:', data.CheckoutRequestID);
+    console.log('CustomerMessage:', data.CustomerMessage);
+    console.log('MerchantRequestID:', data.MerchantRequestID);
+    return data;
+  } catch (error) {
+    console.error('Error initiating M-Pesa STK Push:', error);
+    throw error;
+  }
+}
+
+/**
+ * Check M-Pesa transaction status
+ */
+async function checkTransactionStatus(checkoutRequestID) {
+  try {
+    const token = await getAccessToken();
+    const { password, timestamp } = generatePassword();
+
+    const payload = {
+      BusinessShortCode: MPESA_SHORTCODE,
+      Password: password,
+      Timestamp: timestamp,
+      CheckoutRequestID: checkoutRequestID
+    };
+
+    const response = await fetch(`${MPESA_BASE_URL}/mpesa/stkpushquery/v1/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to check transaction status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error checking transaction status:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  initiateSTKPush,
+  checkTransactionStatus,
+  formatPhoneNumber,
+  getMpesaCallbackUrl
+};
+

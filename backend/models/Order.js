@@ -26,12 +26,38 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false
     },
     status: {
-      type: DataTypes.ENUM('pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'),
+      type: DataTypes.ENUM('pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed', 'cancelled'),
+      defaultValue: 'pending'
+    },
+    paymentStatus: {
+      type: DataTypes.ENUM('pending', 'paid', 'unpaid'),
       defaultValue: 'pending'
     },
     notes: {
       type: DataTypes.TEXT,
       allowNull: true
+    },
+    paymentType: {
+      type: DataTypes.ENUM('pay_now', 'pay_on_delivery'),
+      allowNull: false,
+      defaultValue: 'pay_on_delivery'
+    },
+    paymentMethod: {
+      type: DataTypes.ENUM('card', 'mobile_money'),
+      allowNull: true
+    },
+    driverId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'drivers',
+        key: 'id'
+      }
+    },
+    driverAccepted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+      defaultValue: null
     }
   }, {
     tableName: 'orders',

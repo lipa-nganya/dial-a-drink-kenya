@@ -4,25 +4,37 @@ import {
   Typography,
   Grid,
   Box,
-  Paper,
-  TextField,
-  InputAdornment,
   Button
 } from '@mui/material';
-import { Search, LocalBar, Speed, Security, Support } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import CategoryCard from '../components/CategoryCard';
 import CountdownTimer from '../components/CountdownTimer';
+import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 
 const Home = () => {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
   const navigate = useNavigate();
+  const { colors, isDarkMode } = useTheme();
 
   useEffect(() => {
     fetchCategories();
+    fetchHeroImage();
   }, []);
+
+  const fetchHeroImage = async () => {
+    try {
+      const response = await api.get('/settings/heroImage');
+      if (response.data && response.data.value) {
+        setHeroImage(response.data.value);
+      }
+    } catch (error) {
+      console.error('Error fetching hero image:', error);
+      // Keep default image if fetch fails
+    }
+  };
 
   const fetchCategories = async () => {
     try {
@@ -38,31 +50,13 @@ const Home = () => {
     }
   };
 
-  const features = [
-    {
-      icon: <Speed />,
-      title: 'Fast Delivery',
-      description: 'Get your drinks delivered within 30 minutes'
-    },
-    {
-      icon: <Security />,
-      title: 'Secure Payment',
-      description: 'Safe and secure payment methods'
-    },
-    {
-      icon: <Support />,
-      title: '24/7 Support',
-      description: 'Round the clock customer support'
-    }
-  ];
-
   return (
-    <Box>
+    <Box sx={{ backgroundColor: colors.background, minHeight: '100vh' }}>
       {/* Hero Section */}
       <Box
         sx={{
-          backgroundColor: '#0D0D0D',
-          color: 'white',
+          backgroundColor: colors.background,
+          color: colors.textPrimary,
           textAlign: 'center'
         }}
       >
@@ -80,7 +74,7 @@ const Home = () => {
             }}
           >
             <img
-              src="/assets/images/ads/hero-ad.png"
+              src={heroImage}
               alt="Special Offer - Premium Drinks"
               style={{
                 maxWidth: '100%',
@@ -88,8 +82,8 @@ const Home = () => {
                 display: 'block'
               }}
               onError={(e) => {
-                // Fallback to placeholder if image doesn't exist
-                e.target.src = '';
+                // Fallback to default if image doesn't exist
+                e.target.src = '/assets/images/ads/hero-ad.png';
               }}
             />
           </Box>
@@ -114,94 +108,50 @@ const Home = () => {
           >
             Limited Offers
           </Button>
-        </Container>
-      </Box>
 
-      {/* Features Section */}
-      <Container maxWidth="lg" sx={{ py: { xs: 4, sm: 6 } }}>
-        <Typography 
-          variant="h4" 
-          component="h2" 
-          textAlign="center" 
-          gutterBottom
-          sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
-        >
-          Why Choose Us?
-        </Typography>
-        <Grid container spacing={{ xs: 2, sm: 4 }} sx={{ mt: 2 }}>
-          {features.map((feature, index) => (
-            <Grid item xs={12} sm={6} md={4} key={index}>
-              <Paper
-                sx={{
-                  p: { xs: 2, sm: 3 },
-                  textAlign: 'center',
-                  height: '100%',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center'
-                }}
-              >
-                <Box sx={{ color: '#00E0B8', mb: 2, fontSize: { xs: 32, sm: 40 } }}>
-                  {feature.icon}
-                </Box>
-                <Typography 
-                  variant="h6" 
-                  gutterBottom
-                  sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
-                >
-                  {feature.title}
-                </Typography>
-                <Typography 
-                  variant="body2" 
-                  color="text.secondary"
-                  sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
-                >
-                  {feature.description}
-                </Typography>
-              </Paper>
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
-
-      {/* Categories Section */}
-      <Box sx={{ backgroundColor: '#121212', py: { xs: 4, sm: 6 } }}>
-        <Container maxWidth="lg">
-          <Typography 
-            variant="h4" 
-            component="h2" 
-            textAlign="center" 
-            gutterBottom
-            sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
-          >
-            Browse by Category
-          </Typography>
-          <Grid container spacing={{ xs: 2, sm: 4 }} sx={{ mt: 2 }}>
-            {loading ? (
-              <Grid item xs={12}>
-                <Typography textAlign="center">Loading categories...</Typography>
-              </Grid>
-            ) : categories.length === 0 ? (
-              <Grid item xs={12}>
-                <Typography textAlign="center" color="error">
-                  No categories found. Check console for errors.
-                </Typography>
-              </Grid>
-            ) : (
-              <>
+          {/* Categories Section */}
+          <Box sx={{ py: { xs: 4, sm: 6 } }}>
+            <Typography 
+              variant="h4" 
+              component="h2" 
+              textAlign="center" 
+              gutterBottom
+              sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
+            >
+              Browse by Category
+            </Typography>
+            <Grid 
+              container 
+              spacing={{ xs: 2, sm: 3, md: 3 }}
+              sx={{ 
+                mt: 2
+              }}
+            >
+              {loading ? (
                 <Grid item xs={12}>
-                  <Typography textAlign="center" color="success.main">
-                    Found {categories.length} categories
+                  <Typography textAlign="center">Loading categories...</Typography>
+                </Grid>
+              ) : categories.length === 0 ? (
+                <Grid item xs={12}>
+                  <Typography textAlign="center" color="error">
+                    No categories found. Check console for errors.
                   </Typography>
                 </Grid>
-                {categories.map((category) => (
-                  <Grid item xs={12} sm={6} md={4} key={category.id}>
+              ) : (
+                categories.map((category) => (
+                  <Grid 
+                    size={{ xs: 12, sm: 6, md: 3, lg: 3 }}
+                    key={category.id}
+                    sx={{
+                      display: 'flex'
+                    }}
+                  >
                     <CategoryCard category={category} />
                   </Grid>
-                ))}
-              </>
-            )}
-          </Grid>
+                ))
+              )}
+            </Grid>
+          </Box>
         </Container>
       </Box>
     </Box>
