@@ -325,12 +325,18 @@ const HomeScreen = ({ route, navigation }) => {
             // Remove delivered/completed orders from active orders
             return prevOrders.filter(order => order.id !== data.orderId);
           } else {
-            // Update order status
-            return prevOrders.map(order => 
-              order.id === data.orderId 
-                ? { ...order, status: data.status, paymentStatus: data.paymentStatus }
-                : order
-            );
+            // Update order with all data from socket event (merge order object if provided)
+            return prevOrders.map(order => {
+              if (order.id === data.orderId) {
+                // Merge order object if provided, otherwise just update status fields
+                const updatedOrder = data.order 
+                  ? { ...order, ...data.order, status: data.status, paymentStatus: data.paymentStatus }
+                  : { ...order, status: data.status, paymentStatus: data.paymentStatus };
+                console.log(`✅ Updated order #${data.orderId}: ${order.status} → ${data.status}`);
+                return updatedOrder;
+              }
+              return order;
+            });
           }
         });
         console.log('✅ Order card updated without refresh');

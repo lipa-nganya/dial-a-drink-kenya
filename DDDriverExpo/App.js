@@ -69,7 +69,7 @@ const MainTabs = () => {
         options={{
           tabBarLabel: 'Completed',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkmark-circle" size={size} color={color} />
+            <Ionicons name="checkmark-circle-outline" size={size} color={color} />
           ),
         }}
       />

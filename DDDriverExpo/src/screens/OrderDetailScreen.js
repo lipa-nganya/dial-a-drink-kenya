@@ -87,11 +87,32 @@ const OrderDetailScreen = ({ route, navigation }) => {
     socket.on('order-status-updated', (data) => {
       if (data.orderId === currentOrder.id) {
         console.log('📦 Order status updated via socket:', data);
-        setCurrentOrder(prev => ({
-          ...prev,
-          status: data.status,
-          paymentStatus: data.paymentStatus
-        }));
+        console.log(`   Status: ${currentOrder.status} → ${data.status}`);
+        console.log(`   Payment Status: ${currentOrder.paymentStatus} → ${data.paymentStatus}`);
+        
+        // Merge order object if provided, otherwise just update status fields
+        setCurrentOrder(prev => {
+          const updatedOrder = data.order 
+            ? { ...prev, ...data.order, status: data.status, paymentStatus: data.paymentStatus }
+            : { ...prev, status: data.status, paymentStatus: data.paymentStatus };
+          
+          // Show snackbar notification for status change
+          if (data.status !== prev.status) {
+            setSnackbarMessage(`Order status updated to: ${data.status.replace('_', ' ').toUpperCase()}`);
+            setSnackbarType('info');
+            setSnackbarVisible(true);
+          }
+          
+          return updatedOrder;
+        });
+        
+        // Notify HomeScreen to update its order list
+        navigation.setParams({
+          orderUpdated: true,
+          updatedOrder: { ...currentOrder, status: data.status, paymentStatus: data.paymentStatus, ...(data.order || {}) }
+        });
+        
+        console.log('✅ Order details updated without refresh');
       }
     });
 

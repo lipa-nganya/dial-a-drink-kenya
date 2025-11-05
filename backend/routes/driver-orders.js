@@ -232,24 +232,38 @@ router.patch('/:orderId/status', async (req, res) => {
       }
     }
 
-    // Reload order to get updated status
-    await order.reload();
+    // Reload order to get updated status with all related data
+    await order.reload({
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'orderItems',
+          include: [{ model: db.Drink, as: 'drink' }]
+        }
+      ]
+    });
 
     // Emit Socket.IO event for real-time updates
     const io = req.app.get('io');
     if (io) {
+      // Prepare order data for socket event (convert to plain object)
+      const orderData = order.toJSON ? order.toJSON() : order;
+      
       io.to(`order-${orderId}`).emit('order-status-updated', {
         orderId: order.id,
         status: order.status,
         oldStatus: oldStatus,
-        paymentStatus: order.paymentStatus
+        paymentStatus: order.paymentStatus,
+        order: orderData // Send full order object with all latest data
       });
       io.to('admin').emit('order-status-updated', {
         orderId: order.id,
         status: order.status,
         oldStatus: oldStatus,
-        paymentStatus: order.paymentStatus
+        paymentStatus: order.paymentStatus,
+        order: orderData // Send full order object with all latest data
       });
+      console.log(`📡 Emitted order-status-updated to admin room for Order #${order.id}: ${oldStatus} → ${order.status}`);
     }
 
     res.json(order);

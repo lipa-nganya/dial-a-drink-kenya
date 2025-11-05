@@ -8,6 +8,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -19,6 +20,7 @@ const ProfileScreen = ({ route, navigation }) => {
   const [driverInfo, setDriverInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const { colors, isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadDriverData();
@@ -109,50 +111,63 @@ const ProfileScreen = ({ route, navigation }) => {
   }
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: safeColors.background }]}
-      contentContainerStyle={{ paddingBottom: 80 }} // Add padding to account for bottom tab
-    >
-      <View style={styles.content}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-          <Text style={[styles.title, { color: safeColors.textPrimary }]}>Profile</Text>
-          <ThemeSwitcher />
+    <View style={[styles.container, { backgroundColor: safeColors.background }]}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={{ paddingBottom: 100 }} // Add padding to account for logout button and bottom tab
+      >
+        <View style={styles.content}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <Text style={[styles.title, { color: safeColors.textPrimary }]}>Profile</Text>
+            <ThemeSwitcher />
+          </View>
+          
+          {driverInfo ? (
+            <View style={[styles.infoCard, { backgroundColor: safeColors.paper }]}>
+              <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Name:</Text>
+              <Text style={[styles.infoValue, { color: safeColors.textPrimary }]}>{driverInfo.name}</Text>
+              
+              <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Phone:</Text>
+              <Text style={[styles.infoValue, { color: safeColors.textPrimary }]}>{driverInfo.phoneNumber}</Text>
+              
+              <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Status:</Text>
+              <Text style={[styles.infoValue, { color: safeColors.accentText }]}>
+                {driverInfo.status || 'offline'}
+              </Text>
+            </View>
+          ) : (
+            <View style={[styles.infoCard, { backgroundColor: safeColors.paper }]}>
+              <Text style={[styles.infoValue, { color: safeColors.textSecondary }]}>
+                Loading driver information...
+              </Text>
+            </View>
+          )}
         </View>
-        
-        {driverInfo ? (
-          <View style={[styles.infoCard, { backgroundColor: safeColors.paper }]}>
-            <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Name:</Text>
-            <Text style={[styles.infoValue, { color: safeColors.textPrimary }]}>{driverInfo.name}</Text>
-            
-            <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Phone:</Text>
-            <Text style={[styles.infoValue, { color: safeColors.textPrimary }]}>{driverInfo.phoneNumber}</Text>
-            
-            <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Status:</Text>
-            <Text style={[styles.infoValue, { color: safeColors.accentText }]}>
-              {driverInfo.status || 'offline'}
-            </Text>
-          </View>
-        ) : (
-          <View style={[styles.infoCard, { backgroundColor: safeColors.paper }]}>
-            <Text style={[styles.infoValue, { color: safeColors.textSecondary }]}>
-              Loading driver information...
-            </Text>
-          </View>
-        )}
-
-        <TouchableOpacity 
-          style={[styles.logoutButton, { backgroundColor: safeColors.error || '#FF3366' }]} 
-          onPress={handleLogout}
-        >
-          <Text style={[styles.logoutText, { color: safeColors.errorText || '#F5F5F5' }]}>Logout</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      </ScrollView>
+      
+      {/* Logout button positioned at bottom left above menu */}
+      <TouchableOpacity 
+        style={[
+          styles.logoutButton, 
+          { 
+            backgroundColor: safeColors.error || '#FF3366',
+            bottom: 60 + Math.max(insets.bottom, 10) + 10, // Tab height + safe area + margin
+          }
+        ]} 
+        onPress={handleLogout}
+      >
+        <Ionicons name="log-out-outline" size={16} color={safeColors.errorText || '#F5F5F5'} />
+        <Text style={[styles.logoutText, { color: safeColors.errorText || '#F5F5F5' }]}>Logout</Text>
+      </TouchableOpacity>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  scrollView: {
     flex: 1,
   },
   content: {
@@ -185,15 +200,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   logoutButton: {
-    padding: 16,
-    borderRadius: 8,
+    position: 'absolute',
+    left: 20,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 30,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 6,
+    zIndex: 10, // Ensure it's above scroll content
   },
   logoutText: {
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

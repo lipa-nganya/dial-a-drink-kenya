@@ -708,16 +708,30 @@ router.patch('/orders/:id/status', async (req, res) => {
     
     await order.save();
     
+    // Reload order to get the latest data (including any related data that might have changed)
+    await order.reload({
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'orderItems',
+          include: [{ model: db.Drink, as: 'drink' }]
+        }
+      ]
+    });
+    
     // Emit Socket.IO event to notify customer and driver about order status update
     const io = req.app.get('io');
     if (io) {
+      // Prepare order data for socket event (convert to plain object)
+      const orderData = order.toJSON ? order.toJSON() : order;
+      
       // Emit to order-specific room for customer tracking
       io.to(`order-${order.id}`).emit('order-status-updated', {
         orderId: order.id,
         status: status,
         oldStatus: oldStatus,
         paymentStatus: order.paymentStatus,
-        order: order
+        order: orderData // Send full order object with all latest data
       });
       
       // If order is assigned to a driver, also emit to driver room
@@ -727,7 +741,7 @@ router.patch('/orders/:id/status', async (req, res) => {
           status: status,
           oldStatus: oldStatus,
           paymentStatus: order.paymentStatus,
-          order: order
+          order: orderData // Send full order object with all latest data
         });
         console.log(`📡 Emitted order-status-updated to driver room: driver-${order.driverId}`);
       }
