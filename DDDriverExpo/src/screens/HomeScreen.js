@@ -21,6 +21,7 @@ import api from '../services/api';
 import { registerForPushNotifications, scheduleOrderNotification } from '../services/notifications';
 import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
+import Snackbar from '../components/Snackbar';
 
 const HomeScreen = ({ route, navigation }) => {
   const { phoneNumber } = route.params || {};
@@ -28,8 +29,12 @@ const HomeScreen = ({ route, navigation }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info');
   const socketRef = useRef(null);
   const appState = useRef(AppState.currentState);
+  const processingOrdersRef = useRef(new Set()); // Track orders being processed to prevent duplicates
   const { colors, isDarkMode } = useTheme();
   
   // Get phoneNumber from route params or AsyncStorage
@@ -50,6 +55,17 @@ const HomeScreen = ({ route, navigation }) => {
     loadDriverData();
   }, []);
 
+  // Check for snackbar params from navigation (after accepting/rejecting order)
+  useEffect(() => {
+    if (route.params?.showSnackbar) {
+      setSnackbarMessage(route.params.snackbarMessage || '');
+      setSnackbarType(route.params.snackbarType || 'info');
+      setSnackbarVisible(true);
+      // Clear the params after showing snackbar
+      navigation.setParams({ showSnackbar: false, snackbarMessage: '', snackbarType: 'info' });
+    }
+  }, [route.params?.showSnackbar, navigation]);
+
   // Register for push notifications when driver info is available
   useEffect(() => {
     if (driverInfo?.id) {
@@ -59,38 +75,44 @@ const HomeScreen = ({ route, navigation }) => {
 
   // Set up notification handlers
   useEffect(() => {
-    // Handle notification received while app is in foreground
-    const subscription = Notifications.addNotificationReceivedListener(notification => {
-      console.log('📱 Notification received in foreground:', notification);
-      const { data } = notification.request.content;
-      
-      if (data?.type === 'order-assigned' && data?.order) {
-        // Navigate to OrderAcceptance screen
-        handleOrderAssigned(data.order, true);
-      }
-    });
-
-    // Handle notification tap (when user taps notification)
+    // Handle notification tap (when user taps notification) - only handle taps, not received events
+    // This prevents the loop: socket event -> handleOrderAssigned -> scheduleNotification -> notification received -> handleOrderAssigned (loop!)
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
       console.log('📱 Notification tapped:', response);
       const { data } = response.notification.request.content;
       
       if (data?.type === 'order-assigned' && data?.order) {
-        // Navigate to OrderAcceptance screen
-        handleOrderAssigned(data.order, true);
+        const orderId = data.order.id;
+        // Only handle if not already processing this order
+        if (!processingOrdersRef.current.has(orderId)) {
+          processingOrdersRef.current.add(orderId);
+          // Navigate to OrderAcceptance screen
+          handleOrderAssigned(data.order, true);
+        } else {
+          console.log('⚠️ Order already being processed, ignoring notification tap:', orderId);
+        }
       }
     });
 
     return () => {
-      subscription.remove();
       responseSubscription.remove();
     };
   }, [navigation, driverInfo?.id]);
 
   // Handle order assignment (from socket or notification)
   const handleOrderAssigned = async (order, playSound = true) => {
+    const orderId = order.id;
+    
+    // Prevent duplicate processing - check if already processing this order
+    if (processingOrdersRef.current.has(orderId)) {
+      console.log('⚠️ Order already being processed, skipping:', orderId);
+      return;
+    }
+    
+    // Mark as processing
+    processingOrdersRef.current.add(orderId);
     console.log('🔴🔴🔴 HANDLING ORDER ASSIGNED 🔴🔴🔴');
-    console.log('📦 Order:', order.id);
+    console.log('📦 Order:', orderId);
     console.log('📦 Driver ID:', driverInfo?.id);
     
     // Start vibration immediately
@@ -115,12 +137,21 @@ const HomeScreen = ({ route, navigation }) => {
     }
     
     // Schedule a local notification to wake screen and bring app to foreground
+    // Only schedule notification, don't handle it when received (to prevent loop)
     await scheduleOrderNotification(order);
     
     // Navigate to OrderAcceptance screen
     try {
       const parentNavigation = navigation.getParent();
       const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
+      
+      // Clear HomeScreen vibration interval before navigating (OrderAcceptanceScreen will handle its own)
+      // This prevents both intervals running simultaneously
+      if (socketRef.current?.vibInterval) {
+        clearInterval(socketRef.current.vibInterval);
+        socketRef.current.vibInterval = null;
+        console.log('✅ Cleared HomeScreen vibration interval before navigation');
+      }
       
       if (parentNavigation) {
         console.log('✅ Using parent navigator to navigate to OrderAcceptance');
@@ -143,6 +174,12 @@ const HomeScreen = ({ route, navigation }) => {
       console.error('❌ Navigation error:', navError);
       Alert.alert('New Order', `Order #${order.id} has been assigned to you. Please check your orders.`);
     }
+    
+    // Remove from processing set after a delay to allow re-processing if needed (e.g., if order is reassigned)
+    setTimeout(() => {
+      processingOrdersRef.current.delete(orderId);
+      console.log('✅ Removed order from processing set:', orderId);
+    }, 60000); // Remove after 60 seconds
   };
 
   // Set up Socket.IO connection when driver info is available
@@ -208,6 +245,14 @@ const HomeScreen = ({ route, navigation }) => {
       console.log('📦 PlaySound flag:', data?.playSound);
       
       if (data && data.order) {
+        // Check if this order is already in the orders list (already accepted)
+        // Prevent re-triggering for orders that have already been accepted
+        const existingOrder = orders.find(o => o.id === data.order.id);
+        if (existingOrder && existingOrder.driverAccepted === true) {
+          console.log('⚠️ Order already accepted, skipping re-trigger:', data.order.id);
+          return;
+        }
+        
         // Use the centralized handleOrderAssigned function
         await handleOrderAssigned(data.order, data.playSound !== false);
       } else {
@@ -240,12 +285,11 @@ const HomeScreen = ({ route, navigation }) => {
         console.error('❌ Error scheduling removal notification:', notifError);
       }
       
-      // Show alert notification
-      Alert.alert(
-        'Order Removed',
-        `Order #${data.orderId} removed from your queue`,
-        [{ text: 'OK' }]
-      );
+      // Show red snackbar instead of alert
+      setSnackbarMessage(`Order #${data.orderId} has been removed from your queue`);
+      setSnackbarType('error');
+      setSnackbarVisible(true);
+      
       // Refresh orders list
       loadDriverData();
     });
@@ -399,17 +443,25 @@ const HomeScreen = ({ route, navigation }) => {
   };
 
   return (
-    <ScrollView 
-      style={[styles.container, { backgroundColor: safeColors.background }]}
-      contentContainerStyle={{ paddingBottom: 80 }} // Add padding to account for bottom tab
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={safeColors.accent} />
-      }
-    >
-      <View style={styles.content}>
-        <View style={{ marginBottom: 15 }}>
-          <Text style={[styles.sectionTitle, { color: safeColors.accentText }]}>Active Orders</Text>
-        </View>
+    <View style={{ flex: 1 }}>
+      <Snackbar
+        visible={snackbarVisible}
+        message={snackbarMessage}
+        type={snackbarType}
+        duration={5000}
+        onClose={() => setSnackbarVisible(false)}
+      />
+      <ScrollView 
+        style={[styles.container, { backgroundColor: safeColors.background }]}
+        contentContainerStyle={{ paddingBottom: 80 }} // Add padding to account for bottom tab
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={safeColors.accent} />
+        }
+      >
+        <View style={styles.content}>
+          <View style={{ marginBottom: 15 }}>
+            <Text style={[styles.sectionTitle, { color: safeColors.accentText }]}>Active Orders</Text>
+          </View>
 
         {orders.length === 0 ? (
           <View style={[styles.noOrdersCard, { backgroundColor: safeColors.paper }]}>
@@ -442,14 +494,14 @@ const HomeScreen = ({ route, navigation }) => {
                     <Ionicons name="navigate" size={20} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.actionIcon, { backgroundColor: safeColors.accentText }]}
+                    style={[styles.actionIcon, { backgroundColor: safeColors.accent }]}
                     onPress={(e) => {
                       e.stopPropagation();
                       openOrderDetails(order);
                     }}
                     activeOpacity={0.7}
                   >
-                    <Ionicons name="eye" size={20} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />
+                    <Ionicons name="eye" size={20} color={isDarkMode ? '#0D0D0D' : '#FFFFFF'} />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -475,8 +527,9 @@ const HomeScreen = ({ route, navigation }) => {
             </TouchableOpacity>
           ))
         )}
-      </View>
-    </ScrollView>
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 

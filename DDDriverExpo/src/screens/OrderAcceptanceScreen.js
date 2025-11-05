@@ -16,12 +16,16 @@ import { Audio } from 'expo-av';
 import { Vibration } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
+import Snackbar from '../components/Snackbar';
 
 const { width, height } = Dimensions.get('window');
 
 const OrderAcceptanceScreen = ({ route, navigation }) => {
   const { order, driverId, playSound = true } = route.params || {};
   const [loading, setLoading] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info');
   const appState = useRef(AppState.currentState);
   const soundIntervalRef = useRef(null);
   const vibrationIntervalRef = useRef(null);
@@ -69,8 +73,17 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
     // Play driver sound continuously
     const playDriverSound = async () => {
       try {
-        // Continuous loud vibration - ambulance pattern: vibrate for 0.5s, pause 0.1s, repeat
+        // Start continuous vibration IMMEDIATELY and keep it going
+        // This ensures vibration works alongside sound
         Vibration.vibrate([500, 100, 500, 100, 500, 100], true);
+        console.log('📳✅ Initial vibration started');
+        
+        // Set up vibration interval to keep it going continuously alongside sound
+        vibrationInterval = setInterval(() => {
+          Vibration.vibrate([500, 100, 500, 100], true);
+        }, 1000);
+        vibrationIntervalRef.current = vibrationInterval;
+        console.log('📳✅ Vibration interval set up - will continue alongside sound');
         
         // Load and play the local driver sound file
         try {
@@ -94,7 +107,7 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
           // Play the sound - it will loop automatically
           await sound.playAsync();
           
-          console.log('🔊 Driver sound playing continuously');
+          console.log('🔊 Driver sound playing continuously WITH vibration');
         } catch (localSoundError) {
           console.error('❌ Could not load local driver sound file:', localSoundError);
           console.error('Error details:', {
@@ -102,29 +115,29 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
             code: localSoundError.code,
             name: localSoundError.name
           });
-          // Fallback: just use continuous vibration pattern
-          // The vibration pattern already creates urgency
+          // Even if sound fails, keep vibration going
+          console.log('📳 Keeping vibration active even though sound failed');
         }
       } catch (error) {
         console.warn('Could not play driver sound:', error);
-        // Fallback: just vibrate with intense pattern
+        // Ensure vibration continues even on error
         Vibration.vibrate([500, 100, 500, 100], true);
+        if (!vibrationIntervalRef.current) {
+          vibrationInterval = setInterval(() => {
+            Vibration.vibrate([500, 100, 500, 100], true);
+          }, 1000);
+          vibrationIntervalRef.current = vibrationInterval;
+        }
       }
     };
 
     setupAudio();
 
     // Start driver sound and vibration immediately
+    // playDriverSound() now handles both sound AND vibration setup with intervals
     playDriverSound();
     
-    // Continuous vibration backup - ensure it keeps going
-    vibrationInterval = setInterval(() => {
-      Vibration.vibrate([500, 100, 500, 100], true);
-    }, 1000);
-    
-    vibrationIntervalRef.current = vibrationInterval;
-    
-    console.log('✅ Sound and vibration setup complete');
+    console.log('✅ Sound and vibration setup complete - both will run continuously');
 
     // Handle app state changes to ensure sound continues in background
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -136,10 +149,22 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
     });
 
     return () => {
-      // Clean up all intervals and vibration
+      // Clean up all intervals and vibration when component unmounts
+      console.log('🧹 Cleaning up OrderAcceptanceScreen - stopping all sound and vibration');
+      
+      // Cancel all vibration
+      Vibration.cancel();
+      
+      // Clear all vibration intervals
       if (vibrationInterval) {
         clearInterval(vibrationInterval);
       }
+      if (vibrationIntervalRef.current) {
+        clearInterval(vibrationIntervalRef.current);
+        vibrationIntervalRef.current = null;
+      }
+      
+      // Stop and unload sound
       if (soundObject) {
         soundObject.stopAsync().catch(() => {});
         soundObject.unloadAsync().catch(() => {});
@@ -149,7 +174,12 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
         soundObjectRef.current.unloadAsync().catch(() => {});
         soundObjectRef.current = null;
       }
-      Vibration.cancel();
+      
+      // Force cancel vibration one more time
+      setTimeout(() => {
+        Vibration.cancel();
+      }, 100);
+      
       subscription?.remove();
     };
   }, [playSound]);
@@ -160,21 +190,39 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
       return;
     }
 
-    // Stop sound/vibration immediately when driver responds
+    // Stop ALL sound/vibration immediately when driver responds
+    console.log('🛑 Stopping all sound and vibration...');
+    
+    // Cancel all vibration patterns
     Vibration.cancel();
+    
+    // Clear vibration interval in this screen
+    if (vibrationIntervalRef.current) {
+      clearInterval(vibrationIntervalRef.current);
+      vibrationIntervalRef.current = null;
+      console.log('✅ Cleared OrderAcceptanceScreen vibration interval');
+    }
+    
+    // Also clear any vibration intervals that might be running from HomeScreen
+    // We need to access the socket ref from HomeScreen, but we can't directly
+    // So we'll rely on Vibration.cancel() which should stop all patterns
+    
+    // Stop sound
     if (soundObjectRef.current) {
       try {
         await soundObjectRef.current.stopAsync();
         await soundObjectRef.current.unloadAsync();
+        console.log('✅ Stopped sound');
       } catch (e) {
         console.log('Error stopping sound:', e);
       }
       soundObjectRef.current = null;
     }
-    if (vibrationIntervalRef.current) {
-      clearInterval(vibrationIntervalRef.current);
-      vibrationIntervalRef.current = null;
-    }
+    
+    // Force stop vibration one more time to be sure
+    setTimeout(() => {
+      Vibration.cancel();
+    }, 100);
 
     setLoading(true);
     try {
@@ -184,21 +232,28 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
       });
 
       if (response.data.success) {
-        Alert.alert(
-          accepted ? 'Order Accepted' : 'Order Rejected',
-          accepted 
-            ? 'You have accepted this order. You can view it in your orders list.'
-            : 'You have rejected this order.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate back to home
-                navigation.replace('Home', { phoneNumber: route.params?.phoneNumber });
-              }
-            }
-          ]
-        );
+        // Ensure vibration is completely stopped before navigating
+        Vibration.cancel();
+        if (vibrationIntervalRef.current) {
+          clearInterval(vibrationIntervalRef.current);
+          vibrationIntervalRef.current = null;
+        }
+        
+        // Navigate back to home IMMEDIATELY (before snackbar) to prevent re-triggering
+        // This ensures we're on Home screen before any socket events can re-trigger
+        navigation.replace('Home', { 
+          phoneNumber: route.params?.phoneNumber,
+          showSnackbar: true,
+          snackbarMessage: accepted 
+            ? 'Order accepted successfully. You can view it in your orders list.'
+            : 'Order rejected.',
+          snackbarType: accepted ? 'success' : 'info'
+        });
+        
+        // Force stop vibration one more time after navigation
+        setTimeout(() => {
+          Vibration.cancel();
+        }, 200);
       }
     } catch (error) {
       console.error('Error responding to order:', error);
@@ -232,9 +287,9 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
   console.log('🔴 Route params:', route.params);
 
   if (!order) {
-    console.error('❌ No order data - cannot render red screen');
+    console.error('❌ No order data - cannot render blue screen');
     return (
-      <View style={styles.redOverlay}>
+      <View style={styles.blueOverlay}>
         <Text style={styles.alertTitle}>ERROR</Text>
         <Text style={styles.orderNumberText}>No order data</Text>
         <TouchableOpacity
@@ -257,8 +312,8 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
       presentationStyle="fullScreen" // iOS: ensure full screen
       hardwareAccelerated={true} // Android: hardware acceleration
     >
-      <StatusBar barStyle="light-content" backgroundColor="#FF0000" translucent={false} />
-      <View style={styles.redOverlay}>
+      <StatusBar barStyle="dark-content" backgroundColor="#87CEEB" translucent={false} />
+      <View style={styles.blueOverlay}>
         <View style={styles.contentContainer}>
           <Text style={styles.alertTitle}>NEW ORDER ASSIGNED</Text>
           <Text style={styles.orderNumberText}>Order #{order.id}</Text>
@@ -297,9 +352,9 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  redOverlay: {
+  blueOverlay: {
     flex: 1,
-    backgroundColor: '#FF0000', // Bright red
+    backgroundColor: '#87CEEB', // Light blue (sky blue) - matching icon bg color
     width: '100%',
     height: '100%',
     position: 'absolute',
