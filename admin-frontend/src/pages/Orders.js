@@ -177,22 +177,29 @@ const Orders = () => {
     socket.on('payment-confirmed', async (data) => {
       console.log('✅ Payment confirmed for order:', data);
       if (data.orderId) {
-        // Update order immediately with payment status from event
+        // Update order immediately with payment status from event - merge full order object if provided
         setOrders(prevOrders => {
-          const updated = prevOrders.map(order => 
-            order.id === data.orderId 
-              ? { 
-                  ...order, 
-                  status: data.status || order.status,
-                  paymentStatus: data.paymentStatus || 'paid', // Update payment status from event
-                  transactions: order.transactions?.map(tx => 
-                    tx.id === data.transactionId 
-                      ? { ...tx, status: 'completed', receiptNumber: data.receiptNumber }
-                      : tx
-                  ) || []
-                }
-              : order
-          );
+          const updated = prevOrders.map(order => {
+            if (order.id === data.orderId) {
+              // Merge order object if provided, otherwise just update status fields
+              const updatedOrder = data.order 
+                ? { ...order, ...data.order, status: data.status || 'confirmed', paymentStatus: 'paid', paymentConfirmedAt: data.paymentConfirmedAt }
+                : { 
+                    ...order, 
+                    status: data.status || 'confirmed',
+                    paymentStatus: 'paid',
+                    paymentConfirmedAt: data.paymentConfirmedAt,
+                    transactions: order.transactions?.map(tx => 
+                      tx.id === data.transactionId 
+                        ? { ...tx, status: 'completed', receiptNumber: data.receiptNumber }
+                        : tx
+                    ) || []
+                  };
+              console.log(`✅ Updated order #${data.orderId}: paymentStatus → paid, status → ${data.status || 'confirmed'}`);
+              return updatedOrder;
+            }
+            return order;
+          });
           // Re-sort after update (filtering will be handled by the useEffect that watches orders)
           return sortOrdersByStatus(updated);
         });

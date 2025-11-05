@@ -624,15 +624,24 @@ router.post('/callback', async (req, res) => {
             console.error(`⚠️  Sequelize update failed (SQL updates already applied):`, updateError);
           }
           
-          // Force reload and verify the update
-          await order.reload();
+          // Force reload and verify the update with all relationships
+          await order.reload({
+            include: [
+              {
+                model: db.OrderItem,
+                as: 'orderItems',
+                include: [{ model: db.Drink, as: 'drink' }]
+              }
+            ]
+          });
           
-          // Double-check the status was saved
+          // Double-check the status was saved - get fresh order data
           const verifyOrder = await db.Order.findByPk(order.id);
           
           console.log(`✅✅✅ Order #${order.id} AUTOMATICALLY CONFIRMED via M-Pesa payment`);
           console.log(`   Order Status: ${verifyOrder.status}`);
           console.log(`   Payment Status: ${verifyOrder.paymentStatus}`);
+          console.log(`   Driver ID: ${verifyOrder.driverId || 'Not assigned'}`);
           console.log(`   Receipt: ${receiptNumber}`);
           console.log(`   Amount: ${amount}`);
           console.log(`   Phone: ${phoneNumber}`);
@@ -649,53 +658,59 @@ router.post('/callback', async (req, res) => {
                 replacements: { id: order.id }
               }
             );
+            // Reload again after force update
+            await order.reload();
             const finalCheck = await db.Order.findByPk(order.id);
             console.log(`✅ Final check - Order #${order.id}: Status: ${finalCheck.status}, PaymentStatus: ${finalCheck.paymentStatus}`);
           }
           
+          // Get the final order data with all relationships for socket event
+          const finalOrder = await db.Order.findByPk(order.id, {
+            include: [
+              {
+                model: db.OrderItem,
+                as: 'orderItems',
+                include: [{ model: db.Drink, as: 'drink' }]
+              }
+            ]
+          });
+          
+          // Prepare order data for socket event (convert to plain object)
+          const orderData = finalOrder.toJSON ? finalOrder.toJSON() : finalOrder;
+          const paymentConfirmedAt = new Date().toISOString();
+          
           // Emit real-time notification to frontend via Socket.IO
           const io = req.app.get('io');
           if (io) {
-            // Emit to a specific order room so the frontend can listen for this specific order
-            io.to(`order-${order.id}`).emit('payment-confirmed', {
-              orderId: order.id,
+            // Prepare payment confirmation data
+            const paymentConfirmedData = {
+              orderId: finalOrder.id,
               status: 'confirmed',
-              paymentStatus: 'paid', // Payment status updated to paid
+              paymentStatus: 'paid',
               receiptNumber: receiptNumber,
               amount: amount,
               transactionId: transaction.id,
-              transactionStatus: 'completed', // Single source of truth for payment
-              message: `Payment confirmed for Order #${order.id}`
-            });
+              transactionStatus: 'completed',
+              paymentConfirmedAt: paymentConfirmedAt,
+              order: orderData, // Include full order object
+              message: `Payment confirmed for Order #${finalOrder.id}`
+            };
             
-            // Notify driver if order is assigned to one
-            if (order.driverId) {
-              io.to(`driver-${order.driverId}`).emit('payment-confirmed', {
-                orderId: order.id,
-                status: 'confirmed',
-                paymentStatus: 'paid',
-                receiptNumber: receiptNumber,
-                amount: amount,
-                transactionId: transaction.id,
-                transactionStatus: 'completed',
-                message: `Payment confirmed for Order #${order.id}`
-              });
-              console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
+            // Emit to a specific order room so the frontend can listen for this specific order
+            io.to(`order-${finalOrder.id}`).emit('payment-confirmed', paymentConfirmedData);
+            
+            // Notify driver if order is assigned to one - use finalOrder to get latest driverId
+            if (finalOrder.driverId) {
+              io.to(`driver-${finalOrder.driverId}`).emit('payment-confirmed', paymentConfirmedData);
+              console.log(`📡 Emitted payment-confirmed event to driver-${finalOrder.driverId} for Order #${finalOrder.id}`);
+            } else {
+              console.log(`⚠️  No driverId found for Order #${finalOrder.id}, skipping driver notification`);
             }
             
             // Also notify admin
-            io.to('admin').emit('payment-confirmed', {
-              orderId: order.id,
-              status: 'confirmed',
-              paymentStatus: 'paid', // Payment status updated to paid
-              receiptNumber: receiptNumber,
-              amount: amount,
-              transactionId: transaction.id,
-              transactionStatus: 'completed', // Single source of truth for payment
-              message: `Payment confirmed for Order #${order.id} via M-Pesa`
-            });
+            io.to('admin').emit('payment-confirmed', paymentConfirmedData);
             
-            console.log(`📡 Socket.IO events emitted for Order #${order.id} with transaction status: completed`);
+            console.log(`📡 Socket.IO events emitted for Order #${finalOrder.id} with transaction status: completed`);
           }
       } else {
         // Payment failed - check the specific error code
@@ -953,25 +968,51 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
           
           console.log(`✅ Order #${transaction.orderId} status updated to 'confirmed' (triggered by transaction completion)`);
           
-          // Emit Socket.IO events
-          const io = req.app.get('io');
-          if (io) {
-            io.to(`order-${transaction.orderId}`).emit('payment-confirmed', {
-              orderId: transaction.orderId,
-              status: 'confirmed',
-              receiptNumber: receiptNumber,
-              transactionId: transaction.id,
-              transactionStatus: 'completed', // Single source of truth for payment
-              message: `Payment confirmed for Order #${transaction.orderId}`
-            });
-            io.to('admin').emit('payment-confirmed', {
-              orderId: transaction.orderId,
-              status: 'confirmed',
-              receiptNumber: receiptNumber,
-              transactionId: transaction.id,
-              transactionStatus: 'completed', // Single source of truth for payment
-              message: `Payment confirmed for Order #${transaction.orderId} via M-Pesa`
-            });
+          // Reload order with all relationships to get latest data including driverId
+          const order = await db.Order.findByPk(transaction.orderId, {
+            include: [
+              {
+                model: db.OrderItem,
+                as: 'orderItems',
+                include: [{ model: db.Drink, as: 'drink' }]
+              }
+            ]
+          });
+          
+          if (order) {
+            // Update paymentStatus to paid
+            await order.update({ paymentStatus: 'paid' });
+            await order.reload();
+            
+            // Prepare order data for socket event
+            const orderData = order.toJSON ? order.toJSON() : order;
+            const paymentConfirmedAt = new Date().toISOString();
+            
+            // Emit Socket.IO events
+            const io = req.app.get('io');
+            if (io) {
+              const paymentConfirmedData = {
+                orderId: order.id,
+                status: 'confirmed',
+                paymentStatus: 'paid',
+                receiptNumber: receiptNumber,
+                transactionId: transaction.id,
+                transactionStatus: 'completed',
+                paymentConfirmedAt: paymentConfirmedAt,
+                order: orderData,
+                message: `Payment confirmed for Order #${order.id}`
+              };
+              
+              io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
+              
+              // Notify driver if order is assigned to one
+              if (order.driverId) {
+                io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
+                console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
+              }
+              
+              io.to('admin').emit('payment-confirmed', paymentConfirmedData);
+            }
           }
           
           console.log(`✅ Updated transaction #${transaction.id} and order #${transaction.orderId} based on M-Pesa API query`);
@@ -1047,31 +1088,56 @@ router.get('/check-payment/:orderId', async (req, res) => {
           { replacements: { id: transaction.id } }
         );
         
-        // Update order status
+        // Update order status and paymentStatus
         await db.sequelize.query(
-          `UPDATE orders SET status = 'confirmed', "updatedAt" = NOW() WHERE id = :orderId AND status = 'pending'`,
+          `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW() WHERE id = :orderId AND status = 'pending'`,
           { replacements: { orderId } }
         );
         
-        // Emit Socket.IO event
-        const io = req.app.get('io');
-        if (io) {
-          io.to(`order-${orderId}`).emit('payment-confirmed', {
-            orderId: orderId,
-            status: 'confirmed',
-            receiptNumber: transaction.receiptNumber,
-            transactionId: transaction.id,
-            transactionStatus: 'completed',
-            message: `Payment confirmed for Order #${orderId}`
-          });
-          io.to('admin').emit('payment-confirmed', {
-            orderId: orderId,
-            status: 'confirmed',
-            receiptNumber: transaction.receiptNumber,
-            transactionId: transaction.id,
-            transactionStatus: 'completed',
-            message: `Payment confirmed for Order #${orderId} (auto-detected)`
-          });
+        // Reload order with all relationships to get latest data including driverId
+        const order = await db.Order.findByPk(orderId, {
+          include: [
+            {
+              model: db.OrderItem,
+              as: 'orderItems',
+              include: [{ model: db.Drink, as: 'drink' }]
+            }
+          ]
+        });
+        
+        if (order) {
+          // Prepare order data for socket event
+          const orderData = order.toJSON ? order.toJSON() : order;
+          const paymentConfirmedAt = new Date().toISOString();
+          
+          // Emit Socket.IO event
+          const io = req.app.get('io');
+          if (io) {
+            const paymentConfirmedData = {
+              orderId: order.id,
+              status: 'confirmed',
+              paymentStatus: 'paid',
+              receiptNumber: transaction.receiptNumber,
+              transactionId: transaction.id,
+              transactionStatus: 'completed',
+              paymentConfirmedAt: paymentConfirmedAt,
+              order: orderData,
+              message: `Payment confirmed for Order #${order.id}`
+            };
+            
+            io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
+            
+            // Notify driver if order is assigned to one
+            if (order.driverId) {
+              io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
+              console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
+            }
+            
+            io.to('admin').emit('payment-confirmed', {
+              ...paymentConfirmedData,
+              message: `Payment confirmed for Order #${order.id} (auto-detected)`
+            });
+          }
         }
       }
       
@@ -1147,25 +1213,50 @@ router.get('/transaction-status/:orderId', async (req, res) => {
             }
           );
           
-          // Emit Socket.IO event for real-time update
-          const io = req.app.get('io');
-          if (io) {
-            io.to(`order-${transaction.orderId}`).emit('payment-confirmed', {
-              orderId: transaction.orderId,
-              status: 'confirmed',
-              receiptNumber: transaction.receiptNumber,
-              transactionId: transaction.id,
-              transactionStatus: 'completed',
-              message: `Payment confirmed for Order #${transaction.orderId}`
-            });
-            io.to('admin').emit('payment-confirmed', {
-              orderId: transaction.orderId,
-              status: 'confirmed',
-              receiptNumber: transaction.receiptNumber,
-              transactionId: transaction.id,
-              transactionStatus: 'completed',
-              message: `Payment confirmed for Order #${transaction.orderId} via M-Pesa (auto-detected)`
-            });
+          // Reload order with all relationships to get latest data including driverId
+          const order = await db.Order.findByPk(transaction.orderId, {
+            include: [
+              {
+                model: db.OrderItem,
+                as: 'orderItems',
+                include: [{ model: db.Drink, as: 'drink' }]
+              }
+            ]
+          });
+          
+          if (order) {
+            // Prepare order data for socket event
+            const orderData = order.toJSON ? order.toJSON() : order;
+            const paymentConfirmedAt = new Date().toISOString();
+            
+            // Emit Socket.IO event for real-time update
+            const io = req.app.get('io');
+            if (io) {
+              const paymentConfirmedData = {
+                orderId: order.id,
+                status: 'confirmed',
+                paymentStatus: 'paid',
+                receiptNumber: transaction.receiptNumber,
+                transactionId: transaction.id,
+                transactionStatus: 'completed',
+                paymentConfirmedAt: paymentConfirmedAt,
+                order: orderData,
+                message: `Payment confirmed for Order #${order.id}`
+              };
+              
+              io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
+              
+              // Notify driver if order is assigned to one
+              if (order.driverId) {
+                io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
+                console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
+              }
+              
+              io.to('admin').emit('payment-confirmed', {
+                ...paymentConfirmedData,
+                message: `Payment confirmed for Order #${order.id} via M-Pesa (auto-detected)`
+              });
+            }
           }
           
           console.log(`✅ Auto-updated transaction #${transaction.id} and order #${transaction.orderId} to completed (receipt number detected)`);
@@ -1407,23 +1498,46 @@ router.post('/manual-confirm/:orderId', async (req, res) => {
       }
     );
     
+    // Reload order with all relationships to get latest data including driverId
+    await order.reload({
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'orderItems',
+          include: [{ model: db.Drink, as: 'drink' }]
+        }
+      ]
+    });
+    
+    // Prepare order data for socket event
+    const orderData = order.toJSON ? order.toJSON() : order;
+    const paymentConfirmedAt = new Date().toISOString();
+    
     // Emit Socket.IO events
     const io = req.app.get('io');
     if (io) {
-      io.to(`order-${order.id}`).emit('payment-confirmed', {
+      const paymentConfirmedData = {
         orderId: order.id,
         status: 'confirmed',
+        paymentStatus: 'paid',
         receiptNumber: receiptNumber || transaction.receiptNumber,
         transactionId: transaction.id,
         transactionStatus: 'completed',
+        paymentConfirmedAt: paymentConfirmedAt,
+        order: orderData,
         message: `Payment confirmed for Order #${order.id}`
-      });
+      };
+      
+      io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
+      
+      // Notify driver if order is assigned to one
+      if (order.driverId) {
+        io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
+        console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
+      }
+      
       io.to('admin').emit('payment-confirmed', {
-        orderId: order.id,
-        status: 'confirmed',
-        receiptNumber: receiptNumber || transaction.receiptNumber,
-        transactionId: transaction.id,
-        transactionStatus: 'completed',
+        ...paymentConfirmedData,
         message: `Payment manually confirmed for Order #${order.id}`
       });
     }
@@ -1572,28 +1686,47 @@ router.post('/test-callback/:checkoutRequestID', async (req, res) => {
         }
       );
       
-      // Verify updates
+      // Verify updates - reload with all relationships
       await transaction.reload();
-      await order.reload();
+      await order.reload({
+        include: [
+          {
+            model: db.OrderItem,
+            as: 'orderItems',
+            include: [{ model: db.Drink, as: 'drink' }]
+          }
+        ]
+      });
+      
+      // Prepare order data for socket event
+      const orderData = order.toJSON ? order.toJSON() : order;
+      const paymentConfirmedAt = new Date().toISOString();
       
       const io = req.app.get('io');
       if (io) {
-        io.to(`order-${order.id}`).emit('payment-confirmed', {
+        const paymentConfirmedData = {
           orderId: order.id,
           status: 'confirmed',
+          paymentStatus: 'paid',
           receiptNumber: receiptNumber,
           amount: amount,
           transactionId: transaction.id,
-          transactionStatus: 'completed', // Single source of truth for payment
+          transactionStatus: 'completed',
+          paymentConfirmedAt: paymentConfirmedAt,
+          order: orderData,
           message: `Payment confirmed for Order #${order.id}`
-        });
+        };
+        
+        io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
+        
+        // Notify driver if order is assigned to one
+        if (order.driverId) {
+          io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
+          console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
+        }
+        
         io.to('admin').emit('payment-confirmed', {
-          orderId: order.id,
-          status: 'confirmed',
-          receiptNumber: receiptNumber,
-          amount: amount,
-          transactionId: transaction.id,
-          transactionStatus: 'completed', // Single source of truth for payment
+          ...paymentConfirmedData,
           message: `Payment confirmed for Order #${order.id} via M-Pesa`
         });
       }

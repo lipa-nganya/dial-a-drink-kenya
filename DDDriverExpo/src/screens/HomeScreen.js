@@ -347,13 +347,19 @@ const HomeScreen = ({ route, navigation }) => {
     socket.on('payment-confirmed', (data) => {
       console.log('💰 Payment confirmed via socket:', data);
       if (data.orderId) {
-        // Update order payment status
+        // Update order payment status - merge full order object if provided
         setOrders(prevOrders => 
-          prevOrders.map(order => 
-            order.id === data.orderId 
-              ? { ...order, paymentStatus: 'paid', status: data.status || order.status }
-              : order
-          )
+          prevOrders.map(order => {
+            if (order.id === data.orderId) {
+              // Merge order object if provided, otherwise just update status fields
+              const updatedOrder = data.order 
+                ? { ...order, ...data.order, paymentStatus: 'paid', status: data.status || 'confirmed', paymentConfirmedAt: data.paymentConfirmedAt }
+                : { ...order, paymentStatus: 'paid', status: data.status || 'confirmed', paymentConfirmedAt: data.paymentConfirmedAt };
+              console.log(`✅ Updated order #${data.orderId}: paymentStatus → paid, status → ${data.status || 'confirmed'}`);
+              return updatedOrder;
+            }
+            return order;
+          })
         );
         
         // Show success snackbar
