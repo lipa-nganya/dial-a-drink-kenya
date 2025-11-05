@@ -150,6 +150,29 @@ const Orders = () => {
       });
     });
 
+    // Listen for order status updates from driver app
+    socket.on('order-status-updated', async (data) => {
+      console.log('✅ Order status updated via Socket.IO:', data);
+      if (data.orderId) {
+        // Update order immediately with status from event
+        setOrders(prevOrders => {
+          const updated = prevOrders.map(order => 
+            order.id === data.orderId 
+              ? { 
+                  ...order, 
+                  status: data.status || order.status,
+                  paymentStatus: data.paymentStatus || order.paymentStatus,
+                  ...(data.order || {}) // Merge full order object if provided
+                }
+              : order
+          );
+          const sorted = sortOrdersByStatus(updated);
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+          return sorted;
+        });
+      }
+    });
+
     // Listen for order updates (status changes, payment confirmations, etc.)
     socket.on('payment-confirmed', async (data) => {
       console.log('✅ Payment confirmed for order:', data);
