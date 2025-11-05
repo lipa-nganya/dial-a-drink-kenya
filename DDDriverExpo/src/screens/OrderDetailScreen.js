@@ -95,6 +95,48 @@ const OrderDetailScreen = ({ route, navigation }) => {
       }
     });
 
+    // Listen for payment confirmation
+    socket.on('payment-confirmed', (data) => {
+      if (data.orderId === currentOrder.id) {
+        console.log('💰 Payment confirmed via socket:', data);
+        setCurrentOrder(prev => ({
+          ...prev,
+          status: data.status || prev.status,
+          paymentStatus: 'paid',
+          paymentConfirmedAt: new Date().toISOString()
+        }));
+        setSnackbarMessage(`Payment confirmed! Receipt: ${data.receiptNumber || 'N/A'}`);
+        setSnackbarType('success');
+        setSnackbarVisible(true);
+      }
+    });
+
+    // Listen for payment failures
+    socket.on('payment-failed', (data) => {
+      if (data.orderId === currentOrder.id) {
+        console.log('❌ Payment failed via socket:', data);
+        let message = data.errorMessage || 'Payment failed';
+        
+        if (data.errorType === 'wrong_pin') {
+          message = 'Customer entered incorrect PIN. Payment failed.';
+        } else if (data.errorType === 'insufficient_balance') {
+          message = 'Customer has insufficient balance. Payment failed.';
+        } else if (data.errorType === 'timeout') {
+          message = 'Payment request timed out. Customer did not complete payment.';
+        }
+        
+        setSnackbarMessage(message);
+        setSnackbarType('error');
+        setSnackbarVisible(true);
+        
+        // Update order status
+        setCurrentOrder(prev => ({
+          ...prev,
+          paymentStatus: 'unpaid'
+        }));
+      }
+    });
+
     return () => {
       socket.disconnect();
     };
@@ -158,17 +200,26 @@ const OrderDetailScreen = ({ route, navigation }) => {
       });
 
       if (response.data.success) {
-        setSnackbarMessage('Payment request has been sent to the customer. They will receive an M-Pesa prompt.');
+        // Payment request was sent successfully - show success message
+        // The actual payment status will be updated via socket events when callback arrives
+        setSnackbarMessage('Payment request sent to customer. Waiting for payment confirmation...');
         setSnackbarType('success');
         setSnackbarVisible(true);
+        
+        // Payment status will be updated automatically via socket events:
+        // - payment-confirmed: when customer pays successfully
+        // - payment-failed: when customer enters wrong PIN, has insufficient balance, or times out
       } else {
-        setSnackbarMessage(response.data.error || 'Failed to initiate payment');
+        setSnackbarMessage(response.data.error || 'Failed to initiate payment request');
         setSnackbarType('error');
         setSnackbarVisible(true);
       }
     } catch (error) {
       console.error('Payment initiation error:', error);
-      setSnackbarMessage(error.response?.data?.error || 'Failed to initiate payment. Please try again.');
+      // Only show error if it's a real failure (network error, invalid credentials, etc.)
+      // Not if it's just waiting for customer to enter PIN
+      const errorMessage = error.response?.data?.error || 'Failed to initiate payment request. Please try again.';
+      setSnackbarMessage(errorMessage);
       setSnackbarType('error');
       setSnackbarVisible(true);
     } finally {
