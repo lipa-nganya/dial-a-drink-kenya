@@ -599,19 +599,9 @@ router.post('/callback', async (req, res) => {
           const noteText = `✅ M-Pesa Receipt: ${receiptNumber || 'N/A'}\n✅ Payment confirmed at: ${new Date().toISOString()}`;
           
           // Update order status to 'confirmed' and paymentStatus to 'paid' (transaction completion triggers confirmation)
-          // First update via Sequelize (handles field name correctly)
+          // Use raw SQL first to ensure it works (PostgreSQL column name might be different)
           try {
-            await order.update({
-              status: 'confirmed',
-              paymentStatus: 'paid', // Update payment status to 'paid'
-              notes: order.notes ? 
-                `${order.notes}\n${noteText}` : 
-                noteText
-            });
-            console.log(`✅ Order #${order.id} updated via Sequelize: status=confirmed, paymentStatus=paid`);
-          } catch (updateError) {
-            console.error(`⚠️  Sequelize update failed, trying raw SQL:`, updateError);
-            // Fallback to raw SQL if Sequelize update fails
+            // Try raw SQL first to ensure it works regardless of Sequelize column mapping
             await db.sequelize.query(
               `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW(), notes = COALESCE(notes || E'\n', '') || :note WHERE id = :id`,
               {
@@ -622,6 +612,36 @@ router.post('/callback', async (req, res) => {
               }
             );
             console.log(`✅ Order #${order.id} updated via raw SQL: status=confirmed, paymentStatus=paid`);
+            
+            // Also update via Sequelize as backup
+            try {
+              await order.update({
+                status: 'confirmed',
+                paymentStatus: 'paid',
+                notes: order.notes ? 
+                  `${order.notes}\n${noteText}` : 
+                  noteText
+              });
+              console.log(`✅ Order #${order.id} also updated via Sequelize`);
+            } catch (sequelizeError) {
+              console.log(`⚠️  Sequelize update warning (raw SQL already applied):`, sequelizeError.message);
+            }
+          } catch (sqlError) {
+            console.error(`⚠️  Raw SQL update failed, trying Sequelize:`, sqlError);
+            // Fallback to Sequelize if raw SQL fails
+            try {
+              await order.update({
+                status: 'confirmed',
+                paymentStatus: 'paid',
+                notes: order.notes ? 
+                  `${order.notes}\n${noteText}` : 
+                  noteText
+              });
+              console.log(`✅ Order #${order.id} updated via Sequelize: status=confirmed, paymentStatus=paid`);
+            } catch (updateError) {
+              console.error(`❌ Both SQL and Sequelize updates failed:`, updateError);
+              throw updateError;
+            }
           }
           
           console.log(`✅ Order #${order.id} status updated to 'confirmed' (triggered by transaction completion)`);
@@ -637,13 +657,21 @@ router.post('/callback', async (req, res) => {
             ]
           });
           
-          // Double-check the status was saved - get fresh order data
-          const verifyOrder = await db.Order.findByPk(order.id);
+          // Double-check the status was saved - get fresh order data from database
+          const verifyOrder = await db.sequelize.query(
+            `SELECT id, status, "paymentStatus", "driverId" FROM orders WHERE id = :id`,
+            {
+              replacements: { id: order.id },
+              type: db.sequelize.QueryTypes.SELECT
+            }
+          );
+          
+          const dbOrder = verifyOrder[0];
           
           console.log(`✅✅✅ Order #${order.id} AUTOMATICALLY CONFIRMED via M-Pesa payment`);
-          console.log(`   Order Status: ${verifyOrder.status}`);
-          console.log(`   Payment Status: ${verifyOrder.paymentStatus}`);
-          console.log(`   Driver ID: ${verifyOrder.driverId || 'Not assigned'}`);
+          console.log(`   Order Status (DB): ${dbOrder?.status}`);
+          console.log(`   Payment Status (DB): ${dbOrder?.paymentStatus}`);
+          console.log(`   Driver ID: ${dbOrder?.driverId || 'Not assigned'}`);
           console.log(`   Receipt: ${receiptNumber}`);
           console.log(`   Amount: ${amount}`);
           console.log(`   Phone: ${phoneNumber}`);
@@ -651,8 +679,8 @@ router.post('/callback', async (req, res) => {
           console.log(`   Transaction Status: ${transaction.status}`);
           
           // If order status is still not 'confirmed' or paymentStatus is not 'paid', force update again
-          if (verifyOrder.status !== 'confirmed' || verifyOrder.paymentStatus !== 'paid') {
-            console.log(`⚠️  Order status mismatch detected! Current: ${verifyOrder.status}, paymentStatus: ${verifyOrder.paymentStatus}, expected: confirmed, paid`);
+          if (!dbOrder || dbOrder.status !== 'confirmed' || dbOrder.paymentStatus !== 'paid') {
+            console.log(`⚠️  Order status mismatch detected! Current: ${dbOrder?.status}, paymentStatus: ${dbOrder?.paymentStatus}, expected: confirmed, paid`);
             console.log(`   Force updating with raw SQL again...`);
             await db.sequelize.query(
               `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW() WHERE id = :id`,
@@ -662,11 +690,18 @@ router.post('/callback', async (req, res) => {
             );
             // Reload again after force update
             await order.reload();
-            const finalCheck = await db.Order.findByPk(order.id);
-            console.log(`✅ Final check - Order #${order.id}: Status: ${finalCheck.status}, PaymentStatus: ${finalCheck.paymentStatus}`);
+            const finalCheck = await db.sequelize.query(
+              `SELECT status, "paymentStatus" FROM orders WHERE id = :id`,
+              {
+                replacements: { id: order.id },
+                type: db.sequelize.QueryTypes.SELECT
+              }
+            );
+            console.log(`✅ Final check - Order #${order.id}: Status: ${finalCheck[0]?.status}, PaymentStatus: ${finalCheck[0]?.paymentStatus}`);
           }
           
           // Get the final order data with all relationships for socket event
+          // Use database values to ensure accuracy
           const finalOrder = await db.Order.findByPk(order.id, {
             include: [
               {
@@ -677,42 +712,86 @@ router.post('/callback', async (req, res) => {
             ]
           });
           
+          // Use database values from direct query (most reliable)
+          const actualPaymentStatus = dbOrder?.paymentStatus || finalOrder?.paymentStatus || 'paid';
+          const actualStatus = dbOrder?.status || finalOrder?.status || 'confirmed';
+          
+          // Double-check paymentStatus one more time before emitting
+          if (actualPaymentStatus !== 'paid') {
+            console.log(`⚠️  Final order paymentStatus is still not 'paid' (${actualPaymentStatus}), forcing update again...`);
+            await db.sequelize.query(
+              `UPDATE orders SET "paymentStatus" = 'paid' WHERE id = :id`,
+              {
+                replacements: { id: order.id }
+              }
+            );
+            // Reload again
+            await finalOrder.reload();
+            const finalVerify = await db.sequelize.query(
+              `SELECT "paymentStatus" FROM orders WHERE id = :id`,
+              {
+                replacements: { id: order.id },
+                type: db.sequelize.QueryTypes.SELECT
+              }
+            );
+            console.log(`✅ After force update - PaymentStatus: ${finalVerify[0]?.paymentStatus}`);
+          }
+          
+          // Update finalOrder object with database values
+          if (finalOrder) {
+            finalOrder.paymentStatus = actualPaymentStatus;
+            finalOrder.status = actualStatus;
+          }
+          
           // Prepare order data for socket event (convert to plain object)
           const orderData = finalOrder.toJSON ? finalOrder.toJSON() : finalOrder;
+          // Ensure paymentStatus is correct in order data
+          if (orderData) {
+            orderData.paymentStatus = actualPaymentStatus;
+            orderData.status = actualStatus;
+          }
+          
           const paymentConfirmedAt = new Date().toISOString();
           
           // Emit real-time notification to frontend via Socket.IO
           const io = req.app.get('io');
           if (io) {
-            // Prepare payment confirmation data
+            // Prepare payment confirmation data - use actual values from database
             const paymentConfirmedData = {
-              orderId: finalOrder.id,
-              status: 'confirmed',
-              paymentStatus: 'paid',
+              orderId: order.id,
+              status: actualStatus,
+              paymentStatus: actualPaymentStatus, // Use actual value from database
               receiptNumber: receiptNumber,
               amount: amount,
               transactionId: transaction.id,
               transactionStatus: 'completed',
               paymentConfirmedAt: paymentConfirmedAt,
-              order: orderData, // Include full order object
-              message: `Payment confirmed for Order #${finalOrder.id}`
+              order: orderData, // Include full order object with latest paymentStatus
+              message: `Payment confirmed for Order #${order.id}`
             };
             
-            // Emit to a specific order room so the frontend can listen for this specific order
-            io.to(`order-${finalOrder.id}`).emit('payment-confirmed', paymentConfirmedData);
+            console.log(`📡 Preparing payment-confirmed event for Order #${order.id}`);
+            console.log(`   Status: ${paymentConfirmedData.status}`);
+            console.log(`   PaymentStatus: ${paymentConfirmedData.paymentStatus}`);
+            console.log(`   Order paymentStatus in data: ${orderData?.paymentStatus}`);
+            console.log(`   Driver ID: ${dbOrder?.driverId || finalOrder?.driverId || 'Not assigned'}`);
             
-            // Notify driver if order is assigned to one - use finalOrder to get latest driverId
-            if (finalOrder.driverId) {
-              io.to(`driver-${finalOrder.driverId}`).emit('payment-confirmed', paymentConfirmedData);
-              console.log(`📡 Emitted payment-confirmed event to driver-${finalOrder.driverId} for Order #${finalOrder.id}`);
+            // Emit to a specific order room so the frontend can listen for this specific order
+            io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
+            
+            // Notify driver if order is assigned to one - use database driverId
+            const driverId = dbOrder?.driverId || finalOrder?.driverId;
+            if (driverId) {
+              io.to(`driver-${driverId}`).emit('payment-confirmed', paymentConfirmedData);
+              console.log(`📡 Emitted payment-confirmed event to driver-${driverId} for Order #${order.id}`);
             } else {
-              console.log(`⚠️  No driverId found for Order #${finalOrder.id}, skipping driver notification`);
+              console.log(`⚠️  No driverId found for Order #${order.id}, skipping driver notification`);
             }
             
             // Also notify admin
             io.to('admin').emit('payment-confirmed', paymentConfirmedData);
             
-            console.log(`📡 Socket.IO events emitted for Order #${finalOrder.id} with transaction status: completed`);
+            console.log(`📡 Socket.IO events emitted for Order #${order.id} with transaction status: completed`);
           }
       } else {
         // Payment failed - check the specific error code
