@@ -599,19 +599,7 @@ router.post('/callback', async (req, res) => {
           const noteText = `✅ M-Pesa Receipt: ${receiptNumber || 'N/A'}\n✅ Payment confirmed at: ${new Date().toISOString()}`;
           
           // Update order status to 'confirmed' and paymentStatus to 'paid' (transaction completion triggers confirmation)
-          await db.sequelize.query(
-            `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW(), notes = COALESCE(notes || E'\n', '') || :note WHERE id = :id`,
-            {
-              replacements: { 
-                id: order.id,
-                note: noteText
-              }
-            }
-          );
-          
-          console.log(`✅ Order #${order.id} status updated to 'confirmed' (triggered by transaction completion)`);
-          
-          // Also update via Sequelize as backup
+          // First update via Sequelize (handles field name correctly)
           try {
             await order.update({
               status: 'confirmed',
@@ -620,9 +608,23 @@ router.post('/callback', async (req, res) => {
                 `${order.notes}\n${noteText}` : 
                 noteText
             });
+            console.log(`✅ Order #${order.id} updated via Sequelize: status=confirmed, paymentStatus=paid`);
           } catch (updateError) {
-            console.error(`⚠️  Sequelize update failed (SQL updates already applied):`, updateError);
+            console.error(`⚠️  Sequelize update failed, trying raw SQL:`, updateError);
+            // Fallback to raw SQL if Sequelize update fails
+            await db.sequelize.query(
+              `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW(), notes = COALESCE(notes || E'\n', '') || :note WHERE id = :id`,
+              {
+                replacements: { 
+                  id: order.id,
+                  note: noteText
+                }
+              }
+            );
+            console.log(`✅ Order #${order.id} updated via raw SQL: status=confirmed, paymentStatus=paid`);
           }
+          
+          console.log(`✅ Order #${order.id} status updated to 'confirmed' (triggered by transaction completion)`);
           
           // Force reload and verify the update with all relationships
           await order.reload({

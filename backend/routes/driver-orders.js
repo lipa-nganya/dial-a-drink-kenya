@@ -325,7 +325,42 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
     // Check if STK push was initiated successfully
     // M-Pesa returns success even if the request is accepted, but payment hasn't completed yet
     // We should return success immediately and wait for callback to determine final status
-    if (stkResult.success || stkResult.checkoutRequestID) {
+    if (stkResult.success || stkResult.checkoutRequestID || stkResult.CheckoutRequestID) {
+      const checkoutRequestID = stkResult.checkoutRequestID || stkResult.CheckoutRequestID;
+      const merchantRequestID = stkResult.merchantRequestID || stkResult.MerchantRequestID;
+      
+      // Store checkout request ID in order notes (for callback to find order)
+      const checkoutNote = `M-Pesa CheckoutRequestID: ${checkoutRequestID}`;
+      await order.update({
+        paymentMethod: 'mobile_money',
+        notes: order.notes ? 
+          `${order.notes}\n${checkoutNote}` : 
+          checkoutNote
+      });
+      
+      // Create transaction record for STK push initiation (same as when customer initiates)
+      // This ensures the callback can find the order via transaction checkoutRequestID
+      try {
+        await db.Transaction.create({
+          orderId: order.id,
+          transactionType: 'payment',
+          paymentMethod: 'mobile_money',
+          paymentProvider: 'mpesa',
+          amount: amount,
+          status: 'pending',
+          paymentStatus: 'pending', // Initial payment status - will be updated to 'paid' when callback confirms
+          checkoutRequestID: checkoutRequestID,
+          merchantRequestID: merchantRequestID,
+          phoneNumber: formattedPhone,
+          notes: `STK Push initiated by driver. ${stkResult.CustomerMessage || stkResult.customerMessage || ''}`
+        });
+        console.log(`✅ Transaction record created for driver-initiated payment on Order #${order.id}`);
+      } catch (transactionError) {
+        console.error('❌ Error creating transaction record:', transactionError);
+        // Don't fail the STK push if transaction creation fails - log it but continue
+        console.log('⚠️  Continuing with STK push despite transaction creation error');
+      }
+      
       // STK push was initiated - return success immediately
       // Don't wait for callback - that will come separately
       // The callback will handle payment status updates and notify driver via socket
@@ -333,8 +368,8 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
       res.json({
         success: true,
         message: 'Payment request sent to customer. Waiting for payment confirmation...',
-        checkoutRequestID: stkResult.checkoutRequestID || stkResult.CheckoutRequestID,
-        merchantRequestID: stkResult.merchantRequestID || stkResult.MerchantRequestID,
+        checkoutRequestID: checkoutRequestID,
+        merchantRequestID: merchantRequestID,
         status: 'pending' // Payment is pending until callback confirms
       });
     } else {
