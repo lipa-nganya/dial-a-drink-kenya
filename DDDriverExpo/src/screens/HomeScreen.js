@@ -66,6 +66,24 @@ const HomeScreen = ({ route, navigation }) => {
     }
   }, [route.params?.showSnackbar, navigation]);
 
+  // Check for order updates from OrderDetailScreen
+  useEffect(() => {
+    if (route.params?.orderUpdated && route.params?.updatedOrder) {
+      const updatedOrder = route.params.updatedOrder;
+      // Update the order in the orders list
+      setOrders(prevOrders => 
+        prevOrders.map(order => 
+          order.id === updatedOrder.id 
+            ? { ...order, ...updatedOrder }
+            : order
+        )
+      );
+      // Clear the params
+      navigation.setParams({ orderUpdated: false, updatedOrder: null });
+      console.log('✅ Order card updated from OrderDetailScreen');
+    }
+  }, [route.params?.orderUpdated, route.params?.updatedOrder, navigation]);
+
   // Register for push notifications when driver info is available
   useEffect(() => {
     if (driverInfo?.id) {
@@ -172,7 +190,9 @@ const HomeScreen = ({ route, navigation }) => {
       }
     } catch (navError) {
       console.error('❌ Navigation error:', navError);
-      Alert.alert('New Order', `Order #${order.id} has been assigned to you. Please check your orders.`);
+      setSnackbarMessage(`Order #${order.id} has been assigned to you. Please check your orders.`);
+      setSnackbarType('info');
+      setSnackbarVisible(true);
     }
     
     // Remove from processing set after a delay to allow re-processing if needed (e.g., if order is reassigned)
@@ -293,6 +313,22 @@ const HomeScreen = ({ route, navigation }) => {
       // Refresh orders list
       loadDriverData();
     });
+
+    // Listen for order status updates to update order cards without refresh
+    socket.on('order-status-updated', (data) => {
+      console.log('📦 Order status updated via socket:', data);
+      if (data.orderId) {
+        // Update the order in the orders list without refresh
+        setOrders(prevOrders => 
+          prevOrders.map(order => 
+            order.id === data.orderId 
+              ? { ...order, status: data.status, paymentStatus: data.paymentStatus }
+              : order
+          )
+        );
+        console.log('✅ Order card updated without refresh');
+      }
+    });
     
     // Handle app state changes to reconnect socket
     const subscription = AppState.addEventListener('change', (nextAppState) => {
@@ -392,11 +428,15 @@ const HomeScreen = ({ route, navigation }) => {
       if (supported) {
         Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'Google Maps is not available on this device');
+        setSnackbarMessage('Google Maps is not available on this device');
+        setSnackbarType('error');
+        setSnackbarVisible(true);
       }
     }).catch(err => {
       console.error('Error opening Google Maps:', err);
-      Alert.alert('Error', 'Could not open Google Maps');
+      setSnackbarMessage('Could not open Google Maps');
+      setSnackbarType('error');
+      setSnackbarVisible(true);
     });
   };
 

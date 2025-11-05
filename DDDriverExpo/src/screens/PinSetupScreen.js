@@ -13,7 +13,7 @@ import {
 import api from '../services/api';
 
 const PinSetupScreen = ({ route, navigation }) => {
-  const { phoneNumber } = route.params || {};
+  const { phoneNumber, forgotPin } = route.params || {};
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -32,8 +32,8 @@ const PinSetupScreen = ({ route, navigation }) => {
     }
 
     // Pass the PIN as a string to ensure consistency
-    console.log('PIN setup complete, navigating to PinConfirm with PIN:', pin);
-    navigation.navigate('PinConfirm', { phoneNumber, pin: String(pin) });
+    console.log('PIN setup complete, navigating to PinConfirm with PIN:', pin, 'forgotPin:', forgotPin);
+    navigation.navigate('PinConfirm', { phoneNumber, pin: String(pin), forgotPin: forgotPin || false });
   };
 
   return (

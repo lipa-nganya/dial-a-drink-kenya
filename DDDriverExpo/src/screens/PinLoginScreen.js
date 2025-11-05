@@ -97,23 +97,11 @@ const PinLoginScreen = ({ route, navigation }) => {
     }
   };
 
-  const handleForgotPin = () => {
-    Alert.alert(
-      'Reset PIN',
-      'You will need to verify your phone number again with OTP to reset your PIN. The PIN will be reset in the database.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          onPress: async () => {
-            // Clear login state (PIN is in database, will be reset when new PIN is set)
-            await AsyncStorage.removeItem('driver_logged_in');
-            // Note: We don't remove driver_pin from AsyncStorage because PIN is stored in database
-            navigation.replace('PhoneNumber');
-          },
-        },
-      ]
-    );
+  const handleForgotPin = async () => {
+    // Navigate to PhoneNumber screen with forgotPin flag
+    // This will trigger the forgot PIN flow: phone → OTP → set new PIN → auto login
+    await AsyncStorage.removeItem('driver_logged_in');
+    navigation.replace('PhoneNumber', { forgotPin: true });
   };
 
   return (

@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 
 const PinConfirmScreen = ({ route, navigation }) => {
-  const { phoneNumber, pin } = route.params;
+  const { phoneNumber, pin, forgotPin } = route.params;
   const [confirmPin, setConfirmPin] = useState('');
   const [loading, setLoading] = useState(false);
 
