@@ -120,15 +120,28 @@ const OrderDetailScreen = ({ route, navigation }) => {
     socket.on('payment-confirmed', (data) => {
       if (data.orderId === currentOrder.id) {
         console.log('💰 Payment confirmed via socket:', data);
-        setCurrentOrder(prev => ({
-          ...prev,
-          status: data.status || prev.status,
-          paymentStatus: 'paid',
-          paymentConfirmedAt: new Date().toISOString()
-        }));
+        console.log(`   Status: ${currentOrder.status} → ${data.status || 'confirmed'}`);
+        console.log(`   Payment Status: ${currentOrder.paymentStatus} → paid`);
+        
+        // Merge order object if provided, otherwise just update status fields
+        setCurrentOrder(prev => {
+          const updatedOrder = data.order 
+            ? { ...prev, ...data.order, status: data.status || 'confirmed', paymentStatus: 'paid', paymentConfirmedAt: data.paymentConfirmedAt || new Date().toISOString() }
+            : { ...prev, status: data.status || 'confirmed', paymentStatus: 'paid', paymentConfirmedAt: data.paymentConfirmedAt || new Date().toISOString() };
+          return updatedOrder;
+        });
+        
         setSnackbarMessage(`Payment confirmed! Receipt: ${data.receiptNumber || 'N/A'}`);
         setSnackbarType('success');
         setSnackbarVisible(true);
+        
+        // Notify HomeScreen to update its order list
+        navigation.setParams({
+          orderUpdated: true,
+          updatedOrder: { ...currentOrder, paymentStatus: 'paid', status: data.status || 'confirmed', paymentConfirmedAt: data.paymentConfirmedAt || new Date().toISOString(), ...(data.order || {}) }
+        });
+        
+        console.log('✅ Payment status updated on order details');
       }
     });
 
