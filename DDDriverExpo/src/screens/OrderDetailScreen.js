@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Linking,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
@@ -23,6 +24,7 @@ const OrderDetailScreen = ({ route, navigation }) => {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarType, setSnackbarType] = useState('info');
+  const [paymentPhone, setPaymentPhone] = useState(initialOrder?.customerPhone || '');
   const socketRef = useRef(null);
   const { colors, isDarkMode } = useTheme();
 
@@ -54,6 +56,13 @@ const OrderDetailScreen = ({ route, navigation }) => {
       hour12: false
     });
   };
+
+  // Update payment phone when order changes (prepopulate with customer phone)
+  useEffect(() => {
+    if (currentOrder?.customerPhone) {
+      setPaymentPhone(currentOrder.customerPhone);
+    }
+  }, [currentOrder?.id]); // Reset when order ID changes
 
   // Set up socket connection for real-time order status updates
   useEffect(() => {
@@ -134,11 +143,18 @@ const OrderDetailScreen = ({ route, navigation }) => {
   };
 
   const handleInitiatePayment = async () => {
+    if (!paymentPhone || paymentPhone.trim().length < 9) {
+      setSnackbarMessage('Please enter a valid phone number');
+      setSnackbarType('error');
+      setSnackbarVisible(true);
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await api.post(`/driver-orders/${currentOrder.id}/initiate-payment`, {
         driverId: driverId,
-        customerPhone: currentOrder.customerPhone
+        customerPhone: paymentPhone
       });
 
       if (response.data.success) {
@@ -325,6 +341,24 @@ const OrderDetailScreen = ({ route, navigation }) => {
               {currentOrder.paymentStatus.toUpperCase()}
             </Text>
           </View>
+          {currentOrder.paymentType === 'pay_on_delivery' && canInitiatePayment && (
+            <View style={styles.phoneInputContainer}>
+              <Text style={[styles.infoLabel, { color: colors.textSecondary, marginBottom: 8 }]}>Phone Number:</Text>
+              <TextInput
+                style={[styles.phoneInput, { 
+                  backgroundColor: colors.background, 
+                  borderColor: colors.border,
+                  color: colors.textPrimary 
+                }]}
+                value={paymentPhone}
+                onChangeText={setPaymentPhone}
+                placeholder="Enter phone number"
+                placeholderTextColor={colors.textSecondary}
+                keyboardType="phone-pad"
+                editable={!loading}
+              />
+            </View>
+          )}
           {currentOrder.paymentConfirmedAt && (
             <View style={styles.infoRow}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Confirmed At:</Text>
@@ -361,7 +395,7 @@ const OrderDetailScreen = ({ route, navigation }) => {
               {loading ? (
                 <ActivityIndicator color="#0D0D0D" />
               ) : (
-                <Text style={styles.actionButtonText}>Request Payment</Text>
+                <Text style={styles.actionButtonText}>Send Payment Prompt</Text>
               )}
             </TouchableOpacity>
           )}
@@ -480,6 +514,16 @@ const styles = StyleSheet.create({
   },
   mapIcon: {
     marginRight: 8,
+  },
+  phoneInputContainer: {
+    marginTop: 12,
+  },
+  phoneInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    color: '#F5F5F5',
   },
   address: {
     fontSize: 14,
