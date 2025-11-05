@@ -76,41 +76,11 @@ const CountdownTimer = () => {
   };
 
   if (loading) {
-    return (
-      <Typography 
-        variant="h2" 
-        component="h1" 
-        gutterBottom
-        sx={{ 
-          fontSize: { xs: '2rem', sm: '3rem', md: '3.75rem' },
-          lineHeight: 1.2,
-          pt: 4,
-          pb: 2,
-          color: '#F5F5F5'
-        }}
-      >
-        Dial A Drink Kenya
-      </Typography>
-    );
+    return null;
   }
 
   if (!countdown || !countdown.active) {
-    return (
-      <Typography 
-        variant="h2" 
-        component="h1" 
-        gutterBottom
-        sx={{ 
-          fontSize: { xs: '2rem', sm: '3rem', md: '3.75rem' },
-          lineHeight: 1.2,
-          pt: 4,
-          pb: 2,
-          color: '#F5F5F5'
-        }}
-      >
-        Dial A Drink Kenya
-      </Typography>
-    );
+    return null;
   }
 
   const time = formatTime(timeRemaining);

@@ -13,13 +13,13 @@ const getApiUrl = () => {
   }
   
   // Default to local development
-  return 'http://localhost:4001/api';
+  return 'http://localhost:5001/api';
 };
 
 // Use local backend for development, Render backend for production
 const API_BASE_URL = window.location.hostname.includes('onrender.com') 
   ? 'https://dialadrink-backend.onrender.com/api'
-  : 'http://localhost:4001/api';
+  : 'http://localhost:5001/api';
 
 // Debug logging
 console.log('=== API CONFIGURATION ===');
@@ -39,7 +39,11 @@ const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
-    // Add any auth tokens here if needed
+    // Add admin token if available
+    const adminToken = localStorage.getItem('adminToken');
+    if (adminToken) {
+      config.headers.Authorization = `Bearer ${adminToken}`;
+    }
     return config;
   },
   (error) => {
@@ -54,8 +58,18 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access
-      console.error('Unauthorized access');
+      // Handle unauthorized access - clear token if it's an admin route
+      if (error.config?.url?.includes('/admin/')) {
+        console.error('Unauthorized access - admin token may be invalid');
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminUser');
+        // Redirect to admin login if on an admin page
+        if (window.location.pathname.startsWith('/admin')) {
+          window.location.href = '/admin/login';
+        }
+      } else {
+        console.error('Unauthorized access');
+      }
     }
     return Promise.reject(error);
   }

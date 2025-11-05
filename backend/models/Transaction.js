@@ -1,0 +1,71 @@
+module.exports = (sequelize, DataTypes) => {
+  const Transaction = sequelize.define('Transaction', {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true
+    },
+    orderId: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      references: {
+        model: 'orders',
+        key: 'id'
+      }
+    },
+    transactionType: {
+      type: DataTypes.ENUM('payment', 'refund'),
+      defaultValue: 'payment'
+    },
+    paymentMethod: {
+      type: DataTypes.ENUM('card', 'mobile_money', 'cash'),
+      allowNull: false
+    },
+    paymentProvider: {
+      type: DataTypes.STRING, // e.g., 'mpesa', 'visa', 'mastercard'
+      allowNull: true
+    },
+    amount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false
+    },
+    status: {
+      type: DataTypes.ENUM('pending', 'completed', 'failed', 'cancelled'),
+      defaultValue: 'pending'
+    },
+    paymentStatus: {
+      type: DataTypes.ENUM('pending', 'paid', 'failed', 'cancelled', 'unpaid'),
+      defaultValue: 'pending'
+    },
+    receiptNumber: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    checkoutRequestID: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    merchantRequestID: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    phoneNumber: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    transactionDate: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    notes: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    }
+  }, {
+    tableName: 'transactions',
+    timestamps: true
+  });
+
+  return Transaction;
+};
+

@@ -13,18 +13,21 @@ import {
   ListItemText,
   ListItemIcon,
   useMediaQuery,
-  useTheme
+  useTheme as useMUITheme
 } from '@mui/material';
-import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Assignment, Inventory, Dashboard } from '@mui/icons-material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
+import { useTheme } from '../contexts/ThemeContext';
+import ThemeSwitcher from './ThemeSwitcher';
 
 const Header = () => {
   const navigate = useNavigate();
   const { getTotalItems } = useCart();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const muiTheme = useMUITheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
+  const { isDarkMode, colors } = useTheme();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -36,10 +39,10 @@ const Header = () => {
   };
 
   const drawer = (
-    <Box sx={{ width: 250 }}>
-      <Toolbar>
-        <LocalBar sx={{ mr: 2 }} />
-        <Typography variant="h6" component="div">
+    <Box sx={{ width: 220 }}>
+      <Toolbar sx={{ minHeight: '48px !important' }}>
+        <LocalBar sx={{ mr: 1, fontSize: '1.2rem' }} />
+        <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem' }}>
           Dial A Drink Kenya
         </Typography>
       </Toolbar>
@@ -70,23 +73,23 @@ const Header = () => {
           </ListItemIcon>
           <ListItemText primary="Cart" />
         </ListItem>
-        <ListItem component="button" onClick={() => handleNavigation('/admin')}>
+        <ListItem component="button" onClick={() => {
+          const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
+          handleNavigation(isLoggedIn ? '/orders' : '/login');
+        }}>
           <ListItemIcon>
-            <Dashboard />
+            <ShoppingCart />
           </ListItemIcon>
-          <ListItemText primary="Admin Dashboard" />
+          <ListItemText primary="My Orders" />
         </ListItem>
-        <ListItem component="button" onClick={() => handleNavigation('/admin/orders')}>
+        <ListItem component="button" onClick={() => {
+          const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
+          handleNavigation(isLoggedIn ? '/profile' : '/login');
+        }}>
           <ListItemIcon>
-            <Assignment />
+            <Person />
           </ListItemIcon>
-          <ListItemText primary="Orders" />
-        </ListItem>
-        <ListItem component="button" onClick={() => handleNavigation('/admin/inventory')}>
-          <ListItemIcon>
-            <Inventory />
-          </ListItemIcon>
-          <ListItemText primary="Inventory" />
+          <ListItemText primary="Profile" />
         </ListItem>
       </List>
     </Box>
@@ -94,7 +97,7 @@ const Header = () => {
 
   return (
     <>
-      <AppBar position="sticky" sx={{ backgroundColor: '#121212', boxShadow: '0 2px 8px rgba(0, 224, 184, 0.1)' }}>
+      <AppBar position="sticky" sx={{ backgroundColor: colors.paper, boxShadow: `0 2px 8px ${isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.1)'}` }}>
         <Toolbar>
           {isMobile && (
             <IconButton
@@ -102,7 +105,7 @@ const Header = () => {
               aria-label="open drawer"
               edge="start"
               onClick={handleDrawerToggle}
-              sx={{ mr: 2 }}
+              sx={{ mr: 2, color: colors.textPrimary }}
             >
               <MenuIcon />
             </IconButton>
@@ -115,7 +118,8 @@ const Header = () => {
                   sx={{ 
                     cursor: 'pointer',
                     fontWeight: 700,
-                    fontSize: isMobile ? '1rem' : '1.25rem'
+                    fontSize: isMobile ? '0.9rem' : '1.1rem',
+                    color: isDarkMode ? colors.accentText : colors.textPrimary
                   }}
                   onClick={() => navigate('/')}
                 >
@@ -124,27 +128,48 @@ const Header = () => {
               </Box>
           
           {!isMobile && (
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
               <Button
                 color="inherit"
                 onClick={() => navigate('/')}
-                sx={{ textTransform: 'none' }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
               >
                 Home
               </Button>
               <Button
                 color="inherit"
                 onClick={() => navigate('/menu')}
-                sx={{ textTransform: 'none' }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
               >
                 Menu
               </Button>
               <Button
                 color="inherit"
                 onClick={() => navigate('/offers')}
-                sx={{ textTransform: 'none' }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
               >
                 Offers
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => {
+                  const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
+                  navigate(isLoggedIn ? '/orders' : '/login');
+                }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+              >
+                My Orders
+              </Button>
+              <Button
+                color="inherit"
+                onClick={() => {
+                  const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
+                  navigate(isLoggedIn ? '/profile' : '/login');
+                }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                startIcon={<Person />}
+              >
+                Profile
               </Button>
               <Button
                 color="inherit"
@@ -154,44 +179,27 @@ const Header = () => {
                     <ShoppingCart />
                   </Badge>
                 }
-                sx={{ textTransform: 'none' }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, color: colors.textPrimary }}
               >
                 Cart
               </Button>
-              <Button
-                color="inherit"
-                onClick={() => navigate('/admin')}
-                sx={{ textTransform: 'none' }}
-              >
-                Admin Dashboard
-              </Button>
-              <Button
-                color="inherit"
-                onClick={() => navigate('/admin/orders')}
-                sx={{ textTransform: 'none' }}
-              >
-                Orders
-              </Button>
-              <Button
-                color="inherit"
-                onClick={() => navigate('/admin/inventory')}
-                sx={{ textTransform: 'none' }}
-              >
-                Inventory
-              </Button>
+              <ThemeSwitcher />
             </Box>
           )}
           
           {isMobile && (
-            <IconButton
-              color="inherit"
-              onClick={() => navigate('/cart')}
-              sx={{ ml: 2 }}
-            >
-              <Badge badgeContent={getTotalItems()} color="secondary">
-                <ShoppingCart />
-              </Badge>
-            </IconButton>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ThemeSwitcher />
+              <IconButton
+                color="inherit"
+                onClick={() => navigate('/cart')}
+                sx={{ color: colors.textPrimary }}
+              >
+                <Badge badgeContent={getTotalItems()} color="secondary">
+                  <ShoppingCart />
+                </Badge>
+              </IconButton>
+            </Box>
           )}
         </Toolbar>
       </AppBar>

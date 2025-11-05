@@ -1,131 +1,198 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { CartProvider } from './contexts/CartContext';
+import { CustomerProvider } from './contexts/CustomerContext';
+import { AdminProvider } from './contexts/AdminContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import Header from './components/Header';
+import AdminHeader from './components/AdminHeader';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
 import TestOffers from './pages/TestOffers';
 import Offers from './pages/Offers';
 import Cart from './pages/Cart';
 import OrderSuccess from './pages/OrderSuccess';
-import AdminDashboard from './pages/AdminDashboard';
+import OrderTracking from './pages/OrderTracking';
+import Profile from './pages/Profile';
+import MyOrders from './pages/MyOrders';
+import CustomerLogin from './pages/CustomerLogin';
+import VerifyEmail from './pages/VerifyEmail';
 import AdminOverview from './pages/admin/AdminOverview';
 import Orders from './pages/admin/Orders';
-import InventoryPage from './pages/admin/Inventory';
+import Inventory from './pages/admin/Inventory';
+import Transactions from './pages/admin/Transactions';
+import Notifications from './pages/admin/Notifications';
+import Drivers from './pages/admin/Drivers';
+import AdminLogin from './pages/admin/AdminLogin';
+import PrivateRoute from './components/PrivateRoute';
 import './App.css';
 
-const theme = createTheme({
-  palette: {
-    primary: {
-      main: '#00E0B8', // Neon teal accent
+const getMUITheme = (isDarkMode) => {
+  const colors = isDarkMode ? {
+    background: '#0D0D0D',
+    paper: '#121212',
+    textPrimary: '#F5F5F5',
+    textSecondary: '#B0B0B0',
+    accent: '#00E0B8',
+    accentText: '#00E0B8',
+    error: '#FF3366',
+    errorText: '#F5F5F5',
+  } : {
+    background: '#FFFFFF',
+    paper: '#F5F5F5',
+    textPrimary: '#000000',
+    textSecondary: '#666666',
+    accent: '#00E0B8',
+    accentText: '#000000',
+    error: '#FF3366',
+    errorText: '#000000',
+  };
+
+  return createTheme({
+    palette: {
+      mode: isDarkMode ? 'dark' : 'light',
+      primary: {
+        main: colors.accent,
+      },
+      secondary: {
+        main: colors.error,
+      },
+      background: {
+        default: colors.background,
+        paper: colors.paper,
+      },
+      text: {
+        primary: colors.textPrimary,
+        secondary: colors.textSecondary,
+      },
+      error: {
+        main: colors.error,
+        contrastText: colors.errorText,
+      },
     },
-    secondary: {
-      main: '#FF3366', // Vibrant pink accent
-    },
-    background: {
-      default: '#0D0D0D', // Rich near-black
-      paper: '#121212', // Dark gray for cards
-    },
-    text: {
-      primary: '#F5F5F5', // Off-white text
-      secondary: '#B0B0B0', // Light gray for secondary text
-    },
-    mode: 'dark',
-  },
-  typography: {
-    fontFamily: '"Lato", "Roboto", "Helvetica", "Arial", sans-serif',
-    h1: {
-      fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
-      fontWeight: 700,
-      color: '#F5F5F5',
-    },
-    h2: {
-      fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
-      fontWeight: 600,
-      color: '#F5F5F5',
-    },
-    h3: {
-      fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
-      fontWeight: 600,
-      color: '#F5F5F5',
-    },
-    h4: {
-      fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
-      fontWeight: 500,
-      color: '#F5F5F5',
-    },
-    h5: {
-      fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
-      fontWeight: 500,
-      color: '#F5F5F5',
-    },
-    h6: {
-      fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
-      fontWeight: 500,
-      color: '#F5F5F5',
-    },
-    body1: {
+    typography: {
       fontFamily: '"Lato", "Roboto", "Helvetica", "Arial", sans-serif',
-      color: '#F5F5F5',
+      h1: {
+        fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontWeight: 700,
+        color: colors.textPrimary,
+      },
+      h2: {
+        fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontWeight: 600,
+        color: colors.textPrimary,
+      },
+      h3: {
+        fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontWeight: 600,
+        color: colors.textPrimary,
+      },
+      h4: {
+        fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontWeight: 500,
+        color: colors.textPrimary,
+      },
+      h5: {
+        fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontWeight: 500,
+        color: colors.textPrimary,
+      },
+      h6: {
+        fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+        fontWeight: 500,
+        color: colors.textPrimary,
+      },
+      body1: {
+        fontFamily: '"Lato", "Roboto", "Helvetica", "Arial", sans-serif',
+        color: colors.textPrimary,
+      },
+      body2: {
+        fontFamily: '"Lato", "Roboto", "Helvetica", "Arial", sans-serif',
+        color: colors.textSecondary,
+      },
     },
-    body2: {
-      fontFamily: '"Lato", "Roboto", "Helvetica", "Arial", sans-serif',
-      color: '#B0B0B0',
-    },
-  },
-  components: {
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          backgroundColor: '#121212',
-          color: '#F5F5F5',
+    components: {
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            backgroundColor: colors.paper,
+            color: colors.textPrimary,
+          },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: {
+          root: {
+            backgroundColor: colors.paper,
+            color: colors.textPrimary,
+          },
+        },
+      },
+      MuiButton: {
+        styleOverrides: {
+          root: {
+            fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+            fontWeight: 600,
+          },
         },
       },
     },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          backgroundColor: '#121212',
-          color: '#F5F5F5',
-        },
-      },
-    },
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
-          fontWeight: 600,
-        },
-      },
-    },
-  },
-});
+  });
+};
+
+function AppContent() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  const isAdminLogin = location.pathname === '/admin/login';
+  const { isDarkMode } = useTheme();
+  const muiTheme = getMUITheme(isDarkMode);
+  
+  return (
+    <MUIThemeProvider theme={muiTheme}>
+      <CssBaseline />
+      <div className="App" style={{ backgroundColor: isDarkMode ? '#0D0D0D' : '#FFFFFF', minHeight: '100vh' }}>
+        {isAdminRoute && !isAdminLogin && <AdminHeader />}
+        {!isAdminRoute && <Header />}
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/menu" element={<Menu />} />
+          <Route path="/offers" element={<Offers />} />
+          <Route path="/test-offers" element={<TestOffers />} />
+          <Route path="/cart" element={<Cart />} />
+          <Route path="/order-success" element={<OrderSuccess />} />
+          <Route path="/order-tracking" element={<OrderTracking />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/orders" element={<MyOrders />} />
+          <Route path="/login" element={<CustomerLogin />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
+          {/* Admin Routes */}
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin" element={<PrivateRoute><AdminOverview /></PrivateRoute>} />
+          <Route path="/admin/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
+          <Route path="/admin/inventory" element={<PrivateRoute><Inventory /></PrivateRoute>} />
+          <Route path="/admin/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
+          <Route path="/admin/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
+          <Route path="/admin/drivers" element={<PrivateRoute><Drivers /></PrivateRoute>} />
+        </Routes>
+      </div>
+    </MUIThemeProvider>
+  );
+}
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ThemeProvider>
       <CartProvider>
-        <Router>
-          <div className="App">
-            <Header />
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/menu" element={<Menu />} />
-              <Route path="/offers" element={<Offers />} />
-              <Route path="/test-offers" element={<TestOffers />} />
-              <Route path="/cart" element={<Cart />} />
-              <Route path="/order-success" element={<OrderSuccess />} />
-                  <Route path="/admin" element={<AdminOverview />} />
-                  <Route path="/admin/orders" element={<Orders />} />
-                  <Route path="/admin/inventory" element={<InventoryPage />} />
-                  <Route path="/admin/legacy" element={<AdminDashboard />} />
-              <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
-            </Routes>
-          </div>
-        </Router>
+        <CustomerProvider>
+          <AdminProvider>
+            <Router>
+              <AppContent />
+            </Router>
+          </AdminProvider>
+        </CustomerProvider>
       </CartProvider>
     </ThemeProvider>
   );

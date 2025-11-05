@@ -104,8 +104,8 @@ npm run build
 
 ## 🌐 Application URLs
 
-- **Customer App**: `http://localhost:3001`
-- **Admin Dashboard**: `http://localhost:3001/admin`
+- **Customer App**: `http://localhost:3000`
+- **Admin Dashboard**: `http://localhost:3001`
 - **API Health Check**: `http://localhost:5001/api/health`
 
 ## 📊 Database Schema

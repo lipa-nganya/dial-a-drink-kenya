@@ -1,0 +1,11 @@
+🔧 QUICK FIX: Enable Places API
+
+The error "ApiNotActivatedMapError" means Places API is not enabled.
+
+1. Go to: https://console.cloud.google.com/apis/library
+2. Search "Places API" → Click "Enable"
+3. Search "Maps JavaScript API" → Click "Enable"  
+4. Wait 1-2 minutes
+5. Refresh your browser
+
+That's it! The autocomplete will work after enabling these APIs.

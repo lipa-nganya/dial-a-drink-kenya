@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const db = require('./models');
 
 const app = express();
@@ -19,6 +20,9 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve static files (images)
+app.use('/images', express.static(path.join(__dirname, 'public/images')));
+
 // Routes
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
@@ -26,8 +30,39 @@ app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/countdown', require('./routes/countdown'));
+app.use('/api/settings', require('./routes/settings'));
 app.use('/api/set-offers', require('./routes/set-offers'));
 app.use('/api/seed', require('./routes/seed-subcategories'));
+app.use('/api/import', require('./routes/import-data'));
+app.use('/api/import-drinks', require('./routes/import-drinks'));
+app.use('/api/import-smokes', require('./routes/import-smokes'));
+app.use('/api/add-smokes-subcategories', require('./routes/add-smokes-subcategories'));
+app.use('/api/test-import', require('./routes/test-import'));
+app.use('/api/test-csv-import', require('./routes/test-csv-import'));
+app.use('/api/import-all-smokes', require('./routes/import-all-smokes'));
+app.use('/api/import-brandy', require('./routes/import-brandy'));
+app.use('/api/import-champagne', require('./routes/import-champagne'));
+app.use('/api/import-rum', require('./routes/import-rum'));
+app.use('/api/import-gin', require('./routes/import-gin'));
+app.use('/api/import-liqueurs', require('./routes/import-liqueurs'));
+app.use('/api/import-whiskey', require('./routes/import-whiskey'));
+app.use('/api/import-vodka', require('./routes/import-vodka'));
+app.use('/api/import-dialadrink-vodka', require('./routes/import-dialadrink-vodka'));
+app.use('/api/import-dialadrink-wine', require('./routes/import-dialadrink-wine'));
+app.use('/api/import-missing-wines', require('./routes/import-missing-wines'));
+app.use('/api/add-specific-wines', require('./routes/add-specific-wines'));
+app.use('/api/add-out-of-stock-whisky', require('./routes/add-out-of-stock-whisky'));
+app.use('/api/add-cognac-items', require('./routes/add-cognac-items'));
+app.use('/api/add-missing-beer-items', require('./routes/add-missing-beer-items'));
+app.use('/api/cleanup', require('./routes/cleanup-drinks'));
+app.use('/api/scrape-images', require('./routes/scrape-images'));
+app.use('/api/places', require('./routes/places'));
+app.use('/api/mpesa', require('./routes/mpesa'));
+app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/order-notifications', require('./routes/order-notifications'));
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/drivers', require('./routes/drivers'));
+app.use('/api/driver-orders', require('./routes/driver-orders'));
 
 // Root endpoint
 app.get('/', (req, res) => {
