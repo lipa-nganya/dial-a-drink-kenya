@@ -243,27 +243,48 @@ router.patch('/:orderId/status', async (req, res) => {
       ]
     });
 
+    // Get fresh order data to ensure we have the latest status
+    const freshOrder = await db.Order.findByPk(order.id, {
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'orderItems',
+          include: [{ model: db.Drink, as: 'drink' }]
+        }
+      ]
+    });
+
     // Emit Socket.IO event for real-time updates
     const io = req.app.get('io');
     if (io) {
       // Prepare order data for socket event (convert to plain object)
-      const orderData = order.toJSON ? order.toJSON() : order;
+      const orderData = freshOrder.toJSON ? freshOrder.toJSON() : freshOrder;
       
-      io.to(`order-${orderId}`).emit('order-status-updated', {
-        orderId: order.id,
-        status: order.status,
+      const statusUpdateData = {
+        orderId: freshOrder.id,
+        status: freshOrder.status,
         oldStatus: oldStatus,
-        paymentStatus: order.paymentStatus,
+        paymentStatus: freshOrder.paymentStatus,
         order: orderData // Send full order object with all latest data
-      });
-      io.to('admin').emit('order-status-updated', {
-        orderId: order.id,
-        status: order.status,
-        oldStatus: oldStatus,
-        paymentStatus: order.paymentStatus,
-        order: orderData // Send full order object with all latest data
-      });
-      console.log(`📡 Emitted order-status-updated to admin room for Order #${order.id}: ${oldStatus} → ${order.status}`);
+      };
+      
+      console.log(`📡 Emitting order-status-updated for Order #${freshOrder.id}`);
+      console.log(`   Status: ${oldStatus} → ${freshOrder.status}`);
+      console.log(`   PaymentStatus: ${freshOrder.paymentStatus}`);
+      
+      // Emit to order room
+      io.to(`order-${freshOrder.id}`).emit('order-status-updated', statusUpdateData);
+      
+      // Emit to admin room
+      io.to('admin').emit('order-status-updated', statusUpdateData);
+      
+      // Also emit to driver room if order has driverId
+      if (freshOrder.driverId) {
+        io.to(`driver-${freshOrder.driverId}`).emit('order-status-updated', statusUpdateData);
+        console.log(`📡 Also emitted to driver-${freshOrder.driverId} room`);
+      }
+      
+      console.log(`📡 Emitted order-status-updated to admin room for Order #${freshOrder.id}: ${oldStatus} → ${freshOrder.status}`);
     }
 
     res.json(order);

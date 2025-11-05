@@ -719,34 +719,49 @@ router.patch('/orders/:id/status', async (req, res) => {
       ]
     });
     
+    // Get fresh order data to ensure we have the latest status
+    const freshOrder = await db.Order.findByPk(order.id, {
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'orderItems',
+          include: [{ model: db.Drink, as: 'drink' }]
+        }
+      ]
+    });
+    
     // Emit Socket.IO event to notify customer and driver about order status update
     const io = req.app.get('io');
     if (io) {
       // Prepare order data for socket event (convert to plain object)
-      const orderData = order.toJSON ? order.toJSON() : order;
+      const orderData = freshOrder.toJSON ? freshOrder.toJSON() : freshOrder;
+      
+      const statusUpdateData = {
+        orderId: freshOrder.id,
+        status: freshOrder.status,
+        oldStatus: oldStatus,
+        paymentStatus: freshOrder.paymentStatus,
+        order: orderData // Send full order object with all latest data
+      };
+      
+      console.log(`📡 Emitting order-status-updated for Order #${freshOrder.id}`);
+      console.log(`   Status: ${oldStatus} → ${freshOrder.status}`);
+      console.log(`   PaymentStatus: ${freshOrder.paymentStatus}`);
       
       // Emit to order-specific room for customer tracking
-      io.to(`order-${order.id}`).emit('order-status-updated', {
-        orderId: order.id,
-        status: status,
-        oldStatus: oldStatus,
-        paymentStatus: order.paymentStatus,
-        order: orderData // Send full order object with all latest data
-      });
+      io.to(`order-${freshOrder.id}`).emit('order-status-updated', statusUpdateData);
       
-      // If order is assigned to a driver, also emit to driver room
-      if (order.driverId) {
-        io.to(`driver-${order.driverId}`).emit('order-status-updated', {
-          orderId: order.id,
-          status: status,
-          oldStatus: oldStatus,
-          paymentStatus: order.paymentStatus,
-          order: orderData // Send full order object with all latest data
-        });
-        console.log(`📡 Emitted order-status-updated to driver room: driver-${order.driverId}`);
+      // Always emit to admin room (for admin portal)
+      io.to('admin').emit('order-status-updated', statusUpdateData);
+      console.log(`📡 Emitted order-status-updated to admin room`);
+      
+      // If order is assigned to a driver, also emit to driver room (for driver app)
+      if (freshOrder.driverId) {
+        io.to(`driver-${freshOrder.driverId}`).emit('order-status-updated', statusUpdateData);
+        console.log(`📡 Emitted order-status-updated to driver room: driver-${freshOrder.driverId}`);
       }
       
-      console.log(`📡 Emitted order-status-updated event for Order #${order.id}: ${oldStatus} → ${status}`);
+      console.log(`📡 Emitted order-status-updated event for Order #${freshOrder.id}: ${oldStatus} → ${freshOrder.status}`);
     }
     
     res.json(order);
