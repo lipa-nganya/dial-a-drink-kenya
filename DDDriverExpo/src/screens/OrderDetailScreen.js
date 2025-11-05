@@ -1,22 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Linking,
   ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import io from 'socket.io-client';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import Snackbar from '../components/Snackbar';
 
 const OrderDetailScreen = ({ route, navigation }) => {
-  const { order, driverId } = route.params;
+  const { order: initialOrder, driverId } = route.params;
+  const [currentOrder, setCurrentOrder] = useState(initialOrder);
   const [loading, setLoading] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarType, setSnackbarType] = useState('info');
+  const socketRef = useRef(null);
   const { colors, isDarkMode } = useTheme();
 
   const formatCurrency = (amount) => {
@@ -34,6 +41,56 @@ const OrderDetailScreen = ({ route, navigation }) => {
     });
   };
 
+  const formatDateTimeToSecond = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+  };
+
+  // Set up socket connection for real-time order status updates
+  useEffect(() => {
+    const getSocketUrl = () => {
+      const apiBaseUrl = api.defaults.baseURL;
+      const socketUrl = apiBaseUrl.replace('/api', '').replace('/api/', '');
+      return socketUrl;
+    };
+
+    const socketUrl = getSocketUrl();
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+    });
+
+    socketRef.current = socket;
+
+    // Join order room to receive status updates
+    socket.emit('join-order', currentOrder.id);
+
+    // Listen for order status updates
+    socket.on('order-status-updated', (data) => {
+      if (data.orderId === currentOrder.id) {
+        console.log('📦 Order status updated via socket:', data);
+        setCurrentOrder(prev => ({
+          ...prev,
+          status: data.status,
+          paymentStatus: data.paymentStatus
+        }));
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [currentOrder.id]);
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return '#FFA500';
@@ -47,161 +104,194 @@ const OrderDetailScreen = ({ route, navigation }) => {
   };
 
   const openGoogleMaps = () => {
-    const address = encodeURIComponent(order.deliveryAddress);
+    const address = encodeURIComponent(currentOrder.deliveryAddress);
     const url = `https://www.google.com/maps/dir/?api=1&destination=${address}`;
     
     Linking.canOpenURL(url).then(supported => {
       if (supported) {
         Linking.openURL(url);
       } else {
-        Alert.alert('Error', 'Google Maps is not available on this device');
+        setSnackbarMessage('Google Maps is not available on this device');
+        setSnackbarType('error');
+        setSnackbarVisible(true);
       }
     });
   };
 
   const callCustomer = () => {
-    const phoneNumber = order.customerPhone.replace(/\D/g, '');
+    const phoneNumber = currentOrder.customerPhone.replace(/\D/g, '');
     const phoneUrl = `tel:${phoneNumber}`;
     
     Linking.canOpenURL(phoneUrl).then(supported => {
       if (supported) {
         Linking.openURL(phoneUrl);
       } else {
-        Alert.alert('Error', 'Phone calling is not available on this device');
+        setSnackbarMessage('Phone calling is not available on this device');
+        setSnackbarType('error');
+        setSnackbarVisible(true);
       }
     });
   };
 
   const handleInitiatePayment = async () => {
-    Alert.alert(
-      'Initiate Payment',
-      `Send payment request to ${order.customerPhone}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Send',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const response = await api.post(`/driver-orders/${order.id}/initiate-payment`, {
-                driverId: driverId,
-                customerPhone: order.customerPhone
-              });
+    setLoading(true);
+    try {
+      const response = await api.post(`/driver-orders/${currentOrder.id}/initiate-payment`, {
+        driverId: driverId,
+        customerPhone: currentOrder.customerPhone
+      });
 
-              if (response.data.success) {
-                Alert.alert(
-                  'Success',
-                  'Payment request has been sent to the customer. They will receive an M-Pesa prompt.',
-                  [{ text: 'OK' }]
-                );
-              } else {
-                Alert.alert('Error', response.data.error || 'Failed to initiate payment');
-              }
-            } catch (error) {
-              console.error('Payment initiation error:', error);
-              Alert.alert(
-                'Error',
-                error.response?.data?.error || 'Failed to initiate payment. Please try again.'
-              );
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+      if (response.data.success) {
+        setSnackbarMessage('Payment request has been sent to the customer. They will receive an M-Pesa prompt.');
+        setSnackbarType('success');
+        setSnackbarVisible(true);
+      } else {
+        setSnackbarMessage(response.data.error || 'Failed to initiate payment');
+        setSnackbarType('error');
+        setSnackbarVisible(true);
+      }
+    } catch (error) {
+      console.error('Payment initiation error:', error);
+      setSnackbarMessage(error.response?.data?.error || 'Failed to initiate payment. Please try again.');
+      setSnackbarType('error');
+      setSnackbarVisible(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleStatusUpdate = async (newStatus) => {
     const statusLabels = {
       'preparing': 'Preparing',
       'out_for_delivery': 'On the Way',
-      'delivered': 'Delivered'
+      'delivered': 'Delivered',
+      'completed': 'Completed'
     };
 
-    Alert.alert(
-      'Update Status',
-      `Mark order as ${statusLabels[newStatus]}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            setUpdatingStatus(true);
-            try {
-              const response = await api.patch(`/driver-orders/${order.id}/status`, {
-                status: newStatus,
-                driverId: driverId,
-                oldStatus: order.status
-              });
+    setUpdatingStatus(true);
+    try {
+      const response = await api.patch(`/driver-orders/${currentOrder.id}/status`, {
+        status: newStatus,
+        driverId: driverId,
+        oldStatus: currentOrder.status
+      });
 
-              if (response.data) {
-                Alert.alert('Success', `Order status updated to ${statusLabels[newStatus]}`);
-                navigation.goBack();
-              }
-            } catch (error) {
-              console.error('Status update error:', error);
-              Alert.alert(
-                'Error',
-                error.response?.data?.error || 'Failed to update status. Please try again.'
-              );
-            } finally {
-              setUpdatingStatus(false);
+      if (response.data) {
+        // Check if we need to auto-update to completed
+        // If delivered AND payment is completed, auto-update to completed
+        let finalStatus = newStatus;
+        if (newStatus === 'delivered' && response.data.paymentStatus === 'paid') {
+          finalStatus = 'completed';
+          // Make another API call to update to completed
+          try {
+            const completedResponse = await api.patch(`/driver-orders/${currentOrder.id}/status`, {
+              status: 'completed',
+              driverId: driverId,
+              oldStatus: 'delivered'
+            });
+            if (completedResponse.data) {
+              setCurrentOrder(prev => ({
+                ...prev,
+                status: 'completed',
+                ...completedResponse.data
+              }));
             }
+          } catch (completedError) {
+            console.error('Error auto-updating to completed:', completedError);
           }
         }
-      ]
-    );
+
+        // Update order state locally immediately (no refresh needed)
+        setCurrentOrder(prev => ({
+          ...prev,
+          status: finalStatus === 'completed' ? 'completed' : newStatus,
+          ...response.data
+        }));
+        
+        const message = finalStatus === 'completed' 
+          ? 'Order marked as delivered and automatically completed (payment confirmed)'
+          : `Order status updated to ${statusLabels[newStatus]}`;
+        
+        setSnackbarMessage(message);
+        setSnackbarType('success');
+        setSnackbarVisible(true);
+
+        // Notify HomeScreen to update its orders list
+        navigation.setParams({ 
+          orderUpdated: true, 
+          updatedOrder: { ...currentOrder, status: finalStatus === 'completed' ? 'completed' : newStatus, ...response.data }
+        });
+      }
+    } catch (error) {
+      console.error('Status update error:', error);
+      setSnackbarMessage(error.response?.data?.error || 'Failed to update status. Please try again.');
+      setSnackbarType('error');
+      setSnackbarVisible(true);
+    } finally {
+      setUpdatingStatus(false);
+    }
   };
 
-  const canUpdateToPreparing = order.status === 'confirmed' || order.status === 'pending';
-  const canUpdateToOnTheWay = order.status === 'preparing' || order.status === 'confirmed';
-  const canUpdateToDelivered = order.status === 'out_for_delivery' || order.status === 'preparing';
-  const canInitiatePayment = order.paymentType === 'pay_on_delivery' && order.paymentStatus !== 'paid';
+  // Only admin can update to preparing - drivers cannot
+  const canUpdateToPreparing = false; // Removed for drivers - admin only
+  
+  // Strict step-by-step: Can only update to "On the Way" if status is exactly "preparing"
+  const canUpdateToOnTheWay = currentOrder.status === 'preparing';
+  
+  // Can only update to "Delivered" if status is exactly "out_for_delivery"
+  const canUpdateToDelivered = currentOrder.status === 'out_for_delivery';
+  
+  const canInitiatePayment = currentOrder.paymentType === 'pay_on_delivery' && currentOrder.paymentStatus !== 'paid';
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
-      <View style={styles.content}>
-        {/* Order Header */}
-        <View style={[styles.header, { borderBottomColor: colors.border }]}>
-          <Text style={[styles.orderId, { color: colors.accentText }]}>Order #{order.id}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) }]}>
-            <Text style={styles.statusText}>{order.status.replace('_', ' ').toUpperCase()}</Text>
+    <View style={{ flex: 1 }}>
+      <Snackbar
+        visible={snackbarVisible}
+        message={snackbarMessage}
+        type={snackbarType}
+        duration={5000}
+        onClose={() => setSnackbarVisible(false)}
+      />
+      <ScrollView style={[styles.container, { backgroundColor: colors.background }]}>
+        <View style={styles.content}>
+          {/* Order Header */}
+          <View style={[styles.header, { borderBottomColor: colors.border }]}>
+            <Text style={[styles.orderId, { color: colors.accentText }]}>Order #{currentOrder.id}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: getStatusColor(currentOrder.status) }]}>
+              <Text style={styles.statusText}>{currentOrder.status.replace('_', ' ').toUpperCase()}</Text>
+            </View>
           </View>
-        </View>
 
         {/* Customer Info */}
         <View style={[styles.section, { backgroundColor: colors.paper }]}>
           <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Customer Information</Text>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Name:</Text>
-            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{order.customerName}</Text>
+            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{currentOrder.customerName}</Text>
           </View>
-          <TouchableOpacity style={styles.infoRow} onPress={callCustomer}>
-            <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Phone:</Text>
-            <Text style={[styles.infoValue, styles.link, { color: colors.accentText }]}>{order.customerPhone}</Text>
-          </TouchableOpacity>
-          {order.customerEmail && (
-            <View style={styles.infoRow}>
-              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Email:</Text>
-              <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{order.customerEmail}</Text>
+          <TouchableOpacity style={styles.phoneRow} onPress={callCustomer}>
+            <Ionicons name="call" size={24} color={colors.accentText} style={styles.callIcon} />
+            <View style={styles.phoneInfo}>
+              <Text style={[styles.infoLabel, { color: colors.textSecondary, marginBottom: 4 }]}>Phone:</Text>
+              <Text style={[styles.phoneNumber, { color: colors.accentText }]}>{currentOrder.customerPhone}</Text>
             </View>
-          )}
+          </TouchableOpacity>
         </View>
 
         {/* Delivery Address */}
         <View style={[styles.section, { backgroundColor: colors.paper }]}>
           <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Delivery Address</Text>
-          <Text style={[styles.address, { color: colors.textPrimary }]}>{order.deliveryAddress}</Text>
+          <Text style={[styles.address, { color: colors.textPrimary }]}>{currentOrder.deliveryAddress}</Text>
           <TouchableOpacity style={[styles.mapButton, { backgroundColor: colors.accent }]} onPress={openGoogleMaps}>
-            <Text style={[styles.mapButtonText, { color: isDarkMode ? '#0D0D0D' : colors.textPrimary }]}>📍 Open in Google Maps</Text>
+            <Ionicons name="map" size={20} color={isDarkMode ? '#0D0D0D' : colors.textPrimary} style={styles.mapIcon} />
+            <Text style={[styles.mapButtonText, { color: isDarkMode ? '#0D0D0D' : colors.textPrimary }]}>Open in Google Maps</Text>
           </TouchableOpacity>
         </View>
 
         {/* Order Items */}
         <View style={[styles.section, { backgroundColor: colors.paper }]}>
           <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Order Items</Text>
-          {order.orderItems && order.orderItems.map((item, index) => (
+          {currentOrder.orderItems && currentOrder.orderItems.map((item, index) => (
             <View key={index} style={[styles.itemRow, { borderBottomColor: colors.border }]}>
               <View style={styles.itemInfo}>
                 <Text style={[styles.itemName, { color: colors.textPrimary }]}>
@@ -216,7 +306,7 @@ const OrderDetailScreen = ({ route, navigation }) => {
           ))}
           <View style={[styles.totalRow, { borderTopColor: colors.accentText }]}>
             <Text style={[styles.totalLabel, { color: colors.textPrimary }]}>Total Amount:</Text>
-            <Text style={[styles.totalAmount, { color: colors.accentText }]}>{formatCurrency(order.totalAmount)}</Text>
+            <Text style={[styles.totalAmount, { color: colors.accentText }]}>{formatCurrency(currentOrder.totalAmount)}</Text>
           </View>
         </View>
 
@@ -226,15 +316,23 @@ const OrderDetailScreen = ({ route, navigation }) => {
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Type:</Text>
             <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
-              {order.paymentType === 'pay_now' ? 'Pay Now' : 'Pay on Delivery'}
+              {currentOrder.paymentType === 'pay_now' ? 'Pay Now' : 'Pay on Delivery'}
             </Text>
           </View>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Status:</Text>
-            <Text style={[styles.infoValue, { color: order.paymentStatus === 'paid' ? '#32CD32' : '#FFA500' }]}>
-              {order.paymentStatus.toUpperCase()}
+            <Text style={[styles.infoValue, { color: currentOrder.paymentStatus === 'paid' ? '#32CD32' : '#FFA500' }]}>
+              {currentOrder.paymentStatus.toUpperCase()}
             </Text>
           </View>
+          {currentOrder.paymentConfirmedAt && (
+            <View style={styles.infoRow}>
+              <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Confirmed At:</Text>
+              <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+                {formatDateTimeToSecond(currentOrder.paymentConfirmedAt)}
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Order Details */}
@@ -242,12 +340,12 @@ const OrderDetailScreen = ({ route, navigation }) => {
           <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Order Details</Text>
           <View style={styles.infoRow}>
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date:</Text>
-            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{formatDate(order.createdAt)}</Text>
+            <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{formatDate(currentOrder.createdAt)}</Text>
           </View>
-          {order.notes && (
+          {currentOrder.notes && (
             <View style={styles.notesContainer}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Notes:</Text>
-              <Text style={[styles.notes, { color: colors.textPrimary }]}>{order.notes}</Text>
+              <Text style={[styles.notes, { color: colors.textPrimary }]}>{currentOrder.notes}</Text>
             </View>
           )}
         </View>
@@ -263,18 +361,8 @@ const OrderDetailScreen = ({ route, navigation }) => {
               {loading ? (
                 <ActivityIndicator color="#0D0D0D" />
               ) : (
-                <Text style={styles.actionButtonText}>💳 Request Payment</Text>
+                <Text style={styles.actionButtonText}>Request Payment</Text>
               )}
-            </TouchableOpacity>
-          )}
-
-          {canUpdateToPreparing && (
-            <TouchableOpacity
-              style={[styles.actionButton, styles.statusButton]}
-              onPress={() => handleStatusUpdate('preparing')}
-              disabled={updatingStatus}
-            >
-              <Text style={styles.actionButtonText}>🍽️ Start Preparing</Text>
             </TouchableOpacity>
           )}
 
@@ -300,6 +388,7 @@ const OrderDetailScreen = ({ route, navigation }) => {
         </View>
       </View>
     </ScrollView>
+    </View>
   );
 };
 
@@ -367,6 +456,31 @@ const styles = StyleSheet.create({
     color: '#00E0B8',
     textDecorationLine: 'underline',
   },
+  phoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: 'rgba(0, 224, 184, 0.1)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 224, 184, 0.3)',
+  },
+  callIcon: {
+    marginRight: 12,
+  },
+  phoneInfo: {
+    flex: 1,
+  },
+  phoneNumber: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#00E0B8',
+  },
+  mapIcon: {
+    marginRight: 8,
+  },
   address: {
     fontSize: 14,
     color: '#F5F5F5',
@@ -379,6 +493,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
   },
   mapButtonText: {
     color: '#0D0D0D',

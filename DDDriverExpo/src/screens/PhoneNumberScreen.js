@@ -13,7 +13,8 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 
-const PhoneNumberScreen = ({ navigation }) => {
+const PhoneNumberScreen = ({ route, navigation }) => {
+  const { forgotPin } = route.params || {};
   const [phoneNumber, setPhoneNumber] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -83,6 +84,25 @@ const PhoneNumberScreen = ({ navigation }) => {
         console.log('Continuing with OTP flow despite database check error');
       }
       
+      // If forgotPin flag is set, always send OTP (even if PIN exists)
+      if (forgotPin && driverResponse.data && driverResponse.data.hasPin) {
+        console.log('Forgot PIN flow: Sending OTP to reset PIN');
+        const response = await api.post('/auth/send-otp', {
+          phone: formattedPhone
+        });
+
+        if (response.data.success) {
+          await AsyncStorage.setItem('driver_phone', formattedPhone);
+          navigation.navigate('OtpVerification', { phoneNumber: formattedPhone, forgotPin: true });
+          setLoading(false);
+          return;
+        } else {
+          Alert.alert('Error', response.data.error || 'Failed to send OTP');
+          setLoading(false);
+          return;
+        }
+      }
+
       // No PIN exists in database - send OTP for PIN setup/reset
       console.log('Sending OTP for PIN setup/reset');
       const response = await api.post('/auth/send-otp', {
@@ -92,7 +112,7 @@ const PhoneNumberScreen = ({ navigation }) => {
       if (response.data.success) {
         // Save phone to AsyncStorage for convenience
         await AsyncStorage.setItem('driver_phone', formattedPhone);
-        navigation.navigate('OtpVerification', { phoneNumber: formattedPhone });
+        navigation.navigate('OtpVerification', { phoneNumber: formattedPhone, forgotPin: forgotPin || false });
       } else {
         Alert.alert('Error', response.data.error || 'Failed to send OTP');
       }

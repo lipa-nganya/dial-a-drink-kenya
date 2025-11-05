@@ -14,7 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../services/api';
 
 const OtpVerificationScreen = ({ route, navigation }) => {
-  const { phoneNumber } = route.params;
+  const { phoneNumber, forgotPin } = route.params;
   const [otp, setOtp] = useState(['', '', '', '']); // 4 digits for drivers
   const [loading, setLoading] = useState(false);
   const inputRefs = useRef([]);
@@ -87,9 +87,9 @@ const OtpVerificationScreen = ({ route, navigation }) => {
         
         // Always go to PIN setup after OTP verification - use replace to prevent going back
         // PIN will be saved to database, not AsyncStorage
-        console.log('OTP verified, navigating to PinSetup with phoneNumber:', phoneNumber);
+        console.log('OTP verified, navigating to PinSetup with phoneNumber:', phoneNumber, 'forgotPin:', forgotPin);
         setTimeout(() => {
-          navigation.replace('PinSetup', { phoneNumber });
+          navigation.replace('PinSetup', { phoneNumber, forgotPin: forgotPin || false });
         }, 100);
       } else {
         Alert.alert('Error', response.data.error || 'Invalid OTP');

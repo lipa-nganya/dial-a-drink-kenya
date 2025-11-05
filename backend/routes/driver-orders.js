@@ -156,9 +156,14 @@ router.post('/:orderId/respond', async (req, res) => {
 router.patch('/:orderId/status', async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { status, driverId } = req.body;
+    const { status, driverId, oldStatus } = req.body;
 
-    if (!status || !['preparing', 'out_for_delivery', 'delivered'].includes(status)) {
+    // Drivers cannot update to 'preparing' - only admin can
+    if (status === 'preparing') {
+      return res.status(403).json({ error: 'Only admin can update order to preparing status' });
+    }
+
+    if (!status || !['out_for_delivery', 'delivered', 'completed'].includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
     }
 
@@ -175,11 +180,40 @@ router.patch('/:orderId/status', async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to update this order' });
     }
 
-    // Update order status
-    await order.update({ status });
+    // Strict step-by-step validation: Cannot skip statuses
+    const statusFlow = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'];
+    const currentStatusIndex = statusFlow.indexOf(order.status);
+    const newStatusIndex = statusFlow.indexOf(status);
 
-    // If delivered, also update driver status
-    if (status === 'delivered') {
+    if (currentStatusIndex === -1 || newStatusIndex === -1) {
+      return res.status(400).json({ error: 'Invalid status transition' });
+    }
+
+    // Must be exactly one step forward (unless auto-completing from delivered)
+    if (status === 'completed') {
+      // Allow completion only from delivered status
+      if (order.status !== 'delivered') {
+        return res.status(400).json({ error: 'Can only complete orders that are delivered' });
+      }
+    } else if (newStatusIndex !== currentStatusIndex + 1) {
+      return res.status(400).json({ 
+        error: `Cannot update to ${status}. Order must be in ${statusFlow[currentStatusIndex]} status first.` 
+      });
+    }
+
+    let finalStatus = status;
+
+    // If delivered and payment is paid, auto-update to completed
+    if (status === 'delivered' && order.paymentStatus === 'paid') {
+      await order.update({ status: 'completed' });
+      finalStatus = 'completed';
+    } else {
+      // Update order status
+      await order.update({ status });
+    }
+
+    // If delivered or completed, also update driver status
+    if (finalStatus === 'delivered' || finalStatus === 'completed') {
       const driver = await db.Driver.findByPk(driverId);
       if (driver) {
         await driver.update({ 
@@ -187,7 +221,7 @@ router.patch('/:orderId/status', async (req, res) => {
           lastActivity: new Date()
         });
       }
-    } else if (status === 'out_for_delivery') {
+    } else if (finalStatus === 'out_for_delivery') {
       // Update driver status to on_delivery
       const driver = await db.Driver.findByPk(driverId);
       if (driver) {
@@ -198,19 +232,22 @@ router.patch('/:orderId/status', async (req, res) => {
       }
     }
 
+    // Reload order to get updated status
+    await order.reload();
+
     // Emit Socket.IO event for real-time updates
     const io = req.app.get('io');
     if (io) {
       io.to(`order-${orderId}`).emit('order-status-updated', {
         orderId: order.id,
         status: order.status,
-        oldStatus: req.body.oldStatus,
+        oldStatus: oldStatus,
         paymentStatus: order.paymentStatus
       });
       io.to('admin').emit('order-status-updated', {
         orderId: order.id,
         status: order.status,
-        oldStatus: req.body.oldStatus,
+        oldStatus: oldStatus,
         paymentStatus: order.paymentStatus
       });
     }
