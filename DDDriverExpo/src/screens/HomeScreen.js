@@ -336,6 +336,60 @@ const HomeScreen = ({ route, navigation }) => {
         console.log('✅ Order card updated without refresh');
       }
     });
+
+    // Listen for payment confirmation
+    socket.on('payment-confirmed', (data) => {
+      console.log('💰 Payment confirmed via socket:', data);
+      if (data.orderId) {
+        // Update order payment status
+        setOrders(prevOrders => 
+          prevOrders.map(order => 
+            order.id === data.orderId 
+              ? { ...order, paymentStatus: 'paid', status: data.status || order.status }
+              : order
+          )
+        );
+        
+        // Show success snackbar
+        setSnackbarMessage(`Payment confirmed for Order #${data.orderId}. Receipt: ${data.receiptNumber || 'N/A'}`);
+        setSnackbarType('success');
+        setSnackbarVisible(true);
+        console.log('✅ Payment status updated on order card');
+      }
+    });
+
+    // Listen for payment failures
+    socket.on('payment-failed', (data) => {
+      console.log('❌ Payment failed via socket:', data);
+      if (data.orderId) {
+        let message = data.errorMessage || 'Payment failed';
+        
+        if (data.errorType === 'wrong_pin') {
+          message = `Order #${data.orderId}: Customer entered incorrect PIN. Payment failed.`;
+        } else if (data.errorType === 'insufficient_balance') {
+          message = `Order #${data.orderId}: Customer has insufficient balance. Payment failed.`;
+        } else if (data.errorType === 'timeout') {
+          message = `Order #${data.orderId}: Payment request timed out. Customer did not complete payment.`;
+        } else {
+          message = `Order #${data.orderId}: ${message}`;
+        }
+        
+        // Update order payment status
+        setOrders(prevOrders => 
+          prevOrders.map(order => 
+            order.id === data.orderId 
+              ? { ...order, paymentStatus: 'unpaid' }
+              : order
+          )
+        );
+        
+        // Show error snackbar
+        setSnackbarMessage(message);
+        setSnackbarType('error');
+        setSnackbarVisible(true);
+        console.log('✅ Payment failure notification shown');
+      }
+    });
     
     // Handle app state changes to reconnect socket
     const subscription = AppState.addEventListener('change', (nextAppState) => {

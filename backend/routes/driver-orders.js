@@ -308,17 +308,27 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
       `Payment for order #${order.id}`
     );
 
-    if (stkResult.success) {
+    // Check if STK push was initiated successfully
+    // M-Pesa returns success even if the request is accepted, but payment hasn't completed yet
+    // We should return success immediately and wait for callback to determine final status
+    if (stkResult.success || stkResult.checkoutRequestID) {
+      // STK push was initiated - return success immediately
+      // Don't wait for callback - that will come separately
+      // The callback will handle payment status updates and notify driver via socket
+      
       res.json({
         success: true,
-        message: 'Payment request sent to customer',
-        checkoutRequestID: stkResult.checkoutRequestID,
-        merchantRequestID: stkResult.merchantRequestID
+        message: 'Payment request sent to customer. Waiting for payment confirmation...',
+        checkoutRequestID: stkResult.checkoutRequestID || stkResult.CheckoutRequestID,
+        merchantRequestID: stkResult.merchantRequestID || stkResult.MerchantRequestID,
+        status: 'pending' // Payment is pending until callback confirms
       });
     } else {
+      // Only fail if STK push couldn't be initiated at all (network error, invalid credentials, etc.)
+      // Not if it's just waiting for user to enter PIN
       res.status(500).json({
         success: false,
-        error: stkResult.error || 'Failed to initiate payment'
+        error: stkResult.error || 'Failed to initiate payment request'
       });
     }
   } catch (error) {

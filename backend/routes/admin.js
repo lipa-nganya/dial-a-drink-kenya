@@ -708,7 +708,7 @@ router.patch('/orders/:id/status', async (req, res) => {
     
     await order.save();
     
-    // Emit Socket.IO event to notify customer about order status update
+    // Emit Socket.IO event to notify customer and driver about order status update
     const io = req.app.get('io');
     if (io) {
       // Emit to order-specific room for customer tracking
@@ -719,6 +719,18 @@ router.patch('/orders/:id/status', async (req, res) => {
         paymentStatus: order.paymentStatus,
         order: order
       });
+      
+      // If order is assigned to a driver, also emit to driver room
+      if (order.driverId) {
+        io.to(`driver-${order.driverId}`).emit('order-status-updated', {
+          orderId: order.id,
+          status: status,
+          oldStatus: oldStatus,
+          paymentStatus: order.paymentStatus,
+          order: order
+        });
+        console.log(`📡 Emitted order-status-updated to driver room: driver-${order.driverId}`);
+      }
       
       console.log(`📡 Emitted order-status-updated event for Order #${order.id}: ${oldStatus} → ${status}`);
     }

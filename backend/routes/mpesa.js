@@ -668,6 +668,21 @@ router.post('/callback', async (req, res) => {
               message: `Payment confirmed for Order #${order.id}`
             });
             
+            // Notify driver if order is assigned to one
+            if (order.driverId) {
+              io.to(`driver-${order.driverId}`).emit('payment-confirmed', {
+                orderId: order.id,
+                status: 'confirmed',
+                paymentStatus: 'paid',
+                receiptNumber: receiptNumber,
+                amount: amount,
+                transactionId: transaction.id,
+                transactionStatus: 'completed',
+                message: `Payment confirmed for Order #${order.id}`
+              });
+              console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
+            }
+            
             // Also notify admin
             io.to('admin').emit('payment-confirmed', {
               orderId: order.id,
@@ -683,16 +698,61 @@ router.post('/callback', async (req, res) => {
             console.log(`📡 Socket.IO events emitted for Order #${order.id} with transaction status: completed`);
           }
       } else {
-        // Payment failed
+        // Payment failed - check the specific error code
+        const resultCode = stkCallback.ResultCode;
         const resultDesc = stkCallback.ResultDesc || 'Payment failed';
-        console.log(`❌ Order #${order.id} payment failed: ${resultDesc}`);
+        console.log(`❌ Order #${order.id} payment failed: ${resultDesc} (ResultCode: ${resultCode})`);
+        
+        // Determine error type
+        let errorType = 'failed';
+        let errorMessage = resultDesc;
+        
+        if (resultCode === 1) {
+          errorType = 'insufficient_balance';
+          errorMessage = 'Customer has insufficient balance to complete payment';
+        } else if (resultCode === 2001 || resultCode === 2006 || resultDesc.toLowerCase().includes('pin') || resultDesc.toLowerCase().includes('wrong')) {
+          errorType = 'wrong_pin';
+          errorMessage = 'Customer entered incorrect PIN';
+        } else if (resultCode === 1032) {
+          errorType = 'timeout';
+          errorMessage = 'Payment request timed out - customer did not complete payment';
+        }
+        
+        // Update transaction status if exists
+        const transaction = await db.Transaction.findOne({
+          where: { checkoutRequestID: checkoutRequestID }
+        });
+        
+        if (transaction) {
+          await transaction.update({
+            status: 'failed',
+            paymentStatus: 'unpaid',
+            notes: transaction.notes ? 
+              `${transaction.notes}\n❌ Payment Failed: ${errorMessage}` : 
+              `❌ Payment Failed: ${errorMessage}`
+          });
+        }
         
         await order.update({
           status: 'pending',
+          paymentStatus: 'unpaid',
           notes: order.notes ? 
-            `${order.notes}\nM-Pesa Payment Failed: ${resultDesc}` : 
-            `M-Pesa Payment Failed: ${resultDesc}`
+            `${order.notes}\nM-Pesa Payment Failed: ${errorMessage}` : 
+            `M-Pesa Payment Failed: ${errorMessage}`
         });
+        
+        // Emit socket event to notify driver about payment failure
+        const io = req.app.get('io');
+        if (io && order.driverId) {
+          io.to(`driver-${order.driverId}`).emit('payment-failed', {
+            orderId: order.id,
+            errorType: errorType,
+            errorMessage: errorMessage,
+            resultCode: resultCode,
+            resultDesc: resultDesc
+          });
+          console.log(`📡 Emitted payment-failed event to driver-${order.driverId} for Order #${order.id}`);
+        }
       }
       } else {
         console.log(`⚠️  No order found for CheckoutRequestID: ${checkoutRequestID}`);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { StatusBar, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -315,6 +316,11 @@ const App = () => {
 
   return (
     <ThemeProvider>
+      <StatusBar 
+        barStyle="light-content" // White text on dark background
+        backgroundColor={Platform.OS === 'android' ? '#000000' : undefined} // Pure black background for better contrast
+        translucent={false}
+      />
       <AppNavigator initialRoute={initialRoute} />
     </ThemeProvider>
   );
