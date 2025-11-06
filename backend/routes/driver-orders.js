@@ -400,9 +400,9 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
     }
 
     // Initiate STK push
-    // Payment amount should exclude tip (tip is separate transaction)
-    const tipAmount = parseFloat(order.tipAmount) || 0;
-    const amount = parseFloat(order.totalAmount) - tipAmount;
+    // Customer pays full amount including tip (order.totalAmount includes tip)
+    // The payment will be split into 2 transactions: order payment (minus tip) and tip transaction
+    const amount = parseFloat(order.totalAmount); // Full amount including tip
     const stkResult = await mpesaService.initiateSTKPush(
       formattedPhone,
       amount,
@@ -428,9 +428,10 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
       
       // Create transaction record for STK push initiation (same as when customer initiates)
       // This ensures the callback can find the order via transaction checkoutRequestID
-      // Payment amount should exclude tip (tip is separate transaction)
+      // Note: Customer pays full amount (order.totalAmount), but we store payment transaction as totalAmount - tipAmount
+      // The tip will be created as a separate transaction when payment callback confirms
       const tipAmount = parseFloat(order.tipAmount) || 0;
-      const paymentAmount = amount; // Already calculated as totalAmount - tipAmount
+      const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Order payment (excluding tip)
       
       try {
         await db.Transaction.create({
@@ -438,13 +439,13 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
           transactionType: 'payment',
           paymentMethod: 'mobile_money',
           paymentProvider: 'mpesa',
-          amount: paymentAmount, // Order total minus tip
+          amount: paymentAmount, // Order total minus tip (tip is separate transaction)
           status: 'pending',
           paymentStatus: 'pending', // Initial payment status - will be updated to 'paid' when callback confirms
           checkoutRequestID: checkoutRequestID,
           merchantRequestID: merchantRequestID,
           phoneNumber: formattedPhone,
-          notes: `STK Push initiated by driver. ${stkResult.CustomerMessage || stkResult.customerMessage || ''}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
+          notes: `STK Push initiated by driver. Customer pays KES ${amount.toFixed(2)} (includes KES ${tipAmount.toFixed(2)} tip which will be separate transaction). ${stkResult.CustomerMessage || stkResult.customerMessage || ''}`
         });
         console.log(`✅ Transaction record created for driver-initiated payment on Order #${order.id}`);
       } catch (transactionError) {

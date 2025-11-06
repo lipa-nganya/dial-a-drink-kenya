@@ -507,12 +507,16 @@ router.post('/callback', async (req, res) => {
             const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Store payment without tip
             
             console.log(`📝 Creating new transaction for Order #${order.id} with CheckoutRequestID: ${checkoutRequestID}`);
+            console.log(`   Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} (includes KES ${tipAmount.toFixed(2)} tip)`);
+            console.log(`   Creating payment transaction: KES ${paymentAmount.toFixed(2)}`);
+            console.log(`   Tip transaction will be created separately with same payment attributes`);
+            
             transaction = await db.Transaction.create({
               orderId: order.id,
               transactionType: 'payment',
               paymentMethod: 'mobile_money',
               paymentProvider: 'mpesa',
-              amount: paymentAmount, // Order total minus tip
+              amount: paymentAmount, // Order total minus tip (tip is separate transaction)
               status: 'completed',
               paymentStatus: 'paid', // Set payment status to 'paid' when creating
               receiptNumber: receiptNumber,
@@ -520,7 +524,7 @@ router.post('/callback', async (req, res) => {
               merchantRequestID: stkCallback.MerchantRequestID,
               phoneNumber: phoneNumber,
               transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-              notes: `Payment completed via M-Pesa. Receipt: ${receiptNumber}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
+              notes: `Order payment via M-Pesa. Receipt: ${receiptNumber}. Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} total (KES ${paymentAmount.toFixed(2)} order + KES ${tipAmount.toFixed(2)} tip). Tip is separate transaction.`
             });
             console.log(`✅ Created transaction #${transaction.id} with status: ${transaction.status}`);
           } else {
@@ -671,12 +675,17 @@ router.post('/callback', async (req, res) => {
                   let tipTransactionData = {
                     orderId: order.id,
                     transactionType: 'tip',
-                    paymentMethod: 'cash', // Tip is cash-based
-                    paymentProvider: 'tip',
+                    paymentMethod: 'mobile_money', // Tip comes from same M-Pesa payment
+                    paymentProvider: 'mpesa', // Same payment provider as order payment
                     amount: tipAmount,
+                    status: 'completed', // Tip is paid when order payment is paid
                     paymentStatus: 'paid', // Tip is paid when order payment is paid
-                    receiptNumber: receiptNumber, // Match order's receipt number
-                    notes: `Tip for Order #${order.id} - ${order.customerName}`
+                    receiptNumber: receiptNumber, // Same receipt number as order payment
+                    checkoutRequestID: checkoutRequestID, // Same checkout request ID
+                    merchantRequestID: stkCallback.MerchantRequestID, // Same merchant request ID
+                    phoneNumber: phoneNumber, // Same phone number
+                    transactionDate: transactionDate ? new Date(transactionDate) : new Date(), // Same transaction date
+                    notes: `Tip for Order #${order.id} - ${order.customerName} (from same M-Pesa payment)`
                   };
 
                   // If driver is already assigned, credit tip immediately
