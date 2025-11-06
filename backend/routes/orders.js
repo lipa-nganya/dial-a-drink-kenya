@@ -355,14 +355,22 @@ router.post('/find-all', async (req, res) => {
 
     const orders = await db.Order.findAll({
       where: whereClause,
-      include: [{
-        model: db.OrderItem,
-        as: 'items',
-        include: [{
-          model: db.Drink,
-          as: 'drink'
-        }]
-      }],
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          attributes: ['id', 'name', 'phoneNumber'],
+          required: false // Left join - don't require driver to exist
+        }
+      ],
       order: [['createdAt', 'DESC']]
     });
 

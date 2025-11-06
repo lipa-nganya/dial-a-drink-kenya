@@ -593,30 +593,52 @@ router.post('/callback', async (req, res) => {
           }
 
           // Update order - Transaction status is the single source of truth
-          // Transaction is completed, so automatically confirm the order
-          console.log(`📝 Updating order #${order.id}: status to 'confirmed', paymentStatus to 'paid' (transaction completed)`);
+          // Determine the correct order status based on current status
+          // If order was "out_for_delivery", update directly to "completed" (delivered + paid = completed)
+          // If order was "delivered", update to "completed"
+          // Otherwise, only update paymentStatus to 'paid' without changing status
+          const currentOrderStatus = order.status;
+          let newOrderStatus = currentOrderStatus;
+          
+          if (currentOrderStatus === 'out_for_delivery') {
+            // If order was out for delivery when payment is confirmed, mark as completed directly
+            // (delivered + paid = completed, and it should be moved to completed orders on driver app)
+            newOrderStatus = 'completed';
+            console.log(`📝 Order #${order.id} was "out_for_delivery", updating to "completed" after payment confirmation (delivered + paid = completed)`);
+          } else if (currentOrderStatus === 'delivered') {
+            // If order was already delivered, mark as completed
+            newOrderStatus = 'completed';
+            console.log(`📝 Order #${order.id} was "delivered", updating to "completed" after payment confirmation`);
+          } else if (currentOrderStatus === 'pending' || currentOrderStatus === 'confirmed' || currentOrderStatus === 'preparing') {
+            // For orders that haven't been delivered yet, only update payment status, keep current status
+            newOrderStatus = currentOrderStatus;
+            console.log(`📝 Order #${order.id} is "${currentOrderStatus}", keeping status but updating paymentStatus to 'paid'`);
+          }
+          
+          console.log(`📝 Updating order #${order.id}: status from '${currentOrderStatus}' to '${newOrderStatus}', paymentStatus to 'paid' (transaction completed)`);
           
           const noteText = `✅ M-Pesa Receipt: ${receiptNumber || 'N/A'}\n✅ Payment confirmed at: ${new Date().toISOString()}`;
           
-          // Update order status to 'confirmed' and paymentStatus to 'paid' (transaction completion triggers confirmation)
+          // Update order status and paymentStatus
           // Use raw SQL first to ensure it works (PostgreSQL column name might be different)
           try {
             // Try raw SQL first to ensure it works regardless of Sequelize column mapping
             await db.sequelize.query(
-              `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW(), notes = COALESCE(notes || E'\n', '') || :note WHERE id = :id`,
+              `UPDATE orders SET status = :status, "paymentStatus" = 'paid', "updatedAt" = NOW(), notes = COALESCE(notes || E'\n', '') || :note WHERE id = :id`,
               {
                 replacements: { 
                   id: order.id,
+                  status: newOrderStatus,
                   note: noteText
                 }
               }
             );
-            console.log(`✅ Order #${order.id} updated via raw SQL: status=confirmed, paymentStatus=paid`);
+            console.log(`✅ Order #${order.id} updated via raw SQL: status=${newOrderStatus}, paymentStatus=paid`);
             
             // Also update via Sequelize as backup
             try {
               await order.update({
-                status: 'confirmed',
+                status: newOrderStatus,
                 paymentStatus: 'paid',
                 notes: order.notes ? 
                   `${order.notes}\n${noteText}` : 
@@ -631,20 +653,20 @@ router.post('/callback', async (req, res) => {
             // Fallback to Sequelize if raw SQL fails
             try {
               await order.update({
-                status: 'confirmed',
+                status: newOrderStatus,
                 paymentStatus: 'paid',
                 notes: order.notes ? 
                   `${order.notes}\n${noteText}` : 
                   noteText
               });
-              console.log(`✅ Order #${order.id} updated via Sequelize: status=confirmed, paymentStatus=paid`);
+              console.log(`✅ Order #${order.id} updated via Sequelize: status=${newOrderStatus}, paymentStatus=paid`);
             } catch (updateError) {
               console.error(`❌ Both SQL and Sequelize updates failed:`, updateError);
               throw updateError;
             }
           }
           
-          console.log(`✅ Order #${order.id} status updated to 'confirmed' (triggered by transaction completion)`);
+          console.log(`✅ Order #${order.id} status updated to '${newOrderStatus}' (triggered by transaction completion)`);
           
           // Force reload and verify the update with all relationships
           await order.reload({
@@ -678,16 +700,25 @@ router.post('/callback', async (req, res) => {
           console.log(`   Transaction ID: ${transaction.id}`);
           console.log(`   Transaction Status: ${transaction.status}`);
           
-          // If order status is still not 'confirmed' or paymentStatus is not 'paid', force update again
-          if (!dbOrder || dbOrder.status !== 'confirmed' || dbOrder.paymentStatus !== 'paid') {
-            console.log(`⚠️  Order status mismatch detected! Current: ${dbOrder?.status}, paymentStatus: ${dbOrder?.paymentStatus}, expected: confirmed, paid`);
-            console.log(`   Force updating with raw SQL again...`);
+          // If order status is still not correct or paymentStatus is not 'paid', force update again
+          if (!dbOrder || dbOrder.paymentStatus !== 'paid') {
+            console.log(`⚠️  Order paymentStatus mismatch detected! Current: ${dbOrder?.paymentStatus}, expected: paid`);
+            console.log(`   Force updating paymentStatus with raw SQL again...`);
             await db.sequelize.query(
-              `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW() WHERE id = :id`,
+              `UPDATE orders SET "paymentStatus" = 'paid', "updatedAt" = NOW() WHERE id = :id`,
               {
                 replacements: { id: order.id }
               }
             );
+            // Also update status if it needs to be updated based on previous logic
+            if (dbOrder?.status !== newOrderStatus) {
+              await db.sequelize.query(
+                `UPDATE orders SET status = :status, "updatedAt" = NOW() WHERE id = :id`,
+                {
+                  replacements: { id: order.id, status: newOrderStatus }
+                }
+              );
+            }
             // Reload again after force update
             await order.reload();
             const finalCheck = await db.sequelize.query(
@@ -714,7 +745,7 @@ router.post('/callback', async (req, res) => {
           
           // Use database values from direct query (most reliable)
           const actualPaymentStatus = dbOrder?.paymentStatus || finalOrder?.paymentStatus || 'paid';
-          const actualStatus = dbOrder?.status || finalOrder?.status || 'confirmed';
+          const actualStatus = dbOrder?.status || finalOrder?.status || newOrderStatus;
           
           // Double-check paymentStatus one more time before emitting
           if (actualPaymentStatus !== 'paid') {

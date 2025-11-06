@@ -294,16 +294,6 @@ const AdminOverview = () => {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom sx={{ color: '#00E0B8', fontWeight: 700 }}>
-          🎛️ Admin Dashboard
-        </Typography>
-        <Typography variant="h6" color="text.secondary">
-          Manage your Dial A Drink business
-        </Typography>
-      </Box>
-
       {/* Quick Stats */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid size={{ xs: 12, sm: 6, md: 3 }}>

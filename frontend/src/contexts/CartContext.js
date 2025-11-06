@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useReducer } from 'react';
+import React, { createContext, useContext, useReducer, useState } from 'react';
 
 const CartContext = createContext();
 
@@ -62,6 +62,8 @@ const cartReducer = (state, action) => {
 
 export const CartProvider = ({ children }) => {
   const [state, dispatch] = useReducer(cartReducer, { items: [] });
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   const addToCart = (drink, quantity = 1) => {
     dispatch({
@@ -74,6 +76,11 @@ export const CartProvider = ({ children }) => {
         selectedCapacity: drink.selectedCapacity || null
       }
     });
+    
+    // Show snackbar notification
+    const capacityText = drink.selectedCapacity ? ` (${drink.selectedCapacity})` : '';
+    setSnackbarMessage(`${drink.name}${capacityText} added to cart`);
+    setSnackbarOpen(true);
   };
 
   const removeFromCart = (drinkId, selectedCapacity = null) => {
@@ -110,7 +117,10 @@ export const CartProvider = ({ children }) => {
       updateQuantity,
       clearCart,
       getTotalPrice,
-      getTotalItems
+      getTotalItems,
+      snackbarOpen,
+      setSnackbarOpen,
+      snackbarMessage
     }}>
       {children}
     </CartContext.Provider>
