@@ -24,7 +24,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  InputAdornment
 } from '@mui/material';
 import {
   CheckCircle,
@@ -36,7 +37,8 @@ import {
   Warning,
   Assignment,
   Edit,
-  Person
+  Person,
+  Search
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 import io from 'socket.io-client';
@@ -48,6 +50,7 @@ const Orders = () => {
   const [error, setError] = useState(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [drivers, setDrivers] = useState([]);
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -101,7 +104,7 @@ const Orders = () => {
             : order
         );
         const sorted = sortOrdersByStatus(updated);
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchTerm);
         return sorted;
       });
     });
@@ -220,7 +223,7 @@ const Orders = () => {
       setOrders(sortedOrders);
       setError(null);
       // Apply filters after fetching
-      applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter);
+      applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchTerm);
     } catch (error) {
       console.error('Error fetching orders:', error);
       setError(error.response?.data?.error || error.message);
@@ -242,8 +245,18 @@ const Orders = () => {
   };
 
   // Apply filters to orders
-  const applyFilters = (ordersList, orderStatus, transactionStatus) => {
+  const applyFilters = (ordersList, orderStatus, transactionStatus, search = '') => {
     let filtered = [...ordersList];
+
+    // Filter by search term (customer name or order number)
+    if (search.trim()) {
+      const searchLower = search.toLowerCase().trim();
+      filtered = filtered.filter(order => {
+        const orderNumber = order.id.toString().toLowerCase();
+        const customerName = (order.customerName || '').toLowerCase();
+        return orderNumber.includes(searchLower) || customerName.includes(searchLower);
+      });
+    }
 
     // Filter by order status
     if (orderStatus !== 'all') {
@@ -265,8 +278,8 @@ const Orders = () => {
 
   // Update filters when filter values change
   useEffect(() => {
-    applyFilters(orders, orderStatusFilter, transactionStatusFilter);
-  }, [orderStatusFilter, transactionStatusFilter, orders]);
+    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchTerm);
+  }, [orderStatusFilter, transactionStatusFilter, searchTerm, orders]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     try {
@@ -294,7 +307,7 @@ const Orders = () => {
         // Re-sort after payment status update (status might have changed to completed)
         const sorted = sortOrdersByStatus(updated);
         // Apply filters to updated orders
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchTerm);
         return sorted;
       });
     } catch (error) {
@@ -447,6 +460,36 @@ const Orders = () => {
 
       {/* Filters */}
       <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        <TextField
+          size="small"
+          placeholder="Search by customer name or order number..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search sx={{ color: 'text.secondary' }} />
+              </InputAdornment>
+            )
+          }}
+          sx={{
+            minWidth: 300,
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': {
+                borderColor: '#00E0B8',
+              },
+              '&:hover fieldset': {
+                borderColor: '#00C4A3',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: '#00E0B8',
+              },
+            },
+            '& .MuiInputBase-input': {
+              color: '#F5F5F5',
+            },
+          }}
+        />
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Filter by Order Status</InputLabel>
           <Select
@@ -502,13 +545,14 @@ const Orders = () => {
           </Select>
         </FormControl>
 
-        {(orderStatusFilter !== 'all' || transactionStatusFilter !== 'all') && (
+        {(orderStatusFilter !== 'all' || transactionStatusFilter !== 'all' || searchTerm.trim()) && (
           <Button
             variant="outlined"
             size="small"
             onClick={() => {
               setOrderStatusFilter('all');
               setTransactionStatusFilter('all');
+              setSearchTerm('');
             }}
             sx={{
               borderColor: '#666',

@@ -101,6 +101,20 @@ const AddressAutocomplete = ({ value, onChange, onPlaceSelect, label, ...props }
           // Use the formatted_address from backend (which handles Plus Code conversion)
           const fullAddress = placeData.formatted_address || selectedText;
           
+          // Save address to database (if not already from database)
+          if (!selectedOption.fromDatabase && fullAddress) {
+            try {
+              await api.post('/places/save', {
+                address: fullAddress,
+                placeId: selectedOption.placeId,
+                formattedAddress: fullAddress
+              });
+            } catch (saveError) {
+              console.error('Error saving address:', saveError);
+              // Don't block user flow if save fails
+            }
+          }
+          
           // Update with full address
           setInputValue(fullAddress);
               if (onChange) {
@@ -134,6 +148,18 @@ const AddressAutocomplete = ({ value, onChange, onPlaceSelect, label, ...props }
         onChange({ target: { value: selectedText } });
             }
             
+      // Save address to database (if not already from database)
+      if (!selectedOption.fromDatabase && selectedText) {
+        api.post('/places/save', {
+          address: selectedText,
+          placeId: selectedOption.placeId || null,
+          formattedAddress: selectedText
+        }).catch(saveError => {
+          console.error('Error saving address:', saveError);
+          // Don't block user flow if save fails
+        });
+      }
+
       // Optionally fetch details for additional info (like coordinates) without blocking UI
       if (selectedOption.placeId && onPlaceSelect) {
         api.get(`/places/details/${selectedOption.placeId}`)

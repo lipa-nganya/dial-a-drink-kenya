@@ -1865,5 +1865,188 @@ router.post('/test-callback/:checkoutRequestID', async (req, res) => {
   }
 });
 
+/**
+ * M-Pesa B2C Callback endpoint
+ * Handles callbacks from M-Pesa B2C payment requests (driver withdrawals)
+ */
+router.post('/b2c-callback', (req, res) => {
+  // Respond immediately to M-Pesa
+  res.status(200).json({ ResultCode: 0, ResultDesc: 'Accepted' });
+
+  // Process callback in the background
+  setImmediate(async () => {
+    try {
+      const callbackData = req.body;
+
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('📞📞📞 M-Pesa B2C Callback received at:', new Date().toISOString());
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('Full callback data:', JSON.stringify(callbackData, null, 2));
+      console.log('═══════════════════════════════════════════════════════');
+
+      // M-Pesa B2C callback structure:
+      // {
+      //   Result: {
+      //     ResultType: 0,
+      //     ResultCode: 0,
+      //     ResultDesc: "The service request is processed successfully.",
+      //     OriginatorConversationID: "...",
+      //     ConversationID: "...",
+      //     TransactionID: "...",
+      //     ResultParameters: {
+      //       ResultParameter: [
+      //         { Key: "TransactionAmount", Value: 100 },
+      //         { Key: "TransactionReceipt", Value: "..." },
+      //         { Key: "B2CRecipientIsRegisteredCustomer", Value: "Y" },
+      //         { Key: "B2CChargesPaidAccountAvailableFunds", Value: 100 },
+      //         { Key: "ReceiverPartyPublicName", Value: "..." },
+      //         { Key: "TransactionCompletedDateTime", Value: "..." },
+      //         { Key: "B2CUtilityAccountAvailableFunds", Value: 100 },
+      //         { Key: "B2CWorkingAccountAvailableFunds", Value: 100 }
+      //       ]
+      //     },
+      //     ReferenceData: { ... }
+      //   }
+      // }
+
+      if (callbackData.Result) {
+        const result = callbackData.Result;
+        const conversationID = result.ConversationID;
+        const originatorConversationID = result.OriginatorConversationID;
+        const resultCode = result.ResultCode;
+        const resultDesc = result.ResultDesc;
+
+        console.log(`🔍 Processing B2C callback:`);
+        console.log(`   ConversationID: ${conversationID}`);
+        console.log(`   OriginatorConversationID: ${originatorConversationID}`);
+        console.log(`   ResultCode: ${resultCode}`);
+        console.log(`   ResultDesc: ${resultDesc}`);
+
+        // Find withdrawal transaction by conversationID or originatorConversationID
+        let transaction = await db.Transaction.findOne({
+          where: {
+            [db.Sequelize.Op.or]: [
+              { checkoutRequestID: conversationID },
+              { merchantRequestID: originatorConversationID }
+            ],
+            transactionType: 'withdrawal'
+          }
+        });
+
+        if (!transaction) {
+          // Try to find by driverId and recent withdrawal transactions
+          const recentWithdrawals = await db.Transaction.findAll({
+            where: {
+              transactionType: 'withdrawal',
+              status: 'pending'
+            },
+            order: [['createdAt', 'DESC']],
+            limit: 10
+          });
+
+          // Match by amount and approximate time
+          for (const withdrawal of recentWithdrawals) {
+            if (withdrawal.merchantRequestID === originatorConversationID || 
+                withdrawal.checkoutRequestID === conversationID) {
+              transaction = withdrawal;
+              break;
+            }
+          }
+        }
+
+        if (transaction) {
+          console.log(`✅ Found withdrawal transaction #${transaction.id} for driver #${transaction.driverId}`);
+
+          if (resultCode === 0) {
+            // B2C payment successful
+            const resultParameters = result.ResultParameters?.ResultParameter || [];
+            const transactionAmount = resultParameters.find(p => p.Key === 'TransactionAmount')?.Value;
+            const transactionReceipt = resultParameters.find(p => p.Key === 'TransactionReceipt')?.Value;
+            const transactionCompletedDateTime = resultParameters.find(p => p.Key === 'TransactionCompletedDateTime')?.Value;
+            const receiverPartyPublicName = resultParameters.find(p => p.Key === 'ReceiverPartyPublicName')?.Value;
+
+            console.log(`💰 B2C payment successful:`);
+            console.log(`   Amount: ${transactionAmount || 'N/A'}`);
+            console.log(`   Receipt: ${transactionReceipt || 'N/A'}`);
+            console.log(`   Completed: ${transactionCompletedDateTime || 'N/A'}`);
+            console.log(`   Recipient: ${receiverPartyPublicName || 'N/A'}`);
+
+            // Update transaction
+            await transaction.update({
+              status: 'completed',
+              paymentStatus: 'paid',
+              receiptNumber: transactionReceipt,
+              transactionDate: transactionCompletedDateTime ? new Date(transactionCompletedDateTime) : new Date(),
+              checkoutRequestID: conversationID,
+              merchantRequestID: originatorConversationID,
+              notes: transaction.notes ? 
+                `${transaction.notes}\n✅ B2C payment completed. Receipt: ${transactionReceipt || 'N/A'}` : 
+                `✅ B2C payment completed. Receipt: ${transactionReceipt || 'N/A'}`
+            });
+
+            // Wallet balance was already deducted when withdrawal was initiated
+            // No need to update wallet again - it's already correct
+
+            // Emit socket event to notify driver
+            const io = req.app.get('io');
+            if (io && transaction.driverId) {
+              io.to(`driver-${transaction.driverId}`).emit('withdrawal-completed', {
+                transactionId: transaction.id,
+                amount: transactionAmount,
+                receiptNumber: transactionReceipt,
+                status: 'completed'
+              });
+              console.log(`📡 Emitted withdrawal-completed event to driver-${transaction.driverId}`);
+            }
+
+            console.log(`✅ Withdrawal transaction #${transaction.id} completed successfully`);
+          } else {
+            // B2C payment failed
+            console.log(`❌ B2C payment failed:`);
+            console.log(`   ResultCode: ${resultCode}`);
+            console.log(`   ResultDesc: ${resultDesc}`);
+
+            // Refund wallet balance
+            const wallet = await db.DriverWallet.findByPk(transaction.driverWalletId);
+            if (wallet) {
+              const refundAmount = parseFloat(transaction.amount);
+              await wallet.update({
+                balance: parseFloat(wallet.balance) + refundAmount
+              });
+              console.log(`✅ Refunded KES ${refundAmount.toFixed(2)} to driver wallet #${wallet.id}`);
+            }
+
+            // Update transaction
+            await transaction.update({
+              status: 'failed',
+              paymentStatus: 'failed',
+              notes: transaction.notes ? 
+                `${transaction.notes}\n❌ B2C payment failed: ${resultDesc}` : 
+                `❌ B2C payment failed: ${resultDesc}`
+            });
+
+            // Emit socket event to notify driver
+            const io = req.app.get('io');
+            if (io && transaction.driverId) {
+              io.to(`driver-${transaction.driverId}`).emit('withdrawal-failed', {
+                transactionId: transaction.id,
+                error: resultDesc,
+                status: 'failed'
+              });
+              console.log(`📡 Emitted withdrawal-failed event to driver-${transaction.driverId}`);
+            }
+
+            console.log(`❌ Withdrawal transaction #${transaction.id} failed`);
+          }
+        } else {
+          console.log(`⚠️  Withdrawal transaction not found for ConversationID: ${conversationID}`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing B2C callback:', error);
+    }
+  });
+});
+
 module.exports = router;
 

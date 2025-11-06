@@ -28,6 +28,8 @@ const Otp = require('./Otp')(sequelize, Sequelize.DataTypes);
 const EmailConfirmation = require('./EmailConfirmation')(sequelize, Sequelize.DataTypes);
 const Customer = require('./Customer')(sequelize, Sequelize.DataTypes);
 const Driver = require('./Driver')(sequelize, Sequelize.DataTypes);
+const DriverWallet = require('./DriverWallet')(sequelize, Sequelize.DataTypes);
+const SavedAddress = require('./SavedAddress')(sequelize, Sequelize.DataTypes);
 
 // Define associations
 Category.hasMany(SubCategory, { foreignKey: 'categoryId', as: 'subcategories' });
@@ -46,6 +48,18 @@ OrderItem.belongsTo(Drink, { foreignKey: 'drinkId', as: 'drink' });
 
 Order.hasMany(Transaction, { foreignKey: 'orderId', as: 'transactions' });
 Transaction.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+
+// Transaction-Driver associations
+if (Driver) {
+  Transaction.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasMany(Transaction, { foreignKey: 'driverId', as: 'transactions' });
+}
+
+// Transaction-DriverWallet associations
+if (DriverWallet) {
+  Transaction.belongsTo(DriverWallet, { foreignKey: 'driverWalletId', as: 'wallet' });
+  DriverWallet.hasMany(Transaction, { foreignKey: 'driverWalletId', as: 'transactions' });
+}
 
 // Driver-Order associations
 if (Driver) {
@@ -67,8 +81,16 @@ db.Otp = Otp;
 db.EmailConfirmation = EmailConfirmation;
 db.Customer = Customer;
 db.Driver = Driver;
+db.DriverWallet = DriverWallet;
+db.SavedAddress = SavedAddress;
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
+
+// DriverWallet associations
+if (DriverWallet && Driver) {
+  DriverWallet.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasOne(DriverWallet, { foreignKey: 'driverId', as: 'wallet' });
+}
 
 module.exports = db;
 

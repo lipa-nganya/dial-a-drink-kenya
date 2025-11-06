@@ -4,6 +4,7 @@ import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/st
 import CssBaseline from '@mui/material/CssBaseline';
 import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { EasterEggProvider, useEasterEgg } from './contexts/EasterEggContext';
 import AdminHeader from './components/AdminHeader';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
@@ -15,6 +16,7 @@ import Transactions from './pages/Transactions';
 import OrderNotifications from './pages/OrderNotifications';
 import Drivers from './pages/Drivers';
 import Settings from './pages/Settings';
+import SaveTheFishes from './pages/SaveTheFishes';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -134,6 +136,7 @@ const getMUITheme = (isDarkMode) => {
 
 function AppContent() {
   const { isDarkMode } = useTheme();
+  const { isEasterEggActive } = useEasterEgg();
   const muiTheme = getMUITheme(isDarkMode);
 
   return (
@@ -211,6 +214,19 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
+              {isEasterEggActive && (
+                <Route
+                  path="/save-the-fishes"
+                  element={
+                    <PrivateRoute>
+                      <>
+                        <AdminHeader />
+                        <SaveTheFishes />
+                      </>
+                    </PrivateRoute>
+                  }
+                />
+              )}
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Router>
@@ -223,7 +239,9 @@ function AppContent() {
 function App() {
   return (
     <ThemeProvider>
-      <AppContent />
+      <EasterEggProvider>
+        <AppContent />
+      </EasterEggProvider>
     </ThemeProvider>
   );
 }

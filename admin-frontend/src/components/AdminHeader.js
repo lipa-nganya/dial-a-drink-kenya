@@ -14,11 +14,13 @@ import {
   Logout,
   Receipt,
   Settings as SettingsIcon,
-  LocalShipping
+  LocalShipping,
+  LocalFlorist
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useEasterEgg } from '../contexts/EasterEggContext';
 import ThemeSwitcher from './ThemeSwitcher';
 
 const AdminHeader = () => {
@@ -26,6 +28,7 @@ const AdminHeader = () => {
   const location = useLocation();
   const { pendingOrdersCount, logout, user } = useAdmin();
   const { isDarkMode, colors } = useTheme();
+  const { isEasterEggActive } = useEasterEgg();
 
   const handleLogout = () => {
     logout();
@@ -102,6 +105,16 @@ const AdminHeader = () => {
           >
             Drivers
           </Button>
+          {isEasterEggActive && (
+            <Button
+              color="inherit"
+              onClick={() => navigate('/save-the-fishes')}
+              startIcon={<LocalFlorist />}
+              sx={buttonStyle('/save-the-fishes')}
+            >
+              Save the Fishes
+            </Button>
+          )}
           <Button
             color="inherit"
             onClick={() => navigate('/settings')}

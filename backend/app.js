@@ -63,6 +63,7 @@ app.use('/api/order-notifications', require('./routes/order-notifications'));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/drivers', require('./routes/drivers'));
 app.use('/api/driver-orders', require('./routes/driver-orders'));
+app.use('/api/driver-wallet', require('./routes/driver-wallet'));
 
 // Root endpoint
 app.get('/', (req, res) => {

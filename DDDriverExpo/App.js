@@ -19,6 +19,7 @@ import CompletedOrdersScreen from './src/screens/CompletedOrdersScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import OrderAcceptanceScreen from './src/screens/OrderAcceptanceScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
+import WalletScreen from './src/screens/WalletScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -70,6 +71,16 @@ const MainTabs = () => {
           tabBarLabel: 'Completed',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="checkmark-circle-outline" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="WalletTab"
+        component={WalletScreen}
+        options={{
+          tabBarLabel: 'Wallet',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="wallet" size={size} color={color} />
           ),
         }}
       />
