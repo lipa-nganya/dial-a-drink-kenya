@@ -460,6 +460,55 @@ router.patch('/orders/:id/driver', async (req, res) => {
       orderData.orderItems = orderData.items;
     }
 
+    // If driver was assigned and payment is completed, credit tip immediately if not already credited
+    if (driverId && order.paymentStatus === 'paid' && order.tipAmount && parseFloat(order.tipAmount) > 0) {
+      try {
+        // Find pending tip transaction
+        const tipTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'tip',
+            status: 'pending'
+          }
+        });
+
+        if (tipTransaction) {
+          // Get or create driver wallet
+          let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
+          if (!driverWallet) {
+            driverWallet = await db.DriverWallet.create({
+              driverId: driverId,
+              balance: 0,
+              totalTipsReceived: 0,
+              totalTipsCount: 0
+            });
+          }
+
+          const tipAmount = parseFloat(order.tipAmount);
+
+          // Credit tip to driver wallet
+          await driverWallet.update({
+            balance: parseFloat(driverWallet.balance) + tipAmount,
+            totalTipsReceived: parseFloat(driverWallet.totalTipsReceived) + tipAmount,
+            totalTipsCount: driverWallet.totalTipsCount + 1
+          });
+
+          // Update tip transaction
+          await tipTransaction.update({
+            driverId: driverId,
+            driverWalletId: driverWallet.id,
+            status: 'completed',
+            notes: `Tip for Order #${order.id} - ${order.customerName} (credited to driver wallet)`
+          });
+
+          console.log(`✅ Tip of KES ${tipAmount} credited to driver #${driverId} wallet for Order #${order.id}`);
+        }
+      } catch (tipError) {
+        console.error('❌ Error crediting tip when driver assigned:', tipError);
+        // Don't fail driver assignment if tip credit fails
+      }
+    }
+
     // Emit socket events for real-time updates
     const io = req.app.get('io');
     if (io) {
@@ -469,6 +518,31 @@ router.patch('/orders/:id/driver', async (req, res) => {
         order: orderData,
         message: driverId ? `Driver assigned to order #${order.id}` : `Driver removed from order #${order.id}`
       });
+
+      // If driver was assigned and tip was credited, notify the driver
+      if (driverId && order.paymentStatus === 'paid' && order.tipAmount && parseFloat(order.tipAmount) > 0) {
+        try {
+          const tipTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'tip',
+              status: 'completed',
+              driverId: driverId
+            }
+          });
+          if (tipTransaction) {
+            const driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
+            io.to(`driver-${driverId}`).emit('tip-received', {
+              orderId: order.id,
+              tipAmount: parseFloat(order.tipAmount),
+              customerName: order.customerName,
+              walletBalance: parseFloat(driverWallet?.balance || 0)
+            });
+          }
+        } catch (error) {
+          console.error('Error sending tip notification:', error);
+        }
+      }
 
       // If driver was assigned, notify the driver
       if (driverId) {
