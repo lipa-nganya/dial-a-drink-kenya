@@ -406,6 +406,13 @@ const addMissingColumns = async () => {
       console.log('Note: transaction_type_enum withdrawal value update attempted (may already exist)');
     }
 
+    try {
+      await db.sequelize.query(`ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'delivery_pay'`);
+      console.log('✅ Added delivery_pay to transaction_type_enum');
+    } catch (error) {
+      console.log('Note: transaction_type_enum delivery_pay value update attempted (may already exist)');
+    }
+
     await db.sequelize.query(`
       DO $$ BEGIN
         CREATE TYPE transaction_status_enum AS ENUM ('pending', 'completed', 'failed', 'cancelled');
@@ -416,11 +423,18 @@ const addMissingColumns = async () => {
 
     await db.sequelize.query(`
       DO $$ BEGIN
-        CREATE TYPE transaction_payment_method_enum AS ENUM ('card', 'mobile_money', 'cash');
+        CREATE TYPE transaction_payment_method_enum AS ENUM ('card', 'mobile_money', 'cash', 'system');
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
     `).catch(() => {});
+
+    try {
+      await db.sequelize.query(`ALTER TYPE transaction_payment_method_enum ADD VALUE IF NOT EXISTS 'system'`);
+      console.log('✅ Added system to transaction_payment_method_enum');
+    } catch (error) {
+      console.log('Note: transaction_payment_method_enum system value update attempted (may already exist)');
+    }
 
     // Try to update existing transactions table to use ENUMs if columns exist but aren't ENUMs
     try {
