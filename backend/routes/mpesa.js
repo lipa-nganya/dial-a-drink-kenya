@@ -76,13 +76,14 @@ router.post('/stk-push', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Validate amount matches order total
-    // Note: order.totalAmount already includes delivery fee (calculated in orders.js)
-    const expectedTotal = parseFloat(order.totalAmount);
+    // Validate amount matches order total (excluding tip, since tip is separate transaction)
+    // Note: order.totalAmount includes tip, so payment should be totalAmount - tipAmount
+    const tipAmount = parseFloat(order.tipAmount) || 0;
+    const expectedTotal = parseFloat(order.totalAmount) - tipAmount;
     
     if (Math.abs(parseFloat(amount) - expectedTotal) > 0.01) {
       return res.status(400).json({ 
-        error: `Amount mismatch. Expected KES ${expectedTotal.toFixed(2)}, got KES ${parseFloat(amount).toFixed(2)}` 
+        error: `Amount mismatch. Expected KES ${expectedTotal.toFixed(2)} (order total ${parseFloat(order.totalAmount).toFixed(2)} minus tip ${tipAmount.toFixed(2)}), got KES ${parseFloat(amount).toFixed(2)}` 
       });
     }
 
@@ -146,19 +147,23 @@ router.post('/stk-push', async (req, res) => {
       });
       
       // Create transaction record for STK push initiation
+      // Payment amount should exclude tip (tip is separate transaction)
+      const tipAmount = parseFloat(order.tipAmount) || 0;
+      const paymentAmount = parseFloat(amount); // Already validated to be totalAmount - tipAmount
+      
       try {
         await db.Transaction.create({
           orderId: order.id,
           transactionType: 'payment',
           paymentMethod: 'mobile_money',
           paymentProvider: 'mpesa',
-          amount: parseFloat(amount),
+          amount: paymentAmount, // Order total minus tip
           status: 'pending',
           paymentStatus: 'pending', // Set initial payment status
           checkoutRequestID: checkoutRequestID,
           merchantRequestID: stkResponse.MerchantRequestID,
           phoneNumber: phoneNumber,
-          notes: `STK Push initiated. ${stkResponse.CustomerMessage || ''}`
+          notes: `STK Push initiated. ${stkResponse.CustomerMessage || ''}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
         });
         console.log(`✅ Transaction record created for Order #${orderId}`);
       } catch (transactionError) {
@@ -494,13 +499,17 @@ router.post('/callback', async (req, res) => {
 
           if (!transaction) {
             // Create new transaction if not found
+            // Payment amount should exclude tip (tip is separate transaction)
+            const tipAmount = parseFloat(order.tipAmount) || 0;
+            const paymentAmount = parseFloat(amount); // Callback amount already excludes tip if validation was correct
+            
             console.log(`📝 Creating new transaction for Order #${order.id} with CheckoutRequestID: ${checkoutRequestID}`);
             transaction = await db.Transaction.create({
               orderId: order.id,
               transactionType: 'payment',
               paymentMethod: 'mobile_money',
               paymentProvider: 'mpesa',
-              amount: parseFloat(amount),
+              amount: paymentAmount, // Order total minus tip
               status: 'completed',
               paymentStatus: 'paid', // Set payment status to 'paid' when creating
               receiptNumber: receiptNumber,
@@ -508,7 +517,7 @@ router.post('/callback', async (req, res) => {
               merchantRequestID: stkCallback.MerchantRequestID,
               phoneNumber: phoneNumber,
               transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-              notes: `Payment completed via M-Pesa. Receipt: ${receiptNumber}`
+              notes: `Payment completed via M-Pesa. Receipt: ${receiptNumber}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
             });
             console.log(`✅ Created transaction #${transaction.id} with status: ${transaction.status}`);
           } else {

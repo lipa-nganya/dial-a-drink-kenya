@@ -246,12 +246,25 @@ router.patch('/:orderId/status', async (req, res) => {
               });
             }
 
+            // Get the order's payment transaction receipt number
+            const paymentTransaction = await db.Transaction.findOne({
+              where: {
+                orderId: order.id,
+                transactionType: 'payment',
+                status: 'completed'
+              },
+              order: [['createdAt', 'DESC']]
+            });
+
+            const receiptNumber = paymentTransaction?.receiptNumber || null;
+
             // Update tip transaction with driver info and complete it
             await tipTransaction.update({
               driverId: driverId,
               driverWalletId: driverWallet.id,
               status: 'completed',
               paymentStatus: 'paid',
+              receiptNumber: receiptNumber, // Match order's receipt number
               notes: `Tip for Order #${order.id} - ${order.customerName}`
             });
 
@@ -397,7 +410,9 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
     }
 
     // Initiate STK push
-    const amount = parseFloat(order.totalAmount);
+    // Payment amount should exclude tip (tip is separate transaction)
+    const tipAmount = parseFloat(order.tipAmount) || 0;
+    const amount = parseFloat(order.totalAmount) - tipAmount;
     const stkResult = await mpesaService.initiateSTKPush(
       formattedPhone,
       amount,
@@ -423,19 +438,23 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
       
       // Create transaction record for STK push initiation (same as when customer initiates)
       // This ensures the callback can find the order via transaction checkoutRequestID
+      // Payment amount should exclude tip (tip is separate transaction)
+      const tipAmount = parseFloat(order.tipAmount) || 0;
+      const paymentAmount = amount; // Already calculated as totalAmount - tipAmount
+      
       try {
         await db.Transaction.create({
           orderId: order.id,
           transactionType: 'payment',
           paymentMethod: 'mobile_money',
           paymentProvider: 'mpesa',
-          amount: amount,
+          amount: paymentAmount, // Order total minus tip
           status: 'pending',
           paymentStatus: 'pending', // Initial payment status - will be updated to 'paid' when callback confirms
           checkoutRequestID: checkoutRequestID,
           merchantRequestID: merchantRequestID,
           phoneNumber: formattedPhone,
-          notes: `STK Push initiated by driver. ${stkResult.CustomerMessage || stkResult.customerMessage || ''}`
+          notes: `STK Push initiated by driver. ${stkResult.CustomerMessage || stkResult.customerMessage || ''}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
         });
         console.log(`✅ Transaction record created for driver-initiated payment on Order #${order.id}`);
       } catch (transactionError) {
