@@ -42,11 +42,23 @@ router.get('/:driverId', async (req, res) => {
       include: [{
         model: db.Order,
         as: 'order',
-        attributes: ['id', 'customerName', 'createdAt']
+        attributes: ['id', 'customerName', 'createdAt', 'status']
       }],
       order: [['createdAt', 'DESC']],
       limit: 50 // Last 50 tips
     });
+
+    // Calculate amount on hold (tips for orders that are not completed)
+    let amountOnHold = 0;
+    tipTransactions.forEach(tx => {
+      if (tx.order && tx.order.status !== 'completed') {
+        amountOnHold += parseFloat(tx.amount) || 0;
+      }
+    });
+
+    // Calculate available balance (total balance minus amount on hold)
+    const totalBalance = parseFloat(wallet.balance) || 0;
+    const availableBalance = Math.max(0, totalBalance - amountOnHold);
 
     // Get withdrawal transactions for this driver
     const withdrawalTransactions = await db.Transaction.findAll({
@@ -63,7 +75,9 @@ router.get('/:driverId', async (req, res) => {
       wallet: {
         id: wallet.id,
         driverId: wallet.driverId,
-        balance: parseFloat(wallet.balance) || 0,
+        balance: totalBalance, // Total balance (includes amount on hold)
+        availableBalance: availableBalance, // Available balance (excludes amount on hold)
+        amountOnHold: amountOnHold, // Amount on hold (tips for non-completed orders)
         totalTipsReceived: parseFloat(wallet.totalTipsReceived) || 0,
         totalTipsCount: wallet.totalTipsCount || 0
       },
@@ -122,10 +136,35 @@ router.post('/:driverId/withdraw', async (req, res) => {
     }
 
     const withdrawalAmount = parseFloat(amount);
-    const currentBalance = parseFloat(wallet.balance) || 0;
+    const totalBalance = parseFloat(wallet.balance) || 0;
 
-    if (withdrawalAmount > currentBalance) {
-      return res.status(400).json({ error: 'Insufficient balance' });
+    // Calculate available balance (exclude amount on hold)
+    const tipTransactions = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'tip',
+        status: 'completed'
+      },
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: ['id', 'status']
+      }]
+    });
+
+    let amountOnHold = 0;
+    tipTransactions.forEach(tx => {
+      if (tx.order && tx.order.status !== 'completed') {
+        amountOnHold += parseFloat(tx.amount) || 0;
+      }
+    });
+
+    const availableBalance = Math.max(0, totalBalance - amountOnHold);
+
+    if (withdrawalAmount > availableBalance) {
+      return res.status(400).json({ 
+        error: `Insufficient available balance. Available: KES ${availableBalance.toFixed(2)}, On Hold: KES ${amountOnHold.toFixed(2)}` 
+      });
     }
 
     // Format phone number
@@ -159,7 +198,7 @@ router.post('/:driverId/withdraw', async (req, res) => {
 
     // Update wallet balance (reserve the amount)
     await wallet.update({
-      balance: currentBalance - withdrawalAmount
+      balance: totalBalance - withdrawalAmount
     });
 
     // Initiate M-Pesa B2C payment
@@ -187,7 +226,7 @@ router.post('/:driverId/withdraw', async (req, res) => {
       } else {
         // B2C initiation failed - refund the wallet balance
         await wallet.update({
-          balance: currentBalance // Restore balance
+          balance: totalBalance // Restore balance
         });
         
         await withdrawalTransaction.update({
@@ -205,7 +244,7 @@ router.post('/:driverId/withdraw', async (req, res) => {
       
       // Refund wallet balance on error
       await wallet.update({
-        balance: currentBalance
+        balance: totalBalance
       });
       
       await withdrawalTransaction.update({

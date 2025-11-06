@@ -147,8 +147,9 @@ const WalletScreen = ({ route, navigation }) => {
     }
 
     const amount = parseFloat(withdrawAmount);
-    if (amount > (wallet?.balance || 0)) {
-      setSnackbarMessage('Insufficient balance');
+    const availableBalance = wallet?.availableBalance ?? wallet?.balance ?? 0;
+    if (amount > availableBalance) {
+      setSnackbarMessage(`Insufficient available balance. Available: KES ${availableBalance.toFixed(2)}`);
       setSnackbarType('error');
       setSnackbarVisible(true);
       return;
@@ -249,10 +250,23 @@ const WalletScreen = ({ route, navigation }) => {
         <View style={styles.content}>
           {/* Wallet Balance Card */}
           <View style={[styles.balanceCard, { backgroundColor: safeColors.paper }]}>
-            <Text style={[styles.balanceLabel, { color: safeColors.textSecondary }]}>Wallet Balance</Text>
+            <Text style={[styles.balanceLabel, { color: safeColors.textSecondary }]}>Available Balance</Text>
             <Text style={[styles.balanceAmount, { color: safeColors.accentText }]}>
-              KES {wallet?.balance?.toFixed(2) || '0.00'}
+              KES {wallet?.availableBalance?.toFixed(2) || wallet?.balance?.toFixed(2) || '0.00'}
             </Text>
+            {wallet?.amountOnHold > 0 && (
+              <View style={[styles.onHoldContainer, { borderTopColor: safeColors.border }]}>
+                <Text style={[styles.onHoldLabel, { color: safeColors.textSecondary }]}>Amount on Hold:</Text>
+                <Text style={[styles.onHoldAmount, { color: '#FFC107' }]}>
+                  KES {wallet.amountOnHold.toFixed(2)}
+                </Text>
+              </View>
+            )}
+            {wallet?.amountOnHold > 0 && (
+              <Text style={[styles.onHoldNote, { color: safeColors.textSecondary }]}>
+                Tips for orders not yet completed
+              </Text>
+            )}
           </View>
 
           {/* Tips Summary */}
@@ -473,6 +487,26 @@ const styles = StyleSheet.create({
   tipDate: {
     fontSize: 11,
     textAlign: 'right',
+  },
+  onHoldContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+  },
+  onHoldLabel: {
+    fontSize: 14,
+  },
+  onHoldAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  onHoldNote: {
+    fontSize: 11,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
 });
 
