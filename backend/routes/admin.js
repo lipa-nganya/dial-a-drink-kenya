@@ -35,22 +35,58 @@ router.get('/stats', async (req, res) => {
       }
     });
 
-    // Get today's revenue
-    const todayRevenue = await db.Order.sum('totalAmount', {
+    // Get today's revenue (excluding tips - tips go to drivers, not business)
+    // Revenue = totalAmount - tipAmount (order + delivery fee only)
+    const todayPaidOrders = await db.Order.findAll({
       where: {
         createdAt: {
           [Op.gte]: today
         },
         paymentStatus: 'paid'
-      }
-    }) || 0;
+      },
+      attributes: ['totalAmount', 'tipAmount']
+    });
+    const todayRevenue = todayPaidOrders.reduce((sum, order) => {
+      const orderAmount = parseFloat(order.totalAmount) || 0;
+      const tipAmount = parseFloat(order.tipAmount) || 0;
+      return sum + (orderAmount - tipAmount); // Exclude tip
+    }, 0);
 
-    // Get total revenue
-    const totalRevenue = await db.Order.sum('totalAmount', {
+    // Get total revenue (excluding tips)
+    const allPaidOrders = await db.Order.findAll({
       where: {
         paymentStatus: 'paid'
+      },
+      attributes: ['totalAmount', 'tipAmount']
+    });
+    const totalRevenue = allPaidOrders.reduce((sum, order) => {
+      const orderAmount = parseFloat(order.totalAmount) || 0;
+      const tipAmount = parseFloat(order.tipAmount) || 0;
+      return sum + (orderAmount - tipAmount); // Exclude tip
+    }, 0);
+
+    // Get tip stats
+    const todayTips = todayPaidOrders.reduce((sum, order) => {
+      return sum + (parseFloat(order.tipAmount) || 0);
+    }, 0);
+    const totalTips = allPaidOrders.reduce((sum, order) => {
+      return sum + (parseFloat(order.tipAmount) || 0);
+    }, 0);
+    const totalTipTransactions = await db.Transaction.count({
+      where: {
+        transactionType: 'tip',
+        status: 'completed'
       }
-    }) || 0;
+    });
+    const todayTipTransactions = await db.Transaction.count({
+      where: {
+        transactionType: 'tip',
+        status: 'completed',
+        createdAt: {
+          [Op.gte]: today
+        }
+      }
+    });
 
     // Get total drinks count
     const totalDrinks = await db.Drink.count();
@@ -61,7 +97,12 @@ router.get('/stats', async (req, res) => {
       todayOrders,
       todayRevenue: parseFloat(todayRevenue) || 0,
       totalRevenue: parseFloat(totalRevenue) || 0,
-      totalDrinks
+      totalDrinks,
+      // Tip stats
+      todayTips: parseFloat(todayTips) || 0,
+      totalTips: parseFloat(totalTips) || 0,
+      totalTipTransactions: totalTipTransactions || 0,
+      todayTipTransactions: todayTipTransactions || 0
     });
   } catch (error) {
     console.error('Error fetching admin stats:', error);

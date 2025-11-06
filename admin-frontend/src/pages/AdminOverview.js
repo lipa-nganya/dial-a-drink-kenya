@@ -15,7 +15,9 @@ import {
   ShoppingCart,
   LocalBar,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  AccountBalanceWallet,
+  EmojiEvents
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -194,6 +196,105 @@ const AdminOverview = () => {
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Available Drinks
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Revenue Stats (Excluding Tips) */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Card sx={{ backgroundColor: '#121212', height: '100%' }}>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <AccountBalanceWallet sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                KES {Number(stats.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Total Revenue (Excludes Tips)
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Card sx={{ backgroundColor: '#121212', height: '100%' }}>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <AttachMoney sx={{ fontSize: 40, color: '#FF3366', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: '#FF3366', fontWeight: 700 }}>
+                KES {Number(stats.todayRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Today's Revenue (Excludes Tips)
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+          <Card sx={{ backgroundColor: '#121212', height: '100%' }}>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <ShoppingCart sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                {stats.todayOrders || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Today's Orders
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Tip Stats */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Card sx={{ backgroundColor: '#121212', height: '100%', border: '1px solid rgba(255, 193, 7, 0.3)' }}>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <EmojiEvents sx={{ fontSize: 40, color: '#FFC107', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: '#FFC107', fontWeight: 700 }}>
+                KES {Number(stats.totalTips || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Total Tips (To Drivers)
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Card sx={{ backgroundColor: '#121212', height: '100%', border: '1px solid rgba(255, 193, 7, 0.3)' }}>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <EmojiEvents sx={{ fontSize: 40, color: '#FFC107', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: '#FFC107', fontWeight: 700 }}>
+                KES {Number(stats.todayTips || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Today's Tips (To Drivers)
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Card sx={{ backgroundColor: '#121212', height: '100%', border: '1px solid rgba(255, 193, 7, 0.3)' }}>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <EmojiEvents sx={{ fontSize: 40, color: '#FFC107', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: '#FFC107', fontWeight: 700 }}>
+                {stats.totalTipTransactions || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Total Tip Transactions
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+          <Card sx={{ backgroundColor: '#121212', height: '100%', border: '1px solid rgba(255, 193, 7, 0.3)' }}>
+            <CardContent sx={{ textAlign: 'center' }}>
+              <EmojiEvents sx={{ fontSize: 40, color: '#FFC107', mb: 1 }} />
+              <Typography variant="h4" sx={{ color: '#FFC107', fontWeight: 700 }}>
+                {stats.todayTipTransactions || 0}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Today's Tip Transactions
               </Typography>
             </CardContent>
           </Card>
