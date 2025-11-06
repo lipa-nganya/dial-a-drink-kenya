@@ -140,6 +140,35 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
+// Get merchant wallet (admin wallet)
+router.get('/merchant-wallet', async (req, res) => {
+  try {
+    // Get or create admin wallet (single wallet for all admin revenue)
+    let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+    if (!adminWallet) {
+      adminWallet = await db.AdminWallet.create({
+        id: 1,
+        balance: 0,
+        totalRevenue: 0,
+        totalOrders: 0
+      });
+    }
+
+    // Get total orders count (all orders)
+    const totalOrders = await db.Order.count();
+
+    res.json({
+      balance: parseFloat(adminWallet.balance) || 0,
+      totalRevenue: parseFloat(adminWallet.totalRevenue) || 0,
+      totalOrders: adminWallet.totalOrders || 0,
+      allOrdersCount: totalOrders || 0
+    });
+  } catch (error) {
+    console.error('Error fetching merchant wallet:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all drinks (admin)
 router.get('/drinks', async (req, res) => {
   try {

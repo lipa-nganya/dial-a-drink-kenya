@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Container, Typography, Box, Button, Paper, CircularProgress, Alert } from '@mui/material';
-import { CheckCircle, ShoppingCart, PhoneAndroid, Assignment } from '@mui/icons-material';
+import { Container, Typography, Box, Button, Paper, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { CheckCircle, ShoppingCart, PhoneAndroid, Assignment, Login } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useCustomer } from '../contexts/CustomerContext';
 import CustomerLogin from '../components/CustomerLogin';
 import OrderTracking from './OrderTracking';
 import io from 'socket.io-client';
@@ -14,6 +15,7 @@ const OrderSuccess = () => {
   const location = useLocation();
   const { clearCart } = useCart();
   const { isDarkMode } = useTheme();
+  const { isLoggedIn, login: loginCustomer } = useCustomer();
   const orderId = location.state?.orderId;
   const paymentPending = location.state?.paymentPending || false;
   const paymentMessage = location.state?.paymentMessage;
@@ -21,6 +23,7 @@ const OrderSuccess = () => {
   const [isPolling, setIsPolling] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [loggedIn, setLoggedIn] = useState(false);
   const [orderData, setOrderData] = useState(null);
   const [autoLoggingIn, setAutoLoggingIn] = useState(false);
@@ -68,8 +71,9 @@ const OrderSuccess = () => {
           customerName: order.customerName,
           loggedInAt: new Date().toISOString()
         };
-        localStorage.setItem('customerOrder', JSON.stringify(customerOrderData));
-        localStorage.setItem('customerLoggedIn', 'true');
+        
+        // Update CustomerContext
+        loginCustomer(customerOrderData);
         
         // Set logged in state and order data
         setLoggedIn(true);
@@ -94,7 +98,7 @@ const OrderSuccess = () => {
       setAutoLoggingIn(false);
       hasAutoLoggedInRef.current = false; // Reset flag on error
     }
-  }, [autoLoggingIn]);
+  }, [autoLoggingIn, loginCustomer]);
 
   useEffect(() => {
     if (paymentPending && orderId) {
@@ -539,8 +543,14 @@ const OrderSuccess = () => {
           <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
             <Button
               variant="contained"
-              startIcon={<Assignment />}
-              onClick={() => navigate('/orders')}
+              startIcon={isLoggedIn ? <Assignment /> : <Login />}
+              onClick={() => {
+                if (isLoggedIn) {
+                  navigate('/orders');
+                } else {
+                  setShowLoginModal(true);
+                }
+              }}
               sx={{
                 backgroundColor: isDarkMode ? '#FFFFFF' : '#000000',
                 color: isDarkMode ? '#000000' : '#FFFFFF',
@@ -552,9 +562,49 @@ const OrderSuccess = () => {
                 }
               }}
             >
-              My Orders
+              {isLoggedIn ? 'My Orders' : 'Log in'}
             </Button>
           </Box>
+
+          {/* Login Modal */}
+          <Dialog 
+            open={showLoginModal} 
+            onClose={() => setShowLoginModal(false)}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Login sx={{ color: '#00E0B8' }} />
+                <Typography variant="h6">Log in to Track Your Order</Typography>
+              </Box>
+            </DialogTitle>
+            <DialogContent>
+              <Alert severity="info" sx={{ mb: 3 }}>
+                <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
+                  Track your order in real-time
+                </Typography>
+                <Typography variant="body2">
+                  Log in with your email or phone number to view your order status, 
+                  track delivery progress, and receive real-time updates.
+                </Typography>
+              </Alert>
+              <CustomerLogin 
+                onLoginSuccess={(order) => {
+                  setLoggedIn(true);
+                  setOrderData(order);
+                  setShowLoginModal(false);
+                  navigate('/orders');
+                }}
+                orderId={orderId}
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setShowLoginModal(false)}>
+                Cancel
+              </Button>
+            </DialogActions>
+          </Dialog>
         </Paper>
       </Container>
     );
@@ -590,8 +640,14 @@ const OrderSuccess = () => {
         <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
           <Button
             variant="contained"
-            startIcon={<Assignment />}
-            onClick={() => navigate('/orders')}
+            startIcon={isLoggedIn ? <Assignment /> : <Login />}
+            onClick={() => {
+              if (isLoggedIn) {
+                navigate('/orders');
+              } else {
+                setShowLoginModal(true);
+              }
+            }}
             sx={{
               backgroundColor: isDarkMode ? '#FFFFFF' : '#000000',
               color: isDarkMode ? '#000000' : '#FFFFFF',
@@ -603,7 +659,7 @@ const OrderSuccess = () => {
               }
             }}
           >
-            My Orders
+            {isLoggedIn ? 'My Orders' : 'Log in'}
           </Button>
           
           <Button
@@ -623,6 +679,46 @@ const OrderSuccess = () => {
             Back to Home
           </Button>
         </Box>
+
+        {/* Login Modal */}
+        <Dialog 
+          open={showLoginModal} 
+          onClose={() => setShowLoginModal(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Login sx={{ color: '#00E0B8' }} />
+              <Typography variant="h6">Log in to Track Your Order</Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
+                Track your order in real-time
+              </Typography>
+              <Typography variant="body2">
+                Log in with your email or phone number to view your order status, 
+                track delivery progress, and receive real-time updates.
+              </Typography>
+            </Alert>
+            <CustomerLogin 
+              onLoginSuccess={(order) => {
+                setLoggedIn(true);
+                setOrderData(order);
+                setShowLoginModal(false);
+                navigate('/orders');
+              }}
+              orderId={orderId}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowLoginModal(false)}>
+              Cancel
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Paper>
     </Container>
   );
