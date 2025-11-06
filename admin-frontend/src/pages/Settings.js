@@ -77,7 +77,8 @@ const Settings = () => {
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
     deliveryFeeWithAlcohol: 50,
-    deliveryFeeWithoutAlcohol: 30
+    deliveryFeeWithoutAlcohol: 30,
+    maxTipEnabled: false
   });
   const [showDeliverySettings, setShowDeliverySettings] = useState(false);
   const [deliverySettingsLoading, setDeliverySettingsLoading] = useState(false);
@@ -334,23 +335,26 @@ const Settings = () => {
   // ========== DELIVERY FEE SETTINGS ==========
   const fetchDeliverySettings = async () => {
     try {
-      const [testModeRes, withAlcoholRes, withoutAlcoholRes] = await Promise.all([
+      const [testModeRes, withAlcoholRes, withoutAlcoholRes, maxTipRes] = await Promise.all([
         api.get('/settings/deliveryTestMode').catch(() => ({ data: null, status: 404 })),
         api.get('/settings/deliveryFeeWithAlcohol').catch(() => ({ data: null, status: 404 })),
-        api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: null, status: 404 }))
+        api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/maxTipEnabled').catch(() => ({ data: null, status: 404 }))
       ]);
 
       setDeliverySettings({
         isTestMode: testModeRes.data?.value === 'true' || false,
         deliveryFeeWithAlcohol: parseFloat(withAlcoholRes.data?.value || '50'),
-        deliveryFeeWithoutAlcohol: parseFloat(withoutAlcoholRes.data?.value || '30')
+        deliveryFeeWithoutAlcohol: parseFloat(withoutAlcoholRes.data?.value || '30'),
+        maxTipEnabled: maxTipRes.data?.value === 'true' || false
       });
     } catch (error) {
       console.error('Error fetching delivery settings:', error);
       setDeliverySettings({
         isTestMode: false,
         deliveryFeeWithAlcohol: 50,
-        deliveryFeeWithoutAlcohol: 30
+        deliveryFeeWithoutAlcohol: 30,
+        maxTipEnabled: false
       });
     }
   };
@@ -361,7 +365,8 @@ const Settings = () => {
       await Promise.all([
         api.put('/settings/deliveryTestMode', { value: deliverySettings.isTestMode.toString() }),
         api.put('/settings/deliveryFeeWithAlcohol', { value: deliverySettings.deliveryFeeWithAlcohol.toString() }),
-        api.put('/settings/deliveryFeeWithoutAlcohol', { value: deliverySettings.deliveryFeeWithoutAlcohol.toString() })
+        api.put('/settings/deliveryFeeWithoutAlcohol', { value: deliverySettings.deliveryFeeWithoutAlcohol.toString() }),
+        api.put('/settings/maxTipEnabled', { value: deliverySettings.maxTipEnabled.toString() })
       ]);
       setNotification({ message: 'Delivery settings saved successfully!' });
       setShowDeliverySettings(false);
@@ -838,6 +843,33 @@ const Settings = () => {
                     />
                   </Box>
                 </Grid>
+
+                {deliverySettings.isTestMode && (
+                  <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          Max Tip (1 KES)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          When enabled, maximum tip is limited to 1 KES
+                        </Typography>
+                      </Box>
+                      <Switch
+                        checked={deliverySettings.maxTipEnabled}
+                        onChange={(e) => setDeliverySettings(prev => ({ ...prev, maxTipEnabled: e.target.checked }))}
+                        sx={{
+                          '& .MuiSwitch-switchBase.Mui-checked': {
+                            color: '#00E0B8',
+                          },
+                          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                            backgroundColor: '#00E0B8',
+                          },
+                        }}
+                      />
+                    </Box>
+                  </Grid>
+                )}
 
                 {!deliverySettings.isTestMode && (
                   <>

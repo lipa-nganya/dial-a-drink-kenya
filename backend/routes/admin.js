@@ -69,6 +69,36 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// Get all transactions (admin)
+router.get('/transactions', async (req, res) => {
+  try {
+    const transactions = await db.Transaction.findAll({
+      include: [{
+        model: db.Order,
+        as: 'order',
+        include: [{
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        }]
+      }, {
+        model: db.Driver,
+        as: 'driver',
+        attributes: ['id', 'name', 'phoneNumber', 'status']
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get Save the Fishes stats
 router.get('/save-the-fishes', async (req, res) => {
   try {
@@ -169,6 +199,72 @@ router.patch('/orders/:id/status', async (req, res) => {
     if (status === 'delivered' && order.paymentStatus === 'paid') {
       await order.update({ status: 'completed' });
       finalStatus = 'completed';
+    }
+
+    // Create tip transaction if order has tip and is being delivered
+    if (order.tipAmount && parseFloat(order.tipAmount) > 0 && status === 'delivered' && order.driverId) {
+      try {
+        const driverId = order.driverId;
+        // Check if tip transaction already exists (to avoid duplicates)
+        const existingTipTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'tip',
+            driverId: driverId
+          }
+        });
+
+        if (!existingTipTransaction) {
+          // Get or create driver wallet
+          let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
+          if (!driverWallet) {
+            driverWallet = await db.DriverWallet.create({
+              driverId: driverId,
+              balance: 0,
+              totalTipsReceived: 0,
+              totalTipsCount: 0
+            });
+          }
+
+          // Create tip transaction
+          const tipTransaction = await db.Transaction.create({
+            orderId: order.id,
+            driverId: driverId,
+            driverWalletId: driverWallet.id,
+            transactionType: 'tip',
+            paymentMethod: 'cash', // Tip is cash-based
+            paymentProvider: 'tip',
+            amount: parseFloat(order.tipAmount),
+            status: 'completed',
+            paymentStatus: 'paid',
+            notes: `Tip for Order #${order.id} - ${order.customerName}`
+          });
+
+          // Update driver wallet
+          await driverWallet.update({
+            balance: parseFloat(driverWallet.balance) + parseFloat(order.tipAmount),
+            totalTipsReceived: parseFloat(driverWallet.totalTipsReceived) + parseFloat(order.tipAmount),
+            totalTipsCount: driverWallet.totalTipsCount + 1
+          });
+
+          console.log(`✅ Tip transaction created for Order #${order.id}: KES ${order.tipAmount} for Driver #${driverId}`);
+
+          // Emit socket event to notify driver about tip
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`driver-${driverId}`).emit('tip-received', {
+              orderId: order.id,
+              tipAmount: parseFloat(order.tipAmount),
+              customerName: order.customerName,
+              walletBalance: parseFloat(driverWallet.balance) + parseFloat(order.tipAmount)
+            });
+            console.log(`📬 Tip notification sent to driver #${driverId} for Order #${order.id}`);
+          }
+        }
+      } catch (tipError) {
+        console.error('❌ Error creating tip transaction:', tipError);
+        // Don't fail the order status update if tip transaction fails
+      }
     }
 
     // Reload order to get updated data

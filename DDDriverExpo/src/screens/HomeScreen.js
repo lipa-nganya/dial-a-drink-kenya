@@ -371,6 +371,13 @@ const HomeScreen = ({ route, navigation }) => {
     });
 
     // Listen for payment failures
+    socket.on('tip-received', (data) => {
+      console.log('💰 Tip received:', data);
+      setSnackbarMessage(`You received a tip of KES ${data.tipAmount} from ${data.customerName} for Order #${data.orderId}`);
+      setSnackbarType('success');
+      setSnackbarVisible(true);
+    });
+
     socket.on('payment-failed', (data) => {
       console.log('❌ Payment failed via socket:', data);
       if (data.orderId) {
