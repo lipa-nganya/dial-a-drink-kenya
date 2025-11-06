@@ -618,15 +618,30 @@ router.post('/orders/:id/verify-payment', async (req, res) => {
 
         if (!existingTipTransaction) {
           const tipAmount = parseFloat(order.tipAmount);
+          // Get payment transaction to share payment attributes
+          const paymentTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'payment',
+              status: 'completed'
+            },
+            order: [['createdAt', 'DESC']]
+          });
+          
           let tipTransactionData = {
             orderId: order.id,
             transactionType: 'tip',
-            paymentMethod: 'cash', // Tip is cash-based
-            paymentProvider: 'tip',
+            paymentMethod: paymentTransaction?.paymentMethod || 'mobile_money', // Same payment method as order payment
+            paymentProvider: paymentTransaction?.paymentProvider || 'mpesa', // Same payment provider
             amount: tipAmount,
+            status: 'completed', // Tip is paid when order payment is paid
             paymentStatus: 'paid', // Tip is paid when order payment is paid
-            receiptNumber: receiptNumber || null, // Match order's receipt number
-            notes: `Tip for Order #${order.id} - ${order.customerName}`
+            receiptNumber: paymentTransaction?.receiptNumber || receiptNumber || null, // Same receipt number as order payment
+            checkoutRequestID: paymentTransaction?.checkoutRequestID || null, // Same checkout request ID
+            merchantRequestID: paymentTransaction?.merchantRequestID || null, // Same merchant request ID
+            phoneNumber: paymentTransaction?.phoneNumber || null, // Same phone number
+            transactionDate: paymentTransaction?.transactionDate || new Date(), // Same transaction date
+            notes: `Tip for Order #${order.id} - ${order.customerName} (from same M-Pesa payment as order)`
           };
 
           // If driver is already assigned, credit tip immediately
