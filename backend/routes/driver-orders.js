@@ -255,15 +255,14 @@ router.patch('/:orderId/status', async (req, res) => {
               order: [['createdAt', 'DESC']]
             });
 
-            const receiptNumber = paymentTransaction?.receiptNumber || null;
-
             // Update tip transaction with driver info and complete it
+            // Note: receiptNumber should already be set when payment was completed
             await tipTransaction.update({
               driverId: driverId,
               driverWalletId: driverWallet.id,
               status: 'completed',
               paymentStatus: 'paid',
-              receiptNumber: receiptNumber, // Match order's receipt number
+              // Keep existing receiptNumber (set when payment was completed)
               notes: `Tip for Order #${order.id} - ${order.customerName}`
             });
 
