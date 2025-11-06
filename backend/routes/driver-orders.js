@@ -222,19 +222,19 @@ router.patch('/:orderId/status', async (req, res) => {
         });
       }
 
-      // Create tip transaction if order has tip and is being delivered
+      // Update tip transaction if order has tip and is being delivered
       if (order.tipAmount && parseFloat(order.tipAmount) > 0 && finalStatus === 'delivered') {
         try {
-          // Check if tip transaction already exists (to avoid duplicates)
-          const existingTipTransaction = await db.Transaction.findOne({
+          // Find existing tip transaction (created at order creation time)
+          const tipTransaction = await db.Transaction.findOne({
             where: {
               orderId: order.id,
               transactionType: 'tip',
-              driverId: driverId
+              status: 'pending' // Only update pending tip transactions
             }
           });
 
-          if (!existingTipTransaction) {
+          if (tipTransaction) {
             // Get or create driver wallet
             let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
             if (!driverWallet) {
@@ -246,15 +246,10 @@ router.patch('/:orderId/status', async (req, res) => {
               });
             }
 
-            // Create tip transaction
-            const tipTransaction = await db.Transaction.create({
-              orderId: order.id,
+            // Update tip transaction with driver info and complete it
+            await tipTransaction.update({
               driverId: driverId,
               driverWalletId: driverWallet.id,
-              transactionType: 'tip',
-              paymentMethod: 'cash', // Tip is cash-based
-              paymentProvider: 'tip',
-              amount: parseFloat(order.tipAmount),
               status: 'completed',
               paymentStatus: 'paid',
               notes: `Tip for Order #${order.id} - ${order.customerName}`
@@ -267,7 +262,7 @@ router.patch('/:orderId/status', async (req, res) => {
               totalTipsCount: driverWallet.totalTipsCount + 1
             });
 
-            console.log(`✅ Tip transaction created for Order #${order.id}: KES ${order.tipAmount} for Driver #${driverId}`);
+            console.log(`✅ Tip transaction completed for Order #${order.id}: KES ${order.tipAmount} for Driver #${driverId}`);
 
             // Emit socket event to notify driver about tip
             const io = req.app.get('io');
@@ -280,9 +275,11 @@ router.patch('/:orderId/status', async (req, res) => {
               });
               console.log(`📬 Tip notification sent to driver #${driverId} for Order #${order.id}`);
             }
+          } else {
+            console.log(`⚠️  No pending tip transaction found for Order #${order.id} - may have been completed already`);
           }
         } catch (tipError) {
-          console.error('❌ Error creating tip transaction:', tipError);
+          console.error('❌ Error updating tip transaction:', tipError);
           // Don't fail the order status update if tip transaction fails
         }
       }
