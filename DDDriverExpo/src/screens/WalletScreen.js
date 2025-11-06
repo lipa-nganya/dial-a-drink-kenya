@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import io from 'socket.io-client';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import Snackbar from '../components/Snackbar';
@@ -33,6 +34,61 @@ const WalletScreen = ({ route, navigation }) => {
   useEffect(() => {
     loadWalletData();
   }, []);
+
+  // Set up socket connection for tip notifications
+  useEffect(() => {
+    let socket = null;
+    
+    const setupSocket = async () => {
+      try {
+        const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
+        if (!phone) return;
+
+        const driverResponse = await api.get(`/drivers/phone/${phone}`);
+        if (!driverResponse.data?.id) return;
+
+        const driverId = driverResponse.data.id;
+        const apiBaseUrl = __DEV__ 
+          ? 'http://localhost:5001' 
+          : 'https://dialadrink-backend.onrender.com';
+        
+        socket = io(apiBaseUrl, {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionAttempts: 5
+        });
+
+        socket.emit('join-driver', { driverId });
+        console.log('✅ WalletScreen: Socket connected for driver', driverId);
+
+        socket.on('tip-received', (data) => {
+          console.log('💰 Tip received in WalletScreen:', data);
+          // Reload wallet data to show updated balance
+          loadWalletData();
+          // Show notification
+          setSnackbarMessage(`Tip of KES ${data.tipAmount} received from ${data.customerName}!`);
+          setSnackbarType('success');
+          setSnackbarVisible(true);
+        });
+
+        socket.on('connect_error', (error) => {
+          console.error('❌ WalletScreen Socket connection error:', error);
+        });
+      } catch (error) {
+        console.error('Error setting up socket in WalletScreen:', error);
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+        console.log('✅ WalletScreen: Socket disconnected');
+      }
+    };
+  }, [phoneNumber]);
 
   const loadWalletData = async () => {
     try {

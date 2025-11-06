@@ -69,9 +69,22 @@ router.post('/', async (req, res) => {
     }
 
     // Validate tip amount
-    const tip = parseFloat(tipAmount) || 0;
+    let tip = parseFloat(tipAmount) || 0;
     if (tip < 0) {
       return res.status(400).json({ error: 'Tip amount cannot be negative' });
+    }
+
+    // Check max tip setting in test mode
+    const [testModeSetting, maxTipSetting] = await Promise.all([
+      db.Settings.findOne({ where: { key: 'deliveryTestMode' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'maxTipEnabled' } }).catch(() => null)
+    ]);
+
+    const isTestMode = testModeSetting?.value === 'true';
+    const maxTipEnabled = maxTipSetting?.value === 'true';
+
+    if (isTestMode && maxTipEnabled && tip > 1) {
+      tip = 1; // Limit tip to 1 KES when max tip is enabled in test mode
     }
     
     // Calculate total amount

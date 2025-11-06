@@ -268,6 +268,18 @@ router.patch('/:orderId/status', async (req, res) => {
             });
 
             console.log(`✅ Tip transaction created for Order #${order.id}: KES ${order.tipAmount} for Driver #${driverId}`);
+
+            // Emit socket event to notify driver about tip
+            const io = req.app.get('io');
+            if (io) {
+              io.to(`driver-${driverId}`).emit('tip-received', {
+                orderId: order.id,
+                tipAmount: parseFloat(order.tipAmount),
+                customerName: order.customerName,
+                walletBalance: parseFloat(driverWallet.balance) + parseFloat(order.tipAmount)
+              });
+              console.log(`📬 Tip notification sent to driver #${driverId} for Order #${order.id}`);
+            }
           }
         } catch (tipError) {
           console.error('❌ Error creating tip transaction:', tipError);
