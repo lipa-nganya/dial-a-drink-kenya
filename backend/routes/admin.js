@@ -201,8 +201,8 @@ router.patch('/orders/:id/status', async (req, res) => {
       finalStatus = 'completed';
     }
 
-    // Update tip transaction if order has tip and is being delivered
-    if (order.tipAmount && parseFloat(order.tipAmount) > 0 && status === 'delivered' && order.driverId) {
+    // Update tip transaction if order has tip and is being delivered or completed
+    if (order.tipAmount && parseFloat(order.tipAmount) > 0 && (status === 'delivered' || finalStatus === 'completed') && order.driverId) {
       try {
         const driverId = order.driverId;
         // Find existing tip transaction (created at order creation time)

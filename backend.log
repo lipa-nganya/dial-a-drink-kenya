@@ -1,0 +1,395 @@
+[dotenv@17.2.3] injecting env (11) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+Starting server initialization...
+Executing (default): SELECT 1+1 AS result
+Database connection established successfully.
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'categories'
+🚀 Server is running on port 5001
+🔗 Health check: http://localhost:5001/api/health
+📊 API endpoints:
+   - GET  /api/health
+   - GET  /api/categories
+   - GET  /api/drinks
+   - POST /api/orders
+   - GET  /api/admin/orders
+🌐 Server ready to accept requests!
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'categories' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'subcategories'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'subcategories' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'drinks'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'drinks' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'drivers'
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_drivers_status' GROUP BY 1
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'drivers' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'orders'
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_orders_status' GROUP BY 1
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_orders_paymentStatus' GROUP BY 1
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_orders_paymentType' GROUP BY 1
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_orders_paymentMethod' GROUP BY 1
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'orders' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'order_items'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'order_items' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'countdowns'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'countdowns' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'settings'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'settings' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'admins'
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_admins_role' GROUP BY 1
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'admins' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'driver_wallets'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'driver_wallets' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'transactions'
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_transactionType' GROUP BY 1
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_paymentMethod' GROUP BY 1
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_status' GROUP BY 1
+Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_paymentStatus' GROUP BY 1
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'transactions' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'order_notifications'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'order_notifications' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'otps'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'otps' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'email_confirmations'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'email_confirmations' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'customers'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'customers' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'saved_addresses'
+Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'saved_addresses' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
+Database synchronized successfully.
+Checking for missing columns...
+Executing (default): ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "isOnOffer" BOOLEAN DEFAULT false;
+✅ isOnOffer column checked/added
+Executing (default): ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "originalPrice" DECIMAL(10,2);
+✅ originalPrice column checked/added
+Executing (default): UPDATE "drinks" 
+      SET "originalPrice" = "price" 
+      WHERE "originalPrice" IS NULL;
+✅ originalPrice set for existing drinks
+Executing (default): ALTER TABLE "drinks" 
+      ALTER COLUMN "image" TYPE TEXT;
+✅ Image column updated to TEXT type
+Executing (default): ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "capacity" JSON;
+✅ Capacity column checked/added (JSON type)
+Executing (default): ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "capacityPricing" JSON;
+✅ Capacity pricing column checked/added (JSON type)
+Executing (default): ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "abv" DECIMAL(5,2);
+✅ ABV column checked/added
+Executing (default): CREATE TABLE IF NOT EXISTS "subcategories" (
+        "id" SERIAL PRIMARY KEY,
+        "name" VARCHAR(255) NOT NULL UNIQUE,
+        "categoryId" INTEGER NOT NULL REFERENCES "categories"("id"),
+        "isActive" BOOLEAN DEFAULT true,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ subcategories table checked/created
+Executing (default): ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "subCategoryId" INTEGER REFERENCES "subcategories"("id");
+✅ subCategoryId column checked/added
+Executing (default): CREATE TABLE IF NOT EXISTS "settings" (
+        "id" SERIAL PRIMARY KEY,
+        "key" VARCHAR(255) NOT NULL UNIQUE,
+        "value" TEXT,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ settings table checked/created
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders' AND column_name='paymentType';
+✅ paymentType column already exists
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders' AND column_name='driverId';
+✅ driverId column already exists
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='drivers' AND column_name='pinHash';
+✅ pinHash column already exists in drivers table
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders' AND column_name='driverAccepted';
+✅ driverAccepted column already exists in orders table
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders' AND column_name='paymentMethod';
+✅ paymentMethod column already exists
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders' AND column_name='paymentStatus';
+✅ paymentStatus column already exists
+Executing (default): ALTER TYPE "enum_orders_status" ADD VALUE IF NOT EXISTS 'completed';
+✅ Status enum updated to include completed
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders' AND column_name='tipAmount';
+✅ tipAmount column already exists in orders table
+Executing (default): CREATE TABLE IF NOT EXISTS "transactions" (
+        "id" SERIAL PRIMARY KEY,
+        "orderId" INTEGER REFERENCES "orders"("id") ON DELETE CASCADE,
+        "driverId" INTEGER REFERENCES "drivers"("id") ON DELETE SET NULL,
+        "driverWalletId" INTEGER,
+        "transactionType" VARCHAR(255) DEFAULT 'payment',
+        "paymentMethod" VARCHAR(255) NOT NULL,
+        "paymentProvider" VARCHAR(255),
+        "amount" DECIMAL(10, 2) NOT NULL,
+        "status" VARCHAR(255) DEFAULT 'pending',
+        "paymentStatus" VARCHAR(255) DEFAULT 'pending',
+        "receiptNumber" VARCHAR(255),
+        "checkoutRequestID" VARCHAR(255),
+        "merchantRequestID" VARCHAR(255),
+        "phoneNumber" VARCHAR(255),
+        "transactionDate" TIMESTAMP WITH TIME ZONE,
+        "notes" TEXT,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ transactions table checked/created
+Executing (default): SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name='transactions' AND column_name='paymentStatus';
+✅ paymentStatus column already exists in transactions table
+Executing (default): SELECT is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name='transactions' AND column_name='orderId';
+✅ orderId column already allows NULL in transactions table
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='transactions' AND column_name='driverId';
+✅ driverId column already exists in transactions table
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='transactions' AND column_name='driverWalletId';
+✅ driverWalletId column already exists in transactions table
+Executing (default): DO $$ BEGIN
+        CREATE TYPE transaction_type_enum AS ENUM ('payment', 'refund', 'tip', 'withdrawal');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+Executing (default): ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'tip'
+✅ Added tip to transaction_type_enum
+Executing (default): ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'withdrawal'
+✅ Added withdrawal to transaction_type_enum
+Executing (default): DO $$ BEGIN
+        CREATE TYPE transaction_status_enum AS ENUM ('pending', 'completed', 'failed', 'cancelled');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+Executing (default): DO $$ BEGIN
+        CREATE TYPE transaction_payment_method_enum AS ENUM ('card', 'mobile_money', 'cash');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+Executing (default): SELECT data_type 
+        FROM information_schema.columns 
+        WHERE table_name='transactions' AND column_name='transactionType';
+Executing (default): ALTER TABLE "transactions" 
+          ALTER COLUMN "transactionType" TYPE transaction_type_enum USING "transactionType"::transaction_type_enum;
+Executing (default): CREATE TABLE IF NOT EXISTS "order_notifications" (
+        "id" SERIAL PRIMARY KEY,
+        "name" VARCHAR(255) NOT NULL,
+        "phoneNumber" VARCHAR(255) NOT NULL,
+        "isActive" BOOLEAN DEFAULT true,
+        "notes" TEXT,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ order_notifications table checked/created
+Executing (default): CREATE TABLE IF NOT EXISTS "otps" (
+        "id" SERIAL PRIMARY KEY,
+        "phoneNumber" VARCHAR(255) NOT NULL,
+        "otpCode" VARCHAR(10) NOT NULL,
+        "expiresAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "isUsed" BOOLEAN DEFAULT false,
+        "attempts" INTEGER DEFAULT 0,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ otps table checked/created
+Executing (default): CREATE TABLE IF NOT EXISTS "email_confirmations" (
+        "id" SERIAL PRIMARY KEY,
+        "email" VARCHAR(255) NOT NULL,
+        "token" VARCHAR(255) NOT NULL UNIQUE,
+        "expiresAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "isUsed" BOOLEAN DEFAULT false,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ email_confirmations table checked/created
+Executing (default): CREATE TABLE IF NOT EXISTS "customers" (
+        "id" SERIAL PRIMARY KEY,
+        "email" VARCHAR(255) UNIQUE,
+        "phone" VARCHAR(255) UNIQUE,
+        "username" VARCHAR(255) NOT NULL UNIQUE,
+        "password" VARCHAR(255),
+        "customerName" VARCHAR(255),
+        "hasSetPassword" BOOLEAN DEFAULT false,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ customers table checked/created
+Executing (default): DO $$ BEGIN
+        CREATE TYPE driver_status_enum AS ENUM ('active', 'inactive', 'on_delivery', 'offline');
+      EXCEPTION
+        WHEN duplicate_object THEN null;
+      END $$;
+Executing (default): CREATE TABLE IF NOT EXISTS "drivers" (
+        "id" SERIAL PRIMARY KEY,
+        "name" VARCHAR(255) NOT NULL,
+        "phoneNumber" VARCHAR(255) NOT NULL UNIQUE,
+        "status" driver_status_enum DEFAULT 'offline',
+        "lastActivity" TIMESTAMP WITH TIME ZONE,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ drivers table checked/created
+Executing (default): CREATE TABLE IF NOT EXISTS "driver_wallets" (
+        "id" SERIAL PRIMARY KEY,
+        "driverId" INTEGER NOT NULL UNIQUE REFERENCES "drivers"("id") ON DELETE CASCADE,
+        "balance" DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        "totalTipsReceived" DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        "totalTipsCount" INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ driver_wallets table checked/created
+Executing (default): CREATE TABLE IF NOT EXISTS "saved_addresses" (
+        "id" SERIAL PRIMARY KEY,
+        "address" TEXT NOT NULL UNIQUE,
+        "placeId" VARCHAR(255),
+        "formattedAddress" TEXT,
+        "searchCount" INTEGER DEFAULT 0,
+        "apiCallsSaved" INTEGER DEFAULT 0,
+        "costSaved" DECIMAL(10, 4) DEFAULT 0,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ saved_addresses table checked/created
+Executing (default): CREATE TABLE IF NOT EXISTS "admins" (
+        "id" SERIAL PRIMARY KEY,
+        "username" VARCHAR(255) NOT NULL UNIQUE,
+        "password" VARCHAR(255),
+        "email" VARCHAR(255) NOT NULL UNIQUE,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+✅ admins table checked/created
+Executing (default): SELECT is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name='admins' AND column_name='password';
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='admins' AND column_name='role';
+✅ role column already exists in admins table
+Executing (default): SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='admins' AND column_name='inviteToken';
+✅ inviteToken columns already exist in admins table
+Executing (default): SELECT "id", "username", "password", "email", "role", "inviteToken", "inviteTokenExpiry", "createdAt", "updatedAt" FROM "admins" AS "Admin" WHERE "Admin"."username" = 'admin';
+Client connected: D9iutjC1ewg5ruMnAAAC
+Client connected: uhXqeN4k9yDb7lrVAAAF
+Client connected: qY2Oa6T7_1Ua05YDAAAG
+Executing (default): SELECT "id", "username", "password", "email", "role", "inviteToken", "inviteTokenExpiry", "createdAt", "updatedAt" FROM "admins" AS "Admin" WHERE "Admin"."role" IS NULL;
+Database columns updated successfully.
+Executing (default): SELECT count(*) AS "count" FROM "categories" AS "Category";
+Database setup completed.
+Client connected: GlJZOScvFufyM-zPAAAH
+Client GlJZOScvFufyM-zPAAAH joined driver room: driver-1
+Executing (default): SELECT "Transaction"."id", "Transaction"."orderId", "Transaction"."driverId", "Transaction"."driverWalletId", "Transaction"."transactionType", "Transaction"."paymentMethod", "Transaction"."paymentProvider", "Transaction"."amount", "Transaction"."status", "Transaction"."paymentStatus", "Transaction"."receiptNumber", "Transaction"."checkoutRequestID", "Transaction"."merchantRequestID", "Transaction"."phoneNumber", "Transaction"."transactionDate", "Transaction"."notes", "Transaction"."createdAt", "Transaction"."updatedAt", "order"."id" AS "order.id", "order"."customerName" AS "order.customerName", "order"."customerPhone" AS "order.customerPhone", "order"."customerEmail" AS "order.customerEmail", "order"."deliveryAddress" AS "order.deliveryAddress", "order"."totalAmount" AS "order.totalAmount", "order"."tipAmount" AS "order.tipAmount", "order"."status" AS "order.status", "order"."paymentStatus" AS "order.paymentStatus", "order"."notes" AS "order.notes", "order"."paymentType" AS "order.paymentType", "order"."paymentMethod" AS "order.paymentMethod", "order"."driverId" AS "order.driverId", "order"."driverAccepted" AS "order.driverAccepted", "order"."createdAt" AS "order.createdAt", "order"."updatedAt" AS "order.updatedAt", "order->items"."id" AS "order.items.id", "order->items"."orderId" AS "order.items.orderId", "order->items"."drinkId" AS "order.items.drinkId", "order->items"."quantity" AS "order.items.quantity", "order->items"."price" AS "order.items.price", "order->items"."createdAt" AS "order.items.createdAt", "order->items"."updatedAt" AS "order.items.updatedAt", "order->items->drink"."id" AS "order.items.drink.id", "order->items->drink"."name" AS "order.items.drink.name", "order->items->drink"."description" AS "order.items.drink.description", "order->items->drink"."price" AS "order.items.drink.price", "order->items->drink"."image" AS "order.items.drink.image", "order->items->drink"."categoryId" AS "order.items.drink.categoryId", "order->items->drink"."subCategoryId" AS "order.items.drink.subCategoryId", "order->items->drink"."isAvailable" AS "order.items.drink.isAvailable", "order->items->drink"."isPopular" AS "order.items.drink.isPopular", "order->items->drink"."isOnOffer" AS "order.items.drink.isOnOffer", "order->items->drink"."originalPrice" AS "order.items.drink.originalPrice", "order->items->drink"."capacity" AS "order.items.drink.capacity", "order->items->drink"."capacityPricing" AS "order.items.drink.capacityPricing", "order->items->drink"."abv" AS "order.items.drink.abv", "order->items->drink"."createdAt" AS "order.items.drink.createdAt", "order->items->drink"."updatedAt" AS "order.items.drink.updatedAt", "driver"."id" AS "driver.id", "driver"."name" AS "driver.name", "driver"."phoneNumber" AS "driver.phoneNumber", "driver"."status" AS "driver.status" FROM "transactions" AS "Transaction" LEFT OUTER JOIN "orders" AS "order" ON "Transaction"."orderId" = "order"."id" LEFT OUTER JOIN "order_items" AS "order->items" ON "order"."id" = "order->items"."orderId" LEFT OUTER JOIN "drinks" AS "order->items->drink" ON "order->items"."drinkId" = "order->items->drink"."id" LEFT OUTER JOIN "drivers" AS "driver" ON "Transaction"."driverId" = "driver"."id" ORDER BY "Transaction"."createdAt" DESC;
+Client connected: 5SPMNAVb_fJ1fX1vAAAJ
+Client 5SPMNAVb_fJ1fX1vAAAJ joined driver room: driver-1
+Client connected: ipWuTkJ43ZZoqL61AAAL
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Client disconnected: uhXqeN4k9yDb7lrVAAAF
+Executing (default): SELECT "Transaction"."id", "Transaction"."orderId", "Transaction"."driverId", "Transaction"."driverWalletId", "Transaction"."transactionType", "Transaction"."paymentMethod", "Transaction"."paymentProvider", "Transaction"."amount", "Transaction"."status", "Transaction"."paymentStatus", "Transaction"."receiptNumber", "Transaction"."checkoutRequestID", "Transaction"."merchantRequestID", "Transaction"."phoneNumber", "Transaction"."transactionDate", "Transaction"."notes", "Transaction"."createdAt", "Transaction"."updatedAt", "order"."id" AS "order.id", "order"."customerName" AS "order.customerName", "order"."customerPhone" AS "order.customerPhone", "order"."customerEmail" AS "order.customerEmail", "order"."deliveryAddress" AS "order.deliveryAddress", "order"."totalAmount" AS "order.totalAmount", "order"."tipAmount" AS "order.tipAmount", "order"."status" AS "order.status", "order"."paymentStatus" AS "order.paymentStatus", "order"."notes" AS "order.notes", "order"."paymentType" AS "order.paymentType", "order"."paymentMethod" AS "order.paymentMethod", "order"."driverId" AS "order.driverId", "order"."driverAccepted" AS "order.driverAccepted", "order"."createdAt" AS "order.createdAt", "order"."updatedAt" AS "order.updatedAt", "order->items"."id" AS "order.items.id", "order->items"."orderId" AS "order.items.orderId", "order->items"."drinkId" AS "order.items.drinkId", "order->items"."quantity" AS "order.items.quantity", "order->items"."price" AS "order.items.price", "order->items"."createdAt" AS "order.items.createdAt", "order->items"."updatedAt" AS "order.items.updatedAt", "order->items->drink"."id" AS "order.items.drink.id", "order->items->drink"."name" AS "order.items.drink.name", "order->items->drink"."description" AS "order.items.drink.description", "order->items->drink"."price" AS "order.items.drink.price", "order->items->drink"."image" AS "order.items.drink.image", "order->items->drink"."categoryId" AS "order.items.drink.categoryId", "order->items->drink"."subCategoryId" AS "order.items.drink.subCategoryId", "order->items->drink"."isAvailable" AS "order.items.drink.isAvailable", "order->items->drink"."isPopular" AS "order.items.drink.isPopular", "order->items->drink"."isOnOffer" AS "order.items.drink.isOnOffer", "order->items->drink"."originalPrice" AS "order.items.drink.originalPrice", "order->items->drink"."capacity" AS "order.items.drink.capacity", "order->items->drink"."capacityPricing" AS "order.items.drink.capacityPricing", "order->items->drink"."abv" AS "order.items.drink.abv", "order->items->drink"."createdAt" AS "order.items.drink.createdAt", "order->items->drink"."updatedAt" AS "order.items.drink.updatedAt", "driver"."id" AS "driver.id", "driver"."name" AS "driver.name", "driver"."phoneNumber" AS "driver.phoneNumber", "driver"."status" AS "driver.status" FROM "transactions" AS "Transaction" LEFT OUTER JOIN "orders" AS "order" ON "Transaction"."orderId" = "order"."id" LEFT OUTER JOIN "order_items" AS "order->items" ON "order"."id" = "order->items"."orderId" LEFT OUTER JOIN "drinks" AS "order->items->drink" ON "order->items"."drinkId" = "order->items->drink"."id" LEFT OUTER JOIN "drivers" AS "driver" ON "Transaction"."driverId" = "driver"."id" ORDER BY "Transaction"."createdAt" DESC;
+Client connected: biUHK24BIYY9WVtNAAAN
+Client biUHK24BIYY9WVtNAAAN joined admin room
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "Transaction"."id", "Transaction"."orderId", "Transaction"."driverId", "Transaction"."driverWalletId", "Transaction"."transactionType", "Transaction"."paymentMethod", "Transaction"."paymentProvider", "Transaction"."amount", "Transaction"."status", "Transaction"."paymentStatus", "Transaction"."receiptNumber", "Transaction"."checkoutRequestID", "Transaction"."merchantRequestID", "Transaction"."phoneNumber", "Transaction"."transactionDate", "Transaction"."notes", "Transaction"."createdAt", "Transaction"."updatedAt", "order"."id" AS "order.id", "order"."customerName" AS "order.customerName", "order"."customerPhone" AS "order.customerPhone", "order"."customerEmail" AS "order.customerEmail", "order"."deliveryAddress" AS "order.deliveryAddress", "order"."totalAmount" AS "order.totalAmount", "order"."tipAmount" AS "order.tipAmount", "order"."status" AS "order.status", "order"."paymentStatus" AS "order.paymentStatus", "order"."notes" AS "order.notes", "order"."paymentType" AS "order.paymentType", "order"."paymentMethod" AS "order.paymentMethod", "order"."driverId" AS "order.driverId", "order"."driverAccepted" AS "order.driverAccepted", "order"."createdAt" AS "order.createdAt", "order"."updatedAt" AS "order.updatedAt", "order->items"."id" AS "order.items.id", "order->items"."orderId" AS "order.items.orderId", "order->items"."drinkId" AS "order.items.drinkId", "order->items"."quantity" AS "order.items.quantity", "order->items"."price" AS "order.items.price", "order->items"."createdAt" AS "order.items.createdAt", "order->items"."updatedAt" AS "order.items.updatedAt", "order->items->drink"."id" AS "order.items.drink.id", "order->items->drink"."name" AS "order.items.drink.name", "order->items->drink"."description" AS "order.items.drink.description", "order->items->drink"."price" AS "order.items.drink.price", "order->items->drink"."image" AS "order.items.drink.image", "order->items->drink"."categoryId" AS "order.items.drink.categoryId", "order->items->drink"."subCategoryId" AS "order.items.drink.subCategoryId", "order->items->drink"."isAvailable" AS "order.items.drink.isAvailable", "order->items->drink"."isPopular" AS "order.items.drink.isPopular", "order->items->drink"."isOnOffer" AS "order.items.drink.isOnOffer", "order->items->drink"."originalPrice" AS "order.items.drink.originalPrice", "order->items->drink"."capacity" AS "order.items.drink.capacity", "order->items->drink"."capacityPricing" AS "order.items.drink.capacityPricing", "order->items->drink"."abv" AS "order.items.drink.abv", "order->items->drink"."createdAt" AS "order.items.drink.createdAt", "order->items->drink"."updatedAt" AS "order.items.drink.updatedAt", "driver"."id" AS "driver.id", "driver"."name" AS "driver.name", "driver"."phoneNumber" AS "driver.phoneNumber", "driver"."status" AS "driver.status" FROM "transactions" AS "Transaction" LEFT OUTER JOIN "orders" AS "order" ON "Transaction"."orderId" = "order"."id" LEFT OUTER JOIN "order_items" AS "order->items" ON "order"."id" = "order->items"."orderId" LEFT OUTER JOIN "drinks" AS "order->items->drink" ON "order->items"."drinkId" = "order->items->drink"."id" LEFT OUTER JOIN "drivers" AS "driver" ON "Transaction"."driverId" = "driver"."id" ORDER BY "Transaction"."createdAt" DESC;
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT "id", "start_date" AS "startDate", "end_date" AS "endDate", "is_active" AS "isActive", "title", "createdAt", "updatedAt" FROM "countdowns" AS "Countdown" WHERE "Countdown"."is_active" = true;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT "id", "start_date" AS "startDate", "end_date" AS "endDate", "is_active" AS "isActive", "title", "createdAt", "updatedAt" FROM "countdowns" AS "Countdown" WHERE "Countdown"."is_active" = true;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
