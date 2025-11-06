@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -41,7 +41,7 @@ const WalletScreen = ({ route, navigation }) => {
     if (withdrawAmount && wallet) {
       validateWithdrawAmount(withdrawAmount);
     }
-  }, [wallet]);
+  }, [wallet, withdrawAmount, validateWithdrawAmount]);
 
   // Set up socket connection for tip notifications
   useEffect(() => {
@@ -149,7 +149,7 @@ const WalletScreen = ({ route, navigation }) => {
     loadWalletData();
   };
 
-  const validateWithdrawAmount = (amount) => {
+  const validateWithdrawAmount = useCallback((amount) => {
     if (!amount || amount.trim() === '') {
       setWithdrawAmountError('');
       return false;
@@ -169,7 +169,7 @@ const WalletScreen = ({ route, navigation }) => {
 
     setWithdrawAmountError('');
     return true;
-  };
+  }, [wallet]);
 
   const handleWithdraw = async () => {
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
