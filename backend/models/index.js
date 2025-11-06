@@ -29,6 +29,7 @@ const EmailConfirmation = require('./EmailConfirmation')(sequelize, Sequelize.Da
 const Customer = require('./Customer')(sequelize, Sequelize.DataTypes);
 const Driver = require('./Driver')(sequelize, Sequelize.DataTypes);
 const DriverWallet = require('./DriverWallet')(sequelize, Sequelize.DataTypes);
+const AdminWallet = require('./AdminWallet')(sequelize, Sequelize.DataTypes);
 const SavedAddress = require('./SavedAddress')(sequelize, Sequelize.DataTypes);
 
 // Define associations
@@ -82,6 +83,7 @@ db.EmailConfirmation = EmailConfirmation;
 db.Customer = Customer;
 db.Driver = Driver;
 db.DriverWallet = DriverWallet;
+db.AdminWallet = AdminWallet;
 db.SavedAddress = SavedAddress;
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
