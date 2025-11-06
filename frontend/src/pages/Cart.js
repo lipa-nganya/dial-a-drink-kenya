@@ -580,7 +580,7 @@ const Cart = () => {
                 size="small"
               />
               <AddressAutocomplete
-                label="Street Address *"
+                label="Delivery Address *"
                 value={customerInfo.address}
                 onChange={(e) => handleInputChange('address', e.target.value)}
                 placeholder="Start typing your address..."

@@ -81,18 +81,18 @@ const AdminHeader = () => {
           </Button>
           <Button
             color="inherit"
-            onClick={() => navigate('/inventory')}
-            sx={buttonStyle('/inventory')}
-          >
-            Inventory
-          </Button>
-          <Button
-            color="inherit"
             onClick={() => navigate('/transactions')}
             startIcon={<Receipt />}
             sx={buttonStyle('/transactions')}
           >
             Transactions
+          </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/inventory')}
+            sx={buttonStyle('/inventory')}
+          >
+            Inventory
           </Button>
           <Button
             color="inherit"

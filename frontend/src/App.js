@@ -2,7 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { CartProvider } from './contexts/CartContext';
+import { Snackbar, Alert } from '@mui/material';
+import { CartProvider, useCart } from './contexts/CartContext';
 import { CustomerProvider } from './contexts/CustomerContext';
 import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
@@ -147,6 +148,7 @@ function AppContent() {
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isAdminLogin = location.pathname === '/admin/login';
   const { isDarkMode } = useTheme();
+  const { snackbarOpen, setSnackbarOpen, snackbarMessage } = useCart();
   const muiTheme = getMUITheme(isDarkMode);
   
   return (
@@ -177,6 +179,22 @@ function AppContent() {
           <Route path="/admin/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
           <Route path="/admin/drivers" element={<PrivateRoute><Drivers /></PrivateRoute>} />
         </Routes>
+        
+        {/* Cart Snackbar */}
+        <Snackbar
+          open={snackbarOpen}
+          autoHideDuration={5000}
+          onClose={() => setSnackbarOpen(false)}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert
+            onClose={() => setSnackbarOpen(false)}
+            severity="success"
+            sx={{ width: '100%' }}
+          >
+            {snackbarMessage}
+          </Alert>
+        </Snackbar>
       </div>
     </MUIThemeProvider>
   );

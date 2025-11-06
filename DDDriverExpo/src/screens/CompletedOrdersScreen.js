@@ -7,6 +7,7 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
@@ -174,9 +175,19 @@ const CompletedOrdersScreen = ({ route, navigation }) => {
               value={startDate}
               mode="date"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              maximumDate={endDate} // Prevent start date from being after end date
               onChange={(event, selectedDate) => {
                 setShowStartDatePicker(Platform.OS === 'ios');
                 if (selectedDate) {
+                  // Validate: start date cannot be after end date
+                  if (selectedDate > endDate) {
+                    Alert.alert(
+                      'Invalid Date',
+                      'Start date cannot be after end date. Please select an earlier date.',
+                      [{ text: 'OK' }]
+                    );
+                    return;
+                  }
                   setStartDate(selectedDate);
                 }
               }}
@@ -188,9 +199,19 @@ const CompletedOrdersScreen = ({ route, navigation }) => {
               value={endDate}
               mode="date"
               display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              minimumDate={startDate} // Prevent end date from being before start date
               onChange={(event, selectedDate) => {
                 setShowEndDatePicker(Platform.OS === 'ios');
                 if (selectedDate) {
+                  // Validate: end date cannot be before start date
+                  if (selectedDate < startDate) {
+                    Alert.alert(
+                      'Invalid Date',
+                      'End date cannot be before start date. Please select a later date.',
+                      [{ text: 'OK' }]
+                    );
+                    return;
+                  }
                   setEndDate(selectedDate);
                 }
               }}

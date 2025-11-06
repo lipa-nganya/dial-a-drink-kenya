@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Container, Typography, Box, Button, Paper, CircularProgress, Alert } from '@mui/material';
-import { CheckCircle, ShoppingCart, PhoneAndroid } from '@mui/icons-material';
+import { CheckCircle, ShoppingCart, PhoneAndroid, Assignment } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCart } from '../contexts/CartContext';
+import { useTheme } from '../contexts/ThemeContext';
 import CustomerLogin from '../components/CustomerLogin';
 import OrderTracking from './OrderTracking';
 import io from 'socket.io-client';
@@ -12,6 +13,7 @@ const OrderSuccess = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { clearCart } = useCart();
+  const { isDarkMode } = useTheme();
   const orderId = location.state?.orderId;
   const paymentPending = location.state?.paymentPending || false;
   const paymentMessage = location.state?.paymentMessage;
@@ -536,11 +538,21 @@ const OrderSuccess = () => {
           
           <Box sx={{ mt: 3, display: 'flex', gap: 2, justifyContent: 'center' }}>
             <Button
-              variant="outlined"
-              startIcon={<ShoppingCart />}
-              onClick={() => navigate('/menu')}
+              variant="contained"
+              startIcon={<Assignment />}
+              onClick={() => navigate('/orders')}
+              sx={{
+                backgroundColor: isDarkMode ? '#FFFFFF' : '#000000',
+                color: isDarkMode ? '#000000' : '#FFFFFF',
+                border: '1px solid',
+                borderColor: isDarkMode ? '#FFFFFF' : '#000000',
+                '&:hover': {
+                  backgroundColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
+                  borderColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
+                }
+              }}
             >
-              Continue Shopping
+              My Orders
             </Button>
           </Box>
         </Paper>
@@ -578,21 +590,35 @@ const OrderSuccess = () => {
         <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
           <Button
             variant="contained"
-            startIcon={<ShoppingCart />}
-            onClick={() => navigate('/menu')}
+            startIcon={<Assignment />}
+            onClick={() => navigate('/orders')}
             sx={{
-              backgroundColor: '#FF6B6B',
+              backgroundColor: isDarkMode ? '#FFFFFF' : '#000000',
+              color: isDarkMode ? '#000000' : '#FFFFFF',
+              border: '1px solid',
+              borderColor: isDarkMode ? '#FFFFFF' : '#000000',
               '&:hover': {
-                backgroundColor: '#FF5252'
+                backgroundColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
+                borderColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
               }
             }}
           >
-            Continue Shopping
+            My Orders
           </Button>
           
           <Button
             variant="outlined"
             onClick={() => navigate('/')}
+            sx={{
+              backgroundColor: isDarkMode ? '#000000' : '#FFFFFF',
+              color: isDarkMode ? '#FFFFFF' : '#000000',
+              border: '1px solid',
+              borderColor: isDarkMode ? '#FFFFFF' : '#000000',
+              '&:hover': {
+                backgroundColor: isDarkMode ? '#1A1A1A' : '#F5F5F5',
+                borderColor: isDarkMode ? '#FFFFFF' : '#000000',
+              }
+            }}
           >
             Back to Home
           </Button>

@@ -195,7 +195,7 @@ const AddressAutocomplete = ({ value, onChange, onPlaceSelect, label, ...props }
         <TextField
           {...params}
           {...props}
-          label={label || 'Street Address *'}
+          label={label || 'Delivery Address *'}
           placeholder={props.placeholder || "Start typing your address..."}
       fullWidth
       size="small"
