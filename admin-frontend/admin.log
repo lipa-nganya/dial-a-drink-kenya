@@ -968,3 +968,248 @@ src/pages/Transactions.js
   Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
 
 webpack compiled with 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1192:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1250:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1192:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1250:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+webpack compiled with 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1198:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1256:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1198:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1256:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+webpack compiled with 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1200:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1258:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1200:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1258:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+webpack compiled with 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1254:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1312:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1254:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1312:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+webpack compiled with 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1252:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1310:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 5:3:    'Box' is defined but never used                                                                                             no-unused-vars
+  Line 13:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 32:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 75:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 118:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 275:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 275:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 275:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1252:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1310:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+src/pages/Transactions.js
+  Line 36:3:  'Warning' is defined but never used                                                                                    no-unused-vars
+  Line 38:3:  'AttachMoney' is defined but never used                                                                                no-unused-vars
+  Line 44:3:  'CalendarToday' is defined but never used                                                                              no-unused-vars
+  Line 71:6:  React Hook useEffect has a missing dependency: 'filterTransactions'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+webpack compiled with 1 warning
