@@ -76,14 +76,15 @@ router.post('/stk-push', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Validate amount matches order total (excluding tip, since tip is separate transaction)
-    // Note: order.totalAmount includes tip, so payment should be totalAmount - tipAmount
+    // Validate amount matches order total (customer pays full amount including tip)
+    // Note: order.totalAmount includes tip, and customer pays the full amount
+    // But we store payment transaction as totalAmount - tipAmount (tip is separate transaction)
     const tipAmount = parseFloat(order.tipAmount) || 0;
-    const expectedTotal = parseFloat(order.totalAmount) - tipAmount;
+    const expectedTotal = parseFloat(order.totalAmount); // Customer pays full amount
     
     if (Math.abs(parseFloat(amount) - expectedTotal) > 0.01) {
       return res.status(400).json({ 
-        error: `Amount mismatch. Expected KES ${expectedTotal.toFixed(2)} (order total ${parseFloat(order.totalAmount).toFixed(2)} minus tip ${tipAmount.toFixed(2)}), got KES ${parseFloat(amount).toFixed(2)}` 
+        error: `Amount mismatch. Expected KES ${expectedTotal.toFixed(2)}, got KES ${parseFloat(amount).toFixed(2)}` 
       });
     }
 
@@ -148,8 +149,9 @@ router.post('/stk-push', async (req, res) => {
       
       // Create transaction record for STK push initiation
       // Payment amount should exclude tip (tip is separate transaction)
+      // Customer pays full amount, but we store payment transaction as totalAmount - tipAmount
       const tipAmount = parseFloat(order.tipAmount) || 0;
-      const paymentAmount = parseFloat(amount); // Already validated to be totalAmount - tipAmount
+      const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Store payment without tip
       
       try {
         await db.Transaction.create({
@@ -523,8 +525,9 @@ router.post('/callback', async (req, res) => {
           } else {
             // Update existing transaction - ensure orderId is set if it wasn't
             // Also ensure amount excludes tip (in case transaction was created before fix)
+            // Callback amount is the full amount paid, but we store payment transaction as totalAmount - tipAmount
             const tipAmount = parseFloat(order.tipAmount) || 0;
-            const paymentAmount = parseFloat(amount); // Callback amount should already exclude tip
+            const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Store payment without tip
             
             console.log(`📝 Updating existing transaction #${transaction.id} for Order #${order.id}`);
             console.log(`   Current status: ${transaction.status}`);
