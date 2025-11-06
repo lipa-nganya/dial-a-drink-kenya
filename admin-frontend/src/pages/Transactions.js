@@ -415,8 +415,16 @@ const Transactions = () => {
                   <React.Fragment key={transaction.id}>
                     <TableRow
                       sx={{
+                        backgroundColor: transaction.transactionType === 'tip' 
+                          ? 'rgba(255, 193, 7, 0.15)' // Gold/yellow background for tips
+                          : 'transparent',
+                        borderLeft: transaction.transactionType === 'tip' 
+                          ? '4px solid #FFC107' // Gold border for tips
+                          : 'none',
                         '&:hover': {
-                          backgroundColor: 'rgba(0, 224, 184, 0.05)'
+                          backgroundColor: transaction.transactionType === 'tip'
+                            ? 'rgba(255, 193, 7, 0.2)'
+                            : 'rgba(0, 224, 184, 0.05)'
                         }
                       }}
                     >
@@ -430,9 +438,24 @@ const Transactions = () => {
                         </IconButton>
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          #{transaction.id}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            #{transaction.id}
+                          </Typography>
+                          {transaction.transactionType === 'tip' && (
+                            <Chip
+                              label="TIP"
+                              size="small"
+                              sx={{
+                                backgroundColor: '#FFC107',
+                                color: '#000',
+                                fontWeight: 700,
+                                fontSize: '0.7rem',
+                                height: '20px'
+                              }}
+                            />
+                          )}
+                        </Box>
                       </TableCell>
                   <TableCell>
                     <Typography variant="body2">
@@ -457,17 +480,30 @@ const Transactions = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {getPaymentMethodLabel(transaction.paymentMethod, transaction.paymentProvider)}
+                      {transaction.transactionType === 'tip' 
+                        ? 'Tip' 
+                        : getPaymentMethodLabel(transaction.paymentMethod, transaction.paymentProvider)}
                     </Typography>
-                    {transaction.paymentProvider && (
+                    {transaction.transactionType === 'tip' && transaction.paymentProvider && (
+                      <Typography variant="caption" color="text.secondary">
+                        From M-Pesa Payment
+                      </Typography>
+                    )}
+                    {transaction.transactionType !== 'tip' && transaction.paymentProvider && (
                       <Typography variant="caption" color="text.secondary">
                         {transaction.paymentProvider}
                       </Typography>
                     )}
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366' }}>
-                      KES {Number(transaction.amount).toFixed(2)}
+                    <Typography 
+                      variant="body1" 
+                      sx={{ 
+                        fontWeight: 600, 
+                        color: transaction.transactionType === 'tip' ? '#FFC107' : '#FF3366'
+                      }}
+                    >
+                      {transaction.transactionType === 'tip' ? '+' : ''}KES {Number(transaction.amount).toFixed(2)}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -543,7 +579,23 @@ const Transactions = () => {
                               <Divider sx={{ my: 1, borderColor: '#333' }} />
                               <Box sx={{ mt: 1 }}>
                                 <Typography variant="body2" sx={{ mb: 1 }}>
-                                  <strong>Transaction Type:</strong> {transaction.transactionType || 'N/A'}
+                                  <strong>Transaction Type:</strong>{' '}
+                                  {transaction.transactionType === 'tip' ? (
+                                    <Chip
+                                      label="TIP"
+                                      size="small"
+                                      sx={{
+                                        backgroundColor: '#FFC107',
+                                        color: '#000',
+                                        fontWeight: 700,
+                                        fontSize: '0.7rem',
+                                        ml: 1,
+                                        height: '20px'
+                                      }}
+                                    />
+                                  ) : (
+                                    transaction.transactionType || 'N/A'
+                                  )}
                                 </Typography>
                                 <Typography variant="body2" sx={{ mb: 1 }}>
                                   <strong>Payment Provider:</strong> {transaction.paymentProvider || 'N/A'}
