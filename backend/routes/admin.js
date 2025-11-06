@@ -205,12 +205,11 @@ router.patch('/orders/:id/status', async (req, res) => {
     if (order.tipAmount && parseFloat(order.tipAmount) > 0 && (status === 'delivered' || finalStatus === 'completed') && order.driverId) {
       try {
         const driverId = order.driverId;
-        // Find existing tip transaction (created at order creation time)
+        // Find existing tip transaction (created when payment was completed)
         const tipTransaction = await db.Transaction.findOne({
           where: {
             orderId: order.id,
-            transactionType: 'tip',
-            status: 'pending' // Only update pending tip transactions
+            transactionType: 'tip'
           }
         });
 
@@ -239,12 +238,13 @@ router.patch('/orders/:id/status', async (req, res) => {
           const receiptNumber = paymentTransaction?.receiptNumber || null;
 
           // Update tip transaction with driver info and complete it
+          // Note: receiptNumber should already be set when payment was completed
           await tipTransaction.update({
             driverId: driverId,
             driverWalletId: driverWallet.id,
             status: 'completed',
             paymentStatus: 'paid',
-            receiptNumber: receiptNumber, // Match order's receipt number
+            // Keep existing receiptNumber (set when payment was completed)
             notes: `Tip for Order #${order.id} - ${order.customerName}`
           });
 
@@ -531,15 +531,48 @@ router.post('/orders/:id/verify-payment', async (req, res) => {
       status: order.status === 'pending' ? 'confirmed' : order.status
     });
 
-    // Update transaction if exists
-    if (order.transactions && order.transactions.length > 0) {
-      const transaction = order.transactions[0];
-      await transaction.update({
-        status: 'completed',
-        paymentStatus: 'paid',
-        receiptNumber: receiptNumber || transaction.receiptNumber
-      });
-    }
+          // Update transaction if exists
+          if (order.transactions && order.transactions.length > 0) {
+            const transaction = order.transactions[0];
+            await transaction.update({
+              status: 'completed',
+              paymentStatus: 'paid',
+              receiptNumber: receiptNumber || transaction.receiptNumber
+            });
+          }
+
+          // Create tip transaction if order has tip (only after payment is verified)
+          if (order.tipAmount && parseFloat(order.tipAmount) > 0) {
+            try {
+              // Check if tip transaction already exists
+              const existingTipTransaction = await db.Transaction.findOne({
+                where: {
+                  orderId: order.id,
+                  transactionType: 'tip'
+                }
+              });
+
+              if (!existingTipTransaction) {
+                await db.Transaction.create({
+                  orderId: order.id,
+                  transactionType: 'tip',
+                  paymentMethod: 'cash', // Tip is cash-based
+                  paymentProvider: 'tip',
+                  amount: parseFloat(order.tipAmount),
+                  status: 'pending', // Will be updated to 'completed' when driver is assigned and order is delivered
+                  paymentStatus: 'paid', // Tip is paid when order payment is paid
+                  receiptNumber: receiptNumber || null, // Match order's receipt number
+                  notes: `Tip for Order #${order.id} - ${order.customerName} (pending driver assignment)`
+                });
+                console.log(`✅ Tip transaction created for Order #${order.id}: KES ${order.tipAmount} (after payment verification)`);
+              } else {
+                console.log(`⚠️  Tip transaction already exists for Order #${order.id}`);
+              }
+            } catch (tipError) {
+              console.error('❌ Error creating tip transaction:', tipError);
+              // Don't fail payment verification if tip transaction fails
+            }
+          }
 
     // Reload order
     await order.reload({

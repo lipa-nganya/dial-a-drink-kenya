@@ -655,6 +655,39 @@ router.post('/callback', async (req, res) => {
             );
             console.log(`✅ Order #${order.id} updated via raw SQL: status=${newOrderStatus}, paymentStatus=paid`);
             
+            // Create tip transaction if order has tip (only after payment is completed)
+            if (order.tipAmount && parseFloat(order.tipAmount) > 0) {
+              try {
+                // Check if tip transaction already exists (shouldn't, but just in case)
+                const existingTipTransaction = await db.Transaction.findOne({
+                  where: {
+                    orderId: order.id,
+                    transactionType: 'tip'
+                  }
+                });
+
+                if (!existingTipTransaction) {
+                  await db.Transaction.create({
+                    orderId: order.id,
+                    transactionType: 'tip',
+                    paymentMethod: 'cash', // Tip is cash-based
+                    paymentProvider: 'tip',
+                    amount: parseFloat(order.tipAmount),
+                    status: 'pending', // Will be updated to 'completed' when driver is assigned and order is delivered
+                    paymentStatus: 'paid', // Tip is paid when order payment is paid
+                    receiptNumber: receiptNumber, // Match order's receipt number
+                    notes: `Tip for Order #${order.id} - ${order.customerName} (pending driver assignment)`
+                  });
+                  console.log(`✅ Tip transaction created for Order #${order.id}: KES ${order.tipAmount} (after payment completion)`);
+                } else {
+                  console.log(`⚠️  Tip transaction already exists for Order #${order.id}`);
+                }
+              } catch (tipError) {
+                console.error('❌ Error creating tip transaction:', tipError);
+                // Don't fail payment update if tip transaction fails
+              }
+            }
+
             // Also update via Sequelize as backup
             try {
               await order.update({
