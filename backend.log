@@ -1904,3 +1904,4 @@ Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "
 Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
 Executing (default): SELECT sum("totalAmount") AS "sum" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
 Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT "id", "start_date" AS "startDate", "end_date" AS "endDate", "is_active" AS "isActive", "title", "createdAt", "updatedAt" FROM "countdowns" AS "Countdown" WHERE "Countdown"."is_active" = true;
