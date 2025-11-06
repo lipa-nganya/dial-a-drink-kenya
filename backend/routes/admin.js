@@ -553,18 +553,59 @@ router.post('/orders/:id/verify-payment', async (req, res) => {
         });
 
         if (!existingTipTransaction) {
-          await db.Transaction.create({
+          const tipAmount = parseFloat(order.tipAmount);
+          let tipTransactionData = {
             orderId: order.id,
             transactionType: 'tip',
             paymentMethod: 'cash', // Tip is cash-based
             paymentProvider: 'tip',
-            amount: parseFloat(order.tipAmount),
-            status: 'pending', // Will be updated to 'completed' when driver is assigned and order is delivered
+            amount: tipAmount,
             paymentStatus: 'paid', // Tip is paid when order payment is paid
             receiptNumber: receiptNumber || null, // Match order's receipt number
-            notes: `Tip for Order #${order.id} - ${order.customerName} (pending driver assignment)`
-          });
-          console.log(`✅ Tip transaction created for Order #${order.id}: KES ${order.tipAmount} (after payment verification)`);
+            notes: `Tip for Order #${order.id} - ${order.customerName}`
+          };
+
+          // If driver is already assigned, credit tip immediately
+          if (order.driverId) {
+            try {
+              // Get or create driver wallet
+              let driverWallet = await db.DriverWallet.findOne({ where: { driverId: order.driverId } });
+              if (!driverWallet) {
+                driverWallet = await db.DriverWallet.create({
+                  driverId: order.driverId,
+                  balance: 0,
+                  totalTipsReceived: 0,
+                  totalTipsCount: 0
+                });
+              }
+
+              // Credit tip to driver wallet
+              await driverWallet.update({
+                balance: parseFloat(driverWallet.balance) + tipAmount,
+                totalTipsReceived: parseFloat(driverWallet.totalTipsReceived) + tipAmount,
+                totalTipsCount: driverWallet.totalTipsCount + 1
+              });
+
+              // Update tip transaction data with driver info
+              tipTransactionData.driverId = order.driverId;
+              tipTransactionData.driverWalletId = driverWallet.id;
+              tipTransactionData.status = 'completed'; // Completed since driver is assigned
+              tipTransactionData.notes = `Tip for Order #${order.id} - ${order.customerName} (credited to driver wallet)`;
+
+              console.log(`✅ Tip of KES ${tipAmount} credited to driver #${order.driverId} wallet for Order #${order.id}`);
+            } catch (walletError) {
+              console.error('❌ Error crediting tip to driver wallet:', walletError);
+              // Continue with tip transaction creation even if wallet credit fails
+              tipTransactionData.status = 'pending'; // Will be completed when driver is assigned
+              tipTransactionData.notes = `Tip for Order #${order.id} - ${order.customerName} (pending driver assignment)`;
+            }
+          } else {
+            tipTransactionData.status = 'pending'; // Will be completed when driver is assigned
+            tipTransactionData.notes = `Tip for Order #${order.id} - ${order.customerName} (pending driver assignment)`;
+          }
+
+          await db.Transaction.create(tipTransactionData);
+          console.log(`✅ Tip transaction created for Order #${order.id}: KES ${tipAmount} (after payment verification)`);
         } else {
           console.log(`⚠️  Tip transaction already exists for Order #${order.id}`);
         }
@@ -572,6 +613,37 @@ router.post('/orders/:id/verify-payment', async (req, res) => {
         console.error('❌ Error creating tip transaction:', tipError);
         // Don't fail payment verification if tip transaction fails
       }
+    }
+
+    // Credit order payment to admin wallet (order total minus tip, since tip goes to driver)
+    try {
+      // Get or create admin wallet (single wallet for all admin revenue)
+      let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+      if (!adminWallet) {
+        adminWallet = await db.AdminWallet.create({
+          id: 1,
+          balance: 0,
+          totalRevenue: 0,
+          totalOrders: 0
+        });
+      }
+
+      // Order total for admin is order.totalAmount - tipAmount (tip goes to driver)
+      // Note: payment transaction amount already excludes tip
+      const tipAmount = parseFloat(order.tipAmount) || 0;
+      const orderTotalForAdmin = parseFloat(order.totalAmount) - tipAmount;
+
+      // Update admin wallet
+      await adminWallet.update({
+        balance: parseFloat(adminWallet.balance) + orderTotalForAdmin,
+        totalRevenue: parseFloat(adminWallet.totalRevenue) + orderTotalForAdmin,
+        totalOrders: adminWallet.totalOrders + 1
+      });
+
+      console.log(`✅ Order payment of KES ${orderTotalForAdmin} credited to admin wallet for Order #${order.id}`);
+    } catch (adminWalletError) {
+      console.error('❌ Error crediting order payment to admin wallet:', adminWalletError);
+      // Don't fail payment verification if admin wallet credit fails
     }
 
     // Reload order
