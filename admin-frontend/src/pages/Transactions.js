@@ -42,7 +42,8 @@ import {
   ExpandMore,
   ExpandLess,
   CalendarToday,
-  Clear
+  Clear,
+  AccountBalanceWallet
 } from '@mui/icons-material';
 import { api } from '../services/api';
 
@@ -58,9 +59,11 @@ const Transactions = () => {
   const [endDate, setEndDate] = useState('');
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [merchantWallet, setMerchantWallet] = useState(null);
 
   useEffect(() => {
     fetchTransactions();
+    fetchMerchantWallet();
   }, []);
 
   useEffect(() => {
@@ -77,6 +80,16 @@ const Transactions = () => {
       setError(error.response?.data?.error || error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMerchantWallet = async () => {
+    try {
+      const response = await api.get('/admin/merchant-wallet');
+      setMerchantWallet(response.data);
+    } catch (error) {
+      console.error('Error fetching merchant wallet:', error);
+      // Don't set error state, just log it
     }
   };
 
@@ -222,6 +235,49 @@ const Transactions = () => {
         </Typography>
       </Box>
 
+      {/* Merchant Wallet Section */}
+      {merchantWallet && (
+        <Box sx={{ mb: 3 }}>
+          <Paper sx={{ p: 3, backgroundColor: '#1a1a1a', border: '2px solid #00E0B8' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <AccountBalanceWallet sx={{ fontSize: 32, color: '#00E0B8' }} />
+              <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                Merchant Wallet
+              </Typography>
+            </Box>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body2" color="text.secondary">Current Balance</Typography>
+                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                  KES {Number(merchantWallet.balance || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body2" color="text.secondary">Total Revenue</Typography>
+                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                  KES {Number(merchantWallet.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body2" color="text.secondary">Paid Orders Count</Typography>
+                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                  {merchantWallet.totalOrders || 0}
+                </Typography>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Typography variant="body2" color="text.secondary">All Orders Count</Typography>
+                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                  {merchantWallet.allOrdersCount || 0}
+                </Typography>
+              </Grid>
+            </Grid>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+              * Both Current Balance and Total Revenue exclude driver tips. Tips are credited directly to driver wallets.
+            </Typography>
+          </Paper>
+        </Box>
+      )}
+
       {/* Summary Stats */}
       <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
         <Paper sx={{ p: 2, flex: 1 }}>
@@ -231,16 +287,22 @@ const Transactions = () => {
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
+          <Typography variant="body2" color="text.secondary">Total Orders</Typography>
+          <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+            {merchantWallet?.allOrdersCount || 0}
+          </Typography>
+        </Paper>
+        <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Completed</Typography>
           <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
             {filteredTransactions.filter(t => t.status === 'completed').length}
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">Total Amount</Typography>
+          <Typography variant="body2" color="text.secondary">Total Amount (Excludes Tips)</Typography>
           <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
             KES {filteredTransactions
-              .filter(t => t.status === 'completed')
+              .filter(t => t.status === 'completed' && t.transactionType !== 'tip')
               .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
               .toFixed(2)}
           </Typography>

@@ -9,8 +9,10 @@ import {
 } from '@mui/material';
 import { Login as LoginIcon } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useCustomer } from '../contexts/CustomerContext';
 
 const CustomerLogin = ({ onLoginSuccess, orderId }) => {
+  const { login } = useCustomer();
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
@@ -37,13 +39,21 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
 
       if (response.data.success && response.data.order) {
         // Store order info in localStorage for tracking
-        localStorage.setItem('customerOrder', JSON.stringify({
+        const customerData = {
           orderId: response.data.order.id,
           email: email,
-          phone: phone
-        }));
+          phone: phone,
+          customerName: response.data.order.customerName,
+          loggedInAt: new Date().toISOString()
+        };
         
-        onLoginSuccess(response.data.order);
+        // Update CustomerContext
+        login(customerData);
+        
+        // Also call the onLoginSuccess callback if provided
+        if (onLoginSuccess) {
+          onLoginSuccess(response.data.order);
+        }
       } else {
         setError(response.data.message || 'Order not found. Please check your email or phone number.');
       }
