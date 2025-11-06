@@ -312,7 +312,7 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
       presentationStyle="fullScreen" // iOS: ensure full screen
       hardwareAccelerated={true} // Android: hardware acceleration
     >
-      <StatusBar barStyle="dark-content" backgroundColor="#87CEEB" translucent={false} />
+             <StatusBar barStyle="dark-content" backgroundColor="#00E0B8" translucent={false} />
       <View style={styles.blueOverlay}>
         <View style={styles.contentContainer}>
           <Text style={styles.alertTitle}>NEW ORDER ASSIGNED</Text>
