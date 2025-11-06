@@ -78,7 +78,9 @@ const Settings = () => {
     isTestMode: false,
     deliveryFeeWithAlcohol: 50,
     deliveryFeeWithoutAlcohol: 30,
-    maxTipEnabled: false
+    maxTipEnabled: false,
+    driverPayPerDeliveryEnabled: false,
+    driverPayPerDeliveryAmount: 0
   });
   const [showDeliverySettings, setShowDeliverySettings] = useState(false);
   const [deliverySettingsLoading, setDeliverySettingsLoading] = useState(false);
@@ -335,18 +337,22 @@ const Settings = () => {
   // ========== DELIVERY FEE SETTINGS ==========
   const fetchDeliverySettings = async () => {
     try {
-      const [testModeRes, withAlcoholRes, withoutAlcoholRes, maxTipRes] = await Promise.all([
+      const [testModeRes, withAlcoholRes, withoutAlcoholRes, maxTipRes, driverPayEnabledRes, driverPayAmountRes] = await Promise.all([
         api.get('/settings/deliveryTestMode').catch(() => ({ data: null, status: 404 })),
         api.get('/settings/deliveryFeeWithAlcohol').catch(() => ({ data: null, status: 404 })),
         api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: null, status: 404 })),
-        api.get('/settings/maxTipEnabled').catch(() => ({ data: null, status: 404 }))
+        api.get('/settings/maxTipEnabled').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/driverPayPerDeliveryEnabled').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/driverPayPerDeliveryAmount').catch(() => ({ data: null, status: 404 }))
       ]);
 
       setDeliverySettings({
         isTestMode: testModeRes.data?.value === 'true' || false,
         deliveryFeeWithAlcohol: parseFloat(withAlcoholRes.data?.value || '50'),
         deliveryFeeWithoutAlcohol: parseFloat(withoutAlcoholRes.data?.value || '30'),
-        maxTipEnabled: maxTipRes.data?.value === 'true' || false
+        maxTipEnabled: maxTipRes.data?.value === 'true' || false,
+        driverPayPerDeliveryEnabled: driverPayEnabledRes.data?.value === 'true' || false,
+        driverPayPerDeliveryAmount: parseFloat(driverPayAmountRes.data?.value || '0')
       });
     } catch (error) {
       console.error('Error fetching delivery settings:', error);
@@ -354,7 +360,9 @@ const Settings = () => {
         isTestMode: false,
         deliveryFeeWithAlcohol: 50,
         deliveryFeeWithoutAlcohol: 30,
-        maxTipEnabled: false
+        maxTipEnabled: false,
+        driverPayPerDeliveryEnabled: false,
+        driverPayPerDeliveryAmount: 0
       });
     }
   };
@@ -366,7 +374,9 @@ const Settings = () => {
         api.put('/settings/deliveryTestMode', { value: deliverySettings.isTestMode.toString() }),
         api.put('/settings/deliveryFeeWithAlcohol', { value: deliverySettings.deliveryFeeWithAlcohol.toString() }),
         api.put('/settings/deliveryFeeWithoutAlcohol', { value: deliverySettings.deliveryFeeWithoutAlcohol.toString() }),
-        api.put('/settings/maxTipEnabled', { value: deliverySettings.maxTipEnabled.toString() })
+        api.put('/settings/maxTipEnabled', { value: deliverySettings.maxTipEnabled.toString() }),
+        api.put('/settings/driverPayPerDeliveryEnabled', { value: deliverySettings.driverPayPerDeliveryEnabled.toString() }),
+        api.put('/settings/driverPayPerDeliveryAmount', { value: deliverySettings.driverPayPerDeliveryAmount.toString() })
       ]);
       setNotification({ message: 'Delivery settings saved successfully!' });
       setShowDeliverySettings(false);
@@ -870,6 +880,58 @@ const Settings = () => {
                     </Box>
                   </Grid>
                 )}
+
+                {/* Driver Pay Per Delivery */}
+                <Grid item xs={12}>
+                  <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Box>
+                        <Typography variant="subtitle1" fontWeight={600}>
+                          Driver Pay Per Delivery
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Pay drivers a fixed amount per completed delivery
+                        </Typography>
+                      </Box>
+                      <Switch
+                        checked={deliverySettings.driverPayPerDeliveryEnabled}
+                        onChange={(e) => setDeliverySettings(prev => ({ ...prev, driverPayPerDeliveryEnabled: e.target.checked }))}
+                        sx={{
+                          '& .MuiSwitch-switchBase.Mui-checked': {
+                            color: '#00E0B8',
+                          },
+                          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                            backgroundColor: '#00E0B8',
+                          },
+                        }}
+                      />
+                    </Box>
+                    <TextField
+                      fullWidth
+                      label="Amount Per Delivery (KES)"
+                      type="number"
+                      value={deliverySettings.driverPayPerDeliveryAmount}
+                      onChange={(e) => setDeliverySettings(prev => ({
+                        ...prev,
+                        driverPayPerDeliveryAmount: parseFloat(e.target.value) || 0
+                      }))}
+                      inputProps={{ min: 0, step: 0.01 }}
+                      helperText="Amount drivers receive for each completed delivery"
+                      disabled={!deliverySettings.driverPayPerDeliveryEnabled}
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          '& fieldset': { borderColor: '#00E0B8' },
+                          '&:hover fieldset': { borderColor: '#00E0B8' },
+                          '&.Mui-focused fieldset': { borderColor: '#00E0B8' },
+                          '&.Mui-disabled': {
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            color: 'rgba(255, 255, 255, 0.3)'
+                          }
+                        }
+                      }}
+                    />
+                  </Box>
+                </Grid>
 
                 {!deliverySettings.isTestMode && (
                   <>
