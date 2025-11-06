@@ -26,6 +26,7 @@ const WalletScreen = ({ route, navigation }) => {
   const [withdrawing, setWithdrawing] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawPhone, setWithdrawPhone] = useState('');
+  const [withdrawAmountError, setWithdrawAmountError] = useState('');
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarType, setSnackbarType] = useState('info');
@@ -34,6 +35,13 @@ const WalletScreen = ({ route, navigation }) => {
   useEffect(() => {
     loadWalletData();
   }, []);
+
+  // Re-validate withdraw amount when wallet data changes
+  useEffect(() => {
+    if (withdrawAmount && wallet) {
+      validateWithdrawAmount(withdrawAmount);
+    }
+  }, [wallet]);
 
   // Set up socket connection for tip notifications
   useEffect(() => {
@@ -70,6 +78,16 @@ const WalletScreen = ({ route, navigation }) => {
           setSnackbarMessage(`Tip of KES ${data.tipAmount} received from ${data.customerName}!`);
           setSnackbarType('success');
           setSnackbarVisible(true);
+        });
+
+        // Listen for order status updates - when order is completed, update wallet
+        socket.on('order-status-updated', (data) => {
+          console.log('📦 Order status updated in WalletScreen:', data);
+          // If order is completed, reload wallet to update amount on hold
+          if (data.status === 'completed' && data.order?.driverId === driverId) {
+            console.log('✅ Order completed, updating wallet to reflect available balance');
+            loadWalletData();
+          }
         });
 
         socket.on('connect_error', (error) => {
@@ -131,8 +149,31 @@ const WalletScreen = ({ route, navigation }) => {
     loadWalletData();
   };
 
+  const validateWithdrawAmount = (amount) => {
+    if (!amount || amount.trim() === '') {
+      setWithdrawAmountError('');
+      return false;
+    }
+
+    const numAmount = parseFloat(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      setWithdrawAmountError('Please enter a valid amount');
+      return false;
+    }
+
+    const availableBalance = wallet?.availableBalance ?? wallet?.balance ?? 0;
+    if (numAmount > availableBalance) {
+      setWithdrawAmountError(`Exceeds available balance (KES ${availableBalance.toFixed(2)})`);
+      return false;
+    }
+
+    setWithdrawAmountError('');
+    return true;
+  };
+
   const handleWithdraw = async () => {
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+      setWithdrawAmountError('Please enter a valid withdrawal amount');
       setSnackbarMessage('Please enter a valid withdrawal amount');
       setSnackbarType('error');
       setSnackbarVisible(true);
@@ -149,6 +190,7 @@ const WalletScreen = ({ route, navigation }) => {
     const amount = parseFloat(withdrawAmount);
     const availableBalance = wallet?.availableBalance ?? wallet?.balance ?? 0;
     if (amount > availableBalance) {
+      setWithdrawAmountError(`Exceeds available balance (KES ${availableBalance.toFixed(2)})`);
       setSnackbarMessage(`Insufficient available balance. Available: KES ${availableBalance.toFixed(2)}`);
       setSnackbarType('error');
       setSnackbarVisible(true);
@@ -294,16 +336,25 @@ const WalletScreen = ({ route, navigation }) => {
             <TextInput
               style={[styles.input, { 
                 backgroundColor: safeColors.background, 
-                borderColor: safeColors.border,
+                borderColor: withdrawAmountError ? '#FF3366' : safeColors.border,
+                borderWidth: withdrawAmountError ? 2 : 1,
                 color: safeColors.textPrimary 
               }]}
               value={withdrawAmount}
-              onChangeText={setWithdrawAmount}
+              onChangeText={(text) => {
+                setWithdrawAmount(text);
+                validateWithdrawAmount(text);
+              }}
               placeholder="Enter amount"
               placeholderTextColor={safeColors.textSecondary}
               keyboardType="numeric"
               editable={!withdrawing}
             />
+            {withdrawAmountError ? (
+              <Text style={[styles.errorText, { color: '#FF3366' }]}>
+                {withdrawAmountError}
+              </Text>
+            ) : null}
 
             <Text style={[styles.inputLabel, { color: safeColors.textSecondary, marginTop: 12 }]}>Phone Number</Text>
             <TextInput
@@ -507,6 +558,11 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 4,
     fontStyle: 'italic',
+  },
+  errorText: {
+    fontSize: 12,
+    marginTop: 4,
+    marginBottom: 8,
   },
 });
 
