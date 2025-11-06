@@ -354,7 +354,7 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   blueOverlay: {
     flex: 1,
-    backgroundColor: '#87CEEB', // Light blue (sky blue) - matching icon bg color
+    backgroundColor: '#00E0B8', // Aqua green - matching site color
     width: '100%',
     height: '100%',
     position: 'absolute',
