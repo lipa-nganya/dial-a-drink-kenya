@@ -502,8 +502,9 @@ router.post('/callback', async (req, res) => {
           if (!transaction) {
             // Create new transaction if not found
             // Payment amount should exclude tip (tip is separate transaction)
+            // Callback amount is the full amount paid, but we store payment transaction as totalAmount - tipAmount
             const tipAmount = parseFloat(order.tipAmount) || 0;
-            const paymentAmount = parseFloat(amount); // Callback amount already excludes tip if validation was correct
+            const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Store payment without tip
             
             console.log(`📝 Creating new transaction for Order #${order.id} with CheckoutRequestID: ${checkoutRequestID}`);
             transaction = await db.Transaction.create({
