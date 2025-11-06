@@ -202,6 +202,7 @@ router.patch('/orders/:id/status', async (req, res) => {
     }
 
     // Update tip transaction if order has tip and is being delivered or completed
+    // Only credit if tip transaction hasn't been credited yet (status is pending)
     if (order.tipAmount && parseFloat(order.tipAmount) > 0 && (status === 'delivered' || finalStatus === 'completed') && order.driverId) {
       try {
         const driverId = order.driverId;
@@ -209,7 +210,8 @@ router.patch('/orders/:id/status', async (req, res) => {
         const tipTransaction = await db.Transaction.findOne({
           where: {
             orderId: order.id,
-            transactionType: 'tip'
+            transactionType: 'tip',
+            status: 'pending' // Only credit if not already credited
           }
         });
 
@@ -225,18 +227,6 @@ router.patch('/orders/:id/status', async (req, res) => {
             });
           }
 
-          // Get the order's payment transaction receipt number
-          const paymentTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: order.id,
-              transactionType: 'payment',
-              status: 'completed'
-            },
-            order: [['createdAt', 'DESC']]
-          });
-
-          const receiptNumber = paymentTransaction?.receiptNumber || null;
-
           // Update tip transaction with driver info and complete it
           // Note: receiptNumber should already be set when payment was completed
           await tipTransaction.update({
@@ -245,7 +235,7 @@ router.patch('/orders/:id/status', async (req, res) => {
             status: 'completed',
             paymentStatus: 'paid',
             // Keep existing receiptNumber (set when payment was completed)
-            notes: `Tip for Order #${order.id} - ${order.customerName}`
+            notes: `Tip for Order #${order.id} - ${order.customerName} (credited to driver wallet)`
           });
 
           // Update driver wallet
