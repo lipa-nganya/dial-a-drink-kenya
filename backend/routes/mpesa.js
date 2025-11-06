@@ -522,22 +522,28 @@ router.post('/callback', async (req, res) => {
             console.log(`✅ Created transaction #${transaction.id} with status: ${transaction.status}`);
           } else {
             // Update existing transaction - ensure orderId is set if it wasn't
+            // Also ensure amount excludes tip (in case transaction was created before fix)
+            const tipAmount = parseFloat(order.tipAmount) || 0;
+            const paymentAmount = parseFloat(amount); // Callback amount should already exclude tip
+            
             console.log(`📝 Updating existing transaction #${transaction.id} for Order #${order.id}`);
             console.log(`   Current status: ${transaction.status}`);
+            console.log(`   Current amount: ${transaction.amount}, should be: ${paymentAmount}`);
             console.log(`   Updating to: completed`);
             
             // Use raw SQL update first to ensure it works
             try {
               await db.sequelize.query(
-                `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "receiptNumber" = :receiptNumber, "orderId" = :orderId, "transactionDate" = :transactionDate, "phoneNumber" = COALESCE(:phoneNumber, "phoneNumber"), "updatedAt" = NOW(), notes = COALESCE(notes || E'\n', '') || :note WHERE id = :id`,
+                `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "receiptNumber" = :receiptNumber, "orderId" = :orderId, amount = :amount, "transactionDate" = :transactionDate, "phoneNumber" = COALESCE(:phoneNumber, "phoneNumber"), "updatedAt" = NOW(), notes = COALESCE(notes || E'\n', '') || :note WHERE id = :id`,
                 {
                   replacements: {
                     id: transaction.id,
                     orderId: order.id,
+                    amount: paymentAmount, // Ensure amount excludes tip
                     receiptNumber: receiptNumber || transaction.receiptNumber || null,
                     transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
                     phoneNumber: phoneNumber || transaction.phoneNumber || null,
-                    note: `✅ Payment completed. Receipt: ${receiptNumber || 'N/A'}`
+                    note: `✅ Payment completed. Receipt: ${receiptNumber || 'N/A'}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
                   }
                 }
               );
@@ -545,14 +551,15 @@ router.post('/callback', async (req, res) => {
               // Also try Sequelize update as backup
               await transaction.update({
                 orderId: order.id, // Ensure orderId is set
+                amount: paymentAmount, // Ensure amount excludes tip
                 status: 'completed',
                 paymentStatus: 'paid', // Update payment status to 'paid'
                 receiptNumber: receiptNumber,
                 transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
                 phoneNumber: phoneNumber || transaction.phoneNumber,
                 notes: transaction.notes ? 
-                  `${transaction.notes}\n✅ Payment completed. Receipt: ${receiptNumber}` : 
-                  `✅ Payment completed via M-Pesa. Receipt: ${receiptNumber}`
+                  `${transaction.notes}\n✅ Payment completed. Receipt: ${receiptNumber}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}` : 
+                  `✅ Payment completed via M-Pesa. Receipt: ${receiptNumber}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
               });
             } catch (updateError) {
               console.error(`❌ Error updating transaction:`, updateError);
