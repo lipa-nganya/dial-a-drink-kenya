@@ -847,5 +847,226 @@ router.post('/orders/:id/verify-payment', async (req, res) => {
   }
 });
 
+// Get current admin user
+router.get('/me', async (req, res) => {
+  try {
+    // For now, return a default admin user
+    // In production, this should get the user from the session/token
+    const defaultAdmin = await db.Admin.findOne({ where: { username: 'admin' } });
+    if (defaultAdmin) {
+      res.json({
+        id: defaultAdmin.id,
+        username: defaultAdmin.username,
+        email: defaultAdmin.email,
+        role: defaultAdmin.role || 'admin'
+      });
+    } else {
+      res.json({
+        id: 1,
+        username: 'admin',
+        email: 'admin@dialadrink.com',
+        role: 'admin'
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching current user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all admin users
+router.get('/users', verifyAdmin, async (req, res) => {
+  try {
+    const users = await db.Admin.findAll({
+      attributes: ['id', 'username', 'email', 'role', 'createdAt'],
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(users);
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create new admin user (invite)
+router.post('/users', verifyAdmin, async (req, res) => {
+  try {
+    const { username, email, role } = req.body;
+
+    if (!username || !email) {
+      return res.status(400).json({ error: 'Username and email are required' });
+    }
+
+    // Check if user already exists
+    const existingUser = await db.Admin.findOne({
+      where: {
+        [Op.or]: [
+          { username },
+          { email }
+        ]
+      }
+    });
+
+    if (existingUser) {
+      return res.status(400).json({ error: 'User with this username or email already exists' });
+    }
+
+    // Generate invite token
+    const crypto = require('crypto');
+    const inviteToken = crypto.randomBytes(32).toString('hex');
+    const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+    // Create user
+    const user = await db.Admin.create({
+      username,
+      email,
+      role: role || 'manager',
+      password: null, // Password will be set when user accepts invite
+      inviteToken,
+      inviteTokenExpiry
+    });
+
+    // Send invite email
+    const emailService = require('../services/email');
+    const emailResult = await emailService.sendAdminInvite(email, inviteToken, username);
+
+    if (!emailResult.success) {
+      console.error('Failed to send invite email:', emailResult.error);
+      // User is created, but email failed - still return success
+    }
+
+    res.status(201).json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      createdAt: user.createdAt
+    });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get order notifications (admin)
+router.get('/order-notifications', async (req, res) => {
+  try {
+    const notifications = await db.OrderNotification.findAll({
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching order notifications:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create order notification (admin)
+router.post('/order-notifications', async (req, res) => {
+  try {
+    const { name, phoneNumber, isActive, notes } = req.body;
+
+    if (!name || !phoneNumber) {
+      return res.status(400).json({ error: 'Name and phone number are required' });
+    }
+
+    const notification = await db.OrderNotification.create({
+      name: name.trim(),
+      phoneNumber: phoneNumber.trim(),
+      isActive: isActive !== undefined ? isActive : true,
+      notes: notes || null
+    });
+
+    res.status(201).json(notification);
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update order notification (admin)
+router.put('/order-notifications/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, phoneNumber, isActive, notes } = req.body;
+
+    const notification = await db.OrderNotification.findByPk(id);
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    if (!name || !phoneNumber) {
+      return res.status(400).json({ error: 'Name and phone number are required' });
+    }
+
+    await notification.update({
+      name: name.trim(),
+      phoneNumber: phoneNumber.trim(),
+      isActive: isActive !== undefined ? isActive : notification.isActive,
+      notes: notes !== undefined ? notes : notification.notes
+    });
+
+    res.json(notification);
+  } catch (error) {
+    console.error('Error updating notification:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete order notification (admin)
+router.delete('/order-notifications/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notification = await db.OrderNotification.findByPk(id);
+
+    if (!notification) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+
+    await notification.destroy();
+    res.json({ message: 'Notification deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get SMS settings
+router.get('/sms-settings', async (req, res) => {
+  try {
+    const setting = await db.Settings.findOne({ where: { key: 'smsEnabled' } });
+    res.json({
+      smsEnabled: setting?.value !== 'false' // Default to enabled if not set
+    });
+  } catch (error) {
+    console.error('Error fetching SMS settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update SMS settings
+router.put('/sms-settings', async (req, res) => {
+  try {
+    const { smsEnabled } = req.body;
+
+    const [setting] = await db.Settings.findOrCreate({
+      where: { key: 'smsEnabled' },
+      defaults: { value: smsEnabled.toString() }
+    });
+
+    if (!setting.isNewRecord) {
+      setting.value = smsEnabled.toString();
+      await setting.save();
+    }
+
+    res.json({
+      smsEnabled: setting.value === 'true'
+    });
+  } catch (error) {
+    console.error('Error updating SMS settings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
 module.exports.verifyAdmin = verifyAdmin;
