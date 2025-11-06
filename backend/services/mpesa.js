@@ -278,10 +278,154 @@ async function checkTransactionStatus(checkoutRequestID) {
   }
 }
 
+/**
+ * Initiate M-Pesa B2C (Business to Customer) payment
+ * This is used to send money from the business to customers/drivers
+ * @param {string} phoneNumber - Recipient phone number (Safaricom)
+ * @param {number} amount - Amount to send
+ * @param {string} remarks - Remarks/description for the transaction
+ * @param {string} occasion - Occasion description (optional)
+ */
+async function initiateB2C(phoneNumber, amount, remarks = 'Driver withdrawal', occasion = 'Withdrawal') {
+  try {
+    // Format phone number first
+    let formattedPhone;
+    try {
+      formattedPhone = formatPhoneNumber(phoneNumber);
+      console.log(`Phone number formatted for B2C: ${phoneNumber} -> ${formattedPhone}`);
+    } catch (formatError) {
+      console.error('Phone number formatting error:', formatError);
+      throw new Error(`Invalid phone number: ${formatError.message}`);
+    }
+
+    const token = await getAccessToken();
+    
+    // Get B2C callback URL
+    const getB2CCallbackUrl = () => {
+      let callbackUrl = process.env.MPESA_B2C_CALLBACK_URL;
+      
+      if (callbackUrl) {
+        if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
+          console.warn('⚠️  Localhost B2C callback URL detected. Falling back to production URL.');
+          callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/b2c-callback';
+        } else {
+          console.log(`✅ Using B2C callback URL from environment: ${callbackUrl}`);
+          return callbackUrl;
+        }
+      }
+      
+      const ngrokUrl = process.env.NGROK_URL;
+      if (ngrokUrl && !callbackUrl) {
+        callbackUrl = `${ngrokUrl}/api/mpesa/b2c-callback`;
+        console.log(`✅ Using ngrok URL for B2C callbacks: ${callbackUrl}`);
+        return callbackUrl;
+      }
+      
+      if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+        callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/b2c-callback';
+        console.log(`✅ Using production B2C callback URL: ${callbackUrl}`);
+        return callbackUrl;
+      }
+      
+      console.warn('⚠️  No B2C callback URL configured. Falling back to production URL.');
+      callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/b2c-callback';
+      return callbackUrl;
+    };
+
+    const callbackUrl = getB2CCallbackUrl();
+    
+    // Generate initiator name and password
+    // Note: For B2C, you need Security Credential (encrypted password)
+    // This is different from STK push. You'll need to set MPESA_SECURITY_CREDENTIAL in env
+    const MPESA_INITIATOR_NAME = process.env.MPESA_INITIATOR_NAME || 'testapi';
+    const MPESA_SECURITY_CREDENTIAL = process.env.MPESA_SECURITY_CREDENTIAL;
+    const MPESA_B2C_SHORTCODE = process.env.MPESA_B2C_SHORTCODE || MPESA_SHORTCODE;
+    
+    if (!MPESA_SECURITY_CREDENTIAL) {
+      throw new Error('MPESA_SECURITY_CREDENTIAL is required for B2C transactions. Please set it in environment variables.');
+    }
+
+    // Generate command ID and timeout URL
+    const commandId = 'BusinessPayment'; // For sending money to customer
+    const timeoutUrl = callbackUrl; // Same as callback URL for simplicity
+    
+    const payload = {
+      InitiatorName: MPESA_INITIATOR_NAME,
+      SecurityCredential: MPESA_SECURITY_CREDENTIAL,
+      CommandID: commandId,
+      Amount: Math.ceil(amount), // M-Pesa requires integer amounts
+      PartyA: MPESA_B2C_SHORTCODE,
+      PartyB: formattedPhone,
+      Remarks: remarks,
+      QueueTimeOutURL: timeoutUrl,
+      ResultURL: callbackUrl,
+      Occasion: occasion
+    };
+
+    console.log('M-Pesa B2C Request:', {
+      InitiatorName: MPESA_INITIATOR_NAME,
+      CommandID: commandId,
+      PartyA: MPESA_B2C_SHORTCODE,
+      PartyB: formattedPhone,
+      Amount: Math.ceil(amount),
+      ResultURL: callbackUrl,
+      Environment: MPESA_ENVIRONMENT,
+      BaseURL: MPESA_BASE_URL
+    });
+    
+    // Validate callback URL format
+    if (!callbackUrl.startsWith('https://') && !callbackUrl.startsWith('http://')) {
+      throw new Error(`Invalid callback URL format: ${callbackUrl}. Must start with http:// or https://`);
+    }
+    
+    if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
+      throw new Error(`Callback URL cannot be localhost: ${callbackUrl}. M-Pesa requires a publicly accessible URL.`);
+    }
+
+    console.log('Sending B2C request to M-Pesa...');
+    const response = await fetch(`${MPESA_BASE_URL}/mpesa/b2c/v1/paymentrequest`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    console.log('M-Pesa B2C response status:', response.status);
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      console.error('M-Pesa B2C error response:', errorData);
+      throw new Error(`M-Pesa B2C failed: ${response.status} ${JSON.stringify(errorData)}`);
+    }
+
+    const data = await response.json();
+    console.log('M-Pesa B2C success response:', JSON.stringify(data, null, 2));
+    console.log('ResponseCode:', data.ResponseCode);
+    console.log('OriginatorConversationID:', data.OriginatorConversationID);
+    console.log('ConversationID:', data.ConversationID);
+    console.log('ResponseDescription:', data.ResponseDescription);
+    
+    return {
+      success: data.ResponseCode === '0',
+      responseCode: data.ResponseCode,
+      responseDescription: data.ResponseDescription,
+      originatorConversationID: data.OriginatorConversationID,
+      conversationID: data.ConversationID,
+      data: data
+    };
+  } catch (error) {
+    console.error('Error initiating M-Pesa B2C:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   initiateSTKPush,
   checkTransactionStatus,
   formatPhoneNumber,
-  getMpesaCallbackUrl
+  getMpesaCallbackUrl,
+  initiateB2C
 };
 

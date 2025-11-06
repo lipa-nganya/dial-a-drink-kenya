@@ -23,7 +23,9 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  TextField,
+  InputAdornment
 } from '@mui/material';
 import {
   CheckCircle,
@@ -36,7 +38,9 @@ import {
   Assignment,
   Edit,
   Person,
-  Delete
+  Delete,
+  Search,
+  Clear
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -48,6 +52,7 @@ const Orders = () => {
   const [error, setError] = useState(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [drivers, setDrivers] = useState([]);
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -109,7 +114,7 @@ const Orders = () => {
             // Sort by status priority
             const sorted = sortOrdersByStatus(updated);
             // Apply filters after update
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
             return sorted;
           });
         }
@@ -145,7 +150,7 @@ const Orders = () => {
             : order
         );
         const sorted = sortOrdersByStatus(updated);
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
         return sorted;
       });
     });
@@ -167,7 +172,7 @@ const Orders = () => {
               : order
           );
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
           return sorted;
         });
       }
@@ -264,7 +269,7 @@ const Orders = () => {
       setOrders(sortedOrders);
       setError(null);
       // Apply filters after fetching
-      applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter);
+      applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchQuery);
     } catch (error) {
       console.error('Error fetching orders:', error);
       setError(error.response?.data?.error || error.message);
@@ -286,8 +291,22 @@ const Orders = () => {
   };
 
   // Apply filters to orders
-  const applyFilters = (ordersList, orderStatus, transactionStatus) => {
+  const applyFilters = (ordersList, orderStatus, transactionStatus, search) => {
     let filtered = [...ordersList];
+
+    // Filter by search query (customer name or order number)
+    if (search && search.trim()) {
+      const searchLower = search.trim().toLowerCase();
+      filtered = filtered.filter(order => {
+        // Search by order number (ID)
+        const orderNumberMatch = order.id.toString().includes(searchLower);
+        
+        // Search by customer name
+        const customerNameMatch = order.customerName?.toLowerCase().includes(searchLower);
+        
+        return orderNumberMatch || customerNameMatch;
+      });
+    }
 
     // Filter by order status
     if (orderStatus !== 'all') {
@@ -309,8 +328,8 @@ const Orders = () => {
 
   // Update filters when filter values change
   useEffect(() => {
-    applyFilters(orders, orderStatusFilter, transactionStatusFilter);
-  }, [orderStatusFilter, transactionStatusFilter, orders]);
+    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery);
+  }, [orderStatusFilter, transactionStatusFilter, searchQuery, orders]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     try {
@@ -338,7 +357,7 @@ const Orders = () => {
         // Re-sort after payment status update (status might have changed to completed)
         const sorted = sortOrdersByStatus(updated);
         // Apply filters to updated orders
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
         return sorted;
       });
     } catch (error) {
@@ -507,6 +526,53 @@ const Orders = () => {
 
       {/* Filters */}
       <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* Search Input */}
+        <TextField
+          size="small"
+          placeholder="Search by order number or customer name..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search sx={{ color: '#00E0B8' }} />
+              </InputAdornment>
+            ),
+            endAdornment: searchQuery && (
+              <InputAdornment position="end">
+                <IconButton
+                  size="small"
+                  onClick={() => setSearchQuery('')}
+                  sx={{ color: 'text.secondary' }}
+                >
+                  <Clear fontSize="small" />
+                </IconButton>
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            minWidth: 300,
+            '& .MuiOutlinedInput-root': {
+              '& fieldset': {
+                borderColor: '#00E0B8',
+              },
+              '&:hover fieldset': {
+                borderColor: '#00C4A3',
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: '#00E0B8',
+              },
+            },
+            '& .MuiInputBase-input': {
+              color: '#F5F5F5',
+            },
+            '& .MuiInputBase-input::placeholder': {
+              color: '#B0B0B0',
+              opacity: 1,
+            },
+          }}
+        />
+
         <FormControl size="small" sx={{ minWidth: 200 }}>
           <InputLabel>Filter by Order Status</InputLabel>
           <Select
@@ -562,13 +628,14 @@ const Orders = () => {
           </Select>
         </FormControl>
 
-        {(orderStatusFilter !== 'all' || transactionStatusFilter !== 'all') && (
+        {(orderStatusFilter !== 'all' || transactionStatusFilter !== 'all' || searchQuery) && (
           <Button
             variant="outlined"
             size="small"
             onClick={() => {
               setOrderStatusFilter('all');
               setTransactionStatusFilter('all');
+              setSearchQuery('');
             }}
             sx={{
               borderColor: '#666',
@@ -757,12 +824,17 @@ const Orders = () => {
                             size="small"
                             startIcon={<Delete />}
                             onClick={() => handleRemoveDriver(order)}
+                            disabled={order.status === 'delivered' || order.status === 'completed'}
                             sx={{
-                              borderColor: '#FF3366',
-                              color: '#FF3366',
+                              borderColor: order.status === 'delivered' || order.status === 'completed' ? '#666' : '#FF3366',
+                              color: order.status === 'delivered' || order.status === 'completed' ? '#666' : '#FF3366',
                               '&:hover': {
-                                borderColor: '#FF1744',
-                                backgroundColor: 'rgba(255, 51, 102, 0.1)'
+                                borderColor: order.status === 'delivered' || order.status === 'completed' ? '#666' : '#FF1744',
+                                backgroundColor: order.status === 'delivered' || order.status === 'completed' ? 'transparent' : 'rgba(255, 51, 102, 0.1)'
+                              },
+                              '&.Mui-disabled': {
+                                borderColor: '#666',
+                                color: '#666'
                               }
                             }}
                           >

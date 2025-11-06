@@ -254,11 +254,30 @@ const addMissingColumns = async () => {
       console.log('Note: Status enum update attempted (may already exist)');
     }
 
+    // Add tipAmount column to orders table if it doesn't exist
+    const tipAmountCheck = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='orders' AND column_name='tipAmount';
+    `);
+    
+    if (tipAmountCheck[0].length === 0) {
+      await db.sequelize.query(`
+        ALTER TABLE "orders" 
+        ADD COLUMN "tipAmount" DECIMAL(10, 2) DEFAULT 0;
+      `);
+      console.log('✅ tipAmount column checked/added to orders table');
+    } else {
+      console.log('✅ tipAmount column already exists in orders table');
+    }
+
     // Create transactions table if it doesn't exist
     await db.sequelize.query(`
       CREATE TABLE IF NOT EXISTS "transactions" (
         "id" SERIAL PRIMARY KEY,
-        "orderId" INTEGER NOT NULL REFERENCES "orders"("id") ON DELETE CASCADE,
+        "orderId" INTEGER REFERENCES "orders"("id") ON DELETE CASCADE,
+        "driverId" INTEGER REFERENCES "drivers"("id") ON DELETE SET NULL,
+        "driverWalletId" INTEGER,
         "transactionType" VARCHAR(255) DEFAULT 'payment',
         "paymentMethod" VARCHAR(255) NOT NULL,
         "paymentProvider" VARCHAR(255),
@@ -309,14 +328,83 @@ const addMissingColumns = async () => {
       console.log('Note: paymentStatus column check/update attempted (may already exist)');
     }
 
+    // Update orderId column to allow NULL if it doesn't already
+    try {
+      const orderIdNullableCheck = await db.sequelize.query(`
+        SELECT is_nullable 
+        FROM information_schema.columns 
+        WHERE table_name='transactions' AND column_name='orderId';
+      `);
+      
+      if (orderIdNullableCheck[0].length > 0 && orderIdNullableCheck[0][0].is_nullable === 'NO') {
+        await db.sequelize.query(`
+          ALTER TABLE "transactions" 
+          ALTER COLUMN "orderId" DROP NOT NULL;
+        `);
+        console.log('✅ Updated orderId column to allow NULL in transactions table');
+      } else {
+        console.log('✅ orderId column already allows NULL in transactions table');
+      }
+    } catch (error) {
+      console.log('Note: orderId nullable check attempted (may already be nullable)');
+    }
+
+    // Add driverId and driverWalletId columns to transactions table if they don't exist
+    const transactionsDriverIdCheck = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='transactions' AND column_name='driverId';
+    `);
+    
+    if (transactionsDriverIdCheck[0].length === 0) {
+      await db.sequelize.query(`
+        ALTER TABLE "transactions" 
+        ADD COLUMN "driverId" INTEGER REFERENCES "drivers"("id") ON DELETE SET NULL;
+      `);
+      console.log('✅ driverId column checked/added to transactions table');
+    } else {
+      console.log('✅ driverId column already exists in transactions table');
+    }
+
+    const driverWalletIdCheck = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name='transactions' AND column_name='driverWalletId';
+    `);
+    
+    if (driverWalletIdCheck[0].length === 0) {
+      await db.sequelize.query(`
+        ALTER TABLE "transactions" 
+        ADD COLUMN "driverWalletId" INTEGER;
+      `);
+      console.log('✅ driverWalletId column checked/added to transactions table');
+    } else {
+      console.log('✅ driverWalletId column already exists in transactions table');
+    }
+
     // Create ENUM types for transactions if they don't exist
     await db.sequelize.query(`
       DO $$ BEGIN
-        CREATE TYPE transaction_type_enum AS ENUM ('payment', 'refund');
+        CREATE TYPE transaction_type_enum AS ENUM ('payment', 'refund', 'tip', 'withdrawal');
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
     `).catch(() => {});
+    
+    // Try to add 'tip' and 'withdrawal' to existing enum if they don't exist
+    try {
+      await db.sequelize.query(`ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'tip'`);
+      console.log('✅ Added tip to transaction_type_enum');
+    } catch (error) {
+      console.log('Note: transaction_type_enum tip value update attempted (may already exist)');
+    }
+    
+    try {
+      await db.sequelize.query(`ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'withdrawal'`);
+      console.log('✅ Added withdrawal to transaction_type_enum');
+    } catch (error) {
+      console.log('Note: transaction_type_enum withdrawal value update attempted (may already exist)');
+    }
 
     await db.sequelize.query(`
       DO $$ BEGIN
@@ -434,6 +522,36 @@ const addMissingColumns = async () => {
       );
     `);
     console.log('✅ drivers table checked/created');
+
+    // Create driver_wallets table if it doesn't exist
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS "driver_wallets" (
+        "id" SERIAL PRIMARY KEY,
+        "driverId" INTEGER NOT NULL UNIQUE REFERENCES "drivers"("id") ON DELETE CASCADE,
+        "balance" DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        "totalTipsReceived" DECIMAL(10, 2) NOT NULL DEFAULT 0,
+        "totalTipsCount" INTEGER NOT NULL DEFAULT 0,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+    `);
+    console.log('✅ driver_wallets table checked/created');
+
+    // Create saved_addresses table if it doesn't exist
+    await db.sequelize.query(`
+      CREATE TABLE IF NOT EXISTS "saved_addresses" (
+        "id" SERIAL PRIMARY KEY,
+        "address" TEXT NOT NULL UNIQUE,
+        "placeId" VARCHAR(255),
+        "formattedAddress" TEXT,
+        "searchCount" INTEGER DEFAULT 0,
+        "apiCallsSaved" INTEGER DEFAULT 0,
+        "costSaved" DECIMAL(10, 4) DEFAULT 0,
+        "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL,
+        "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
+      );
+    `);
+    console.log('✅ saved_addresses table checked/created');
 
     // Create admins table if it doesn't exist
     await db.sequelize.query(`

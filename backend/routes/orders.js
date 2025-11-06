@@ -53,7 +53,7 @@ const calculateDeliveryFee = async (items) => {
 // Create new order
 router.post('/', async (req, res) => {
   try {
-    const { customerName, customerPhone, customerEmail, deliveryAddress, items, notes, paymentType, paymentMethod } = req.body;
+    const { customerName, customerPhone, customerEmail, deliveryAddress, items, notes, paymentType, paymentMethod, tipAmount } = req.body;
     
     if (!customerName || !customerPhone || !deliveryAddress || !items || items.length === 0) {
       return res.status(400).json({ error: 'Missing required fields' });
@@ -66,6 +66,12 @@ router.post('/', async (req, res) => {
 
     if (paymentType === 'pay_now' && (!paymentMethod || !['card', 'mobile_money'].includes(paymentMethod))) {
       return res.status(400).json({ error: 'Payment method required when paying now' });
+    }
+
+    // Validate tip amount
+    const tip = parseFloat(tipAmount) || 0;
+    if (tip < 0) {
+      return res.status(400).json({ error: 'Tip amount cannot be negative' });
     }
     
     // Calculate total amount
@@ -90,7 +96,7 @@ router.post('/', async (req, res) => {
 
     // Calculate delivery fee
     const deliveryFee = await calculateDeliveryFee(items);
-    const finalTotal = totalAmount + deliveryFee;
+    const finalTotal = totalAmount + deliveryFee + tip; // Include tip in total
     
     // Create order
     // Determine payment status based on payment type
@@ -117,8 +123,9 @@ router.post('/', async (req, res) => {
       customerPhone,
       customerEmail,
       deliveryAddress,
-      totalAmount: finalTotal, // Include delivery fee in total
-      notes: notes ? `${notes}\nDelivery Fee: KES ${deliveryFee.toFixed(2)}` : `Delivery Fee: KES ${deliveryFee.toFixed(2)}`,
+      totalAmount: finalTotal, // Include delivery fee and tip in total
+      tipAmount: tip,
+      notes: notes ? `${notes}\nDelivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}` : `Delivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}`,
       paymentType: paymentType || 'pay_on_delivery',
       paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
       paymentStatus: paymentStatus,

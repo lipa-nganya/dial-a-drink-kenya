@@ -7,14 +7,30 @@ module.exports = (sequelize, DataTypes) => {
     },
     orderId: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true, // Allow null for withdrawals (no order associated)
       references: {
         model: 'orders',
         key: 'id'
       }
     },
+    driverId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'drivers',
+        key: 'id'
+      }
+    },
+    driverWalletId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'driver_wallets',
+        key: 'id'
+      }
+    },
     transactionType: {
-      type: DataTypes.ENUM('payment', 'refund'),
+      type: DataTypes.ENUM('payment', 'refund', 'tip', 'withdrawal'),
       defaultValue: 'payment'
     },
     paymentMethod: {

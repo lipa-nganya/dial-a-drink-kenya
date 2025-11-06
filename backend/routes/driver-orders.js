@@ -221,6 +221,59 @@ router.patch('/:orderId/status', async (req, res) => {
           lastActivity: new Date()
         });
       }
+
+      // Create tip transaction if order has tip and is being delivered
+      if (order.tipAmount && parseFloat(order.tipAmount) > 0 && finalStatus === 'delivered') {
+        try {
+          // Check if tip transaction already exists (to avoid duplicates)
+          const existingTipTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'tip',
+              driverId: driverId
+            }
+          });
+
+          if (!existingTipTransaction) {
+            // Get or create driver wallet
+            let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
+            if (!driverWallet) {
+              driverWallet = await db.DriverWallet.create({
+                driverId: driverId,
+                balance: 0,
+                totalTipsReceived: 0,
+                totalTipsCount: 0
+              });
+            }
+
+            // Create tip transaction
+            const tipTransaction = await db.Transaction.create({
+              orderId: order.id,
+              driverId: driverId,
+              driverWalletId: driverWallet.id,
+              transactionType: 'tip',
+              paymentMethod: 'cash', // Tip is cash-based
+              paymentProvider: 'tip',
+              amount: parseFloat(order.tipAmount),
+              status: 'completed',
+              paymentStatus: 'paid',
+              notes: `Tip for Order #${order.id} - ${order.customerName}`
+            });
+
+            // Update driver wallet
+            await driverWallet.update({
+              balance: parseFloat(driverWallet.balance) + parseFloat(order.tipAmount),
+              totalTipsReceived: parseFloat(driverWallet.totalTipsReceived) + parseFloat(order.tipAmount),
+              totalTipsCount: driverWallet.totalTipsCount + 1
+            });
+
+            console.log(`✅ Tip transaction created for Order #${order.id}: KES ${order.tipAmount} for Driver #${driverId}`);
+          }
+        } catch (tipError) {
+          console.error('❌ Error creating tip transaction:', tipError);
+          // Don't fail the order status update if tip transaction fails
+        }
+      }
     } else if (finalStatus === 'out_for_delivery') {
       // Update driver status to on_delivery
       const driver = await db.Driver.findByPk(driverId);
