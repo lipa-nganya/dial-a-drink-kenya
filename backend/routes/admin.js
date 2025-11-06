@@ -226,12 +226,25 @@ router.patch('/orders/:id/status', async (req, res) => {
             });
           }
 
+          // Get the order's payment transaction receipt number
+          const paymentTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'payment',
+              status: 'completed'
+            },
+            order: [['createdAt', 'DESC']]
+          });
+
+          const receiptNumber = paymentTransaction?.receiptNumber || null;
+
           // Update tip transaction with driver info and complete it
           await tipTransaction.update({
             driverId: driverId,
             driverWalletId: driverWallet.id,
             status: 'completed',
             paymentStatus: 'paid',
+            receiptNumber: receiptNumber, // Match order's receipt number
             notes: `Tip for Order #${order.id} - ${order.customerName}`
           });
 
