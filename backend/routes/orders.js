@@ -165,25 +165,6 @@ router.post('/', async (req, res) => {
       }]
     });
     
-    // Create tip transaction if order has tip (status: pending, will be completed when driver is assigned and order is delivered)
-    if (tip > 0) {
-      try {
-        await db.Transaction.create({
-          orderId: order.id,
-          transactionType: 'tip',
-          paymentMethod: 'cash', // Tip is cash-based
-          paymentProvider: 'tip',
-          amount: tip,
-          status: 'pending', // Will be updated to 'completed' when driver is assigned and order is delivered
-          paymentStatus: 'pending', // Will be updated to 'paid' when driver is assigned and order is delivered
-          notes: `Tip for Order #${order.id} - ${customerName} (pending driver assignment)`
-        });
-        console.log(`✅ Tip transaction created for Order #${order.id}: KES ${tip} (pending driver assignment)`);
-      } catch (tipError) {
-        console.error('❌ Error creating tip transaction:', tipError);
-        // Don't fail order creation if tip transaction fails
-      }
-    }
 
     // Emit notification to admin dashboard
     const io = req.app.get('io');
