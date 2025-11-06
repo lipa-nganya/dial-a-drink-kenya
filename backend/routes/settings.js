@@ -22,6 +22,15 @@ router.get('/:key', async (req, res) => {
       if (key === 'deliveryFeeWithoutAlcohol') {
         return res.json({ key: 'deliveryFeeWithoutAlcohol', value: '30' });
       }
+      if (key === 'maxTipEnabled') {
+        return res.json({ key: 'maxTipEnabled', value: 'false' });
+      }
+      if (key === 'driverPayPerDeliveryEnabled') {
+        return res.json({ key: 'driverPayPerDeliveryEnabled', value: 'false' });
+      }
+      if (key === 'driverPayPerDeliveryAmount') {
+        return res.json({ key: 'driverPayPerDeliveryAmount', value: '0' });
+      }
       return res.status(404).json({ error: 'Setting not found' });
     }
     
