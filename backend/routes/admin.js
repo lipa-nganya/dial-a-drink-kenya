@@ -140,6 +140,27 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
+// Get all drinks (admin)
+router.get('/drinks', async (req, res) => {
+  try {
+    const drinks = await db.Drink.findAll({
+      include: [{
+        model: db.Category,
+        as: 'category'
+      }, {
+        model: db.SubCategory,
+        as: 'subCategory'
+      }],
+      order: [['name', 'ASC']]
+    });
+
+    res.json(drinks);
+  } catch (error) {
+    console.error('Error fetching drinks:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get Save the Fishes stats
 router.get('/save-the-fishes', async (req, res) => {
   try {
