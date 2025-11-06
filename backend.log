@@ -1,4 +1,4 @@
-[dotenv@17.2.3] injecting env (11) from .env -- tip: 🔑 add access controls to secrets: https://dotenvx.com/ops
+[dotenv@17.2.3] injecting env (11) from .env -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
 Starting server initialization...
 Executing (default): SELECT 1+1 AS result
 Database connection established successfully.
@@ -42,6 +42,9 @@ Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY 
 Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_paymentMethod' GROUP BY 1
 Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_status' GROUP BY 1
 Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_paymentStatus' GROUP BY 1
+Executing (default): ALTER TYPE "public"."enum_transactions_transactionType" ADD VALUE IF NOT EXISTS 'delivery_pay' AFTER 'withdrawal'
+Executing (default): ALTER TYPE "public"."enum_transactions_paymentMethod" ADD VALUE IF NOT EXISTS 'system' AFTER 'cash'
+Executing (default): WITH ranges AS (  SELECT pg_range.rngtypid, pg_type.typname AS rngtypname,         pg_type.typarray AS rngtyparray, pg_range.rngsubtype    FROM pg_range LEFT OUTER JOIN pg_type ON pg_type.oid = pg_range.rngtypid)SELECT pg_type.typname, pg_type.typtype, pg_type.oid, pg_type.typarray,       ranges.rngtypname, ranges.rngtypid, ranges.rngtyparray  FROM pg_type LEFT OUTER JOIN ranges ON pg_type.oid = ranges.rngsubtype WHERE (pg_type.typtype IN('b', 'e'));
 Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'transactions' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
 Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'order_notifications'
 Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'order_notifications' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
@@ -59,7 +62,6 @@ Database synchronized successfully.
 Checking for missing columns...
 Executing (default): ALTER TABLE "drinks" 
       ADD COLUMN IF NOT EXISTS "isOnOffer" BOOLEAN DEFAULT false;
-Client connected: ZJ_EGy_pgIG3hbdFAAAB
 ✅ isOnOffer column checked/added
 Executing (default): ALTER TABLE "drinks" 
       ADD COLUMN IF NOT EXISTS "originalPrice" DECIMAL(10,2);
@@ -176,6 +178,8 @@ Executing (default): ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 't
 ✅ Added tip to transaction_type_enum
 Executing (default): ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'withdrawal'
 ✅ Added withdrawal to transaction_type_enum
+Executing (default): ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'delivery_pay'
+✅ Added delivery_pay to transaction_type_enum
 Executing (default): DO $$ BEGIN
         CREATE TYPE transaction_status_enum AS ENUM ('pending', 'completed', 'failed', 'cancelled');
       EXCEPTION
@@ -296,17 +300,11 @@ Executing (default): SELECT "id", "username", "password", "email", "role", "invi
 Database columns updated successfully.
 Executing (default): SELECT count(*) AS "count" FROM "categories" AS "Category";
 Database setup completed.
-Client connected: zmd_WZauCeG9EuQ6AAAE
-Client connected: lhwmyrQLG-4DDfQHAAAG
-Client connected: 77uFs5hxRPF_0ZTDAAAI
-Client zmd_WZauCeG9EuQ6AAAE joined driver room: driver-1
-Client connected: eLKcw3f3yhhMzxjkAAAJ
-Client lhwmyrQLG-4DDfQHAAAG joined driver room: driver-1
-Client connected: _8lVeiy2Tev19RPqAAAL
-Client eLKcw3f3yhhMzxjkAAAJ joined driver room: driver-1
-Client connected: wkXi3vYu2l2U81AIAAAP
-Client connected: PLSpdILvRUM2x8nCAAAQ
-Client connected: folDUWFOL-a6FX39AAAR
+Client connected: 5SIo9Paxi8TRMGAZAAAC
+Client connected: TqY-HXVlrhc5HYRWAAAD
+Client connected: hLAL1EGAhMftCkRYAAAF
+Client connected: q3IlMf76ERRr_7R3AAAH
+Client connected: g4opPCW9QWAH6EdrAAAJ
 Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
 Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
 Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
@@ -315,44 +313,3 @@ Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" 
 Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
 Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
 Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
-Executing (default): SELECT "id", "key", "value", "createdAt", "updatedAt" FROM "settings" AS "Settings" WHERE "Settings"."key" = 'driverPayPerDeliveryEnabled';

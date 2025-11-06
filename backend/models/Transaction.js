@@ -30,11 +30,11 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     transactionType: {
-      type: DataTypes.ENUM('payment', 'refund', 'tip', 'withdrawal'),
+      type: DataTypes.ENUM('payment', 'refund', 'tip', 'withdrawal', 'delivery_pay'),
       defaultValue: 'payment'
     },
     paymentMethod: {
-      type: DataTypes.ENUM('card', 'mobile_money', 'cash'),
+      type: DataTypes.ENUM('card', 'mobile_money', 'cash', 'system'),
       allowNull: false
     },
     paymentProvider: {

@@ -223,6 +223,83 @@ router.patch('/:orderId/status', async (req, res) => {
         });
       }
 
+      // Credit driver pay per delivery if enabled (when order is completed)
+      // This is separate from tips and is only credited when order is completed
+      if (finalStatus === 'completed') {
+        try {
+          // Check if driver pay per delivery is enabled
+          const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+            db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
+            db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+          ]);
+
+          const isDriverPayEnabled = driverPayEnabledSetting?.value === 'true';
+          const driverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
+
+          if (isDriverPayEnabled && driverPayAmount > 0) {
+            // Check if delivery pay transaction already exists for this order
+            const existingDeliveryPayTransaction = await db.Transaction.findOne({
+              where: {
+                orderId: order.id,
+                transactionType: 'delivery_pay',
+                driverId: driverId
+              }
+            });
+
+            if (!existingDeliveryPayTransaction) {
+              // Get or create driver wallet
+              let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
+              if (!driverWallet) {
+                driverWallet = await db.DriverWallet.create({
+                  driverId: driverId,
+                  balance: 0,
+                  totalTipsReceived: 0,
+                  totalTipsCount: 0
+                });
+              }
+
+              // Credit delivery pay to driver wallet
+              await driverWallet.update({
+                balance: parseFloat(driverWallet.balance) + driverPayAmount
+              });
+
+              // Create delivery pay transaction
+              await db.Transaction.create({
+                orderId: order.id,
+                driverId: driverId,
+                driverWalletId: driverWallet.id,
+                transactionType: 'delivery_pay',
+                paymentMethod: 'system',
+                paymentProvider: 'system',
+                amount: driverPayAmount,
+                status: 'completed',
+                paymentStatus: 'paid',
+                notes: `Delivery pay for Order #${order.id} - ${order.customerName} (credited to driver wallet)`
+              });
+
+              console.log(`✅ Delivery pay of KES ${driverPayAmount} credited to driver #${driverId} wallet for Order #${order.id}`);
+
+              // Emit socket event to notify driver about delivery pay
+              const io = req.app.get('io');
+              if (io) {
+                io.to(`driver-${driverId}`).emit('delivery-pay-received', {
+                  orderId: order.id,
+                  amount: driverPayAmount,
+                  customerName: order.customerName,
+                  walletBalance: parseFloat(driverWallet.balance)
+                });
+                console.log(`📬 Delivery pay notification sent to driver #${driverId} for Order #${order.id}`);
+              }
+            } else {
+              console.log(`ℹ️  Delivery pay for Order #${order.id} was already credited to driver #${driverId} wallet`);
+            }
+          }
+        } catch (deliveryPayError) {
+          console.error('❌ Error crediting delivery pay to driver wallet:', deliveryPayError);
+          // Don't fail the order status update if delivery pay credit fails
+        }
+      }
+
       // Update tip transaction if order has tip and is being delivered or completed
       // Credit tip to driver wallet when order is delivered (for orders paid immediately via M-Pesa)
       // Check if tip hasn't been credited to this driver yet
