@@ -190,6 +190,20 @@ const addMissingColumns = async () => {
       console.log('✅ driverAccepted column already exists in orders table');
     }
 
+    await db.sequelize.query(`
+      ALTER TABLE "orders"
+      ADD COLUMN IF NOT EXISTS "driverPayCredited" BOOLEAN DEFAULT false;
+    `);
+    await db.sequelize.query(`
+      ALTER TABLE "orders"
+      ADD COLUMN IF NOT EXISTS "driverPayCreditedAt" TIMESTAMP WITH TIME ZONE;
+    `);
+    await db.sequelize.query(`
+      ALTER TABLE "orders"
+      ADD COLUMN IF NOT EXISTS "driverPayAmount" DECIMAL(10,2) DEFAULT 0;
+    `);
+    console.log('✅ Driver pay tracking columns checked/added to orders table');
+
     // Check if paymentMethod column exists
     const paymentMethodCheck = await db.sequelize.query(`
       SELECT column_name 
@@ -436,6 +450,36 @@ const addMissingColumns = async () => {
       console.log('Note: transaction_payment_method_enum system value update attempted (may already exist)');
     }
 
+    // Ensure payment transactions have a transactionDate
+    await db.sequelize.query(`
+      UPDATE transactions
+      SET "transactionDate" = "createdAt"
+      WHERE "transactionType" = 'payment' AND "transactionDate" IS NULL;
+    `);
+    console.log('✅ Backfilled missing payment transaction dates');
+
+    // Align tip transaction dates with corresponding payment transactions
+    await db.sequelize.query(`
+      UPDATE transactions AS tip
+      SET "transactionDate" = pay."transactionDate"
+      FROM transactions AS pay
+      WHERE tip."transactionType" = 'tip'
+        AND pay."transactionType" = 'payment'
+        AND pay."status" = 'completed'
+        AND tip."orderId" = pay."orderId"
+        AND pay."transactionDate" IS NOT NULL
+        AND tip."transactionDate" IS DISTINCT FROM pay."transactionDate";
+    `);
+    console.log('✅ Synchronized tip transaction dates with payment transactions');
+
+    // Backfill remaining tip transactions without a timestamp
+    await db.sequelize.query(`
+      UPDATE transactions
+      SET "transactionDate" = "createdAt"
+      WHERE "transactionType" = 'tip' AND "transactionDate" IS NULL;
+    `);
+    console.log('✅ Backfilled missing tip transaction dates');
+
     // Try to update existing transactions table to use ENUMs if columns exist but aren't ENUMs
     try {
       const transactionTypeCheck = await db.sequelize.query(`
@@ -550,6 +594,16 @@ const addMissingColumns = async () => {
       );
     `);
     console.log('✅ driver_wallets table checked/created');
+
+    await db.sequelize.query(`
+      ALTER TABLE "driver_wallets"
+      ADD COLUMN IF NOT EXISTS "totalDeliveryPay" DECIMAL(10,2) DEFAULT 0;
+    `);
+    await db.sequelize.query(`
+      ALTER TABLE "driver_wallets"
+      ADD COLUMN IF NOT EXISTS "totalDeliveryPayCount" INTEGER DEFAULT 0;
+    `);
+    console.log('✅ Delivery pay tracking columns checked/added to driver_wallets table');
 
     // Create saved_addresses table if it doesn't exist
     await db.sequelize.query(`

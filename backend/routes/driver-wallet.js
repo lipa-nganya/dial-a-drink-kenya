@@ -28,7 +28,9 @@ router.get('/:driverId', async (req, res) => {
         driverId: driverId,
         balance: 0,
         totalTipsReceived: 0,
-        totalTipsCount: 0
+              totalTipsCount: 0,
+              totalDeliveryPay: 0,
+              totalDeliveryPayCount: 0
       });
     }
 
@@ -79,7 +81,9 @@ router.get('/:driverId', async (req, res) => {
         availableBalance: availableBalance, // Available balance (excludes amount on hold)
         amountOnHold: amountOnHold, // Amount on hold (tips for non-completed orders)
         totalTipsReceived: parseFloat(wallet.totalTipsReceived) || 0,
-        totalTipsCount: wallet.totalTipsCount || 0
+              totalTipsCount: wallet.totalTipsCount || 0,
+              totalDeliveryPay: parseFloat(wallet.totalDeliveryPay) || 0,
+              totalDeliveryPayCount: wallet.totalDeliveryPayCount || 0
       },
       recentTips: tipTransactions.map(tx => ({
         id: tx.id,
@@ -131,7 +135,9 @@ router.post('/:driverId/withdraw', async (req, res) => {
         driverId: driverId,
         balance: 0,
         totalTipsReceived: 0,
-        totalTipsCount: 0
+              totalTipsCount: 0,
+              totalDeliveryPay: 0,
+              totalDeliveryPayCount: 0
       });
     }
 

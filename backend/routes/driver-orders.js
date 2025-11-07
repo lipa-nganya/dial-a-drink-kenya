@@ -223,11 +223,9 @@ router.patch('/:orderId/status', async (req, res) => {
         });
       }
 
-      // Credit driver pay per delivery if enabled (when order is completed)
-      // This is separate from tips and is only credited when order is completed
-      if (finalStatus === 'completed') {
+      // Credit driver pay per delivery if enabled (when order is completed) without creating extra transactions
+      if (finalStatus === 'completed' && !order.driverPayCredited) {
         try {
-          // Check if driver pay per delivery is enabled
           const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
             db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
             db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
@@ -237,61 +235,47 @@ router.patch('/:orderId/status', async (req, res) => {
           const driverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
 
           if (isDriverPayEnabled && driverPayAmount > 0) {
-            // Check if delivery pay transaction already exists for this order
-            const existingDeliveryPayTransaction = await db.Transaction.findOne({
-              where: {
-                orderId: order.id,
-                transactionType: 'delivery_pay',
-                driverId: driverId
-              }
+            // Get or create driver wallet
+            let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
+            if (!driverWallet) {
+              driverWallet = await db.DriverWallet.create({
+                driverId: driverId,
+                balance: 0,
+                totalTipsReceived: 0,
+                totalTipsCount: 0,
+                totalDeliveryPay: 0,
+                totalDeliveryPayCount: 0
+              });
+            }
+
+            const currentBalance = parseFloat(driverWallet.balance) || 0;
+            const currentDeliveryPayTotal = parseFloat(driverWallet.totalDeliveryPay) || 0;
+            const currentDeliveryPayCount = driverWallet.totalDeliveryPayCount || 0;
+
+            await driverWallet.update({
+              balance: currentBalance + driverPayAmount,
+              totalDeliveryPay: currentDeliveryPayTotal + driverPayAmount,
+              totalDeliveryPayCount: currentDeliveryPayCount + 1
             });
 
-            if (!existingDeliveryPayTransaction) {
-              // Get or create driver wallet
-              let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
-              if (!driverWallet) {
-                driverWallet = await db.DriverWallet.create({
-                  driverId: driverId,
-                  balance: 0,
-                  totalTipsReceived: 0,
-                  totalTipsCount: 0
-                });
-              }
+            await order.update({
+              driverPayCredited: true,
+              driverPayCreditedAt: new Date(),
+              driverPayAmount: driverPayAmount
+            });
 
-              // Credit delivery pay to driver wallet
-              await driverWallet.update({
-                balance: parseFloat(driverWallet.balance) + driverPayAmount
-              });
+            console.log(`✅ Delivery pay of KES ${driverPayAmount} credited to driver #${driverId} wallet for Order #${order.id}`);
 
-              // Create delivery pay transaction
-              await db.Transaction.create({
+            // Emit socket event to notify driver about delivery pay
+            const io = req.app.get('io');
+            if (io) {
+              io.to(`driver-${driverId}`).emit('delivery-pay-received', {
                 orderId: order.id,
-                driverId: driverId,
-                driverWalletId: driverWallet.id,
-                transactionType: 'delivery_pay',
-                paymentMethod: 'system',
-                paymentProvider: 'system',
                 amount: driverPayAmount,
-                status: 'completed',
-                paymentStatus: 'paid',
-                notes: `Delivery pay for Order #${order.id} - ${order.customerName} (credited to driver wallet)`
+                customerName: order.customerName,
+                walletBalance: currentBalance + driverPayAmount
               });
-
-              console.log(`✅ Delivery pay of KES ${driverPayAmount} credited to driver #${driverId} wallet for Order #${order.id}`);
-
-              // Emit socket event to notify driver about delivery pay
-              const io = req.app.get('io');
-              if (io) {
-                io.to(`driver-${driverId}`).emit('delivery-pay-received', {
-                  orderId: order.id,
-                  amount: driverPayAmount,
-                  customerName: order.customerName,
-                  walletBalance: parseFloat(driverWallet.balance)
-                });
-                console.log(`📬 Delivery pay notification sent to driver #${driverId} for Order #${order.id}`);
-              }
-            } else {
-              console.log(`ℹ️  Delivery pay for Order #${order.id} was already credited to driver #${driverId} wallet`);
+              console.log(`📬 Delivery pay notification sent to driver #${driverId} for Order #${order.id}`);
             }
           }
         } catch (deliveryPayError) {
@@ -344,6 +328,32 @@ router.patch('/:orderId/status', async (req, res) => {
                 });
               }
 
+              // Determine transaction date to align with merchant payment
+              let transactionDateToUse = tipTransaction.transactionDate;
+              try {
+                const paymentTransaction = await db.Transaction.findOne({
+                  where: {
+                    orderId: order.id,
+                    transactionType: 'payment',
+                    status: 'completed'
+                  },
+                  order: [
+                    ['transactionDate', 'DESC'],
+                    ['createdAt', 'DESC']
+                  ]
+                });
+
+                if (paymentTransaction) {
+                  transactionDateToUse = paymentTransaction.transactionDate || paymentTransaction.createdAt;
+                }
+              } catch (paymentLookupError) {
+                console.warn('⚠️ Could not fetch payment transaction for tip synchronization:', paymentLookupError.message);
+              }
+
+              if (!transactionDateToUse) {
+                transactionDateToUse = tipTransaction.createdAt;
+              }
+
               // Update tip transaction with driver info and complete it
               // Note: receiptNumber should already be set when payment was completed
               await tipTransaction.update({
@@ -351,6 +361,7 @@ router.patch('/:orderId/status', async (req, res) => {
                 driverWalletId: driverWallet.id,
                 status: 'completed',
                 paymentStatus: 'paid',
+                transactionDate: transactionDateToUse,
                 // Keep existing receiptNumber (set when payment was completed)
                 notes: `Tip for Order #${order.id} - ${order.customerName} (credited to driver wallet when order marked as delivered)`
               });

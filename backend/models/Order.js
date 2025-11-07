@@ -63,6 +63,20 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       allowNull: true,
       defaultValue: null
+    },
+    driverPayCredited: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    driverPayCreditedAt: {
+      type: DataTypes.DATE,
+      allowNull: true
+    },
+    driverPayAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0
     }
   }, {
     tableName: 'orders',
