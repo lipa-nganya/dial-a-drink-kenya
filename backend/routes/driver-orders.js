@@ -3,6 +3,8 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
+const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+const pushNotifications = require('../services/pushNotifications');
 
 /**
  * Get orders assigned to a driver
@@ -277,6 +279,20 @@ router.patch('/:orderId/status', async (req, res) => {
               });
               console.log(`📬 Delivery pay notification sent to driver #${driverId} for Order #${order.id}`);
             }
+
+            if (driver?.pushToken) {
+              pushNotifications.sendPushNotification(driver.pushToken, {
+                title: 'Delivery Fee Received',
+                body: `KES ${driverPayAmount.toFixed(2)} for Order #${order.id} has been added to your wallet.`,
+                data: {
+                  type: 'delivery_pay',
+                  orderId: order.id,
+                  amount: driverPayAmount
+                }
+              }).catch((pushError) => {
+                console.error('❌ Error sending delivery pay push notification:', pushError);
+              });
+            }
           }
         } catch (deliveryPayError) {
           console.error('❌ Error crediting delivery pay to driver wallet:', deliveryPayError);
@@ -385,6 +401,21 @@ router.patch('/:orderId/status', async (req, res) => {
                   walletBalance: parseFloat(driverWallet.balance)
                 });
                 console.log(`📬 Tip notification sent to driver #${driverId} for Order #${order.id}`);
+              }
+
+              if (driver?.pushToken) {
+                const tipAmount = Number(order.tipAmount) || 0;
+                pushNotifications.sendPushNotification(driver.pushToken, {
+                  title: 'Tip Received',
+                  body: `You received a tip of KES ${tipAmount.toFixed(2)} for Order #${order.id}.`,
+                  data: {
+                    type: 'tip',
+                    orderId: order.id,
+                    amount: tipAmount
+                  }
+                }).catch((pushError) => {
+                  console.error('❌ Error sending tip push notification:', pushError);
+                });
               }
             } else {
               console.log(`ℹ️  Tip for Order #${order.id} was already credited to driver #${driverId} wallet`);
@@ -539,32 +570,86 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
           checkoutNote
       });
       
-      // Create transaction record for STK push initiation (same as when customer initiates)
-      // This ensures the callback can find the order via transaction checkoutRequestID
-      // Note: Customer pays full amount (order.totalAmount), but we store payment transaction as totalAmount - tipAmount
+      // Create transaction records for STK push initiation (same as when customer initiates)
       // The tip will be created as a separate transaction when payment callback confirms
-      const tipAmount = parseFloat(order.tipAmount) || 0;
-      const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Order payment (excluding tip)
-      
       try {
-        await db.Transaction.create({
+        const {
+          itemsTotal,
+          deliveryFee,
+          tipAmount
+        } = await getOrderFinancialBreakdown(order.id);
+
+        const baseTransactionPayload = {
           orderId: order.id,
-          transactionType: 'payment',
           paymentMethod: 'mobile_money',
           paymentProvider: 'mpesa',
-          amount: paymentAmount, // Order total minus tip (tip is separate transaction)
           status: 'pending',
-          paymentStatus: 'pending', // Initial payment status - will be updated to 'paid' when callback confirms
+          paymentStatus: 'pending',
           checkoutRequestID: checkoutRequestID,
           merchantRequestID: merchantRequestID,
-          phoneNumber: formattedPhone,
-          notes: `STK Push initiated by driver. Customer pays KES ${amount.toFixed(2)} (includes KES ${tipAmount.toFixed(2)} tip which will be separate transaction). ${stkResult.CustomerMessage || stkResult.customerMessage || ''}`
+          phoneNumber: formattedPhone
+        };
+
+        const paymentNote = `STK Push initiated by driver. Customer pays KES ${amount.toFixed(2)}. Item portion: KES ${itemsTotal.toFixed(2)}.${tipAmount > 0 ? ` Tip (KES ${tipAmount.toFixed(2)}) will be recorded separately.` : ''}`;
+
+        let paymentTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'payment',
+            status: { [Op.ne]: 'completed' }
+          },
+          order: [['createdAt', 'DESC']]
         });
-        console.log(`✅ Transaction record created for driver-initiated payment on Order #${order.id}`);
+
+        if (paymentTransaction) {
+          await paymentTransaction.update({
+            ...baseTransactionPayload,
+            amount: itemsTotal,
+            notes: paymentNote
+          });
+          console.log(`✅ Payment transaction updated for driver-initiated payment on Order #${order.id} (transaction #${paymentTransaction.id})`);
+        } else {
+          paymentTransaction = await db.Transaction.create({
+            ...baseTransactionPayload,
+            transactionType: 'payment',
+            amount: itemsTotal,
+            notes: paymentNote
+          });
+          console.log(`✅ Payment transaction created for driver-initiated payment on Order #${order.id} (transaction #${paymentTransaction.id})`);
+        }
+
+        const deliveryNote = `Delivery fee portion for Order #${order.id}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
+
+        let deliveryTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'delivery_pay',
+            status: { [Op.ne]: 'completed' }
+          },
+          order: [['createdAt', 'DESC']]
+        });
+
+        if (deliveryTransaction) {
+          await deliveryTransaction.update({
+            ...baseTransactionPayload,
+            transactionType: 'delivery_pay',
+            amount: deliveryFee,
+            notes: deliveryNote
+          });
+          console.log(`✅ Delivery fee transaction updated for driver-initiated payment on Order #${order.id} (transaction #${deliveryTransaction.id})`);
+        } else {
+          deliveryTransaction = await db.Transaction.create({
+            ...baseTransactionPayload,
+            transactionType: 'delivery_pay',
+            amount: deliveryFee,
+            notes: deliveryNote
+          });
+          console.log(`✅ Delivery fee transaction created for driver-initiated payment on Order #${order.id} (transaction #${deliveryTransaction.id})`);
+        }
       } catch (transactionError) {
-        console.error('❌ Error creating transaction record:', transactionError);
+        console.error('❌ Error preparing driver-initiated transactions:', transactionError);
         // Don't fail the STK push if transaction creation fails - log it but continue
-        console.log('⚠️  Continuing with STK push despite transaction creation error');
+        console.log('⚠️  Continuing with STK push despite transaction preparation error');
       }
       
       // STK push was initiated - return success immediately

@@ -10,56 +10,94 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
+  Button,
   Chip,
-  Alert,
-  CircularProgress,
   TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   InputAdornment,
+  CircularProgress,
+  Alert,
   IconButton,
   Collapse,
+  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Button,
-  Divider,
   Grid,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
-  CheckCircle,
-  Cancel,
-  AccessTime,
-  Warning,
   Search,
-  AttachMoney,
-  Phone,
-  Receipt,
-  Info,
-  ExpandMore,
-  ExpandLess,
-  CalendarToday,
+  Cancel,
+  RemoveCircle,
+  LocalShipping,
   Clear,
+  ExpandLess,
+  ExpandMore,
+  Receipt,
+  Phone,
+  Info,
   AccountBalanceWallet
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
+import {
+  getPaymentMethodChipProps,
+  getTransactionTypeChipProps,
+  getTransactionStatusChipProps
+} from '../utils/chipStyles';
 
 const Transactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [expandedRows, setExpandedRows] = useState(new Set());
-  const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [merchantWallet, setMerchantWallet] = useState(null);
+  const [expandedRows, setExpandedRows] = useState(() => new Set());
+  const [selectedTransaction, setSelectedTransaction] = useState(null);
+  const [transactionDialogTab, setTransactionDialogTab] = useState('transaction');
+  const { isDarkMode, colors } = useTheme();
+
+  const dateFieldStyles = {
+    minWidth: 180,
+    '& .MuiOutlinedInput-root': {
+      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+      '& fieldset': { borderColor: '#00E0B8' },
+      '&:hover fieldset': { borderColor: '#00C4A3' },
+      '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+    },
+    '& .MuiOutlinedInput-input': {
+      color: colors.textPrimary
+    },
+    '& .MuiInputBase-input': {
+      color: colors.textPrimary
+    },
+    '& .MuiInputLabel-root': {
+      color: isDarkMode ? '#00E0B8' : undefined
+    },
+    '& .MuiInputLabel-root.Mui-focused': {
+      color: '#00E0B8'
+    },
+    '& input[type="date"]::-webkit-calendar-picker-indicator': {
+      filter: isDarkMode ? 'invert(75%) sepia(59%) saturate(514%) hue-rotate(116deg) brightness(97%) contrast(93%)' : 'none'
+    },
+    '& input[type="date"]::-webkit-calendar-picker-indicator:hover': {
+      filter: isDarkMode ? 'invert(75%) sepia(59%) saturate(514%) hue-rotate(116deg) brightness(97%) contrast(93%)' : 'none'
+    }
+  };
 
   useEffect(() => {
     fetchTransactions();
@@ -153,6 +191,7 @@ const Transactions = () => {
     }
 
     setFilteredTransactions(filtered);
+    setPage(0);
   };
 
   const handleClearFilters = () => {
@@ -161,26 +200,6 @@ const Transactions = () => {
     setPaymentMethodFilter('all');
     setStartDate('');
     setEndDate('');
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed': return 'success';
-      case 'pending': return 'warning';
-      case 'failed': return 'error';
-      case 'cancelled': return 'default';
-      default: return 'default';
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'completed': return <CheckCircle />;
-      case 'pending': return <AccessTime />;
-      case 'failed': return <Cancel />;
-      case 'cancelled': return <Cancel />;
-      default: return <AccessTime />;
-    }
   };
 
   const getPaymentMethodLabel = (method, provider) => {
@@ -204,9 +223,85 @@ const Transactions = () => {
     setSelectedTransaction(transaction);
   };
 
+  const getTransactionCategory = (transactionType = '') => {
+    const normalizedType = transactionType.toLowerCase();
+    const debitTypes = new Set([
+      'refund',
+      'chargeback',
+      'withdrawal',
+      'payout',
+      'driver_payout',
+      'manual_payout',
+      'reversal',
+      'adjustment_debit'
+    ]);
+
+    if (debitTypes.has(normalizedType)) {
+      return 'Debit';
+    }
+
+    return 'Credit';
+  };
+
+  const getCategoryChipProps = (transactionType) => {
+    const category = getTransactionCategory(transactionType);
+    if (category === 'Debit') {
+      return {
+        label: 'Debit',
+        sx: {
+          backgroundColor: '#FF3366',
+          color: '#FFFFFF',
+          fontWeight: 700
+        }
+      };
+    }
+
+    return {
+      label: 'Credit',
+      sx: {
+        backgroundColor: '#00E0B8',
+        color: '#002A54',
+        fontWeight: 700
+      }
+    };
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) {
+      return 'N/A';
+    }
+
+    return new Date(value).toLocaleString('en-KE', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit'
+    });
+  };
+
+  const handleChangePage = (_event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    const newRowsPerPage = parseInt(event.target.value, 10);
+    setRowsPerPage(newRowsPerPage);
+    setPage(0);
+  };
+
+  useEffect(() => {
+    if (page > 0 && page * rowsPerPage >= filteredTransactions.length) {
+      const lastPage = Math.max(0, Math.ceil(filteredTransactions.length / rowsPerPage) - 1);
+      if (page !== lastPage) {
+        setPage(lastPage);
+      }
+    }
+  }, [filteredTransactions.length, page, rowsPerPage]);
+
   if (loading) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4, textAlign: 'center' }}>
+      <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 4 }, textAlign: 'center' }}>
         <CircularProgress />
         <Typography variant="h6" sx={{ mt: 2 }}>Loading transactions...</Typography>
       </Container>
@@ -215,14 +310,19 @@ const Transactions = () => {
 
   if (error) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 4 } }}>
         <Alert severity="error">Error loading transactions: {error}</Alert>
       </Container>
     );
   }
 
+  const paginatedTransactions = filteredTransactions.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
+
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
+    <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 4 } }}>
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <Receipt sx={{ color: '#00E0B8', fontSize: 40 }} />
@@ -377,14 +477,7 @@ const Transactions = () => {
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               InputLabelProps={{ shrink: true }}
-              sx={{
-                minWidth: 180,
-                '& .MuiOutlinedInput-root': {
-                  '& fieldset': { borderColor: '#00E0B8' },
-                  '&:hover fieldset': { borderColor: '#00C4A3' },
-                  '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                }
-              }}
+              sx={dateFieldStyles}
             />
 
             <TextField
@@ -394,14 +487,7 @@ const Transactions = () => {
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               InputLabelProps={{ shrink: true }}
-              sx={{
-                minWidth: 180,
-                '& .MuiOutlinedInput-root': {
-                  '& fieldset': { borderColor: '#00E0B8' },
-                  '&:hover fieldset': { borderColor: '#00C4A3' },
-                  '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                }
-              }}
+              sx={dateFieldStyles}
             />
 
             {(statusFilter !== 'all' || paymentMethodFilter !== 'all' || startDate || endDate || searchTerm) && (
@@ -453,16 +539,18 @@ const Transactions = () => {
           </Typography>
         </Paper>
       ) : (
-        <TableContainer component={Paper}>
-          <Table>
+        <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
+          <Table sx={{ minWidth: 1300 }}>
             <TableHead>
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }} width="40px"></TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Transaction ID</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Transaction Type</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Order ID</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Customer</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Payment Method</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Amount</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Category</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Status</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Receipt Number</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Phone</TableCell>
@@ -471,8 +559,24 @@ const Transactions = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredTransactions.map((transaction) => {
+              {paginatedTransactions.map((transaction) => {
                 const isExpanded = expandedRows.has(transaction.id);
+                const typeChip = getTransactionTypeChipProps(transaction.transactionType);
+                const methodChip = getPaymentMethodChipProps(transaction.paymentMethod);
+                const statusChip = getTransactionStatusChipProps(transaction.status);
+                const methodLabel = getPaymentMethodLabel(
+                  transaction.paymentMethod,
+                  transaction.paymentProvider
+                );
+                const providerLabel = transaction.paymentProvider
+                  ? transaction.paymentProvider.replace(/_/g, ' ')
+                  : '';
+                const normalizedMethod = methodLabel
+                  ? methodLabel.replace(/[^a-z0-9]/gi, '').toLowerCase()
+                  : '';
+                const normalizedProvider = providerLabel
+                  ? providerLabel.replace(/[^a-z0-9]/gi, '').toLowerCase()
+                  : '';
                 return (
                   <React.Fragment key={transaction.id}>
                     <TableRow
@@ -500,24 +604,22 @@ const Transactions = () => {
                         </IconButton>
                       </TableCell>
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            #{transaction.id}
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          #{transaction.id}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {typeChip ? (
+                          <Chip
+                            size="small"
+                            label={typeChip.label}
+                            sx={{ fontWeight: 700, ...typeChip.sx }}
+                          />
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">
+                            {transaction.transactionType || 'N/A'}
                           </Typography>
-                          {transaction.transactionType === 'tip' && (
-                            <Chip
-                              label="TIP"
-                              size="small"
-                              sx={{
-                                backgroundColor: '#FFC107',
-                                color: '#000',
-                                fontWeight: 700,
-                                fontSize: '0.7rem',
-                                height: '20px'
-                              }}
-                            />
-                          )}
-                        </Box>
+                        )}
                       </TableCell>
                   <TableCell>
                     <Typography variant="body2">
@@ -541,21 +643,60 @@ const Transactions = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2">
-                      {transaction.transactionType === 'tip' 
-                        ? 'Tip' 
-                        : getPaymentMethodLabel(transaction.paymentMethod, transaction.paymentProvider)}
-                    </Typography>
-                    {transaction.transactionType === 'tip' && transaction.paymentProvider && (
-                      <Typography variant="caption" color="text.secondary">
-                        From M-Pesa Payment
-                      </Typography>
-                    )}
-                    {transaction.transactionType !== 'tip' && transaction.paymentProvider && (
-                      <Typography variant="caption" color="text.secondary">
-                        {transaction.paymentProvider}
-                      </Typography>
-                    )}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
+                      {transaction.transactionType === 'tip' ? (
+                        typeChip ? (
+                          <Chip
+                            size="small"
+                            label={typeChip.label}
+                            sx={{ fontWeight: 700, ...typeChip.sx }}
+                          />
+                        ) : (
+                          <Chip
+                            size="small"
+                            label="Tip"
+                            sx={{ fontWeight: 700, backgroundColor: '#FFC107', color: '#000' }}
+                          />
+                        )
+                      ) : methodChip ? (
+                        <Chip
+                          size="small"
+                          label={methodChip.label}
+                          sx={{ fontWeight: 700, ...methodChip.sx }}
+                        />
+                      ) : (
+                        <Chip
+                          size="small"
+                          label={methodLabel || '—'}
+                          sx={{ fontWeight: 700, backgroundColor: '#424242', color: '#FFFFFF' }}
+                        />
+                      )}
+                      {(() => {
+                        let detailText;
+                        if ((transaction.transactionType || '').toLowerCase() === 'tip') {
+                          detailText = providerLabel
+                            ? `From ${providerLabel.toLowerCase()} payment`
+                            : 'Tip transaction';
+                        } else if (methodLabel) {
+                          detailText = methodLabel;
+                          if (
+                            providerLabel &&
+                            normalizedProvider &&
+                            normalizedMethod &&
+                            normalizedProvider !== normalizedMethod
+                          ) {
+                            detailText = `${methodLabel} (${providerLabel})`;
+                          }
+                        } else {
+                          detailText = providerLabel || '—';
+                        }
+                        return (
+                          <Typography variant="caption" color="text.secondary">
+                            {detailText}
+                          </Typography>
+                        );
+                      })()}
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Typography 
@@ -565,16 +706,32 @@ const Transactions = () => {
                         color: transaction.transactionType === 'tip' ? '#FFC107' : '#FF3366'
                       }}
                     >
-                      {transaction.transactionType === 'tip' ? '+' : ''}KES {Number(transaction.amount).toFixed(2)}
+                      KES {Number(transaction.amount).toFixed(2)}
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      icon={getStatusIcon(transaction.status)}
-                      label={transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
-                      color={getStatusColor(transaction.status)}
-                      size="small"
-                    />
+                    {(() => {
+                      const categoryChip = getCategoryChipProps(transaction.transactionType);
+                      return (
+                        <Chip
+                          size="small"
+                          label={categoryChip.label}
+                          sx={categoryChip.sx}
+                        />
+                      );
+                    })()}
+                  </TableCell>
+                  <TableCell>
+                    {statusChip ? (
+                      <Chip
+                        size="small"
+                        {...statusChip}
+                      />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        {transaction.status}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     {transaction.receiptNumber ? (
@@ -626,7 +783,7 @@ const Transactions = () => {
                   </TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={11}>
+                  <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={13}>
                     <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                       <Box sx={{ margin: 2 }}>
                         <Typography variant="h6" gutterBottom sx={{ color: '#00E0B8', mb: 2 }}>
@@ -634,72 +791,126 @@ const Transactions = () => {
                         </Typography>
                         <Grid container spacing={2}>
                           <Grid item xs={12} md={6}>
-                            <Paper sx={{ p: 2, backgroundColor: '#1a1a1a' }}>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                Transaction Information
-                              </Typography>
-                              <Divider sx={{ my: 1, borderColor: '#333' }} />
-                              <Box sx={{ mt: 1 }}>
-                                <Typography variant="body2" sx={{ mb: 1 }}>
-                                  <strong>Transaction Type:</strong>{' '}
-                                  {transaction.transactionType === 'tip' ? (
-                                    <Chip
-                                      label="TIP"
-                                      size="small"
-                                      sx={{
-                                        backgroundColor: '#FFC107',
-                                        color: '#000',
-                                        fontWeight: 700,
-                                        fontSize: '0.7rem',
-                                        ml: 1,
-                                        height: '20px'
-                                      }}
-                                    />
-                                  ) : (
-                                    transaction.transactionType || 'N/A'
-                                  )}
-                                </Typography>
-                                <Typography variant="body2" sx={{ mb: 1 }}>
-                                  <strong>Payment Provider:</strong> {transaction.paymentProvider || 'N/A'}
-                                </Typography>
-                                <Typography variant="body2" sx={{ mb: 1 }}>
-                                  <strong>Checkout Request ID:</strong> {transaction.checkoutRequestID || 'N/A'}
-                                </Typography>
-                                <Typography variant="body2" sx={{ mb: 1 }}>
-                                  <strong>Merchant Request ID:</strong> {transaction.merchantRequestID || 'N/A'}
-                                </Typography>
-                              </Box>
-                            </Paper>
-                          </Grid>
-                          <Grid item xs={12} md={6}>
-                            <Paper sx={{ p: 2, backgroundColor: '#1a1a1a' }}>
-                              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                                Order Information
-                              </Typography>
-                              <Divider sx={{ my: 1, borderColor: '#333' }} />
-                              <Box sx={{ mt: 1 }}>
-                                {transaction.order ? (
-                                  <>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                      <strong>Customer Name:</strong> {transaction.order.customerName || 'N/A'}
+                            <Paper sx={{ p: 0, backgroundColor: '#101010' }}>
+                              <Tabs
+                                value={transactionDialogTab}
+                                onChange={(_event, newValue) => setTransactionDialogTab(newValue)}
+                                textColor="secondary"
+                                indicatorColor="secondary"
+                                variant="fullWidth"
+                                sx={{
+                                  borderBottom: '1px solid #333',
+                                  '& .MuiTab-root': {
+                                    color: '#ccc',
+                                    fontWeight: 600
+                                  },
+                                  '& .Mui-selected': {
+                                    color: '#00E0B8'
+                                  }
+                                }}
+                              >
+                                <Tab label="Transaction Info" value="transaction" />
+                                <Tab label="Order Info" value="order" />
+                              </Tabs>
+                              <Box sx={{ p: 3 }}>
+                                {transactionDialogTab === 'transaction' ? (
+                                  <Box>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                                      <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                                        Transaction Information
+                                      </Typography>
+                                      {transaction.transactionType && (
+                                        <Chip
+                                          label={(transaction.transactionType || '').toUpperCase()}
+                                          size="small"
+                                          sx={{
+                                            backgroundColor: transaction.transactionType.toLowerCase() === 'tip'
+                                              ? '#FFC107'
+                                              : '#00E0B8',
+                                            color: transaction.transactionType.toLowerCase() === 'tip'
+                                              ? '#000'
+                                              : '#002A54',
+                                            fontWeight: 700
+                                          }}
+                                        />
+                                      )}
+                                    </Box>
+                                    <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                      <strong>Transaction ID:</strong> #{transaction.id}
                                     </Typography>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                      <strong>Customer Email:</strong> {transaction.order.customerEmail || 'N/A'}
+                                    <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                      <strong>Amount:</strong> KES {Number(transaction.amount || 0).toFixed(2)}
                                     </Typography>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                      <strong>Order Total:</strong> KES {Number(transaction.order.totalAmount || 0).toFixed(2)}
+                                    <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                      <strong>Category:</strong> {getTransactionCategory(transaction.transactionType)}
                                     </Typography>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                      <strong>Order Status:</strong> {transaction.order.status || 'N/A'}
+                                    <Typography variant="body1" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <strong>Status:</strong>
+                                      {(() => {
+                                        const statusChip = getTransactionStatusChipProps(transaction.status);
+                                        return statusChip ? (
+                                          <Chip size="small" {...statusChip} />
+                                        ) : (
+                                          <Typography variant="body1" color="text.secondary">
+                                            {transaction.status || 'N/A'}
+                                          </Typography>
+                                        );
+                                      })()}
                                     </Typography>
-                                    <Typography variant="body2" sx={{ mb: 1 }}>
-                                      <strong>Payment Status:</strong> {transaction.order.paymentStatus || 'N/A'}
+                                    {transaction.paymentProvider && (
+                                      <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                        <strong>Payment Provider:</strong> {transaction.paymentProvider}
+                                      </Typography>
+                                    )}
+                                    {transaction.phoneNumber && (
+                                      <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                        <strong>Phone Number:</strong> {transaction.phoneNumber}
+                                      </Typography>
+                                    )}
+                                    <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                      <strong>Transaction Date:</strong>{' '}
+                                      {new Date(transaction.transactionDate || transaction.createdAt).toLocaleString()}
                                     </Typography>
-                                  </>
+                                  </Box>
                                 ) : (
-                                  <Typography variant="body2" color="text.secondary">
-                                    Order information not available
-                                  </Typography>
+                                  <Box>
+                                    <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700, mb: 2 }}>
+                                      Order Information
+                                    </Typography>
+                                    {transaction.order ? (
+                                      <>
+                                        <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                          <strong>Order ID:</strong> #{transaction.order.id || transaction.orderId}
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                          <strong>Customer Name:</strong> {transaction.order.customerName || 'N/A'}
+                                        </Typography>
+                                        {transaction.order.customerEmail && (
+                                          <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                            <strong>Customer Email:</strong> {transaction.order.customerEmail}
+                                          </Typography>
+                                        )}
+                                        {transaction.order.customerPhone && (
+                                          <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                            <strong>Customer Phone:</strong> {transaction.order.customerPhone}
+                                          </Typography>
+                                        )}
+                                        <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                          <strong>Order Total:</strong> KES {Number(transaction.order.totalAmount || 0).toFixed(2)}
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                          <strong>Order Status:</strong> {transaction.order.status || 'N/A'}
+                                        </Typography>
+                                        <Typography variant="body1" sx={{ mb: 1.5 }}>
+                                          <strong>Payment Method:</strong> {getPaymentMethodLabel(transaction.paymentMethod, transaction.paymentProvider)}
+                                        </Typography>
+                                      </>
+                                    ) : (
+                                      <Typography variant="body1" color="text.secondary">
+                                        Order information not available
+                                      </Typography>
+                                    )}
+                                  </Box>
                                 )}
                               </Box>
                             </Paper>
@@ -733,7 +944,10 @@ const Transactions = () => {
       {/* Transaction Details Dialog */}
       <Dialog
         open={selectedTransaction !== null}
-        onClose={() => setSelectedTransaction(null)}
+        onClose={() => {
+          setSelectedTransaction(null);
+          setTransactionDialogTab('transaction');
+        }}
         maxWidth="md"
         fullWidth
       >
@@ -742,134 +956,171 @@ const Transactions = () => {
             <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
               Transaction Details #{selectedTransaction.id}
             </DialogTitle>
-            <DialogContent>
-              <Grid container spacing={3} sx={{ mt: 1 }}>
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Transaction Information
-                  </Typography>
-                  <Divider sx={{ my: 1 }} />
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Transaction ID:</strong> #{selectedTransaction.id}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Transaction Type:</strong> {selectedTransaction.transactionType || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Payment Method:</strong> {getPaymentMethodLabel(selectedTransaction.paymentMethod, selectedTransaction.paymentProvider)}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Payment Provider:</strong> {selectedTransaction.paymentProvider || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Amount:</strong> <span style={{ color: '#FF3366', fontWeight: 600 }}>KES {Number(selectedTransaction.amount).toFixed(2)}</span>
-                    </Typography>
-                    <Box sx={{ mb: 1.5 }}>
-                      <strong>Status: </strong>
-                      <Chip
-                        icon={getStatusIcon(selectedTransaction.status)}
-                        label={selectedTransaction.status.charAt(0).toUpperCase() + selectedTransaction.status.slice(1)}
-                        color={getStatusColor(selectedTransaction.status)}
-                        size="small"
-                        sx={{ ml: 1 }}
-                      />
-                    </Box>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Receipt Number:</strong> {selectedTransaction.receiptNumber || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Phone Number:</strong> {selectedTransaction.phoneNumber || 'N/A'}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Transaction Date:</strong> {selectedTransaction.transactionDate 
-                        ? new Date(selectedTransaction.transactionDate).toLocaleString('en-US')
-                        : new Date(selectedTransaction.createdAt).toLocaleString('en-US')}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Created:</strong> {new Date(selectedTransaction.createdAt).toLocaleString('en-US')}
-                    </Typography>
-                    <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Last Updated:</strong> {new Date(selectedTransaction.updatedAt).toLocaleString('en-US')}
-                    </Typography>
-                    {selectedTransaction.checkoutRequestID && (
-                      <Typography variant="body2" sx={{ mb: 1.5 }}>
-                        <strong>Checkout Request ID:</strong> {selectedTransaction.checkoutRequestID}
-                      </Typography>
-                    )}
-                    {selectedTransaction.merchantRequestID && (
-                      <Typography variant="body2" sx={{ mb: 1.5 }}>
-                        <strong>Merchant Request ID:</strong> {selectedTransaction.merchantRequestID}
-                      </Typography>
-                    )}
-                  </Box>
-                </Grid>
-                <Grid item xs={12} md={6}>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Order Information
-                  </Typography>
-                  <Divider sx={{ my: 1 }} />
-                  <Box sx={{ mt: 2 }}>
-                    {selectedTransaction.order ? (
-                      <>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Order ID:</strong> #{selectedTransaction.order.id}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Customer Name:</strong> {selectedTransaction.order.customerName || 'N/A'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Customer Phone:</strong> {selectedTransaction.order.customerPhone || 'N/A'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Customer Email:</strong> {selectedTransaction.order.customerEmail || 'N/A'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Delivery Address:</strong> {selectedTransaction.order.deliveryAddress || 'N/A'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Order Total:</strong> <span style={{ color: '#FF3366', fontWeight: 600 }}>KES {Number(selectedTransaction.order.totalAmount || 0).toFixed(2)}</span>
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Order Status:</strong> {selectedTransaction.order.status || 'N/A'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Payment Type:</strong> {selectedTransaction.order.paymentType === 'pay_now' ? 'Pay Now' : 'Pay on Delivery'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Payment Status:</strong> {selectedTransaction.order.paymentStatus || 'N/A'}
-                        </Typography>
-                        <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Order Date:</strong> {new Date(selectedTransaction.order.createdAt).toLocaleString('en-US')}
-                        </Typography>
-                      </>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        Order information not available
-                      </Typography>
-                    )}
-                  </Box>
-                </Grid>
-                {selectedTransaction.notes && (
-                  <Grid item xs={12}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      Notes
-                    </Typography>
-                    <Divider sx={{ my: 1 }} />
-                    <Paper sx={{ p: 2, backgroundColor: '#1a1a1a', mt: 1 }}>
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {selectedTransaction.notes}
-                      </Typography>
-                    </Paper>
-                  </Grid>
-                )}
-              </Grid>
-            </DialogContent>
-            <DialogActions sx={{ p: 2 }}>
-              <Button
-                onClick={() => setSelectedTransaction(null)}
-                sx={{ color: 'text.secondary' }}
+            <DialogContent
+              sx={{
+                '& .MuiTypography-body1': { fontSize: '1rem' },
+                '& .MuiTypography-body2': { fontSize: '0.95rem' },
+                '& .MuiTypography-caption': { fontSize: '0.85rem' }
+              }}
+            >
+              <Tabs
+                value={transactionDialogTab}
+                onChange={(_event, newValue) => setTransactionDialogTab(newValue)}
+                textColor="secondary"
+                indicatorColor="secondary"
+                variant="fullWidth"
+                sx={{
+                  mb: 3,
+                  borderBottom: '1px solid #333',
+                  '& .MuiTab-root': {
+                    color: '#ccc',
+                    fontWeight: 600,
+                    fontSize: '0.95rem'
+                  },
+                  '& .Mui-selected': {
+                    color: '#00E0B8'
+                  }
+                }}
               >
+                <Tab label="Transaction Info" value="transaction" />
+                <Tab label="Order Info" value="order" />
+              </Tabs>
+
+              {transactionDialogTab === 'transaction' ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+                  <Typography variant="body1"><strong>Transaction ID:</strong> #{selectedTransaction.id}</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body1"><strong>Transaction Type:</strong></Typography>
+                    {(() => {
+                      const typeChip = getTransactionTypeChipProps(selectedTransaction.transactionType);
+                      return typeChip ? (
+                        <Chip size="small" label={typeChip.label} sx={{ fontWeight: 700, ...typeChip.sx }} />
+                      ) : (
+                        <Typography variant="body1">{selectedTransaction.transactionType || 'N/A'}</Typography>
+                      );
+                    })()}
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body1"><strong>Payment Method:</strong></Typography>
+                    {(() => {
+                      const methodChip = getPaymentMethodChipProps(selectedTransaction.paymentMethod);
+                      return methodChip ? (
+                        <Chip size="small" label={methodChip.label} sx={{ fontWeight: 700, ...methodChip.sx }} />
+                      ) : (
+                        <Typography variant="body1">
+                          {getPaymentMethodLabel(selectedTransaction.paymentMethod, selectedTransaction.paymentProvider)}
+                        </Typography>
+                      );
+                    })()}
+                  </Box>
+                  {selectedTransaction.paymentProvider && (
+                    <Typography variant="body1">
+                      <strong>Payment Provider:</strong> {selectedTransaction.paymentProvider}
+                    </Typography>
+                  )}
+                  <Typography variant="body1">
+                    <strong>Amount:</strong> KES {Number(selectedTransaction.amount || 0).toFixed(2)}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body1"><strong>Status:</strong></Typography>
+                    {(() => {
+                      const statusChip = getTransactionStatusChipProps(selectedTransaction.status);
+                      return statusChip ? (
+                        <Chip size="small" {...statusChip} />
+                      ) : (
+                        <Typography variant="body1">{selectedTransaction.status || 'N/A'}</Typography>
+                      );
+                    })()}
+                  </Box>
+                  {selectedTransaction.receiptNumber && (
+                    <Typography variant="body1">
+                      <strong>Receipt Number:</strong> {selectedTransaction.receiptNumber}
+                    </Typography>
+                  )}
+                  {selectedTransaction.phoneNumber && (
+                    <Typography variant="body1">
+                      <strong>Phone Number:</strong> {selectedTransaction.phoneNumber}
+                    </Typography>
+                  )}
+                  <Typography variant="body1">
+                    <strong>Transaction Date:</strong> {formatDateTime(selectedTransaction.transactionDate || selectedTransaction.createdAt)}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Created:</strong> {formatDateTime(selectedTransaction.createdAt)}
+                  </Typography>
+                  <Typography variant="body1">
+                    <strong>Last Updated:</strong> {formatDateTime(selectedTransaction.updatedAt)}
+                  </Typography>
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+                  {selectedTransaction.order ? (
+                    <>
+                      <Typography variant="body1"><strong>Order ID:</strong> #{selectedTransaction.order.id}</Typography>
+                      {selectedTransaction.order.customerName && (
+                        <Typography variant="body1"><strong>Customer Name:</strong> {selectedTransaction.order.customerName}</Typography>
+                      )}
+                      {selectedTransaction.order.customerPhone && (
+                        <Typography variant="body1"><strong>Customer Phone:</strong> {selectedTransaction.order.customerPhone}</Typography>
+                      )}
+                      {selectedTransaction.order.customerEmail && (
+                        <Typography variant="body1"><strong>Customer Email:</strong> {selectedTransaction.order.customerEmail}</Typography>
+                      )}
+                      {selectedTransaction.order.driver && selectedTransaction.order.driver.name && (
+                        <Typography variant="body1"><strong>Driver Name:</strong> {selectedTransaction.order.driver.name}</Typography>
+                      )}
+                      {selectedTransaction.order.driver && selectedTransaction.order.driver.phoneNumber && (
+                        <Typography variant="body1"><strong>Driver Phone:</strong> {selectedTransaction.order.driver.phoneNumber}</Typography>
+                      )}
+                      <Typography variant="body1">
+                        <strong>Order Total:</strong> KES {Number(selectedTransaction.order.totalAmount || 0).toFixed(2)}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Order Status:</strong> {selectedTransaction.order.status || 'N/A'}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Payment Method:</strong> {getPaymentMethodLabel(selectedTransaction.paymentMethod, selectedTransaction.paymentProvider)}
+                      </Typography>
+                      {(() => {
+                        if (!selectedTransaction.order.notes) {
+                          return null;
+                        }
+                        const sanitizedNotes = selectedTransaction.order.notes.replace(/✅/g, '').trim();
+                        if (!sanitizedNotes) {
+                          return null;
+                        }
+                        return (
+                          <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                            <strong>Notes:</strong>
+                            {'\n'}{sanitizedNotes}
+                          </Typography>
+                        );
+                      })()}
+                    </>
+                  ) : (
+                    <Typography variant="body1" color="text.secondary">
+                      Order information not available
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
+              {selectedTransaction.notes && transactionDialogTab === 'transaction' && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700, mb: 1 }}>
+                    Notes
+                  </Typography>
+                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {selectedTransaction.notes}
+                  </Typography>
+                </Box>
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, py: 2 }}>
+              <Button onClick={() => {
+                setSelectedTransaction(null);
+                setTransactionDialogTab('transaction');
+              }} sx={{ color: '#FF3366' }}>
                 Close
               </Button>
             </DialogActions>

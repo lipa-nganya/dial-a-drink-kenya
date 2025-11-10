@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../models');
 const bcrypt = require('bcryptjs');
 const { verifyAdmin } = require('./admin');
+const { Expo } = require('expo-server-sdk');
 
 // Public routes (for driver app) - no authentication required
 /**
@@ -328,6 +329,38 @@ router.post('/phone/:phoneNumber/verify-pin', async (req, res) => {
   } catch (error) {
     console.error('Error verifying PIN:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * Register or update driver Expo push token
+ * POST /api/drivers/push-token
+ */
+router.post('/push-token', async (req, res) => {
+  try {
+    const { driverId, pushToken } = req.body || {};
+
+    if (!driverId || !pushToken) {
+      return res.status(400).json({ error: 'driverId and pushToken are required' });
+    }
+
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+
+    if (!Expo.isExpoPushToken(pushToken)) {
+      console.warn(`⚠️ Invalid Expo push token received for driver #${driverId}: ${pushToken}`);
+      return res.status(400).json({ error: 'Invalid Expo push token' });
+    }
+
+    driver.pushToken = pushToken;
+    await driver.save();
+
+    res.json({ success: true, driverId: driver.id, pushToken: driver.pushToken });
+  } catch (error) {
+    console.error('Error saving driver push token:', error);
+    res.status(500).json({ error: 'Failed to save push token' });
   }
 });
 

@@ -2,11 +2,228 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
+const {
+  syncCustomersFromOrders,
+  normalizePhoneNumber,
+  generatePhoneVariants
+} = require('../utils/customerSync');
 
 // Admin authentication middleware (placeholder - can be implemented later)
 const verifyAdmin = (req, res, next) => {
   // For now, allow all requests. Can add admin token verification later
   next();
+};
+
+const toNumber = (value) => {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  const parsed = parseFloat(value);
+  if (Number.isNaN(parsed)) {
+    return null;
+  }
+
+  return parsed;
+};
+
+const normalizeCapacityPricing = (input = []) => {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input
+    .map((entry) => {
+      if (!entry) {
+        return null;
+      }
+
+      const capacity =
+        typeof entry.capacity === 'string'
+          ? entry.capacity.trim()
+          : entry.capacity !== undefined && entry.capacity !== null
+          ? String(entry.capacity).trim()
+          : '';
+
+      if (!capacity) {
+        return null;
+      }
+
+      const originalPriceCandidate =
+        entry.originalPrice ?? entry.price ?? entry.currentPrice;
+      const currentPriceCandidate =
+        entry.currentPrice ?? entry.price ?? entry.originalPrice;
+
+      const originalPrice = toNumber(originalPriceCandidate);
+      const currentPrice = toNumber(currentPriceCandidate);
+
+      const resolvedOriginal =
+        originalPrice !== null
+          ? originalPrice
+          : currentPrice !== null
+          ? currentPrice
+          : 0;
+
+      const resolvedCurrent =
+        currentPrice !== null
+          ? currentPrice
+          : originalPrice !== null
+          ? originalPrice
+          : 0;
+
+      return {
+        capacity,
+        originalPrice: resolvedOriginal,
+        currentPrice: resolvedCurrent
+      };
+    })
+    .filter(Boolean);
+};
+
+const deriveCapacities = (explicitCapacities, pricing) => {
+  const set = new Set();
+
+  if (Array.isArray(explicitCapacities)) {
+    explicitCapacities.forEach((capacity) => {
+      if (typeof capacity === 'string' && capacity.trim()) {
+        set.add(capacity.trim());
+      } else if (capacity !== undefined && capacity !== null) {
+        const value = String(capacity).trim();
+        if (value) {
+          set.add(value);
+        }
+      }
+    });
+  }
+
+  pricing.forEach((pricingRow) => {
+    if (pricingRow.capacity) {
+      set.add(pricingRow.capacity);
+    }
+  });
+
+  return Array.from(set);
+};
+
+const summarisePricing = (pricing, fallbackPrice, fallbackOriginalPrice) => {
+  const priceCandidates = pricing
+    .map((p) => toNumber(p.currentPrice))
+    .filter((value) => value !== null);
+  const originalCandidates = pricing
+    .map((p) => toNumber(p.originalPrice))
+    .filter((value) => value !== null);
+
+  const finalPrice =
+    priceCandidates.length > 0
+      ? Math.min(...priceCandidates)
+      : toNumber(fallbackPrice);
+
+  let finalOriginal =
+    originalCandidates.length > 0
+      ? Math.min(...originalCandidates)
+      : toNumber(fallbackOriginalPrice);
+
+  if (finalOriginal === null && finalPrice !== null) {
+    finalOriginal = finalPrice;
+  }
+
+  const isOnOfferFromPricing = pricing.some((row) => {
+    const original = toNumber(row.originalPrice);
+    const current = toNumber(row.currentPrice);
+    return original !== null && current !== null && original > current;
+  });
+
+  const priceNumber = finalPrice !== null ? finalPrice : 0;
+  const originalNumber =
+    finalOriginal !== null ? finalOriginal : priceNumber || 0;
+  const isOnOffer =
+    isOnOfferFromPricing || originalNumber > priceNumber
+      ? true
+      : false;
+
+  return {
+    price: priceNumber,
+    originalPrice: originalNumber,
+    isOnOffer
+  };
+};
+
+const buildCustomerOrderFilter = (customer) => {
+  if (!customer) {
+    return null;
+  }
+
+  const orClauses = [];
+  const phoneVariants = generatePhoneVariants(customer.phone || customer.username);
+  if (phoneVariants.length > 0) {
+    orClauses.push({ customerPhone: { [Op.in]: phoneVariants } });
+  }
+
+  const emails = new Set();
+  if (customer.email) {
+    emails.add(customer.email);
+    emails.add(customer.email.toLowerCase());
+  }
+  if (customer.username && customer.username.includes('@')) {
+    emails.add(customer.username);
+    emails.add(customer.username.toLowerCase());
+  }
+
+  if (emails.size > 0) {
+    orClauses.push({ customerEmail: { [Op.in]: Array.from(emails).filter(Boolean) } });
+  }
+
+  return orClauses.length > 0 ? { [Op.or]: orClauses } : null;
+};
+
+const findLatestOtpForPhone = async (phone) => {
+  if (!phone) {
+    return null;
+  }
+
+  const variants = generatePhoneVariants(phone);
+  const candidateSet = new Set();
+
+  variants.forEach((value) => {
+    if (!value) {
+      return;
+    }
+    candidateSet.add(value);
+    const digits = value.replace(/\D/g, '');
+    if (digits) {
+      candidateSet.add(digits);
+      if (digits.startsWith('254')) {
+        const local = digits.slice(3);
+        if (local) {
+          candidateSet.add(local);
+          candidateSet.add(`0${local}`);
+          candidateSet.add(`+254${local}`);
+        }
+      } else if (digits.startsWith('0')) {
+        const local = digits.slice(1);
+        candidateSet.add(local);
+        candidateSet.add(`254${local}`);
+      } else if (digits.length === 9) {
+        candidateSet.add(`0${digits}`);
+        candidateSet.add(`254${digits}`);
+      }
+    }
+  });
+
+  const candidateList = Array.from(candidateSet).filter(Boolean);
+  if (candidateList.length === 0) {
+    return null;
+  }
+
+  return db.Otp.findOne({
+    where: {
+      phoneNumber: {
+        [Op.in]: candidateList
+      },
+      isUsed: false
+    },
+    order: [['createdAt', 'DESC']]
+  });
 };
 
 // Get admin stats
@@ -117,14 +334,21 @@ router.get('/transactions', async (req, res) => {
       include: [{
         model: db.Order,
         as: 'order',
-        include: [{
-          model: db.OrderItem,
-          as: 'items',
-          include: [{
-            model: db.Drink,
-            as: 'drink'
-          }]
-        }]
+        include: [
+          {
+            model: db.OrderItem,
+            as: 'items',
+            include: [{
+              model: db.Drink,
+              as: 'drink'
+            }]
+          },
+          {
+            model: db.Driver,
+            as: 'driver',
+            attributes: ['id', 'name', 'phoneNumber', 'status']
+          }
+        ]
       }, {
         model: db.Driver,
         as: 'driver',
@@ -187,6 +411,196 @@ router.get('/drinks', async (req, res) => {
   } catch (error) {
     console.error('Error fetching drinks:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new drink (admin)
+router.post('/drinks', async (req, res) => {
+  try {
+    const {
+      name,
+      description,
+      price,
+      originalPrice,
+      image,
+      categoryId,
+      subCategoryId,
+      isAvailable,
+      isPopular,
+      limitedTimeOffer,
+      capacity,
+      capacityPricing,
+      abv
+    } = req.body;
+
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    if (!normalizedName) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const parsedCategoryId = parseInt(categoryId, 10);
+    if (Number.isNaN(parsedCategoryId)) {
+      return res.status(400).json({ error: 'Name and categoryId are required' });
+    }
+
+    let parsedSubCategoryId = null;
+    if (subCategoryId !== undefined && subCategoryId !== null && subCategoryId !== '') {
+      const parsed = parseInt(subCategoryId, 10);
+      if (Number.isNaN(parsed)) {
+        return res.status(400).json({ error: 'subCategoryId must be a number if provided' });
+      }
+      parsedSubCategoryId = parsed;
+    }
+
+    const normalizedPricing = normalizeCapacityPricing(capacityPricing);
+    const capacities = deriveCapacities(capacity, normalizedPricing);
+    const summary = summarisePricing(normalizedPricing, price, originalPrice);
+    const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : false;
+
+    const newDrink = await db.Drink.create({
+      name: normalizedName,
+      description:
+        typeof description === 'string' && description.trim()
+          ? description.trim()
+          : null,
+      price: summary.price,
+      originalPrice: summary.originalPrice,
+      image:
+        typeof image === 'string' && image.trim() ? image.trim() : null,
+      categoryId: parsedCategoryId,
+      subCategoryId: parsedSubCategoryId,
+      isAvailable:
+        typeof isAvailable === 'boolean' ? isAvailable : true,
+      isPopular: typeof isPopular === 'boolean' ? isPopular : false,
+      limitedTimeOffer: limitedTimeFlag,
+      isOnOffer: summary.isOnOffer,
+      capacity: capacities,
+      capacityPricing: normalizedPricing,
+      abv: toNumber(abv)
+    });
+
+    const drinkWithRelations = await db.Drink.findByPk(newDrink.id, {
+      include: [
+        { model: db.Category, as: 'category' },
+        { model: db.SubCategory, as: 'subCategory' }
+      ]
+    });
+
+    res.status(201).json(drinkWithRelations);
+  } catch (error) {
+    console.error('Error creating drink:', error);
+    res.status(500).json({ error: 'Failed to create drink' });
+  }
+});
+
+// Update an existing drink (admin)
+router.put('/drinks/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const drink = await db.Drink.findByPk(id);
+
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+
+    const {
+      name,
+      description,
+      price,
+      originalPrice,
+      image,
+      categoryId,
+      subCategoryId,
+      isAvailable,
+      isPopular,
+      limitedTimeOffer,
+      capacity,
+      capacityPricing,
+      abv
+    } = req.body;
+
+    const normalizedName = typeof name === 'string' ? name.trim() : '';
+    if (!normalizedName) {
+      return res.status(400).json({ error: 'Name is required' });
+    }
+
+    const parsedCategoryId = parseInt(categoryId, 10);
+    if (Number.isNaN(parsedCategoryId)) {
+      return res.status(400).json({ error: 'categoryId must be a number' });
+    }
+
+    let parsedSubCategoryId = null;
+    if (subCategoryId !== undefined && subCategoryId !== null && subCategoryId !== '') {
+      const parsed = parseInt(subCategoryId, 10);
+      if (Number.isNaN(parsed)) {
+        return res.status(400).json({ error: 'subCategoryId must be a number if provided' });
+      }
+      parsedSubCategoryId = parsed;
+    }
+
+    const normalizedPricing = normalizeCapacityPricing(capacityPricing);
+    const capacities = deriveCapacities(capacity, normalizedPricing);
+    const summary = summarisePricing(normalizedPricing, price, originalPrice);
+    const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : drink.limitedTimeOffer;
+
+    await drink.update({
+      name: normalizedName,
+      description:
+        typeof description === 'string' && description.trim()
+          ? description.trim()
+          : null,
+      price: summary.price,
+      originalPrice: summary.originalPrice,
+      image:
+        typeof image === 'string' && image.trim() ? image.trim() : null,
+      categoryId: parsedCategoryId,
+      subCategoryId: parsedSubCategoryId,
+      isAvailable:
+        typeof isAvailable === 'boolean' ? isAvailable : drink.isAvailable,
+      isPopular:
+        typeof isPopular === 'boolean' ? isPopular : drink.isPopular,
+      limitedTimeOffer: limitedTimeFlag,
+      isOnOffer: summary.isOnOffer,
+      capacity: capacities,
+      capacityPricing: normalizedPricing,
+      abv: toNumber(abv)
+    });
+
+    const updatedDrink = await db.Drink.findByPk(id, {
+      include: [
+        { model: db.Category, as: 'category' },
+        { model: db.SubCategory, as: 'subCategory' }
+      ]
+    });
+
+    res.json(updatedDrink);
+  } catch (error) {
+    console.error('Error updating drink:', error);
+    res.status(500).json({ error: 'Failed to update drink' });
+  }
+});
+
+// Update drink availability (admin)
+router.patch('/drinks/:id/availability', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isAvailable } = req.body;
+
+    if (typeof isAvailable !== 'boolean') {
+      return res.status(400).json({ error: 'isAvailable must be a boolean value' });
+    }
+
+    const drink = await db.Drink.findByPk(id);
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+
+    await drink.update({ isAvailable });
+
+    res.json({ id: drink.id, isAvailable: drink.isAvailable });
+  } catch (error) {
+    console.error('Error updating drink availability:', error);
+    res.status(500).json({ error: 'Failed to update drink availability' });
   }
 });
 
@@ -1181,6 +1595,381 @@ router.put('/sms-settings', async (req, res) => {
   } catch (error) {
     console.error('Error updating SMS settings:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get latest transactions (admin dashboard)
+router.get('/latest-transactions', async (req, res) => {
+  try {
+    const transactions = await db.Transaction.findAll({
+      order: [['createdAt', 'DESC']],
+      limit: 10,
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: ['customerName']
+      }]
+    });
+
+    const formatted = transactions.map(tx => {
+      const amount = parseFloat(tx.amount) || 0;
+      const status = typeof tx.get === 'function' ? tx.get('status') : tx.status;
+      const paymentStatus = typeof tx.get === 'function' ? tx.get('paymentStatus') : tx.paymentStatus;
+      const resolvedStatus = status || paymentStatus || null;
+      let customerName = tx.customerName || tx.order?.customerName || null;
+
+      if (!customerName && tx.paymentDetails) {
+        try {
+          const details = typeof tx.paymentDetails === 'string' ? JSON.parse(tx.paymentDetails) : tx.paymentDetails;
+          customerName = details?.payerName || details?.customerName || null;
+        } catch (error) {
+          console.warn('Failed to parse paymentDetails for transaction', tx.id, error.message);
+        }
+      }
+
+      return {
+        id: tx.id,
+        orderId: tx.orderId,
+        transactionType: tx.transactionType,
+        amount: amount,
+        paymentMethod: tx.paymentMethod || null,
+        status: status || null,
+        paymentStatus: paymentStatus || null,
+        transactionStatus: resolvedStatus,
+        customerName: customerName || 'Guest Customer',
+        createdAt: tx.createdAt
+      };
+    });
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('Error fetching latest transactions:', error);
+    res.status(500).json({ error: 'Failed to fetch latest transactions' });
+  }
+});
+
+// Get customers list (admin dashboard)
+router.get('/customers', async (req, res) => {
+  try {
+    await syncCustomersFromOrders();
+
+    const customers = await db.Customer.findAll({
+      order: [['createdAt', 'DESC']]
+    });
+
+    const orders = await db.Order.findAll({
+      attributes: ['id', 'customerName', 'customerPhone', 'customerEmail', 'totalAmount', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'createdAt'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const ordersByPhone = new Map();
+    const ordersByEmail = new Map();
+
+    orders.forEach((order) => {
+      const phoneKey = normalizePhoneNumber(order.customerPhone);
+      if (phoneKey) {
+        if (!ordersByPhone.has(phoneKey)) {
+          ordersByPhone.set(phoneKey, []);
+        }
+        ordersByPhone.get(phoneKey).push(order);
+      }
+
+      if (order.customerEmail) {
+        const emailKey = order.customerEmail.toLowerCase();
+        if (!ordersByEmail.has(emailKey)) {
+          ordersByEmail.set(emailKey, []);
+        }
+        ordersByEmail.get(emailKey).push(order);
+      }
+    });
+
+    const formatted = customers.map((customer) => {
+      try {
+        const customerName = typeof customer.customerName === 'string'
+          ? customer.customerName
+          : (customer.customerName != null ? String(customer.customerName) : null);
+        const username = typeof customer.username === 'string'
+          ? customer.username
+          : (customer.username != null ? String(customer.username) : null);
+        const email = typeof customer.email === 'string'
+          ? customer.email
+          : (customer.email != null ? String(customer.email) : null);
+        const phone = typeof customer.phone === 'string'
+          ? customer.phone
+          : (customer.phone != null ? String(customer.phone) : null);
+
+        const phoneCandidate = phone || (/^\+?\d+$/.test(username || '') ? username : null);
+        const phoneKey = normalizePhoneNumber(phoneCandidate);
+        const ordersFromPhone = phoneKey ? (ordersByPhone.get(phoneKey) || []) : [];
+
+        const emailKeys = new Set();
+        if (email) {
+          emailKeys.add(email.toLowerCase());
+        }
+        if (username && username.includes('@')) {
+          emailKeys.add(username.toLowerCase());
+        }
+
+        const ordersFromEmail = Array.from(emailKeys).flatMap((key) => ordersByEmail.get(key) || []);
+
+        const orderMap = new Map();
+        [...ordersFromPhone, ...ordersFromEmail].forEach((order) => {
+          orderMap.set(order.id, order);
+        });
+
+        const customerOrders = Array.from(orderMap.values()).sort(
+          (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+        );
+
+        const totalOrders = customerOrders.length;
+        const lastOrderAt = totalOrders ? customerOrders[0].createdAt : null;
+        const firstOrderAt = totalOrders ? customerOrders[customerOrders.length - 1].createdAt : null;
+        const totalSpent = customerOrders.reduce(
+          (sum, order) => sum + (parseFloat(order.totalAmount) || 0),
+          0
+        );
+
+        const dateJoinedCandidates = [customer.createdAt, firstOrderAt]
+          .filter(Boolean)
+          .map((date) => new Date(date));
+        const dateJoined = dateJoinedCandidates.length
+          ? new Date(
+              Math.min(
+                ...dateJoinedCandidates.map((d) => d.getTime())
+              )
+            )
+          : customer.createdAt;
+
+        return {
+          id: customer.id,
+          name: customerName || username || 'Customer',
+          username,
+          email,
+          phone,
+          createdAt: customer.createdAt,
+          dateJoined,
+          totalOrders,
+          totalSpent,
+          lastOrderAt
+        };
+      } catch (formatError) {
+        console.error('Failed to format customer record', {
+          id: customer?.id,
+          rawCustomer: customer?.toJSON ? customer.toJSON() : customer,
+          message: formatError?.message,
+          stack: formatError?.stack
+        });
+        throw formatError;
+      }
+    });
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('Error fetching customers:', error?.stack || error);
+    res.status(500).json({ error: 'Failed to fetch customers' });
+  }
+});
+
+// Get customer details
+router.get('/customers/:id', async (req, res) => {
+  try {
+    const customer = await db.Customer.findByPk(req.params.id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    const orderFilter = buildCustomerOrderFilter(customer);
+
+    let orders = [];
+    if (orderFilter) {
+      orders = await db.Order.findAll({
+        where: orderFilter,
+        order: [['createdAt', 'DESC']],
+        limit: 100
+      });
+    }
+
+    const orderData = orders.map((order) => ({
+      id: order.id,
+      orderNumber: order.id,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      customerEmail: order.customerEmail,
+      totalAmount: parseFloat(order.totalAmount) || 0,
+      tipAmount: parseFloat(order.tipAmount) || 0,
+      status: order.status,
+      paymentStatus: order.paymentStatus,
+      paymentType: order.paymentType,
+      paymentMethod: order.paymentMethod,
+      createdAt: order.createdAt
+    }));
+
+    const totalOrders = orderData.length;
+    const totalSpent = orderData.reduce((sum, order) => sum + (parseFloat(order.totalAmount) || 0), 0);
+    const lastOrderAt = totalOrders ? orderData[0].createdAt : null;
+    const firstOrderAt = totalOrders ? orderData[orderData.length - 1].createdAt : null;
+
+    let transactions = [];
+    if (orderFilter) {
+      transactions = await db.Transaction.findAll({
+        order: [['createdAt', 'DESC']],
+        limit: 100,
+        include: [{
+          model: db.Order,
+          as: 'order',
+          attributes: ['id', 'customerName', 'customerPhone', 'customerEmail'],
+          where: orderFilter
+        }]
+      });
+    }
+
+    const transactionData = transactions.map((tx) => ({
+      id: tx.id,
+      orderId: tx.orderId,
+      transactionType: tx.transactionType,
+      paymentMethod: tx.paymentMethod,
+      amount: parseFloat(tx.amount) || 0,
+      status: tx.status,
+      paymentStatus: tx.paymentStatus,
+      createdAt: tx.createdAt
+    }));
+
+    const dateJoinedCandidates = [customer.createdAt, firstOrderAt]
+      .filter(Boolean)
+      .map((date) => new Date(date));
+    const dateJoined = dateJoinedCandidates.length
+      ? new Date(
+          Math.min(
+            ...dateJoinedCandidates.map((d) => d.getTime())
+          )
+        )
+      : customer.createdAt;
+
+    res.json({
+      customer: {
+        id: customer.id,
+        name: customer.customerName || customer.username || 'Customer',
+        username: customer.username,
+        email: customer.email,
+        phone: customer.phone,
+        createdAt: customer.createdAt
+      },
+      stats: {
+        totalOrders,
+        totalSpent,
+        dateJoined,
+        lastOrderAt
+      },
+      orders: orderData,
+      transactions: transactionData
+    });
+  } catch (error) {
+    console.error('Error fetching customer details:', error);
+    res.status(500).json({ error: 'Failed to fetch customer details' });
+  }
+});
+
+// Get latest OTP for a customer
+router.get('/customers/:id/latest-otp', async (req, res) => {
+  try {
+    const customer = await db.Customer.findByPk(req.params.id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    const otp = await findLatestOtpForPhone(customer.phone || customer.username);
+    if (!otp) {
+      return res.json({
+        hasOtp: false,
+        message: 'No active OTP found for this customer'
+      });
+    }
+
+    const isExpired = otp.expiresAt ? new Date() > new Date(otp.expiresAt) : false;
+
+    res.json({
+      hasOtp: true,
+      otpCode: otp.otpCode,
+      expiresAt: otp.expiresAt,
+      isExpired,
+      createdAt: otp.createdAt,
+      attempts: otp.attempts
+    });
+  } catch (error) {
+    console.error('Error fetching customer OTP:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get latest orders (admin dashboard)
+router.get('/latest-orders', async (req, res) => {
+  try {
+    const orders = await db.Order.findAll({
+      attributes: ['id', 'customerName', 'status', 'totalAmount', 'createdAt'],
+      order: [['createdAt', 'DESC']],
+      limit: 10
+    });
+
+    const formatted = orders.map(order => {
+      const orderJson = order.toJSON();
+      return {
+        id: orderJson.id,
+        orderNumber: orderJson.id,
+        customerName: orderJson.customerName || 'Guest Customer',
+        totalAmount: parseFloat(orderJson.totalAmount) || 0,
+        status: orderJson.status,
+        createdAt: orderJson.createdAt
+      };
+    });
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('Error fetching latest orders:', error);
+    res.status(500).json({ error: 'Failed to fetch latest orders' });
+  }
+});
+
+// Get top inventory items by total quantity sold (admin dashboard)
+router.get('/top-inventory-items', async (req, res) => {
+  try {
+    const results = await db.OrderItem.findAll({
+      attributes: [
+        'drinkId',
+        [db.sequelize.fn('SUM', db.sequelize.col('quantity')), 'totalQuantity']
+      ],
+      group: ['drinkId'],
+      order: [[db.sequelize.fn('SUM', db.sequelize.col('quantity')), 'DESC']],
+      limit: 10,
+      include: [
+        {
+          model: db.Drink,
+          as: 'drink',
+          attributes: ['id', 'name', 'categoryId'],
+          include: [{
+            model: db.Category,
+            as: 'category',
+            attributes: ['name']
+          }]
+        }
+      ]
+    });
+
+    const formatted = results
+      .filter(item => item.drink)
+      .map(item => {
+        const drink = item.drink;
+        return {
+          drinkId: drink.id,
+          name: drink.name,
+          category: drink.category ? drink.category.name : 'Uncategorized',
+          totalQuantity: parseInt(item.get('totalQuantity'), 10) || 0
+        };
+      });
+
+    res.json(formatted);
+  } catch (error) {
+    console.error('Error fetching top inventory items:', error);
+    res.status(500).json({ error: 'Failed to fetch top inventory items' });
   }
 });
 

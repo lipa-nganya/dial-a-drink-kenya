@@ -39,6 +39,13 @@ const addMissingColumns = async () => {
     `);
     console.log('✅ isOnOffer column checked/added');
 
+    // Add limitedTimeOffer column if it doesn't exist
+    await db.sequelize.query(`
+      ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "limitedTimeOffer" BOOLEAN DEFAULT false;
+    `);
+    console.log('✅ limitedTimeOffer column checked/added');
+
     // Add originalPrice column if it doesn't exist
     await db.sequelize.query(`
       ALTER TABLE "drinks" 
@@ -171,6 +178,23 @@ const addMissingColumns = async () => {
       console.log('✅ pinHash column checked/added to drivers table');
     } else {
       console.log('✅ pinHash column already exists in drivers table');
+    }
+
+    // Ensure pushToken column exists in drivers table
+    const pushTokenCheck = await db.sequelize.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name='drivers' AND column_name='pushToken';
+    `);
+
+    if (pushTokenCheck[0].length === 0) {
+      await db.sequelize.query(`
+        ALTER TABLE "drivers"
+        ADD COLUMN "pushToken" VARCHAR(255);
+      `);
+      console.log('✅ pushToken column checked/added to drivers table');
+    } else {
+      console.log('✅ pushToken column already exists in drivers table');
     }
 
     // Check if driverAccepted column exists in orders table
