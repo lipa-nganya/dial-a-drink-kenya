@@ -2,6 +2,233 @@ const express = require('express');
 const router = express.Router();
 const mpesaService = require('../services/mpesa');
 const db = require('../models');
+const { Op } = require('sequelize');
+const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+const pushNotifications = require('../services/pushNotifications');
+
+const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber, req, context = 'Payment confirmation' }) => {
+  if (!paymentTransaction) {
+    throw new Error('Payment transaction is required to finalize payment');
+  }
+
+  const effectiveOrderId = orderId || paymentTransaction.orderId;
+  const orderInstance = await db.Order.findByPk(effectiveOrderId);
+  if (!orderInstance) {
+    throw new Error(`Order ${effectiveOrderId} not found during payment finalization`);
+  }
+
+  if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid') {
+    await paymentTransaction.reload().catch(() => {});
+    return { order: orderInstance, receipt: paymentTransaction.receiptNumber };
+  }
+
+  const breakdown = await getOrderFinancialBreakdown(effectiveOrderId);
+  const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+  const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+  const tipAmountNumeric = parseFloat(breakdown.tipAmount) || 0;
+
+  const normalizedReceipt = receiptNumber || paymentTransaction.receiptNumber;
+
+  if (!normalizedReceipt) {
+    throw new Error('Missing M-Pesa receipt number; cannot finalize payment without Safaricom confirmation.');
+  }
+
+  const initialTransactionDate = paymentTransaction.transactionDate || null;
+  const transactionTimestamp = initialTransactionDate
+    ? new Date(initialTransactionDate)
+    : new Date();
+  const paymentMethod = paymentTransaction.paymentMethod || orderInstance.paymentMethod || 'mobile_money';
+  const paymentProvider = paymentTransaction.paymentProvider || 'mpesa';
+
+  await paymentTransaction.update({
+    amount: itemsTotal,
+    status: 'completed',
+    paymentStatus: 'paid',
+    receiptNumber: normalizedReceipt,
+    transactionDate: transactionTimestamp
+  });
+  await paymentTransaction.reload().catch(() => {});
+
+  const resolvedTransactionDate = paymentTransaction.transactionDate
+    ? new Date(paymentTransaction.transactionDate)
+    : transactionTimestamp;
+
+  let deliveryTransaction = await db.Transaction.findOne({
+    where: {
+      orderId: effectiveOrderId,
+      transactionType: 'delivery_pay'
+    }
+  });
+
+  const deliveryNotes = `Delivery fee for Order #${effectiveOrderId} (${context})`;
+
+  if (deliveryTransaction) {
+    await deliveryTransaction.update({
+      amount: deliveryFee,
+      status: 'completed',
+      paymentStatus: 'paid',
+      receiptNumber: normalizedReceipt,
+      transactionDate: resolvedTransactionDate,
+      notes: deliveryNotes
+    });
+  } else {
+    deliveryTransaction = await db.Transaction.create({
+      orderId: effectiveOrderId,
+      transactionType: 'delivery_pay',
+      paymentMethod,
+      paymentProvider,
+      amount: deliveryFee,
+      status: 'completed',
+      paymentStatus: 'paid',
+      receiptNumber: normalizedReceipt,
+      checkoutRequestID: paymentTransaction.checkoutRequestID,
+      merchantRequestID: paymentTransaction.merchantRequestID,
+      phoneNumber: paymentTransaction.phoneNumber,
+      transactionDate: resolvedTransactionDate,
+      notes: deliveryNotes
+    });
+  }
+
+  let tipTransaction = null;
+  if (tipAmountNumeric > 0.009) {
+    tipTransaction = await db.Transaction.findOne({
+      where: {
+        orderId: effectiveOrderId,
+        transactionType: 'tip'
+      }
+    });
+
+    const tipPayload = {
+      orderId: effectiveOrderId,
+      transactionType: 'tip',
+      paymentMethod,
+      paymentProvider,
+      amount: tipAmountNumeric,
+      status: 'completed',
+      paymentStatus: 'paid',
+      receiptNumber: normalizedReceipt,
+      checkoutRequestID: paymentTransaction.checkoutRequestID,
+      merchantRequestID: paymentTransaction.merchantRequestID,
+      phoneNumber: paymentTransaction.phoneNumber,
+      transactionDate: resolvedTransactionDate,
+      notes: `Tip for Order #${effectiveOrderId} (${context})`
+    };
+
+    if (tipTransaction) {
+      await tipTransaction.update(tipPayload);
+    } else {
+      tipTransaction = await db.Transaction.create(tipPayload);
+    }
+
+    if (orderInstance.driverId) {
+      try {
+        let driverWallet = await db.DriverWallet.findOne({ where: { driverId: orderInstance.driverId } });
+        if (!driverWallet) {
+          driverWallet = await db.DriverWallet.create({
+            driverId: orderInstance.driverId,
+            balance: 0,
+            totalTipsReceived: 0,
+            totalTipsCount: 0
+          });
+        }
+
+        const driver = await db.Driver.findByPk(orderInstance.driverId).catch(() => null);
+
+        const tipAlreadyCredited =
+          tipTransaction.driverWalletId === driverWallet.id && tipTransaction.status === 'completed';
+
+        if (!tipAlreadyCredited) {
+          await driverWallet.update({
+            balance: parseFloat(driverWallet.balance) + tipAmountNumeric,
+            totalTipsReceived: parseFloat(driverWallet.totalTipsReceived) + tipAmountNumeric,
+            totalTipsCount: driverWallet.totalTipsCount + 1
+          });
+
+          await tipTransaction.update({
+            driverId: orderInstance.driverId,
+            driverWalletId: driverWallet.id,
+            paymentStatus: 'paid',
+            status: 'completed',
+            notes: `Tip for Order #${effectiveOrderId} (${context}) - credited to driver wallet`
+          });
+
+          if (driver?.pushToken) {
+            pushNotifications.sendPushNotification(driver.pushToken, {
+              title: 'Tip Received',
+              body: `You received a tip of KES ${tipAmountNumeric.toFixed(2)} for Order #${effectiveOrderId}.`,
+              data: {
+                type: 'tip',
+                orderId: effectiveOrderId,
+                amount: tipAmountNumeric
+              }
+            }).catch((pushError) => {
+              console.error('❌ Error sending tip push notification (finalizeOrderPayment):', pushError);
+            });
+          }
+        }
+      } catch (walletError) {
+        console.error('⚠️ Failed to credit tip to driver wallet:', walletError);
+      }
+    }
+  }
+
+  await orderInstance.update({
+    paymentStatus: 'paid',
+    status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
+  });
+
+  await orderInstance.reload({
+    include: [
+      {
+        model: db.OrderItem,
+        as: 'orderItems',
+        include: [{ model: db.Drink, as: 'drink' }]
+      },
+      {
+        model: db.Transaction,
+        as: 'transactions'
+      },
+      {
+        model: db.Driver,
+        as: 'driver'
+      }
+    ]
+  }).catch(() => {});
+
+  const io = req?.app?.get('io');
+  if (io) {
+    const paymentConfirmedAt = new Date().toISOString();
+    const payload = {
+      orderId: orderInstance.id,
+      status: orderInstance.status,
+      paymentStatus: 'paid',
+      receiptNumber: normalizedReceipt,
+      transactionId: paymentTransaction.id,
+      transactionStatus: 'completed',
+      paymentConfirmedAt,
+      order: orderInstance.toJSON ? orderInstance.toJSON() : orderInstance,
+      message: `Payment confirmed for Order #${orderInstance.id}`
+    };
+
+    io.to(`order-${orderInstance.id}`).emit('payment-confirmed', payload);
+
+    if (orderInstance.driverId) {
+      io.to(`driver-${orderInstance.driverId}`).emit('payment-confirmed', payload);
+    }
+
+    io.to('admin').emit('payment-confirmed', {
+      ...payload,
+      message: `${context} for Order #${orderInstance.id}`
+    });
+  }
+
+  return {
+    order: orderInstance,
+    receipt: normalizedReceipt,
+    deliveryTransaction,
+    tipTransaction
+  };
+};
 
 // Helper function to calculate delivery fee (same as in orders.js)
 const calculateDeliveryFee = async (orderId) => {
@@ -146,32 +373,85 @@ router.post('/stk-push', async (req, res) => {
           `${order.notes}\n${checkoutNote}` : 
           checkoutNote
       });
-      
-      // Create transaction record for STK push initiation
-      // Payment amount should exclude tip (tip is separate transaction)
-      // Customer pays full amount, but we store payment transaction as totalAmount - tipAmount
-      const tipAmount = parseFloat(order.tipAmount) || 0;
-      const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Store payment without tip
-      
+
+      const {
+        itemsTotal,
+        deliveryFee,
+        tipAmount
+      } = await getOrderFinancialBreakdown(order.id);
+
+      const baseTransactionPayload = {
+        orderId: order.id,
+        paymentMethod: 'mobile_money',
+        paymentProvider: 'mpesa',
+        status: 'pending',
+        paymentStatus: 'pending',
+        checkoutRequestID: checkoutRequestID,
+        merchantRequestID: stkResponse.MerchantRequestID,
+        phoneNumber: phoneNumber
+      };
+
       try {
-        await db.Transaction.create({
-          orderId: order.id,
-          transactionType: 'payment',
-          paymentMethod: 'mobile_money',
-          paymentProvider: 'mpesa',
-          amount: paymentAmount, // Order total minus tip
-          status: 'pending',
-          paymentStatus: 'pending', // Set initial payment status
-          checkoutRequestID: checkoutRequestID,
-          merchantRequestID: stkResponse.MerchantRequestID,
-          phoneNumber: phoneNumber,
-          notes: `STK Push initiated. ${stkResponse.CustomerMessage || ''}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
+        const paymentNote = `STK Push initiated. ${stkResponse.CustomerMessage || ''} Order portion: KES ${itemsTotal.toFixed(2)}.${tipAmount > 0 ? ` Tip (KES ${tipAmount.toFixed(2)}) will be recorded separately.` : ''}`;
+
+        let paymentTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'payment',
+            status: { [Op.ne]: 'completed' }
+          },
+          order: [['createdAt', 'DESC']]
         });
-        console.log(`✅ Transaction record created for Order #${orderId}`);
+
+        if (paymentTransaction) {
+          await paymentTransaction.update({
+            ...baseTransactionPayload,
+            amount: itemsTotal,
+            notes: paymentNote
+          });
+          console.log(`✅ Payment transaction updated for Order #${orderId} (transaction #${paymentTransaction.id})`);
+        } else {
+          paymentTransaction = await db.Transaction.create({
+            ...baseTransactionPayload,
+            transactionType: 'payment',
+            amount: itemsTotal,
+            notes: paymentNote
+          });
+          console.log(`✅ Payment transaction created for Order #${orderId} (transaction #${paymentTransaction.id})`);
+        }
+
+        const deliveryNote = `Delivery fee portion for Order #${orderId}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
+
+        let deliveryTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'delivery_pay',
+            status: { [Op.ne]: 'completed' }
+          },
+          order: [['createdAt', 'DESC']]
+        });
+
+        if (deliveryTransaction) {
+          await deliveryTransaction.update({
+            ...baseTransactionPayload,
+            amount: deliveryFee,
+            notes: deliveryNote,
+            transactionType: 'delivery_pay'
+          });
+          console.log(`✅ Delivery fee transaction updated for Order #${orderId} (transaction #${deliveryTransaction.id})`);
+        } else {
+          deliveryTransaction = await db.Transaction.create({
+            ...baseTransactionPayload,
+            transactionType: 'delivery_pay',
+            amount: deliveryFee,
+            notes: deliveryNote
+          });
+          console.log(`✅ Delivery fee transaction created for Order #${orderId} (transaction #${deliveryTransaction.id})`);
+        }
       } catch (transactionError) {
-        console.error('❌ Error creating transaction record:', transactionError);
+        console.error('❌ Error preparing order transactions:', transactionError);
         // Don't fail the STK push if transaction creation fails - log it but continue
-        console.log('⚠️  Continuing with STK push despite transaction creation error');
+        console.log('⚠️  Continuing with STK push despite transaction preparation error');
       }
       
       console.log(`✅ STK Push initiated for Order #${orderId}. CheckoutRequestID: ${checkoutRequestID}`);
@@ -441,6 +721,12 @@ router.post('/callback', async (req, res) => {
         console.log(`✅ Found order #${order.id} for CheckoutRequestID: ${checkoutRequestID}`);
         console.log(`   Order current status: ${order.status}, paymentStatus: ${order.paymentStatus}`);
 
+        const {
+          itemsTotal,
+          deliveryFee,
+          tipAmount
+        } = await getOrderFinancialBreakdown(order.id);
+
         if (resultCode === 0) {
           // Payment successful
           const callbackMetadata = stkCallback.CallbackMetadata || {};
@@ -501,38 +787,32 @@ router.post('/callback', async (req, res) => {
 
           if (!transaction) {
             // Create new transaction if not found
-            // Payment amount should exclude tip (tip is separate transaction)
-            // Callback amount is the full amount paid, but we store payment transaction as totalAmount - tipAmount
-            const tipAmount = parseFloat(order.tipAmount) || 0;
-            const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Store payment without tip
+            const paymentAmount = itemsTotal;
             
             console.log(`📝 Creating new transaction for Order #${order.id} with CheckoutRequestID: ${checkoutRequestID}`);
-            console.log(`   Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} (includes KES ${tipAmount.toFixed(2)} tip)`);
-            console.log(`   Creating payment transaction: KES ${paymentAmount.toFixed(2)}`);
-            console.log(`   Tip transaction will be created separately with same payment attributes`);
+            console.log(`   Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} (items: KES ${itemsTotal.toFixed(2)}, delivery: KES ${deliveryFee.toFixed(2)}, tip: KES ${tipAmount.toFixed(2)})`);
+            console.log(`   Creating item payment transaction: KES ${paymentAmount.toFixed(2)}`);
+            console.log(`   Delivery fee and tip transactions will be handled separately with same payment attributes`);
             
             transaction = await db.Transaction.create({
               orderId: order.id,
               transactionType: 'payment',
               paymentMethod: 'mobile_money',
               paymentProvider: 'mpesa',
-              amount: paymentAmount, // Order total minus tip (tip is separate transaction)
+              amount: paymentAmount,
               status: 'completed',
-              paymentStatus: 'paid', // Set payment status to 'paid' when creating
+              paymentStatus: 'paid',
               receiptNumber: receiptNumber,
               checkoutRequestID: checkoutRequestID,
               merchantRequestID: stkCallback.MerchantRequestID,
               phoneNumber: phoneNumber,
               transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-              notes: `Order payment via M-Pesa. Receipt: ${receiptNumber}. Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} total (KES ${paymentAmount.toFixed(2)} order + KES ${tipAmount.toFixed(2)} tip). Tip is separate transaction.`
+              notes: `Item payment via M-Pesa. Receipt: ${receiptNumber}. Breakdown: items KES ${paymentAmount.toFixed(2)}, delivery KES ${deliveryFee.toFixed(2)}, tip KES ${tipAmount.toFixed(2)} (tip recorded separately).`
             });
             console.log(`✅ Created transaction #${transaction.id} with status: ${transaction.status}`);
           } else {
             // Update existing transaction - ensure orderId is set if it wasn't
-            // Also ensure amount excludes tip (in case transaction was created before fix)
-            // Callback amount is the full amount paid, but we store payment transaction as totalAmount - tipAmount
-            const tipAmount = parseFloat(order.tipAmount) || 0;
-            const paymentAmount = parseFloat(order.totalAmount) - tipAmount; // Store payment without tip
+            const paymentAmount = itemsTotal;
             
             console.log(`📝 Updating existing transaction #${transaction.id} for Order #${order.id}`);
             console.log(`   Current status: ${transaction.status}`);
@@ -547,27 +827,27 @@ router.post('/callback', async (req, res) => {
                   replacements: {
                     id: transaction.id,
                     orderId: order.id,
-                    amount: paymentAmount, // Ensure amount excludes tip
+                    amount: paymentAmount,
                     receiptNumber: receiptNumber || transaction.receiptNumber || null,
                     transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
                     phoneNumber: phoneNumber || transaction.phoneNumber || null,
-                    note: `✅ Payment completed. Receipt: ${receiptNumber || 'N/A'}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
+                    note: `✅ Item payment completed. Receipt: ${receiptNumber || 'N/A'} (items: KES ${paymentAmount.toFixed(2)}, delivery: KES ${deliveryFee.toFixed(2)}${tipAmount > 0 ? `, tip: KES ${tipAmount.toFixed(2)} separate` : ''})`
                   }
                 }
               );
               
               // Also try Sequelize update as backup
               await transaction.update({
-                orderId: order.id, // Ensure orderId is set
-                amount: paymentAmount, // Ensure amount excludes tip
+                orderId: order.id,
+                amount: paymentAmount,
                 status: 'completed',
-                paymentStatus: 'paid', // Update payment status to 'paid'
+                paymentStatus: 'paid',
                 receiptNumber: receiptNumber,
                 transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
                 phoneNumber: phoneNumber || transaction.phoneNumber,
                 notes: transaction.notes ? 
-                  `${transaction.notes}\n✅ Payment completed. Receipt: ${receiptNumber}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}` : 
-                  `✅ Payment completed via M-Pesa. Receipt: ${receiptNumber}${tipAmount > 0 ? ` (Tip: KES ${tipAmount.toFixed(2)} is separate transaction)` : ''}`
+                  `${transaction.notes}\n✅ Item payment completed. Receipt: ${receiptNumber} (items: KES ${paymentAmount.toFixed(2)}, delivery: KES ${deliveryFee.toFixed(2)}${tipAmount > 0 ? `, tip: KES ${tipAmount.toFixed(2)} separate` : ''})` : 
+                  `✅ Item payment completed via M-Pesa. Receipt: ${receiptNumber} (items: KES ${paymentAmount.toFixed(2)}, delivery: KES ${deliveryFee.toFixed(2)}${tipAmount > 0 ? `, tip: KES ${tipAmount.toFixed(2)} separate` : ''})`
               });
             } catch (updateError) {
               console.error(`❌ Error updating transaction:`, updateError);
@@ -614,6 +894,53 @@ router.post('/callback', async (req, res) => {
               
               console.log(`✅ Final check - Transaction #${transaction.id}: Status: ${finalCheckResult?.[0]?.status || 'NOT FOUND'}`);
             }
+          }
+
+          // Ensure delivery fee transaction is present and marked as completed
+          try {
+            const deliveryTransactionNote = `Delivery fee settled via M-Pesa. Receipt: ${receiptNumber || 'N/A'}. Delivery amount: KES ${deliveryFee.toFixed(2)}.`;
+
+            let deliveryTransaction = await db.Transaction.findOne({
+              where: {
+                orderId: order.id,
+                transactionType: 'delivery_pay'
+              },
+              order: [['createdAt', 'DESC']]
+            });
+
+            if (!deliveryTransaction) {
+              deliveryTransaction = await db.Transaction.create({
+                orderId: order.id,
+                transactionType: 'delivery_pay',
+                paymentMethod: 'mobile_money',
+                paymentProvider: 'mpesa',
+                amount: deliveryFee,
+                status: 'completed',
+                paymentStatus: 'paid',
+                receiptNumber: receiptNumber,
+                checkoutRequestID: checkoutRequestID,
+                merchantRequestID: stkCallback.MerchantRequestID,
+                phoneNumber: phoneNumber,
+                transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+                notes: deliveryTransactionNote
+              });
+              console.log(`✅ Created delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
+            } else {
+              await deliveryTransaction.update({
+                amount: deliveryFee,
+                status: 'completed',
+                paymentStatus: 'paid',
+                receiptNumber: receiptNumber,
+                checkoutRequestID: checkoutRequestID,
+                merchantRequestID: stkCallback.MerchantRequestID || deliveryTransaction.merchantRequestID,
+                phoneNumber: phoneNumber || deliveryTransaction.phoneNumber,
+                transactionDate: transactionDate ? new Date(transactionDate) : (deliveryTransaction.transactionDate || new Date()),
+                notes: deliveryTransaction.notes ? `${deliveryTransaction.notes}\n${deliveryTransactionNote}` : deliveryTransactionNote
+              });
+              console.log(`✅ Updated delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
+            }
+          } catch (deliveryTxnError) {
+            console.error('❌ Error ensuring delivery fee transaction:', deliveryTxnError);
           }
 
           // Update order - Transaction status is the single source of truth
@@ -1162,115 +1489,52 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
     // Payment is completed ONLY if we have a receipt number AND ResultCode is 0
     // Just ResultCode 0 alone isn't enough - it can mean the request was received but not yet completed
     const isCompleted = mpesaStatus && mpesaStatus.ResultCode === 0 && hasReceiptNumber;
+    const isSuccessWithoutReceipt = mpesaStatus && mpesaStatus.ResultCode === 0 && !hasReceiptNumber;
     
     console.log(`🔍 M-Pesa status check: ResultCode=${mpesaStatus?.ResultCode}, hasReceiptNumber=${!!hasReceiptNumber}, isCompleted=${isCompleted}`);
     
-    // If M-Pesa confirms payment completion (ResultCode 0 AND has receipt number), update our database
+    // If M-Pesa confirms payment completion (ResultCode 0 with receipt), update our database
     if (isCompleted) {
-      // Find transaction by checkoutRequestID
       const transaction = await db.Transaction.findOne({
-        where: { checkoutRequestID: checkoutRequestID },
+        where: { checkoutRequestID, transactionType: 'payment' },
         include: [{
           model: db.Order,
           as: 'order'
         }]
       });
-      
-      if (transaction && transaction.status !== 'completed') {
-        // Extract receipt number from M-Pesa response
-        // M-Pesa query API returns receipt in CallbackMetadata when payment is complete
-        // Check both possible locations
-        const receiptFromMetadata = mpesaStatus.CallbackMetadata?.Item?.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
-        const receiptFromResponse = mpesaStatus.ReceiptNumber;
+
+      if (transaction) {
         const receiptNumber = receiptFromMetadata || receiptFromResponse || null;
-        
-        console.log(`🔍 Receipt number extraction: metadata=${receiptFromMetadata}, response=${receiptFromResponse}, final=${receiptNumber}`);
-        
-        console.log(`💰 M-Pesa confirmed payment. Receipt: ${receiptNumber || 'N/A'}`);
-        
-        // STEP 1: Update transaction status FIRST (payment is independent of order status)
-        await db.sequelize.query(
-          `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "receiptNumber" = :receiptNumber, "updatedAt" = NOW() WHERE id = :id`,
-          {
-            replacements: {
-              id: transaction.id,
-              receiptNumber: receiptNumber
-            }
-          }
-        );
-        
-        console.log(`✅ Transaction #${transaction.id} updated to completed`);
-        
-        // STEP 2: Update order status (transaction completion triggers order confirmation)
-        if (transaction.orderId) {
-          // Update order status to 'confirmed' (transaction completion triggers confirmation)
-          // Note: paymentStatus is derived from transaction status, not stored separately
-          await db.sequelize.query(
-            `UPDATE orders SET status = 'confirmed', "updatedAt" = NOW() WHERE id = :id`,
-            {
-              replacements: { id: transaction.orderId }
-            }
-          );
-          
-          console.log(`✅ Order #${transaction.orderId} status updated to 'confirmed' (triggered by transaction completion)`);
-          
-          // Reload order with all relationships to get latest data including driverId
-          const order = await db.Order.findByPk(transaction.orderId, {
-            include: [
-              {
-                model: db.OrderItem,
-                as: 'orderItems',
-                include: [{ model: db.Drink, as: 'drink' }]
-              }
-            ]
-          });
-          
-          if (order) {
-            // Update paymentStatus to paid
-            await order.update({ paymentStatus: 'paid' });
-            await order.reload();
-            
-            // Prepare order data for socket event
-            const orderData = order.toJSON ? order.toJSON() : order;
-            const paymentConfirmedAt = new Date().toISOString();
-            
-            // Emit Socket.IO events
-            const io = req.app.get('io');
-            if (io) {
-              const paymentConfirmedData = {
-                orderId: order.id,
-                status: 'confirmed',
-                paymentStatus: 'paid',
-                receiptNumber: receiptNumber,
-                transactionId: transaction.id,
-                transactionStatus: 'completed',
-                paymentConfirmedAt: paymentConfirmedAt,
-                order: orderData,
-                message: `Payment confirmed for Order #${order.id}`
-              };
-              
-              io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
-              
-              // Notify driver if order is assigned to one
-              if (order.driverId) {
-                io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
-                console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
-              }
-              
-              io.to('admin').emit('payment-confirmed', paymentConfirmedData);
-            }
-          }
-          
-          console.log(`✅ Updated transaction #${transaction.id} and order #${transaction.orderId} based on M-Pesa API query`);
-        }
+        const context = 'M-Pesa query confirmation';
+
+        const finalizeResult = await finalizeOrderPayment({
+          orderId: transaction.orderId,
+          paymentTransaction: transaction,
+          receiptNumber,
+          req,
+          context
+        });
+
+        return res.json({
+          success: true,
+          status: 'completed',
+          mpesaStatus,
+          receiptNumber: finalizeResult.receipt,
+          message: 'Transaction completed according to M-Pesa API'
+        });
       }
-      
+    } else if (isSuccessWithoutReceipt) {
+      // M-Pesa returned success but did not include receipt metadata yet.
+      // This usually means the asynchronous callback has not been delivered.
       return res.json({
-        success: true,
-        status: 'completed',
-        mpesaStatus: mpesaStatus,
-        receiptNumber: mpesaStatus.ReceiptNumber || null,
-        message: 'Transaction completed according to M-Pesa API'
+        success: false,
+        error: false,
+        status: 'pending',
+        awaitingReceipt: true,
+        mpesaStatus,
+        message: 'M-Pesa reported success but has not provided a receipt number yet. Waiting for Safaricom callback.',
+        resultCode: mpesaStatus?.ResultCode,
+        resultDesc: mpesaStatus?.ResultDesc
       });
     } else {
       // Transaction still pending or failed
@@ -1705,7 +1969,7 @@ router.get('/status/:orderId', async (req, res) => {
 router.post('/manual-confirm/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { receiptNumber } = req.body; // Optional receipt number
+    const { receiptNumber } = req.body || {}; // Optional receipt number
     
     console.log(`🔧 Manual payment confirmation requested for order #${orderId}`);
     
@@ -1717,76 +1981,30 @@ router.post('/manual-confirm/:orderId', async (req, res) => {
     
     // Find the transaction
     const transaction = await db.Transaction.findOne({
-      where: { orderId: order.id },
+      where: { orderId: order.id, transactionType: 'payment' },
       order: [['createdAt', 'DESC']]
     });
     
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found for this order' });
     }
-    
-    // Update transaction status
-    await db.sequelize.query(
-      `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "receiptNumber" = COALESCE(:receiptNumber, "receiptNumber"), "updatedAt" = NOW() WHERE id = :id`,
-      {
-        replacements: {
-          id: transaction.id,
-          receiptNumber: receiptNumber || transaction.receiptNumber || null
-        }
-      }
-    );
-    
-    // Update order status
-    await db.sequelize.query(
-      `UPDATE orders SET status = 'confirmed', "updatedAt" = NOW() WHERE id = :id`,
-      {
-        replacements: { id: order.id }
-      }
-    );
-    
-    // Reload order with all relationships to get latest data including driverId
-    await order.reload({
-      include: [
-        {
-          model: db.OrderItem,
-          as: 'orderItems',
-          include: [{ model: db.Drink, as: 'drink' }]
-        }
-      ]
-    });
-    
-    // Prepare order data for socket event
-    const orderData = order.toJSON ? order.toJSON() : order;
-    const paymentConfirmedAt = new Date().toISOString();
-    
-    // Emit Socket.IO events
-    const io = req.app.get('io');
-    if (io) {
-      const paymentConfirmedData = {
-        orderId: order.id,
-        status: 'confirmed',
-        paymentStatus: 'paid',
-        receiptNumber: receiptNumber || transaction.receiptNumber,
-        transactionId: transaction.id,
-        transactionStatus: 'completed',
-        paymentConfirmedAt: paymentConfirmedAt,
-        order: orderData,
-        message: `Payment confirmed for Order #${order.id}`
-      };
-      
-      io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
-      
-      // Notify driver if order is assigned to one
-      if (order.driverId) {
-        io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
-        console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
-      }
-      
-      io.to('admin').emit('payment-confirmed', {
-        ...paymentConfirmedData,
-        message: `Payment manually confirmed for Order #${order.id}`
+
+    const effectiveReceiptNumber = receiptNumber || transaction.receiptNumber;
+
+    if (!effectiveReceiptNumber) {
+      return res.status(400).json({
+        error: 'Receipt number required',
+        message: 'Safaricom receipt number is required to confirm payment. Please provide the M-Pesa receipt or wait for the official callback.'
       });
     }
+
+    const { receipt, order: updatedOrder } = await finalizeOrderPayment({
+      orderId: order.id,
+      paymentTransaction: transaction,
+      receiptNumber: effectiveReceiptNumber,
+      req,
+      context: 'Manual confirmation'
+    });
     
     console.log(`✅ Order #${order.id} manually confirmed`);
     
@@ -1794,8 +2012,9 @@ router.post('/manual-confirm/:orderId', async (req, res) => {
       success: true,
       message: 'Payment confirmed successfully',
       orderId: order.id,
-      status: 'confirmed',
-      transactionStatus: 'completed'
+      status: updatedOrder.status,
+      transactionStatus: 'completed',
+      receiptNumber: receipt
     });
   } catch (error) {
     console.error('Error manually confirming payment:', error);
