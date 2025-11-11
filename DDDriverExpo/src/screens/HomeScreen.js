@@ -321,8 +321,8 @@ const HomeScreen = ({ route, navigation }) => {
         // Update the order in the orders list without refresh
         // If order is delivered or completed, remove it from active orders
         setOrders(prevOrders => {
-          if (data.status === 'delivered' || data.status === 'completed') {
-            // Remove delivered/completed orders from active orders
+          if (data.status === 'delivered' || data.status === 'completed' || data.status === 'cancelled') {
+            // Remove delivered/completed/cancelled orders from active orders
             return prevOrders.filter(order => order.id !== data.orderId);
           } else {
             // Update order with all data from socket event (merge order object if provided)
@@ -456,11 +456,12 @@ const HomeScreen = ({ route, navigation }) => {
         if (driverResponse.data.id) {
           try {
             const ordersResponse = await api.get(`/driver-orders/${driverResponse.data.id}`);
-            // Filter to only show accepted orders (exclude rejected ones and delivered orders)
+            // Filter to only show accepted orders (exclude rejected ones and delivered/cancelled orders)
             const filteredOrders = (ordersResponse.data || []).filter(order => 
               order.driverAccepted !== false && // Show accepted (true) or pending (null), hide rejected (false)
               order.status !== 'delivered' && // Remove delivered orders from active orders
-              order.status !== 'completed' // Also remove completed orders
+              order.status !== 'completed' && // Also remove completed orders
+              order.status !== 'cancelled' // Remove cancelled orders from active orders
             );
             // Sort by oldest first (ascending by createdAt)
             filteredOrders.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));

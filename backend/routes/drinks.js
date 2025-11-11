@@ -56,12 +56,38 @@ router.get('/', async (req, res) => {
 // Get drinks on offer
 router.get('/offers', async (req, res) => {
   try {
-    console.log('Fetching offers...');
-    
-    // First, get all available drinks
-    const allDrinks = await db.Drink.findAll({
-      where: { 
-        isAvailable: true
+    console.log('Fetching limited time offers...');
+
+    const countdown = await db.Countdown.findOne({
+      where: { isActive: true },
+      order: [['createdAt', 'DESC']]
+    });
+
+    if (!countdown) {
+      console.log('No active countdown found. Returning empty offers list.');
+      return res.json([]);
+    }
+
+    const now = new Date();
+    const startDate = new Date(countdown.startDate);
+    const endDate = new Date(countdown.endDate);
+
+    if (now < startDate) {
+      console.log('Countdown has not started yet. Returning empty offers list.');
+      return res.json([]);
+    }
+
+    if (now > endDate) {
+      console.log('Countdown has ended. Returning empty offers list.');
+      if (countdown.isActive) {
+        await countdown.update({ isActive: false });
+      }
+      return res.json([]);
+    }
+
+    const offers = await db.Drink.findAll({
+      where: {
+        limitedTimeOffer: true
       },
       include: [{
         model: db.Category,
@@ -70,48 +96,13 @@ router.get('/offers', async (req, res) => {
         model: db.SubCategory,
         as: 'subCategory'
       }],
-      order: [['name', 'ASC']]
+      order: [
+        ['isAvailable', 'DESC'],
+        ['name', 'ASC']
+      ]
     });
-    
-    // Filter drinks that have discounts (items with discounts automatically appear on offers page)
-    const offers = allDrinks.filter(drink => {
-      // Check if drink has discounts in capacityPricing
-      if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
-        const hasDiscount = drink.capacityPricing.some(pricing => {
-          if (!pricing || typeof pricing !== 'object') return false;
-          const originalPrice = parseFloat(pricing.originalPrice) || 0;
-          const currentPrice = parseFloat(pricing.currentPrice) || parseFloat(pricing.price) || 0;
-          // Return true if originalPrice is greater than currentPrice and originalPrice is valid
-          return originalPrice > currentPrice && originalPrice > 0 && currentPrice >= 0;
-        });
-        if (hasDiscount) {
-          return true;
-        }
-      }
-      
-      // Check if drink has a discount at the main price level
-      const originalPrice = parseFloat(drink.originalPrice) || 0;
-      const currentPrice = parseFloat(drink.price) || 0;
-      // Return true if originalPrice is greater than currentPrice and both are valid
-      if (originalPrice > currentPrice && originalPrice > 0 && currentPrice >= 0) {
-        return true;
-      }
-      
-      return false;
-    });
-    
-    console.log('Offers found:', offers.length);
-    console.log('Offers details:', offers.map(d => ({ 
-      id: d.id, 
-      name: d.name,
-      hasCapacityDiscount: Array.isArray(d.capacityPricing) && d.capacityPricing.some(p => {
-        const orig = parseFloat(p.originalPrice) || 0;
-        const curr = parseFloat(p.currentPrice) || 0;
-        return orig > curr && orig > 0;
-      }),
-      hasMainDiscount: parseFloat(d.originalPrice || 0) > parseFloat(d.price || 0)
-    })));
-    
+
+    console.log('Limited time offers found:', offers.length);
     res.json(offers);
   } catch (error) {
     console.error('Error fetching offers:', error);

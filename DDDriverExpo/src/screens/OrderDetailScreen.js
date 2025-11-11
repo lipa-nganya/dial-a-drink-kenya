@@ -16,6 +16,35 @@ import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import Snackbar from '../components/Snackbar';
 
+const sanitizeNotesForDriver = (notes) => {
+  if (!notes) {
+    return '';
+  }
+
+  const filtered = notes
+    .split('\n')
+    .filter(line => {
+      if (!line) {
+        return false;
+      }
+      const trimmed = line.trim();
+      if (/checkoutrequestid/i.test(trimmed)) {
+        return false;
+      }
+      if (/^tip\b/i.test(trimmed)) {
+        return false;
+      }
+      if (/^delivery\s*fee\b/i.test(trimmed)) {
+        return false;
+      }
+      return true;
+    })
+    .join('\n')
+    .trim();
+
+  return filtered;
+};
+
 const OrderDetailScreen = ({ route, navigation }) => {
   const { order: initialOrder, driverId } = route.params;
   const [currentOrder, setCurrentOrder] = useState(initialOrder);
@@ -27,6 +56,10 @@ const OrderDetailScreen = ({ route, navigation }) => {
   const [paymentPhone, setPaymentPhone] = useState(initialOrder?.customerPhone || '');
   const socketRef = useRef(null);
   const { colors, isDarkMode } = useTheme();
+
+  const normalizedStatus = (currentOrder?.status || '').toLowerCase();
+  const isCompletedOrCancelled = normalizedStatus === 'completed' || normalizedStatus === 'cancelled';
+  const isActiveOrder = !isCompletedOrCancelled;
 
   const formatCurrency = (amount) => {
     return `KES ${parseFloat(amount).toFixed(2)}`;
@@ -342,7 +375,25 @@ const OrderDetailScreen = ({ route, navigation }) => {
   // Can only update to "Delivered" if status is exactly "out_for_delivery"
   const canUpdateToDelivered = currentOrder.status === 'out_for_delivery';
   
-  const canInitiatePayment = currentOrder.paymentType === 'pay_on_delivery' && currentOrder.paymentStatus !== 'paid';
+  const canInitiatePayment = currentOrder.paymentType === 'pay_on_delivery' && currentOrder.paymentStatus !== 'paid' && isActiveOrder;
+
+  const orderItems = Array.isArray(currentOrder?.orderItems)
+    ? currentOrder.orderItems
+    : Array.isArray(currentOrder?.items)
+      ? currentOrder.items
+      : [];
+
+  const itemsSubtotal = orderItems.reduce((sum, item) => {
+    const price = parseFloat(item.price) || 0;
+    const quantity = parseFloat(item.quantity) || 0;
+    return sum + price * quantity;
+  }, 0);
+
+  const totalAmount = parseFloat(currentOrder?.totalAmount) || 0;
+  const tipAmount = parseFloat(currentOrder?.tipAmount) || 0;
+  const deliveryFee = Math.max(totalAmount - itemsSubtotal - tipAmount, 0);
+
+  const displayNotes = sanitizeNotesForDriver(currentOrder?.notes);
 
   return (
     <View style={{ flex: 1 }}>
@@ -370,29 +421,44 @@ const OrderDetailScreen = ({ route, navigation }) => {
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Name:</Text>
             <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{currentOrder.customerName}</Text>
           </View>
-          <TouchableOpacity style={styles.phoneRow} onPress={callCustomer}>
-            <Ionicons name="call" size={24} color={colors.accentText} style={styles.callIcon} />
-            <View style={styles.phoneInfo}>
-              <Text style={[styles.infoLabel, { color: colors.textSecondary, marginBottom: 4 }]}>Phone:</Text>
-              <Text style={[styles.phoneNumber, { color: colors.accentText }]}>{currentOrder.customerPhone}</Text>
-            </View>
-          </TouchableOpacity>
+          {isCompletedOrCancelled ? (
+            <Text style={[styles.infoMessage, { color: colors.textSecondary }]}>
+              Customer phone number is hidden after {normalizedStatus === 'cancelled' ? 'cancellation' : 'completion'}.
+            </Text>
+          ) : (
+            <TouchableOpacity style={styles.phoneRow} onPress={callCustomer}>
+              <Ionicons name="call" size={24} color={colors.accentText} style={styles.callIcon} />
+              <View style={styles.phoneInfo}>
+                <Text style={[styles.infoLabel, { color: colors.textSecondary, marginBottom: 4 }]}>Phone:</Text>
+                <Text style={[styles.phoneNumber, { color: colors.accentText }]}>{currentOrder.customerPhone}</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Delivery Address */}
-        <View style={[styles.section, { backgroundColor: colors.paper }]}>
-          <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Delivery Address</Text>
-          <Text style={[styles.address, { color: colors.textPrimary }]}>{currentOrder.deliveryAddress}</Text>
-          <TouchableOpacity style={[styles.mapButton, { backgroundColor: colors.accent }]} onPress={openGoogleMaps}>
-            <Ionicons name="map" size={20} color={isDarkMode ? '#0D0D0D' : colors.textPrimary} style={styles.mapIcon} />
-            <Text style={[styles.mapButtonText, { color: isDarkMode ? '#0D0D0D' : colors.textPrimary }]}>Open in Google Maps</Text>
-          </TouchableOpacity>
-        </View>
+        {isCompletedOrCancelled ? (
+          <View style={[styles.section, { backgroundColor: colors.paper }]}>
+            <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Delivery Address</Text>
+            <Text style={[styles.infoMessage, { color: colors.textSecondary }]}>
+              Delivery address is hidden after {normalizedStatus === 'cancelled' ? 'cancellation' : 'completion'}.
+            </Text>
+          </View>
+        ) : (
+          <View style={[styles.section, { backgroundColor: colors.paper }]}>
+            <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Delivery Address</Text>
+            <Text style={[styles.address, { color: colors.textPrimary }]}>{currentOrder.deliveryAddress}</Text>
+            <TouchableOpacity style={[styles.mapButton, { backgroundColor: colors.accent }]} onPress={openGoogleMaps}>
+              <Ionicons name="map" size={20} color={isDarkMode ? '#0D0D0D' : colors.textPrimary} style={styles.mapIcon} />
+              <Text style={[styles.mapButtonText, { color: isDarkMode ? '#0D0D0D' : colors.textPrimary }]}>Open in Google Maps</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Order Items */}
         <View style={[styles.section, { backgroundColor: colors.paper }]}>
           <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Order Items</Text>
-          {currentOrder.orderItems && currentOrder.orderItems.map((item, index) => (
+          {orderItems.map((item, index) => (
             <View key={index} style={[styles.itemRow, { borderBottomColor: colors.border }]}>
               <View style={styles.itemInfo}>
                 <Text style={[styles.itemName, { color: colors.textPrimary }]}>
@@ -452,6 +518,34 @@ const OrderDetailScreen = ({ route, navigation }) => {
               </Text>
             </View>
           )}
+          {isCompletedOrCancelled && (
+            <View style={styles.breakdownContainer}>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, styles.breakdownLabel, { color: colors.textSecondary }]}>Items Total:</Text>
+                <Text style={[styles.infoValue, styles.breakdownValue, { color: colors.textPrimary }]}>
+                  {formatCurrency(itemsSubtotal)}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, styles.breakdownLabel, { color: colors.textSecondary }]}>Delivery Fee:</Text>
+                <Text style={[styles.infoValue, styles.breakdownValue, { color: colors.textPrimary }]}>
+                  {formatCurrency(deliveryFee)}
+                </Text>
+              </View>
+              <View style={styles.infoRow}>
+                <Text style={[styles.infoLabel, styles.breakdownLabel, { color: colors.textSecondary }]}>Tip:</Text>
+                <Text style={[styles.infoValue, styles.breakdownValue, { color: colors.textPrimary }]}>
+                  {formatCurrency(tipAmount)}
+                </Text>
+              </View>
+              <View style={[styles.infoRow, styles.breakdownTotalRow]}>
+                <Text style={[styles.infoLabel, styles.breakdownTotalLabel, { color: colors.textPrimary }]}>Total Paid:</Text>
+                <Text style={[styles.infoValue, styles.breakdownTotalValue, { color: colors.accentText }]}>
+                  {formatCurrency(totalAmount)}
+                </Text>
+              </View>
+            </View>
+          )}
         </View>
 
         {/* Order Details */}
@@ -461,12 +555,12 @@ const OrderDetailScreen = ({ route, navigation }) => {
             <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Date:</Text>
             <Text style={[styles.infoValue, { color: colors.textPrimary }]}>{formatDate(currentOrder.createdAt)}</Text>
           </View>
-          {currentOrder.notes && (
+          {displayNotes ? (
             <View style={styles.notesContainer}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Notes:</Text>
-              <Text style={[styles.notes, { color: colors.textPrimary }]}>{currentOrder.notes}</Text>
+              <Text style={[styles.notes, { color: colors.textPrimary }]}>{displayNotes}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {/* Action Buttons */}
@@ -571,6 +665,11 @@ const styles = StyleSheet.create({
     flex: 2,
     textAlign: 'right',
   },
+  infoMessage: {
+    fontSize: 13,
+    marginTop: 6,
+    lineHeight: 18,
+  },
   link: {
     color: '#00E0B8',
     textDecorationLine: 'underline',
@@ -672,6 +771,39 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#00E0B8',
     fontWeight: 'bold',
+  },
+  breakdownContainer: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(128, 128, 128, 0.2)',
+    gap: 6,
+  },
+  breakdownLabel: {
+    flex: 1,
+    textAlign: 'left',
+  },
+  breakdownValue: {
+    flex: 1,
+    textAlign: 'right',
+  },
+  breakdownTotalRow: {
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0, 224, 184, 0.3)',
+  },
+  breakdownTotalLabel: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: '700',
+    textAlign: 'left',
+  },
+  breakdownTotalValue: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   notesContainer: {
     marginTop: 8,
