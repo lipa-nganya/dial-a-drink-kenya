@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
+import Constants from 'expo-constants';
 
 // Configuration for API base URL
 // IMPORTANT: Choose the correct method based on how you're testing:
@@ -22,33 +23,36 @@ import { Platform } from 'react-native';
 // Run: adb reverse tcp:5001 tcp:5001
 // Then use 'http://localhost:5001/api' below
 
+const normalizeBaseUrl = (value) => {
+  if (!value) {
+    return '';
+  }
+  return value.replace(/\/+$/, '');
+};
+
 const getBaseURL = () => {
-  // ==========================================
-  // CHANGE THIS URL BASED ON YOUR SETUP:
-  // ==========================================
-  
-  // Option 1: Use Ngrok (for physical device - currently active)
-  // Your ngrok URL: https://homiest-psychopharmacologic-anaya.ngrok-free.dev
-  return 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev/api';
-  
-  // Option 2: Android Emulator (uncomment if using emulator):
-  // if (Platform.OS === 'android' && __DEV__) {
-  //   return 'http://10.0.2.2:5001/api';
-  // }
-  
-  // Option 3: Physical Device - Local Network (uncomment and update with your IP):
-  // return 'http://192.168.1.66:5001/api'; // Your local IP is 192.168.1.66
-  
-  // Option 4: Physical Device - USB ADB (uncomment):
-  // return 'http://localhost:5001/api';
-  
-  // Option 5: iOS Simulator:
-  // if (Platform.OS === 'ios' && __DEV__) {
-  //   return 'http://localhost:5001/api';
-  // }
-  
-  // Production URL (uncomment when deploying):
-  // return 'https://your-production-url.com/api';
+  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+  if (envBase) {
+    return `${envBase}/api`;
+  }
+
+  const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
+  if (configBase) {
+    return `${configBase}/api`;
+  }
+
+  if (Platform.OS === 'android' && __DEV__) {
+    return 'http://10.0.2.2:5001/api';
+  }
+
+  if (Platform.OS === 'ios' && __DEV__) {
+    return 'http://localhost:5001/api';
+  }
+
+  console.warn(
+    '[DDDriverExpo] No API base URL configured. Set EXPO_PUBLIC_API_BASE_URL or extra.apiBaseUrl in app.json.'
+  );
+  return 'http://localhost:5001/api';
 };
 
 const api = axios.create({
