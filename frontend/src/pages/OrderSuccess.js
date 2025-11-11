@@ -29,8 +29,10 @@ const OrderSuccess = () => {
   const [autoLoggingIn, setAutoLoggingIn] = useState(false);
   const [transactionData, setTransactionData] = useState(null);
   const [currentTransactionStatus, setCurrentTransactionStatus] = useState('pending'); // Track current transaction status for display
+  const [pollingTimedOut, setPollingTimedOut] = useState(false);
   const hasAutoLoggedInRef = useRef(false); // Use ref to prevent re-renders
   const isProcessingRef = useRef(false); // Use ref for processing flag
+  const pollStartRef = useRef(null);
 
   // Auto-login function
   const autoLoginCustomer = useCallback(async (orderId) => {
@@ -165,8 +167,11 @@ const OrderSuccess = () => {
       
       // Start polling for payment status as backup
       setIsPolling(true);
+      pollStartRef.current = Date.now();
+      setPollingTimedOut(false);
+      const MAX_POLL_DURATION_MS = 180000; // 3 minutes
       let pollInterval = null;
-      
+
       const pollForPayment = async () => {
         // Check if already confirmed/logged in before polling
         if (isProcessingRef.current || hasAutoLoggedInRef.current) {
@@ -179,6 +184,20 @@ const OrderSuccess = () => {
         }
         
         try {
+          if (
+            !pollingTimedOut &&
+            pollStartRef.current &&
+            Date.now() - pollStartRef.current > MAX_POLL_DURATION_MS
+          ) {
+            setPollingTimedOut(true);
+            setIsPolling(false);
+            if (pollInterval) {
+              clearInterval(pollInterval);
+              pollInterval = null;
+            }
+            return;
+          }
+
           // Get transaction first to get checkoutRequestID
           const transactionResponse = await api.get(`/mpesa/transaction-status/${orderId}`).catch((error) => {
             console.log('Transaction status check failed (will retry):', error.response?.status || error.message);
@@ -330,25 +349,11 @@ const OrderSuccess = () => {
       
       pollInterval = setInterval(pollForPayment, 5000); // Poll every 5 seconds
 
-      // Stop polling after 2 minutes (24 polls at 5-second intervals)
-      const timeoutId = setTimeout(() => {
-        if (pollInterval) {
-          clearInterval(pollInterval);
-          pollInterval = null;
-        }
-        setIsPolling(false);
-        if (!paymentConfirmed) {
-          // If still not confirmed after 2 minutes, show timeout message
-          setOrderStatus('timeout');
-          console.log('Payment confirmation timeout after 2 minutes - order may still be processing');
-        }
-      }, 120000); // 2 minutes (120 seconds)
-
       return () => {
         if (pollInterval) {
           clearInterval(pollInterval);
         }
-        clearTimeout(timeoutId);
+        pollStartRef.current = null;
         socket.disconnect();
         // Reset refs on cleanup
         isProcessingRef.current = false;
@@ -437,6 +442,13 @@ const OrderSuccess = () => {
             Please check your phone and enter your M-Pesa PIN to complete the payment. 
             This page will automatically update once payment is confirmed.
           </Alert>
+
+          {pollingTimedOut && (
+            <Alert severity="warning" sx={{ mb: 3 }}>
+              We’ve been waiting a little longer than usual. If you already completed the payment, it should reflect shortly.
+              Keep this page open or use the confirmation button below after entering your M-Pesa receipt number.
+            </Alert>
+          )}
           
           {window.location.hostname === 'localhost' && (
             <Alert severity="warning" sx={{ mb: 3 }}>

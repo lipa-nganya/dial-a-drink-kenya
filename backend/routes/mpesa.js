@@ -4,6 +4,7 @@ const mpesaService = require('../services/mpesa');
 const db = require('../models');
 const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const pushNotifications = require('../services/pushNotifications');
 
 const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber, req, context = 'Payment confirmation' }) => {
@@ -418,6 +419,12 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     } catch (adminWalletError) {
       console.error('❌ Error crediting admin wallet during finalizeOrderPayment:', adminWalletError);
     }
+  }
+
+  try {
+    await ensureDeliveryFeeSplit(orderInstance, { context: 'mpesa-finalize' });
+  } catch (syncError) {
+    console.error('❌ Error syncing delivery fee transactions (finalizeOrderPayment):', syncError);
   }
 
   return {
@@ -1222,7 +1229,11 @@ router.post('/callback', async (req, res) => {
             // If order was already delivered, mark as completed
             newOrderStatus = 'completed';
             console.log(`📝 Order #${order.id} was "delivered", updating to "completed" after payment confirmation`);
-          } else if (currentOrderStatus === 'pending' || currentOrderStatus === 'confirmed' || currentOrderStatus === 'preparing') {
+          } else if (currentOrderStatus === 'pending' || currentOrderStatus === 'cancelled') {
+            // For newly paid orders, move them into confirmed so they flow through the rest of the lifecycle
+            newOrderStatus = 'confirmed';
+            console.log(`📝 Order #${order.id} was "${currentOrderStatus}", updating to "confirmed" after payment confirmation`);
+          } else if (currentOrderStatus === 'confirmed' || currentOrderStatus === 'preparing') {
             // For orders that haven't been delivered yet, only update payment status, keep current status
             newOrderStatus = currentOrderStatus;
             console.log(`📝 Order #${order.id} is "${currentOrderStatus}", keeping status but updating paymentStatus to 'paid'`);
@@ -1864,78 +1875,53 @@ router.get('/check-payment/:orderId', async (req, res) => {
     const transaction = results?.[0] || results;
     
     if (transaction && transaction.receiptNumber) {
-      // Payment completed - receipt exists
-      // Auto-fix status if needed
-      if (transaction.status !== 'completed') {
-        console.log(`🔧 Auto-fixing transaction #${transaction.id} status from ${transaction.status} to completed (receipt: ${transaction.receiptNumber})`);
-        await db.sequelize.query(
-          `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "updatedAt" = NOW() WHERE id = :id`,
-          { replacements: { id: transaction.id } }
-        );
-        
-        // Update order status and paymentStatus
-        await db.sequelize.query(
-          `UPDATE orders SET status = 'confirmed', "paymentStatus" = 'paid', "updatedAt" = NOW() WHERE id = :orderId AND status = 'pending'`,
-          { replacements: { orderId } }
-        );
-        
-        // Reload order with all relationships to get latest data including driverId
-        const order = await db.Order.findByPk(orderId, {
-          include: [
-            {
-              model: db.OrderItem,
-              as: 'orderItems',
-              include: [{ model: db.Drink, as: 'drink' }]
-            }
-          ]
+      const paymentTransaction = await db.Transaction.findByPk(transaction.id);
+      if (!paymentTransaction) {
+        console.warn(`⚠️  Payment transaction #${transaction.id} not found while finalizing receipt check`);
+        return res.json({
+          success: true,
+          paymentCompleted: true,
+          receiptNumber: transaction.receiptNumber,
+          transactionId: transaction.id,
+          status: 'completed',
+          amount: transaction.amount,
+          phoneNumber: transaction.phoneNumber,
+          transactionDate: transaction.transactionDate
         });
-        
-        if (order) {
-          // Prepare order data for socket event
-          const orderData = order.toJSON ? order.toJSON() : order;
-          const paymentConfirmedAt = new Date().toISOString();
-          
-          // Emit Socket.IO event
-          const io = req.app.get('io');
-          if (io) {
-            const paymentConfirmedData = {
-              orderId: order.id,
-              status: 'confirmed',
-              paymentStatus: 'paid',
-              receiptNumber: transaction.receiptNumber,
-              transactionId: transaction.id,
-              transactionStatus: 'completed',
-              paymentConfirmedAt: paymentConfirmedAt,
-              order: orderData,
-              message: `Payment confirmed for Order #${order.id}`
-            };
-            
-            io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
-            
-            // Notify driver if order is assigned to one
-            if (order.driverId) {
-              io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
-              console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
-            }
-            
-            io.to('admin').emit('payment-confirmed', {
-              ...paymentConfirmedData,
-              message: `Payment confirmed for Order #${order.id} (auto-detected)`
-            });
-          }
-        }
       }
       
-      return res.json({
-        success: true,
-        paymentCompleted: true,
-        receiptNumber: transaction.receiptNumber,
-        transactionId: transaction.id,
-        status: 'completed',
-        amount: transaction.amount,
-        phoneNumber: transaction.phoneNumber,
-        transactionDate: transaction.transactionDate
-      });
+      try {
+        const finalizeResult = await finalizeOrderPayment({
+          orderId,
+          paymentTransaction,
+          receiptNumber: transaction.receiptNumber,
+          req,
+          context: 'Receipt detected via check-payment'
+        });
+
+        await paymentTransaction.reload().catch(() => {});
+        const finalizedOrder = finalizeResult.order || await db.Order.findByPk(orderId);
+
+        return res.json({
+          success: true,
+          paymentCompleted: true,
+          receiptNumber: finalizeResult.receipt || paymentTransaction.receiptNumber,
+          transactionId: paymentTransaction.id,
+          status: paymentTransaction.status,
+          amount: paymentTransaction.amount,
+          phoneNumber: paymentTransaction.phoneNumber,
+          transactionDate: paymentTransaction.transactionDate,
+          orderStatus: finalizedOrder?.status,
+          paymentStatus: finalizedOrder?.paymentStatus
+        });
+      } catch (finalizeError) {
+        console.error('Error finalizing payment via check-payment:', finalizeError);
+        return res.status(500).json({
+          success: false,
+          error: 'Failed to finalize payment status',
+          message: finalizeError.message
+        });
+      }
     }
     
     // No receipt = payment not completed yet
@@ -1980,77 +1966,22 @@ router.get('/transaction-status/:orderId', async (req, res) => {
     // it means callback processed payment but status update might have failed
     // Auto-update it to completed immediately
     if (transaction && transaction.receiptNumber && transaction.status !== 'completed') {
-      console.log(`⚠️  AUTOMATIC FIX: Transaction #${transaction.id} has receipt number (${transaction.receiptNumber}) but status is ${transaction.status}. Auto-updating to completed...`);
+      console.log(`⚠️  AUTOMATIC FIX: Transaction #${transaction.id} has receipt number (${transaction.receiptNumber}) but status is ${transaction.status}. Finalizing...`);
       try {
-        await db.sequelize.query(
-          `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "updatedAt" = NOW() WHERE id = :id`,
-          {
-            replacements: { id: transaction.id }
-          }
-        );
-        
-        // Also update order if payment is confirmed
-        if (transaction.orderId) {
-          await db.sequelize.query(
-            `UPDATE orders SET status = 'confirmed', "updatedAt" = NOW() WHERE id = :id AND status = 'pending'`,
-            {
-              replacements: { id: transaction.orderId }
-            }
-          );
-          
-          // Reload order with all relationships to get latest data including driverId
-          const order = await db.Order.findByPk(transaction.orderId, {
-            include: [
-              {
-                model: db.OrderItem,
-                as: 'orderItems',
-                include: [{ model: db.Drink, as: 'drink' }]
-              }
-            ]
-          });
-          
-          if (order) {
-            // Prepare order data for socket event
-            const orderData = order.toJSON ? order.toJSON() : order;
-            const paymentConfirmedAt = new Date().toISOString();
-            
-            // Emit Socket.IO event for real-time update
-            const io = req.app.get('io');
-            if (io) {
-              const paymentConfirmedData = {
-                orderId: order.id,
-                status: 'confirmed',
-                paymentStatus: 'paid',
-                receiptNumber: transaction.receiptNumber,
-                transactionId: transaction.id,
-                transactionStatus: 'completed',
-                paymentConfirmedAt: paymentConfirmedAt,
-                order: orderData,
-                message: `Payment confirmed for Order #${order.id}`
-              };
-              
-              io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
-              
-              // Notify driver if order is assigned to one
-              if (order.driverId) {
-                io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
-                console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
-              }
-              
-              io.to('admin').emit('payment-confirmed', {
-                ...paymentConfirmedData,
-                message: `Payment confirmed for Order #${order.id} via M-Pesa (auto-detected)`
-              });
-            }
-          }
-          
-          console.log(`✅ Auto-updated transaction #${transaction.id} and order #${transaction.orderId} to completed (receipt number detected)`);
+        const finalizeResult = await finalizeOrderPayment({
+          orderId: transaction.orderId,
+          paymentTransaction: transaction,
+          receiptNumber: transaction.receiptNumber,
+          req,
+          context: 'Transaction status auto-fix'
+        });
+        await transaction.reload().catch(() => {});
+        if (finalizeResult.order) {
+          transaction.order = finalizeResult.order;
         }
-        
-        // Reload transaction to get updated status
-        await transaction.reload();
+        console.log(`✅ Auto-finalized transaction #${transaction.id} and order #${transaction.orderId} (receipt number detected)`);
       } catch (updateError) {
-        console.error(`❌ Error auto-updating transaction:`, updateError);
+        console.error(`❌ Error auto-finalizing transaction:`, updateError);
       }
     }
 
