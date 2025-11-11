@@ -116,11 +116,9 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       where: {
         orderId: effectiveOrderId,
         transactionType: 'delivery_pay',
-        driverWalletId: {
-          [Op.not]: null
-        }
+        driverId: orderInstance.driverId
       },
-      order: [['createdAt', 'DESC']]
+      order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
     });
 
     const driverDeliveryPayload = {
@@ -128,7 +126,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       transactionType: 'delivery_pay',
       paymentMethod,
       paymentProvider,
-        amount: driverPayAmount,
+      amount: driverPayAmount,
       status: 'completed',
       paymentStatus: 'paid',
       receiptNumber: normalizedReceipt,
@@ -206,7 +204,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       where: {
         orderId: effectiveOrderId,
         transactionType: 'delivery_pay',
-        driverWalletId: {
+        driverId: {
           [Op.not]: null
         }
       },
@@ -1814,6 +1812,7 @@ router.get('/check-payment/:orderId', async (req, res) => {
       `SELECT id, status, "receiptNumber", "checkoutRequestID", "orderId", amount, "phoneNumber", "transactionDate"
        FROM transactions 
        WHERE "orderId" = :orderId 
+         AND "transactionType" = 'payment'
        ORDER BY "updatedAt" DESC, "createdAt" DESC 
        LIMIT 1`,
       {
@@ -2175,11 +2174,18 @@ router.get('/status/:orderId', async (req, res) => {
 
     console.log(`Status check for order #${orderId}: ${actualStatus} (${minutesSinceOrder.toFixed(1)} minutes old)`);
 
-    // Also check transaction status - this is the single source of truth for payment
-    const transaction = await db.Transaction.findOne({
-      where: { orderId: order.id },
+    // Also check transaction status - prioritize payment transaction as source of truth
+    let transaction = await db.Transaction.findOne({
+      where: { orderId: order.id, transactionType: 'payment' },
       order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
     });
+
+    if (!transaction) {
+      transaction = await db.Transaction.findOne({
+        where: { orderId: order.id },
+        order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+      });
+    }
     
     res.json({
       orderId: order.id,
