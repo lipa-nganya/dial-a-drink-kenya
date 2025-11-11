@@ -673,52 +673,51 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
           console.log(`✅ Delivery fee transaction created for Order #${orderId} (transaction #${deliveryTransaction.id})`);
         }
 
-        if (driverPayAmount > 0) {
-          const driverPayNote = `Driver delivery payout for Order #${orderId}. Amount: KES ${driverPayAmount.toFixed(2)}. Pending confirmation.`;
+        if (driverPayAmount > 0 && order.driverId) {
+          const driverDeliveryNote = `Driver delivery fee payment for Order #${orderId}. Amount: KES ${driverPayAmount.toFixed(2)}. Pending confirmation.`;
 
-          let driverPayTransaction = await db.Transaction.findOne({
+          let driverDeliveryTransaction = await db.Transaction.findOne({
             where: {
               orderId: order.id,
-              transactionType: 'driver_pay',
+              transactionType: 'delivery_pay',
+              driverId: order.driverId,
               status: { [Op.ne]: 'completed' }
             },
             order: [['createdAt', 'DESC']]
           });
 
-          if (driverPayTransaction) {
-            await driverPayTransaction.update({
-              ...baseTransactionPayload,
-              transactionType: 'driver_pay',
-              amount: driverPayAmount,
-              notes: driverPayNote,
-              driverId: order.driverId || null
-            });
-            console.log(`✅ Driver payout transaction updated for Order #${orderId} (transaction #${driverPayTransaction.id})`);
+          const driverDeliveryPayload = {
+            ...baseTransactionPayload,
+            transactionType: 'delivery_pay',
+            amount: driverPayAmount,
+            notes: driverDeliveryNote,
+            driverId: order.driverId,
+            driverWalletId: null
+          };
+
+          if (driverDeliveryTransaction) {
+            await driverDeliveryTransaction.update(driverDeliveryPayload);
+            console.log(`✅ Driver delivery fee transaction updated for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
           } else {
-            driverPayTransaction = await db.Transaction.create({
-              ...baseTransactionPayload,
-              transactionType: 'driver_pay',
-              amount: driverPayAmount,
-              notes: driverPayNote,
-              driverId: order.driverId || null
-            });
-            console.log(`✅ Driver payout transaction created for Order #${orderId} (transaction #${driverPayTransaction.id})`);
+            driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload);
+            console.log(`✅ Driver delivery fee transaction created for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
           }
         } else {
-          const existingDriverPayTransaction = await db.Transaction.findOne({
+          const existingDriverDeliveryTransaction = await db.Transaction.findOne({
             where: {
               orderId: order.id,
-              transactionType: 'driver_pay'
+              transactionType: 'delivery_pay',
+              driverId: order.driverId || null
             },
             order: [['createdAt', 'DESC']]
           });
 
-          if (existingDriverPayTransaction) {
-            await existingDriverPayTransaction.update({
+          if (existingDriverDeliveryTransaction) {
+            await existingDriverDeliveryTransaction.update({
               status: 'cancelled',
               paymentStatus: 'cancelled',
               amount: 0,
-              notes: `${existingDriverPayTransaction.notes || ''}\nDriver payout disabled or no driver assigned.`.trim()
+              notes: `${existingDriverDeliveryTransaction.notes || ''}\nDriver delivery fee payment disabled or no driver assigned.`.trim()
             });
           }
         }
@@ -867,7 +866,8 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
           paymentStatus: 'paid',
           receiptNumber: deliveryTransaction.receiptNumber || normalizedReceipt,
           transactionDate: now,
-          driverId: order.driverId,
+          driverId: null,
+          driverWalletId: null,
           notes: deliveryTransaction.notes ? `${deliveryTransaction.notes}\n${deliveryNote}` : deliveryNote,
           amount: merchantDeliveryAmount
         });
@@ -882,39 +882,41 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
           paymentStatus: 'paid',
           receiptNumber: normalizedReceipt,
           transactionDate: now,
-          driverId: order.driverId,
+          driverId: null,
+          driverWalletId: null,
           notes: deliveryNote
         });
       }
     }
 
-    if (driverPayAmount > 0.01) {
-      let driverPayTransaction = await db.Transaction.findOne({
+    if (driverPayAmount > 0.01 && order.driverId) {
+      let driverDeliveryTransaction = await db.Transaction.findOne({
         where: {
           orderId: order.id,
-          transactionType: 'driver_pay'
+          transactionType: 'delivery_pay',
+          driverId: order.driverId
         },
         order: [['createdAt', 'DESC']]
       });
 
-      const driverPayNote = `Driver delivery payout confirmed via ${paymentMethod === 'cash' ? 'cash' : 'driver M-Pesa'} by driver #${driverId}.`;
+      const driverDeliveryNote = `Driver delivery fee payment confirmed via ${paymentMethod === 'cash' ? 'cash' : 'driver M-Pesa'} by driver #${driverId}.`;
 
-      if (driverPayTransaction) {
-        await driverPayTransaction.update({
+      if (driverDeliveryTransaction) {
+        await driverDeliveryTransaction.update({
           paymentMethod,
           paymentProvider,
           status: 'completed',
           paymentStatus: 'paid',
-          receiptNumber: driverPayTransaction.receiptNumber || normalizedReceipt,
+          receiptNumber: driverDeliveryTransaction.receiptNumber || normalizedReceipt,
           transactionDate: now,
           driverId: order.driverId,
-          notes: driverPayTransaction.notes ? `${driverPayTransaction.notes}\n${driverPayNote}` : driverPayNote,
+          notes: driverDeliveryTransaction.notes ? `${driverDeliveryTransaction.notes}\n${driverDeliveryNote}` : driverDeliveryNote,
           amount: driverPayAmount
         });
       } else {
-        driverPayTransaction = await db.Transaction.create({
+        driverDeliveryTransaction = await db.Transaction.create({
           orderId: order.id,
-          transactionType: 'driver_pay',
+          transactionType: 'delivery_pay',
           paymentMethod,
           paymentProvider,
           amount: driverPayAmount,
@@ -923,49 +925,47 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
           receiptNumber: normalizedReceipt,
           transactionDate: now,
           driverId: order.driverId,
-          notes: driverPayNote
+          notes: driverDeliveryNote
         });
       }
 
-      if (order.driverId) {
-        try {
-          let driverWallet = await db.DriverWallet.findOne({ where: { driverId: order.driverId } });
-          if (!driverWallet) {
-            driverWallet = await db.DriverWallet.create({
-              driverId: order.driverId,
-              balance: 0,
-              totalTipsReceived: 0,
-              totalTipsCount: 0,
-              totalDeliveryPay: 0,
-              totalDeliveryPayCount: 0
-            });
-          }
-
-          const alreadyCredited = driverPayTransaction.driverWalletId === driverWallet.id && driverPayTransaction.status === 'completed';
-
-          if (!alreadyCredited) {
-            await driverWallet.update({
-              balance: parseFloat(driverWallet.balance) + driverPayAmount,
-              totalDeliveryPay: parseFloat(driverWallet.totalDeliveryPay || 0) + driverPayAmount,
-              totalDeliveryPayCount: (driverWallet.totalDeliveryPayCount || 0) + 1
-            });
-
-            await driverPayTransaction.update({
-              driverWalletId: driverWallet.id,
-              status: 'completed',
-              paymentStatus: 'paid',
-              notes: `${driverPayNote} Credited to driver wallet.`
-            });
-
-            await order.update({
-              driverPayCredited: true,
-              driverPayCreditedAt: now,
-              driverPayAmount: driverPayAmount
-            });
-          }
-        } catch (driverPayError) {
-          console.error('❌ Error crediting driver pay during manual confirmation:', driverPayError);
+      try {
+        let driverWallet = await db.DriverWallet.findOne({ where: { driverId: order.driverId } });
+        if (!driverWallet) {
+          driverWallet = await db.DriverWallet.create({
+            driverId: order.driverId,
+            balance: 0,
+            totalTipsReceived: 0,
+            totalTipsCount: 0,
+            totalDeliveryPay: 0,
+            totalDeliveryPayCount: 0
+          });
         }
+
+        const alreadyCredited = driverDeliveryTransaction.driverWalletId === driverWallet.id && driverDeliveryTransaction.status === 'completed';
+
+        if (!alreadyCredited) {
+          await driverWallet.update({
+            balance: parseFloat(driverWallet.balance) + driverPayAmount,
+            totalDeliveryPay: parseFloat(driverWallet.totalDeliveryPay || 0) + driverPayAmount,
+            totalDeliveryPayCount: (driverWallet.totalDeliveryPayCount || 0) + 1
+          });
+
+          await driverDeliveryTransaction.update({
+            driverWalletId: driverWallet.id,
+            status: 'completed',
+            paymentStatus: 'paid',
+            notes: `${driverDeliveryNote} Credited to driver wallet.`
+          });
+
+          await order.update({
+            driverPayCredited: true,
+            driverPayCreditedAt: now,
+            driverPayAmount: driverPayAmount
+          });
+        }
+      } catch (driverPayError) {
+        console.error('❌ Error crediting delivery fee payment during manual confirmation:', driverPayError);
       }
     }
 
@@ -1030,43 +1030,6 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       console.log(`✅ Credited admin wallet with KES ${adminCreditAmount.toFixed(2)} for Order #${order.id} (manual confirmation)`);
     } catch (adminWalletError) {
       console.error('❌ Error crediting admin wallet during manual confirmation:', adminWalletError);
-    }
-
-    if (order.driverId) {
-      try {
-        let driverWallet = await db.DriverWallet.findOne({ where: { driverId: order.driverId } });
-        if (!driverWallet) {
-          driverWallet = await db.DriverWallet.create({
-            driverId: order.driverId,
-            balance: 0,
-            totalTipsReceived: 0,
-            totalTipsCount: 0,
-            totalDeliveryPay: 0,
-            totalDeliveryPayCount: 0
-          });
-        }
-
-        await driverWallet.update({
-          balance: parseFloat(driverWallet.balance) - adminCreditAmount
-        });
-
-        await db.Transaction.create({
-          orderId: order.id,
-          transactionType: 'delivery_fee_debit',
-          paymentMethod,
-          paymentProvider,
-          amount: adminCreditAmount,
-          status: 'completed',
-          paymentStatus: 'paid',
-          receiptNumber: normalizedReceipt,
-          transactionDate: now,
-          driverId: order.driverId,
-          driverWalletId: driverWallet.id,
-          notes: `Merchant share of KES ${adminCreditAmount.toFixed(2)} deducted from driver wallet for cash payment of Order #${order.id}.`
-        });
-      } catch (driverDebitError) {
-        console.error('❌ Error debiting driver wallet for merchant share:', driverDebitError);
-      }
     }
 
     await order.update({

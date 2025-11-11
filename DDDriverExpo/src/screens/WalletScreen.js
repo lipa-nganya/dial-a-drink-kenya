@@ -22,7 +22,6 @@ const WalletScreen = ({ route }) => {
   const [wallet, setWallet] = useState(null);
   const [recentTips, setRecentTips] = useState([]);
   const [recentDeliveryPayments, setRecentDeliveryPayments] = useState([]);
-  const [recentDeliverySettlements, setRecentDeliverySettlements] = useState([]);
   const [recentWithdrawals, setRecentWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -71,7 +70,6 @@ const WalletScreen = ({ route }) => {
           setWallet(walletResponse.data.wallet);
           setRecentTips(walletResponse.data.recentTips || []);
           setRecentDeliveryPayments(walletResponse.data.recentDeliveryPayments || []);
-          setRecentDeliverySettlements(walletResponse.data.deliveryFeeSettlements || []);
           setRecentWithdrawals(walletResponse.data.recentWithdrawals || []);
           setWithdrawPhone(driverResponse.data.phoneNumber || '');
         }
@@ -272,7 +270,7 @@ const WalletScreen = ({ route }) => {
   const combinedTransactions = useMemo(() => {
     const deliveries = (recentDeliveryPayments || []).map((tx) => {
       const amountNumeric = parseFloat(tx.amount) || 0;
-      const isDebit = tx.transactionType === 'delivery_fee_debit' || amountNumeric < 0;
+      const isDebit = amountNumeric < 0;
       return {
         id: `delivery-${tx.id}`,
         type: isDebit ? 'delivery_debit' : 'delivery',
@@ -284,17 +282,6 @@ const WalletScreen = ({ route }) => {
         notes: tx.notes || '',
       };
     });
-
-    const deliverySettlements = (recentDeliverySettlements || []).map((tx) => ({
-      id: `delivery-settlement-${tx.id}`,
-      type: 'delivery_debit',
-      amount: parseFloat(tx.amount) || 0,
-      date: tx.date,
-      status: tx.status || 'completed',
-      reference: tx.orderNumber || tx.orderId,
-      customerName: tx.customerName,
-      notes: tx.notes || '',
-    }));
 
     const tips = (recentTips || []).map((tx) => ({
       id: `tip-${tx.id}`,
@@ -317,15 +304,15 @@ const WalletScreen = ({ route }) => {
       notes: tx.notes || '',
     }));
 
-    return [...deliveries, ...deliverySettlements, ...tips, ...withdrawals].sort(
+    return [...deliveries, ...tips, ...withdrawals].sort(
       (a, b) => new Date(b.date) - new Date(a.date)
     );
-  }, [recentDeliveryPayments, recentDeliverySettlements, recentTips, recentWithdrawals]);
+  }, [recentDeliveryPayments, recentTips, recentWithdrawals]);
 
   const getTransactionLabel = (type) => {
     switch (type) {
       case 'delivery':
-        return 'Delivery Payment';
+        return 'Delivery Fee Payment';
       case 'delivery_debit':
         return 'Delivery Fee Settlement';
       case 'tip':
@@ -367,13 +354,9 @@ const WalletScreen = ({ route }) => {
       <View style={[styles.listCard, { backgroundColor: safeColors.paper }]}> 
         {items.map((item) => {
           const amountNumeric = parseFloat(item.amount) || 0;
-          const isDebit = amountNumeric < 0 || item.transactionType === 'delivery_fee_debit';
+          const isDebit = amountNumeric < 0;
           const displayAmount = Math.abs(amountNumeric).toFixed(2);
-          const label = item.transactionType === 'delivery_fee_debit'
-            ? 'Delivery Fee Settlement'
-            : isDelivery
-            ? 'Driver Payout'
-            : 'Tip';
+          const label = isDelivery ? 'Delivery Fee Payment' : 'Tip';
 
           return (
           <View key={`${type}-${item.id}`} style={[styles.listItem, { borderBottomColor: safeColors.border }]}> 
