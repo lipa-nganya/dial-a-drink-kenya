@@ -360,20 +360,23 @@ const WalletScreen = ({ route }) => {
     }
   };
 
-  const renderSummaryList = (items, type) => {
+  const listCardBackground = isDarkMode ? '#121212' : safeColors.paper;
+  const listItemDivider = isDarkMode ? '#1F1F1F' : safeColors.border;
+
+  const renderSummaryList = (items, type, cardBackground = listCardBackground) => {
     const isDelivery = type === 'delivery';
     const emptyMessage = isDelivery ? 'No delivery payments yet' : 'No tips received yet';
 
     if (!items || items.length === 0) {
       return (
-        <View style={[styles.emptyStateCard, { backgroundColor: safeColors.paper }]}> 
+        <View style={[styles.emptyStateCard, { backgroundColor: cardBackground }]}> 
           <Text style={[styles.emptyStateText, { color: safeColors.textSecondary }]}>{emptyMessage}</Text>
         </View>
       );
     }
 
     return (
-      <View style={[styles.listCard, { backgroundColor: safeColors.paper }]}> 
+      <View style={[styles.listCard, { backgroundColor: cardBackground }]}> 
         {items.map((item) => {
           const amountNumeric = parseFloat(item.amount) || 0;
           const isDebit = amountNumeric < 0;
@@ -381,7 +384,7 @@ const WalletScreen = ({ route }) => {
           const label = isDelivery ? 'Delivery Fee Payment' : 'Tip';
 
           return (
-          <View key={`${type}-${item.id}`} style={[styles.listItem, { borderBottomColor: safeColors.border }]}> 
+          <View key={`${type}-${item.id}`} style={[styles.listItem, { borderBottomColor: listItemDivider }]}> 
             <View style={styles.listItemLeft}>
               <Text style={[styles.listLabel, { color: safeColors.textSecondary }]}> 
                 {label}
@@ -413,9 +416,12 @@ const WalletScreen = ({ route }) => {
     );
   };
 
+  const summaryCardBackground = isDarkMode ? '#121212' : safeColors.paper;
+  const tileBackground = isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)';
+
   const renderSummarySection = () => (
     <>
-      <View style={[styles.balanceCard, { backgroundColor: safeColors.paper }]}> 
+      <View style={[styles.balanceCard, { backgroundColor: summaryCardBackground }]}> 
         <Text style={[styles.balanceLabel, { color: safeColors.textSecondary }]}>Total Wallet Balance</Text>
         <Text style={[styles.balanceAmount, { color: safeColors.accentText }]}> 
           KES {displayBalance.toFixed(2)}
@@ -431,7 +437,7 @@ const WalletScreen = ({ route }) => {
           <View
             style={[styles.breakdownBox, {
               borderColor: safeColors.border,
-              backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+              backgroundColor: tileBackground,
             }]}
           >
             <Text style={[styles.breakdownLabel, { color: safeColors.textSecondary }]}>Delivery Payments</Text>
@@ -445,7 +451,7 @@ const WalletScreen = ({ route }) => {
           <View
             style={[styles.breakdownBox, {
               borderColor: safeColors.border,
-              backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+              backgroundColor: tileBackground,
             }]}
           >
             <Text style={[styles.breakdownLabel, { color: safeColors.textSecondary }]}>Tips Received</Text>
@@ -483,13 +489,13 @@ const WalletScreen = ({ route }) => {
         </TouchableOpacity>
 
         {showWithdrawForm && (
-          <View style={styles.withdrawForm}>
+          <View style={[styles.withdrawForm, { backgroundColor: isDarkMode ? '#101010' : safeColors.paper }]}>
             <Text style={[styles.inputLabel, { color: safeColors.textSecondary }]}>Amount (KES)</Text>
             <TextInput
               style={[
                 styles.input,
                 {
-                  backgroundColor: safeColors.background,
+                  backgroundColor: isDarkMode ? '#0D0D0D' : safeColors.background,
                   borderColor: withdrawAmountError ? '#FF3366' : safeColors.border,
                   borderWidth: withdrawAmountError ? 2 : 1,
                   color: safeColors.textPrimary,
@@ -514,7 +520,7 @@ const WalletScreen = ({ route }) => {
               style={[
                 styles.input,
                 {
-                  backgroundColor: safeColors.background,
+                  backgroundColor: isDarkMode ? '#0D0D0D' : safeColors.background,
                   borderColor: safeColors.border,
                   color: safeColors.textPrimary,
                 },
@@ -549,15 +555,15 @@ const WalletScreen = ({ route }) => {
         )}
       </View>
 
-      <View
-        style={[
-          styles.summaryTabsContainer,
-          {
-            borderColor: safeColors.border,
-            backgroundColor: safeColors.paper,
-          },
-        ]}
-      >
+        <View
+          style={[
+            styles.summaryTabsContainer,
+            {
+              borderColor: safeColors.border,
+              backgroundColor: summaryCardBackground,
+            },
+          ]}
+        >
         {[
           { key: 'delivery', label: 'Delivery Payments' },
           { key: 'tips', label: 'Tips' },
@@ -597,7 +603,7 @@ const WalletScreen = ({ route }) => {
       </View>
 
       <View
-        style={[styles.overtimeCard, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}
+        style={[styles.overtimeCard, { backgroundColor: summaryCardBackground, borderColor: safeColors.border }]}
       >
         <Text style={[styles.overtimeTitle, { color: safeColors.accentText }]}> 
           {summaryTab === 'delivery' ? 'Delivery Payments Overtime' : 'Tips Overtime'}
@@ -617,14 +623,14 @@ const WalletScreen = ({ route }) => {
         </Text>
       </View>
 
-      {renderSummaryList(summaryTab === 'delivery' ? recentDeliveryPayments : recentTips, summaryTab)}
+      {renderSummaryList(summaryTab === 'delivery' ? recentDeliveryPayments : recentTips, summaryTab, summaryCardBackground)}
     </>
   );
 
   const renderTransactionsSection = () => (
     <View>
       {combinedTransactions.length === 0 ? (
-        <View style={[styles.emptyStateCard, { backgroundColor: safeColors.paper }]}> 
+        <View style={[styles.emptyStateCard, { backgroundColor: listCardBackground }]}> 
           <Text style={[styles.emptyStateText, { color: safeColors.textSecondary }]}> 
             No wallet transactions yet
           </Text>
@@ -652,7 +658,13 @@ const WalletScreen = ({ route }) => {
           return (
             <View
               key={tx.id}
-              style={[styles.transactionCard, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}
+              style={[
+                styles.transactionCard,
+                {
+                  backgroundColor: listCardBackground,
+                  borderColor: listItemDivider,
+                },
+              ]}
             >
               <View style={styles.transactionCardHeader}>
                 <View
