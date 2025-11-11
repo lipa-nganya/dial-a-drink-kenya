@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
 
 /**
@@ -50,10 +51,13 @@ router.get('/:driverId', async (req, res) => {
     });
 
     // Get driver pay transactions (only the per-delivery payouts configured in admin)
-    const driverPayTransactions = await db.Transaction.findAll({
+    const driverDeliveryTransactions = await db.Transaction.findAll({
       where: {
         driverId: driverId,
-        transactionType: 'driver_pay',
+        transactionType: 'delivery_pay',
+        driverWalletId: {
+          [Op.not]: null
+        },
         status: 'completed'
       },
       include: [{
@@ -62,23 +66,7 @@ router.get('/:driverId', async (req, res) => {
         attributes: ['id', 'customerName', 'createdAt', 'status']
       }],
       order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 delivery payouts
-    });
-
-    // Get delivery fee debit transactions (when driver settles merchant share after cash collection)
-    const deliveryFeeDebitTransactions = await db.Transaction.findAll({
-      where: {
-        driverId: driverId,
-        transactionType: 'delivery_fee_debit',
-        status: 'completed'
-      },
-      include: [{
-        model: db.Order,
-        as: 'order',
-        attributes: ['id', 'customerName', 'createdAt', 'status']
-      }],
-      order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 settlements
+      limit: 50 // Last 50 delivery payments
     });
 
     // Calculate amount on hold (tips for orders that are not completed)
@@ -116,20 +104,9 @@ router.get('/:driverId', async (req, res) => {
               totalDeliveryPay: parseFloat(wallet.totalDeliveryPay) || 0,
               totalDeliveryPayCount: wallet.totalDeliveryPayCount || 0
       },
-      recentDeliveryPayments: driverPayTransactions.map(tx => ({
+      recentDeliveryPayments: driverDeliveryTransactions.map(tx => ({
         id: tx.id,
         amount: Math.abs(parseFloat(tx.amount)),
-        transactionType: tx.transactionType,
-        orderId: tx.orderId,
-        orderNumber: tx.order?.id,
-        customerName: tx.order?.customerName,
-        status: tx.order?.status,
-        date: tx.createdAt,
-        notes: tx.notes
-      })),
-      deliveryFeeSettlements: deliveryFeeDebitTransactions.map(tx => ({
-        id: tx.id,
-        amount: -Math.abs(parseFloat(tx.amount)),
         transactionType: tx.transactionType,
         orderId: tx.orderId,
         orderNumber: tx.order?.id,

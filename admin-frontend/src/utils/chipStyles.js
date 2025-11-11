@@ -145,7 +145,7 @@ export const getTransactionTypeChipProps = (type) => {
 
   if (normalized === 'delivery' || normalized === 'delivery_pay') {
     return {
-      label: 'Delivery Fee',
+      label: 'Delivery Fee Payment',
       sx: {
         backgroundColor: '#2196F3',
         color: '#002A54',
