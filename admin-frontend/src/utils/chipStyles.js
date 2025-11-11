@@ -155,13 +155,28 @@ export const getTransactionTypeChipProps = (type) => {
   }
 
   if (normalized === 'delivery' || normalized === 'delivery_pay') {
-    return {
-      label: 'Delivery Fee Payment',
-      sx: {
-        backgroundColor: '#2196F3',
-        color: '#002A54',
-        fontWeight: 700
+    return (transaction = {}) => {
+      const isDriverPayment = Boolean(transaction?.driverWalletId);
+
+      if (isDriverPayment) {
+        return {
+          label: 'Delivery Fee Payment (Driver)',
+          sx: {
+            backgroundColor: '#FFC107',
+            color: '#000',
+            fontWeight: 700
+          }
+        };
       }
+
+      return {
+        label: 'Delivery Fee Payment',
+        sx: {
+          backgroundColor: '#2196F3',
+          color: '#002A54',
+          fontWeight: 700
+        }
+      };
     };
   }
 

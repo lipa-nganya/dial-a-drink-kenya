@@ -562,7 +562,10 @@ const Transactions = () => {
             <TableBody>
               {paginatedTransactions.map((transaction) => {
                 const isExpanded = expandedRows.has(transaction.id);
-                const typeChip = getTransactionTypeChipProps(transaction.transactionType);
+                const typeChipRaw = getTransactionTypeChipProps(transaction.transactionType);
+                const typeChip = typeof typeChipRaw === 'function'
+                  ? typeChipRaw(transaction)
+                  : typeChipRaw;
                 const methodChip = getPaymentMethodChipProps(transaction.paymentMethod);
                 const statusChip = getTransactionStatusChipProps(transaction.status);
                 const methodLabel = getPaymentMethodLabel(
