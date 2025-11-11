@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
+const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const {
   syncCustomersFromOrders,
   normalizePhoneNumber,
@@ -909,7 +910,7 @@ router.patch('/orders/:id/status', async (req, res) => {
       ]
     });
 
-    const orderData = order.toJSON();
+    let orderData = order.toJSON();
     if (orderData.items) {
       orderData.orderItems = orderData.items;
     }
@@ -988,6 +989,135 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       orderData.orderItems = orderData.items;
     }
     orderData.status = finalStatus;
+
+    if (driverId && order.paymentStatus === 'paid' && !order.driverPayCredited) {
+      try {
+        const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
+          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+        ]);
+
+        const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
+        const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
+        const breakdown = await getOrderFinancialBreakdown(order.id);
+        const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+
+        let driverPayAmount = parseFloat(order.driverPayAmount || 0) || 0;
+        if (driverPayAmount <= 0 && driverPaySettingEnabled && configuredDriverPayAmount > 0) {
+          driverPayAmount = Math.min(deliveryFee, configuredDriverPayAmount);
+        }
+
+        if (driverPayAmount > 0.009) {
+          let driverWallet = await db.DriverWallet.findOne({ where: { driverId } });
+          if (!driverWallet) {
+            driverWallet = await db.DriverWallet.create({
+              driverId,
+              balance: 0,
+              totalTipsReceived: 0,
+              totalTipsCount: 0,
+              totalDeliveryPay: 0,
+              totalDeliveryPayCount: 0
+            });
+          }
+
+          const paymentTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'payment',
+              status: 'completed'
+            },
+            order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']]
+          });
+
+          const transactionDateToUse = paymentTransaction?.transactionDate || paymentTransaction?.createdAt || new Date();
+          const receiptNumberToUse = paymentTransaction?.receiptNumber || null;
+
+          let driverDeliveryTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'delivery_pay',
+              driverId: null,
+              paymentStatus: { [Op.in]: ['pending', 'unpaid'] }
+            },
+            order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+          });
+
+          if (driverPayAmount <= 0.009 && driverDeliveryTransaction) {
+            driverPayAmount = parseFloat(driverDeliveryTransaction.amount || 0) || 0;
+          }
+
+          if (driverPayAmount > 0.009) {
+            const driverDeliveryNotes = driverDeliveryTransaction
+            ? `Driver delivery fee payment for Order #${order.id}. Credited after driver assignment.`
+            : `Driver delivery fee payment for Order #${order.id}. Credited to driver wallet.`;
+
+          const driverTransactionPayload = {
+            paymentMethod: paymentTransaction?.paymentMethod || driverDeliveryTransaction?.paymentMethod || 'mobile_money',
+            paymentProvider: paymentTransaction?.paymentProvider || driverDeliveryTransaction?.paymentProvider || 'mpesa',
+            amount: driverPayAmount,
+            status: 'completed',
+            paymentStatus: 'paid',
+            receiptNumber: receiptNumberToUse || driverDeliveryTransaction?.receiptNumber || null,
+            checkoutRequestID: paymentTransaction?.checkoutRequestID || driverDeliveryTransaction?.checkoutRequestID || null,
+            merchantRequestID: paymentTransaction?.merchantRequestID || driverDeliveryTransaction?.merchantRequestID || null,
+            phoneNumber: paymentTransaction?.phoneNumber || driverDeliveryTransaction?.phoneNumber || null,
+            transactionDate: transactionDateToUse,
+            driverId,
+            driverWalletId: driverWallet.id,
+            notes: driverDeliveryNotes
+          };
+
+          if (driverDeliveryTransaction) {
+            await driverDeliveryTransaction.update(driverTransactionPayload);
+          } else {
+            driverDeliveryTransaction = await db.Transaction.create({
+              orderId: order.id,
+              transactionType: 'delivery_pay',
+              ...driverTransactionPayload
+            });
+          }
+
+          await driverWallet.update({
+            balance: parseFloat(driverWallet.balance) + driverPayAmount,
+            totalDeliveryPay: parseFloat(driverWallet.totalDeliveryPay || 0) + driverPayAmount,
+            totalDeliveryPayCount: (driverWallet.totalDeliveryPayCount || 0) + 1
+          });
+
+          await order.update({
+            driverPayCredited: true,
+            driverPayCreditedAt: new Date(),
+            driverPayAmount: driverPayAmount
+          });
+          }
+        }
+      } catch (deliveryPayError) {
+        console.error('❌ Error crediting delivery fee payment when driver assigned:', deliveryPayError);
+      }
+    }
+
+    await order.reload({
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{ model: db.Drink, as: 'drink' }]
+        },
+        {
+          model: db.Transaction,
+          as: 'transactions'
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          attributes: ['id', 'name', 'phoneNumber', 'status']
+        }
+      ]
+    });
+
+    orderData = order.toJSON();
+    if (orderData.items) {
+      orderData.orderItems = orderData.items;
+    }
 
     // Emit socket events for real-time updates
     const io = req.app.get('io');

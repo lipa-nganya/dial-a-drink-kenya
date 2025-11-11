@@ -36,7 +36,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
   const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
   const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-  const driverPayAmount = driverPaySettingEnabled && orderInstance.driverId && configuredDriverPayAmount > 0
+  const driverPayAmount = driverPaySettingEnabled && configuredDriverPayAmount > 0
     ? Math.min(deliveryFee, configuredDriverPayAmount)
     : 0;
   const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
@@ -198,6 +198,40 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     } catch (driverPayError) {
       console.error('❌ Error crediting delivery fee payment during payment finalization:', driverPayError);
     }
+  } else if (driverPayAmount > 0.009) {
+    driverDeliveryTransaction = await db.Transaction.findOne({
+      where: {
+        orderId: effectiveOrderId,
+        transactionType: 'delivery_pay',
+        driverId: null,
+        paymentStatus: 'pending'
+      },
+      order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+    });
+
+    const pendingDriverPayload = {
+      orderId: effectiveOrderId,
+      transactionType: 'delivery_pay',
+      paymentMethod,
+      paymentProvider,
+      amount: driverPayAmount,
+      status: 'pending',
+      paymentStatus: 'pending',
+      receiptNumber: normalizedReceipt,
+      checkoutRequestID: paymentTransaction.checkoutRequestID,
+      merchantRequestID: paymentTransaction.merchantRequestID,
+      phoneNumber: paymentTransaction.phoneNumber,
+      transactionDate: resolvedTransactionDate,
+      driverId: null,
+      driverWalletId: null,
+      notes: `Driver delivery fee payment for Order #${effectiveOrderId} (${context}) - pending driver assignment.`
+    };
+
+    if (driverDeliveryTransaction) {
+      await driverDeliveryTransaction.update(pendingDriverPayload);
+    } else {
+      driverDeliveryTransaction = await db.Transaction.create(pendingDriverPayload);
+    }
   } else {
     // If no driver delivery payment is due, cancel any lingering driver-specific delivery payments to avoid confusion
     const existingDriverDeliveryTransaction = await db.Transaction.findOne({
@@ -304,10 +338,16 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     }
   }
 
-  await orderInstance.update({
+  const orderUpdatePayload = {
     paymentStatus: 'paid',
     status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
-  });
+  };
+
+  if (driverPayAmount > 0.009) {
+    orderUpdatePayload.driverPayAmount = driverPayAmount;
+  }
+
+  await orderInstance.update(orderUpdatePayload);
 
   await orderInstance.reload({
     include: [
