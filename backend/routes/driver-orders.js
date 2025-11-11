@@ -266,6 +266,84 @@ router.patch('/:orderId/status', async (req, res) => {
               totalDeliveryPayCount: currentDeliveryPayCount + 1
             });
 
+            // Update or create driver delivery transaction
+            try {
+              const paymentTransaction = await db.Transaction.findOne({
+                where: {
+                  orderId: order.id,
+                  transactionType: 'payment',
+                  status: 'completed'
+                },
+                order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']]
+              });
+
+              let driverDeliveryTransaction = await db.Transaction.findOne({
+                where: {
+                  orderId: order.id,
+                  transactionType: 'delivery_pay',
+                  driverId
+                },
+                order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+              });
+
+              if (!driverDeliveryTransaction) {
+                driverDeliveryTransaction = await db.Transaction.findOne({
+                  where: {
+                    orderId: order.id,
+                    transactionType: 'delivery_pay',
+                    driverId: null,
+                    paymentStatus: {
+                      [Op.in]: ['pending', 'unpaid', 'paid']
+                    }
+                  },
+                  order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+                });
+              }
+
+              const receiptNumberToUse = paymentTransaction?.receiptNumber || driverDeliveryTransaction?.receiptNumber || null;
+              const checkoutRequestIDToUse = paymentTransaction?.checkoutRequestID || driverDeliveryTransaction?.checkoutRequestID || null;
+              const merchantRequestIDToUse = paymentTransaction?.merchantRequestID || driverDeliveryTransaction?.merchantRequestID || null;
+              const phoneNumberToUse = paymentTransaction?.phoneNumber || driverDeliveryTransaction?.phoneNumber || null;
+              const transactionDateToUse =
+                paymentTransaction?.transactionDate ||
+                driverDeliveryTransaction?.transactionDate ||
+                paymentTransaction?.createdAt ||
+                driverDeliveryTransaction?.createdAt ||
+                new Date();
+
+              const driverDeliveryNotes = driverDeliveryTransaction
+                ? `${driverDeliveryTransaction.notes || ''}\nDriver delivery fee payment credited to driver wallet.`
+                : `Driver delivery fee payment for Order #${order.id}. Credited to driver wallet.`;
+
+              const driverDeliveryPayload = {
+                paymentMethod: paymentTransaction?.paymentMethod || driverDeliveryTransaction?.paymentMethod || order.paymentMethod || 'cash',
+                paymentProvider: paymentTransaction?.paymentProvider || driverDeliveryTransaction?.paymentProvider || order.paymentMethod || 'cash',
+                amount: driverPayAmount,
+                status: 'completed',
+                paymentStatus: 'paid',
+                receiptNumber: receiptNumberToUse,
+                checkoutRequestID: checkoutRequestIDToUse,
+                merchantRequestID: merchantRequestIDToUse,
+                phoneNumber: phoneNumberToUse,
+                transactionDate: transactionDateToUse,
+                driverId,
+                driverWalletId: driverWallet.id,
+                notes: driverDeliveryNotes.trim()
+              };
+
+              if (driverDeliveryTransaction) {
+                await driverDeliveryTransaction.update(driverDeliveryPayload);
+              } else {
+                await db.Transaction.create({
+                  orderId: order.id,
+                  transactionType: 'delivery_pay',
+                  ...driverDeliveryPayload
+                });
+              }
+            } catch (driverTransactionError) {
+              console.error('❌ Error recording driver delivery transaction:', driverTransactionError);
+            }
+
             await order.update({
               driverPayCredited: true,
               driverPayCreditedAt: new Date(),
