@@ -1,16 +1,8 @@
 #!/usr/bin/env bash
 
 # Generic GCP project bootstrap focused on low-cost defaults.
-# Usage:
-#   export PROJECT_ID="your-project-id"
-#   export BILLING_ACCOUNT="XXXXXX-XXXXXX-XXXXXX"   # optional
-#   export ORG_ID="1234567890"                      # optional (mutually exclusive with FOLDER_ID)
-#   export FOLDER_ID="3456789012"                   # optional
-#   export REGION="us-central1"                     # optional
-#   export ZONE="us-central1-c"                     # optional
-#   export BUDGET_AMOUNT=50                         # optional, USD/month
-#   export BUDGET_DISPLAY_NAME="Dev budget"         # optional
-#   ./scripts/gcp-bootstrap.sh
+# You can pre-set environment variables if you prefer (PROJECT_ID, BILLING_ACCOUNT, etc.),
+# otherwise the script will interactively ask for the values it needs.
 
 set -euo pipefail
 
@@ -18,12 +10,38 @@ log() {
   printf "\n[%s] %s\n" "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
 }
 
-require_var() {
-  local name="$1"
-  if [[ -z "${!name:-}" ]]; then
-    echo "Error: \$$name must be set." >&2
-    exit 1
+ask_input() {
+  local var_name="$1"
+  local prompt="$2"
+  local default="${3:-}"
+  local required="${4:-optional}"
+  local current="${!var_name:-}"
+
+  if [[ -n "$current" ]]; then
+    return
   fi
+
+  local value=""
+  while true; do
+    if [[ -n "$default" ]]; then
+      read -r -p "$prompt [$default]: " value || true
+    else
+      read -r -p "$prompt: " value || true
+    fi
+
+    if [[ -z "$value" ]]; then
+      value="$default"
+    fi
+
+    if [[ "$required" == "required" && -z "$value" ]]; then
+      echo "A value is required." >&2
+      continue
+    fi
+
+    break
+  done
+
+  printf -v "$var_name" '%s' "$value"
 }
 
 PROJECT_ID="${PROJECT_ID:-}"
@@ -35,7 +53,18 @@ ZONE="${ZONE:-us-central1-c}"
 BUDGET_AMOUNT="${BUDGET_AMOUNT:-}"
 BUDGET_DISPLAY_NAME="${BUDGET_DISPLAY_NAME:-Dial-a-Drink Cost Ceiling}"
 
-require_var PROJECT_ID
+ask_input PROJECT_ID "Enter the GCP project ID" "" "required"
+ask_input BILLING_ACCOUNT "Enter the billing account ID (leave blank to skip linking)"
+ask_input ORG_ID "Enter the organization ID (leave blank if not applicable)"
+ask_input FOLDER_ID "Enter the folder ID (leave blank if not applicable)"
+ask_input REGION "Enter the default region" "${REGION}"
+ask_input ZONE "Enter the default zone" "${ZONE}"
+ask_input BUDGET_AMOUNT "Enter monthly budget amount in USD (leave blank to skip budget creation)"
+ask_input BUDGET_DISPLAY_NAME "Enter the budget display name" "${BUDGET_DISPLAY_NAME}"
+
+if [[ -n "${ORG_ID}" && -n "${FOLDER_ID}" ]]; then
+  echo "Warning: Both ORG_ID and FOLDER_ID provided. The folder takes precedence." >&2
+fi
 
 log "Ensuring gcloud CLI is installed..."
 if ! command -v gcloud >/dev/null 2>&1; then
@@ -86,12 +115,15 @@ gcloud services enable "${core_services[@]}"
 
 log "Hardening defaults for cost savings..."
 # Enable OS Login and disable serial port access to reduce attack surface.
-gcloud compute project-info update-metadata \
+gcloud compute project-info add-metadata \
   --metadata enable-oslogin=TRUE,serial-port-enable=FALSE
 
 # Create a lean VPC and delete the default one (which opens extra firewall rules).
 if gcloud compute networks describe default >/dev/null 2>&1; then
   log "Deleting default network (unsafe defaults)..."
+  for rule in default-allow-icmp default-allow-internal default-allow-rdp default-allow-ssh; do
+    gcloud compute firewall-rules delete "${rule}" --quiet >/dev/null 2>&1 || true
+  done
   gcloud compute networks delete default --quiet
 fi
 
@@ -114,13 +146,28 @@ if ! gcloud compute networks describe "${PROJECT_ID}-vpc" >/dev/null 2>&1; then
 fi
 
 log "Creating a minimal platform service account..."
-if ! gcloud iam service-accounts describe "platform@${PROJECT_ID}.iam.gserviceaccount.com" >/dev/null 2>&1; then
+ACCOUNT_EMAIL="platform@${PROJECT_ID}.iam.gserviceaccount.com"
+if ! gcloud iam service-accounts describe "${ACCOUNT_EMAIL}" >/dev/null 2>&1; then
   gcloud iam service-accounts create platform \
     --display-name="dialadrink-platform"
 fi
 
+# Wait until the service account is visible to IAM (handles eventual consistency).
+readonly MAX_ATTEMPTS=10
+readonly SLEEP_SECONDS=5
+attempt=1
+while ! gcloud iam service-accounts describe "${ACCOUNT_EMAIL}" >/dev/null 2>&1; do
+  if (( attempt >= MAX_ATTEMPTS )); then
+    echo "Service account ${ACCOUNT_EMAIL} not visible after waiting. Exiting." >&2
+    exit 1
+  fi
+  log "Waiting for service account to propagate (attempt ${attempt}/${MAX_ATTEMPTS})..."
+  sleep "${SLEEP_SECONDS}"
+  ((attempt++))
+done
+
 gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-  --member="serviceAccount:platform@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --member="serviceAccount:${ACCOUNT_EMAIL}" \
   --role="roles/run.developer" \
   --role="roles/cloudsql.client" \
   --role="roles/storage.objectViewer" \
