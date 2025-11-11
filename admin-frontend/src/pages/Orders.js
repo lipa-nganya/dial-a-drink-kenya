@@ -28,12 +28,8 @@ import {
   InputAdornment
 } from '@mui/material';
 import {
-  CheckCircle,
   Cancel,
-  LocalShipping,
   ShoppingCart,
-  AccessTime,
-  DoneAll,
   Warning,
   Assignment,
   Edit,
@@ -44,6 +40,7 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
+import { getOrderStatusChipProps, getPaymentStatusChipProps } from '../utils/chipStyles';
 
 const Orders = () => {
   const [orders, setOrders] = useState([]);
@@ -57,6 +54,10 @@ const Orders = () => {
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReasonError, setCancelReasonError] = useState('');
+  const [cancelTargetOrder, setCancelTargetOrder] = useState(null);
 
   useEffect(() => {
     fetchOrders();
@@ -332,6 +333,15 @@ const Orders = () => {
   }, [orderStatusFilter, transactionStatusFilter, searchQuery, orders]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
+    if (newStatus === 'cancelled') {
+      const targetOrder = orders.find(order => order.id === orderId) || null;
+      setCancelTargetOrder(targetOrder);
+      setCancelReason('');
+      setCancelReasonError('');
+      setCancelDialogOpen(true);
+      return;
+    }
+
     try {
       const response = await api.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
       setOrders(prevOrders => {
@@ -344,6 +354,49 @@ const Orders = () => {
     } catch (error) {
       console.error('Error updating order status:', error);
       setError(error.response?.data?.error || error.message);
+    }
+  };
+
+  const handleCloseCancelDialog = () => {
+    setCancelDialogOpen(false);
+    setCancelReason('');
+    setCancelReasonError('');
+    setCancelTargetOrder(null);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelTargetOrder) {
+      return;
+    }
+
+    const trimmedReason = cancelReason.trim();
+    if (!trimmedReason) {
+      setCancelReasonError('Cancellation reason is required');
+      return;
+    }
+
+    if (trimmedReason.length > 100) {
+      setCancelReasonError('Reason must be 100 characters or fewer');
+      return;
+    }
+
+    try {
+      const response = await api.patch(`/admin/orders/${cancelTargetOrder.id}/status`, {
+        status: 'cancelled',
+        reason: trimmedReason
+      });
+
+      setOrders((prevOrders) => {
+        const updated = prevOrders.map((order) =>
+          order.id === cancelTargetOrder.id ? { ...order, status: 'cancelled', ...response.data } : order
+        );
+        return sortOrdersByStatus(updated);
+      });
+
+      handleCloseCancelDialog();
+    } catch (error) {
+      console.error('Error cancelling order:', error);
+      setCancelReasonError(error.response?.data?.error || 'Failed to cancel order');
     }
   };
 
@@ -407,57 +460,6 @@ const Orders = () => {
     } catch (error) {
       console.error('Error removing driver:', error);
       setError(error.response?.data?.error || error.message);
-    }
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'pending': return 'warning';
-      case 'confirmed': return 'info';
-      case 'preparing': return 'primary';
-      case 'out_for_delivery': return 'secondary';
-      case 'delivered': return 'success';
-      case 'completed': return 'success';
-      case 'cancelled': return 'error';
-      default: return 'default';
-    }
-  };
-
-  const getStatusIcon = (status) => {
-    switch (status) {
-      case 'pending': return <AccessTime />;
-      case 'confirmed': return <CheckCircle />;
-      case 'preparing': return <ShoppingCart />;
-      case 'out_for_delivery': return <LocalShipping />;
-      case 'delivered': return <DoneAll />;
-      case 'completed': return <DoneAll />;
-      case 'cancelled': return <Cancel />;
-      default: return <ShoppingCart />;
-    }
-  };
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case 'pending': return 'Pending';
-      case 'confirmed': return 'Confirmed';
-      case 'preparing': return 'Preparing';
-      case 'out_for_delivery': return 'On the Way';
-      case 'delivered': return 'Delivered';
-      case 'completed': return 'Completed';
-      case 'cancelled': return 'Cancelled';
-      default: return status;
-    }
-  };
-
-  const getPaymentStatusColor = (paymentStatus, orderStatus) => {
-    if (orderStatus === 'delivered' && paymentStatus === 'unpaid') {
-      return 'error'; // Highlight unpaid delivered orders
-    }
-    switch (paymentStatus) {
-      case 'paid': return 'success';
-      case 'unpaid': return 'warning';
-      case 'pending': return 'default';
-      default: return 'default';
     }
   };
 
@@ -680,6 +682,8 @@ const Orders = () => {
             <TableBody>
               {filteredOrders.map((order) => {
                 const isUnpaidDelivered = order.status === 'delivered' && order.paymentStatus === 'unpaid';
+                const statusChip = getOrderStatusChipProps(order.status);
+                const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
                 const nextStatusOptions = getNextStatusOptions(order.status, order.paymentType, order.paymentStatus);
                 
                 return (
@@ -730,12 +734,14 @@ const Orders = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={order.paymentStatus === 'paid' ? 'Paid' : order.paymentStatus === 'unpaid' ? 'Unpaid' : 'Pending'}
-                        color={getPaymentStatusColor(order.paymentStatus, order.status)}
-                        size="small"
-                        icon={order.paymentStatus === 'paid' ? <CheckCircle /> : order.paymentStatus === 'unpaid' ? <Warning /> : <AccessTime />}
-                      />
+                      {paymentStatusChip ? (
+                        <Chip
+                          size="small"
+                          {...paymentStatusChip}
+                        />
+                      ) : (
+                        <Chip size="small" label="—" />
+                      )}
                       {isUnpaidDelivered && (
                         <Tooltip title="This order has been delivered but payment is still unpaid">
                           <IconButton size="small" sx={{ ml: 1, color: 'error.main' }}>
@@ -746,10 +752,8 @@ const Orders = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        icon={getStatusIcon(order.status)}
-                        label={getStatusLabel(order.status)}
-                        color={getStatusColor(order.status)}
                         size="small"
+                        {...statusChip}
                       />
                     </TableCell>
                     <TableCell>
@@ -807,12 +811,17 @@ const Orders = () => {
                           size="small"
                           startIcon={<Edit />}
                           onClick={() => handleOpenDriverDialog(order)}
+                          disabled={order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled'}
                           sx={{
-                            borderColor: '#00E0B8',
-                            color: '#00E0B8',
+                            borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#00E0B8',
+                            color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#00E0B8',
                             '&:hover': {
-                              borderColor: '#00C4A3',
-                              backgroundColor: 'rgba(0, 224, 184, 0.1)'
+                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#00C4A3',
+                              backgroundColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? 'transparent' : 'rgba(0, 224, 184, 0.1)'
+                            },
+                            '&.Mui-disabled': {
+                              borderColor: '#666',
+                              color: '#666'
                             }
                           }}
                         >
@@ -824,13 +833,13 @@ const Orders = () => {
                             size="small"
                             startIcon={<Delete />}
                             onClick={() => handleRemoveDriver(order)}
-                            disabled={order.status === 'delivered' || order.status === 'completed'}
+                            disabled={order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled'}
                             sx={{
-                              borderColor: order.status === 'delivered' || order.status === 'completed' ? '#666' : '#FF3366',
-                              color: order.status === 'delivered' || order.status === 'completed' ? '#666' : '#FF3366',
+                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#FF3366',
+                              color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#FF3366',
                               '&:hover': {
-                                borderColor: order.status === 'delivered' || order.status === 'completed' ? '#666' : '#FF1744',
-                                backgroundColor: order.status === 'delivered' || order.status === 'completed' ? 'transparent' : 'rgba(255, 51, 102, 0.1)'
+                                borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#FF1744',
+                                backgroundColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? 'transparent' : 'rgba(255, 51, 102, 0.1)'
                               },
                               '&.Mui-disabled': {
                                 borderColor: '#666',
@@ -977,6 +986,52 @@ const Orders = () => {
             }}
           >
             Assign Driver
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={cancelDialogOpen}
+        onClose={handleCloseCancelDialog}
+        fullWidth
+        maxWidth="sm"
+      >
+        <DialogTitle>Cancel Order</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Please provide a reason for cancelling Order #{cancelTargetOrder?.id}. This will be saved for audit purposes.
+          </Typography>
+          <TextField
+            autoFocus
+            fullWidth
+            multiline
+            minRows={2}
+            label="Cancellation Reason"
+            value={cancelReason}
+            onChange={(e) => {
+              setCancelReason(e.target.value);
+              if (cancelReasonError) {
+                setCancelReasonError('');
+              }
+            }}
+            inputProps={{ maxLength: 100 }}
+            helperText={`${cancelReason.length}/100`}
+            error={Boolean(cancelReasonError)}
+          />
+          {cancelReasonError && (
+            <Typography variant="caption" color="error">
+              {cancelReasonError}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseCancelDialog}>Back</Button>
+          <Button
+            onClick={handleConfirmCancel}
+            variant="contained"
+            sx={{ backgroundColor: '#FF3366', color: '#0D0D0D', '&:hover': { backgroundColor: '#FF1744' } }}
+          >
+            Confirm Cancel
           </Button>
         </DialogActions>
       </Dialog>

@@ -8,6 +8,7 @@ import {
   Linking,
   ActivityIndicator,
   TextInput,
+  Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
@@ -58,12 +59,16 @@ const OrderDetailScreen = ({ route, navigation }) => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarType, setSnackbarType] = useState('info');
   const [paymentPhone, setPaymentPhone] = useState(initialOrder?.customerPhone || '');
+  const [confirmingCash, setConfirmingCash] = useState(false);
   const socketRef = useRef(null);
   const { colors, isDarkMode } = useTheme();
 
   const normalizedStatus = (currentOrder?.status || '').toLowerCase();
   const isCompletedOrCancelled = normalizedStatus === 'completed' || normalizedStatus === 'cancelled';
   const isActiveOrder = !isCompletedOrCancelled;
+  const isPayOnDelivery = currentOrder.paymentType === 'pay_on_delivery';
+  const isPaymentPaid = (currentOrder.paymentStatus || '').toLowerCase() === 'paid';
+  const isOnTheWay = normalizedStatus === 'out_for_delivery';
 
   const formatCurrency = (amount) => {
     return `KES ${parseFloat(amount).toFixed(2)}`;
@@ -298,6 +303,58 @@ const OrderDetailScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleConfirmCashPayment = async (method) => {
+    setConfirmingCash(true);
+    try {
+      const response = await api.post(`/driver-orders/${currentOrder.id}/confirm-cash-payment`, {
+        driverId,
+        method
+      });
+
+      if (response.data?.order) {
+        const updatedOrder = response.data.order;
+        setCurrentOrder(updatedOrder);
+        navigation.setParams({
+          orderUpdated: true,
+          updatedOrder
+        });
+      }
+
+      setSnackbarMessage('Payment marked as paid.');
+      setSnackbarType('success');
+      setSnackbarVisible(true);
+    } catch (error) {
+      console.error('Manual payment confirmation error:', error);
+      setSnackbarMessage(error.response?.data?.error || 'Failed to confirm payment.');
+      setSnackbarType('error');
+      setSnackbarVisible(true);
+    } finally {
+      setConfirmingCash(false);
+    }
+  };
+
+  const promptCashConfirmation = () => {
+    Alert.alert(
+      'Confirm Payment Received',
+      'How did the customer pay? Choose the option that best describes the payment method.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Cash in Hand',
+          onPress: () => handleConfirmCashPayment('cash')
+        },
+        {
+          text: 'Paid to My M-Pesa',
+          onPress: () => handleConfirmCashPayment('mpesa_manual')
+        }
+      ],
+      { cancelable: true }
+    );
+  };
+
   const handleStatusUpdate = async (newStatus) => {
     const statusLabels = {
       'preparing': 'Preparing',
@@ -378,8 +435,11 @@ const OrderDetailScreen = ({ route, navigation }) => {
   
   // Can only update to "Delivered" if status is exactly "out_for_delivery"
   const canUpdateToDelivered = currentOrder.status === 'out_for_delivery';
-  
-  const canInitiatePayment = currentOrder.paymentType === 'pay_on_delivery' && currentOrder.paymentStatus !== 'paid' && isActiveOrder;
+  const canMarkDeliveredNow = isPaymentPaid;
+
+  const canShowPaymentPrompt = isPayOnDelivery && currentOrder.paymentStatus !== 'paid' && isActiveOrder;
+  const paymentPromptEnabled = isOnTheWay;
+  const canShowCashConfirmation = isPayOnDelivery && currentOrder.paymentStatus !== 'paid' && isActiveOrder && isOnTheWay;
 
   const orderItems = Array.isArray(currentOrder?.orderItems)
     ? currentOrder.orderItems
@@ -496,7 +556,7 @@ const OrderDetailScreen = ({ route, navigation }) => {
               {currentOrder.paymentStatus.toUpperCase()}
             </Text>
           </View>
-          {currentOrder.paymentType === 'pay_on_delivery' && canInitiatePayment && (
+          {currentOrder.paymentType === 'pay_on_delivery' && canShowPaymentPrompt && (
             <View style={styles.phoneInputContainer}>
               <Text style={[styles.infoLabel, { color: colors.textSecondary, marginBottom: 8 }]}>Phone Number:</Text>
               <TextInput
@@ -569,16 +629,34 @@ const OrderDetailScreen = ({ route, navigation }) => {
 
         {/* Action Buttons */}
         <View style={styles.actions}>
-          {canInitiatePayment && (
+          {canShowPaymentPrompt && (
             <TouchableOpacity
-              style={[styles.actionButton, styles.paymentButton]}
+              style={[
+                styles.actionButton,
+                styles.paymentButton,
+                (!paymentPromptEnabled || loading) && styles.actionButtonDisabled
+              ]}
               onPress={handleInitiatePayment}
-              disabled={loading}
+              disabled={loading || !paymentPromptEnabled}
             >
               {loading ? (
                 <ActivityIndicator color="#0D0D0D" />
               ) : (
                 <Text style={styles.actionButtonText}>Send Payment Prompt</Text>
+              )}
+            </TouchableOpacity>
+          )}
+
+          {canShowCashConfirmation && (
+            <TouchableOpacity
+              style={[styles.actionButton, styles.cashButton]}
+              onPress={promptCashConfirmation}
+              disabled={confirmingCash}
+            >
+              {confirmingCash ? (
+                <ActivityIndicator color="#0D0D0D" />
+              ) : (
+                <Text style={styles.actionButtonText}>💵 Received Cash Payment</Text>
               )}
             </TouchableOpacity>
           )}
@@ -595,9 +673,13 @@ const OrderDetailScreen = ({ route, navigation }) => {
 
           {canUpdateToDelivered && (
             <TouchableOpacity
-              style={[styles.actionButton, styles.deliveredButton]}
+              style={[
+                styles.actionButton,
+                styles.deliveredButton,
+                (!canMarkDeliveredNow || updatingStatus) && styles.actionButtonDisabled
+              ]}
               onPress={() => handleStatusUpdate('delivered')}
-              disabled={updatingStatus}
+              disabled={updatingStatus || !canMarkDeliveredNow}
             >
               <Text style={styles.actionButtonText}>✅ Mark Delivered</Text>
             </TouchableOpacity>
@@ -823,19 +905,27 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   actionButton: {
-    padding: 16,
+    flex: 1,
+    padding: 15,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 12,
   },
+  actionButtonDisabled: {
+    opacity: 0.5,
+  },
   paymentButton: {
-    backgroundColor: '#FFD700',
+    backgroundColor: '#00E0B8',
   },
   statusButton: {
-    backgroundColor: '#00BFFF',
+    backgroundColor: '#1E88E5',
   },
   deliveredButton: {
-    backgroundColor: '#32CD32',
+    backgroundColor: '#00C853',
+  },
+  cashButton: {
+    backgroundColor: '#FDD835',
   },
   actionButtonText: {
     color: '#0D0D0D',

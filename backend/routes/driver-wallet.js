@@ -50,6 +50,24 @@ router.get('/:driverId', async (req, res) => {
       limit: 50 // Last 50 tips
     });
 
+    // Get delivery pay transactions for this driver (driver payout entries)
+    const deliveryPayTransactions = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: {
+          [Op.in]: ['driver_pay', 'delivery_fee_debit']
+        },
+        status: 'completed'
+      },
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: ['id', 'customerName', 'createdAt', 'status']
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: 50 // Last 50 delivery payments
+    });
+
     // Calculate amount on hold (tips for orders that are not completed)
     let amountOnHold = 0;
     tipTransactions.forEach(tx => {
@@ -85,6 +103,17 @@ router.get('/:driverId', async (req, res) => {
               totalDeliveryPay: parseFloat(wallet.totalDeliveryPay) || 0,
               totalDeliveryPayCount: wallet.totalDeliveryPayCount || 0
       },
+      recentDeliveryPayments: deliveryPayTransactions.map(tx => ({
+        id: tx.id,
+        amount: tx.transactionType === 'delivery_fee_debit' ? -Math.abs(parseFloat(tx.amount)) : Math.abs(parseFloat(tx.amount)),
+        transactionType: tx.transactionType,
+        orderId: tx.orderId,
+        orderNumber: tx.order?.id,
+        customerName: tx.order?.customerName,
+        status: tx.order?.status,
+        date: tx.createdAt,
+        notes: tx.notes
+      })),
       recentTips: tipTransactions.map(tx => ({
         id: tx.id,
         amount: parseFloat(tx.amount),

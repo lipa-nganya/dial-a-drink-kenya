@@ -231,6 +231,7 @@ const Transactions = () => {
       'withdrawal',
       'payout',
       'driver_payout',
+      'driver_pay',
       'manual_payout',
       'reversal',
       'adjustment_debit'

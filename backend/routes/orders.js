@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const { ensureCustomerFromOrder } = require('../utils/customerSync');
 const smsService = require('../services/sms');
 
 // Helper function to calculate delivery fee
@@ -144,6 +145,8 @@ router.post('/', async (req, res) => {
       paymentStatus: paymentStatus,
       status: orderStatus
     });
+    
+    await ensureCustomerFromOrder(order);
     
     // Create order items
     for (const item of orderItems) {
@@ -326,7 +329,7 @@ router.get('/:id', async (req, res) => {
 // Update order status
 router.patch('/:id/status', async (req, res) => {
   try {
-    const { status } = req.body;
+    const { status, reason } = req.body;
     const validStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
     
     if (!validStatuses.includes(status)) {
@@ -337,9 +340,28 @@ router.patch('/:id/status', async (req, res) => {
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
+
+    let trimmedReason = null;
+    if (status === 'cancelled') {
+      trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+      if (!trimmedReason) {
+        return res.status(400).json({ error: 'Cancellation reason is required' });
+      }
+
+      if (trimmedReason.length > 100) {
+        return res.status(400).json({ error: 'Cancellation reason must be 100 characters or fewer' });
+      }
+
+      const cancellationNote = `[${new Date().toISOString()}] Cancelled by admin. Reason: ${trimmedReason}`;
+      order.notes = order.notes ? `${order.notes}\n${cancellationNote}` : cancellationNote;
+    }
     
     order.status = status;
     await order.save();
+
+    if (trimmedReason) {
+      order.setDataValue('cancellationReason', trimmedReason);
+    }
     
     res.json(order);
   } catch (error) {

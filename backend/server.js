@@ -180,23 +180,6 @@ const addMissingColumns = async () => {
       console.log('✅ pinHash column already exists in drivers table');
     }
 
-    // Ensure pushToken column exists in drivers table
-    const pushTokenCheck = await db.sequelize.query(`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_name='drivers' AND column_name='pushToken';
-    `);
-
-    if (pushTokenCheck[0].length === 0) {
-      await db.sequelize.query(`
-        ALTER TABLE "drivers"
-        ADD COLUMN "pushToken" VARCHAR(255);
-      `);
-      console.log('✅ pushToken column checked/added to drivers table');
-    } else {
-      console.log('✅ pushToken column already exists in drivers table');
-    }
-
     // Check if driverAccepted column exists in orders table
     const driverAcceptedCheck = await db.sequelize.query(`
       SELECT column_name 
@@ -449,6 +432,20 @@ const addMissingColumns = async () => {
       console.log('✅ Added delivery_pay to transaction_type_enum');
     } catch (error) {
       console.log('Note: transaction_type_enum delivery_pay value update attempted (may already exist)');
+    }
+
+    try {
+      await db.sequelize.query(`ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'driver_pay'`);
+      console.log('✅ Added driver_pay to transaction_type_enum');
+    } catch (error) {
+      console.log('Note: transaction_type_enum driver_pay value update attempted (may already exist)');
+    }
+
+    try {
+      await db.sequelize.query(`ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'delivery_fee_debit'`);
+      console.log('✅ Added delivery_fee_debit to transaction_type_enum');
+    } catch (error) {
+      console.log('Note: transaction_type_enum delivery_fee_debit value update attempted (may already exist)');
     }
 
     await db.sequelize.query(`
