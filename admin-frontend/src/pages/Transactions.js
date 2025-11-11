@@ -554,7 +554,6 @@ const Transactions = () => {
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Category</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Status</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Receipt Number</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Phone</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Date</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }} align="center">Actions</TableCell>
               </TableRow>
@@ -743,18 +742,6 @@ const Transactions = () => {
                       <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                         <Receipt fontSize="small" />
                         {transaction.receiptNumber}
-                      </Typography>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">
-                        N/A
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {transaction.phoneNumber ? (
-                      <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Phone fontSize="small" />
-                        {transaction.phoneNumber}
                       </Typography>
                     ) : (
                       <Typography variant="body2" color="text.secondary">
