@@ -132,6 +132,17 @@ export const getTransactionTypeChipProps = (type) => {
     };
   }
 
+  if (normalized === 'cash_settlement') {
+    return {
+      label: 'Cash Received',
+      sx: {
+        backgroundColor: '#FF6B6B',
+        color: '#FFFFFF',
+        fontWeight: 700
+      }
+    };
+  }
+
   if (normalized === 'payment' || normalized === 'order_payment') {
     return {
       label: 'Order Payment',

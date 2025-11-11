@@ -230,8 +230,8 @@ const Transactions = () => {
       'chargeback',
       'withdrawal',
       'payout',
-      'driver_payout',
       'driver_pay',
+      'cash_settlement',
       'manual_payout',
       'reversal',
       'adjustment_debit'

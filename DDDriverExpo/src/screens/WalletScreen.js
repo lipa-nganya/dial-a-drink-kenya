@@ -22,6 +22,7 @@ const WalletScreen = ({ route }) => {
   const [wallet, setWallet] = useState(null);
   const [recentTips, setRecentTips] = useState([]);
   const [recentDeliveryPayments, setRecentDeliveryPayments] = useState([]);
+  const [recentCashSettlements, setRecentCashSettlements] = useState([]);
   const [recentWithdrawals, setRecentWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -57,6 +58,7 @@ const WalletScreen = ({ route }) => {
         setWallet(null);
         setRecentTips([]);
         setRecentDeliveryPayments([]);
+        setRecentCashSettlements([]);
         setRecentWithdrawals([]);
         return;
       }
@@ -70,6 +72,7 @@ const WalletScreen = ({ route }) => {
           setWallet(walletResponse.data.wallet);
           setRecentTips(walletResponse.data.recentTips || []);
           setRecentDeliveryPayments(walletResponse.data.recentDeliveryPayments || []);
+          setRecentCashSettlements(walletResponse.data.cashSettlements || []);
           setRecentWithdrawals(walletResponse.data.recentWithdrawals || []);
           setWithdrawPhone(driverResponse.data.phoneNumber || '');
         }
@@ -79,6 +82,7 @@ const WalletScreen = ({ route }) => {
       setSnackbarMessage('Failed to load wallet data');
       setSnackbarType('error');
       setSnackbarVisible(true);
+      setRecentCashSettlements([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -271,17 +275,31 @@ const WalletScreen = ({ route }) => {
     const deliveries = (recentDeliveryPayments || []).map((tx) => {
       const amountNumeric = parseFloat(tx.amount) || 0;
       const isDebit = amountNumeric < 0;
+      const direction = isDebit ? 'debit' : 'credit';
       return {
         id: `delivery-${tx.id}`,
         type: isDebit ? 'delivery_debit' : 'delivery',
         amount: amountNumeric,
         date: tx.date,
         status: tx.status || 'completed',
+        direction,
         reference: tx.orderNumber || tx.orderId,
         customerName: tx.customerName,
         notes: tx.notes || '',
       };
     });
+
+    const cashSettlements = (recentCashSettlements || []).map((tx) => ({
+      id: `cash-${tx.id}`,
+      type: 'cash_settlement',
+      amount: -Math.abs(parseFloat(tx.amount) || 0),
+      date: tx.date,
+      status: tx.status || 'completed',
+      direction: 'debit',
+      reference: tx.orderNumber || tx.orderId,
+      customerName: tx.customerName,
+      notes: tx.notes || '',
+    }));
 
     const tips = (recentTips || []).map((tx) => ({
       id: `tip-${tx.id}`,
@@ -289,6 +307,7 @@ const WalletScreen = ({ route }) => {
       amount: parseFloat(tx.amount) || 0,
       date: tx.date,
       status: 'completed',
+      direction: 'credit',
       reference: tx.orderNumber || tx.orderId,
       customerName: tx.customerName,
       notes: tx.notes || '',
@@ -304,10 +323,10 @@ const WalletScreen = ({ route }) => {
       notes: tx.notes || '',
     }));
 
-    return [...deliveries, ...tips, ...withdrawals].sort(
+    return [...deliveries, ...cashSettlements, ...tips, ...withdrawals].sort(
       (a, b) => new Date(b.date) - new Date(a.date)
     );
-  }, [recentDeliveryPayments, recentTips, recentWithdrawals]);
+  }, [recentDeliveryPayments, recentCashSettlements, recentTips, recentWithdrawals]);
 
   const getTransactionLabel = (type) => {
     switch (type) {
@@ -315,6 +334,8 @@ const WalletScreen = ({ route }) => {
         return 'Delivery Fee Payment';
       case 'delivery_debit':
         return 'Delivery Fee Settlement';
+      case 'cash_settlement':
+        return 'Cash Received';
       case 'tip':
         return 'Tip';
       case 'withdrawal':
@@ -329,6 +350,7 @@ const WalletScreen = ({ route }) => {
       case 'withdrawal':
         return '#FF6B6B';
       case 'delivery_debit':
+      case 'cash_settlement':
         return '#FF6B6B';
       case 'delivery':
         return safeColors.accentText;
@@ -610,7 +632,23 @@ const WalletScreen = ({ route }) => {
       ) : (
         combinedTransactions.map((tx) => {
           const amountColor = getTransactionColor(tx.type);
-          const isDebit = tx.amount < 0 || tx.type === 'delivery_debit' || tx.type === 'withdrawal';
+          const isDebit = tx.amount < 0 || tx.type === 'delivery_debit' || tx.type === 'withdrawal' || tx.direction === 'debit' || tx.type === 'cash_settlement';
+          const statusLabel = tx.direction
+            ? tx.direction
+            : tx.status
+            ? tx.status
+            : null;
+          const statusColor = tx.direction
+            ? tx.direction === 'credit'
+              ? '#32CD32'
+              : '#FF6B6B'
+            : tx.status
+            ? tx.status.toLowerCase() === 'completed' || tx.status.toLowerCase() === 'paid'
+              ? '#32CD32'
+              : tx.status.toLowerCase() === 'failed'
+              ? '#FF6B6B'
+              : '#FFA500'
+            : safeColors.textSecondary;
           return (
             <View
               key={tx.id}
@@ -642,21 +680,16 @@ const WalletScreen = ({ route }) => {
               ) : null}
               <View style={styles.transactionFooter}>
                 <Text style={[styles.transactionDate, { color: safeColors.textSecondary }]}>{formatDate(tx.date)}</Text>
-                {tx.status ? (
+                {statusLabel ? (
                   <Text
                     style={[
                       styles.transactionStatus,
                       {
-                        color:
-                          tx.status.toLowerCase() === 'completed' || tx.status.toLowerCase() === 'paid'
-                            ? '#32CD32'
-                            : tx.status.toLowerCase() === 'failed'
-                            ? '#FF6B6B'
-                            : '#FFA500',
+                        color: statusColor,
                       },
                     ]}
                   >
-                    {tx.status.toUpperCase()}
+                    {statusLabel.toUpperCase()}
                   </Text>
                 ) : null}
               </View>

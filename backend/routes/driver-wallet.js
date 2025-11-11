@@ -69,6 +69,22 @@ router.get('/:driverId', async (req, res) => {
       limit: 50 // Last 50 delivery payments
     });
 
+    // Get cash settlement debits (driver remits collected cash)
+    const cashSettlementTransactions = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        status: 'completed'
+      },
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: ['id', 'customerName', 'createdAt', 'status']
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: 50 // Last 50 settlements
+    });
+
     // Calculate amount on hold (tips for orders that are not completed)
     let amountOnHold = 0;
     tipTransactions.forEach(tx => {
@@ -105,6 +121,17 @@ router.get('/:driverId', async (req, res) => {
               totalDeliveryPayCount: wallet.totalDeliveryPayCount || 0
       },
       recentDeliveryPayments: driverDeliveryTransactions.map(tx => ({
+        id: tx.id,
+        amount: Math.abs(parseFloat(tx.amount)),
+        transactionType: tx.transactionType,
+        orderId: tx.orderId,
+        orderNumber: tx.order?.id,
+        customerName: tx.order?.customerName,
+        status: tx.order?.status,
+        date: tx.createdAt,
+        notes: tx.notes
+      })),
+      cashSettlements: cashSettlementTransactions.map(tx => ({
         id: tx.id,
         amount: Math.abs(parseFloat(tx.amount)),
         transactionType: tx.transactionType,
