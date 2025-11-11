@@ -581,20 +581,21 @@ const Transactions = () => {
                 const normalizedProvider = providerLabel
                   ? providerLabel.replace(/[^a-z0-9]/gi, '').toLowerCase()
                   : '';
+                const isTip = transaction.transactionType === 'tip';
+                const isDriverDelivery = transaction.transactionType === 'delivery_pay' && !!transaction.driverWalletId;
+                const highlighted = isTip || isDriverDelivery;
+                const highlightBackground = 'rgba(255, 193, 7, 0.15)';
+                const highlightBorder = '4px solid #FFC107';
+                const hoverHighlightBackground = 'rgba(255, 193, 7, 0.2)';
+
                 return (
                   <React.Fragment key={transaction.id}>
                     <TableRow
                       sx={{
-                        backgroundColor: transaction.transactionType === 'tip' 
-                          ? 'rgba(255, 193, 7, 0.15)' // Gold/yellow background for tips
-                          : 'transparent',
-                        borderLeft: transaction.transactionType === 'tip' 
-                          ? '4px solid #FFC107' // Gold border for tips
-                          : 'none',
+                        backgroundColor: highlighted ? highlightBackground : 'transparent',
+                        borderLeft: highlighted ? highlightBorder : 'none',
                         '&:hover': {
-                          backgroundColor: transaction.transactionType === 'tip'
-                            ? 'rgba(255, 193, 7, 0.2)'
-                            : 'rgba(0, 224, 184, 0.05)'
+                          backgroundColor: highlighted ? hoverHighlightBackground : 'rgba(0, 224, 184, 0.05)'
                         }
                       }}
                     >
