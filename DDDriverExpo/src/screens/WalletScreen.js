@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -17,10 +17,12 @@ import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import Snackbar from '../components/Snackbar';
 
-const WalletScreen = ({ route, navigation }) => {
+const WalletScreen = ({ route }) => {
   const { phoneNumber } = route.params || {};
   const [wallet, setWallet] = useState(null);
   const [recentTips, setRecentTips] = useState([]);
+  const [recentDeliveryPayments, setRecentDeliveryPayments] = useState([]);
+  const [recentWithdrawals, setRecentWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [withdrawing, setWithdrawing] = useState(false);
@@ -30,106 +32,45 @@ const WalletScreen = ({ route, navigation }) => {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarType, setSnackbarType] = useState('info');
+  const [activeTab, setActiveTab] = useState('summary');
+  const [summaryTab, setSummaryTab] = useState('delivery');
+  const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const { colors, isDarkMode } = useTheme();
 
-  useEffect(() => {
-    loadWalletData();
-  }, []);
+  const safeColors = colors || {
+    background: '#0D0D0D',
+    paper: '#121212',
+    textPrimary: '#F5F5F5',
+    textSecondary: '#B0B0B0',
+    accent: '#00E0B8',
+    accentText: '#00E0B8',
+    border: '#333',
+  };
 
-  // Re-validate withdraw amount when wallet data changes
-  useEffect(() => {
-    if (withdrawAmount && wallet) {
-      validateWithdrawAmount(withdrawAmount);
-    }
-  }, [wallet, withdrawAmount, validateWithdrawAmount]);
-
-  // Set up socket connection for tip notifications
-  useEffect(() => {
-    let socket = null;
-    
-    const setupSocket = async () => {
-      try {
-        const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
-        if (!phone) return;
-
-        const driverResponse = await api.get(`/drivers/phone/${phone}`);
-        if (!driverResponse.data?.id) return;
-
-        const driverId = driverResponse.data.id;
-        const apiBaseUrl = __DEV__ 
-          ? 'http://localhost:5001' 
-          : 'https://dialadrink-backend.onrender.com';
-        
-        socket = io(apiBaseUrl, {
-          transports: ['websocket', 'polling'],
-          reconnection: true,
-          reconnectionDelay: 1000,
-          reconnectionAttempts: 5
-        });
-
-        socket.emit('join-driver', { driverId });
-        console.log('✅ WalletScreen: Socket connected for driver', driverId);
-
-        socket.on('tip-received', (data) => {
-          console.log('💰 Tip received in WalletScreen:', data);
-          // Reload wallet data to show updated balance
-          loadWalletData();
-          // Show notification
-          setSnackbarMessage(`Tip of KES ${data.tipAmount} received from ${data.customerName}!`);
-          setSnackbarType('success');
-          setSnackbarVisible(true);
-        });
-
-        // Listen for order status updates - when order is completed, update wallet
-        socket.on('order-status-updated', (data) => {
-          console.log('📦 Order status updated in WalletScreen:', data);
-          // If order is completed, reload wallet to update amount on hold
-          if (data.status === 'completed' && data.order?.driverId === driverId) {
-            console.log('✅ Order completed, updating wallet to reflect available balance');
-            loadWalletData();
-          }
-        });
-
-        socket.on('connect_error', (error) => {
-          console.error('❌ WalletScreen Socket connection error:', error);
-        });
-      } catch (error) {
-        console.error('Error setting up socket in WalletScreen:', error);
-      }
-    };
-
-    setupSocket();
-
-    return () => {
-      if (socket) {
-        socket.disconnect();
-        console.log('✅ WalletScreen: Socket disconnected');
-      }
-    };
-  }, [phoneNumber]);
-
-  const loadWalletData = async () => {
+  const loadWalletData = useCallback(async () => {
     try {
       setLoading(true);
-      const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
-      
+      const phone = phoneNumber || (await AsyncStorage.getItem('driver_phone'));
+
       if (!phone) {
         console.error('No phone number found');
-        setLoading(false);
+        setWallet(null);
+        setRecentTips([]);
+        setRecentDeliveryPayments([]);
+        setRecentWithdrawals([]);
         return;
       }
 
-      // Load driver info to get driver ID
       const driverResponse = await api.get(`/drivers/phone/${phone}`);
-      
+
       if (driverResponse.data && driverResponse.data.id) {
-        // Load wallet data
         const walletResponse = await api.get(`/driver-wallet/${driverResponse.data.id}`);
-        
+
         if (walletResponse.data.success) {
           setWallet(walletResponse.data.wallet);
           setRecentTips(walletResponse.data.recentTips || []);
-          // Pre-populate withdraw phone with driver's phone
+          setRecentDeliveryPayments(walletResponse.data.recentDeliveryPayments || []);
+          setRecentWithdrawals(walletResponse.data.recentWithdrawals || []);
           setWithdrawPhone(driverResponse.data.phoneNumber || '');
         }
       }
@@ -142,34 +83,107 @@ const WalletScreen = ({ route, navigation }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [phoneNumber]);
+
+  useEffect(() => {
+    loadWalletData();
+  }, [loadWalletData]);
+
+  const validateWithdrawAmount = useCallback(
+    (amount) => {
+      if (!amount || amount.trim() === '') {
+        setWithdrawAmountError('');
+        return false;
+      }
+
+      const numAmount = parseFloat(amount);
+      if (Number.isNaN(numAmount) || numAmount <= 0) {
+        setWithdrawAmountError('Please enter a valid amount');
+        return false;
+      }
+
+      const availableBalance = wallet?.availableBalance ?? wallet?.balance ?? 0;
+      if (numAmount > availableBalance) {
+        setWithdrawAmountError(`Exceeds available balance (KES ${availableBalance.toFixed(2)})`);
+        return false;
+      }
+
+      setWithdrawAmountError('');
+      return true;
+    },
+    [wallet]
+  );
+
+  useEffect(() => {
+    if (withdrawAmount && wallet) {
+      validateWithdrawAmount(withdrawAmount);
+    }
+  }, [wallet, withdrawAmount, validateWithdrawAmount]);
+
+  useEffect(() => {
+    if (!showWithdrawForm) {
+      setWithdrawAmount('');
+      setWithdrawAmountError('');
+    }
+  }, [showWithdrawForm]);
+
+  useEffect(() => {
+    let socket = null;
+
+    const setupSocket = async () => {
+      try {
+        const phone = phoneNumber || (await AsyncStorage.getItem('driver_phone'));
+        if (!phone) return;
+
+        const driverResponse = await api.get(`/drivers/phone/${phone}`);
+        if (!driverResponse.data?.id) return;
+
+        const driverId = driverResponse.data.id;
+        const apiBaseUrl = __DEV__ ? 'http://localhost:5001' : 'https://dialadrink-backend.onrender.com';
+
+        socket = io(apiBaseUrl, {
+          transports: ['websocket', 'polling'],
+          reconnection: true,
+          reconnectionDelay: 1000,
+          reconnectionAttempts: 5,
+        });
+
+        socket.emit('join-driver', { driverId });
+
+        socket.on('tip-received', (data) => {
+          loadWalletData();
+          setSnackbarMessage(`Tip of KES ${data.tipAmount} received from ${data.customerName}!`);
+          setSnackbarType('success');
+          setSnackbarVisible(true);
+        });
+
+        socket.on('order-status-updated', (data) => {
+          if (data.status === 'completed' && data.order?.driverId === driverId) {
+            loadWalletData();
+          }
+        });
+
+        socket.on('connect_error', (error) => {
+          console.error('WalletScreen Socket connection error:', error);
+        });
+      } catch (error) {
+        console.error('Error setting up socket in WalletScreen:', error);
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [phoneNumber, loadWalletData]);
 
   const onRefresh = () => {
     setRefreshing(true);
     loadWalletData();
   };
-
-  const validateWithdrawAmount = useCallback((amount) => {
-    if (!amount || amount.trim() === '') {
-      setWithdrawAmountError('');
-      return false;
-    }
-
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      setWithdrawAmountError('Please enter a valid amount');
-      return false;
-    }
-
-    const availableBalance = wallet?.availableBalance ?? wallet?.balance ?? 0;
-    if (numAmount > availableBalance) {
-      setWithdrawAmountError(`Exceeds available balance (KES ${availableBalance.toFixed(2)})`);
-      return false;
-    }
-
-    setWithdrawAmountError('');
-    return true;
-  }, [wallet]);
 
   const handleWithdraw = async () => {
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
@@ -197,50 +211,46 @@ const WalletScreen = ({ route, navigation }) => {
       return;
     }
 
-    Alert.alert(
-      'Confirm Withdrawal',
-      `Withdraw KES ${amount.toFixed(2)} to ${withdrawPhone}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Confirm',
-          onPress: async () => {
-            try {
-              setWithdrawing(true);
-              const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
-              const driverResponse = await api.get(`/drivers/phone/${phone}`);
-              
-              if (driverResponse.data && driverResponse.data.id) {
-                const response = await api.post(`/driver-wallet/${driverResponse.data.id}/withdraw`, {
-                  amount: amount,
-                  phoneNumber: withdrawPhone
-                });
+    Alert.alert('Confirm Withdrawal', `Withdraw KES ${amount.toFixed(2)} to ${withdrawPhone}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Confirm',
+        onPress: async () => {
+          try {
+            setWithdrawing(true);
+            const phone = phoneNumber || (await AsyncStorage.getItem('driver_phone'));
+            const driverResponse = await api.get(`/drivers/phone/${phone}`);
 
-                if (response.data.success) {
-                  setSnackbarMessage(`Withdrawal of KES ${amount.toFixed(2)} initiated successfully`);
-                  setSnackbarType('success');
-                  setSnackbarVisible(true);
-                  setWithdrawAmount('');
-                  // Refresh wallet data
-                  await loadWalletData();
-                } else {
-                  setSnackbarMessage(response.data.error || 'Failed to initiate withdrawal');
-                  setSnackbarType('error');
-                  setSnackbarVisible(true);
-                }
+            if (driverResponse.data && driverResponse.data.id) {
+              const response = await api.post(`/driver-wallet/${driverResponse.data.id}/withdraw`, {
+                amount,
+                phoneNumber: withdrawPhone,
+              });
+
+              if (response.data.success) {
+                setSnackbarMessage(`Withdrawal of KES ${amount.toFixed(2)} initiated successfully`);
+                setSnackbarType('success');
+                setSnackbarVisible(true);
+                setShowWithdrawForm(false);
+                setWithdrawAmount('');
+                await loadWalletData();
+              } else {
+                setSnackbarMessage(response.data.error || 'Failed to initiate withdrawal');
+                setSnackbarType('error');
+                setSnackbarVisible(true);
               }
-            } catch (error) {
-              console.error('Withdrawal error:', error);
-              setSnackbarMessage(error.response?.data?.error || 'Failed to initiate withdrawal');
-              setSnackbarType('error');
-              setSnackbarVisible(true);
-            } finally {
-              setWithdrawing(false);
             }
+          } catch (error) {
+            console.error('Withdrawal error:', error);
+            setSnackbarMessage(error.response?.data?.error || 'Failed to initiate withdrawal');
+            setSnackbarType('error');
+            setSnackbarVisible(true);
+          } finally {
+            setWithdrawing(false);
           }
-        }
-      ]
-    );
+        },
+      },
+    ]);
   };
 
   const formatDate = (dateString) => {
@@ -250,23 +260,420 @@ const WalletScreen = ({ route, navigation }) => {
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
     });
   };
 
-  const safeColors = colors || {
-    background: '#0D0D0D',
-    paper: '#121212',
-    textPrimary: '#F5F5F5',
-    textSecondary: '#B0B0B0',
-    accent: '#00E0B8',
-    accentText: '#00E0B8',
-    border: '#333',
+  const displayBalance = wallet ? parseFloat(wallet.balance ?? wallet.availableBalance ?? 0) : 0;
+  const availableToWithdraw = wallet ? parseFloat(wallet.availableBalance ?? wallet.balance ?? 0) : 0;
+
+  const combinedTransactions = useMemo(() => {
+    const deliveries = (recentDeliveryPayments || []).map((tx) => {
+      const amountNumeric = parseFloat(tx.amount) || 0;
+      const isDebit = tx.transactionType === 'delivery_fee_debit' || amountNumeric < 0;
+      return {
+        id: `delivery-${tx.id}`,
+        type: isDebit ? 'delivery_debit' : 'delivery',
+        amount: amountNumeric,
+        date: tx.date,
+        status: tx.status || 'completed',
+        reference: tx.orderNumber || tx.orderId,
+        customerName: tx.customerName,
+        notes: tx.notes || '',
+      };
+    });
+
+    const tips = (recentTips || []).map((tx) => ({
+      id: `tip-${tx.id}`,
+      type: 'tip',
+      amount: parseFloat(tx.amount) || 0,
+      date: tx.date,
+      status: 'completed',
+      reference: tx.orderNumber || tx.orderId,
+      customerName: tx.customerName,
+      notes: tx.notes || '',
+    }));
+
+    const withdrawals = (recentWithdrawals || []).map((tx) => ({
+      id: `withdrawal-${tx.id}`,
+      type: 'withdrawal',
+      amount: parseFloat(tx.amount) || 0,
+      date: tx.date,
+      status: tx.status || tx.paymentStatus || 'pending',
+      reference: tx.phoneNumber,
+      notes: tx.notes || '',
+    }));
+
+    return [...deliveries, ...tips, ...withdrawals].sort(
+      (a, b) => new Date(b.date) - new Date(a.date)
+    );
+  }, [recentDeliveryPayments, recentTips, recentWithdrawals]);
+
+  const getTransactionLabel = (type) => {
+    switch (type) {
+      case 'delivery':
+        return 'Delivery Payment';
+      case 'delivery_debit':
+        return 'Delivery Fee Settlement';
+      case 'tip':
+        return 'Tip';
+      case 'withdrawal':
+        return 'Withdrawal';
+      default:
+        return 'Transaction';
+    }
   };
+
+  const getTransactionColor = (type) => {
+    switch (type) {
+      case 'withdrawal':
+        return '#FF6B6B';
+      case 'delivery_debit':
+        return '#FF6B6B';
+      case 'delivery':
+        return safeColors.accentText;
+      case 'tip':
+      default:
+        return safeColors.accentText;
+    }
+  };
+
+  const renderSummaryList = (items, type) => {
+    const isDelivery = type === 'delivery';
+    const emptyMessage = isDelivery ? 'No delivery payments yet' : 'No tips received yet';
+
+    if (!items || items.length === 0) {
+      return (
+        <View style={[styles.emptyStateCard, { backgroundColor: safeColors.paper }]}> 
+          <Text style={[styles.emptyStateText, { color: safeColors.textSecondary }]}>{emptyMessage}</Text>
+        </View>
+      );
+    }
+
+    return (
+      <View style={[styles.listCard, { backgroundColor: safeColors.paper }]}> 
+        {items.map((item) => {
+          const amountNumeric = parseFloat(item.amount) || 0;
+          const isDebit = amountNumeric < 0 || item.transactionType === 'delivery_fee_debit';
+          const displayAmount = Math.abs(amountNumeric).toFixed(2);
+          const label = item.transactionType === 'delivery_fee_debit'
+            ? 'Delivery Fee Settlement'
+            : isDelivery
+            ? 'Driver Payout'
+            : 'Tip';
+
+          return (
+          <View key={`${type}-${item.id}`} style={[styles.listItem, { borderBottomColor: safeColors.border }]}> 
+            <View style={styles.listItemLeft}>
+              <Text style={[styles.listLabel, { color: safeColors.textSecondary }]}> 
+                {label}
+              </Text>
+              <Text style={[styles.listAmount, { color: isDebit ? '#FF6B6B' : safeColors.accentText }]}> 
+                {isDebit ? '- ' : ''}KES {displayAmount}
+              </Text>
+              {item.orderNumber || item.orderId ? (
+                <Text style={[styles.listMeta, { color: safeColors.textSecondary }]}> 
+                  {`Order #${item.orderNumber || item.orderId}`}
+                </Text>
+              ) : null}
+              {item.customerName ? (
+                <Text style={[styles.listMeta, { color: safeColors.textSecondary }]}> 
+                  {item.customerName}
+                </Text>
+              ) : null}
+              {item.notes ? (
+                <Text style={[styles.listMeta, { color: safeColors.textSecondary }]} numberOfLines={1}>
+                  {item.notes}
+                </Text>
+              ) : null}
+            </View>
+            <Text style={[styles.listDate, { color: safeColors.textSecondary }]}>{formatDate(item.date)}</Text>
+          </View>
+        );
+        })}
+      </View>
+    );
+  };
+
+  const renderSummarySection = () => (
+    <>
+      <View style={[styles.balanceCard, { backgroundColor: safeColors.paper }]}> 
+        <Text style={[styles.balanceLabel, { color: safeColors.textSecondary }]}>Total Wallet Balance</Text>
+        <Text style={[styles.balanceAmount, { color: safeColors.accentText }]}> 
+          KES {displayBalance.toFixed(2)}
+        </Text>
+        <Text style={[styles.balanceSubtitle, { color: safeColors.textSecondary }]}> 
+          Includes completed delivery payments and tips
+        </Text>
+        <Text style={[styles.secondaryInfo, { color: safeColors.textSecondary }]}> 
+          Available to withdraw: KES {availableToWithdraw.toFixed(2)}
+        </Text>
+
+        <View style={styles.balanceBreakdown}>
+          <View
+            style={[styles.breakdownBox, {
+              borderColor: safeColors.border,
+              backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+            }]}
+          >
+            <Text style={[styles.breakdownLabel, { color: safeColors.textSecondary }]}>Delivery Payments</Text>
+            <Text style={[styles.breakdownValue, { color: safeColors.accentText }]}> 
+              KES {(wallet?.totalDeliveryPay || 0).toFixed(2)}
+            </Text>
+            <Text style={[styles.breakdownLabel, { color: safeColors.textSecondary }]}> 
+              {wallet?.totalDeliveryPayCount || 0} deliveries
+            </Text>
+          </View>
+          <View
+            style={[styles.breakdownBox, {
+              borderColor: safeColors.border,
+              backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)',
+            }]}
+          >
+            <Text style={[styles.breakdownLabel, { color: safeColors.textSecondary }]}>Tips Received</Text>
+            <Text style={[styles.breakdownValue, { color: safeColors.accentText }]}> 
+              KES {(wallet?.totalTipsReceived || 0).toFixed(2)}
+            </Text>
+            <Text style={[styles.breakdownLabel, { color: safeColors.textSecondary }]}> 
+              {wallet?.totalTipsCount || 0} tips
+            </Text>
+          </View>
+        </View>
+
+        {wallet?.amountOnHold > 0 && (
+          <View style={[styles.onHoldContainer, { borderTopColor: safeColors.border }]}> 
+            <Text style={[styles.onHoldLabel, { color: safeColors.textSecondary }]}>Amount on Hold:</Text>
+            <Text style={[styles.onHoldAmount, { color: '#FFC107' }]}> 
+              KES {wallet.amountOnHold.toFixed(2)}
+            </Text>
+          </View>
+        )}
+
+        {wallet?.amountOnHold > 0 && (
+          <Text style={[styles.onHoldNote, { color: safeColors.textSecondary }]}> 
+            Tips for orders not yet completed are released once the order is completed
+          </Text>
+        )}
+
+        <TouchableOpacity
+          style={[styles.primaryButton, { backgroundColor: safeColors.accent }]}
+          onPress={() => setShowWithdrawForm((prev) => !prev)}
+        >
+          <Text style={[styles.primaryButtonText, { color: isDarkMode ? '#0D0D0D' : '#0D0D0D' }]}> 
+            {showWithdrawForm ? 'Hide Withdraw Form' : 'Withdraw Funds'}
+          </Text>
+        </TouchableOpacity>
+
+        {showWithdrawForm && (
+          <View style={styles.withdrawForm}>
+            <Text style={[styles.inputLabel, { color: safeColors.textSecondary }]}>Amount (KES)</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: safeColors.background,
+                  borderColor: withdrawAmountError ? '#FF3366' : safeColors.border,
+                  borderWidth: withdrawAmountError ? 2 : 1,
+                  color: safeColors.textPrimary,
+                },
+              ]}
+              value={withdrawAmount}
+              onChangeText={(text) => {
+                setWithdrawAmount(text);
+                validateWithdrawAmount(text);
+              }}
+              placeholder="Enter amount"
+              placeholderTextColor={safeColors.textSecondary}
+              keyboardType="numeric"
+              editable={!withdrawing}
+            />
+            {withdrawAmountError ? (
+              <Text style={[styles.errorText, { color: '#FF3366' }]}>{withdrawAmountError}</Text>
+            ) : null}
+
+            <Text style={[styles.inputLabel, { color: safeColors.textSecondary }]}>Phone Number</Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: safeColors.background,
+                  borderColor: safeColors.border,
+                  color: safeColors.textPrimary,
+                },
+              ]}
+              value={withdrawPhone}
+              onChangeText={setWithdrawPhone}
+              placeholder="Enter M-Pesa phone number"
+              placeholderTextColor={safeColors.textSecondary}
+              keyboardType="phone-pad"
+              editable={!withdrawing}
+            />
+
+            <TouchableOpacity
+              style={[styles.submitButton, { backgroundColor: safeColors.accent }]}
+              onPress={handleWithdraw}
+              disabled={withdrawing}
+            >
+              {withdrawing ? (
+                <ActivityIndicator color={isDarkMode ? '#0D0D0D' : '#FFFFFF'} />
+              ) : (
+                <Text
+                  style={[styles.submitButtonText, { color: isDarkMode ? '#0D0D0D' : '#0D0D0D' }]}
+                >
+                  Submit Withdrawal
+                </Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowWithdrawForm(false)}>
+              <Text style={[styles.cancelLink, { color: safeColors.textSecondary }]}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
+
+      <View
+        style={[
+          styles.summaryTabsContainer,
+          {
+            borderColor: safeColors.border,
+            backgroundColor: safeColors.paper,
+          },
+        ]}
+      >
+        {[
+          { key: 'delivery', label: 'Delivery Payments' },
+          { key: 'tips', label: 'Tips' },
+        ].map((tab) => {
+          const isActive = summaryTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.summaryTabButton,
+                {
+                  backgroundColor: isActive
+                    ? safeColors.accent
+                    : 'transparent',
+                },
+              ]}
+              onPress={() => setSummaryTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.summaryTabLabel,
+                  {
+                    color: isActive
+                      ? isDarkMode
+                        ? '#0D0D0D'
+                        : '#0D0D0D'
+                      : safeColors.textSecondary,
+                  },
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <View
+        style={[styles.overtimeCard, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}
+      >
+        <Text style={[styles.overtimeTitle, { color: safeColors.accentText }]}> 
+          {summaryTab === 'delivery' ? 'Delivery Payments Overtime' : 'Tips Overtime'}
+        </Text>
+        <Text style={[styles.overtimeSubtitle, { color: safeColors.textSecondary }]}> 
+          Total {summaryTab === 'delivery' ? 'Payments Received' : 'Tips Received'}
+        </Text>
+        <Text style={[styles.overtimeAmount, { color: safeColors.accentText }]}> 
+          KES {summaryTab === 'delivery'
+            ? (wallet?.totalDeliveryPay || 0).toFixed(2)
+            : (wallet?.totalTipsReceived || 0).toFixed(2)}
+        </Text>
+        <Text style={[styles.overtimeCount, { color: safeColors.textSecondary }]}> 
+          {summaryTab === 'delivery'
+            ? `${wallet?.totalDeliveryPayCount || 0} payments`
+            : `${wallet?.totalTipsCount || 0} tips`}
+        </Text>
+      </View>
+
+      {renderSummaryList(summaryTab === 'delivery' ? recentDeliveryPayments : recentTips, summaryTab)}
+    </>
+  );
+
+  const renderTransactionsSection = () => (
+    <View>
+      {combinedTransactions.length === 0 ? (
+        <View style={[styles.emptyStateCard, { backgroundColor: safeColors.paper }]}> 
+          <Text style={[styles.emptyStateText, { color: safeColors.textSecondary }]}> 
+            No wallet transactions yet
+          </Text>
+        </View>
+      ) : (
+        combinedTransactions.map((tx) => {
+          const amountColor = getTransactionColor(tx.type);
+          const isDebit = tx.amount < 0 || tx.type === 'delivery_debit' || tx.type === 'withdrawal';
+          return (
+            <View
+              key={tx.id}
+              style={[styles.transactionCard, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}
+            >
+              <View style={styles.transactionCardHeader}>
+                <View
+                  style={[styles.transactionTypeBadge, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)' }]}
+                >
+                  <Text style={[styles.transactionTypeText, { color: amountColor }]}>
+                    {getTransactionLabel(tx.type)}
+                  </Text>
+                </View>
+                <Text style={[styles.transactionAmount, { color: amountColor }]}>
+                  {isDebit ? '- ' : ''}KES {Math.abs(tx.amount).toFixed(2)}
+                </Text>
+              </View>
+              {tx.reference || tx.customerName ? (
+                <Text style={[styles.transactionMeta, { color: safeColors.textSecondary }]}> 
+                  {[tx.reference ? `Ref: ${tx.reference}` : null, tx.customerName]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </Text>
+              ) : null}
+              {tx.notes ? (
+                <Text style={[styles.transactionMeta, { color: safeColors.textSecondary }]} numberOfLines={2}>
+                  {tx.notes}
+                </Text>
+              ) : null}
+              <View style={styles.transactionFooter}>
+                <Text style={[styles.transactionDate, { color: safeColors.textSecondary }]}>{formatDate(tx.date)}</Text>
+                {tx.status ? (
+                  <Text
+                    style={[
+                      styles.transactionStatus,
+                      {
+                        color:
+                          tx.status.toLowerCase() === 'completed' || tx.status.toLowerCase() === 'paid'
+                            ? '#32CD32'
+                            : tx.status.toLowerCase() === 'failed'
+                            ? '#FF6B6B'
+                            : '#FFA500',
+                      },
+                    ]}
+                  >
+                    {tx.status.toUpperCase()}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          );
+        })
+      )}
+    </View>
+  );
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: safeColors.background }]}>
+      <View style={[styles.container, styles.centered, { backgroundColor: safeColors.background }]}> 
         <ActivityIndicator size="large" color={safeColors.accent} />
         <Text style={[styles.loadingText, { color: safeColors.textSecondary }]}>Loading wallet...</Text>
       </View>
@@ -282,6 +689,52 @@ const WalletScreen = ({ route, navigation }) => {
         duration={5000}
         onClose={() => setSnackbarVisible(false)}
       />
+
+      <View
+        style={[
+          styles.topTabContainer,
+          {
+            borderColor: safeColors.border,
+            backgroundColor: safeColors.paper,
+          },
+        ]}
+      >
+        {[
+          { key: 'summary', label: 'Wallet Summary' },
+          { key: 'transactions', label: 'Wallet Transactions' },
+        ].map((tab) => {
+          const isActive = activeTab === tab.key;
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={[
+                styles.topTabButton,
+                {
+                  backgroundColor: isActive
+                    ? safeColors.accent
+                    : 'transparent',
+                },
+              ]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Text
+                style={[
+                  styles.topTabLabel,
+                  {
+                    color: isActive
+                      ? '#0D0D0D'
+                      : safeColors.textSecondary,
+                  },
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <ScrollView
         style={[styles.container, { backgroundColor: safeColors.background }]}
         contentContainerStyle={{ paddingBottom: 80 }}
@@ -290,130 +743,7 @@ const WalletScreen = ({ route, navigation }) => {
         }
       >
         <View style={styles.content}>
-          {/* Wallet Balance Card */}
-          <View style={[styles.balanceCard, { backgroundColor: safeColors.paper }]}>
-            <Text style={[styles.balanceLabel, { color: safeColors.textSecondary }]}>Available Balance</Text>
-            <Text style={[styles.balanceAmount, { color: safeColors.accentText }]}>
-              KES {wallet?.availableBalance?.toFixed(2) || wallet?.balance?.toFixed(2) || '0.00'}
-            </Text>
-            {wallet?.amountOnHold > 0 && (
-              <View style={[styles.onHoldContainer, { borderTopColor: safeColors.border }]}>
-                <Text style={[styles.onHoldLabel, { color: safeColors.textSecondary }]}>Amount on Hold:</Text>
-                <Text style={[styles.onHoldAmount, { color: '#FFC107' }]}>
-                  KES {wallet.amountOnHold.toFixed(2)}
-                </Text>
-              </View>
-            )}
-            {wallet?.amountOnHold > 0 && (
-              <Text style={[styles.onHoldNote, { color: safeColors.textSecondary }]}>
-                Tips for orders not yet completed
-              </Text>
-            )}
-          </View>
-
-          {/* Tips Summary */}
-          <View style={[styles.summaryCard, { backgroundColor: safeColors.paper }]}>
-            <Text style={[styles.sectionTitle, { color: safeColors.accentText }]}>Tips Summary</Text>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: safeColors.textSecondary }]}>Total Tips Received:</Text>
-              <Text style={[styles.summaryValue, { color: safeColors.accentText }]}>
-                KES {wallet?.totalTipsReceived?.toFixed(2) || '0.00'}
-              </Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <Text style={[styles.summaryLabel, { color: safeColors.textSecondary }]}>Number of Tips:</Text>
-              <Text style={[styles.summaryValue, { color: safeColors.textPrimary }]}>
-                {wallet?.totalTipsCount || 0}
-              </Text>
-            </View>
-          </View>
-
-          {/* Withdrawal Section */}
-          <View style={[styles.withdrawCard, { backgroundColor: safeColors.paper }]}>
-            <Text style={[styles.sectionTitle, { color: safeColors.accentText }]}>Withdraw to M-Pesa</Text>
-            
-            <Text style={[styles.inputLabel, { color: safeColors.textSecondary }]}>Amount (KES)</Text>
-            <TextInput
-              style={[styles.input, { 
-                backgroundColor: safeColors.background, 
-                borderColor: withdrawAmountError ? '#FF3366' : safeColors.border,
-                borderWidth: withdrawAmountError ? 2 : 1,
-                color: safeColors.textPrimary 
-              }]}
-              value={withdrawAmount}
-              onChangeText={(text) => {
-                setWithdrawAmount(text);
-                validateWithdrawAmount(text);
-              }}
-              placeholder="Enter amount"
-              placeholderTextColor={safeColors.textSecondary}
-              keyboardType="numeric"
-              editable={!withdrawing}
-            />
-            {withdrawAmountError ? (
-              <Text style={[styles.errorText, { color: '#FF3366' }]}>
-                {withdrawAmountError}
-              </Text>
-            ) : null}
-
-            <Text style={[styles.inputLabel, { color: safeColors.textSecondary, marginTop: 12 }]}>Phone Number</Text>
-            <TextInput
-              style={[styles.input, { 
-                backgroundColor: safeColors.background, 
-                borderColor: safeColors.border,
-                color: safeColors.textPrimary 
-              }]}
-              value={withdrawPhone}
-              onChangeText={setWithdrawPhone}
-              placeholder="Enter M-Pesa phone number"
-              placeholderTextColor={safeColors.textSecondary}
-              keyboardType="phone-pad"
-              editable={!withdrawing}
-            />
-
-            <TouchableOpacity
-              style={[styles.withdrawButton, { backgroundColor: safeColors.accent }]}
-              onPress={handleWithdraw}
-              disabled={withdrawing || !withdrawAmount || !withdrawPhone}
-            >
-              {withdrawing ? (
-                <ActivityIndicator color={isDarkMode ? '#0D0D0D' : '#FFFFFF'} />
-              ) : (
-                <Text style={[styles.withdrawButtonText, { color: isDarkMode ? '#0D0D0D' : '#FFFFFF' }]}>
-                  Withdraw
-                </Text>
-              )}
-            </TouchableOpacity>
-          </View>
-
-          {/* Recent Tips */}
-          <View style={[styles.tipsCard, { backgroundColor: safeColors.paper }]}>
-            <Text style={[styles.sectionTitle, { color: safeColors.accentText }]}>Recent Tips</Text>
-            {recentTips.length === 0 ? (
-              <Text style={[styles.emptyText, { color: safeColors.textSecondary }]}>No tips received yet</Text>
-            ) : (
-              recentTips.map((tip) => (
-                <View key={tip.id} style={[styles.tipItem, { borderBottomColor: safeColors.border }]}>
-                  <View style={styles.tipItemLeft}>
-                    <Text style={[styles.tipAmount, { color: safeColors.accentText }]}>
-                      KES {tip.amount?.toFixed(2)}
-                    </Text>
-                    <Text style={[styles.tipOrder, { color: safeColors.textSecondary }]}>
-                      Order #{tip.orderNumber}
-                    </Text>
-                    {tip.customerName && (
-                      <Text style={[styles.tipCustomer, { color: safeColors.textSecondary }]}>
-                        {tip.customerName}
-                      </Text>
-                    )}
-                  </View>
-                  <Text style={[styles.tipDate, { color: safeColors.textSecondary }]}>
-                    {formatDate(tip.date)}
-                  </Text>
-                </View>
-              ))
-            )}
-          </View>
+          {activeTab === 'summary' ? renderSummarySection() : renderTransactionsSection()}
         </View>
       </ScrollView>
     </View>
@@ -435,51 +765,88 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
+  topTabContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderRadius: 12,
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  topTabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topTabLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   balanceCard: {
     borderRadius: 12,
     padding: 24,
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 4,
     elevation: 5,
   },
   balanceLabel: {
     fontSize: 16,
     marginBottom: 8,
+    fontWeight: '500',
   },
   balanceAmount: {
     fontSize: 36,
     fontWeight: 'bold',
   },
-  summaryCard: {
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 20,
+  balanceSubtitle: {
+    fontSize: 12,
+    marginTop: 6,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 12,
+  secondaryInfo: {
+    fontSize: 13,
+    marginTop: 12,
   },
-  summaryRow: {
+  balanceBreakdown: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginTop: 20,
+    width: '100%',
   },
-  summaryLabel: {
-    fontSize: 14,
+  breakdownBox: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginHorizontal: 4,
   },
-  summaryValue: {
-    fontSize: 14,
+  breakdownLabel: {
+    fontSize: 12,
+    marginBottom: 6,
+  },
+  breakdownValue: {
+    fontSize: 18,
     fontWeight: '600',
   },
-  withdrawCard: {
-    borderRadius: 10,
-    padding: 16,
-    marginBottom: 20,
+  primaryButton: {
+    width: '100%',
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  primaryButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  withdrawForm: {
+    width: '100%',
+    marginTop: 20,
   },
   inputLabel: {
     fontSize: 14,
@@ -493,59 +860,117 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 12,
   },
-  withdrawButton: {
-    padding: 16,
+  submitButton: {
+    paddingVertical: 14,
     borderRadius: 8,
     alignItems: 'center',
     marginTop: 8,
   },
-  withdrawButtonText: {
+  submitButtonText: {
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  tipsCard: {
+  cancelLink: {
+    marginTop: 12,
+    textAlign: 'center',
+    fontSize: 13,
+    textDecorationLine: 'underline',
+  },
+  summaryTabsContainer: {
+    flexDirection: 'row',
+    borderWidth: 1,
     borderRadius: 10,
-    padding: 16,
+    padding: 4,
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  summaryTabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  summaryTabLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  listCard: {
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     marginBottom: 20,
   },
-  emptyText: {
-    fontSize: 14,
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: 20,
+  overtimeCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 18,
+    marginBottom: 16,
   },
-  tipItem: {
+  overtimeTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  overtimeSubtitle: {
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  overtimeAmount: {
+    fontSize: 28,
+    fontWeight: 'bold',
+  },
+  overtimeCount: {
+    fontSize: 12,
+    marginTop: 8,
+  },
+  listItem: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
   },
-  tipItemLeft: {
+  listItemLeft: {
     flex: 1,
+    marginRight: 12,
   },
-  tipAmount: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  tipOrder: {
+  listLabel: {
     fontSize: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
     marginBottom: 2,
   },
-  tipCustomer: {
-    fontSize: 12,
+  listAmount: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
   },
-  tipDate: {
+  listMeta: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  listDate: {
     fontSize: 11,
+    minWidth: 90,
     textAlign: 'right',
+  },
+  emptyStateCard: {
+    borderRadius: 10,
+    padding: 24,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  emptyStateText: {
+    fontSize: 14,
+    fontStyle: 'italic',
   },
   onHoldContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 16,
     paddingTop: 12,
     borderTopWidth: 1,
+    width: '100%',
   },
   onHoldLabel: {
     fontSize: 14,
@@ -556,13 +981,55 @@ const styles = StyleSheet.create({
   },
   onHoldNote: {
     fontSize: 11,
-    marginTop: 4,
+    marginTop: 6,
     fontStyle: 'italic',
   },
   errorText: {
     fontSize: 12,
     marginTop: 4,
     marginBottom: 8,
+  },
+  transactionCard: {
+    borderWidth: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+  },
+  transactionCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  transactionTypeBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  transactionTypeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  transactionAmount: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  transactionMeta: {
+    fontSize: 13,
+    marginBottom: 4,
+  },
+  transactionFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  transactionDate: {
+    fontSize: 12,
+  },
+  transactionStatus: {
+    fontSize: 12,
+    fontWeight: '600',
   },
 });
 

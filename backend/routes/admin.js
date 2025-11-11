@@ -305,16 +305,46 @@ router.get('/stats', async (req, res) => {
       }
     });
 
-    // Get total drinks count
+    // Cancelled orders count
+    const cancelledOrders = await db.Order.count({
+      where: { status: 'cancelled' }
+    });
+
+    // Inventory stats
     const totalDrinks = await db.Drink.count();
+    const availableItems = await db.Drink.count({
+      where: {
+        isAvailable: true
+      }
+    });
+    const outOfStockItems = await db.Drink.count({
+      where: {
+        isAvailable: {
+          [Op.not]: true
+        }
+      }
+    });
+    const limitedOfferItems = await db.Drink.count({
+      where: {
+        [Op.or]: [
+          { limitedTimeOffer: true },
+          { isOnOffer: true }
+        ]
+      }
+    });
 
     res.json({
       totalOrders,
       pendingOrders,
+      cancelledOrders,
       todayOrders,
       todayRevenue: parseFloat(todayRevenue) || 0,
       totalRevenue: parseFloat(totalRevenue) || 0,
       totalDrinks,
+      totalItems: totalDrinks,
+      availableItems,
+      outOfStockItems,
+      limitedOfferItems,
       // Tip stats
       todayTips: parseFloat(todayTips) || 0,
       totalTips: parseFloat(totalTips) || 0,
@@ -1932,14 +1962,19 @@ router.get('/latest-orders', async (req, res) => {
 // Get top inventory items by total quantity sold (admin dashboard)
 router.get('/top-inventory-items', async (req, res) => {
   try {
+    const totalOrders = await db.Order.count();
+
     const results = await db.OrderItem.findAll({
       attributes: [
         'drinkId',
-        [db.sequelize.fn('SUM', db.sequelize.col('quantity')), 'totalQuantity']
+        [db.sequelize.fn('SUM', db.sequelize.col('quantity')), 'totalQuantity'],
+        [
+          db.sequelize.fn('COUNT', db.sequelize.fn('DISTINCT', db.sequelize.col('orderId'))),
+          'ordersCount'
+        ]
       ],
-      group: ['drinkId'],
+      group: ['OrderItem.drinkId', 'drink.id', 'drink->category.id'],
       order: [[db.sequelize.fn('SUM', db.sequelize.col('quantity')), 'DESC']],
-      limit: 10,
       include: [
         {
           model: db.Drink,
@@ -1948,25 +1983,50 @@ router.get('/top-inventory-items', async (req, res) => {
           include: [{
             model: db.Category,
             as: 'category',
-            attributes: ['name']
+            attributes: ['id', 'name']
           }]
         }
       ]
     });
 
-    const formatted = results
-      .filter(item => item.drink)
-      .map(item => {
+    const aggregated = results
+      .filter((item) => item.drink)
+      .map((item) => {
         const drink = item.drink;
+        const totalQuantity = parseInt(item.get('totalQuantity'), 10) || 0;
+        const ordersCount = parseInt(item.get('ordersCount'), 10) || 0;
+        const ordersPercentage =
+          totalOrders > 0 ? Number(((ordersCount / totalOrders) * 100).toFixed(1)) : 0;
+
         return {
           drinkId: drink.id,
           name: drink.name,
           category: drink.category ? drink.category.name : 'Uncategorized',
-          totalQuantity: parseInt(item.get('totalQuantity'), 10) || 0
+          totalQuantity,
+          ordersCount,
+          ordersPercentage
         };
+      })
+      .sort((a, b) => b.totalQuantity - a.totalQuantity);
+
+    let finalList = aggregated.slice(0, 10);
+
+    if (finalList.length < 10 && totalOrders > 0) {
+      const eightyPercentThreshold = totalOrders * 0.8;
+      const highCoverageItems = aggregated.filter((item) => item.ordersCount >= eightyPercentThreshold);
+
+      const mergedMap = new Map();
+      finalList.forEach((item) => mergedMap.set(item.drinkId, item));
+      highCoverageItems.forEach((item) => {
+        if (!mergedMap.has(item.drinkId)) {
+          mergedMap.set(item.drinkId, item);
+        }
       });
 
-    res.json(formatted);
+      finalList = Array.from(mergedMap.values()).sort((a, b) => b.totalQuantity - a.totalQuantity);
+    }
+
+    res.json(finalList);
   } catch (error) {
     console.error('Error fetching top inventory items:', error);
     res.status(500).json({ error: 'Failed to fetch top inventory items' });

@@ -17,7 +17,9 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     throw new Error(`Order ${effectiveOrderId} not found during payment finalization`);
   }
 
-  if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid') {
+  const orderWasPreviouslyPaid = orderInstance.paymentStatus === 'paid';
+
+  if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid' && orderWasPreviouslyPaid) {
     await paymentTransaction.reload().catch(() => {});
     return { order: orderInstance, receipt: paymentTransaction.receiptNumber };
   }
@@ -222,10 +224,37 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     });
   }
 
+  if (!orderWasPreviouslyPaid) {
+    try {
+      let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+      if (!adminWallet) {
+        adminWallet = await db.AdminWallet.create({
+          id: 1,
+          balance: 0,
+          totalRevenue: 0,
+          totalOrders: 0
+        });
+      }
+
+      const adminCreditAmount = Math.max(itemsTotal + deliveryFee, 0);
+
+      await adminWallet.update({
+        balance: parseFloat(adminWallet.balance) + adminCreditAmount,
+        totalRevenue: parseFloat(adminWallet.totalRevenue) + adminCreditAmount,
+        totalOrders: adminWallet.totalOrders + 1
+      });
+
+      console.log(`✅ Credited admin wallet with KES ${adminCreditAmount.toFixed(2)} for Order #${orderInstance.id}`);
+    } catch (adminWalletError) {
+      console.error('❌ Error crediting admin wallet during finalizeOrderPayment:', adminWalletError);
+    }
+  }
+
   return {
     order: orderInstance,
     receipt: normalizedReceipt,
     deliveryTransaction,
+    driverPayTransaction: null,
     tipTransaction
   };
 };
@@ -373,21 +402,33 @@ router.post('/stk-push', async (req, res) => {
           `${order.notes}\n${checkoutNote}` : 
           checkoutNote
       });
-
+      
       const {
         itemsTotal,
         deliveryFee,
         tipAmount
       } = await getOrderFinancialBreakdown(order.id);
 
+      const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+        db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
+        db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+      ]);
+
+      const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
+      const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
+      const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
+        ? Math.min(deliveryFee, configuredDriverPayAmount)
+        : 0;
+      const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
+
       const baseTransactionPayload = {
-        orderId: order.id,
-        paymentMethod: 'mobile_money',
-        paymentProvider: 'mpesa',
-        status: 'pending',
+          orderId: order.id,
+          paymentMethod: 'mobile_money',
+          paymentProvider: 'mpesa',
+          status: 'pending',
         paymentStatus: 'pending',
-        checkoutRequestID: checkoutRequestID,
-        merchantRequestID: stkResponse.MerchantRequestID,
+          checkoutRequestID: checkoutRequestID,
+          merchantRequestID: stkResponse.MerchantRequestID,
         phoneNumber: phoneNumber
       };
 
@@ -420,7 +461,9 @@ router.post('/stk-push', async (req, res) => {
           console.log(`✅ Payment transaction created for Order #${orderId} (transaction #${paymentTransaction.id})`);
         }
 
-        const deliveryNote = `Delivery fee portion for Order #${orderId}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
+        const deliveryNote = driverPayAmount > 0
+          ? `Delivery fee portion for Order #${orderId}. Merchant share: KES ${merchantDeliveryAmount.toFixed(2)}. Driver payout KES ${driverPayAmount.toFixed(2)} pending.`
+          : `Delivery fee portion for Order #${orderId}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
 
         let deliveryTransaction = await db.Transaction.findOne({
           where: {
@@ -434,7 +477,7 @@ router.post('/stk-push', async (req, res) => {
         if (deliveryTransaction) {
           await deliveryTransaction.update({
             ...baseTransactionPayload,
-            amount: deliveryFee,
+            amount: merchantDeliveryAmount,
             notes: deliveryNote,
             transactionType: 'delivery_pay'
           });
@@ -443,10 +486,60 @@ router.post('/stk-push', async (req, res) => {
           deliveryTransaction = await db.Transaction.create({
             ...baseTransactionPayload,
             transactionType: 'delivery_pay',
-            amount: deliveryFee,
+            amount: merchantDeliveryAmount,
             notes: deliveryNote
           });
           console.log(`✅ Delivery fee transaction created for Order #${orderId} (transaction #${deliveryTransaction.id})`);
+        }
+
+        if (driverPayAmount > 0) {
+          const driverPayNote = `Driver delivery payout for Order #${orderId}. Amount: KES ${driverPayAmount.toFixed(2)}. Pending confirmation.`;
+
+          let driverPayTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'driver_pay',
+              status: { [Op.ne]: 'completed' }
+            },
+            order: [['createdAt', 'DESC']]
+          });
+
+          if (driverPayTransaction) {
+            await driverPayTransaction.update({
+              ...baseTransactionPayload,
+              transactionType: 'driver_pay',
+              amount: driverPayAmount,
+              notes: driverPayNote,
+              driverId: order.driverId || null
+            });
+            console.log(`✅ Driver payout transaction updated for Order #${orderId} (transaction #${driverPayTransaction.id})`);
+          } else {
+            driverPayTransaction = await db.Transaction.create({
+              ...baseTransactionPayload,
+              transactionType: 'driver_pay',
+              amount: driverPayAmount,
+              notes: driverPayNote,
+              driverId: order.driverId || null
+            });
+            console.log(`✅ Driver payout transaction created for Order #${orderId} (transaction #${driverPayTransaction.id})`);
+          }
+        } else {
+          const existingDriverPayTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'driver_pay'
+            },
+            order: [['createdAt', 'DESC']]
+          });
+
+          if (existingDriverPayTransaction) {
+            await existingDriverPayTransaction.update({
+              status: 'cancelled',
+              paymentStatus: 'cancelled',
+              amount: 0,
+              notes: `${existingDriverPayTransaction.notes || ''}\nDriver payout disabled or no driver assigned.`.trim()
+            });
+          }
         }
       } catch (transactionError) {
         console.error('❌ Error preparing order transactions:', transactionError);
@@ -1078,10 +1171,22 @@ router.post('/callback', async (req, res) => {
                 });
               }
 
-              // Order total for admin is order.totalAmount - tipAmount (tip goes to driver)
-              // Note: payment transaction amount already excludes tip
+              const { deliveryFee } = await getOrderFinancialBreakdown(order.id);
+              const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+                db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
+                db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+              ]);
+
+              const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
+              const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
+              const deliveryFeeNumeric = parseFloat(deliveryFee) || 0;
+              const driverPayoutPortion = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
+                ? Math.min(deliveryFeeNumeric, configuredDriverPayAmount)
+                : 0;
+
+              // Order total for admin excludes tips and driver delivery payouts
               const tipAmount = parseFloat(order.tipAmount) || 0;
-              const orderTotalForAdmin = parseFloat(order.totalAmount) - tipAmount;
+              const orderTotalForAdmin = Math.max(parseFloat(order.totalAmount) - tipAmount - driverPayoutPortion, 0);
 
               // Update admin wallet
               await adminWallet.update({
@@ -1502,7 +1607,7 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
           as: 'order'
         }]
       });
-
+      
       if (transaction) {
         const receiptNumber = receiptFromMetadata || receiptFromResponse || null;
         const context = 'M-Pesa query confirmation';
@@ -1514,13 +1619,13 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
           req,
           context
         });
-
-        return res.json({
-          success: true,
-          status: 'completed',
+      
+      return res.json({
+        success: true,
+        status: 'completed',
           mpesaStatus,
           receiptNumber: finalizeResult.receipt,
-          message: 'Transaction completed according to M-Pesa API'
+        message: 'Transaction completed according to M-Pesa API'
         });
       }
     } else if (isSuccessWithoutReceipt) {
@@ -1988,7 +2093,7 @@ router.post('/manual-confirm/:orderId', async (req, res) => {
     if (!transaction) {
       return res.status(404).json({ error: 'Transaction not found for this order' });
     }
-
+    
     const effectiveReceiptNumber = receiptNumber || transaction.receiptNumber;
 
     if (!effectiveReceiptNumber) {

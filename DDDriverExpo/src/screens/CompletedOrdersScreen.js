@@ -159,19 +159,16 @@ const OrderHistoryScreen = ({ route, navigation }) => {
       <View style={styles.content}>
         <Text style={[styles.sectionTitle, { color: safeColors.accentText, marginBottom: 20 }]}>Order History</Text>
 
-        <View
-          style={[styles.toggleContainer, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}
-        >
+        <View style={styles.tabsContainer}>
           {HISTORY_TABS.map((tab) => {
             const isActive = historyType === tab.key;
             return (
               <TouchableOpacity
                 key={tab.key}
                 style={[
-                  styles.toggleButton,
+                  styles.tabButton,
                   {
-                    backgroundColor: isActive ? safeColors.accent : 'transparent',
-                    borderColor: isActive ? safeColors.accent : safeColors.border,
+                    borderBottomColor: isActive ? safeColors.accent : 'transparent',
                   },
                 ]}
                 onPress={() => setHistoryType(tab.key)}
@@ -179,7 +176,7 @@ const OrderHistoryScreen = ({ route, navigation }) => {
               >
                 <Text
                   style={[
-                    styles.toggleLabel,
+                    styles.tabLabel,
                     {
                       color: isActive
                         ? isDarkMode
@@ -373,24 +370,21 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
   },
-  toggleContainer: {
+  tabsContainer: {
     flexDirection: 'row',
-    borderWidth: 1,
-    borderRadius: 10,
-    padding: 4,
+    justifyContent: 'space-between',
     marginBottom: 20,
   },
-  toggleButton: {
+  tabButton: {
     flex: 1,
     paddingVertical: 10,
-    borderWidth: 1,
-    borderRadius: 8,
     alignItems: 'center',
-    marginHorizontal: 4,
+    borderBottomWidth: 2,
+    marginHorizontal: 8,
   },
-  toggleLabel: {
+  tabLabel: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   dateFilterCard: {
     padding: 15,
