@@ -41,6 +41,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
+      "apiBaseUrl": "https://your-cloud-run-backend-url",
       "eas": {
         "projectId": "d016afe9-031a-42ca-b832-94c00c800600"
       }
