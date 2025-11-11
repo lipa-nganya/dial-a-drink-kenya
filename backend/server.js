@@ -447,6 +447,12 @@ const addMissingColumns = async () => {
     } catch (error) {
       console.log('Note: transaction_type_enum delivery_fee_debit value update attempted (may already exist)');
     }
+    try {
+      await db.sequelize.query(`ALTER TYPE transaction_type_enum ADD VALUE IF NOT EXISTS 'cash_settlement'`);
+      console.log('✅ Added cash_settlement to transaction_type_enum');
+    } catch (error) {
+      console.log('Note: transaction_type_enum cash_settlement value update attempted (may already exist)');
+    }
 
     await db.sequelize.query(`
       DO $$ BEGIN
