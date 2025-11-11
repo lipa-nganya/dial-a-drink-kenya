@@ -21,23 +21,27 @@ const sanitizeNotesForDriver = (notes) => {
     return '';
   }
 
+  const removalPatterns = [
+    /checkoutrequestid/i,
+    /merchantrequestid/i,
+    /m-?pesa/i,
+    /transaction\s*(id)?/i,
+    /payment confirmed/i,
+    /^tip\b/i,
+    /^delivery\s*fee/i,
+    /tip \(kes/i,
+    /tip amount/i,
+    /driver will (only )?be notified/i,
+  ];
+
   const filtered = notes
     .split('\n')
-    .filter(line => {
+    .filter((line) => {
       if (!line) {
         return false;
       }
       const trimmed = line.trim();
-      if (/checkoutrequestid/i.test(trimmed)) {
-        return false;
-      }
-      if (/^tip\b/i.test(trimmed)) {
-        return false;
-      }
-      if (/^delivery\s*fee\b/i.test(trimmed)) {
-        return false;
-      }
-      return true;
+      return !removalPatterns.some((pattern) => pattern.test(trimmed));
     })
     .join('\n')
     .trim();

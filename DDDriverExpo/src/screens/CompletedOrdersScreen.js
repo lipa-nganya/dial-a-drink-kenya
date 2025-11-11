@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,13 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { Platform } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
-import { Ionicons } from '@expo/vector-icons';
 
 const HISTORY_TABS = [
   { key: 'completed', label: 'Completed' },
@@ -33,24 +33,21 @@ const toEndOfDay = (date) => {
   return copy;
 };
 
-const formatPickerDate = (date) => {
-  return date.toLocaleDateString('en-US', {
+const formatPickerDate = (date) =>
+  date.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
-    year: 'numeric'
+    year: 'numeric',
   });
-};
 
-const formatDateTime = (dateString) => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
+const formatDateTime = (dateString) =>
+  new Date(dateString).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
   });
-};
 
 const OrderHistoryScreen = ({ route, navigation }) => {
   const { phoneNumber } = route.params || {};
@@ -65,41 +62,46 @@ const OrderHistoryScreen = ({ route, navigation }) => {
   const [loadError, setLoadError] = useState(null);
   const { colors, isDarkMode } = useTheme();
 
-  useEffect(() => {
-    loadOrderHistory();
-  }, [historyType, startDate, endDate]);
+  const safeColors = colors || {
+    background: '#0D0D0D',
+    paper: '#121212',
+    textPrimary: '#F5F5F5',
+    textSecondary: '#B0B0B0',
+    accent: '#00E0B8',
+    accentText: '#00E0B8',
+    border: '#333',
+  };
 
-  const loadOrderHistory = async () => {
+  const loadOrderHistory = useCallback(async () => {
     try {
       setLoading(true);
       setLoadError(null);
-      const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
+
+      const phone = phoneNumber || (await AsyncStorage.getItem('driver_phone'));
       if (!phone) {
         console.error('No phone number found');
-        setLoading(false);
         setOrders([]);
         return;
       }
 
       const driverResponse = await api.get(`/drivers/phone/${phone}`);
-      if (!driverResponse.data?.id) {
+      const driverId = driverResponse.data?.id;
+
+      if (!driverId) {
         setOrders([]);
         return;
       }
 
-      const ordersResponse = await api.get(`/driver-orders/${driverResponse.data.id}`);
+      const ordersResponse = await api.get(`/driver-orders/${driverId}`);
       const allOrders = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
-
-      const relevantStatuses = historyType === 'completed'
-        ? ['completed', 'delivered']
-        : ['cancelled'];
 
       const start = toStartOfDay(startDate);
       const end = toEndOfDay(endDate);
+      const relevantStatuses = historyType === 'completed' ? ['completed', 'delivered'] : ['cancelled'];
 
       const filtered = allOrders
-        .filter(order => relevantStatuses.includes(order.status))
-        .filter(order => {
+        .filter((order) => relevantStatuses.includes(order.status))
+        .filter((order) => {
           const orderDate = new Date(order.createdAt);
           return orderDate >= start && orderDate <= end;
         })
@@ -114,7 +116,11 @@ const OrderHistoryScreen = ({ route, navigation }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [phoneNumber, historyType, startDate, endDate]);
+
+  useEffect(() => {
+    loadOrderHistory();
+  }, [loadOrderHistory]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -124,27 +130,22 @@ const OrderHistoryScreen = ({ route, navigation }) => {
   const openOrderDetails = (order) => {
     navigation.navigate('OrderDetail', {
       order,
-      driverId: null
+      driverId: null,
     });
   };
 
-  const safeColors = colors || {
-    background: '#0D0D0D',
-    paper: '#121212',
-    textPrimary: '#F5F5F5',
-    textSecondary: '#B0B0B0',
-    accent: '#00E0B8',
-    accentText: '#00E0B8',
-    border: '#333',
-  };
-
-  const emptyStateMessage = historyType === 'completed'
-    ? 'No completed orders in this date range'
-    : 'No cancelled orders in this date range';
+  const emptyStateMessage =
+    historyType === 'completed'
+      ? 'No completed orders in this date range'
+      : 'No cancelled orders in this date range';
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.centered, { backgroundColor: safeColors.background }]}>\n        <ActivityIndicator size="large" color={safeColors.accent} />\n        <Text style={[styles.loadingText, { color: safeColors.textSecondary }]}>Loading...</Text>\n      </View>\n    );
+      <View style={[styles.container, styles.centered, { backgroundColor: safeColors.background }]}>
+        <ActivityIndicator size="large" color={safeColors.accent} />
+        <Text style={[styles.loadingText, { color: safeColors.textSecondary }]}>Loading...</Text>
+      </View>
+    );
   }
 
   return (
@@ -156,23 +157,199 @@ const OrderHistoryScreen = ({ route, navigation }) => {
       }
     >
       <View style={styles.content}>
-        <Text style={[styles.sectionTitle, { color: safeColors.accentText, marginBottom: 20 }]}>\n          Order History\n        </Text>
+        <Text style={[styles.sectionTitle, { color: safeColors.accentText, marginBottom: 20 }]}>Order History</Text>
 
-        <View style={[styles.toggleContainer, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}>\n          {HISTORY_TABS.map((tab) => {\n            const isActive = historyType === tab.key;\n            return (\n              <TouchableOpacity\n                key={tab.key}\n                style={[\n                  styles.toggleButton,\n                  {\n                    backgroundColor: isActive ? safeColors.accent : 'transparent',\n                    borderColor: isActive ? safeColors.accent : safeColors.border,\n                  }\n                ]}\n                onPress={() => setHistoryType(tab.key)}\n                activeOpacity={0.7}\n              >\n                <Text\n                  style={[\n                    styles.toggleLabel,\n                    {\n                      color: isActive\n                        ? (isDarkMode ? '#0D0D0D' : safeColors.textPrimary)\n                        : safeColors.textSecondary\n                    }\n                  ]}\n                >\n                  {tab.label}\n                </Text>\n              </TouchableOpacity>\n            );\n          })}\n        </View>
-
-        <View style={[styles.dateFilterCard, { backgroundColor: safeColors.paper }]}>\n          <Text style={[styles.filterLabel, { color: safeColors.textPrimary }]}>Filter by Date Range</Text>\n          \n          <View style={styles.datePickerRow}>\n            <View style={styles.datePickerContainer}>\n              <Text style={[styles.dateLabel, { color: safeColors.textSecondary }]}>From:</Text>\n              <TouchableOpacity\n                style={[styles.datePickerButton, { backgroundColor: safeColors.accent }]}\n                onPress={() => setShowStartDatePicker(true)}\n              >\n                <Ionicons name="calendar" size={16} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />\n                <Text style={[styles.datePickerText, { color: isDarkMode ? '#0D0D0D' : safeColors.textPrimary }]}>\n                  {formatPickerDate(startDate)}\n                </Text>\n              </TouchableOpacity>\n            </View>
-
-            <View style={styles.datePickerContainer}>\n              <Text style={[styles.dateLabel, { color: safeColors.textSecondary }]}>To:</Text>\n              <TouchableOpacity\n                style={[styles.datePickerButton, { backgroundColor: safeColors.accent }]}\n                onPress={() => setShowEndDatePicker(true)}\n              >\n                <Ionicons name="calendar" size={16} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />\n                <Text style={[styles.datePickerText, { color: isDarkMode ? '#0D0D0D' : safeColors.textPrimary }]}>\n                  {formatPickerDate(endDate)}\n                </Text>\n              </TouchableOpacity>\n            </View>\n          </View>
-
-          {showStartDatePicker && (\n            <DateTimePicker\n              value={startDate}\n              mode="date"\n              display={Platform.OS === 'ios' ? 'spinner' : 'default'}\n              maximumDate={endDate}\n              onChange={(event, selectedDate) => {\n                setShowStartDatePicker(Platform.OS === 'ios');\n                if (selectedDate) {\n                  if (selectedDate > endDate) {\n                    Alert.alert(\n                      'Invalid Date',\n                      'Start date cannot be after end date. Please select an earlier date.',\n                      [{ text: 'OK' }]\n                    );\n                    return;\n                  }\n                  setStartDate(selectedDate);\n                }\n              }}\n            />\n          )}
-
-          {showEndDatePicker && (\n            <DateTimePicker\n              value={endDate}\n              mode="date"\n              display={Platform.OS === 'ios' ? 'spinner' : 'default'}\n              minimumDate={startDate}\n              onChange={(event, selectedDate) => {\n                setShowEndDatePicker(Platform.OS === 'ios');\n                if (selectedDate) {\n                  if (selectedDate < startDate) {\n                    Alert.alert(\n                      'Invalid Date',\n                      'End date cannot be before start date. Please select a later date.',\n                      [{ text: 'OK' }]\n                    );\n                    return;\n                  }\n                  setEndDate(selectedDate);\n                }\n              }}\n            />\n          )}
+        <View
+          style={[styles.toggleContainer, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}
+        >
+          {HISTORY_TABS.map((tab) => {
+            const isActive = historyType === tab.key;
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={[
+                  styles.toggleButton,
+                  {
+                    backgroundColor: isActive ? safeColors.accent : 'transparent',
+                    borderColor: isActive ? safeColors.accent : safeColors.border,
+                  },
+                ]}
+                onPress={() => setHistoryType(tab.key)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.toggleLabel,
+                    {
+                      color: isActive
+                        ? isDarkMode
+                          ? '#0D0D0D'
+                          : safeColors.textPrimary
+                        : safeColors.textSecondary,
+                    },
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
-        {loadError && (\n          <Text style={[styles.errorText, { color: safeColors.textSecondary, borderColor: safeColors.border }]}>\n            {loadError}\n          </Text>\n        )}
+        <View style={[styles.dateFilterCard, { backgroundColor: safeColors.paper }]}> 
+          <Text style={[styles.filterLabel, { color: safeColors.textPrimary }]}>Filter by Date Range</Text>
 
-        {orders.length === 0 ? (\n          <View style={[styles.noOrdersCard, { backgroundColor: safeColors.paper }]}>\n            <Text style={[styles.noOrdersText, { color: safeColors.textSecondary }]}>\n              {emptyStateMessage}\n            </Text>\n          </View>\n        ) : (\n          orders.map((order) => (\n            <TouchableOpacity\n              key={order.id}\n              style={[styles.orderCard, { backgroundColor: safeColors.paper }]}\n              onPress={() => openOrderDetails(order)}\n              activeOpacity={0.7}\n            >\n              <View style={styles.orderCardHeader}>\n                <View style={styles.orderCardLeft}>\n                  <Text style={[styles.orderNumber, { color: safeColors.accentText }]}>Order #{order.id}</Text>\n                  <View style={[\n                    styles.statusBadge,\n                    {\n                      backgroundColor: historyType === 'completed' ? '#00E0B8' : '#EF5350'\n                    }\n                  ]}>\n                    <Text style={styles.statusText}>{order.status.replace('_', ' ').toUpperCase()}</Text>\n                  </View>\n                </View>\n                <TouchableOpacity\n                  style={[styles.actionIcon, { backgroundColor: safeColors.accentText }]}\n                  onPress={(e) => {\n                    e.stopPropagation();\n                    openOrderDetails(order);\n                  }}\n                  activeOpacity={0.7}\n                >\n                  <Ionicons name="eye" size={20} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />\n                </TouchableOpacity>\n              </View>\n
-              <View style={styles.orderCardBody}>\n                <Text style={[styles.orderCardDetail, { color: safeColors.textPrimary, marginBottom: 6 }]}>\n                  <Text style={[styles.orderCardLabel, { color: safeColors.textSecondary }]}>Customer: </Text>\n                  {order.customerName}\n                </Text>\n                <Text style={[styles.orderCardDetail, { color: safeColors.textSecondary, marginBottom: 6 }]}>\n                  Customer phone and address are hidden after {historyType === 'completed' ? 'completion' : 'cancellation'}.\n                </Text>\n                <View style={styles.orderCardFooter}>\n                  <View>\n                    <Text style={[styles.orderCardAmount, { color: safeColors.accentText }]}>\n                      KES {parseFloat(order.totalAmount).toFixed(2)}\n                    </Text>\n                    {order.tipAmount && parseFloat(order.tipAmount) > 0 && (\n                      <Text style={[styles.tipText, { color: safeColors.textSecondary }]}>\n                        Tip: KES {parseFloat(order.tipAmount).toFixed(2)}\n                      </Text>\n                    )}\n                  </View>\n                  <Text style={[styles.orderCardDate, { color: safeColors.textSecondary }]}>\n                    {formatDateTime(order.createdAt)}\n                  </Text>\n                </View>\n              </View>\n            </TouchableOpacity>\n          ))\n        )}
+          <View style={styles.datePickerRow}>
+            <View style={styles.datePickerContainer}>
+              <Text style={[styles.dateLabel, { color: safeColors.textSecondary }]}>From:</Text>
+              <TouchableOpacity
+                style={[styles.datePickerButton, { backgroundColor: safeColors.accent }]}
+                onPress={() => setShowStartDatePicker(true)}
+              >
+                <Ionicons name="calendar" size={16} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />
+                <Text style={[styles.datePickerText, { color: isDarkMode ? '#0D0D0D' : safeColors.textPrimary }]}
+                >
+                  {formatPickerDate(startDate)}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.datePickerContainer}>
+              <Text style={[styles.dateLabel, { color: safeColors.textSecondary }]}>To:</Text>
+              <TouchableOpacity
+                style={[styles.datePickerButton, { backgroundColor: safeColors.accent }]}
+                onPress={() => setShowEndDatePicker(true)}
+              >
+                <Ionicons name="calendar" size={16} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />
+                <Text style={[styles.datePickerText, { color: isDarkMode ? '#0D0D0D' : safeColors.textPrimary }]}
+                >
+                  {formatPickerDate(endDate)}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {showStartDatePicker && (
+            <DateTimePicker
+              value={startDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              maximumDate={endDate}
+              onChange={(event, selectedDate) => {
+                setShowStartDatePicker(Platform.OS === 'ios');
+                if (selectedDate) {
+                  if (selectedDate > endDate) {
+                    Alert.alert(
+                      'Invalid Date',
+                      'Start date cannot be after end date. Please select an earlier date.',
+                      [{ text: 'OK' }],
+                    );
+                    return;
+                  }
+                  setStartDate(selectedDate);
+                }
+              }}
+            />
+          )}
+
+          {showEndDatePicker && (
+            <DateTimePicker
+              value={endDate}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              minimumDate={startDate}
+              onChange={(event, selectedDate) => {
+                setShowEndDatePicker(Platform.OS === 'ios');
+                if (selectedDate) {
+                  if (selectedDate < startDate) {
+                    Alert.alert(
+                      'Invalid Date',
+                      'End date cannot be before start date. Please select a later date.',
+                      [{ text: 'OK' }],
+                    );
+                    return;
+                  }
+                  setEndDate(selectedDate);
+                }
+              }}
+            />
+          )}
+        </View>
+
+        {loadError && (
+          <Text style={[styles.errorText, { color: safeColors.textSecondary, borderColor: safeColors.border }]}
+          >
+            {loadError}
+          </Text>
+        )}
+
+        {orders.length === 0 ? (
+          <View style={[styles.noOrdersCard, { backgroundColor: safeColors.paper }]}> 
+            <Text style={[styles.noOrdersText, { color: safeColors.textSecondary }]}
+            >
+              {emptyStateMessage}
+            </Text>
+          </View>
+        ) : (
+          orders.map((order) => (
+            <TouchableOpacity
+              key={order.id}
+              style={[styles.orderCard, { backgroundColor: safeColors.paper }]}
+              onPress={() => openOrderDetails(order)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.orderCardHeader}>
+                <View style={styles.orderCardLeft}>
+                  <Text style={[styles.orderNumber, { color: safeColors.accentText }]}>Order #{order.id}</Text>
+                  <View
+                    style={[
+                      styles.statusBadge,
+                      { backgroundColor: historyType === 'completed' ? '#00E0B8' : '#EF5350' },
+                    ]}
+                  >
+                    <Text style={styles.statusText}>{order.status.replace('_', ' ').toUpperCase()}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={[styles.actionIcon, { backgroundColor: safeColors.accentText }]}
+                  onPress={(e) => {
+                    e.stopPropagation();
+                    openOrderDetails(order);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="eye" size={20} color={isDarkMode ? '#0D0D0D' : safeColors.textPrimary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.orderCardBody}>
+                <Text style={[styles.orderCardDetail, { color: safeColors.textPrimary, marginBottom: 6 }]}>
+                  <Text style={[styles.orderCardLabel, { color: safeColors.textSecondary }]}>Customer: </Text>
+                  {order.customerName}
+                </Text>
+                <Text style={[styles.orderCardDetail, { color: safeColors.textSecondary, marginBottom: 6 }]}>
+                  Customer phone and address are hidden after{' '}
+                  {historyType === 'completed' ? 'completion' : 'cancellation'}.
+                </Text>
+                <View style={styles.orderCardFooter}>
+                  <View>
+                    <Text style={[styles.orderCardAmount, { color: safeColors.accentText }]}> 
+                      KES {parseFloat(order.totalAmount).toFixed(2)}
+                    </Text>
+                    {order.tipAmount && parseFloat(order.tipAmount) > 0 && (
+                      <Text style={[styles.tipText, { color: safeColors.textSecondary }]}> 
+                        Tip: KES {parseFloat(order.tipAmount).toFixed(2)}
+                      </Text>
+                    )}
+                  </View>
+                  <Text style={[styles.orderCardDate, { color: safeColors.textSecondary }]}>
+                    {formatDateTime(order.createdAt)}
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
       </View>
     </ScrollView>
   );
@@ -309,9 +486,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  orderCardBody: {
-    marginTop: 4,
-  },
   orderCardDetail: {
     fontSize: 13,
     lineHeight: 18,
@@ -322,7 +496,7 @@ const styles = StyleSheet.create({
   orderCardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
@@ -333,12 +507,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   tipText: {
-    fontSize: 11,
+    fontSize: 12,
     marginTop: 2,
   },
   orderCardDate: {
     fontSize: 11,
-    textAlign: 'right',
   },
 });
 
