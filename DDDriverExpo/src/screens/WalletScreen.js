@@ -22,6 +22,7 @@ const WalletScreen = ({ route }) => {
   const [wallet, setWallet] = useState(null);
   const [recentTips, setRecentTips] = useState([]);
   const [recentDeliveryPayments, setRecentDeliveryPayments] = useState([]);
+  const [recentDeliverySettlements, setRecentDeliverySettlements] = useState([]);
   const [recentWithdrawals, setRecentWithdrawals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -70,6 +71,7 @@ const WalletScreen = ({ route }) => {
           setWallet(walletResponse.data.wallet);
           setRecentTips(walletResponse.data.recentTips || []);
           setRecentDeliveryPayments(walletResponse.data.recentDeliveryPayments || []);
+          setRecentDeliverySettlements(walletResponse.data.deliveryFeeSettlements || []);
           setRecentWithdrawals(walletResponse.data.recentWithdrawals || []);
           setWithdrawPhone(driverResponse.data.phoneNumber || '');
         }
@@ -283,6 +285,17 @@ const WalletScreen = ({ route }) => {
       };
     });
 
+    const deliverySettlements = (recentDeliverySettlements || []).map((tx) => ({
+      id: `delivery-settlement-${tx.id}`,
+      type: 'delivery_debit',
+      amount: parseFloat(tx.amount) || 0,
+      date: tx.date,
+      status: tx.status || 'completed',
+      reference: tx.orderNumber || tx.orderId,
+      customerName: tx.customerName,
+      notes: tx.notes || '',
+    }));
+
     const tips = (recentTips || []).map((tx) => ({
       id: `tip-${tx.id}`,
       type: 'tip',
@@ -304,10 +317,10 @@ const WalletScreen = ({ route }) => {
       notes: tx.notes || '',
     }));
 
-    return [...deliveries, ...tips, ...withdrawals].sort(
+    return [...deliveries, ...deliverySettlements, ...tips, ...withdrawals].sort(
       (a, b) => new Date(b.date) - new Date(a.date)
     );
-  }, [recentDeliveryPayments, recentTips, recentWithdrawals]);
+  }, [recentDeliveryPayments, recentDeliverySettlements, recentTips, recentWithdrawals]);
 
   const getTransactionLabel = (type) => {
     switch (type) {
