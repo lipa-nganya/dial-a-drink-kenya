@@ -372,6 +372,7 @@ const AdminOverview = () => {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
+                        <TableCell sx={{ color: '#00E0B8' }}>Txn #</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }}>Order #</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }}>Customer</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }} align="right">Amount</TableCell>
@@ -491,6 +492,7 @@ const AdminOverview = () => {
                               }
                             }}
                           >
+                            <TableCell sx={{ color: '#F5F5F5' }}>#{txn.id}</TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }}>#{txn.orderId}</TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }}>
                               {typeChip ? (
@@ -545,7 +547,7 @@ const AdminOverview = () => {
                       })}
                       {latestTransactions.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} sx={{ color: '#999', textAlign: 'center' }}>
+                          <TableCell colSpan={8} sx={{ color: '#999', textAlign: 'center' }}>
                             No recent transactions found.
                           </TableCell>
                         </TableRow>

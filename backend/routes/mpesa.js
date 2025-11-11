@@ -67,7 +67,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     ? new Date(paymentTransaction.transactionDate)
     : transactionTimestamp;
 
-  let deliveryTransaction = await db.Transaction.findOne({
+  let merchantDeliveryTransaction = await db.Transaction.findOne({
     where: {
       orderId: effectiveOrderId,
       transactionType: 'delivery_pay',
@@ -79,8 +79,8 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     ? `Delivery fee for Order #${effectiveOrderId} (${context}) - merchant share KES ${merchantDeliveryAmount.toFixed(2)}, driver payout pending KES ${driverPayAmount.toFixed(2)}.`
     : `Delivery fee for Order #${effectiveOrderId} (${context})`;
 
-  if (deliveryTransaction) {
-    await deliveryTransaction.update({
+  if (merchantDeliveryTransaction) {
+    await merchantDeliveryTransaction.update({
       amount: merchantDeliveryAmount,
       status: 'completed',
       paymentStatus: 'paid',
@@ -91,7 +91,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       driverWalletId: null
     });
   } else {
-    deliveryTransaction = await db.Transaction.create({
+    merchantDeliveryTransaction = await db.Transaction.create({
       orderId: effectiveOrderId,
       transactionType: 'delivery_pay',
       paymentMethod,
@@ -128,7 +128,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       transactionType: 'delivery_pay',
       paymentMethod,
       paymentProvider,
-      amount: driverPayAmount,
+        amount: driverPayAmount,
       status: 'completed',
       paymentStatus: 'paid',
       receiptNumber: normalizedReceipt,
@@ -386,7 +386,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     order: orderInstance,
     receipt: normalizedReceipt,
     deliveryTransaction,
-    driverPayTransaction: driverDeliveryTransaction,
+      driverPayTransaction: driverDeliveryTransaction,
     tipTransaction
   };
 };
