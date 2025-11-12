@@ -88,7 +88,8 @@ const PhoneNumberScreen = ({ route, navigation }) => {
       if (forgotPin && driverResponse.data && driverResponse.data.hasPin) {
         console.log('Forgot PIN flow: Sending OTP to reset PIN');
         const response = await api.post('/auth/send-otp', {
-          phone: formattedPhone
+          phone: formattedPhone,
+          userType: 'driver'
         });
 
         if (response.data.success) {
@@ -106,7 +107,8 @@ const PhoneNumberScreen = ({ route, navigation }) => {
       // No PIN exists in database - send OTP for PIN setup/reset
       console.log('Sending OTP for PIN setup/reset');
       const response = await api.post('/auth/send-otp', {
-        phone: formattedPhone
+        phone: formattedPhone,
+        userType: 'driver'
       });
 
       if (response.data.success) {

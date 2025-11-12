@@ -48,7 +48,8 @@ const OtpVerification = ({ phone, onBack, infoMessage }) => {
     try {
       const response = await api.post('/auth/verify-otp', {
         phone: phone,
-        otpCode: otpCode
+        otpCode: otpCode,
+        userType: 'customer'
       });
 
       if (response.data.success && response.data.customer) {
@@ -104,7 +105,8 @@ const OtpVerification = ({ phone, onBack, infoMessage }) => {
     
     try {
       const response = await api.post('/auth/send-otp', {
-        phone: phone
+        phone: phone,
+        userType: 'customer'
       });
 
       if (response.data.success) {

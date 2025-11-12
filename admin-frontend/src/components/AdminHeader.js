@@ -9,13 +9,13 @@ import {
 } from '@mui/material';
 import {
   Dashboard,
-  Assignment,
   Inventory,
   Logout,
   Receipt,
   Settings as SettingsIcon,
   LocalShipping,
-  LocalFlorist
+  LocalFlorist,
+  People
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -96,6 +96,14 @@ const AdminHeader = () => {
             sx={buttonStyle('/inventory')}
           >
             Inventory
+          </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/admin/customers')}
+            startIcon={<People />}
+            sx={buttonStyle('/admin/customers')}
+          >
+            Customers
           </Button>
           <Button
             color="inherit"
