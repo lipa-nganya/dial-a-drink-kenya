@@ -13,7 +13,7 @@ import { VerifiedUser, ArrowBack } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
-import SetPassword from './SetPassword';
+import SetPin from './SetPin';
 
 const OtpVerification = ({ phone, onBack }) => {
   const navigate = useNavigate();
@@ -24,7 +24,7 @@ const OtpVerification = ({ phone, onBack }) => {
   const [resending, setResending] = useState(false);
   const [countdown, setCountdown] = useState(60); // 60 seconds cooldown for resend
   const [verifiedCustomer, setVerifiedCustomer] = useState(null);
-  const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(false);
+  const [requiresPinSetup, setRequiresPinSetup] = useState(false);
 
   useEffect(() => {
     // Countdown timer for resend button
@@ -52,10 +52,12 @@ const OtpVerification = ({ phone, onBack }) => {
       });
 
       if (response.data.success && response.data.customer) {
-        // Check if password setup is required
-        if (response.data.requiresPasswordSetup) {
+        const needsPinSetup =
+          response.data.requiresPinSetup ?? response.data.requiresPasswordSetup;
+
+        if (needsPinSetup) {
           setVerifiedCustomer(response.data.customer);
-          setRequiresPasswordSetup(true);
+          setRequiresPinSetup(true);
           return;
         }
 
@@ -122,9 +124,9 @@ const OtpVerification = ({ phone, onBack }) => {
   };
 
   // Show password setup if required
-  if (requiresPasswordSetup && verifiedCustomer) {
+  if (requiresPinSetup && verifiedCustomer) {
     return (
-      <SetPassword
+      <SetPin
         customer={verifiedCustomer}
         onSuccess={(customerData) => {
           navigate('/orders');

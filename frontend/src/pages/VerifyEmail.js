@@ -12,7 +12,7 @@ import { CheckCircle, Error, Person } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
-import SetPassword from './SetPassword';
+import SetPin from './SetPin';
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
@@ -22,7 +22,7 @@ const VerifyEmail = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [customerData, setCustomerData] = useState(null);
-  const [requiresPasswordSetup, setRequiresPasswordSetup] = useState(false);
+  const [requiresPinSetup, setRequiresPinSetup] = useState(false);
 
   useEffect(() => {
     const token = searchParams.get('token');
@@ -46,9 +46,12 @@ const VerifyEmail = () => {
 
       if (response.data.success && response.data.customer) {
         // Check if password setup is required
-        if (response.data.requiresPasswordSetup) {
+        const needsPinSetup =
+          response.data.requiresPinSetup ?? response.data.requiresPasswordSetup;
+
+        if (needsPinSetup) {
           setCustomerData(response.data.customer);
-          setRequiresPasswordSetup(true);
+          setRequiresPinSetup(true);
           setLoading(false);
           return;
         }
@@ -88,9 +91,9 @@ const VerifyEmail = () => {
   };
 
   // Show password setup if required
-  if (requiresPasswordSetup && customerData) {
+  if (requiresPinSetup && customerData) {
     return (
-      <SetPassword
+      <SetPin
         customer={customerData}
         onSuccess={(customerData) => {
           navigate('/orders');

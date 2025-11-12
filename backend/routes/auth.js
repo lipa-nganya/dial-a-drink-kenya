@@ -21,6 +21,76 @@ function generateDriverOTP() {
 }
 
 /**
+ * Normalize a customer phone number to a canonical format (Kenyan numbers -> 2547...)
+ */
+function normalizeCustomerPhone(phone) {
+  if (!phone) {
+    return null;
+  }
+
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) {
+    return null;
+  }
+
+  if (digits.startsWith('254') && digits.length === 12) {
+    return digits;
+  }
+
+  if (digits.startsWith('0') && digits.length === 10) {
+    return `254${digits.slice(1)}`;
+  }
+
+  if (digits.length === 9 && digits.startsWith('7')) {
+    return `254${digits}`;
+  }
+
+  if (digits.length === 9 && !digits.startsWith('7')) {
+    return digits;
+  }
+
+  return digits;
+}
+
+/**
+ * Build a list of phone variants to search against when looking up customers
+ */
+function buildPhoneLookupVariants(phone) {
+  const variants = new Set();
+  if (!phone) {
+    return [];
+  }
+
+  const digitsOnly = phone.replace(/\D/g, '');
+  const normalized = normalizeCustomerPhone(phone);
+
+  if (digitsOnly) {
+    variants.add(digitsOnly);
+  }
+
+  if (normalized) {
+    variants.add(normalized);
+  }
+
+  if (digitsOnly.startsWith('254')) {
+    variants.add('0' + digitsOnly.slice(3));
+    variants.add(digitsOnly.slice(3));
+  }
+
+  if (digitsOnly.startsWith('0') && digitsOnly.length === 10) {
+    variants.add(`254${digitsOnly.slice(1)}`);
+    variants.add(digitsOnly.slice(1));
+  }
+
+  if (digitsOnly.length === 9) {
+    variants.add(`0${digitsOnly}`);
+    variants.add(`254${digitsOnly}`);
+  }
+
+  return Array.from(variants).filter(Boolean);
+}
+
+/**
  * Send OTP for phone login
  * POST /api/auth/send-otp
  */
@@ -37,6 +107,7 @@ router.post('/send-otp', async (req, res) => {
 
     // Clean phone number
     const cleanedPhone = phone.replace(/\D/g, '');
+    const normalizedPhone = normalizeCustomerPhone(phone) || cleanedPhone;
     
     // Check if phone number has associated orders (optional - allow login even without orders)
     const order = await db.Order.findOne({
@@ -326,11 +397,21 @@ router.post('/verify-otp', async (req, res) => {
 
     // Continue with customer logic if not a driver
     // Find customer's orders (if any)
+    const phoneQueryConditions = phoneLookupVariants.length
+      ? phoneLookupVariants.map((variant) => ({
+          customerPhone: {
+            [db.Sequelize.Op.like]: `%${variant}%`
+          }
+        }))
+      : [{
+          customerPhone: {
+            [db.Sequelize.Op.like]: `%${cleanedPhone}%`
+          }
+        }];
+
     const orders = await db.Order.findAll({
       where: {
-        customerPhone: {
-          [db.Sequelize.Op.like]: `%${cleanedPhone}%`
-        }
+        [db.Sequelize.Op.or]: phoneQueryConditions
       },
       include: [{
         model: db.OrderItem,
@@ -371,32 +452,39 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     // Check if customer record exists
+    const customerLookupConditions = [
+      ...phoneLookupVariants.flatMap((variant) => ([
+        { phone: variant },
+        { username: variant }
+      ])),
+      customerEmail ? { email: customerEmail } : null,
+      customerEmail ? { username: customerEmail } : null
+    ].filter(Boolean);
+
     let customer = await db.Customer.findOne({
       where: {
-        [db.Sequelize.Op.or]: [
-          { phone: cleanedPhone },
-          { email: customerEmail },
-          { username: cleanedPhone },
-          { username: customerEmail }
-        ]
+        [db.Sequelize.Op.or]: customerLookupConditions.length
+          ? customerLookupConditions
+          : [{ phone: cleanedPhone }]
       }
     });
 
     // Create or update customer record
     if (!customer) {
       customer = await db.Customer.create({
-        phone: cleanedPhone,
+        phone: normalizedPhone || cleanedPhone,
         email: customerEmail,
-        username: cleanedPhone, // Use phone as username by default
+        username: normalizedPhone || cleanedPhone,
         customerName: customerName,
         hasSetPassword: false
       });
     } else {
       // Update customer info if needed
       await customer.update({
-        phone: customer.phone || cleanedPhone,
+        phone: normalizedPhone || customer.phone || cleanedPhone,
         email: customer.email || customerEmail,
-        customerName: customer.customerName || customerName
+        customerName: customer.customerName || customerName,
+        username: normalizedPhone || customer.username || cleanedPhone
       });
     }
 
@@ -405,14 +493,16 @@ router.post('/verify-otp', async (req, res) => {
       success: true,
       customer: {
         id: customer.id,
-        phone: cleanedPhone,
+        phone: customer.phone || normalizedPhone,
         email: customerEmail,
         customerName: customerName,
         username: customer.username,
         hasSetPassword: customer.hasSetPassword,
+        hasSetPin: customer.hasSetPassword,
         orders: orders
       },
-      requiresPasswordSetup: !customer.hasSetPassword
+      requiresPasswordSetup: !customer.hasSetPassword,
+      requiresPinSetup: !customer.hasSetPassword
     });
   } catch (error) {
     console.error('Error verifying OTP:', error);
@@ -649,9 +739,11 @@ router.get('/verify-email', async (req, res) => {
         customerName: customerName,
         username: customer.username,
         hasSetPassword: customer.hasSetPassword,
+        hasSetPin: customer.hasSetPassword,
         orders: orders
       },
-      requiresPasswordSetup: !customer.hasSetPassword
+      requiresPasswordSetup: !customer.hasSetPassword,
+      requiresPinSetup: !customer.hasSetPassword
     });
   } catch (error) {
     console.error('Error verifying email:', error);
@@ -663,28 +755,41 @@ router.get('/verify-email', async (req, res) => {
 });
 
 /**
- * Set password for customer (after first-time OTP/email verification)
- * POST /api/auth/set-password
+ * Set 4-digit PIN for customer (after first-time OTP verification)
+ * POST /api/auth/set-pin
  */
-router.post('/set-password', async (req, res) => {
+const handleSetCustomerPin = async (req, res) => {
   try {
-    const { customerId, username, password } = req.body;
+    const { customerId, phone, pin, confirmPin } = req.body;
 
-    if (!customerId || !username || !password) {
+    if (!customerId || !pin) {
       return res.status(400).json({
         success: false,
-        error: 'Customer ID, username, and password are required'
+        error: 'Customer ID and PIN are required'
       });
     }
 
-    if (password.length < 6) {
+    if (pin !== undefined && typeof pin === 'string' && pin.trim() === '') {
       return res.status(400).json({
         success: false,
-        error: 'Password must be at least 6 characters long'
+        error: 'PIN is required'
       });
     }
 
-    // Find customer
+    if (pin && !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        error: 'PIN must be exactly 4 digits'
+      });
+    }
+
+    if (confirmPin !== undefined && pin !== confirmPin) {
+      return res.status(400).json({
+        success: false,
+        error: 'PIN entries do not match'
+      });
+    }
+
     const customer = await db.Customer.findByPk(customerId);
 
     if (!customer) {
@@ -694,45 +799,149 @@ router.post('/set-password', async (req, res) => {
       });
     }
 
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const normalizedPhone = normalizeCustomerPhone(phone || customer.phone || customer.username);
+    if (!normalizedPhone) {
+      return res.status(400).json({
+        success: false,
+        error: 'A valid phone number is required to set a PIN'
+      });
+    }
 
-    // Update customer with password
+    const hashedPin = await bcrypt.hash(pin, 10);
+
     await customer.update({
-      password: hashedPassword,
-      username: username, // Save username (email or phone)
+      password: hashedPin,
+      username: normalizedPhone,
+      phone: normalizedPhone,
       hasSetPassword: true
     });
 
     res.json({
       success: true,
-      message: 'Password set successfully'
+      message: 'PIN set successfully'
     });
   } catch (error) {
-    console.error('Error setting password:', error);
+    console.error('Error setting customer PIN:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to set password. Please try again.'
+      error: 'Failed to set PIN. Please try again.'
     });
   }
-});
+};
+
+router.post('/set-pin', handleSetCustomerPin);
+router.post('/set-password', handleSetCustomerPin); // Legacy alias
 
 /**
- * Login with password (for returning customers)
+ * Login with phone + PIN (primary) or legacy username/password fallback
  * POST /api/auth/login
  */
 router.post('/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { phone, pin, username, password } = req.body;
 
-    if (!username || !password) {
+    const usingPinLogin = Boolean(phone && pin);
+    const usingLegacyLogin = !usingPinLogin && Boolean(username && password);
+
+    if (!usingPinLogin && !usingLegacyLogin) {
       return res.status(400).json({
         success: false,
-        error: 'Username and password are required'
+        error: 'Phone number and PIN are required'
       });
     }
 
-    // Find customer by username (can be email or phone)
+    if (usingPinLogin) {
+      const phoneVariants = buildPhoneLookupVariants(phone);
+      const customer = await db.Customer.findOne({
+        where: {
+          [db.Sequelize.Op.or]: phoneVariants.length
+            ? phoneVariants.flatMap((variant) => ([
+                { phone: variant },
+                { username: variant }
+              ]))
+            : [{ phone: phone.replace(/\D/g, '') }]
+        }
+      });
+
+      if (!customer) {
+        return res.status(404).json({
+          success: false,
+          error: 'Customer not found. Please request an OTP to set up your PIN.',
+          requiresPinSetup: true
+        });
+      }
+
+      if (!customer.hasSetPassword || !customer.password) {
+        return res.status(400).json({
+          success: false,
+          error: 'PIN not set. Please verify your phone via OTP to create one.',
+          requiresPinSetup: true
+        });
+      }
+
+      const isValidPin = await bcrypt.compare(pin, customer.password);
+
+      if (!isValidPin) {
+        return res.status(401).json({
+          success: false,
+          error: 'Invalid PIN. Please try again or request an OTP to reset it.'
+        });
+      }
+
+      const orderPhoneVariants = buildPhoneLookupVariants(customer.phone || phone);
+      const orderConditions = orderPhoneVariants.map((variant) => ({
+        customerPhone: { [db.Sequelize.Op.like]: `%${variant}%` }
+      }));
+
+      if (customer.phone) {
+        orderConditions.push({
+          customerPhone: { [db.Sequelize.Op.like]: `%${customer.phone}%` }
+        });
+      }
+
+      if (customer.email) {
+        orderConditions.push({
+          customerEmail: customer.email
+        });
+      }
+
+      if (!orderConditions.length) {
+        orderConditions.push({
+          customerPhone: { [db.Sequelize.Op.like]: `%${phone.replace(/\D/g, '')}%` }
+        });
+      }
+
+      const orders = await db.Order.findAll({
+        where: {
+          [db.Sequelize.Op.or]: orderConditions
+        },
+        include: [{
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        }],
+        order: [['createdAt', 'DESC']]
+      });
+
+      return res.json({
+        success: true,
+        customer: {
+          id: customer.id,
+          email: customer.email,
+          phone: customer.phone,
+          customerName: customer.customerName,
+          username: customer.username,
+          hasSetPin: true,
+          orders: orders
+        },
+        authMethod: 'pin'
+      });
+    }
+
+    // Legacy fallback to support existing sessions (email/phone + password)
     const customer = await db.Customer.findOne({
       where: {
         username: username
@@ -742,35 +951,33 @@ router.post('/login', async (req, res) => {
     if (!customer) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid username or password'
+        error: 'Invalid credentials'
       });
     }
 
-    // Check if password is set
     if (!customer.hasSetPassword || !customer.password) {
       return res.status(400).json({
         success: false,
-        error: 'Password not set. Please use OTP or email verification to set your password first.'
+        error: 'PIN not set. Please use phone + OTP to create one.',
+        requiresPinSetup: true
       });
     }
 
-    // Verify password
     const isValidPassword = await bcrypt.compare(password, customer.password);
 
     if (!isValidPassword) {
       return res.status(401).json({
         success: false,
-        error: 'Invalid username or password'
+        error: 'Invalid credentials'
       });
     }
 
-    // Find customer's orders
     const orders = await db.Order.findAll({
       where: {
         [db.Sequelize.Op.or]: [
-          { customerEmail: customer.email },
-          { customerPhone: customer.phone }
-        ]
+          customer.email ? { customerEmail: customer.email } : null,
+          customer.phone ? { customerPhone: customer.phone } : null
+        ].filter(Boolean)
       },
       include: [{
         model: db.OrderItem,
@@ -791,8 +998,10 @@ router.post('/login', async (req, res) => {
         phone: customer.phone,
         customerName: customer.customerName,
         username: customer.username,
+        hasSetPin: true,
         orders: orders
-      }
+      },
+      authMethod: 'legacy'
     });
   } catch (error) {
     console.error('Error logging in:', error);
@@ -804,53 +1013,53 @@ router.post('/login', async (req, res) => {
 });
 
 /**
- * Check if customer has password set
- * POST /api/auth/check-password-status
+ * Check if customer has PIN set
+ * POST /api/auth/check-pin-status
  */
-router.post('/check-password-status', async (req, res) => {
+router.post('/check-pin-status', async (req, res) => {
   try {
-    const { email, phone } = req.body;
+    const { phone } = req.body;
 
-    if (!email && !phone) {
+    if (!phone) {
       return res.status(400).json({
         success: false,
-        error: 'Email or phone number is required'
+        error: 'Phone number is required'
       });
     }
 
-    const cleanedPhone = phone ? phone.replace(/\D/g, '') : null;
+    const phoneVariants = buildPhoneLookupVariants(phone);
 
-    // Find customer
     const customer = await db.Customer.findOne({
       where: {
-        [db.Sequelize.Op.or]: [
-          email ? { email: email } : null,
-          cleanedPhone ? { phone: cleanedPhone } : null,
-          email ? { username: email } : null,
-          cleanedPhone ? { username: cleanedPhone } : null
-        ].filter(Boolean)
+        [db.Sequelize.Op.or]: phoneVariants.length
+          ? phoneVariants.flatMap((variant) => ([
+              { phone: variant },
+              { username: variant }
+            ]))
+          : [{ phone: phone.replace(/\D/g, '') }]
       }
     });
 
     if (!customer) {
       return res.json({
         success: true,
-        hasPassword: false,
+        hasPin: false,
         requiresSetup: true
       });
     }
 
     res.json({
       success: true,
-      hasPassword: customer.hasSetPassword || false,
-      requiresSetup: !customer.hasSetPassword,
-      username: customer.username
+      hasPin: Boolean(customer.hasSetPassword && customer.password),
+      requiresSetup: !(customer.hasSetPassword && customer.password),
+      username: customer.username,
+      phone: customer.phone
     });
   } catch (error) {
-    console.error('Error checking password status:', error);
+    console.error('Error checking PIN status:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to check password status'
+      error: 'Failed to check PIN status'
     });
   }
 });
