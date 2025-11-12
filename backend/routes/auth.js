@@ -108,6 +108,7 @@ router.post('/send-otp', async (req, res) => {
     // Clean phone number
     const cleanedPhone = phone.replace(/\D/g, '');
     const phoneLookupVariants = buildPhoneLookupVariants(phone);
+    const phoneLookupVariants = buildPhoneLookupVariants(phone);
     const normalizedPhone = normalizeCustomerPhone(phone) || cleanedPhone;
     
     // Check if phone number has associated orders (optional - allow login even without orders)
@@ -333,11 +334,13 @@ router.post('/verify-otp', async (req, res) => {
     // Find the most recent unused OTP for this phone
     const otpRecord = await db.Otp.findOne({
       where: {
-        phoneNumber: {
-          [db.Sequelize.Op.in]: phoneLookupVariants.length
-            ? phoneLookupVariants.map((variant) => variant.replace(/\D/g, ''))
-            : [cleanedPhone]
-        },
+        phoneNumber: phoneLookupVariants.length
+          ? {
+              [db.Sequelize.Op.in]: phoneLookupVariants.map((variant) =>
+                variant.replace(/\D/g, '')
+              )
+            }
+          : cleanedPhone,
         isUsed: false
       },
       order: [['createdAt', 'DESC']]
