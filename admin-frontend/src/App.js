@@ -17,6 +17,7 @@ import OrderNotifications from './pages/OrderNotifications';
 import Drivers from './pages/Drivers';
 import Settings from './pages/Settings';
 import SaveTheFishes from './pages/SaveTheFishes';
+import Customers from './pages/Customers';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -130,6 +131,29 @@ const getMUITheme = (isDarkMode) => {
           },
         },
       },
+      MuiTableCell: {
+        styleOverrides: {
+          head: {
+            fontFamily: '"Montserrat", "Roboto", "Helvetica", "Arial", sans-serif',
+            fontWeight: 800,
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+            color: colors.accent,
+            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 224, 184, 0.2)',
+            borderBottom: `2px solid ${colors.accent}`,
+          },
+        },
+      },
+      MuiTableHead: {
+        styleOverrides: {
+          root: {
+            '& .MuiTableCell-head': {
+              paddingTop: 14,
+              paddingBottom: 14,
+            },
+          },
+        },
+      },
     },
   });
 };
@@ -227,6 +251,19 @@ function AppContent() {
                   }
                 />
               )}
+              <Route
+                path="/admin/customers"
+                element={
+                  <PrivateRoute>
+                    <>
+                      <AdminHeader />
+                      <Customers />
+                    </>
+                  </PrivateRoute>
+                }
+              />
+              <Route path="/customers" element={<Navigate to="/admin/customers" replace />} />
+              <Route path="/admin/notifications" element={<PrivateRoute><OrderNotifications /></PrivateRoute>} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Router>

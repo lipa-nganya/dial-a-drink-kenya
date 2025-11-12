@@ -71,7 +71,8 @@ const OtpVerificationScreen = ({ route, navigation }) => {
     try {
       const response = await api.post('/auth/verify-otp', {
         phone: phoneNumber,
-        otp: otpCode
+        otp: otpCode,
+        userType: 'driver'
       });
 
       if (response.data.success) {

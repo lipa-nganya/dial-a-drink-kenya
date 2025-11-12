@@ -126,7 +126,10 @@ const CustomerLogin = () => {
     setOtpLoading(true);
 
     try {
-      const response = await api.post('/auth/send-otp', { phone });
+      const response = await api.post('/auth/send-otp', {
+        phone,
+        userType: 'customer'
+      });
 
       const { success, error: responseError, note, message } = response.data || {};
       setOtpPhone(phone);

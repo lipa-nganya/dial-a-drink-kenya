@@ -97,6 +97,17 @@ function buildPhoneLookupVariants(phone) {
 router.post('/send-otp', async (req, res) => {
   try {
     const { phone } = req.body;
+    const rawContext =
+      req.body?.userType ||
+      req.body?.context ||
+      req.body?.clientType ||
+      req.body?.audience ||
+      req.body?.role ||
+      '';
+    const normalizedContext =
+      typeof rawContext === 'string' ? rawContext.trim().toLowerCase() : '';
+    const forceCustomer = normalizedContext === 'customer';
+    const forceDriver = normalizedContext === 'driver';
 
     if (!phone) {
       return res.status(400).json({
@@ -107,9 +118,8 @@ router.post('/send-otp', async (req, res) => {
 
     // Clean phone number
     const cleanedPhone = phone.replace(/\D/g, '');
-    const phoneLookupVariants = buildPhoneLookupVariants(phone);
-    const phoneLookupVariants = buildPhoneLookupVariants(phone);
     const normalizedPhone = normalizeCustomerPhone(phone) || cleanedPhone;
+    const phoneLookupVariants = buildPhoneLookupVariants(phone);
     
     // Check if phone number has associated orders (optional - allow login even without orders)
     const order = await db.Order.findOne({
@@ -143,29 +153,23 @@ router.post('/send-otp', async (req, res) => {
 
     // Check if this is a driver phone number
     // Try exact match first, then try with different formats
-    let driver = await db.Driver.findOne({
-      where: { phoneNumber: cleanedPhone }
-    });
-    
-    // If not found, try with different phone formats
-    if (!driver) {
-      // Try with 0 prefix
-      const phoneWithZero = '0' + cleanedPhone.substring(3);
+    let driver = null;
+    if (!forceCustomer) {
+      const driverLookup = phoneLookupVariants.length
+        ? phoneLookupVariants
+        : [cleanedPhone];
+
       driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWithZero }
-      });
-    }
-    
-    if (!driver) {
-      // Try without country code
-      const phoneWithoutCode = cleanedPhone.substring(3);
-      driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWithoutCode }
+        where: {
+          phoneNumber: {
+            [db.Sequelize.Op.in]: driverLookup
+          }
+        }
       });
     }
     
     // Generate OTP - 4 digits for drivers, 6 digits for customers
-    const isDriver = !!driver;
+    const isDriver = forceDriver || (!!driver && !forceCustomer);
     const otpCode = isDriver ? generateDriverOTP() : generateOTP();
     const expiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000); // 3 hours from now
     
@@ -315,6 +319,18 @@ router.post('/verify-otp', async (req, res) => {
 
     // Use otpCode if provided, otherwise fall back to otp
     const codeToVerify = otpCode || otpFromBody;
+    const rawContext =
+      req.body?.userType ||
+      req.body?.context ||
+      req.body?.clientType ||
+      req.body?.audience ||
+      req.body?.role ||
+      '';
+    const normalizedContext =
+      typeof rawContext === 'string' ? rawContext.trim().toLowerCase() : '';
+    const forceCustomer = normalizedContext === 'customer';
+    const forceDriver = normalizedContext === 'driver';
+    const phoneLookupVariants = buildPhoneLookupVariants(phone);
 
     if (!phone || !codeToVerify) {
       console.error('OTP verification error - missing fields:', {
@@ -330,17 +346,25 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     const cleanedPhone = phone.replace(/\D/g, '');
+    const normalizedPhone = normalizeCustomerPhone(phone) || cleanedPhone;
 
-    // Find the most recent unused OTP for this phone
+    const candidatePhones = new Set();
+    candidatePhones.add(cleanedPhone);
+    if (normalizedPhone) {
+      candidatePhones.add(normalizedPhone.replace(/\D/g, ''));
+    }
+    phoneLookupVariants.forEach((variant) => {
+      const digits = (variant || '').replace(/\D/g, '');
+      if (digits) {
+        candidatePhones.add(digits);
+      }
+    });
+
     const otpRecord = await db.Otp.findOne({
       where: {
-        phoneNumber: phoneLookupVariants.length
-          ? {
-              [db.Sequelize.Op.in]: phoneLookupVariants.map((variant) =>
-                variant.replace(/\D/g, '')
-              )
-            }
-          : cleanedPhone,
+        phoneNumber: {
+          [db.Sequelize.Op.in]: Array.from(candidatePhones)
+        },
         isUsed: false
       },
       order: [['createdAt', 'DESC']]
@@ -388,59 +412,38 @@ router.post('/verify-otp', async (req, res) => {
     await otpRecord.update({ isUsed: true });
 
     // Check if this is a driver phone number FIRST
-    let driver = await db.Driver.findOne({
-      where: { phoneNumber: cleanedPhone }
-    });
-    
-    // If not found, try with different phone formats
-    if (!driver) {
-      // Try with 0 prefix
-      if (cleanedPhone.startsWith('254')) {
-        const phoneWithZero = '0' + cleanedPhone.substring(3);
-        driver = await db.Driver.findOne({
-          where: { phoneNumber: phoneWithZero }
-        });
-      }
-    }
-    
-    if (!driver) {
-      // Try without country code
-      if (cleanedPhone.startsWith('254')) {
-        const phoneWithoutCode = cleanedPhone.substring(3);
-        driver = await db.Driver.findOne({
-          where: { phoneNumber: phoneWithoutCode }
-        });
-      }
-    }
-    
-    if (!driver && !cleanedPhone.startsWith('254') && cleanedPhone.length === 9) {
-      // Try adding 254 prefix
-      const phoneWith254 = '254' + cleanedPhone;
+    let driver = null;
+    if (!forceCustomer) {
+      const driverLookup = new Set(phoneLookupVariants);
+      driverLookup.add(cleanedPhone);
+      driverLookup.add(normalizedPhone);
+
       driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWith254 }
+        where: {
+          phoneNumber: {
+            [db.Sequelize.Op.in]: Array.from(driverLookup).filter(Boolean)
+          }
+        }
       });
     }
     
-    if (!driver && cleanedPhone.startsWith('0')) {
-      // Try with 0 prefix then add 254
-      const phoneWithoutZero = cleanedPhone.substring(1);
-      const phoneWith254 = '254' + phoneWithoutZero;
-      driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWith254 }
-      });
-    }
+    const isDriver = forceDriver || (!!driver && !forceCustomer);
     
     // If this is a driver, return simple success response
-    if (driver) {
-      console.log(`✅ Driver OTP verified for: ${driver.name} (${driver.phoneNumber})`);
+    if (isDriver) {
+      if (driver) {
+        console.log(`✅ Driver OTP verified for: ${driver.name} (${driver.phoneNumber})`);
+      } else {
+        console.log('✅ Driver OTP verified (driver context enforced)');
+      }
       return res.json({
         success: true,
         isDriver: true,
         driver: {
-          id: driver.id,
-          name: driver.name,
-          phoneNumber: driver.phoneNumber,
-          status: driver.status
+          id: driver?.id || null,
+          name: driver?.name || null,
+          phoneNumber: driver?.phoneNumber || cleanedPhone,
+          status: driver?.status || null
         }
       });
     }
