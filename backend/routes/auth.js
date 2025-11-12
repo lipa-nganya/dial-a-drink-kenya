@@ -223,6 +223,48 @@ router.post('/send-otp', async (req, res) => {
       });
     }
 
+    // Ensure a customer record exists so admins can retrieve OTPs even if SMS fails
+    let customerRecord = null;
+    if (!isDriver) {
+      const customerLookup = [
+        normalizedPhone ? { phone: normalizedPhone } : null,
+        normalizedPhone ? { username: normalizedPhone } : null,
+        cleanedPhone ? { phone: cleanedPhone } : null,
+        cleanedPhone ? { username: cleanedPhone } : null
+      ].filter(Boolean);
+
+      if (customerLookup.length) {
+        customerRecord = await db.Customer.findOne({
+          where: {
+            [db.Sequelize.Op.or]: customerLookup
+          }
+        });
+      }
+
+      if (!customerRecord) {
+        customerRecord = await db.Customer.create({
+          phone: normalizedPhone || cleanedPhone,
+          username: normalizedPhone || cleanedPhone,
+          customerName: customerName || null,
+          hasSetPassword: false
+        });
+      } else {
+        const updates = {};
+        if (!customerRecord.phone && (normalizedPhone || cleanedPhone)) {
+          updates.phone = normalizedPhone || cleanedPhone;
+        }
+        if (!customerRecord.username && (normalizedPhone || cleanedPhone)) {
+          updates.username = normalizedPhone || cleanedPhone;
+        }
+        if (!customerRecord.customerName && customerName) {
+          updates.customerName = customerName;
+        }
+        if (Object.keys(updates).length) {
+          await customerRecord.update(updates);
+        }
+      }
+    }
+
     // For customers, handle SMS failures differently
     if (!smsResult.success) {
       console.error('Failed to send OTP:', smsResult.error);
