@@ -15,7 +15,7 @@ import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
 import SetPin from './SetPin';
 
-const OtpVerification = ({ phone, onBack }) => {
+const OtpVerification = ({ phone, onBack, infoMessage }) => {
   const navigate = useNavigate();
   const { login } = useCustomer();
   const [otpCode, setOtpCode] = useState('');
@@ -147,6 +147,12 @@ const OtpVerification = ({ phone, onBack }) => {
             Enter the 6-digit code sent to {phone}
           </Typography>
         </Box>
+
+        {infoMessage && (
+          <Alert severity="info" sx={{ mb: 3 }}>
+            {infoMessage}
+          </Alert>
+        )}
 
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>

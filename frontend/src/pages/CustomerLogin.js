@@ -28,6 +28,7 @@ const CustomerLogin = () => {
   const [otpLoading, setOtpLoading] = useState(false);
   const [showOtpVerification, setShowOtpVerification] = useState(false);
   const [otpPhone, setOtpPhone] = useState('');
+  const [otpMessage, setOtpMessage] = useState('');
 
   useEffect(() => {
     if (!phone) {
@@ -127,18 +128,39 @@ const CustomerLogin = () => {
     try {
       const response = await api.post('/auth/send-otp', { phone });
 
-      if (response.data.success) {
-        setOtpPhone(phone);
-        setShowOtpVerification(true);
+      const { success, error: responseError, note, message } = response.data || {};
+      setOtpPhone(phone);
+      const info =
+        responseError ||
+        note ||
+        message ||
+        'OTP generated. Enter the code you received (or provided by support).';
+      if (!success && responseError) {
+        setError(responseError);
       } else {
-        setError(response.data.error || 'Failed to send OTP. Please try again.');
+        setError('');
       }
+      setOtpMessage(info);
+      setShowOtpVerification(true);
     } catch (err) {
       console.error('Send OTP error:', err);
-      setError(
+      const status = err.response?.status;
+      const apiError =
         err.response?.data?.error ||
-          'Failed to send OTP. You can continue without logging in to place orders.'
-      );
+        err.response?.data?.message ||
+        'Failed to send OTP. You can continue without logging in to place orders.';
+
+      if (status === 402) {
+        // OTP still generated but SMS failed (e.g., insufficient credits)
+        setError('');
+        setOtpPhone(phone);
+        setOtpMessage(
+          `${apiError} Enter the OTP shared with you by support to continue.`
+        );
+        setShowOtpVerification(true);
+      } else {
+        setError(apiError);
+      }
     } finally {
       setOtpLoading(false);
     }
@@ -148,9 +170,11 @@ const CustomerLogin = () => {
     return (
       <OtpVerification
         phone={otpPhone}
+        infoMessage={otpMessage}
         onBack={() => {
           setShowOtpVerification(false);
           setOtpPhone('');
+          setOtpMessage('');
           setError('');
         }}
       />
