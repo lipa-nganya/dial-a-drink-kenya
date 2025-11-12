@@ -2,7 +2,7 @@
   "expo": {
     "name": "DD Driver",
     "slug": "dddriver",
-    "version": "1.0.32",
+    "version": "1.0.33",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -41,7 +41,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiBaseUrl": "https://your-cloud-run-backend-url",
+      "apiBaseUrl": "https://dialadrink-backend-910510650031.us-central1.run.app",
       "eas": {
         "projectId": "d016afe9-031a-42ca-b832-94c00c800600"
       }

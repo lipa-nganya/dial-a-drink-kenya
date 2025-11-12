@@ -1,3 +1,11 @@
+const shouldUseSsl = (() => {
+  if (process.env.DB_REQUIRE_SSL) {
+    return process.env.DB_REQUIRE_SSL !== 'false';
+  }
+  const databaseUrl = process.env.DATABASE_URL || '';
+  return !databaseUrl.includes('/cloudsql/');
+})();
+
 module.exports = {
   development: {
     username: process.env.DB_USER || 'postgres',
@@ -10,12 +18,14 @@ module.exports = {
   production: {
     use_env_variable: 'DATABASE_URL',
     dialect: 'postgres',
-    dialectOptions: {
-      ssl: {
-        require: true,
-        rejectUnauthorized: false
-      }
-    },
+    dialectOptions: shouldUseSsl
+      ? {
+          ssl: {
+            require: true,
+            rejectUnauthorized: false
+          }
+        }
+      : {},
     logging: false // Disable SQL logging in production
   }
 };
