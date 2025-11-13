@@ -31,32 +31,49 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
+  // Priority 1: Environment variable (set at build time or runtime)
   const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
   if (envBase) {
-    console.log('🌐 Using API URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
+    console.log('🌐 [API] Using URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
     return `${envBase}/api`;
   }
 
+  // Priority 2: App config extra.apiBaseUrl (set in app.config.js based on build profile)
   const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
   if (configBase) {
-    console.log('🌐 Using API URL from app config:', `${configBase}/api`);
+    console.log('🌐 [API] Using URL from app config extra.apiBaseUrl:', `${configBase}/api`);
+    console.log('📱 [API] Build profile:', Constants.expoConfig?.extra?.environment || 'unknown');
     return `${configBase}/api`;
+  }
+
+  // Priority 3: Check if we're in local-dev mode and use ngrok
+  const buildProfile = Constants.expoConfig?.extra?.environment || process.env.EXPO_PUBLIC_ENV;
+  if (buildProfile === 'local') {
+    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] Using ngrok URL for local-dev:', `${ngrokUrl}/api`);
+    return `${ngrokUrl}/api`;
   }
 
   // Fallback for development (emulator only)
   if (Platform.OS === 'android' && __DEV__) {
-    console.warn('⚠️ Using emulator fallback URL (10.0.2.2). For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
+    console.warn('⚠️ [API] Using emulator fallback URL (10.0.2.2). For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
     return 'http://10.0.2.2:5001/api';
   }
 
   if (Platform.OS === 'ios' && __DEV__) {
-    console.warn('⚠️ Using localhost fallback. For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
+    console.warn('⚠️ [API] Using localhost fallback. For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
     return 'http://localhost:5001/api';
   }
 
   console.error(
-    '❌ No API base URL configured. Set EXPO_PUBLIC_API_BASE_URL or extra.apiBaseUrl in app.config.js.'
+    '❌ [API] No API base URL configured. Set EXPO_PUBLIC_API_BASE_URL or extra.apiBaseUrl in app.config.js.'
   );
+  console.error('📱 [API] Debug info:', {
+    envBase,
+    configBase,
+    buildProfile,
+    expoConfig: Constants.expoConfig?.extra
+  });
   return 'http://localhost:5001/api';
 };
 

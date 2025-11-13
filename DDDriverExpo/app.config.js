@@ -15,7 +15,16 @@ module.exports = ({ config }) => {
   const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
   
   // Choose API URL based on environment
+  // For local-dev, always use ngrok URL (localhost doesn't work on physical devices)
   const apiBaseUrl = isLocalDev ? localApiUrl : cloudApiUrl;
+  
+  console.log('🔧 API Configuration:', {
+    buildProfile,
+    isLocalDev,
+    apiBaseUrl,
+    envApiUrl: process.env.EXPO_PUBLIC_API_BASE_URL,
+    ngrokUrl
+  });
   
   // App identifiers - use different bundle IDs for local vs cloud so you can install both
   const localBundleId = 'com.dialadrink.driver.local';
