@@ -150,16 +150,16 @@ const CustomerLogin = () => {
     } catch (err) {
       console.error('Send OTP error:', err);
       const status = err.response?.status;
-      const apiError =
-        err.response?.data?.error ||
-        err.response?.data?.message ||
-        'Failed to send OTP. You can continue without logging in to place orders.';
-
-      if (status === 402) {
-        // OTP still generated but SMS failed (e.g., insufficient credits)
+      const responseData = err.response?.data || {};
+      const apiError = responseData.error || responseData.message || 'Failed to send OTP. Please try again.';
+      
+      // If OTP code is present in error response, still allow OTP entry
+      // Admin can provide the code from dashboard
+      if (responseData.otpCode || status === 402) {
         setError('');
         setOtpPhone(phone);
         setOtpMessage(
+          responseData.note || 
           `${apiError} Enter the OTP shared with you by support to continue.`
         );
         setShowOtpVerification(true);
