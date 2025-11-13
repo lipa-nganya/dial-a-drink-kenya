@@ -378,6 +378,15 @@ const HomeScreen = ({ route, navigation }) => {
       setSnackbarVisible(true);
     });
 
+    socket.on('delivery-pay-received', (data) => {
+      console.log('💰 Delivery pay received:', data);
+      setSnackbarMessage(`Delivery fee of KES ${data.amount} received for Order #${data.orderId}!`);
+      setSnackbarType('success');
+      setSnackbarVisible(true);
+      // Refresh orders to update wallet balance display
+      fetchOrders();
+    });
+
     socket.on('payment-failed', (data) => {
       console.log('❌ Payment failed via socket:', data);
       if (data.orderId) {

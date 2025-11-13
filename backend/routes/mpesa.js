@@ -182,6 +182,19 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
         });
 
         const driver = await db.Driver.findByPk(orderInstance.driverId).catch(() => null);
+        
+        // Emit socket event to notify driver about delivery pay
+        const io = req?.app?.get('io');
+        if (io) {
+          io.to(`driver-${orderInstance.driverId}`).emit('delivery-pay-received', {
+            orderId: effectiveOrderId,
+            amount: driverPayAmount,
+            customerName: orderInstance.customerName,
+            walletBalance: parseFloat(driverWallet.balance)
+          });
+          console.log(`📬 Delivery pay notification sent to driver #${orderInstance.driverId} for Order #${effectiveOrderId}`);
+        }
+        
         if (driver?.pushToken) {
           pushNotifications.sendPushNotification(driver.pushToken, {
             title: 'Delivery Fee Payment',
