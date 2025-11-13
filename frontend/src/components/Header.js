@@ -15,15 +15,17 @@ import {
   useMediaQuery,
   useTheme as useMUITheme
 } from '@mui/material';
-import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person } from '@mui/icons-material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useCustomer } from '../contexts/CustomerContext';
 import ThemeSwitcher from './ThemeSwitcher';
 
 const Header = () => {
   const navigate = useNavigate();
   const { getTotalItems } = useCart();
+  const { isLoggedIn } = useCustomer();
   const [mobileOpen, setMobileOpen] = useState(false);
   const muiTheme = useMUITheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
@@ -74,7 +76,6 @@ const Header = () => {
           <ListItemText primary="Cart" />
         </ListItem>
         <ListItem component="button" onClick={() => {
-          const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
           handleNavigation(isLoggedIn ? '/orders' : '/login');
         }}>
           <ListItemIcon>
@@ -82,15 +83,21 @@ const Header = () => {
           </ListItemIcon>
           <ListItemText primary="My Orders" />
         </ListItem>
-        <ListItem component="button" onClick={() => {
-          const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
-          handleNavigation(isLoggedIn ? '/profile' : '/login');
-        }}>
-          <ListItemIcon>
-            <Person />
-          </ListItemIcon>
-          <ListItemText primary="Profile" />
-        </ListItem>
+        {isLoggedIn ? (
+          <ListItem component="button" onClick={() => handleNavigation('/profile')}>
+            <ListItemIcon>
+              <Person />
+            </ListItemIcon>
+            <ListItemText primary="Profile" />
+          </ListItem>
+        ) : (
+          <ListItem component="button" onClick={() => handleNavigation('/login')}>
+            <ListItemIcon>
+              <Login />
+            </ListItemIcon>
+            <ListItemText primary="Login" />
+          </ListItem>
+        )}
       </List>
     </Box>
   );
@@ -152,25 +159,30 @@ const Header = () => {
               </Button>
               <Button
                 color="inherit"
-                onClick={() => {
-                  const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
-                  navigate(isLoggedIn ? '/orders' : '/login');
-                }}
+                onClick={() => navigate(isLoggedIn ? '/orders' : '/login')}
                 sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
               >
                 My Orders
               </Button>
-              <Button
-                color="inherit"
-                onClick={() => {
-                  const isLoggedIn = localStorage.getItem('customerLoggedIn') === 'true';
-                  navigate(isLoggedIn ? '/profile' : '/login');
-                }}
-                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
-                startIcon={<Person />}
-              >
-                Profile
-              </Button>
+              {isLoggedIn ? (
+                <Button
+                  color="inherit"
+                  onClick={() => navigate('/profile')}
+                  sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                  startIcon={<Person />}
+                >
+                  Profile
+                </Button>
+              ) : (
+                <Button
+                  color="inherit"
+                  onClick={() => navigate('/login')}
+                  sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                  startIcon={<Login />}
+                >
+                  Login
+                </Button>
+              )}
               <Button
                 color="inherit"
                 onClick={() => navigate('/cart')}
