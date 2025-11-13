@@ -858,9 +858,11 @@ const startServer = async () => {
     });
     
     // Start server immediately
-    server.listen(PORT, () => {
-      console.log(`🚀 Server is running on port ${PORT}`);
-      console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
+    // Listen on 0.0.0.0 to accept connections from outside container (required for Cloud Run)
+    const HOST = process.env.HOST || '0.0.0.0';
+    server.listen(PORT, HOST, () => {
+      console.log(`🚀 Server is running on ${HOST}:${PORT}`);
+      console.log(`🔗 Health check: http://${HOST}:${PORT}/api/health`);
       console.log(`📊 API endpoints:`);
       console.log(`   - GET  /api/health`);
       console.log(`   - GET  /api/categories`);
