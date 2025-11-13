@@ -132,6 +132,32 @@ const getMUITheme = (isDarkMode) => {
           },
         },
       },
+      MuiDrawer: {
+        styleOverrides: {
+          paper: {
+            backgroundColor: `${colors.paper} !important`,
+            color: `${colors.textPrimary} !important`,
+          },
+        },
+      },
+      MuiList: {
+        styleOverrides: {
+          root: {
+            backgroundColor: colors.paper,
+            color: colors.textPrimary,
+          },
+        },
+      },
+      MuiListItem: {
+        styleOverrides: {
+          root: {
+            color: colors.textPrimary,
+            '&:hover': {
+              backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+            },
+          },
+        },
+      },
       MuiButton: {
         styleOverrides: {
           root: {
