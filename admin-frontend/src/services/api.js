@@ -64,8 +64,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
+      console.warn('Unauthorized access - admin token may be invalid or expired');
       localStorage.removeItem('adminToken');
-      window.location.href = '/login';
+      localStorage.removeItem('adminUser');
+      // Only redirect if not already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }

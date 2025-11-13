@@ -82,10 +82,22 @@ export const AdminProvider = ({ children }) => {
   // Fetch pending orders count
   const fetchPendingOrdersCount = async () => {
     try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        console.warn('No admin token found, skipping stats fetch');
+        return;
+      }
       const response = await api.get('/admin/stats');
       setPendingOrdersCount(response.data.pendingOrders || 0);
     } catch (error) {
-      console.error('Error fetching pending orders count:', error);
+      if (error.response?.status === 401) {
+        console.warn('Unauthorized access - admin token may be invalid or expired');
+        // Token is invalid, clear it and let the interceptor handle redirect
+        localStorage.removeItem('adminToken');
+        localStorage.removeItem('adminUser');
+      } else {
+        console.error('Error fetching pending orders count:', error);
+      }
     }
   };
 
