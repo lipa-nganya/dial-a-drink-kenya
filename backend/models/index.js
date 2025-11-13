@@ -5,10 +5,34 @@ const env = process.env.NODE_ENV || 'development';
 const dbConfig = config[env];
 
 let sequelize;
-if (dbConfig.use_env_variable) {
-  sequelize = new Sequelize(process.env[dbConfig.use_env_variable], dbConfig);
-} else {
-  sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, dbConfig);
+try {
+  if (dbConfig.use_env_variable) {
+    const databaseUrl = process.env[dbConfig.use_env_variable];
+    if (!databaseUrl) {
+      console.warn(`⚠️ Warning: ${dbConfig.use_env_variable} environment variable is not set.`);
+      console.warn('⚠️ Creating placeholder Sequelize instance. Database connection will be deferred.');
+      // Create a minimal Sequelize instance with dummy connection so models can initialize
+      // The actual connection will be established later when DATABASE_URL is available
+      sequelize = new Sequelize('postgres://placeholder:placeholder@localhost:5432/placeholder', {
+        ...dbConfig,
+        logging: false,
+        pool: { max: 0 } // Disable connection pooling for placeholder
+      });
+    } else {
+      sequelize = new Sequelize(databaseUrl, dbConfig);
+    }
+  } else {
+    sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, dbConfig);
+  }
+} catch (error) {
+  console.error('❌ Error initializing Sequelize:', error.message);
+  console.warn('⚠️ Database connection will be deferred. Server will start but database operations will fail.');
+  // Create a minimal placeholder instance
+  sequelize = new Sequelize('postgres://placeholder:placeholder@localhost:5432/placeholder', {
+    dialect: 'postgres',
+    logging: false,
+    pool: { max: 0 }
+  });
 }
 
 const db = {};
