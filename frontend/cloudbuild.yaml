@@ -1,0 +1,56 @@
+# Cloud Build configuration for Customer Frontend
+# This file enables automatic deployments from GitHub to Cloud Run
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/dialadrink-frontend:latest'
+      - '--build-arg'
+      - 'REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api'
+      - '.'
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/dialadrink-frontend:latest'
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'dialadrink-customer'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '256Mi'
+      - '--set-env-vars'
+      - 'REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api'
+
+images:
+  - 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/dialadrink-frontend:latest'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '1200s'
+
