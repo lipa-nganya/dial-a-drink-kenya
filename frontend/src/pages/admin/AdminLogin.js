@@ -69,7 +69,7 @@ const AdminLogin = () => {
             Admin Login
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Dial A Drink Kenya
+            Drink Suite
           </Typography>
         </Box>
 

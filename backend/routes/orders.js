@@ -55,12 +55,55 @@ const calculateDeliveryFee = async (items) => {
 router.post('/', async (req, res) => {
   try {
     const { customerName, customerPhone, customerEmail, deliveryAddress, items, notes, paymentType, paymentMethod, tipAmount } = req.body;
+    console.log('🛒 Incoming order payload:', JSON.stringify({
+      customerName,
+      customerPhone,
+      customerEmail,
+      deliveryAddress,
+      items,
+      paymentType,
+      paymentMethod,
+      tipAmount
+    }, null, 2));
     
-    if (!customerName || !customerPhone || !deliveryAddress || !items || items.length === 0) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (!customerName || !customerPhone || !deliveryAddress || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Missing required fields or empty cart' });
     }
 
-    // Validate payment information
+    const normalizedItems = [];
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      if (!item || item.drinkId === undefined || item.drinkId === null) {
+        return res.status(400).json({ error: `Invalid item at position ${index + 1}: missing drinkId` });
+      }
+
+      const drinkId = parseInt(item.drinkId, 10);
+      if (!Number.isInteger(drinkId) || drinkId <= 0) {
+        return res.status(400).json({ error: `Invalid drinkId for item ${index + 1}` });
+      }
+
+      const quantity = parseInt(item.quantity, 10);
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        return res.status(400).json({ error: `Invalid quantity for item ${index + 1}` });
+      }
+
+      const selectedPrice =
+        item.selectedPrice !== undefined && item.selectedPrice !== null
+          ? parseFloat(item.selectedPrice)
+          : item.price !== undefined && item.price !== null
+          ? parseFloat(item.price)
+          : null;
+
+      normalizedItems.push({
+        drinkId,
+        quantity,
+        selectedPrice: Number.isFinite(selectedPrice) ? selectedPrice : null,
+        selectedCapacity: item.selectedCapacity || null
+      });
+    }
+
+    console.log('🛒 Normalized cart items:', JSON.stringify(normalizedItems, null, 2));
+
     if (!paymentType || !['pay_now', 'pay_on_delivery'].includes(paymentType)) {
       return res.status(400).json({ error: 'Invalid payment type' });
     }
@@ -69,13 +112,11 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Payment method required when paying now' });
     }
 
-    // Validate tip amount
     let tip = parseFloat(tipAmount) || 0;
     if (tip < 0) {
       return res.status(400).json({ error: 'Tip amount cannot be negative' });
     }
 
-    // Check max tip setting in test mode
     const [testModeSetting, maxTipSetting] = await Promise.all([
       db.Settings.findOne({ where: { key: 'deliveryTestMode' } }).catch(() => null),
       db.Settings.findOne({ where: { key: 'maxTipEnabled' } }).catch(() => null)
@@ -85,79 +126,98 @@ router.post('/', async (req, res) => {
     const maxTipEnabled = maxTipSetting?.value === 'true';
 
     if (isTestMode && maxTipEnabled && tip > 1) {
-      tip = 1; // Limit tip to 1 KES when max tip is enabled in test mode
+      tip = 1;
     }
     
-    // Calculate total amount
-    let totalAmount = 0;
-    const orderItems = [];
-    
-    for (const item of items) {
-      const drink = await db.Drink.findByPk(item.drinkId);
-      if (!drink) {
-        return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
+    let createdOrderId = null;
+    const transaction = await db.sequelize.transaction();
+
+    try {
+      let totalAmount = 0;
+      const orderItems = [];
+
+      for (const item of normalizedItems) {
+        const drink = await db.Drink.findByPk(item.drinkId, { transaction });
+        if (!drink) {
+          await transaction.rollback();
+          return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
+        }
+
+        const priceToUse =
+          Number.isFinite(item.selectedPrice) && item.selectedPrice > 0
+            ? item.selectedPrice
+            : parseFloat(drink.price) || 0;
+
+        console.log('[order:create] item', {
+          drinkId: item.drinkId,
+          quantity: item.quantity,
+          selectedPrice: item.selectedPrice,
+          drinkPrice: drink.price,
+          computedPrice: priceToUse
+        });
+
+        const itemTotal = priceToUse * item.quantity;
+        totalAmount += itemTotal;
+
+        orderItems.push({
+          drinkId: item.drinkId,
+          quantity: item.quantity,
+          price: priceToUse
+        });
       }
-      
-      const itemTotal = drink.price * item.quantity;
-      totalAmount += itemTotal;
-      
-      orderItems.push({
-        drinkId: item.drinkId,
-        quantity: item.quantity,
-        price: drink.price
-      });
+
+      const deliveryFee = await calculateDeliveryFee(normalizedItems);
+      const finalTotal = totalAmount + deliveryFee + tip;
+
+      let paymentStatus = paymentType === 'pay_now' ? 'pending' : 'unpaid';
+      let orderStatus = 'pending';
+
+      if (paymentType === 'pay_now' && paymentMethod === 'card') {
+        orderStatus = 'confirmed';
+        paymentStatus = 'paid';
+      }
+
+      const order = await db.Order.create({
+        customerName,
+        customerPhone,
+        customerEmail,
+        deliveryAddress,
+        totalAmount: finalTotal,
+        tipAmount: tip,
+        notes: notes ? `${notes}\nDelivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}` : `Delivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}`,
+        paymentType: paymentType || 'pay_on_delivery',
+        paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
+        paymentStatus,
+        status: orderStatus
+      }, { transaction });
+
+      createdOrderId = order.id;
+
+      await ensureCustomerFromOrder(order, { transaction });
+
+      for (const item of orderItems) {
+        console.log('[order:create] creating order item', item);
+        await db.OrderItem.create({
+          orderId: order.id,
+          ...item
+        }, { transaction });
+      }
+
+      await transaction.commit();
+    } catch (error) {
+      if (error?.errors) {
+        console.error('Error creating order (validation):', error.errors.map((e) => ({
+          message: e.message,
+          path: e.path,
+          value: e.value,
+          type: e.type
+        })));
+      }
+      console.error('Error creating order:', error);
+      res.status(500).json({ error: error.message });
     }
 
-    // Calculate delivery fee
-    const deliveryFee = await calculateDeliveryFee(items);
-    const finalTotal = totalAmount + deliveryFee + tip; // Include tip in total
-    
-    // Create order
-    // Determine payment status based on payment type
-    let paymentStatus = 'pending';
-    if (paymentType === 'pay_now') {
-      paymentStatus = 'pending'; // Will be updated to 'paid' when payment completes
-    } else {
-      paymentStatus = 'unpaid'; // Pay on delivery starts as unpaid
-    }
-
-    // Determine order status based on payment
-    let orderStatus = 'pending';
-    if (paymentType === 'pay_now' && paymentMethod === 'mobile_money') {
-      // M-Pesa payments start as pending, will be confirmed when payment callback arrives
-      orderStatus = 'pending';
-    } else if (paymentType === 'pay_now' && paymentMethod === 'card') {
-      // Card payments can be confirmed immediately (assuming payment gateway handles it)
-      orderStatus = 'confirmed';
-      paymentStatus = 'paid';
-    }
-
-    const order = await db.Order.create({
-      customerName,
-      customerPhone,
-      customerEmail,
-      deliveryAddress,
-      totalAmount: finalTotal, // Include delivery fee and tip in total
-      tipAmount: tip,
-      notes: notes ? `${notes}\nDelivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}` : `Delivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}`,
-      paymentType: paymentType || 'pay_on_delivery',
-      paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
-      paymentStatus: paymentStatus,
-      status: orderStatus
-    });
-    
-    await ensureCustomerFromOrder(order);
-    
-    // Create order items
-    for (const item of orderItems) {
-      await db.OrderItem.create({
-        orderId: order.id,
-        ...item
-      });
-    }
-    
-    // Fetch the complete order with items
-    const completeOrder = await db.Order.findByPk(order.id, {
+    const completeOrder = await db.Order.findByPk(createdOrderId, {
       include: [{
         model: db.OrderItem,
         as: 'items',
@@ -167,9 +227,7 @@ router.post('/', async (req, res) => {
         }]
       }]
     });
-    
 
-    // Emit notification to admin dashboard
     const io = req.app.get('io');
     if (io) {
       io.to('admin').emit('new-order', {
@@ -179,19 +237,15 @@ router.post('/', async (req, res) => {
       });
     }
     
-    // Send SMS notifications to active notification recipients
     try {
-      // Check if SMS is enabled
       const smsEnabledSetting = await db.Settings.findOne({ 
         where: { key: 'smsEnabled' } 
       }).catch(() => null);
       
-      const isSmsEnabled = smsEnabledSetting?.value !== 'false'; // Default to enabled if not set
+      const isSmsEnabledNotifications = smsEnabledSetting?.value !== 'false';
       
-      if (!isSmsEnabled) {
+      if (!isSmsEnabledNotifications) {
         console.log('📱 SMS notifications are DISABLED - skipping SMS for order #' + completeOrder.id);
-        // Continue without sending SMS - functionality is paused
-        // Exit this try block without sending SMS
       } else {
         console.log('📱 SMS notifications are ENABLED - sending SMS for order #' + completeOrder.id);
         const activeNotifications = await db.OrderNotification.findAll({
@@ -199,22 +253,19 @@ router.post('/', async (req, res) => {
         });
         
         if (activeNotifications.length > 0) {
-        // Format order details for SMS (simplified format)
-        const smsMessage = `Order ID: ${completeOrder.id}\n` +
-          `Customer: ${completeOrder.customerName}\n` +
-          `Phone: ${completeOrder.customerPhone}\n` +
-          `Total: KES ${parseFloat(completeOrder.totalAmount).toFixed(2)}`;
+          const smsMessage = `Order ID: ${completeOrder.id}\n` +
+            `Customer: ${completeOrder.customerName}\n` +
+            `Phone: ${completeOrder.customerPhone}\n` +
+            `Total: KES ${parseFloat(completeOrder.totalAmount).toFixed(2)}`;
         
-        // Send SMS to all active recipients (async, don't wait for all to complete)
-        const smsPromises = activeNotifications.map(notification => 
-          smsService.sendSMS(notification.phoneNumber, smsMessage)
-            .catch(error => {
-              console.error(`Failed to send SMS to ${notification.name} (${notification.phoneNumber}):`, error);
-              return { success: false, phone: notification.phoneNumber, error: error.message };
-            })
-        );
-        
-          // Fire and forget - don't block the response
+          const smsPromises = activeNotifications.map(notification => 
+            smsService.sendSMS(notification.phoneNumber, smsMessage)
+              .catch(error => {
+                console.error(`Failed to send SMS to ${notification.name} (${notification.phoneNumber}):`, error);
+                return { success: false, phone: notification.phoneNumber, error: error.message };
+              })
+          );
+          
           Promise.all(smsPromises).then(results => {
             const successful = results.filter(r => r.success).length;
             const failed = results.filter(r => !r.success).length;
@@ -227,12 +278,12 @@ router.post('/', async (req, res) => {
         }
       }
     } catch (error) {
-      // Don't fail the order creation if SMS fails
       console.error('Error sending SMS notifications:', error);
     }
     
-    res.status(201).json(completeOrder);
+    return res.status(201).json(completeOrder);
   } catch (error) {
+    console.error('Error creating order:', error);
     res.status(500).json({ error: error.message });
   }
 });

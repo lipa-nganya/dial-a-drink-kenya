@@ -3,17 +3,45 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const {
   syncCustomersFromOrders,
   normalizePhoneNumber,
   generatePhoneVariants
 } = require('../utils/customerSync');
 
-// Admin authentication middleware (placeholder - can be implemented later)
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
+const ADMIN_TOKEN_TTL = process.env.ADMIN_TOKEN_TTL || '12h';
+
 const verifyAdmin = (req, res, next) => {
-  // For now, allow all requests. Can add admin token verification later
-  next();
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+
+  if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
+    return res.status(401).json({ error: 'Authorization token missing' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.admin = decoded;
+    return next();
+  } catch (error) {
+    console.warn('Admin auth token verification failed:', error.message);
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
 };
+
+const buildAdminUserResponse = (adminInstance) => ({
+  id: adminInstance.id,
+  username: adminInstance.username,
+  email: adminInstance.email,
+  role: adminInstance.role || 'admin',
+  createdAt: adminInstance.createdAt,
+  updatedAt: adminInstance.updatedAt
+});
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === '') {
@@ -226,6 +254,71 @@ const findLatestOtpForPhone = async (phone) => {
     order: [['createdAt', 'DESC']]
   });
 };
+
+router.post('/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+
+    if (!username || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username and password are required'
+      });
+    }
+
+    const trimmedUsername = username.trim();
+
+    const adminUser = await db.Admin.findOne({
+      where: {
+        [Op.or]: [
+          { username: trimmedUsername },
+          { email: trimmedUsername }
+        ]
+      }
+    });
+
+    if (!adminUser || !adminUser.password) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password'
+      });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, adminUser.password);
+
+    if (!isPasswordValid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password'
+      });
+    }
+
+    const tokenPayload = {
+      id: adminUser.id,
+      username: adminUser.username,
+      role: adminUser.role || 'admin'
+    };
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, {
+      expiresIn: ADMIN_TOKEN_TTL
+    });
+
+    return res.json({
+      success: true,
+      message: 'Login successful',
+      token,
+      user: buildAdminUserResponse(adminUser)
+    });
+  } catch (error) {
+    console.error('Admin login error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to log in. Please try again.'
+    });
+  }
+});
+
+router.use(verifyAdmin);
 
 // Get admin stats
 router.get('/stats', async (req, res) => {
@@ -891,6 +984,14 @@ router.patch('/orders/:id/status', async (req, res) => {
       }
     }
 
+    if (order.paymentStatus === 'paid') {
+      try {
+        await ensureDeliveryFeeSplit(order, { context: 'admin-status-update' });
+      } catch (syncError) {
+        console.error('❌ Error syncing delivery fee transactions (admin status update):', syncError);
+      }
+    }
+
     // Reload order to get updated data
     await order.reload({
       include: [
@@ -1290,6 +1391,16 @@ router.patch('/orders/:id/driver', async (req, res) => {
       }
     }
 
+    if (order.paymentStatus === 'paid') {
+      try {
+        await ensureDeliveryFeeSplit(order, {
+          context: driverId ? 'admin-driver-assigned' : 'admin-driver-unassigned'
+        });
+      } catch (syncError) {
+        console.error('❌ Error syncing delivery fee transactions (admin driver assignment):', syncError);
+      }
+    }
+
     // Emit socket events for real-time updates
     const io = req.app.get('io');
     if (io) {
@@ -1540,32 +1651,25 @@ router.post('/orders/:id/verify-payment', async (req, res) => {
 // Get current admin user
 router.get('/me', async (req, res) => {
   try {
-    // For now, return a default admin user
-    // In production, this should get the user from the session/token
-    const defaultAdmin = await db.Admin.findOne({ where: { username: 'admin' } });
-    if (defaultAdmin) {
-      res.json({
-        id: defaultAdmin.id,
-        username: defaultAdmin.username,
-        email: defaultAdmin.email,
-        role: defaultAdmin.role || 'admin'
-      });
-    } else {
-      res.json({
-        id: 1,
-        username: 'admin',
-        email: 'admin@dialadrink.com',
-        role: 'admin'
-      });
+    if (!req.admin?.id) {
+      return res.status(401).json({ error: 'Unauthorized' });
     }
+
+    const adminRecord = await db.Admin.findByPk(req.admin.id);
+
+    if (!adminRecord) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    return res.json(buildAdminUserResponse(adminRecord));
   } catch (error) {
-    console.error('Error fetching current user:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching current admin user:', error);
+    return res.status(500).json({ error: 'Failed to fetch admin profile' });
   }
 });
 
 // Get all admin users
-router.get('/users', verifyAdmin, async (req, res) => {
+router.get('/users', async (req, res) => {
   try {
     const users = await db.Admin.findAll({
       attributes: ['id', 'username', 'email', 'role', 'createdAt'],
@@ -1579,7 +1683,7 @@ router.get('/users', verifyAdmin, async (req, res) => {
 });
 
 // Create new admin user (invite)
-router.post('/users', verifyAdmin, async (req, res) => {
+router.post('/users', async (req, res) => {
   try {
     const { username, email, role } = req.body;
 

@@ -4,24 +4,32 @@ import {
   Typography,
   Grid,
   Box,
-  Button
+  Button,
+  TextField,
+  InputAdornment
 } from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
 import { useNavigate } from 'react-router-dom';
 import CategoryCard from '../components/CategoryCard';
+import DrinkCard from '../components/DrinkCard';
 import CountdownTimer from '../components/CountdownTimer';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 
 const Home = () => {
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+  const [drinks, setDrinks] = useState([]);
+  const [drinksLoading, setDrinksLoading] = useState(true);
   const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
   const { colors, isDarkMode } = useTheme();
 
   useEffect(() => {
     fetchCategories();
     fetchHeroImage();
+    fetchDrinks();
   }, []);
 
   const fetchHeroImage = async () => {
@@ -46,9 +54,35 @@ const Home = () => {
       console.error('Error fetching categories:', error);
       console.error('Error details:', error.response?.data || error.message);
     } finally {
-      setLoading(false);
+      setCategoriesLoading(false);
     }
   };
+
+  const fetchDrinks = async () => {
+    try {
+      const response = await api.get('/drinks');
+      setDrinks(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error fetching drinks:', error);
+    } finally {
+      setDrinksLoading(false);
+    }
+  };
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredDrinks = normalizedSearch
+    ? drinks.filter((drink) => {
+        if (!drink) return false;
+        const name = typeof drink.name === 'string' ? drink.name.toLowerCase() : '';
+        const description = typeof drink.description === 'string' ? drink.description.toLowerCase() : '';
+        const sku = typeof drink.sku === 'string' ? drink.sku.toLowerCase() : '';
+        return (
+          name.includes(normalizedSearch) ||
+          description.includes(normalizedSearch) ||
+          sku.includes(normalizedSearch)
+        );
+      })
+    : [];
 
   return (
     <Box sx={{ backgroundColor: colors.background, minHeight: '100vh' }}>
@@ -109,6 +143,91 @@ const Home = () => {
             Limited Offers
           </Button>
 
+          {/* Search Bar */}
+          <Box
+            sx={{
+              mb: 4,
+              maxWidth: 480,
+              mx: 'auto'
+            }}
+          >
+            <TextField
+              fullWidth
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search drinks"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                )
+              }}
+              variant="outlined"
+              size="medium"
+              sx={{
+                backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF',
+                borderRadius: 2,
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 2
+                }
+              }}
+            />
+          </Box>
+
+          {/* Search Results */}
+          {normalizedSearch && (
+            <Box sx={{ mb: 6 }}>
+              <Typography
+                variant="h5"
+                component="h3"
+                sx={{ mb: 2, textAlign: 'center', fontSize: { xs: '1.5rem', sm: '1.75rem' } }}
+              >
+                Search Results
+              </Typography>
+
+              {drinksLoading ? (
+                <Typography textAlign="center">Searching inventory...</Typography>
+              ) : filteredDrinks.length === 0 ? (
+                <Typography textAlign="center">
+                  No drinks found for "{searchTerm}". Try a different search.
+                </Typography>
+              ) : (
+                <Grid
+                  container
+                  spacing={{ xs: 2, sm: 3 }}
+                  sx={{
+                    justifyContent: { xs: 'center', md: 'flex-start' }
+                  }}
+                >
+                  {filteredDrinks.slice(0, 8).map((drink) => (
+                    <Grid
+                      item
+                      xs={12}
+                      sm={6}
+                      md={3}
+                      key={drink.id}
+                      sx={{ display: 'flex' }}
+                    >
+                      <DrinkCard drink={drink} />
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+
+              {filteredDrinks.length > 8 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate('/menu')}
+                  >
+                    View all results
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+
           {/* Categories Section */}
           <Box sx={{ py: { xs: 4, sm: 6 } }}>
             <Typography 
@@ -127,7 +246,7 @@ const Home = () => {
                 mt: 2
               }}
             >
-              {loading ? (
+              {categoriesLoading ? (
                 <Grid item xs={12}>
                   <Typography textAlign="center">Loading categories...</Typography>
                 </Grid>

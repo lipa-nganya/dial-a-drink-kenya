@@ -521,24 +521,47 @@ router.post('/stk-push', async (req, res) => {
       });
     }
 
+    const testModeSetting = await db.Settings.findOne({ where: { key: 'deliveryTestMode' } }).catch(() => null);
+    const isTestMode = testModeSetting?.value === 'true';
+    const shouldSimulatePayment = isTestMode || (process.env.NODE_ENV !== 'production' && process.env.FORCE_REAL_MPESA !== 'true');
+
     // Initiate STK Push
     const reference = accountReference || `ORDER-${orderId}`;
     const description = `Payment for Order #${orderId}`;
 
-    console.log('Initiating STK Push with:', {
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('🚀 Initiating STK Push with:', {
       phoneNumber,
       amount,
       reference,
       description,
-      orderId
+      orderId,
+      testMode: isTestMode,
+      simulate: shouldSimulatePayment,
+      NODE_ENV: process.env.NODE_ENV,
+      FORCE_REAL_MPESA: process.env.FORCE_REAL_MPESA,
+      MPESA_ENVIRONMENT: process.env.MPESA_ENVIRONMENT
     });
+    console.log('═══════════════════════════════════════════════════════');
 
-    const stkResponse = await mpesaService.initiateSTKPush(
-      phoneNumber,
-      amount,
-      reference,
-      description
-    );
+    let stkResponse;
+    if (shouldSimulatePayment) {
+      stkResponse = {
+        ResponseCode: '0',
+        CustomerMessage: 'Test mode payment simulated. No STK push sent.',
+        CheckoutRequestID: `TEST-${Date.now()}`,
+        MerchantRequestID: `TESTMER-${Date.now()}`,
+        RequestID: `TESTREQ-${Date.now()}`
+      };
+      console.log('🧪 Skipping real M-Pesa call - simulated response:', stkResponse);
+    } else {
+      stkResponse = await mpesaService.initiateSTKPush(
+        phoneNumber,
+        amount,
+        reference,
+        description
+      );
+    }
 
     console.log('STK Push response received:', JSON.stringify(stkResponse, null, 2));
 
@@ -717,6 +740,34 @@ router.post('/stk-push', async (req, res) => {
             });
           }
         }
+
+        if (shouldSimulatePayment) {
+          try {
+            console.log(`🧪 Test mode: auto finalizing payment for Order #${orderId}`);
+            const paymentTransactionRecord = await db.Transaction.findOne({
+              where: {
+                orderId: order.id,
+                transactionType: 'payment',
+                checkoutRequestID: checkoutRequestID
+              },
+              order: [['updatedAt', 'DESC']]
+            });
+
+            if (paymentTransactionRecord) {
+              await finalizeOrderPayment({
+                orderId: order.id,
+                paymentTransaction: paymentTransactionRecord,
+                receiptNumber: `TEST-RECEIPT-${Date.now()}`,
+                req,
+                context: 'Test mode auto-payment'
+              });
+            } else {
+              console.warn('⚠️ Test mode: payment transaction not found for auto-finalization');
+            }
+          } catch (finalizeError) {
+            console.error('❌ Test mode auto-finalization failed:', finalizeError);
+          }
+        }
       } catch (transactionError) {
         console.error('❌ Error preparing order transactions:', transactionError);
         // Don't fail the STK push if transaction creation fails - log it but continue
@@ -730,6 +781,7 @@ router.post('/stk-push', async (req, res) => {
         message: stkResponse.CustomerMessage || stkResponse.customerMessage || 'STK Push initiated successfully. Please check your phone to complete payment.',
         checkoutRequestID: checkoutRequestID,
         customerMessage: stkResponse.CustomerMessage || stkResponse.customerMessage,
+        testMode: shouldSimulatePayment,
         response: stkResponse
       });
     } else {

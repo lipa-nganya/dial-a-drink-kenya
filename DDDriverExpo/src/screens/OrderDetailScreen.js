@@ -436,7 +436,7 @@ const OrderDetailScreen = ({ route, navigation }) => {
   // Can only update to "Delivered" if status is exactly "out_for_delivery"
   const canUpdateToDelivered = currentOrder.status === 'out_for_delivery';
   const canMarkDeliveredNow = isPaymentPaid;
-
+  
   const canShowPaymentPrompt = isPayOnDelivery && currentOrder.paymentStatus !== 'paid' && isActiveOrder;
   const paymentPromptEnabled = isOnTheWay;
   const canShowCashConfirmation = isPayOnDelivery && currentOrder.paymentStatus !== 'paid' && isActiveOrder && isOnTheWay;

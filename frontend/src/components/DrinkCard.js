@@ -14,7 +14,12 @@ import {
   FormControl,
   Alert
 } from '@mui/material';
-import { AddShoppingCart, Star, Cancel } from '@mui/icons-material';
+import {
+  AddShoppingCart,
+  Star,
+  Cancel,
+  LocalOffer
+} from '@mui/icons-material';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -38,8 +43,11 @@ const DrinkCard = ({ drink }) => {
     }
     
     // For relative paths, construct the full URL
-    const baseUrl = window.location.hostname.includes('onrender.com') 
-      ? 'https://dialadrink-backend.onrender.com'
+    const isHosted =
+      window.location.hostname.includes('onrender.com') ||
+      window.location.hostname.includes('run.app');
+    const baseUrl = isHosted
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     
     return `${baseUrl}${imagePath}`;
@@ -108,8 +116,8 @@ const DrinkCard = ({ drink }) => {
       />
       <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#fff', pb: availableCapacities.length >= 2 ? 1 : 0 }}>
         {/* Status Label Above Name */}
-        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center' }}>
-          {!drink.isAvailable ? (
+        <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {!drink.isAvailable && (
             <Chip
               icon={<Cancel />}
               label="Out of Stock"
@@ -121,7 +129,8 @@ const DrinkCard = ({ drink }) => {
                 color: '#F5F5F5'
               }}
             />
-          ) : drink.isPopular ? (
+          )}
+          {drink.isAvailable && drink.isPopular && (
             <Chip
               icon={<Star />}
               label="Popular"
@@ -129,7 +138,20 @@ const DrinkCard = ({ drink }) => {
               color="secondary"
               sx={{ fontSize: '0.65rem', height: '20px' }}
             />
-          ) : null}
+          )}
+          {drink.limitedTimeOffer && (
+            <Chip
+              icon={<LocalOffer />}
+              label="Limited Time"
+              size="small"
+              sx={{ 
+                fontSize: '0.65rem', 
+                height: '20px',
+                backgroundColor: '#00E0B8',
+                color: '#0D0D0D'
+              }}
+            />
+          )}
         </Box>
         
         {/* Drink Name */}

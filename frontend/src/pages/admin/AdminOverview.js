@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -31,12 +31,14 @@ import {
   Save,
   Edit,
   LocalShipping,
-  Warning
+  Warning,
+  CloudUpload
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import io from 'socket.io-client';
 import { useAdmin } from '../../contexts/AdminContext';
+import { useTheme } from '../../contexts/ThemeContext';
 
 const AdminOverview = () => {
   const [stats, setStats] = useState({});
@@ -53,6 +55,10 @@ const AdminOverview = () => {
   });
   const [heroImage, setHeroImage] = useState('');
   const [heroImageInput, setHeroImageInput] = useState('');
+  const [heroImageFileName, setHeroImageFileName] = useState('');
+  const [heroImageUploadError, setHeroImageUploadError] = useState('');
+  const [heroImageUploadLoading, setHeroImageUploadLoading] = useState(false);
+  const [useHeroImageUrl, setUseHeroImageUrl] = useState(false);
   const [showHeroImageForm, setShowHeroImageForm] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
@@ -64,11 +70,40 @@ const AdminOverview = () => {
   const [showTestModeWarning, setShowTestModeWarning] = useState(false);
   const navigate = useNavigate();
   const { fetchPendingOrdersCount } = useAdmin();
+  const { isDarkMode, colors } = useTheme();
+  const heroImageFileInputRef = useRef(null);
+
+  const countdownFieldStyles = {
+    '& .MuiOutlinedInput-root': {
+      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+      '& fieldset': { borderColor: '#00E0B8' },
+      '&:hover fieldset': { borderColor: '#00E0B8' },
+      '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+    },
+    '& .MuiOutlinedInput-input': {
+      color: colors.textPrimary
+    },
+    '& .MuiInputBase-input': {
+      color: colors.textPrimary
+    },
+    '& .MuiInputLabel-root': {
+      color: isDarkMode ? '#00E0B8' : undefined
+    },
+    '& .MuiInputLabel-root.Mui-focused': {
+      color: '#00E0B8'
+    },
+    '& input::-webkit-calendar-picker-indicator': {
+      filter: isDarkMode ? 'invert(64%) sepia(62%) saturate(458%) hue-rotate(116deg) brightness(93%) contrast(86%)' : 'none'
+    }
+  };
 
   useEffect(() => {
     // Initialize socket connection - use production URL
-    const socketUrl = window.location.hostname.includes('onrender.com') 
-      ? 'https://dialadrink-backend.onrender.com'
+    const isHosted =
+      window.location.hostname.includes('onrender.com') ||
+      window.location.hostname.includes('run.app');
+    const socketUrl = isHosted
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
@@ -162,6 +197,9 @@ const AdminOverview = () => {
       if (response.data && response.data.value) {
         setHeroImage(response.data.value);
         setHeroImageInput(response.data.value);
+        setHeroImageFileName('');
+        setHeroImageUploadError('');
+        setUseHeroImageUrl(false);
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
@@ -228,10 +266,58 @@ const AdminOverview = () => {
       await api.put('/settings/heroImage', { value: heroImageInput });
       setHeroImage(heroImageInput);
       setShowHeroImageForm(false);
+      setHeroImageFileName('');
+      setHeroImageUploadError('');
+      setUseHeroImageUrl(false);
       alert('Hero image updated successfully!');
     } catch (error) {
       console.error('Error updating hero image:', error);
       alert('Failed to update hero image. Please try again.');
+    }
+  };
+
+  const handleHeroImageFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setHeroImageUploadError('');
+    setHeroImageUploadLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await api.post('/settings/heroImage/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const uploadedUrl = response.data?.url || response.data?.path;
+      if (!uploadedUrl) {
+        throw new Error('Upload failed. No URL returned.');
+      }
+
+      setHeroImageInput(uploadedUrl);
+      setHeroImageFileName(file.name);
+      setUseHeroImageUrl(false);
+    } catch (uploadError) {
+      console.error('Error uploading hero image:', uploadError);
+      const message = uploadError.response?.data?.error || uploadError.message || 'Failed to upload hero image.';
+      setHeroImageUploadError(message);
+    } finally {
+      setHeroImageUploadLoading(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  const openHeroImageFilePicker = () => {
+    if (heroImageFileInputRef.current) {
+      heroImageFileInputRef.current.click();
     }
   };
 
@@ -440,7 +526,17 @@ const AdminOverview = () => {
           </Typography>
           <Button 
             variant="outlined" 
-            onClick={() => setShowHeroImageForm(!showHeroImageForm)}
+            onClick={() => {
+              const next = !showHeroImageForm;
+              setShowHeroImageForm(next);
+              if (next) {
+                setUseHeroImageUrl(false);
+                setHeroImageInput('');
+              }
+              setHeroImageFileName('');
+              setHeroImageUploadError('');
+              setHeroImageUploadLoading(false);
+            }}
             startIcon={showHeroImageForm ? <Edit /> : <ImageIcon />}
             sx={{
               borderColor: '#00E0B8',
@@ -503,23 +599,109 @@ const AdminOverview = () => {
                 Update Hero Image
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Enter the URL or path to the hero image. This will replace the hero image on the home page.
+                Upload a new image from your computer or provide a full URL. The selected image will appear on the customer homepage.
               </Typography>
-              <TextField
-                fullWidth
-                label="Hero Image URL or Path"
-                value={heroImageInput}
-                onChange={(e) => setHeroImageInput(e.target.value)}
-                placeholder="/assets/images/ads/hero-ad.png"
-                sx={{
-                  mb: 2,
-                  '& .MuiOutlinedInput-root': {
-                    '& fieldset': { borderColor: '#00E0B8' },
-                    '&:hover fieldset': { borderColor: '#00E0B8' },
-                    '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                  }
-                }}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Mode:
+                </Typography>
+                <Button
+                  size="small"
+                  variant="text"
+                  onClick={() => {
+                    setUseHeroImageUrl((prev) => {
+                      const next = !prev;
+                      if (next) {
+                        setHeroImageInput('');
+                        setHeroImageFileName('');
+                        setHeroImageUploadError('');
+                      } else {
+                        setHeroImageInput('');
+                        setHeroImageUploadError('');
+                      }
+                      return next;
+                    });
+                  }}
+                  sx={{ color: '#00E0B8', textTransform: 'none', px: 0, minWidth: 'unset' }}
+                >
+                  {useHeroImageUrl ? 'Switch to upload' : 'Enter URL instead'}
+                </Button>
+              </Box>
+              <input
+                type="file"
+                accept="image/*"
+                ref={heroImageFileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleHeroImageFileChange}
               />
+              <Box
+                sx={{
+                  display: useHeroImageUrl ? 'none' : 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  mb: 2,
+                  flexWrap: 'wrap'
+                }}
+              >
+                <Button
+                  variant="outlined"
+                  startIcon={<CloudUpload />}
+                  onClick={openHeroImageFilePicker}
+                  disabled={heroImageUploadLoading}
+                  sx={{
+                    borderColor: '#00E0B8',
+                    color: '#00E0B8',
+                    '&:hover': { 
+                      borderColor: '#00C4A3',
+                      backgroundColor: 'rgba(0, 224, 184, 0.1)'
+                    }
+                  }}
+                >
+                  {heroImageUploadLoading ? 'Uploading...' : 'Select Image'}
+                </Button>
+                {heroImageFileName && (
+                  <Typography variant="body2" color="text.secondary">
+                    Selected: {heroImageFileName}
+                  </Typography>
+                )}
+              </Box>
+              {heroImageUploadError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {heroImageUploadError}
+                </Alert>
+              )}
+              {useHeroImageUrl ? (
+                <TextField
+                  fullWidth
+                  label="Hero Image URL"
+                  value={heroImageInput}
+                  onChange={(e) => {
+                    setHeroImageInput(e.target.value);
+                    if (heroImageFileName) {
+                      setHeroImageFileName('');
+                    }
+                    if (heroImageUploadError) {
+                      setHeroImageUploadError('');
+                    }
+                  }}
+                  placeholder="https://example.com/hero-image.jpg"
+                  sx={{
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      '& fieldset': { borderColor: '#00E0B8' },
+                      '&:hover fieldset': { borderColor: '#00E0B8' },
+                      '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                    }
+                  }}
+                  disabled={heroImageUploadLoading}
+                />
+              ) : (
+                heroImageInput && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2, wordBreak: 'break-all' }}>
+                    Image URL: {heroImageInput}
+                  </Typography>
+                )
+              )}
               {heroImageInput && (
                 <Box sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -553,7 +735,7 @@ const AdminOverview = () => {
               <Button 
                 variant="contained" 
                 onClick={updateHeroImage}
-                disabled={!heroImageInput}
+                disabled={!heroImageInput || heroImageUploadLoading}
                 startIcon={<Save />}
                 sx={{
                   backgroundColor: '#00E0B8',
@@ -610,13 +792,7 @@ const AdminOverview = () => {
                     value={countdownForm.title}
                     onChange={(e) => setCountdownForm({...countdownForm, title: e.target.value})}
                     size="small"
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': { borderColor: '#00E0B8' },
-                        '&:hover fieldset': { borderColor: '#00E0B8' },
-                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                      }
-                    }}
+                    sx={countdownFieldStyles}
                   />
                 </Grid>
                 <Grid item xs={12} sm={3}>
@@ -628,13 +804,7 @@ const AdminOverview = () => {
                     onChange={(e) => setCountdownForm({...countdownForm, startDate: e.target.value})}
                     size="small"
                     InputLabelProps={{ shrink: true }}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': { borderColor: '#00E0B8' },
-                        '&:hover fieldset': { borderColor: '#00E0B8' },
-                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                      }
-                    }}
+                    sx={countdownFieldStyles}
                   />
                 </Grid>
                 <Grid item xs={12} sm={3}>
@@ -646,13 +816,7 @@ const AdminOverview = () => {
                     onChange={(e) => setCountdownForm({...countdownForm, endDate: e.target.value})}
                     size="small"
                     InputLabelProps={{ shrink: true }}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': { borderColor: '#00E0B8' },
-                        '&:hover fieldset': { borderColor: '#00E0B8' },
-                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                      }
-                    }}
+                    sx={countdownFieldStyles}
                   />
                 </Grid>
                 <Grid item xs={12}>

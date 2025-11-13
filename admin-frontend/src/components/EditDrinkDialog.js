@@ -35,6 +35,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     description: '',
     isAvailable: true,
     isPopular: false,
+    limitedTimeOffer: false,
     image: '',
     categoryId: '',
     capacity: [],
@@ -53,6 +54,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         description: drink.description || '',
         isAvailable: drink.isAvailable !== undefined ? drink.isAvailable : true,
         isPopular: drink.isPopular || false,
+        limitedTimeOffer: drink.limitedTimeOffer || false,
         image: drink.image || '',
         categoryId: drink.categoryId || '',
         capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
@@ -67,6 +69,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         description: '',
         isAvailable: true,
         isPopular: false,
+        limitedTimeOffer: false,
         image: '',
         categoryId: '',
         capacity: [],
@@ -162,6 +165,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         originalPrice: lowestOriginalPrice, // Use lowest original price from capacities
         isAvailable: formData.isAvailable,
         isPopular: formData.isPopular,
+        limitedTimeOffer: !!formData.limitedTimeOffer,
         image: formData.image,
         categoryId: parseInt(formData.categoryId),
         capacity: formData.capacity,
@@ -470,6 +474,26 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                 />
               }
               label="Popular"
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.limitedTimeOffer}
+                  onChange={(e) => handleInputChange('limitedTimeOffer', e.target.checked)}
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: '#00E0B8',
+                    },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                      backgroundColor: '#00E0B8',
+                    },
+                  }}
+                />
+              }
+              label="Limited Time Offer"
             />
           </Grid>
         </Grid>

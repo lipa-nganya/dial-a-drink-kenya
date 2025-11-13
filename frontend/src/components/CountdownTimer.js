@@ -101,7 +101,7 @@ const CountdownTimer = () => {
           textShadow: '0 0 10px rgba(0, 224, 184, 0.3)'
         }}
       >
-        ⏰ {countdown.title} Ends in
+        {countdown.title} Ends in
       </Typography>
       
       {/* Countdown Display */}
@@ -277,7 +277,7 @@ const CountdownTimer = () => {
           mb: 2
         }}
       >
-        🔥 Don't Miss Out! Limited Time Offer
+        Don't Miss Out! Limited Time Offer
       </Typography>
     </Box>
   );

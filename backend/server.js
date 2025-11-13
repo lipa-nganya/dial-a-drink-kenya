@@ -14,10 +14,11 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: [
-      process.env.FRONTEND_URL || "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:3002",
-      "https://dialadrink-frontend.onrender.com"
+      process.env.FRONTEND_URL || 'http://localhost:3000',
+      process.env.ADMIN_URL || 'http://localhost:3001',
+      'http://localhost:3002',
+      'https://drink-suite-customer-910510650031.us-central1.run.app',
+      'https://drink-suite-admin-910510650031.us-central1.run.app'
     ],
     methods: ["GET", "POST"],
     credentials: true

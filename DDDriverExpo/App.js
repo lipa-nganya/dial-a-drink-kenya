@@ -15,7 +15,7 @@ import PinSetupScreen from './src/screens/PinSetupScreen';
 import PinConfirmScreen from './src/screens/PinConfirmScreen';
 import PinLoginScreen from './src/screens/PinLoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
-import CompletedOrdersScreen from './src/screens/CompletedOrdersScreen';
+import OrderHistoryScreen from './src/screens/CompletedOrdersScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import OrderAcceptanceScreen from './src/screens/OrderAcceptanceScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
@@ -65,12 +65,12 @@ const MainTabs = () => {
         }}
       />
       <Tab.Screen
-        name="CompletedOrdersTab"
-        component={CompletedOrdersScreen}
+        name="OrderHistoryTab"
+        component={OrderHistoryScreen}
         options={{
-          tabBarLabel: 'Completed',
+          tabBarLabel: 'History',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="checkmark-circle-outline" size={size} color={color} />
+            <Ionicons name="time-outline" size={size} color={color} />
           ),
         }}
       />

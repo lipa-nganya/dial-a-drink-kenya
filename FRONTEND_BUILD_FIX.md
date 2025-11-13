@@ -115,9 +115,9 @@ Ensure all files are readable by the build process
 ## 🎯 Expected Results:
 
 After successful deployment:
-- **Frontend URL**: `https://dialadrink-frontend.onrender.com`
+- **Frontend URL**: `https://drink-suite-customer-910510650031.us-central1.run.app`
 - **Should show**: Dial A Drink Kenya homepage
-- **Admin Dashboard**: `https://dialadrink-frontend.onrender.com/admin`
+- **Admin Dashboard**: `https://drink-suite-customer-910510650031.us-central1.run.app/admin`
 
 ## 🆘 If Still Failing:
 

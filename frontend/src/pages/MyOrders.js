@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -16,7 +16,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  Pagination
 } from '@mui/material';
 import {
   CheckCircle,
@@ -46,23 +47,25 @@ const MyOrders = () => {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [page, setPage] = useState(0);
+  const rowsPerPage = 10;
 
   useEffect(() => {
-    // Check if customer is logged in
-    if (!isLoggedIn && !localStorage.getItem('customerOrder')) {
-      navigate('/login');
-      return;
+    const totalPages = Math.max(1, Math.ceil(orders.length / rowsPerPage));
+    if (page > 0 && page >= totalPages) {
+      setPage(totalPages - 1);
     }
-    fetchOrders();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoggedIn]);
+  }, [orders.length, page, rowsPerPage]);
   
   // Set up Socket.IO for real-time order status updates
   useEffect(() => {
     if (orders.length === 0) return; // Don't set up socket if no orders yet
     
-    const socketUrl = window.location.hostname.includes('onrender.com') 
-      ? 'https://dialadrink-backend.onrender.com'
+    const isHosted =
+      window.location.hostname.includes('onrender.com') ||
+      window.location.hostname.includes('run.app');
+    const socketUrl = isHosted
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     
     const socket = io(socketUrl);
@@ -153,7 +156,7 @@ const MyOrders = () => {
     };
   }, [orders]);
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -189,6 +192,7 @@ const MyOrders = () => {
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
         setOrders(sortedOrders);
+        setPage(0);
       } else {
         setError(response.data.message || 'No orders found.');
       }
@@ -198,7 +202,11 @@ const MyOrders = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [customer, navigate]);
+
+  useEffect(() => {
+    fetchOrders();
+  }, [fetchOrders]);
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -332,6 +340,19 @@ const MyOrders = () => {
     }
   };
 
+  const totalOrders = orders.length;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / rowsPerPage));
+  const startIndex = totalOrders === 0 ? 0 : page * rowsPerPage;
+  const endIndex = totalOrders === 0 ? 0 : Math.min(startIndex + rowsPerPage, totalOrders);
+  const displayStart = totalOrders === 0 ? 0 : startIndex + 1;
+  const displayEnd = totalOrders === 0 ? 0 : endIndex;
+  const paginatedOrders = orders.slice(startIndex, endIndex);
+
+  const handlePageChange = (_event, value) => {
+    setPage(value - 1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const getProgressSteps = (status) => {
     const steps = [
       { label: 'Order Placed', status: 'pending', completed: true },
@@ -411,11 +432,11 @@ const MyOrders = () => {
         <>
           <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="body2" color="text.secondary">
-              Showing {orders.length} {orders.length === 1 ? 'order' : 'orders'}
+              Showing {displayStart}-{displayEnd} of {totalOrders} {totalOrders === 1 ? 'order' : 'orders'}
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {orders.map((order) => (
+          {paginatedOrders.map((order) => (
             <Accordion
               key={order.id}
               expanded={expandedOrder === order.id}
@@ -490,7 +511,7 @@ const MyOrders = () => {
                   </Box>
                   
                   {/* Third Row: Make Payment Button for Unpaid Orders */}
-                  {order.paymentStatus !== 'paid' && order.paymentType === 'pay_now' && (
+                  {order.paymentStatus !== 'paid' && order.paymentType === 'pay_now' && order.status !== 'cancelled' && (
                     <Box sx={{ mt: 0.5 }}>
                       <Button
                         variant="contained"
@@ -582,6 +603,17 @@ const MyOrders = () => {
             </Accordion>
           ))}
           </Box>
+          {totalPages > 1 && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
+              <Pagination
+                count={totalPages}
+                page={page + 1}
+                onChange={handlePageChange}
+                color="primary"
+                shape="rounded"
+              />
+            </Box>
+          )}
         </>
       )}
 

@@ -24,6 +24,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import { sanitizeCustomerNotes } from '../utils/sanitizeNotes';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ const Profile = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [customerInfo, setCustomerInfo] = useState({
     name: '',
     phone: '',
@@ -87,44 +89,7 @@ const Profile = () => {
           const mostRecentOrder = response.data.orders[0];
           
           // Extract delivery information from the most recent order
-          // Clean notes field to remove technical details
-          let customerNotes = mostRecentOrder.notes || '';
-          
-          // Remove technical details from notes (delivery fee, M-Pesa details, etc.)
-          const technicalPatterns = [
-            /Delivery Fee:?\s*KES?\s*\d+\.?\d*/gi,
-            /checkoutRequestID:?\s*[\w-]+/gi,
-            /merchantRequestID:?\s*[\w-]+/gi,
-            /M-Pesa Receipt:?\s*[\w-]+/gi,
-            /M-Pesa|STK|Payment confirmed|Transaction|Receipt/gi,
-            /Payment confirmed at:?\s*[\d\-\s:]+/gi
-          ];
-          
-          technicalPatterns.forEach(pattern => {
-            customerNotes = customerNotes.replace(pattern, '').trim();
-          });
-          
-          // Split by newlines and filter out technical lines
-          const noteLines = customerNotes.split('\n').filter(line => {
-            const trimmed = line.trim();
-            // Skip lines that look like technical details
-            if (!trimmed || 
-                trimmed.match(/^Delivery Fee/i) ||
-                trimmed.match(/^Payment/i) ||
-                trimmed.match(/^M-Pesa/i) ||
-                trimmed.match(/^Receipt/i) ||
-                trimmed.match(/^Transaction/i) ||
-                trimmed.match(/^STK/i) ||
-                trimmed.match(/checkoutRequestID/i) ||
-                trimmed.match(/merchantRequestID/i) ||
-                trimmed.match(/^\d{4}-\d{2}-\d{2}/) // ISO date format
-            ) {
-              return false;
-            }
-            return true;
-          });
-          
-          customerNotes = noteLines.join('\n').trim();
+          const customerNotes = sanitizeCustomerNotes(mostRecentOrder.notes);
           
           deliveryInfo = {
             name: mostRecentOrder.customerName || '',
@@ -154,47 +119,12 @@ const Profile = () => {
               const parsed = JSON.parse(savedDeliveryInfo);
               // Merge saved info with order info (saved info takes precedence)
               // But ensure notes don't contain technical details
-              let savedNotes = parsed.notes || '';
-              
-              // Clean saved notes too, in case they contain technical details
-              const technicalPatterns = [
-                /Delivery Fee:?\s*KES?\s*\d+\.?\d*/gi,
-                /checkoutRequestID:?\s*[\w-]+/gi,
-                /merchantRequestID:?\s*[\w-]+/gi,
-                /M-Pesa Receipt:?\s*[\w-]+/gi,
-                /M-Pesa|STK|Payment confirmed|Transaction|Receipt/gi,
-                /Payment confirmed at:?\s*[\d\-\s:]+/gi
-              ];
-              
-              technicalPatterns.forEach(pattern => {
-                savedNotes = savedNotes.replace(pattern, '').trim();
-              });
-              
-              // Filter out technical lines
-              const savedNoteLines = savedNotes.split('\n').filter(line => {
-                const trimmed = line.trim();
-                if (!trimmed || 
-                    trimmed.match(/^Delivery Fee/i) ||
-                    trimmed.match(/^Payment/i) ||
-                    trimmed.match(/^M-Pesa/i) ||
-                    trimmed.match(/^Receipt/i) ||
-                    trimmed.match(/^Transaction/i) ||
-                    trimmed.match(/^STK/i) ||
-                    trimmed.match(/checkoutRequestID/i) ||
-                    trimmed.match(/merchantRequestID/i) ||
-                    trimmed.match(/^\d{4}-\d{2}-\d{2}/)
-                ) {
-                  return false;
-                }
-                return true;
-              });
-              
-              savedNotes = savedNoteLines.join('\n').trim();
+              const sanitizedSavedNotes = sanitizeCustomerNotes(parsed.notes ?? '');
               
               deliveryInfo = {
                 ...deliveryInfo,
                 ...parsed,
-                notes: savedNotes || deliveryInfo.notes, // Use cleaned notes
+                notes: sanitizedSavedNotes,
                 // Keep email and phone from saved order if not in saved delivery info
                 email: parsed.email || deliveryInfo.email,
                 phone: parsed.phone || deliveryInfo.phone
@@ -211,7 +141,11 @@ const Profile = () => {
         if (savedDeliveryInfo) {
           try {
             const parsed = JSON.parse(savedDeliveryInfo);
-            deliveryInfo = { ...deliveryInfo, ...parsed };
+            deliveryInfo = {
+              ...deliveryInfo,
+              ...parsed,
+              notes: sanitizeCustomerNotes(parsed.notes)
+            };
           } catch (e) {
             console.error('Error parsing saved delivery info:', e);
           }
@@ -219,6 +153,19 @@ const Profile = () => {
       }
       
       setCustomerInfo(deliveryInfo);
+      try {
+        localStorage.setItem('customerDeliveryInfo', JSON.stringify({
+          name: deliveryInfo.name,
+          phone: deliveryInfo.phone,
+          email: deliveryInfo.email,
+          address: deliveryInfo.address,
+          apartmentHouseNumber: deliveryInfo.apartmentHouseNumber,
+          floorNumber: deliveryInfo.floorNumber,
+          notes: sanitizeCustomerNotes(deliveryInfo.notes)
+        }));
+      } catch (storageError) {
+        console.warn('Unable to persist cleaned delivery info:', storageError);
+      }
     } catch (err) {
       console.error('Error loading customer info:', err);
     } finally {
@@ -226,17 +173,30 @@ const Profile = () => {
     }
   };
 
-  const handleInputChange = (field, value) => {
-    setCustomerInfo(prev => ({
+  const handleInputChange = (field, valueOrEvent) => {
+    const value =
+      valueOrEvent && typeof valueOrEvent === 'object' && 'target' in valueOrEvent
+        ? valueOrEvent.target.value
+        : valueOrEvent;
+
+    setCustomerInfo((prev) => {
+      if (prev[field] === value) {
+        return prev;
+      }
+      setHasUnsavedChanges(true);
+      return {
       ...prev,
       [field]: value
-    }));
+      };
+    });
   };
 
   const handleSave = async () => {
     try {
       setError('');
       setSuccess('');
+      
+      const sanitizedNotesForSave = sanitizeCustomerNotes(customerInfo.notes);
       
       // Save delivery information to localStorage
       localStorage.setItem('customerDeliveryInfo', JSON.stringify({
@@ -246,7 +206,7 @@ const Profile = () => {
         address: customerInfo.address,
         apartmentHouseNumber: customerInfo.apartmentHouseNumber,
         floorNumber: customerInfo.floorNumber,
-        notes: customerInfo.notes
+        notes: sanitizedNotesForSave
       }));
       
       // Also update customerOrder in localStorage
@@ -268,8 +228,14 @@ const Profile = () => {
         customerName: customerInfo.name
       });
       
+      setCustomerInfo((prev) => ({
+        ...prev,
+        notes: sanitizedNotesForSave
+      }));
+      
       setSuccess('Profile updated successfully! Your delivery information has been saved.');
       setIsEditing(false);
+      setHasUnsavedChanges(false);
     } catch (err) {
       setError('Failed to update profile. Please try again.');
     }
@@ -278,6 +244,7 @@ const Profile = () => {
   const handleCancel = () => {
     loadCustomerInfo();
     setIsEditing(false);
+    setHasUnsavedChanges(false);
   };
 
   if (loading) {
@@ -309,15 +276,13 @@ const Profile = () => {
       <Paper sx={{ p: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h6">Personal Information</Typography>
-          {!isEditing && (
             <Button
               startIcon={<Edit />}
-              onClick={() => setIsEditing(true)}
+            onClick={() => setIsEditing((prev) => !prev)}
               sx={{ color: '#000000' }}
             >
-              Edit
+            {isEditing ? 'Stop Editing' : 'Edit'}
             </Button>
-          )}
         </Box>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
@@ -325,7 +290,6 @@ const Profile = () => {
             label="Full Name"
             value={customerInfo.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
-            disabled={!isEditing}
             InputProps={{
               startAdornment: <Person sx={{ mr: 1, color: 'text.secondary' }} />
             }}
@@ -355,33 +319,23 @@ const Profile = () => {
             fullWidth
           />
 
-          {isEditing ? (
             <AddressAutocomplete
               label="Delivery Address"
-              value={customerInfo.address}
-              onChange={(value) => handleInputChange('address', value)}
+            value={typeof customerInfo.address === 'string' ? customerInfo.address : ''}
+            onChange={(event) => handleInputChange('address', event)}
               placeholder="Start typing your address..."
-              disabled={!isEditing}
-            />
-          ) : (
-            <TextField
-              label="Delivery Address"
-              value={customerInfo.address}
-              disabled={true}
-              multiline
-              rows={3}
+            helperText="Update your delivery address to help drivers locate you faster"
               InputProps={{
-                startAdornment: <LocationOn sx={{ mr: 1, color: 'text.secondary', alignSelf: 'flex-start', mt: 1 }} />
+              startAdornment: (
+                <LocationOn sx={{ mr: 1, color: 'text.secondary' }} />
+              )
               }}
-              fullWidth
             />
-          )}
           
           <TextField
             label="Apartment/House Number"
             value={customerInfo.apartmentHouseNumber}
             onChange={(e) => handleInputChange('apartmentHouseNumber', e.target.value)}
-            disabled={!isEditing}
             fullWidth
             placeholder="e.g., Apartment 4B, House 12"
           />
@@ -390,7 +344,6 @@ const Profile = () => {
             label="Floor Number (Optional)"
             value={customerInfo.floorNumber}
             onChange={(e) => handleInputChange('floorNumber', e.target.value)}
-            disabled={!isEditing}
             fullWidth
             placeholder="e.g., 3rd Floor"
           />
@@ -399,7 +352,6 @@ const Profile = () => {
             label="Special Instructions (Optional)"
             value={customerInfo.notes}
             onChange={(e) => handleInputChange('notes', e.target.value)}
-            disabled={!isEditing}
             multiline
             rows={2}
             fullWidth
@@ -407,7 +359,7 @@ const Profile = () => {
           />
         </Box>
 
-        {isEditing && (
+        {(isEditing || hasUnsavedChanges) && (
           <Box sx={{ display: 'flex', gap: 2, mt: 4 }}>
             <Button
               variant="contained"
@@ -418,9 +370,11 @@ const Profile = () => {
                 color: '#0D0D0D',
                 '&:hover': { backgroundColor: '#00C4A3' }
               }}
+              disabled={!hasUnsavedChanges && !isEditing}
             >
               Save Changes
             </Button>
+            {isEditing && (
             <Button
               variant="outlined"
               startIcon={<Cancel />}
@@ -428,6 +382,7 @@ const Profile = () => {
             >
               Cancel
             </Button>
+            )}
           </Box>
         )}
       </Paper>

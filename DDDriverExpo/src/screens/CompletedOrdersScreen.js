@@ -193,7 +193,7 @@ const OrderHistoryScreen = ({ route, navigation }) => {
           })}
         </View>
 
-        <View style={[styles.dateFilterCard, { backgroundColor: safeColors.paper }]}> 
+        <View style={[styles.dateFilterCard, { backgroundColor: safeColors.paper }]}>
           <Text style={[styles.filterLabel, { color: safeColors.textPrimary }]}>Filter by Date Range</Text>
 
           <View style={styles.datePickerRow}>
@@ -281,7 +281,7 @@ const OrderHistoryScreen = ({ route, navigation }) => {
         )}
 
         {orders.length === 0 ? (
-          <View style={[styles.noOrdersCard, { backgroundColor: safeColors.paper }]}> 
+          <View style={[styles.noOrdersCard, { backgroundColor: safeColors.paper }]}>
             <Text style={[styles.noOrdersText, { color: safeColors.textSecondary }]}
             >
               {emptyStateMessage}
@@ -330,11 +330,11 @@ const OrderHistoryScreen = ({ route, navigation }) => {
                 </Text>
                 <View style={styles.orderCardFooter}>
                   <View>
-                    <Text style={[styles.orderCardAmount, { color: safeColors.accentText }]}> 
+                    <Text style={[styles.orderCardAmount, { color: safeColors.accentText }]}>
                       KES {parseFloat(order.totalAmount).toFixed(2)}
                     </Text>
                     {order.tipAmount && parseFloat(order.tipAmount) > 0 && (
-                      <Text style={[styles.tipText, { color: safeColors.textSecondary }]}> 
+                      <Text style={[styles.tipText, { color: safeColors.textSecondary }]}>
                         Tip: KES {parseFloat(order.tipAmount).toFixed(2)}
                       </Text>
                     )}

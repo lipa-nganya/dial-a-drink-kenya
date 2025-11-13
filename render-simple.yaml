@@ -9,4 +9,4 @@ services:
     staticPublishPath: frontend/build
     envVars:
       - key: REACT_APP_API_URL
-        value: https://dialadrink-backend.onrender.com/api
+        value: https://dialadrink-backend-910510650031.us-central1.run.app/api

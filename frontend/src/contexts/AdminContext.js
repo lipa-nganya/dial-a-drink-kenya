@@ -61,8 +61,11 @@ export const AdminProvider = ({ children }) => {
 
   useEffect(() => {
     // Initialize socket connection for admin
-    const socketUrl = window.location.hostname.includes('onrender.com') 
-      ? 'https://dialadrink-backend.onrender.com'
+    const isHosted =
+      window.location.hostname.includes('onrender.com') ||
+      window.location.hostname.includes('run.app');
+    const socketUrl = isHosted
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
@@ -98,6 +101,11 @@ export const AdminProvider = ({ children }) => {
     </AdminContext.Provider>
   );
 };
+
+
+
+
+
 
 
 

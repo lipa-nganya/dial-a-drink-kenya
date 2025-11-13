@@ -14,6 +14,8 @@ const Offers = () => {
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [countdownActive, setCountdownActive] = useState(false);
+  const [countdownInfo, setCountdownInfo] = useState(null);
 
   useEffect(() => {
     fetchOffers();
@@ -21,7 +23,21 @@ const Offers = () => {
 
   const fetchOffers = async () => {
     try {
-      console.log('Fetching offers...');
+      console.log('Fetching countdown for offers...');
+      const countdownResponse = await api.get('/countdown/current');
+      const countdownData = countdownResponse.data;
+      setCountdownInfo(countdownData);
+
+      if (!countdownData?.active) {
+        console.log('No active countdown. Skipping offers fetch.');
+        setCountdownActive(false);
+        setOffers([]);
+        return;
+      }
+
+      setCountdownActive(true);
+
+      console.log('Fetching limited time offers...');
       const response = await api.get('/drinks/offers');
       console.log('Offers response:', response.data);
       setOffers(response.data);
@@ -48,6 +64,22 @@ const Offers = () => {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Alert severity="error" sx={{ fontSize: '0.9rem' }}>{error}</Alert>
+      </Container>
+    );
+  }
+
+  if (!countdownActive) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Box textAlign="center">
+          <LocalOffer sx={{ fontSize: 60, color: 'text.secondary', mb: 1 }} />
+          <Typography variant="h5" component="h1" gutterBottom sx={{ fontSize: '1.2rem' }}>
+            No Active Countdown
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
+            {countdownInfo?.message || 'Limited time offers will appear here when the next countdown starts.'}
+          </Typography>
+        </Box>
       </Container>
     );
   }

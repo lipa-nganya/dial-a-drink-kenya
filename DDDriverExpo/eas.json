@@ -8,6 +8,28 @@
       "distribution": "internal",
       "channel": "development"
     },
+    "local-dev": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "local-dev",
+      "env": {
+        "EXPO_PUBLIC_ENV": "local",
+        "EXPO_PUBLIC_BUILD_PROFILE": "local-dev"
+      }
+    },
+    "cloud-dev": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "cloud-dev",
+      "env": {
+        "EXPO_PUBLIC_ENV": "cloud",
+        "EXPO_PUBLIC_BUILD_PROFILE": "cloud-dev"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "android": {

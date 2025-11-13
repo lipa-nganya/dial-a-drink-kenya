@@ -38,3 +38,10 @@ module.exports = (sequelize, DataTypes) => {
 
 
 
+
+
+
+
+
+
+

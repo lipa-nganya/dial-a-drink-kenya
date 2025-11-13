@@ -143,7 +143,9 @@ const WalletScreen = ({ route }) => {
         if (!driverResponse.data?.id) return;
 
         const driverId = driverResponse.data.id;
-        const apiBaseUrl = __DEV__ ? 'http://localhost:5001' : 'https://dialadrink-backend.onrender.com';
+        const apiBaseUrl = __DEV__
+          ? 'http://localhost:5001'
+          : 'https://dialadrink-backend-910510650031.us-central1.run.app';
 
         socket = io(apiBaseUrl, {
           transports: ['websocket', 'polling'],

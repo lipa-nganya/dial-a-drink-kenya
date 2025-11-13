@@ -33,24 +33,29 @@ const normalizeBaseUrl = (value) => {
 const getBaseURL = () => {
   const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
   if (envBase) {
+    console.log('🌐 Using API URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
     return `${envBase}/api`;
   }
 
   const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
   if (configBase) {
+    console.log('🌐 Using API URL from app config:', `${configBase}/api`);
     return `${configBase}/api`;
   }
 
+  // Fallback for development (emulator only)
   if (Platform.OS === 'android' && __DEV__) {
+    console.warn('⚠️ Using emulator fallback URL (10.0.2.2). For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
     return 'http://10.0.2.2:5001/api';
   }
 
   if (Platform.OS === 'ios' && __DEV__) {
+    console.warn('⚠️ Using localhost fallback. For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
     return 'http://localhost:5001/api';
   }
 
-  console.warn(
-    '[DDDriverExpo] No API base URL configured. Set EXPO_PUBLIC_API_BASE_URL or extra.apiBaseUrl in app.json.'
+  console.error(
+    '❌ No API base URL configured. Set EXPO_PUBLIC_API_BASE_URL or extra.apiBaseUrl in app.config.js.'
   );
   return 'http://localhost:5001/api';
 };

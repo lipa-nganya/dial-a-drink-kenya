@@ -1,6 +1,64 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const heroImageUploadDir = path.join(__dirname, '../public/uploads/hero');
+
+if (!fs.existsSync(heroImageUploadDir)) {
+  fs.mkdirSync(heroImageUploadDir, { recursive: true });
+}
+
+const heroImageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, heroImageUploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const extension = path.extname(file.originalname) || '.png';
+    cb(null, `hero-${uniqueSuffix}${extension}`);
+  }
+});
+
+const heroImageUpload = multer({
+  storage: heroImageStorage,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB
+  },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    cb(null, true);
+  }
+});
+
+router.post('/heroImage/upload', (req, res) => {
+  heroImageUpload.single('image')(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      return res.status(400).json({ error: err.message });
+    }
+
+    if (err) {
+      return res.status(400).json({ error: err.message || 'Failed to upload image' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file is required' });
+    }
+
+    const relativePath = `/uploads/hero/${req.file.filename}`;
+    const absoluteUrl = `${req.protocol}://${req.get('host')}${relativePath}`;
+
+    return res.json({
+      url: absoluteUrl,
+      path: relativePath,
+      filename: req.file.filename
+    });
+  });
+});
 
 // Get setting by key
 router.get('/:key', async (req, res) => {

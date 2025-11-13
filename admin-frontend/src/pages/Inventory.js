@@ -38,7 +38,8 @@ import {
   Search,
   FilterList,
   Clear,
-  Add
+  Add,
+  LocalOffer
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import EditDrinkDialog from '../components/EditDrinkDialog';
@@ -76,8 +77,11 @@ const InventoryPage = () => {
     }
     
     // For relative paths, construct the full URL
-    const baseUrl = window.location.hostname.includes('onrender.com') 
-      ? 'https://dialadrink-backend.onrender.com'
+    const isHosted =
+      window.location.hostname.includes('onrender.com') ||
+      window.location.hostname.includes('run.app');
+    const baseUrl = isHosted
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     
     return `${baseUrl}${imagePath}`;
@@ -173,9 +177,13 @@ const InventoryPage = () => {
 
     // On Offer filter
     if (offerFilter !== 'all') {
-      filtered = filtered.filter(drink =>
-        offerFilter === 'on-offer' ? isDrinkOnOffer(drink) : !isDrinkOnOffer(drink)
-      );
+      if (offerFilter === 'limited') {
+        filtered = filtered.filter(drink => drink.limitedTimeOffer === true);
+      } else {
+        filtered = filtered.filter(drink =>
+          offerFilter === 'on-offer' ? isDrinkOnOffer(drink) : !isDrinkOnOffer(drink)
+        );
+      }
     }
 
     setFilteredDrinks(filtered);
@@ -198,6 +206,35 @@ const InventoryPage = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedDrinks = filteredDrinks.slice(startIndex, endIndex);
+
+  const summaryCards = [
+    {
+      icon: <Inventory sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
+      value: filteredDrinks.length,
+      label: drinks.length !== filteredDrinks.length ? 'Filtered Drinks' : 'Total Drinks',
+      sublabel: drinks.length !== filteredDrinks.length ? `of ${drinks.length} total` : null
+    },
+    {
+      icon: <TrendingUp sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
+      value: filteredDrinks.filter(drink => drink.isAvailable).length,
+      label: 'Available'
+    },
+    {
+      icon: <TrendingDown sx={{ fontSize: 40, color: '#FF3366', mb: 1 }} />,
+      value: filteredDrinks.filter(drink => !drink.isAvailable).length,
+      label: 'Out of Stock'
+    },
+    {
+      icon: <LocalBar sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
+      value: filteredDrinks.filter(drink => drink.isPopular).length,
+      label: 'Popular Items'
+    },
+    {
+      icon: <LocalOffer sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
+      value: filteredDrinks.filter(drink => drink.limitedTimeOffer).length,
+      label: 'Limited Time Items'
+    }
+  ];
 
   const handleAvailabilityToggle = async (drinkId, isAvailable) => {
     try {
@@ -278,65 +315,33 @@ const InventoryPage = () => {
       </Box>
 
       {/* Summary Stats */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center' }}>
-        <Grid container spacing={2} sx={{ maxWidth: '1200px' }}>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card sx={{ backgroundColor: '#121212' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <Inventory sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />
-                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
-                  {filteredDrinks.length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {drinks.length !== filteredDrinks.length ? 'Filtered Drinks' : 'Total Drinks'}
-                </Typography>
-                {drinks.length !== filteredDrinks.length && (
-                  <Typography variant="caption" color="text.secondary">
-                    of {drinks.length} total
+      <Box sx={{ mb: 4 }}>
+        <Grid
+          container
+          spacing={2}
+          justifyContent="center"
+          alignItems="stretch"
+        >
+          {summaryCards.map((card, index) => (
+            <Grid key={index} item xs={12} sm={6} md={4} lg={2} sx={{ display: 'flex' }}>
+              <Card sx={{ backgroundColor: '#121212', flexGrow: 1 }}>
+                <CardContent sx={{ textAlign: 'center' }}>
+                  {card.icon}
+                  <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                    {card.value}
                   </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card sx={{ backgroundColor: '#121212' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <TrendingUp sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />
-                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
-                  {filteredDrinks.filter(drink => drink.isAvailable).length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Available
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card sx={{ backgroundColor: '#121212' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <TrendingDown sx={{ fontSize: 40, color: '#FF3366', mb: 1 }} />
-                <Typography variant="h4" sx={{ color: '#FF3366', fontWeight: 700 }}>
-                  {filteredDrinks.filter(drink => !drink.isAvailable).length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Out of Stock
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <Card sx={{ backgroundColor: '#121212' }}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <LocalBar sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />
-                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
-                  {filteredDrinks.filter(drink => drink.isPopular).length}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Popular Items
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+                  <Typography variant="body2" color="text.secondary">
+                    {card.label}
+                  </Typography>
+                  {card.sublabel && (
+                    <Typography variant="caption" color="text.secondary">
+                      {card.sublabel}
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
         </Grid>
       </Box>
 
@@ -477,6 +482,7 @@ const InventoryPage = () => {
               >
                 <MenuItem value="all">All Items</MenuItem>
                 <MenuItem value="on-offer">On Offer Only</MenuItem>
+                <MenuItem value="limited">Limited Time Only</MenuItem>
                 <MenuItem value="not-on-offer">Not On Offer</MenuItem>
               </Select>
             </FormControl>
@@ -511,7 +517,7 @@ const InventoryPage = () => {
               {searchTerm && ` matching "${searchTerm}"`}
               {selectedCategory && ` in ${selectedCategory}`}
               {availabilityFilter !== 'all' && ` (${availabilityFilter === 'available' ? 'Available' : 'Out of Stock'})`}
-              {offerFilter !== 'all' && ` (${offerFilter === 'on-offer' ? 'On Offer' : 'Not On Offer'})`}
+              {offerFilter !== 'all' && ` (${offerFilter === 'on-offer' ? 'On Offer' : offerFilter === 'limited' ? 'Limited Time' : 'Not On Offer'})`}
             </Typography>
           </Box>
         )}
@@ -581,8 +587,8 @@ const InventoryPage = () => {
                 />
                 <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#fff' }}>
                   {/* Status Label Above Name */}
-                  <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center' }}>
-                    {!drink.isAvailable ? (
+                  <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    {!drink.isAvailable && (
                       <Chip
                         icon={<Cancel />}
                         label="Out of Stock"
@@ -594,7 +600,8 @@ const InventoryPage = () => {
                           color: '#F5F5F5'
                         }}
                       />
-                    ) : drink.isPopular ? (
+                    )}
+                    {drink.isAvailable && drink.isPopular && (
                       <Chip
                         icon={<LocalBar />}
                         label="Popular"
@@ -606,7 +613,20 @@ const InventoryPage = () => {
                           color: '#F5F5F5'
                         }}
                       />
-                    ) : null}
+                    )}
+                    {drink.limitedTimeOffer && (
+                      <Chip
+                        icon={<LocalOffer />}
+                        label="Limited Time"
+                        size="small"
+                        sx={{ 
+                          fontSize: '0.65rem', 
+                          height: '20px',
+                          backgroundColor: '#00E0B8',
+                          color: '#0D0D0D'
+                        }}
+                      />
+                    )}
                   </Box>
 
                   {/* Drink Name */}

@@ -22,3 +22,10 @@ echo "💡 To view specific build: eas build:view [BUILD_ID]"
 
 
 
+
+
+
+
+
+
+

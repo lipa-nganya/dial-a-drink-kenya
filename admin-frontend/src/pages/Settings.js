@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -47,14 +47,17 @@ import {
   Warning,
   Cancel as CancelIcon,
   PersonAdd,
-  AdminPanelSettings
+  AdminPanelSettings,
+  CloudUpload
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 const Settings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
+  const { isDarkMode, colors } = useTheme();
 
   // Notifications module state
   const [notifications, setNotifications] = useState([]);
@@ -94,11 +97,63 @@ const Settings = () => {
     startDate: '',
     endDate: ''
   });
+  const [editingCountdown, setEditingCountdown] = useState(null);
+  const [countdownFormError, setCountdownFormError] = useState('');
+  const countdownFieldStyles = {
+    '& .MuiOutlinedInput-root': {
+      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+      '& fieldset': { borderColor: '#00E0B8' },
+      '&:hover fieldset': { borderColor: '#00E0B8' },
+      '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+    },
+    '& .MuiOutlinedInput-input': {
+      color: colors.textPrimary
+    },
+    '& .MuiInputBase-input': {
+      color: colors.textPrimary
+    },
+    '& input[type="datetime-local"]': {
+      color: colors.textPrimary
+    },
+    '& .MuiInputLabel-root': {
+      color: isDarkMode ? '#00E0B8' : undefined
+    },
+    '& .MuiInputLabel-root.Mui-focused': {
+      color: '#00E0B8'
+    },
+    '& input[type="datetime-local"]::-webkit-calendar-picker-indicator': {
+      filter: isDarkMode ? 'invert(75%) sepia(59%) saturate(514%) hue-rotate(116deg) brightness(97%) contrast(93%)' : 'none'
+    },
+    '& input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover': {
+      filter: isDarkMode ? 'invert(75%) sepia(59%) saturate(514%) hue-rotate(116deg) brightness(97%) contrast(93%)' : 'none'
+    }
+  };
+
+  const formatDateTimeLocal = (value) => {
+    if (!value) {
+      return '';
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+    const offset = date.getTimezoneOffset();
+    const adjusted = new Date(date.getTime() - offset * 60000);
+    return adjusted.toISOString().slice(0, 16);
+  };
+
+  const isCountdownSaveDisabled =
+    !countdownForm.title.trim() || !countdownForm.startDate || !countdownForm.endDate;
 
   // Hero Management state
   const [heroImage, setHeroImage] = useState('');
   const [heroImageInput, setHeroImageInput] = useState('');
+  const [heroImageFileName, setHeroImageFileName] = useState('');
+  const [heroImageUploadError, setHeroImageUploadError] = useState('');
+  const [heroImageUploadLoading, setHeroImageUploadLoading] = useState(false);
+  const [useHeroImageUrl, setUseHeroImageUrl] = useState(false);
   const [showHeroImageForm, setShowHeroImageForm] = useState(false);
+  const heroImageFileInputRef = useRef(null);
 
   // User Management state
   const [users, setUsers] = useState([]);
@@ -411,25 +466,86 @@ const Settings = () => {
     }
   };
 
-  const createCountdown = async () => {
-    try {
-      const startDate = new Date(countdownForm.startDate).toISOString();
-      const endDate = new Date(countdownForm.endDate).toISOString();
-      
-      const countdownData = {
-        title: countdownForm.title,
-        startDate: startDate,
-        endDate: endDate
-      };
-      
-      await api.post('/countdown', countdownData);
-      setCountdownForm({ title: '', startDate: '', endDate: '' });
+  const handleNewCountdown = () => {
+    setEditingCountdown(null);
+    setCountdownForm({
+      title: '',
+      startDate: '',
+      endDate: ''
+    });
+    setCountdownFormError('');
+    setShowCountdownForm(true);
+  };
+
+  const handleCancelCountdownForm = () => {
       setShowCountdownForm(false);
-      fetchCountdowns();
+    setEditingCountdown(null);
+    setCountdownForm({
+      title: '',
+      startDate: '',
+      endDate: ''
+    });
+    setCountdownFormError('');
+  };
+
+  const handleEditCountdown = (countdown) => {
+    setEditingCountdown(countdown);
+    setCountdownForm({
+      title: countdown.title || '',
+      startDate: formatDateTimeLocal(countdown.startDate),
+      endDate: formatDateTimeLocal(countdown.endDate)
+    });
+    setCountdownFormError('');
+    setShowCountdownForm(true);
+  };
+
+  const handleSaveCountdown = async () => {
+    setCountdownFormError('');
+
+    if (!countdownForm.title.trim()) {
+      setCountdownFormError('Offer title is required');
+      return;
+    }
+
+    if (!countdownForm.startDate || !countdownForm.endDate) {
+      setCountdownFormError('Start and end date are required');
+      return;
+    }
+
+    const startDateObj = new Date(countdownForm.startDate);
+    const endDateObj = new Date(countdownForm.endDate);
+
+    if (Number.isNaN(startDateObj.getTime()) || Number.isNaN(endDateObj.getTime())) {
+      setCountdownFormError('Please provide valid start and end dates');
+      return;
+    }
+
+    if (startDateObj >= endDateObj) {
+      setCountdownFormError('End date must be after the start date');
+      return;
+    }
+
+    const payload = {
+      title: countdownForm.title.trim(),
+      startDate: startDateObj.toISOString(),
+      endDate: endDateObj.toISOString()
+    };
+
+    try {
+      if (editingCountdown) {
+        await api.put(`/countdown/${editingCountdown.id}`, payload);
+        setNotification({ message: 'Countdown offer updated successfully!' });
+      } else {
+        await api.post('/countdown', payload);
       setNotification({ message: 'Countdown offer created successfully!' });
+      }
+
+      await fetchCountdowns();
+      handleCancelCountdownForm();
     } catch (error) {
-      console.error('Error creating countdown:', error);
-      setError('Failed to create countdown offer');
+      console.error('Error saving countdown:', error);
+      const errorMessage = error.response?.data?.error || 'Failed to save countdown offer';
+      setCountdownFormError(errorMessage);
     }
   };
 
@@ -450,6 +566,9 @@ const Settings = () => {
       if (response.data && response.data.value) {
         setHeroImage(response.data.value);
         setHeroImageInput(response.data.value);
+        setHeroImageFileName('');
+        setHeroImageUploadError('');
+        setUseHeroImageUrl(false);
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
@@ -461,10 +580,59 @@ const Settings = () => {
       await api.put('/settings/heroImage', { value: heroImageInput });
       setHeroImage(heroImageInput);
       setShowHeroImageForm(false);
+      setHeroImageFileName('');
+      setHeroImageUploadError('');
+      setHeroImageUploadLoading(false);
+      setUseHeroImageUrl(false);
       setNotification({ message: 'Hero image updated successfully!' });
     } catch (error) {
       console.error('Error updating hero image:', error);
       setError('Failed to update hero image. Please try again.');
+    }
+  };
+
+  const handleHeroImageFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    setHeroImageUploadError('');
+    setHeroImageUploadLoading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await api.post('/settings/heroImage/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const uploadedUrl = response.data?.url || response.data?.path;
+      if (!uploadedUrl) {
+        throw new Error('Upload failed. No URL returned.');
+      }
+
+      setHeroImageInput(uploadedUrl);
+      setHeroImageFileName(file.name);
+      setUseHeroImageUrl(false);
+    } catch (uploadError) {
+      console.error('Error uploading hero image:', uploadError);
+      const message = uploadError.response?.data?.error || uploadError.message || 'Failed to upload hero image.';
+      setHeroImageUploadError(message);
+    } finally {
+      setHeroImageUploadLoading(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
+  };
+
+  const openHeroImageFilePicker = () => {
+    if (heroImageFileInputRef.current) {
+      heroImageFileInputRef.current.click();
     }
   };
 
@@ -1046,7 +1214,7 @@ const Settings = () => {
             </Box>
             <Button 
               variant="contained" 
-              onClick={() => setShowCountdownForm(!showCountdownForm)}
+              onClick={handleNewCountdown}
               startIcon={<Add />}
               sx={{
                 backgroundColor: '#00E0B8',
@@ -1054,7 +1222,7 @@ const Settings = () => {
                 '&:hover': { backgroundColor: '#00C4A3' }
               }}
             >
-              {showCountdownForm ? 'Cancel' : 'New Countdown'}
+              New Countdown
             </Button>
           </Box>
 
@@ -1062,8 +1230,13 @@ const Settings = () => {
             <Card sx={{ mb: 3, backgroundColor: '#121212' }}>
               <CardContent>
                 <Typography variant="h6" gutterBottom sx={{ color: '#00E0B8' }}>
-                  Create New Countdown
+                  {editingCountdown ? 'Edit Countdown' : 'Create New Countdown'}
                 </Typography>
+                {countdownFormError && (
+                  <Alert severity="error" sx={{ mb: 2 }} onClose={() => setCountdownFormError('')}>
+                    {countdownFormError}
+                  </Alert>
+                )}
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={6}>
                     <TextField
@@ -1090,13 +1263,7 @@ const Settings = () => {
                       onChange={(e) => setCountdownForm({...countdownForm, startDate: e.target.value})}
                       size="small"
                       InputLabelProps={{ shrink: true }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          '& fieldset': { borderColor: '#00E0B8' },
-                          '&:hover fieldset': { borderColor: '#00E0B8' },
-                          '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                        }
-                      }}
+                      sx={countdownFieldStyles}
                     />
                   </Grid>
                   <Grid item xs={12} sm={3}>
@@ -1108,20 +1275,26 @@ const Settings = () => {
                       onChange={(e) => setCountdownForm({...countdownForm, endDate: e.target.value})}
                       size="small"
                       InputLabelProps={{ shrink: true }}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          '& fieldset': { borderColor: '#00E0B8' },
-                          '&:hover fieldset': { borderColor: '#00E0B8' },
-                          '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                        }
-                      }}
+                      sx={countdownFieldStyles}
                     />
                   </Grid>
                   <Grid item xs={12}>
+                    <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                      <Button
+                        variant="outlined"
+                        onClick={handleCancelCountdownForm}
+                        sx={{
+                          borderColor: '#666',
+                          color: '#F5F5F5',
+                          '&:hover': { borderColor: '#888' }
+                        }}
+                      >
+                        Cancel
+                      </Button>
                     <Button 
                       variant="contained" 
-                      onClick={createCountdown}
-                      disabled={!countdownForm.startDate || !countdownForm.endDate}
+                        onClick={handleSaveCountdown}
+                        disabled={isCountdownSaveDisabled}
                       startIcon={<LocalOffer />}
                       sx={{
                         backgroundColor: '#00E0B8',
@@ -1129,8 +1302,9 @@ const Settings = () => {
                         '&:hover': { backgroundColor: '#00C4A3' }
                       }}
                     >
-                      Create Countdown
+                        {editingCountdown ? 'Update Countdown' : 'Create Countdown'}
                     </Button>
+                    </Box>
                   </Grid>
                 </Grid>
               </CardContent>
@@ -1174,6 +1348,20 @@ const Settings = () => {
                       sx={{ mt: 1 }}
                     />
                   </Box>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button 
+                      size="small"
+                      variant="outlined"
+                      startIcon={<Edit />}
+                      onClick={() => handleEditCountdown(countdown)}
+                      sx={{
+                        borderColor: '#00E0B8',
+                        color: '#00E0B8',
+                        '&:hover': { borderColor: '#00C4A3', backgroundColor: 'rgba(0, 224, 184, 0.1)' }
+                      }}
+                    >
+                      Edit
+                    </Button>
                   <Button 
                     color="error" 
                     onClick={() => deleteCountdown(countdown.id)}
@@ -1186,6 +1374,7 @@ const Settings = () => {
                   >
                     Delete
                   </Button>
+                  </Box>
                 </Box>
               </CardContent>
             </Card>
@@ -1213,7 +1402,17 @@ const Settings = () => {
             </Box>
             <Button 
               variant="outlined" 
-              onClick={() => setShowHeroImageForm(!showHeroImageForm)}
+              onClick={() => {
+                const next = !showHeroImageForm;
+                setShowHeroImageForm(next);
+                if (next) {
+                  setUseHeroImageUrl(false);
+                  setHeroImageInput('');
+                }
+                setHeroImageFileName('');
+                setHeroImageUploadError('');
+                setHeroImageUploadLoading(false);
+              }}
               startIcon={showHeroImageForm ? <Edit /> : <ImageIcon />}
               sx={{
                 borderColor: '#00E0B8',
@@ -1276,23 +1475,109 @@ const Settings = () => {
                   Update Hero Image
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Enter the URL or path to the hero image. This will replace the hero image on the home page.
+                  Upload a new image from your computer or provide a full URL. The selected image will appear on the customer homepage.
                 </Typography>
-                <TextField
-                  fullWidth
-                  label="Hero Image URL or Path"
-                  value={heroImageInput}
-                  onChange={(e) => setHeroImageInput(e.target.value)}
-                  placeholder="/assets/images/ads/hero-ad.png"
-                  sx={{
-                    mb: 2,
-                    '& .MuiOutlinedInput-root': {
-                      '& fieldset': { borderColor: '#00E0B8' },
-                      '&:hover fieldset': { borderColor: '#00E0B8' },
-                      '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
-                    }
-                  }}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Mode:
+                  </Typography>
+                  <Button
+                    size="small"
+                    variant="text"
+                    onClick={() => {
+                      setUseHeroImageUrl((prev) => {
+                        const next = !prev;
+                        if (next) {
+                          setHeroImageInput('');
+                          setHeroImageFileName('');
+                          setHeroImageUploadError('');
+                        } else {
+                          setHeroImageInput('');
+                          setHeroImageUploadError('');
+                        }
+                        return next;
+                      });
+                    }}
+                    sx={{ color: '#00E0B8', textTransform: 'none', px: 0, minWidth: 'unset' }}
+                  >
+                    {useHeroImageUrl ? 'Switch to upload' : 'Enter URL instead'}
+                  </Button>
+                </Box>
+                <input
+                  type="file"
+                  accept="image/*"
+                  ref={heroImageFileInputRef}
+                  style={{ display: 'none' }}
+                  onChange={handleHeroImageFileChange}
                 />
+                <Box
+                  sx={{
+                    display: useHeroImageUrl ? 'none' : 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    mb: 2,
+                    flexWrap: 'wrap'
+                  }}
+                >
+                  <Button
+                    variant="outlined"
+                    startIcon={<CloudUpload />}
+                    onClick={openHeroImageFilePicker}
+                    disabled={heroImageUploadLoading}
+                    sx={{
+                      borderColor: '#00E0B8',
+                      color: '#00E0B8',
+                      '&:hover': { 
+                        borderColor: '#00C4A3',
+                        backgroundColor: 'rgba(0, 224, 184, 0.1)'
+                      }
+                    }}
+                  >
+                    {heroImageUploadLoading ? 'Uploading...' : 'Select Image'}
+                  </Button>
+                  {heroImageFileName && (
+                    <Typography variant="body2" color="text.secondary">
+                      Selected: {heroImageFileName}
+                    </Typography>
+                  )}
+                </Box>
+                {heroImageUploadError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {heroImageUploadError}
+                  </Alert>
+                )}
+                {useHeroImageUrl ? (
+                  <TextField
+                    fullWidth
+                    label="Hero Image URL"
+                    value={heroImageInput}
+                    onChange={(e) => {
+                      setHeroImageInput(e.target.value);
+                      if (heroImageFileName) {
+                        setHeroImageFileName('');
+                      }
+                      if (heroImageUploadError) {
+                        setHeroImageUploadError('');
+                      }
+                    }}
+                    placeholder="https://example.com/hero-image.jpg"
+                    sx={{
+                      mb: 2,
+                      '& .MuiOutlinedInput-root': {
+                        '& fieldset': { borderColor: '#00E0B8' },
+                        '&:hover fieldset': { borderColor: '#00E0B8' },
+                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                      }
+                    }}
+                    disabled={heroImageUploadLoading}
+                  />
+                ) : (
+                  heroImageInput && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2, wordBreak: 'break-all' }}>
+                      Image URL: {heroImageInput}
+                    </Typography>
+                  )
+                )}
                 {heroImageInput && (
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -1326,7 +1611,7 @@ const Settings = () => {
                 <Button 
                   variant="contained" 
                   onClick={updateHeroImage}
-                  disabled={!heroImageInput}
+                  disabled={!heroImageInput || heroImageUploadLoading}
                   startIcon={<Save />}
                   sx={{
                     backgroundColor: '#00E0B8',
