@@ -562,9 +562,21 @@ const Transactions = () => {
               {paginatedTransactions.map((transaction) => {
                 const isExpanded = expandedRows.has(transaction.id);
                 const typeChipRaw = getTransactionTypeChipProps(transaction.transactionType);
-                const typeChip = typeof typeChipRaw === 'function'
+                let typeChip = typeof typeChipRaw === 'function'
                   ? typeChipRaw(transaction)
                   : typeChipRaw;
+                
+                // Ensure typeChip always has a label
+                if (!typeChip || !typeChip.label) {
+                  typeChip = {
+                    label: transaction.transactionType || 'Unknown',
+                    sx: {
+                      backgroundColor: '#616161',
+                      color: '#FFFFFF',
+                      fontWeight: 600
+                    }
+                  };
+                }
                 const methodChip = getPaymentMethodChipProps(transaction.paymentMethod);
                 const statusChip = getTransactionStatusChipProps(transaction.status);
                 const methodLabel = getPaymentMethodLabel(
@@ -613,16 +625,22 @@ const Transactions = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        {typeChip ? (
+                        {typeChip && typeChip.label ? (
                           <Chip
                             size="small"
                             label={typeChip.label}
-                            sx={{ fontWeight: 700, ...typeChip.sx }}
+                            sx={{ fontWeight: 700, ...(typeChip.sx || {}) }}
                           />
                         ) : (
-                          <Typography variant="body2" color="text.secondary">
-                            {transaction.transactionType || 'N/A'}
-                          </Typography>
+                          <Chip
+                            size="small"
+                            label={transaction.transactionType || 'Unknown'}
+                            sx={{
+                              backgroundColor: '#616161',
+                              color: '#FFFFFF',
+                              fontWeight: 600
+                            }}
+                          />
                         )}
                       </TableCell>
                   <TableCell>
