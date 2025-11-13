@@ -270,27 +270,22 @@ router.post('/send-otp', async (req, res) => {
       }
     }
 
-    // For customers, handle SMS failures differently
+    // For customers, handle SMS failures - always allow OTP entry
+    // Admin can retrieve OTP from dashboard
     if (!smsResult.success) {
       console.error('Failed to send OTP:', smsResult.error);
-      console.error('OTP Code generated (for testing):', otpCode);
+      console.log(`📱 Customer OTP generated (SMS failed): ${otpCode} - Admin can provide from dashboard`);
       
-      // If it's a credit issue, return a helpful error
-      if (smsResult.code === 402 || smsResult.requiresTopUp) {
-        return res.status(402).json({
-          success: false,
-          error: 'SMS service account has insufficient credits. OTP could not be sent. Please contact administrator.',
-          requiresTopUp: true,
-          otpCode: otpCode,
-          note: 'OTP has been generated and stored in database. You can verify it manually if needed.'
-        });
-      }
-      
-      // For other errors, still return success but with a warning
+      // Always return success with note that admin can provide OTP
+      // This allows customer to proceed to OTP entry screen
       return res.status(200).json({
-        success: false,
-        error: smsResult.error || 'Failed to send OTP via SMS',
-        note: 'OTP has been generated and stored in database. Please contact administrator for the code.'
+        success: true,
+        message: 'OTP generated. Admin will provide the code if SMS failed.',
+        phoneNumber: cleanedPhone,
+        expiresAt: expiresAt.toISOString(),
+        smsFailed: true,
+        smsError: smsResult.error,
+        note: 'SMS delivery failed. Please contact administrator for the OTP code, or try again later.'
       });
     }
 

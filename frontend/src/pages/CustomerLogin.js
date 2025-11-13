@@ -131,20 +131,22 @@ const CustomerLogin = () => {
         userType: 'customer'
       });
 
-      const { success, error: responseError, note, message } = response.data || {};
+      const { success, error: responseError, note, message, smsFailed, smsError } = response.data || {};
       setOtpPhone(phone);
-      const info =
-        responseError ||
-        note ||
-        message ||
-        'OTP generated. Enter the code you received (or provided by support).';
-      if (!success && responseError) {
-        setError(responseError);
-      } else {
+      
+      // Always proceed to OTP entry if OTP was generated (success: true)
+      // Even if SMS failed, admin can provide the code
+      if (success) {
         setError('');
+        const info = smsFailed
+          ? (note || message || 'SMS delivery failed. Please contact administrator for the OTP code.')
+          : (message || 'OTP sent successfully. Enter the code you received.');
+        setOtpMessage(info);
+        setShowOtpVerification(true);
+      } else {
+        // Only show error if OTP generation itself failed
+        setError(responseError || 'Failed to generate OTP. Please try again.');
       }
-      setOtpMessage(info);
-      setShowOtpVerification(true);
     } catch (err) {
       console.error('Send OTP error:', err);
       const status = err.response?.status;
