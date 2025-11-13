@@ -160,23 +160,39 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
     ]
   });
 
+  // Find driver transaction (must have driverId matching current driver)
   let driverTransaction = deliveryTransactions.find(
     (tx) => tx.driverId && driverId && tx.driverId === driverId
   );
-  let merchantTransaction = deliveryTransactions.find((tx) => tx.driverId == null);
+  
+  // Find merchant transaction (must have driverId: null AND driverWalletId: null)
+  // This ensures we don't match driver transactions that haven't been linked yet
+  let merchantTransaction = deliveryTransactions.find(
+    (tx) => tx.driverId == null && tx.driverWalletId == null
+  );
 
-  if (!driverTransaction && driverId) {
-    const convertible = deliveryTransactions.find(
-      (tx) => tx.driverId == null && Math.abs(toNumeric(tx.amount) - driverPayAmount) < 0.01
-    );
-
-    if (convertible) {
-      driverTransaction = convertible;
-      if (merchantTransaction && merchantTransaction.id === convertible.id) {
-        merchantTransaction = null;
-      }
+  // Clean up duplicate merchant transactions (keep the first one, cancel others)
+  const merchantTransactions = deliveryTransactions.filter(
+    (tx) => tx.driverId == null && tx.driverWalletId == null
+  );
+  if (merchantTransactions.length > 1) {
+    console.log(`⚠️ Found ${merchantTransactions.length} merchant delivery transactions for Order #${orderId}, cleaning up duplicates...`);
+    // Keep the first one (oldest), cancel the rest
+    for (let i = 1; i < merchantTransactions.length; i++) {
+      const duplicate = merchantTransactions[i];
+      await duplicate.update({
+        status: 'cancelled',
+        paymentStatus: 'cancelled',
+        amount: 0,
+        notes: `${duplicate.notes || ''}\nDuplicate transaction cancelled (${context}).`.trim()
+      });
+      console.log(`   Cancelled duplicate merchant transaction #${duplicate.id}`);
     }
+    merchantTransaction = merchantTransactions[0];
   }
+
+  // Don't convert merchant transactions to driver transactions
+  // Driver transactions should be created separately
 
   const merchantPayloadBase = {
     paymentMethod: merchantTransaction?.paymentMethod || paymentMethod,
@@ -254,14 +270,40 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       notes: `Driver delivery fee payment for Order #${orderId} (${context}). Amount: KES ${driverPayAmount.toFixed(2)}.${paymentCompleted ? '' : ' Pending payment confirmation.'}`
     };
 
+    const wasAlreadyCredited = driverTransaction?.driverWalletId === driverWallet.id && 
+                                driverTransaction?.status === 'completed' &&
+                                driverTransaction?.driverId === driverId;
+
     if (driverTransaction) {
       await driverTransaction.update(driverPayload);
+      await driverTransaction.reload();
     } else {
       driverTransaction = await db.Transaction.create({
         orderId,
         transactionType: 'delivery_pay',
         ...driverPayload
       });
+    }
+
+    // Credit driver wallet if not already credited
+    if (!wasAlreadyCredited && paymentCompleted) {
+      const oldBalance = toNumeric(driverWallet.balance);
+      const oldTotalDeliveryPay = toNumeric(driverWallet.totalDeliveryPay);
+      const oldCount = driverWallet.totalDeliveryPayCount || 0;
+
+      await driverWallet.update({
+        balance: oldBalance + driverPayAmount,
+        totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
+        totalDeliveryPayCount: oldCount + 1
+      });
+
+      await driverWallet.reload();
+
+      console.log(`✅ Delivery pay credited to driver wallet for Order #${orderId}:`);
+      console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
+      console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${toNumeric(driverWallet.balance).toFixed(2)}`);
+      console.log(`   Total delivery pay: ${oldTotalDeliveryPay.toFixed(2)} → ${toNumeric(driverWallet.totalDeliveryPay).toFixed(2)}`);
+      console.log(`   Delivery pay count: ${oldCount} → ${driverWallet.totalDeliveryPayCount}`);
     }
 
     await orderModel.update({

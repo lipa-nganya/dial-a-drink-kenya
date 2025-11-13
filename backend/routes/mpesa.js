@@ -68,12 +68,16 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     ? new Date(paymentTransaction.transactionDate)
     : transactionTimestamp;
 
+  // Find merchant delivery transaction (must have driverId: null AND driverWalletId: null)
+  // This ensures we don't match driver transactions
   let merchantDeliveryTransaction = await db.Transaction.findOne({
     where: {
       orderId: effectiveOrderId,
       transactionType: 'delivery_pay',
+      driverId: null,
       driverWalletId: null
-    }
+    },
+    order: [['createdAt', 'ASC']] // Get the first one if multiple exist
   });
 
   const deliveryNotes = driverPayAmount > 0
