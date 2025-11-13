@@ -57,9 +57,8 @@ const OrderSuccess = () => {
         return;
       }
 
-      // Use order's email or phone to log in
+      // Use order's phone to log in (phone-only login)
       const loginResponse = await api.post('/orders/find', {
-        email: order.customerEmail || null,
         phone: order.customerPhone || null,
         orderId: orderId
       });
