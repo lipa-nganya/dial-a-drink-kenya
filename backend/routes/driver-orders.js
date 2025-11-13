@@ -266,6 +266,15 @@ router.patch('/:orderId/status', async (req, res) => {
               totalDeliveryPay: currentDeliveryPayTotal + driverPayAmount,
               totalDeliveryPayCount: currentDeliveryPayCount + 1
             });
+            
+            // Reload wallet to get updated values
+            await driverWallet.reload();
+            
+            console.log(`✅ Delivery pay credited for Order #${order.id}:`);
+            console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
+            console.log(`   Wallet balance: ${currentBalance.toFixed(2)} → ${parseFloat(driverWallet.balance).toFixed(2)}`);
+            console.log(`   Total delivery pay: ${currentDeliveryPayTotal.toFixed(2)} → ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
+            console.log(`   Delivery pay count: ${currentDeliveryPayCount} → ${driverWallet.totalDeliveryPayCount}`);
 
             // Update or create driver delivery transaction
             try {

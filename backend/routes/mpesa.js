@@ -162,10 +162,14 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
         driverDeliveryTransaction.driverWalletId === driverWallet.id && driverDeliveryTransaction.status === 'completed';
 
       if (!alreadyCredited) {
+        const oldBalance = parseFloat(driverWallet.balance) || 0;
+        const oldTotalDeliveryPay = parseFloat(driverWallet.totalDeliveryPay || 0);
+        const oldCount = driverWallet.totalDeliveryPayCount || 0;
+        
         await driverWallet.update({
-          balance: parseFloat(driverWallet.balance) + driverPayAmount,
-          totalDeliveryPay: parseFloat(driverWallet.totalDeliveryPay || 0) + driverPayAmount,
-          totalDeliveryPayCount: (driverWallet.totalDeliveryPayCount || 0) + 1
+          balance: oldBalance + driverPayAmount,
+          totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
+          totalDeliveryPayCount: oldCount + 1
         });
 
         await driverDeliveryTransaction.update({
@@ -174,6 +178,15 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
           paymentStatus: 'paid',
           notes: `Driver delivery fee payment for Order #${effectiveOrderId} (${context}) - credited to driver wallet`
         });
+        
+        // Reload wallet to get updated balance
+        await driverWallet.reload();
+        
+        console.log(`✅ Delivery pay credited for Order #${effectiveOrderId}:`);
+        console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
+        console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(driverWallet.balance).toFixed(2)}`);
+        console.log(`   Total delivery pay: ${oldTotalDeliveryPay.toFixed(2)} → ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
+        console.log(`   Delivery pay count: ${oldCount} → ${driverWallet.totalDeliveryPayCount}`);
 
         await orderInstance.update({
           driverPayCredited: true,
