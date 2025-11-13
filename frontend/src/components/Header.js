@@ -289,9 +289,16 @@ const Header = () => {
           '& .MuiDrawer-paper': { 
             boxSizing: 'border-box', 
             width: 250,
-            backgroundColor: colors.paper,
-            color: colors.textPrimary
+            backgroundColor: `${colors.paper} !important`,
+            color: `${colors.textPrimary} !important`,
+            backgroundImage: 'none !important',
           },
+        }}
+        PaperProps={{
+          sx: {
+            backgroundColor: `${colors.paper} !important`,
+            color: `${colors.textPrimary} !important`,
+          }
         }}
       >
         {drawer}
