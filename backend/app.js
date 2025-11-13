@@ -10,8 +10,14 @@ const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
   process.env.ADMIN_URL || 'http://localhost:3001',
   'http://localhost:3002',
+  // Old service URLs (kept for backward compatibility)
   'https://drink-suite-customer-910510650031.us-central1.run.app',
-  'https://drink-suite-admin-910510650031.us-central1.run.app'
+  'https://drink-suite-admin-910510650031.us-central1.run.app',
+  // New service URLs
+  'https://dialadrink-customer-p6bkgryxqa-uc.a.run.app',
+  'https://dialadrink-admin-p6bkgryxqa-uc.a.run.app',
+  // Also allow the old numeric format
+  'https://dialadrink-backend-910510650031.us-central1.run.app'
 ].filter(Boolean);
 
 const corsOptions = {
