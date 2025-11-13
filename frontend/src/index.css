@@ -11,3 +11,17 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Force dark background on mobile menu drawer in dark mode */
+.MuiDrawer-paper[data-dark-mode="true"],
+.MuiDrawer-paper[class*="MuiPaper-root"] {
+  background-color: #121212 !important;
+  background: #121212 !important;
+  color: #F5F5F5 !important;
+}
+
+/* Override any Material-UI default drawer styles */
+.MuiDrawer-paper {
+  background-color: var(--drawer-bg, #121212) !important;
+  background: var(--drawer-bg, #121212) !important;
+}

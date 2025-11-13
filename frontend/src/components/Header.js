@@ -43,13 +43,15 @@ const Header = () => {
   const drawer = (
     <Box sx={{ 
       width: 220, 
-      backgroundColor: `${colors.paper} !important`,
+      backgroundColor: isDarkMode ? '#121212' : colors.paper,
       height: '100%',
       minHeight: '100vh',
-      background: colors.paper,
+      background: isDarkMode ? '#121212' : colors.paper,
+      color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
     }} style={{
-      backgroundColor: colors.paper,
-      color: colors.textPrimary,
+      backgroundColor: isDarkMode ? '#121212' : colors.paper,
+      color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
+      background: isDarkMode ? '#121212' : colors.paper,
     }}>
       <Toolbar sx={{ 
         minHeight: '48px !important',
@@ -294,24 +296,25 @@ const Header = () => {
           '& .MuiDrawer-paper': { 
             boxSizing: 'border-box', 
             width: 250,
-            backgroundColor: `${colors.paper} !important`,
-            color: `${colors.textPrimary} !important`,
+            backgroundColor: isDarkMode ? '#121212' : colors.paper,
+            color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
             backgroundImage: 'none !important',
-            background: `${colors.paper} !important`,
+            background: isDarkMode ? '#121212' : colors.paper,
           },
         }}
         PaperProps={{
           sx: {
-            backgroundColor: `${colors.paper} !important`,
-            color: `${colors.textPrimary} !important`,
-            background: `${colors.paper} !important`,
+            backgroundColor: isDarkMode ? '#121212' : colors.paper,
+            color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
+            background: isDarkMode ? '#121212' : colors.paper,
             backgroundImage: 'none !important',
           },
           style: {
-            backgroundColor: colors.paper,
-            color: colors.textPrimary,
-            background: colors.paper,
-          }
+            backgroundColor: isDarkMode ? '#121212' : colors.paper,
+            color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
+            background: isDarkMode ? '#121212' : colors.paper,
+          },
+          className: isDarkMode ? 'dark-drawer' : 'light-drawer',
         }}
       >
         {drawer}
