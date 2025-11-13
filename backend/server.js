@@ -1,4 +1,16 @@
 require('dotenv').config();
+
+// Handle unhandled promise rejections to prevent crashes
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit - let the server continue running
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  // Don't exit immediately - let Cloud Run handle it
+});
+
 const app = require('./app');
 const db = require('./models');
 const seedData = require('./seed');
@@ -791,6 +803,59 @@ const startServer = async () => {
     console.log(`Port: ${process.env.PORT || 5001}`);
     console.log(`Host: ${process.env.HOST || '0.0.0.0'}`);
     
+    // Socket.IO connection handling (set up before server starts)
+    io.on('connection', (socket) => {
+      console.log('Client connected:', socket.id);
+      
+      socket.on('join-admin', () => {
+        socket.join('admin');
+        console.log(`Client ${socket.id} joined admin room`);
+      });
+
+      socket.on('join-driver', (driverId) => {
+        const roomName = `driver-${driverId}`;
+        socket.join(roomName);
+        console.log(`Client ${socket.id} joined driver room: ${roomName}`);
+      });
+
+      // Allow clients to join order-specific rooms for payment notifications
+      socket.on('join-order', (orderId) => {
+        const roomName = `order-${orderId}`;
+        socket.join(roomName);
+        console.log(`Client ${socket.id} joined room: ${roomName}`);
+      });
+      
+      socket.on('disconnect', () => {
+        console.log('Client disconnected:', socket.id);
+      });
+    });
+    
+    // Start server IMMEDIATELY - before any async database operations
+    // This is critical for Cloud Run health checks
+    const HOST = process.env.HOST || '0.0.0.0';
+    
+    server.listen(PORT, HOST, () => {
+      console.log(`🚀 Server is running on ${HOST}:${PORT}`);
+      console.log(`🔗 Health check: http://${HOST}:${PORT}/api/health`);
+      console.log(`📊 API endpoints:`);
+      console.log(`   - GET  /api/health`);
+      console.log(`   - GET  /api/categories`);
+      console.log(`   - GET  /api/drinks`);
+      console.log(`   - POST /api/orders`);
+      console.log(`   - GET  /api/admin/orders`);
+      console.log(`🌐 Server ready to accept requests!`);
+    });
+    
+    // Handle server errors gracefully
+    server.on('error', (error) => {
+      console.error('❌ Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+        process.exit(1);
+      }
+    });
+    
+    // Now do database operations asynchronously (non-blocking)
     // Test database connection with timeout
     const dbTimeout = setTimeout(() => {
       console.log('⚠️ Database connection timeout - continuing with startup');
@@ -832,66 +897,18 @@ const startServer = async () => {
       })
       .catch(error => {
         console.warn('Database setup failed:', error.message);
+        console.warn('Stack:', error.stack);
+        // Don't crash - server is already running
       });
-    
-    // Socket.IO connection handling
-    io.on('connection', (socket) => {
-      console.log('Client connected:', socket.id);
-      
-      socket.on('join-admin', () => {
-        socket.join('admin');
-        console.log(`Client ${socket.id} joined admin room`);
-      });
-
-      socket.on('join-driver', (driverId) => {
-        const roomName = `driver-${driverId}`;
-        socket.join(roomName);
-        console.log(`Client ${socket.id} joined driver room: ${roomName}`);
-      });
-
-      // Allow clients to join order-specific rooms for payment notifications
-      socket.on('join-order', (orderId) => {
-        const roomName = `order-${orderId}`;
-        socket.join(roomName);
-        console.log(`Client ${socket.id} joined room: ${roomName}`);
-      });
-      
-      socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
-      });
-    });
-    
-    // Start server immediately
-    // Listen on 0.0.0.0 to accept connections from outside container (required for Cloud Run)
-    const HOST = process.env.HOST || '0.0.0.0';
-    
-    // Start server - this must succeed for Cloud Run health checks
-    server.listen(PORT, HOST, () => {
-      console.log(`🚀 Server is running on ${HOST}:${PORT}`);
-      console.log(`🔗 Health check: http://${HOST}:${PORT}/api/health`);
-      console.log(`📊 API endpoints:`);
-      console.log(`   - GET  /api/health`);
-      console.log(`   - GET  /api/categories`);
-      console.log(`   - GET  /api/drinks`);
-      console.log(`   - POST /api/orders`);
-      console.log(`   - GET  /api/admin/orders`);
-      console.log(`🌐 Server ready to accept requests!`);
-    });
-    
-    // Handle server errors gracefully
-    server.on('error', (error) => {
-      console.error('❌ Server error:', error);
-      if (error.code === 'EADDRINUSE') {
-        console.error(`Port ${PORT} is already in use`);
-      }
-      // Don't exit - let Cloud Run handle it
-    });
     
   } catch (error) {
     console.error('❌ Unable to start server:', error);
     console.error('Error stack:', error.stack);
-    // Exit with error code so Cloud Run knows it failed
-    process.exit(1);
+    // Only exit if server hasn't started listening yet
+    // If server is already listening, let it continue
+    if (!server.listening) {
+      process.exit(1);
+    }
   }
 };
 
