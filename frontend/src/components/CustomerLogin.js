@@ -7,16 +7,17 @@ import {
   Alert,
   Paper
 } from '@mui/material';
-import { Login as LoginIcon } from '@mui/icons-material';
+import { PhoneIphone as LoginIcon } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
 
 const CustomerLogin = ({ onLoginSuccess, orderId }) => {
   const { login } = useCustomer();
-  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const sanitizePhoneInput = (value) => value.replace(/[^\d+]/g, '');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -24,16 +25,15 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
     setLoading(true);
 
     try {
-      if (!email && !phone) {
-        setError('Please enter either email or phone number');
+      if (!phone) {
+        setError('Please enter your phone number');
         setLoading(false);
         return;
       }
 
-      // Find order by email or phone
+      // Find order by phone number
       const response = await api.post('/orders/find', {
-        email: email || null,
-        phone: phone || null,
+        phone: phone,
         orderId: orderId || null
       });
 
@@ -41,7 +41,6 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
         // Store order info in localStorage for tracking
         const customerData = {
           orderId: response.data.order.id,
-          email: email,
           phone: phone,
           customerName: response.data.order.customerName,
           loggedInAt: new Date().toISOString()
@@ -55,7 +54,7 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
           onLoginSuccess(response.data.order);
         }
       } else {
-        setError(response.data.message || 'Order not found. Please check your email or phone number.');
+        setError(response.data.message || 'Order not found. Please check your phone number.');
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -73,7 +72,7 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
       </Typography>
       
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Enter your email or phone number to track your order status
+        Enter your phone number to track your order status
       </Typography>
 
       {error && (
@@ -84,35 +83,18 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
 
       <Box component="form" onSubmit={handleSubmit}>
         <TextField
-          label="Email Address"
-          type="email"
-          value={email}
-          onChange={(e) => {
-            setEmail(e.target.value);
-            setError('');
-          }}
-          fullWidth
-          sx={{ mb: 2 }}
-          placeholder="your.email@example.com"
-          disabled={loading}
-        />
-
-        <Typography variant="body2" sx={{ textAlign: 'center', my: 2, color: 'text.secondary' }}>
-          OR
-        </Typography>
-
-        <TextField
           label="Phone Number"
           type="tel"
           value={phone}
           onChange={(e) => {
-            setPhone(e.target.value.replace(/[^\d+]/g, ''));
+            setPhone(sanitizePhoneInput(e.target.value));
             setError('');
           }}
           fullWidth
           sx={{ mb: 3 }}
           placeholder="0712345678 or 254712345678"
           disabled={loading}
+          autoComplete="tel"
         />
 
         <Button
@@ -120,7 +102,7 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
           variant="contained"
           fullWidth
           size="large"
-          disabled={loading || (!email && !phone)}
+          disabled={loading || !phone}
           sx={{
             backgroundColor: '#00E0B8',
             color: '#0D0D0D',
