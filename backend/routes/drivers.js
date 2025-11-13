@@ -34,9 +34,13 @@ router.get('/phone/:phoneNumber', async (req, res) => {
       phoneVariants.add('254' + cleanedPhone);
       phoneVariants.add('0' + cleanedPhone);
     } else if (cleanedPhone.length === 9 && !cleanedPhone.startsWith('7')) {
-      // 123456789 -> 254123456789, 0123456789, 254712345678 (if starts with 7)
+      // 123456789 -> 254123456789, 0123456789
       phoneVariants.add('254' + cleanedPhone);
       phoneVariants.add('0' + cleanedPhone);
+    } else if (cleanedPhone.length === 10 && !cleanedPhone.startsWith('0') && !cleanedPhone.startsWith('254')) {
+      // 10 digits without 0 or 254 prefix - try adding both
+      phoneVariants.add('0' + cleanedPhone);
+      phoneVariants.add('254' + cleanedPhone);
     }
     
     // Convert to array and filter out empty strings
