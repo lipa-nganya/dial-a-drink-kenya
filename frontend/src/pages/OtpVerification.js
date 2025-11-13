@@ -15,7 +15,7 @@ import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
 import SetPin from './SetPin';
 
-const OtpVerification = ({ phone, onBack, infoMessage }) => {
+const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
   const navigate = useNavigate();
   const { login } = useCustomer();
   const [otpCode, setOtpCode] = useState('');
@@ -77,7 +77,12 @@ const OtpVerification = ({ phone, onBack, infoMessage }) => {
         
         login(customerData);
         
-        navigate('/orders');
+        // If callback provided, call it instead of navigating
+        if (onLoginSuccess) {
+          onLoginSuccess(customerData);
+        } else {
+          navigate('/orders');
+        }
       } else {
         setError(response.data.error || 'Failed to verify OTP. Please try again.');
       }
@@ -131,7 +136,12 @@ const OtpVerification = ({ phone, onBack, infoMessage }) => {
       <SetPin
         customer={verifiedCustomer}
         onSuccess={(customerData) => {
-          navigate('/orders');
+          // If callback provided, call it instead of navigating
+          if (onLoginSuccess) {
+            onLoginSuccess(customerData);
+          } else {
+            navigate('/orders');
+          }
         }}
       />
     );
