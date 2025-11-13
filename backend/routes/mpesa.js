@@ -183,10 +183,10 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
         if (!alreadyCredited) {
           const oldBalance = parseFloat(driverWallet.balance) || 0;
-        const oldTotalDeliveryPay = parseFloat(driverWallet.totalDeliveryPay || 0);
-        const oldCount = driverWallet.totalDeliveryPayCount || 0;
-        
-        await driverWallet.update({
+          const oldTotalDeliveryPay = parseFloat(driverWallet.totalDeliveryPay || 0);
+          const oldCount = driverWallet.totalDeliveryPayCount || 0;
+          
+          await driverWallet.update({
           balance: oldBalance + driverPayAmount,
           totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
           totalDeliveryPayCount: oldCount + 1
