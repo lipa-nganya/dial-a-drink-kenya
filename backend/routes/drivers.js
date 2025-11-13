@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const { verifyAdmin } = require('./admin');
 const { Expo } = require('expo-server-sdk');
@@ -13,59 +14,92 @@ const { Expo } = require('expo-server-sdk');
 router.get('/phone/:phoneNumber', async (req, res) => {
   try {
     const { phoneNumber } = req.params;
-    const cleanedPhone = phoneNumber.replace(/\D/g, '');
+    const cleanedPhone = phoneNumber.replace(/\D/g, '').trim();
     
-    // Try multiple phone number formats to find the driver
+    // Build all possible phone number variants
+    const phoneVariants = new Set();
+    phoneVariants.add(cleanedPhone);
+    
+    // Generate all possible formats
+    if (cleanedPhone.startsWith('254') && cleanedPhone.length === 12) {
+      // 254712345678 -> 0712345678, 712345678
+      phoneVariants.add('0' + cleanedPhone.substring(3));
+      phoneVariants.add(cleanedPhone.substring(3));
+    } else if (cleanedPhone.startsWith('0') && cleanedPhone.length === 10) {
+      // 0712345678 -> 254712345678, 712345678
+      phoneVariants.add('254' + cleanedPhone.substring(1));
+      phoneVariants.add(cleanedPhone.substring(1));
+    } else if (cleanedPhone.length === 9 && cleanedPhone.startsWith('7')) {
+      // 712345678 -> 254712345678, 0712345678
+      phoneVariants.add('254' + cleanedPhone);
+      phoneVariants.add('0' + cleanedPhone);
+    } else if (cleanedPhone.length === 9 && !cleanedPhone.startsWith('7')) {
+      // 123456789 -> 254123456789, 0123456789, 254712345678 (if starts with 7)
+      phoneVariants.add('254' + cleanedPhone);
+      phoneVariants.add('0' + cleanedPhone);
+    }
+    
+    // Convert to array and filter out empty strings
+    const variants = Array.from(phoneVariants).filter(v => v && v.length > 0);
+    
+    console.log(`🔍 Looking up driver with phone: ${phoneNumber} (cleaned: ${cleanedPhone})`);
+    console.log(`📋 Trying ${variants.length} variants:`, variants);
+    
+    // Try to find driver using all variants in a single query
     let driver = await db.Driver.findOne({
-      where: { phoneNumber: cleanedPhone }
+      where: {
+        [Op.or]: variants.map(variant => ({
+          phoneNumber: {
+            [Op.iLike]: variant // Case-insensitive matching
+          }
+        }))
+      }
     });
     
-    // If not found, try with 0 prefix
-    if (!driver && cleanedPhone.startsWith('254')) {
-      const phoneWithZero = '0' + cleanedPhone.substring(3);
+    // If still not found, try exact match with trimmed values
+    if (!driver) {
       driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWithZero }
+        where: {
+          [Op.or]: variants.map(variant => ({
+            phoneNumber: db.sequelize.where(
+              db.sequelize.fn('TRIM', db.sequelize.col('phoneNumber')),
+              variant
+            )
+          }))
+        }
       });
     }
     
-    // If not found, try without country code
-    if (!driver && cleanedPhone.startsWith('254')) {
-      const phoneWithoutCode = cleanedPhone.substring(3);
-      driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWithoutCode }
-      });
-    }
-    
-    // If not found, try adding 254 prefix
-    if (!driver && !cleanedPhone.startsWith('254') && cleanedPhone.length === 9) {
-      const phoneWith254 = '254' + cleanedPhone;
-      driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWith254 }
-      });
-    }
-    
-    // If not found, try with 0 prefix then add 254
-    if (!driver && cleanedPhone.startsWith('0')) {
-      const phoneWithoutZero = cleanedPhone.substring(1);
-      const phoneWith254 = '254' + phoneWithoutZero;
-      driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWith254 }
-      });
-    }
-    
-    // Also try the original format with 0 prefix
-    if (!driver && !cleanedPhone.startsWith('0') && !cleanedPhone.startsWith('254')) {
-      const phoneWithZero = '0' + cleanedPhone;
-      driver = await db.Driver.findOne({
-        where: { phoneNumber: phoneWithZero }
-      });
+    // Last resort: try LIKE pattern matching (for any whitespace or formatting issues)
+    if (!driver) {
+      for (const variant of variants) {
+        driver = await db.Driver.findOne({
+          where: {
+            phoneNumber: {
+              [Op.iLike]: `%${variant}%`
+            }
+          }
+        });
+        if (driver) {
+          console.log(`✅ Found driver using LIKE pattern with variant: ${variant}`);
+          break;
+        }
+      }
     }
     
     if (!driver) {
-      console.error('Driver not found for phone:', phoneNumber, 'cleaned:', cleanedPhone);
-      console.error('Tried formats:', cleanedPhone, cleanedPhone.startsWith('254') ? '0' + cleanedPhone.substring(3) : 'N/A');
+      console.error('❌ Driver not found for phone:', phoneNumber);
+      console.error('📋 Tried variants:', variants);
+      // Log all drivers in database for debugging (first 10)
+      const allDrivers = await db.Driver.findAll({
+        attributes: ['id', 'name', 'phoneNumber'],
+        limit: 10
+      });
+      console.error('📋 Sample drivers in database:', allDrivers.map(d => ({ id: d.id, phone: d.phoneNumber })));
       return res.status(404).json({ error: 'Driver not found' });
     }
+    
+    console.log(`✅ Found driver #${driver.id} with phone: ${driver.phoneNumber}`);
     
     // Check if driver has PIN set (from database)
     const hasPin = driver.pinHash !== null && driver.pinHash !== '';
