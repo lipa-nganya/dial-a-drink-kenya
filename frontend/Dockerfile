@@ -15,8 +15,14 @@ FROM nginx:1.25-alpine
 ENV PORT=8080
 EXPOSE 8080
 
-RUN rm /etc/nginx/conf.d/default.conf
+# Remove default nginx config
+RUN rm -f /etc/nginx/conf.d/default.conf
+
+# Copy nginx config (listens on port 8080)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Copy built app
 COPY --from=builder /app/build /usr/share/nginx/html
 
+# Start nginx
 CMD ["nginx", "-g", "daemon off;"]
