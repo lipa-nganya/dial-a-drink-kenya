@@ -137,6 +137,8 @@ const getMUITheme = (isDarkMode) => {
           paper: {
             backgroundColor: `${colors.paper} !important`,
             color: `${colors.textPrimary} !important`,
+            background: `${colors.paper} !important`,
+            backgroundImage: 'none !important',
           },
         },
       },
