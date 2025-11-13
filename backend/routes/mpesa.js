@@ -113,6 +113,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
   let driverDeliveryTransaction = null;
   if (driverPayAmount > 0.009 && orderInstance.driverId) {
+    // First check for existing transaction with this driverId
     driverDeliveryTransaction = await db.Transaction.findOne({
       where: {
         orderId: effectiveOrderId,
@@ -121,6 +122,21 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       },
       order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
     });
+    
+    // If not found, check for pending transaction with null driverId (created before driver assignment)
+    if (!driverDeliveryTransaction) {
+      driverDeliveryTransaction = await db.Transaction.findOne({
+        where: {
+          orderId: effectiveOrderId,
+          transactionType: 'delivery_pay',
+          driverId: null,
+          paymentStatus: {
+            [Op.in]: ['pending', 'unpaid', 'paid']
+          }
+        },
+        order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+      });
+    }
 
     const driverDeliveryPayload = {
       orderId: effectiveOrderId,
@@ -141,28 +157,32 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
     if (driverDeliveryTransaction) {
       await driverDeliveryTransaction.update(driverDeliveryPayload);
+      // Reload transaction to get updated values
+      await driverDeliveryTransaction.reload();
     } else {
       driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload);
     }
 
     try {
-      let driverWallet = await db.DriverWallet.findOne({ where: { driverId: orderInstance.driverId } });
-      if (!driverWallet) {
-        driverWallet = await db.DriverWallet.create({
-          driverId: orderInstance.driverId,
-          balance: 0,
-          totalTipsReceived: 0,
-          totalTipsCount: 0,
-          totalDeliveryPay: 0,
-          totalDeliveryPayCount: 0
-        });
-      }
+      // Check if wallet was already credited (check order flag first to avoid double crediting)
+      if (!orderInstance.driverPayCredited) {
+        let driverWallet = await db.DriverWallet.findOne({ where: { driverId: orderInstance.driverId } });
+        if (!driverWallet) {
+          driverWallet = await db.DriverWallet.create({
+            driverId: orderInstance.driverId,
+            balance: 0,
+            totalTipsReceived: 0,
+            totalTipsCount: 0,
+            totalDeliveryPay: 0,
+            totalDeliveryPayCount: 0
+          });
+        }
 
-      const alreadyCredited =
-        driverDeliveryTransaction.driverWalletId === driverWallet.id && driverDeliveryTransaction.status === 'completed';
+        const alreadyCredited =
+          driverDeliveryTransaction.driverWalletId === driverWallet.id && driverDeliveryTransaction.status === 'completed';
 
-      if (!alreadyCredited) {
-        const oldBalance = parseFloat(driverWallet.balance) || 0;
+        if (!alreadyCredited) {
+          const oldBalance = parseFloat(driverWallet.balance) || 0;
         const oldTotalDeliveryPay = parseFloat(driverWallet.totalDeliveryPay || 0);
         const oldCount = driverWallet.totalDeliveryPayCount || 0;
         
@@ -221,6 +241,11 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
             console.error('❌ Error sending delivery fee payment push notification (finalizeOrderPayment):', pushError);
           });
         }
+        } else {
+          console.log(`ℹ️ Delivery pay already credited for Order #${effectiveOrderId} (transaction already linked to wallet)`);
+        }
+      } else {
+        console.log(`ℹ️ Delivery pay already credited for Order #${effectiveOrderId} (order flag set)`);
       }
     } catch (driverPayError) {
       console.error('❌ Error crediting delivery fee payment during payment finalization:', driverPayError);
