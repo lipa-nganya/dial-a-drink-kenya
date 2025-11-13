@@ -45,10 +45,37 @@ function formatPhoneNumber(phone) {
  * @returns {Promise<Object>} Response from SMS API
  */
 async function sendSMS(phoneNumber, message) {
+  // Check if we're in local development
+  const isLocalDev = process.env.NODE_ENV !== 'production' || 
+                     process.env.ENVIRONMENT === 'local' ||
+                     process.env.FORCE_LOCAL_SMS === 'true';
+  
+  if (isLocalDev) {
+    // Local development: Only log SMS, don't send actual SMS
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('📱 LOCAL DEV MODE - SMS NOT SENT');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log(`Phone Number: ${formattedPhone || phoneNumber}`);
+    console.log(`Message: ${message}`);
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('');
+    
+    return {
+      success: true,
+      messageId: 'local-dev-no-sms',
+      mobile: formattedPhone || phoneNumber,
+      networkId: 'local',
+      localDev: true
+    };
+  }
+  
+  // Production/GCP: Send actual SMS via Advanta API
   try {
-    const apiKey = process.env.ADVANTA_API_KEY || '172172cbc7c1e27c9447c94a8ea4a34a';
+    const apiKey = process.env.ADVANTA_API_KEY || 'd25f14bfa5afdbb8035c464568f82a89';
     const partnerID = process.env.ADVANTA_PARTNER_ID || '14944';
-    const shortcode = process.env.ADVANTA_SENDER_ID || 'AdvantaSMS';
+    const shortcode = process.env.ADVANTA_SENDER_ID || 'WOLFGANG';
     // Advanta API base URL - can be configured via environment variable
     const baseUrl = process.env.ADVANTA_API_URL || 'https://quicksms.advantasms.com';
     
@@ -181,15 +208,51 @@ async function sendBulkSMS(phoneNumbers, message) {
 /**
  * Send OTP using Advanta SMS API (sendotp endpoint)
  * This endpoint is specifically for OTP and transactional messages
+ * 
+ * In local development: Only logs OTP to console/admin portal (no actual SMS sent)
+ * In production/GCP: Sends actual SMS via Advanta API
+ * 
  * @param {string} phoneNumber - Recipient phone number
  * @param {string} otpCode - OTP code to send
  * @returns {Promise<Object>} Response from SMS API
  */
 async function sendOTP(phoneNumber, otpCode) {
+  // Check if we're in local development
+  const isLocalDev = process.env.NODE_ENV !== 'production' || 
+                     process.env.ENVIRONMENT === 'local' ||
+                     process.env.FORCE_LOCAL_SMS === 'true';
+  
+  if (isLocalDev) {
+    // Local development: Only log OTP, don't send actual SMS
+    const formattedPhone = formatPhoneNumber(phoneNumber);
+    console.log('');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('📱 LOCAL DEV MODE - OTP NOT SENT VIA SMS');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log(`Phone Number: ${formattedPhone || phoneNumber}`);
+    console.log(`OTP Code: ${otpCode}`);
+    console.log(`Message: Your Dial A Drink login code is: ${otpCode}. This code is valid for 3 hours.`);
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('ℹ️  Admin can retrieve this OTP from the admin dashboard');
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('');
+    
+    // Return success but indicate SMS was not sent
+    return {
+      success: true,
+      messageId: 'local-dev-no-sms',
+      mobile: formattedPhone || phoneNumber,
+      networkId: 'local',
+      localDev: true,
+      note: 'OTP logged to console. Admin can retrieve from dashboard.'
+    };
+  }
+  
+  // Production/GCP: Send actual SMS via Advanta API
   try {
-    const apiKey = process.env.ADVANTA_API_KEY || '172172cbc7c1e27c9447c94a8ea4a34a';
+    const apiKey = process.env.ADVANTA_API_KEY || 'd25f14bfa5afdbb8035c464568f82a89';
     const partnerID = process.env.ADVANTA_PARTNER_ID || '14944';
-    const shortcode = process.env.ADVANTA_SENDER_ID || 'AdvantaSMS';
+    const shortcode = process.env.ADVANTA_SENDER_ID || 'WOLFGANG';
     const baseUrl = process.env.ADVANTA_API_URL || 'https://quicksms.advantasms.com';
     
     // Format phone number
