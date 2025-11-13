@@ -787,20 +787,24 @@ const addMissingColumns = async () => {
 const startServer = async () => {
   try {
     console.log('Starting server initialization...');
+    console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`Port: ${process.env.PORT || 5001}`);
+    console.log(`Host: ${process.env.HOST || '0.0.0.0'}`);
     
     // Test database connection with timeout
     const dbTimeout = setTimeout(() => {
-      console.log('Database connection timeout - continuing with startup');
+      console.log('⚠️ Database connection timeout - continuing with startup');
     }, 10000);
     
     try {
       await db.sequelize.authenticate();
-      console.log('Database connection established successfully.');
+      console.log('✅ Database connection established successfully.');
       clearTimeout(dbTimeout);
     } catch (dbError) {
-      console.warn('Database connection failed:', dbError.message);
+      console.warn('⚠️ Database connection failed:', dbError.message);
+      console.warn('⚠️ Continuing startup - database will retry on first request');
       clearTimeout(dbTimeout);
-      // Continue startup even if database fails initially
+      // Continue startup even if database fails initially - don't crash
     }
     
     // Sync database (create tables if they don't exist) - non-blocking
@@ -860,6 +864,8 @@ const startServer = async () => {
     // Start server immediately
     // Listen on 0.0.0.0 to accept connections from outside container (required for Cloud Run)
     const HOST = process.env.HOST || '0.0.0.0';
+    
+    // Start server - this must succeed for Cloud Run health checks
     server.listen(PORT, HOST, () => {
       console.log(`🚀 Server is running on ${HOST}:${PORT}`);
       console.log(`🔗 Health check: http://${HOST}:${PORT}/api/health`);
@@ -871,8 +877,20 @@ const startServer = async () => {
       console.log(`   - GET  /api/admin/orders`);
       console.log(`🌐 Server ready to accept requests!`);
     });
+    
+    // Handle server errors gracefully
+    server.on('error', (error) => {
+      console.error('❌ Server error:', error);
+      if (error.code === 'EADDRINUSE') {
+        console.error(`Port ${PORT} is already in use`);
+      }
+      // Don't exit - let Cloud Run handle it
+    });
+    
   } catch (error) {
-    console.error('Unable to start server:', error);
+    console.error('❌ Unable to start server:', error);
+    console.error('Error stack:', error.stack);
+    // Exit with error code so Cloud Run knows it failed
     process.exit(1);
   }
 };
