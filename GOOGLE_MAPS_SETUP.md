@@ -29,7 +29,7 @@ This guide will help you set up Google Maps API key for address autocomplete fun
    - Under "Application restrictions":
      - Select "HTTP referrers (web sites)"
      - Add your domain (e.g., `http://localhost:3000/*` for local development)
-     - Add your production domain (e.g., `https://dialadrink-frontend.onrender.com/*`)
+     - Add your production domain (e.g., `https://drink-suite-customer-910510650031.us-central1.run.app/*`)
    - Under "API restrictions":
      - Select "Restrict key"
      - Select only "Places API" and "Maps JavaScript API"
@@ -101,6 +101,13 @@ For a typical e-commerce site:
 - After free tier: Very affordable for small to medium sites
 
 For more details: https://developers.google.com/maps/billing-and-pricing
+
+
+
+
+
+
+
 
 
 

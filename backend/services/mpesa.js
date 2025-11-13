@@ -1,10 +1,20 @@
 const crypto = require('crypto');
 
-// M-Pesa Sandbox credentials
-const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY || 'FHZFIBqOrkVQRROotlEhiit3LWycwhsg2GgIxeS1BaE46Ecf';
-const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET || 'BDosKnRkJOXzY2oIeAMp12g5mQHxjkPCA1k5drdUmrqsd2A9W3APkmgx5ThkLjws';
-const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || '174379'; // Sandbox test shortcode
-const MPESA_PASSKEY = process.env.MPESA_PASSKEY || 'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919'; // Sandbox passkey
+// M-Pesa Production credentials (must be set via environment variables)
+const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
+const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
+const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE;
+const MPESA_PASSKEY = process.env.MPESA_PASSKEY;
+
+// Validate required credentials
+if (!MPESA_CONSUMER_KEY || !MPESA_CONSUMER_SECRET || !MPESA_SHORTCODE || !MPESA_PASSKEY) {
+  console.error('❌ M-Pesa credentials missing! Please set:');
+  console.error('   MPESA_CONSUMER_KEY');
+  console.error('   MPESA_CONSUMER_SECRET');
+  console.error('   MPESA_SHORTCODE');
+  console.error('   MPESA_PASSKEY');
+  throw new Error('M-Pesa credentials are required. Please set environment variables.');
+}
 // Determine callback URL based on environment
 const getCallbackUrl = () => {
   let callbackUrl = process.env.MPESA_CALLBACK_URL;
@@ -15,7 +25,7 @@ const getCallbackUrl = () => {
     if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
       console.warn('⚠️  Localhost callback URL detected. M-Pesa requires a publicly accessible URL.');
       console.warn('⚠️  Please use ngrok or set a public URL. Falling back to production URL.');
-      callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/callback';
+      callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/callback';
     } else {
       console.log(`✅ Using callback URL from environment: ${callbackUrl}`);
       return callbackUrl;
@@ -32,7 +42,7 @@ const getCallbackUrl = () => {
   
   // Priority 3: Check if we're in production
   if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
-    callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/callback';
+    callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/callback';
     console.log(`✅ Using production callback URL: ${callbackUrl}`);
     return callbackUrl;
   }
@@ -45,7 +55,7 @@ const getCallbackUrl = () => {
   console.warn('   2. Run: ngrok http 5001');
   console.warn('   3. Set MPESA_CALLBACK_URL in .env to: https://your-ngrok-url.ngrok.io/api/mpesa/callback');
   console.warn('⚠️  Falling back to production URL (callbacks will go to production server, not local).');
-  callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/callback';
+  callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/callback';
   
   return callbackUrl;
 };
@@ -53,7 +63,7 @@ const getCallbackUrl = () => {
 // Get callback URL function - call at runtime to ensure environment is loaded
 const getMpesaCallbackUrl = () => getCallbackUrl();
 
-const MPESA_ENVIRONMENT = process.env.MPESA_ENVIRONMENT || 'sandbox'; // 'sandbox' or 'production'
+const MPESA_ENVIRONMENT = process.env.MPESA_ENVIRONMENT || 'production'; // Default to production
 
 // M-Pesa API endpoints
 const MPESA_BASE_URL = MPESA_ENVIRONMENT === 'production'
@@ -307,7 +317,7 @@ async function initiateB2C(phoneNumber, amount, remarks = 'Driver withdrawal', o
       if (callbackUrl) {
         if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
           console.warn('⚠️  Localhost B2C callback URL detected. Falling back to production URL.');
-          callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/b2c-callback';
+          callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/b2c-callback';
         } else {
           console.log(`✅ Using B2C callback URL from environment: ${callbackUrl}`);
           return callbackUrl;
@@ -322,13 +332,13 @@ async function initiateB2C(phoneNumber, amount, remarks = 'Driver withdrawal', o
       }
       
       if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
-        callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/b2c-callback';
+        callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/b2c-callback';
         console.log(`✅ Using production B2C callback URL: ${callbackUrl}`);
         return callbackUrl;
       }
       
       console.warn('⚠️  No B2C callback URL configured. Falling back to production URL.');
-      callbackUrl = 'https://dialadrink-backend.onrender.com/api/mpesa/b2c-callback';
+      callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/b2c-callback';
       return callbackUrl;
     };
 

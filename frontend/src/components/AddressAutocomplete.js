@@ -2,7 +2,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { TextField, Autocomplete, CircularProgress } from '@mui/material';
 import { api } from '../services/api';
 
-const AddressAutocomplete = ({ value, onChange, onPlaceSelect, label, ...props }) => {
+const AddressAutocomplete = ({
+  value,
+  onChange,
+  onPlaceSelect,
+  label,
+  InputProps: externalInputProps = {},
+  ...props
+}) => {
   const [inputValue, setInputValue] = useState(value || '');
   const [suggestions, setSuggestions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -237,6 +244,7 @@ const AddressAutocomplete = ({ value, onChange, onPlaceSelect, label, ...props }
           }}
           InputProps={{
             ...params.InputProps,
+            ...externalInputProps,
             endAdornment: (
               <>
                 {loading ? <CircularProgress color="inherit" size={20} /> : null}

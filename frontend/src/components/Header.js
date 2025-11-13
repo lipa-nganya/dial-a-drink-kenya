@@ -43,7 +43,7 @@ const Header = () => {
       <Toolbar sx={{ minHeight: '48px !important' }}>
         <LocalBar sx={{ mr: 1, fontSize: '1.2rem' }} />
         <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem' }}>
-          Dial A Drink Kenya
+          Drink Suite
         </Typography>
       </Toolbar>
       <List>
@@ -123,7 +123,7 @@ const Header = () => {
                   }}
                   onClick={() => navigate('/')}
                 >
-                  {isMobile ? 'Dial A Drink' : 'Dial A Drink Kenya'}
+                  Drink Suite
                 </Typography>
               </Box>
           

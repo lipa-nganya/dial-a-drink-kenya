@@ -44,7 +44,7 @@ Since the `render.yaml` might be causing conflicts, here's how to deploy manuall
 3. **Deploy**
    - Click "Create Web Service"
    - Wait for deployment
-   - Note the URL: `https://dialadrink-backend.onrender.com`
+   - Note the URL: `https://dialadrink-backend-910510650031.us-central1.run.app`
 
 ### 3. Deploy Frontend (Manual)
 
@@ -61,13 +61,13 @@ Since the `render.yaml` might be causing conflicts, here's how to deploy manuall
 
 2. **Environment Variables**
    ```
-   REACT_APP_API_URL=https://dialadrink-backend.onrender.com/api
+   REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api
    ```
 
 3. **Deploy**
    - Click "Create Static Site"
    - Wait for deployment
-   - Note the URL: `https://dialadrink-frontend.onrender.com`
+   - Note the URL: `https://drink-suite-customer-910510650031.us-central1.run.app`
 
 ### 4. Update Backend CORS
 
@@ -77,7 +77,7 @@ After both are deployed:
 2. **Environment Variables**
 3. **Add**:
    ```
-   FRONTEND_URL=https://dialadrink-frontend.onrender.com
+   FRONTEND_URL=https://drink-suite-customer-910510650031.us-central1.run.app
    ```
 4. **Redeploy** the backend
 
@@ -102,24 +102,24 @@ After both are deployed:
 ## 🧪 Test Your Deployment
 
 ### Backend Health Check
-- Visit: `https://dialadrink-backend.onrender.com/api/health`
+- Visit: `https://dialadrink-backend-910510650031.us-central1.run.app/api/health`
 - Should return: `{"status":"OK","message":"Dial A Drink API is running"}`
 
 ### Frontend
-- Visit: `https://dialadrink-frontend.onrender.com`
+- Visit: `https://drink-suite-customer-910510650031.us-central1.run.app`
 - Should show the homepage
 
 ### Admin Dashboard
-- Visit: `https://dialadrink-frontend.onrender.com/admin`
+- Visit: `https://drink-suite-customer-910510650031.us-central1.run.app/admin`
 - Should show the admin dashboard
 
 ## 🎉 Success!
 
 Your Dial A Drink Kenya app should now be live!
 
-- **Frontend**: `https://dialadrink-frontend.onrender.com`
-- **Backend**: `https://dialadrink-backend.onrender.com`
-- **Admin**: `https://dialadrink-frontend.onrender.com/admin`
+- **Frontend**: `https://drink-suite-customer-910510650031.us-central1.run.app`
+- **Backend**: `https://dialadrink-backend-910510650031.us-central1.run.app`
+- **Admin**: `https://drink-suite-customer-910510650031.us-central1.run.app/admin`
 
 ---
 

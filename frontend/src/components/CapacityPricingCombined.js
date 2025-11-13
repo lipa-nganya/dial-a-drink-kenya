@@ -19,6 +19,7 @@ const CAPACITY_OPTIONS = [
   '1 litre',
   '750ml',
   '700ml',
+  '500ml',
   '6pack',
   'twin pack',
   '12 pack',

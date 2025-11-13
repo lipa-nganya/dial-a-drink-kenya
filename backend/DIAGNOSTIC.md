@@ -7,7 +7,7 @@
 - This means **M-Pesa callback is NOT arriving** at your local server
 
 ## Root Cause
-The callback URL configured in M-Pesa STK push is pointing to the **production server** (`https://dialadrink-backend.onrender.com/api/mpesa/callback`) instead of your local ngrok URL.
+The callback URL configured in M-Pesa STK push is pointing to the **production server** (`https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/callback`) instead of your local ngrok URL.
 
 ## Solution
 
@@ -60,6 +60,13 @@ If callbacks still don't arrive, you can manually confirm payment using the admi
 3. Restart backend server
 4. Make a test payment
 5. Check backend logs for callback receipt: `tail -f /tmp/backend.log | grep -i callback`
+
+
+
+
+
+
+
 
 
 

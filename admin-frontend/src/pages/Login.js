@@ -30,7 +30,7 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await api.post('/admin/login', {
+      const response = await api.post('/admin/auth/login', {
         username,
         password
       });

@@ -1,33 +1,46 @@
 import axios from 'axios';
 
-// Determine API URL based on environment
-const getApiUrl = () => {
-  // If environment variable is set, use it
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
+const DEFAULT_LOCAL_API_BASE = 'http://localhost:5001/api';
+const DEFAULT_PRODUCTION_API_BASE = process.env.REACT_APP_PRODUCTION_API_BASE || 'https://dialadrink-backend-910510650031.us-central1.run.app/api';
+
+const resolveApiBaseUrl = () => {
+  const explicitUrl = process.env.REACT_APP_API_URL;
+  if (explicitUrl) {
+    return { url: explicitUrl, source: 'env' };
   }
-  
-  // If we're on Render frontend, use Render backend
-  if (window.location.hostname.includes('onrender.com')) {
-    return 'https://dialadrink-backend.onrender.com/api';
+
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
+  const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
+
+  if (isLocalHost || isLanHost || process.env.NODE_ENV === 'development') {
+    return { url: DEFAULT_LOCAL_API_BASE, source: 'local-default' };
   }
-  
-  // Default to local development
-  return 'http://localhost:5001/api';
+
+  const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
+  if (isManagedHost) {
+    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'managed-host' };
+  }
+
+  return { url: DEFAULT_PRODUCTION_API_BASE, source: 'fallback-production' };
 };
 
-// Use local backend for development, Render backend for production
-const API_BASE_URL = window.location.hostname.includes('onrender.com') 
-  ? 'https://dialadrink-backend.onrender.com/api'
-  : 'http://localhost:5001/api';
+const { url: API_BASE_URL, source: apiSource } = resolveApiBaseUrl();
 
-// Debug logging
-console.log('=== API CONFIGURATION ===');
-console.log('API_BASE_URL:', API_BASE_URL);
-console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-console.log('Current hostname:', window.location.hostname);
-console.log('Version: 3.0 - Dynamic URL based on hostname');
-console.log('========================');
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line no-console
+  console.log('=== API CONFIGURATION ===');
+  // eslint-disable-next-line no-console
+  console.log('API_BASE_URL:', API_BASE_URL);
+  // eslint-disable-next-line no-console
+  console.log('API source:', apiSource);
+  // eslint-disable-next-line no-console
+  console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+  // eslint-disable-next-line no-console
+  console.log('Hostname:', window.location.hostname);
+  // eslint-disable-next-line no-console
+  console.log('========================');
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -36,34 +49,25 @@ const api = axios.create({
   },
 });
 
-// Request interceptor
 api.interceptors.request.use(
   (config) => {
-    // Add admin token if available
     const adminToken = localStorage.getItem('adminToken');
     if (adminToken) {
       config.headers.Authorization = `Bearer ${adminToken}`;
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Response interceptor
 api.interceptors.response.use(
-  (response) => {
-    return response;
-  },
+  (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Handle unauthorized access - clear token if it's an admin route
       if (error.config?.url?.includes('/admin/')) {
         console.error('Unauthorized access - admin token may be invalid');
         localStorage.removeItem('adminToken');
         localStorage.removeItem('adminUser');
-        // Redirect to admin login if on an admin page
         if (window.location.pathname.startsWith('/admin')) {
           window.location.href = '/admin/login';
         }

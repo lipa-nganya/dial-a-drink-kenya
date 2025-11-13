@@ -56,3 +56,4 @@ gcloud run deploy dialadrink-backend \
 
 Once deployed, note the service URL returned by Cloud Run. Update frontend and mobile clients to use the new domain.
 
+

@@ -61,7 +61,7 @@ const AdminHeader = () => {
           sx={{ flexGrow: 1, color: isDarkMode ? colors.accentText : colors.textPrimary, fontWeight: 700, cursor: 'pointer' }}
           onClick={() => navigate('/admin')}
         >
-          Dial A Drink Admin
+          Drink Suite Admin
         </Typography>
         
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

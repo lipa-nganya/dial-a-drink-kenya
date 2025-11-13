@@ -49,6 +49,10 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },
+    limitedTimeOffer: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
     originalPrice: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true

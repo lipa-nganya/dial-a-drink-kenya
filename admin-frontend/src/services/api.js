@@ -1,19 +1,46 @@
 import axios from 'axios';
 
-// Determine API URL based on environment
-const getApiUrl = () => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
+const DEFAULT_LOCAL_API_BASE = 'http://localhost:5001/api';
+const DEFAULT_PRODUCTION_API_BASE = process.env.REACT_APP_PRODUCTION_API_BASE || 'https://dialadrink-backend-910510650031.us-central1.run.app/api';
+
+const resolveApiBaseUrl = () => {
+  const explicitUrl = process.env.REACT_APP_API_URL;
+  if (explicitUrl) {
+    return { url: explicitUrl, source: 'env' };
   }
-  
-  if (window.location.hostname.includes('onrender.com')) {
-    return 'https://dialadrink-backend.onrender.com/api';
+
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
+  const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
+
+  if (isLocalHost || isLanHost || process.env.NODE_ENV === 'development') {
+    return { url: DEFAULT_LOCAL_API_BASE, source: 'local-default' };
   }
-  
-  return 'http://localhost:5001/api';
+
+  const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
+  if (isManagedHost) {
+    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'managed-host' };
+  }
+
+  return { url: DEFAULT_PRODUCTION_API_BASE, source: 'fallback-production' };
 };
 
-const API_BASE_URL = getApiUrl();
+const { url: API_BASE_URL, source: apiSource } = resolveApiBaseUrl();
+
+if (typeof window !== 'undefined') {
+  // eslint-disable-next-line no-console
+  console.log('=== ADMIN API CONFIGURATION ===');
+  // eslint-disable-next-line no-console
+  console.log('API_BASE_URL:', API_BASE_URL);
+  // eslint-disable-next-line no-console
+  console.log('API source:', apiSource);
+  // eslint-disable-next-line no-console
+  console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
+  // eslint-disable-next-line no-console
+  console.log('Hostname:', window.location.hostname);
+  // eslint-disable-next-line no-console
+  console.log('==============================');
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -22,7 +49,6 @@ const api = axios.create({
   }
 });
 
-// Add auth token to requests if available
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('adminToken');
@@ -31,17 +57,13 @@ api.interceptors.request.use(
     }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
-// Handle auth errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Unauthorized - clear token and redirect to login
       localStorage.removeItem('adminToken');
       window.location.href = '/login';
     }

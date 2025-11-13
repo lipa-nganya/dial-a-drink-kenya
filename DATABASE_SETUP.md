@@ -95,8 +95,8 @@ Your application is configured to use:
 ## 🚀 Quick Test:
 
 Once deployed, test your database by:
-1. **Visit your backend URL**: `https://dialadrink-backend.onrender.com/api/health`
-2. **Check categories**: `https://dialadrink-backend.onrender.com/api/categories`
+1. **Visit your backend URL**: `https://dialadrink-backend-910510650031.us-central1.run.app/api/health`
+2. **Check categories**: `https://dialadrink-backend-910510650031.us-central1.run.app/api/categories`
 3. **Should return data** if database is working
 
 ---

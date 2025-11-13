@@ -13,7 +13,7 @@ services:
       - key: PORT
         value: 10000
       - key: FRONTEND_URL
-        value: https://dialadrink-frontend.onrender.com
+        value: https://drink-suite-customer-910510650031.us-central1.run.app
 
   # Frontend
   - type: web
@@ -25,4 +25,4 @@ services:
     startCommand: cd frontend && npm run serve
     envVars:
       - key: REACT_APP_API_URL
-        value: https://dialadrink-backend.onrender.com/api
+        value: https://dialadrink-backend-910510650031.us-central1.run.app/api

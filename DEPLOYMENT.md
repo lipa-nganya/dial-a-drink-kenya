@@ -47,7 +47,7 @@ This guide will help you deploy the Dial A Drink Kenya application to Render.com
 3. **Deploy**
    - Click "Create Web Service"
    - Wait for deployment to complete
-   - Note the **URL** (e.g., `https://dialadrink-backend.onrender.com`)
+   - Note the **URL** (e.g., `https://dialadrink-backend-910510650031.us-central1.run.app`)
 
 ## 🎨 Step 3: Deploy Frontend
 
@@ -63,12 +63,12 @@ This guide will help you deploy the Dial A Drink Kenya application to Render.com
    - **Publish Directory**: `build`
 
 2. **Environment Variables**
-   - **REACT_APP_API_URL**: `https://dialadrink-backend.onrender.com/api`
+   - **REACT_APP_API_URL**: `https://dialadrink-backend-910510650031.us-central1.run.app/api`
 
 3. **Deploy**
    - Click "Create Static Site"
    - Wait for deployment to complete
-   - Note the **URL** (e.g., `https://dialadrink-frontend.onrender.com`)
+   - Note the **URL** (e.g., `https://drink-suite-customer-910510650031.us-central1.run.app`)
 
 ## 🔗 Step 4: Update Backend CORS
 
@@ -77,7 +77,7 @@ After both services are deployed, update the backend CORS settings:
 1. **Go to Backend Service Settings**
 2. **Environment Variables**
 3. **Add/Update**:
-   - **FRONTEND_URL**: `https://dialadrink-frontend.onrender.com`
+   - **FRONTEND_URL**: `https://drink-suite-customer-910510650031.us-central1.run.app`
 
 4. **Update backend/app.js** to use this environment variable:
    ```javascript
@@ -89,15 +89,15 @@ After both services are deployed, update the backend CORS settings:
 ## 🧪 Step 5: Test Deployment
 
 ### Test Backend
-- Visit: `https://dialadrink-backend.onrender.com/api/health`
+- Visit: `https://dialadrink-backend-910510650031.us-central1.run.app/api/health`
 - Should return: `{"status":"OK","message":"Dial A Drink API is running"}`
 
 ### Test Frontend
-- Visit: `https://dialadrink-frontend.onrender.com`
+- Visit: `https://drink-suite-customer-910510650031.us-central1.run.app`
 - Should show the Dial A Drink Kenya homepage
 
 ### Test Admin Dashboard
-- Visit: `https://dialadrink-frontend.onrender.com/admin`
+- Visit: `https://drink-suite-customer-910510650031.us-central1.run.app/admin`
 - Should show the admin dashboard
 
 ## 🔧 Environment Variables Summary
@@ -106,12 +106,12 @@ After both services are deployed, update the backend CORS settings:
 ```
 NODE_ENV=production
 DATABASE_URL=[PostgreSQL External Database URL]
-FRONTEND_URL=https://dialadrink-frontend.onrender.com
+FRONTEND_URL=https://drink-suite-customer-910510650031.us-central1.run.app
 ```
 
 ### Frontend Environment Variables
 ```
-REACT_APP_API_URL=https://dialadrink-backend.onrender.com/api
+REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api
 ```
 
 ## 📊 Database Setup
@@ -169,9 +169,9 @@ Test the mobile responsiveness:
 
 Your Dial A Drink Kenya application is now live on Render!
 
-- **Frontend**: `https://dialadrink-frontend.onrender.com`
-- **Backend API**: `https://dialadrink-backend.onrender.com`
-- **Admin Dashboard**: `https://dialadrink-frontend.onrender.com/admin`
+- **Frontend**: `https://drink-suite-customer-910510650031.us-central1.run.app`
+- **Backend API**: `https://dialadrink-backend-910510650031.us-central1.run.app`
+- **Admin Dashboard**: `https://drink-suite-customer-910510650031.us-central1.run.app/admin`
 
 ## 📞 Support
 

@@ -1,4 +1,4 @@
-[dotenv@17.2.3] injecting env (11) from .env -- tip: 🗂️ backup and recover secrets: https://dotenvx.com/ops
+[dotenv@17.2.3] injecting env (11) from .env -- tip: ⚙️  suppress all logs with { quiet: true }
 Starting server initialization...
 Executing (default): SELECT 1+1 AS result
 Database connection established successfully.
@@ -42,9 +42,6 @@ Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY 
 Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_paymentMethod' GROUP BY 1
 Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_status' GROUP BY 1
 Executing (default): SELECT t.typname enum_name, array_agg(e.enumlabel ORDER BY enumsortorder) enum_value FROM pg_type t JOIN pg_enum e ON t.oid = e.enumtypid JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace WHERE n.nspname = 'public' AND t.typname='enum_transactions_paymentStatus' GROUP BY 1
-Executing (default): ALTER TYPE "public"."enum_transactions_transactionType" ADD VALUE IF NOT EXISTS 'delivery_pay' AFTER 'withdrawal'
-Executing (default): ALTER TYPE "public"."enum_transactions_paymentMethod" ADD VALUE IF NOT EXISTS 'system' AFTER 'cash'
-Executing (default): WITH ranges AS (  SELECT pg_range.rngtypid, pg_type.typname AS rngtypname,         pg_type.typarray AS rngtyparray, pg_range.rngsubtype    FROM pg_range LEFT OUTER JOIN pg_type ON pg_type.oid = pg_range.rngtypid)SELECT pg_type.typname, pg_type.typtype, pg_type.oid, pg_type.typarray,       ranges.rngtypname, ranges.rngtypid, ranges.rngtyparray  FROM pg_type LEFT OUTER JOIN ranges ON pg_type.oid = ranges.rngsubtype WHERE (pg_type.typtype IN('b', 'e'));
 Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'transactions' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
 Executing (default): SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'order_notifications'
 Executing (default): SELECT i.relname AS name, ix.indisprimary AS primary, ix.indisunique AS unique, ix.indkey AS indkey, array_agg(a.attnum) as column_indexes, array_agg(a.attname) AS column_names, pg_get_indexdef(ix.indexrelid) AS definition FROM pg_class t, pg_class i, pg_index ix, pg_attribute a WHERE t.oid = ix.indrelid AND i.oid = ix.indexrelid AND a.attrelid = t.oid AND t.relkind = 'r' and t.relname = 'order_notifications' GROUP BY i.relname, ix.indexrelid, ix.indisprimary, ix.indisunique, ix.indkey ORDER BY i.relname;
@@ -63,6 +60,9 @@ Checking for missing columns...
 Executing (default): ALTER TABLE "drinks" 
       ADD COLUMN IF NOT EXISTS "isOnOffer" BOOLEAN DEFAULT false;
 ✅ isOnOffer column checked/added
+Executing (default): ALTER TABLE "drinks" 
+      ADD COLUMN IF NOT EXISTS "limitedTimeOffer" BOOLEAN DEFAULT false;
+✅ limitedTimeOffer column checked/added
 Executing (default): ALTER TABLE "drinks" 
       ADD COLUMN IF NOT EXISTS "originalPrice" DECIMAL(10,2);
 ✅ originalPrice column checked/added
@@ -114,10 +114,21 @@ Executing (default): SELECT column_name
       FROM information_schema.columns 
       WHERE table_name='drivers' AND column_name='pinHash';
 ✅ pinHash column already exists in drivers table
+Executing (default): SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name='drivers' AND column_name='pushToken';
+✅ pushToken column already exists in drivers table
 Executing (default): SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name='orders' AND column_name='driverAccepted';
 ✅ driverAccepted column already exists in orders table
+Executing (default): ALTER TABLE "orders"
+      ADD COLUMN IF NOT EXISTS "driverPayCredited" BOOLEAN DEFAULT false;
+Executing (default): ALTER TABLE "orders"
+      ADD COLUMN IF NOT EXISTS "driverPayCreditedAt" TIMESTAMP WITH TIME ZONE;
+Executing (default): ALTER TABLE "orders"
+      ADD COLUMN IF NOT EXISTS "driverPayAmount" DECIMAL(10,2) DEFAULT 0;
+✅ Driver pay tracking columns checked/added to orders table
 Executing (default): SELECT column_name 
       FROM information_schema.columns 
       WHERE table_name='orders' AND column_name='paymentMethod';
@@ -186,10 +197,30 @@ Executing (default): DO $$ BEGIN
         WHEN duplicate_object THEN null;
       END $$;
 Executing (default): DO $$ BEGIN
-        CREATE TYPE transaction_payment_method_enum AS ENUM ('card', 'mobile_money', 'cash');
+        CREATE TYPE transaction_payment_method_enum AS ENUM ('card', 'mobile_money', 'cash', 'system');
       EXCEPTION
         WHEN duplicate_object THEN null;
       END $$;
+Executing (default): ALTER TYPE transaction_payment_method_enum ADD VALUE IF NOT EXISTS 'system'
+✅ Added system to transaction_payment_method_enum
+Executing (default): UPDATE transactions
+      SET "transactionDate" = "createdAt"
+      WHERE "transactionType" = 'payment' AND "transactionDate" IS NULL;
+✅ Backfilled missing payment transaction dates
+Executing (default): UPDATE transactions AS tip
+      SET "transactionDate" = pay."transactionDate"
+      FROM transactions AS pay
+      WHERE tip."transactionType" = 'tip'
+        AND pay."transactionType" = 'payment'
+        AND pay."status" = 'completed'
+        AND tip."orderId" = pay."orderId"
+        AND pay."transactionDate" IS NOT NULL
+        AND tip."transactionDate" IS DISTINCT FROM pay."transactionDate";
+✅ Synchronized tip transaction dates with payment transactions
+Executing (default): UPDATE transactions
+      SET "transactionDate" = "createdAt"
+      WHERE "transactionType" = 'tip' AND "transactionDate" IS NULL;
+✅ Backfilled missing tip transaction dates
 Executing (default): SELECT data_type 
         FROM information_schema.columns 
         WHERE table_name='transactions' AND column_name='transactionType';
@@ -263,6 +294,11 @@ Executing (default): CREATE TABLE IF NOT EXISTS "driver_wallets" (
         "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL
       );
 ✅ driver_wallets table checked/created
+Executing (default): ALTER TABLE "driver_wallets"
+      ADD COLUMN IF NOT EXISTS "totalDeliveryPay" DECIMAL(10,2) DEFAULT 0;
+Executing (default): ALTER TABLE "driver_wallets"
+      ADD COLUMN IF NOT EXISTS "totalDeliveryPayCount" INTEGER DEFAULT 0;
+✅ Delivery pay tracking columns checked/added to driver_wallets table
 Executing (default): CREATE TABLE IF NOT EXISTS "saved_addresses" (
         "id" SERIAL PRIMARY KEY,
         "address" TEXT NOT NULL UNIQUE,
@@ -300,16 +336,178 @@ Executing (default): SELECT "id", "username", "password", "email", "role", "invi
 Database columns updated successfully.
 Executing (default): SELECT count(*) AS "count" FROM "categories" AS "Category";
 Database setup completed.
-Client connected: 5SIo9Paxi8TRMGAZAAAC
-Client connected: TqY-HXVlrhc5HYRWAAAD
-Client connected: hLAL1EGAhMftCkRYAAAF
-Client connected: q3IlMf76ERRr_7R3AAAH
-Client connected: g4opPCW9QWAH6EdrAAAJ
+Client connected: P4rAHz39tjp-deTLAAAB
+Client connected: D0kzlUglPerxcKnCAAAD
+Client connected: kSkYoeTsxMSwceMoAAAF
 Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
 Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
-Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
-Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-05 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
 Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
 Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
-Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-05 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Client disconnected: kSkYoeTsxMSwceMoAAAF
+Client connected: woDF114y7ugfmfnQAAAI
+Client woDF114y7ugfmfnQAAAI joined admin room
+Executing (default): SELECT "id", "name", "phoneNumber", "pushToken", "status", "lastActivity", "pinHash", "createdAt", "updatedAt" FROM "drivers" AS "Driver" ORDER BY "Driver"."lastActivity" DESC, "Driver"."createdAt" DESC;
+Executing (default): SELECT "Order"."id", "Order"."customerName", "Order"."customerPhone", "Order"."customerEmail", "Order"."deliveryAddress", "Order"."totalAmount", "Order"."tipAmount", "Order"."status", "Order"."paymentStatus", "Order"."notes", "Order"."paymentType", "Order"."paymentMethod", "Order"."driverId", "Order"."driverAccepted", "Order"."driverPayCredited", "Order"."driverPayCreditedAt", "Order"."driverPayAmount", "Order"."createdAt", "Order"."updatedAt", "items"."id" AS "items.id", "items"."orderId" AS "items.orderId", "items"."drinkId" AS "items.drinkId", "items"."quantity" AS "items.quantity", "items"."price" AS "items.price", "items"."createdAt" AS "items.createdAt", "items"."updatedAt" AS "items.updatedAt", "items->drink"."id" AS "items.drink.id", "items->drink"."name" AS "items.drink.name", "items->drink"."description" AS "items.drink.description", "items->drink"."price" AS "items.drink.price", "items->drink"."image" AS "items.drink.image", "items->drink"."categoryId" AS "items.drink.categoryId", "items->drink"."subCategoryId" AS "items.drink.subCategoryId", "items->drink"."isAvailable" AS "items.drink.isAvailable", "items->drink"."isPopular" AS "items.drink.isPopular", "items->drink"."isOnOffer" AS "items.drink.isOnOffer", "items->drink"."limitedTimeOffer" AS "items.drink.limitedTimeOffer", "items->drink"."originalPrice" AS "items.drink.originalPrice", "items->drink"."capacity" AS "items.drink.capacity", "items->drink"."capacityPricing" AS "items.drink.capacityPricing", "items->drink"."abv" AS "items.drink.abv", "items->drink"."createdAt" AS "items.drink.createdAt", "items->drink"."updatedAt" AS "items.drink.updatedAt", "transactions"."id" AS "transactions.id", "transactions"."orderId" AS "transactions.orderId", "transactions"."driverId" AS "transactions.driverId", "transactions"."driverWalletId" AS "transactions.driverWalletId", "transactions"."transactionType" AS "transactions.transactionType", "transactions"."paymentMethod" AS "transactions.paymentMethod", "transactions"."paymentProvider" AS "transactions.paymentProvider", "transactions"."amount" AS "transactions.amount", "transactions"."status" AS "transactions.status", "transactions"."paymentStatus" AS "transactions.paymentStatus", "transactions"."receiptNumber" AS "transactions.receiptNumber", "transactions"."checkoutRequestID" AS "transactions.checkoutRequestID", "transactions"."merchantRequestID" AS "transactions.merchantRequestID", "transactions"."phoneNumber" AS "transactions.phoneNumber", "transactions"."transactionDate" AS "transactions.transactionDate", "transactions"."notes" AS "transactions.notes", "transactions"."createdAt" AS "transactions.createdAt", "transactions"."updatedAt" AS "transactions.updatedAt", "driver"."id" AS "driver.id", "driver"."name" AS "driver.name", "driver"."phoneNumber" AS "driver.phoneNumber", "driver"."status" AS "driver.status" FROM "orders" AS "Order" LEFT OUTER JOIN "order_items" AS "items" ON "Order"."id" = "items"."orderId" LEFT OUTER JOIN "drinks" AS "items->drink" ON "items"."drinkId" = "items->drink"."id" LEFT OUTER JOIN "transactions" AS "transactions" ON "Order"."id" = "transactions"."orderId" LEFT OUTER JOIN "drivers" AS "driver" ON "Order"."driverId" = "driver"."id" ORDER BY "Order"."createdAt" DESC;
+Executing (default): SELECT "id", "name", "phoneNumber", "pushToken", "status", "lastActivity", "pinHash", "createdAt", "updatedAt" FROM "drivers" AS "Driver" ORDER BY "Driver"."lastActivity" DESC, "Driver"."createdAt" DESC;
+Executing (default): SELECT "Order"."id", "Order"."customerName", "Order"."customerPhone", "Order"."customerEmail", "Order"."deliveryAddress", "Order"."totalAmount", "Order"."tipAmount", "Order"."status", "Order"."paymentStatus", "Order"."notes", "Order"."paymentType", "Order"."paymentMethod", "Order"."driverId", "Order"."driverAccepted", "Order"."driverPayCredited", "Order"."driverPayCreditedAt", "Order"."driverPayAmount", "Order"."createdAt", "Order"."updatedAt", "items"."id" AS "items.id", "items"."orderId" AS "items.orderId", "items"."drinkId" AS "items.drinkId", "items"."quantity" AS "items.quantity", "items"."price" AS "items.price", "items"."createdAt" AS "items.createdAt", "items"."updatedAt" AS "items.updatedAt", "items->drink"."id" AS "items.drink.id", "items->drink"."name" AS "items.drink.name", "items->drink"."description" AS "items.drink.description", "items->drink"."price" AS "items.drink.price", "items->drink"."image" AS "items.drink.image", "items->drink"."categoryId" AS "items.drink.categoryId", "items->drink"."subCategoryId" AS "items.drink.subCategoryId", "items->drink"."isAvailable" AS "items.drink.isAvailable", "items->drink"."isPopular" AS "items.drink.isPopular", "items->drink"."isOnOffer" AS "items.drink.isOnOffer", "items->drink"."limitedTimeOffer" AS "items.drink.limitedTimeOffer", "items->drink"."originalPrice" AS "items.drink.originalPrice", "items->drink"."capacity" AS "items.drink.capacity", "items->drink"."capacityPricing" AS "items.drink.capacityPricing", "items->drink"."abv" AS "items.drink.abv", "items->drink"."createdAt" AS "items.drink.createdAt", "items->drink"."updatedAt" AS "items.drink.updatedAt", "transactions"."id" AS "transactions.id", "transactions"."orderId" AS "transactions.orderId", "transactions"."driverId" AS "transactions.driverId", "transactions"."driverWalletId" AS "transactions.driverWalletId", "transactions"."transactionType" AS "transactions.transactionType", "transactions"."paymentMethod" AS "transactions.paymentMethod", "transactions"."paymentProvider" AS "transactions.paymentProvider", "transactions"."amount" AS "transactions.amount", "transactions"."status" AS "transactions.status", "transactions"."paymentStatus" AS "transactions.paymentStatus", "transactions"."receiptNumber" AS "transactions.receiptNumber", "transactions"."checkoutRequestID" AS "transactions.checkoutRequestID", "transactions"."merchantRequestID" AS "transactions.merchantRequestID", "transactions"."phoneNumber" AS "transactions.phoneNumber", "transactions"."transactionDate" AS "transactions.transactionDate", "transactions"."notes" AS "transactions.notes", "transactions"."createdAt" AS "transactions.createdAt", "transactions"."updatedAt" AS "transactions.updatedAt", "driver"."id" AS "driver.id", "driver"."name" AS "driver.name", "driver"."phoneNumber" AS "driver.phoneNumber", "driver"."status" AS "driver.status" FROM "orders" AS "Order" LEFT OUTER JOIN "order_items" AS "items" ON "Order"."id" = "items"."orderId" LEFT OUTER JOIN "drinks" AS "items->drink" ON "items"."drinkId" = "items->drink"."id" LEFT OUTER JOIN "transactions" AS "transactions" ON "Order"."id" = "transactions"."orderId" LEFT OUTER JOIN "drivers" AS "driver" ON "Order"."driverId" = "driver"."id" ORDER BY "Order"."createdAt" DESC;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT "id", "start_date" AS "startDate", "end_date" AS "endDate", "is_active" AS "isActive", "title", "createdAt", "updatedAt" FROM "countdowns" AS "Countdown" WHERE "Countdown"."is_active" = true;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Client disconnected: D0kzlUglPerxcKnCAAAD
+Client connected: ca3JV4d7e58YgbiYAAAL
+Client ca3JV4d7e58YgbiYAAAL joined admin room
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT "id", "start_date" AS "startDate", "end_date" AS "endDate", "is_active" AS "isActive", "title", "createdAt", "updatedAt" FROM "countdowns" AS "Countdown" WHERE "Countdown"."is_active" = true;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Client disconnected: ca3JV4d7e58YgbiYAAAL
+Client connected: JsbG9iecuIDawsmmAAAO
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Client JsbG9iecuIDawsmmAAAO joined admin room
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Client disconnected: P4rAHz39tjp-deTLAAAB
+Client disconnected: woDF114y7ugfmfnQAAAI
+Executing (default): SELECT "id", "start_date" AS "startDate", "end_date" AS "endDate", "is_active" AS "isActive", "title", "createdAt", "updatedAt" FROM "countdowns" AS "Countdown" WHERE "Countdown"."is_active" = true;
+Executing (default): SELECT "Order"."id", "Order"."customerName", "Order"."customerPhone", "Order"."customerEmail", "Order"."deliveryAddress", "Order"."totalAmount", "Order"."tipAmount", "Order"."status", "Order"."paymentStatus", "Order"."notes", "Order"."paymentType", "Order"."paymentMethod", "Order"."driverId", "Order"."driverAccepted", "Order"."driverPayCredited", "Order"."driverPayCreditedAt", "Order"."driverPayAmount", "Order"."createdAt", "Order"."updatedAt", "items"."id" AS "items.id", "items"."orderId" AS "items.orderId", "items"."drinkId" AS "items.drinkId", "items"."quantity" AS "items.quantity", "items"."price" AS "items.price", "items"."createdAt" AS "items.createdAt", "items"."updatedAt" AS "items.updatedAt", "items->drink"."id" AS "items.drink.id", "items->drink"."name" AS "items.drink.name", "items->drink"."description" AS "items.drink.description", "items->drink"."price" AS "items.drink.price", "items->drink"."image" AS "items.drink.image", "items->drink"."categoryId" AS "items.drink.categoryId", "items->drink"."subCategoryId" AS "items.drink.subCategoryId", "items->drink"."isAvailable" AS "items.drink.isAvailable", "items->drink"."isPopular" AS "items.drink.isPopular", "items->drink"."isOnOffer" AS "items.drink.isOnOffer", "items->drink"."limitedTimeOffer" AS "items.drink.limitedTimeOffer", "items->drink"."originalPrice" AS "items.drink.originalPrice", "items->drink"."capacity" AS "items.drink.capacity", "items->drink"."capacityPricing" AS "items.drink.capacityPricing", "items->drink"."abv" AS "items.drink.abv", "items->drink"."createdAt" AS "items.drink.createdAt", "items->drink"."updatedAt" AS "items.drink.updatedAt", "transactions"."id" AS "transactions.id", "transactions"."orderId" AS "transactions.orderId", "transactions"."driverId" AS "transactions.driverId", "transactions"."driverWalletId" AS "transactions.driverWalletId", "transactions"."transactionType" AS "transactions.transactionType", "transactions"."paymentMethod" AS "transactions.paymentMethod", "transactions"."paymentProvider" AS "transactions.paymentProvider", "transactions"."amount" AS "transactions.amount", "transactions"."status" AS "transactions.status", "transactions"."paymentStatus" AS "transactions.paymentStatus", "transactions"."receiptNumber" AS "transactions.receiptNumber", "transactions"."checkoutRequestID" AS "transactions.checkoutRequestID", "transactions"."merchantRequestID" AS "transactions.merchantRequestID", "transactions"."phoneNumber" AS "transactions.phoneNumber", "transactions"."transactionDate" AS "transactions.transactionDate", "transactions"."notes" AS "transactions.notes", "transactions"."createdAt" AS "transactions.createdAt", "transactions"."updatedAt" AS "transactions.updatedAt", "driver"."id" AS "driver.id", "driver"."name" AS "driver.name", "driver"."phoneNumber" AS "driver.phoneNumber", "driver"."status" AS "driver.status" FROM "orders" AS "Order" LEFT OUTER JOIN "order_items" AS "items" ON "Order"."id" = "items"."orderId" LEFT OUTER JOIN "drinks" AS "items->drink" ON "items"."drinkId" = "items->drink"."id" LEFT OUTER JOIN "transactions" AS "transactions" ON "Order"."id" = "transactions"."orderId" LEFT OUTER JOIN "drivers" AS "driver" ON "Order"."driverId" = "driver"."id" ORDER BY "Order"."createdAt" DESC;
+Client connected: NKVT-ZYyLjrwMgZPAAAS
+Client connected: dc3Ha1f0Y41R6eveAAAT
+Client NKVT-ZYyLjrwMgZPAAAS joined admin room
+Client dc3Ha1f0Y41R6eveAAAT joined admin room
+Executing (default): SELECT "id", "name", "phoneNumber", "pushToken", "status", "lastActivity", "pinHash", "createdAt", "updatedAt" FROM "drivers" AS "Driver" ORDER BY "Driver"."lastActivity" DESC, "Driver"."createdAt" DESC;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT "id", "name", "phoneNumber", "pushToken", "status", "lastActivity", "pinHash", "createdAt", "updatedAt" FROM "drivers" AS "Driver" ORDER BY "Driver"."lastActivity" DESC, "Driver"."createdAt" DESC;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT "Order"."id", "Order"."customerName", "Order"."customerPhone", "Order"."customerEmail", "Order"."deliveryAddress", "Order"."totalAmount", "Order"."tipAmount", "Order"."status", "Order"."paymentStatus", "Order"."notes", "Order"."paymentType", "Order"."paymentMethod", "Order"."driverId", "Order"."driverAccepted", "Order"."driverPayCredited", "Order"."driverPayCreditedAt", "Order"."driverPayAmount", "Order"."createdAt", "Order"."updatedAt", "items"."id" AS "items.id", "items"."orderId" AS "items.orderId", "items"."drinkId" AS "items.drinkId", "items"."quantity" AS "items.quantity", "items"."price" AS "items.price", "items"."createdAt" AS "items.createdAt", "items"."updatedAt" AS "items.updatedAt", "items->drink"."id" AS "items.drink.id", "items->drink"."name" AS "items.drink.name", "items->drink"."description" AS "items.drink.description", "items->drink"."price" AS "items.drink.price", "items->drink"."image" AS "items.drink.image", "items->drink"."categoryId" AS "items.drink.categoryId", "items->drink"."subCategoryId" AS "items.drink.subCategoryId", "items->drink"."isAvailable" AS "items.drink.isAvailable", "items->drink"."isPopular" AS "items.drink.isPopular", "items->drink"."isOnOffer" AS "items.drink.isOnOffer", "items->drink"."limitedTimeOffer" AS "items.drink.limitedTimeOffer", "items->drink"."originalPrice" AS "items.drink.originalPrice", "items->drink"."capacity" AS "items.drink.capacity", "items->drink"."capacityPricing" AS "items.drink.capacityPricing", "items->drink"."abv" AS "items.drink.abv", "items->drink"."createdAt" AS "items.drink.createdAt", "items->drink"."updatedAt" AS "items.drink.updatedAt", "transactions"."id" AS "transactions.id", "transactions"."orderId" AS "transactions.orderId", "transactions"."driverId" AS "transactions.driverId", "transactions"."driverWalletId" AS "transactions.driverWalletId", "transactions"."transactionType" AS "transactions.transactionType", "transactions"."paymentMethod" AS "transactions.paymentMethod", "transactions"."paymentProvider" AS "transactions.paymentProvider", "transactions"."amount" AS "transactions.amount", "transactions"."status" AS "transactions.status", "transactions"."paymentStatus" AS "transactions.paymentStatus", "transactions"."receiptNumber" AS "transactions.receiptNumber", "transactions"."checkoutRequestID" AS "transactions.checkoutRequestID", "transactions"."merchantRequestID" AS "transactions.merchantRequestID", "transactions"."phoneNumber" AS "transactions.phoneNumber", "transactions"."transactionDate" AS "transactions.transactionDate", "transactions"."notes" AS "transactions.notes", "transactions"."createdAt" AS "transactions.createdAt", "transactions"."updatedAt" AS "transactions.updatedAt", "driver"."id" AS "driver.id", "driver"."name" AS "driver.name", "driver"."phoneNumber" AS "driver.phoneNumber", "driver"."status" AS "driver.status" FROM "orders" AS "Order" LEFT OUTER JOIN "order_items" AS "items" ON "Order"."id" = "items"."orderId" LEFT OUTER JOIN "drinks" AS "items->drink" ON "items"."drinkId" = "items->drink"."id" LEFT OUTER JOIN "transactions" AS "transactions" ON "Order"."id" = "transactions"."orderId" LEFT OUTER JOIN "drivers" AS "driver" ON "Order"."driverId" = "driver"."id" ORDER BY "Order"."createdAt" DESC;
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";
+Client disconnected: JsbG9iecuIDawsmmAAAO
+Executing (default): SELECT "id", "start_date" AS "startDate", "end_date" AS "endDate", "is_active" AS "isActive", "title", "createdAt", "updatedAt" FROM "countdowns" AS "Countdown" WHERE "Countdown"."is_active" = true;
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order";
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."status" IN ('pending', 'confirmed');
+Executing (default): SELECT count(*) AS "count" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."createdAt" >= '2025-11-09 21:00:00.000 +00:00' AND "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT "totalAmount", "tipAmount" FROM "orders" AS "Order" WHERE "Order"."paymentStatus" = 'paid';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed';
+Executing (default): SELECT count(*) AS "count" FROM "transactions" AS "Transaction" WHERE "Transaction"."transactionType" = 'tip' AND "Transaction"."status" = 'completed' AND "Transaction"."createdAt" >= '2025-11-09 21:00:00.000 +00:00';
 Executing (default): SELECT count(*) AS "count" FROM "drinks" AS "Drink";

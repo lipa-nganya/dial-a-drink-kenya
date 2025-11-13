@@ -23,6 +23,7 @@ import { useCart } from '../contexts/CartContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import { sanitizeCustomerNotes } from '../utils/sanitizeNotes';
 
 const Cart = () => {
   const { items, updateQuantity, removeFromCart, getTotalPrice, clearCart } = useCart();
@@ -50,6 +51,27 @@ const Cart = () => {
   });
   const navigate = useNavigate();
 
+  const formatPhoneForDisplay = (phone) => {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+
+    if (!digits) return '';
+
+    if (digits.startsWith('254') && digits.length === 12) {
+      return `0${digits.slice(3)}`;
+    }
+
+    if (digits.startsWith('0') && digits.length === 10) {
+      return digits;
+    }
+
+    if (digits.length === 9 && digits.startsWith('7')) {
+      return `0${digits}`;
+    }
+
+    return digits;
+  };
+
   // Fetch delivery settings
   useEffect(() => {
     const fetchDeliverySettings = async () => {
@@ -76,59 +98,18 @@ const Cart = () => {
     const loadSavedDeliveryInfo = () => {
       try {
         // Helper function to clean notes from technical details
-        const cleanNotes = (notes) => {
-          if (!notes) return '';
-          
-          let cleaned = notes;
-          
-          // Remove technical details from notes
-          const technicalPatterns = [
-            /Delivery Fee:?\s*KES?\s*\d+\.?\d*/gi,
-            /checkoutRequestID:?\s*[\w-]+/gi,
-            /merchantRequestID:?\s*[\w-]+/gi,
-            /M-Pesa Receipt:?\s*[\w-]+/gi,
-            /M-Pesa|STK|Payment confirmed|Transaction|Receipt/gi,
-            /Payment confirmed at:?\s*[\d\-\s:]+/gi
-          ];
-          
-          technicalPatterns.forEach(pattern => {
-            cleaned = cleaned.replace(pattern, '').trim();
-          });
-          
-          // Split by newlines and filter out technical lines
-          const noteLines = cleaned.split('\n').filter(line => {
-            const trimmed = line.trim();
-            if (!trimmed || 
-                trimmed.match(/^Delivery Fee/i) ||
-                trimmed.match(/^Payment/i) ||
-                trimmed.match(/^M-Pesa/i) ||
-                trimmed.match(/^Receipt/i) ||
-                trimmed.match(/^Transaction/i) ||
-                trimmed.match(/^STK/i) ||
-                trimmed.match(/checkoutRequestID/i) ||
-                trimmed.match(/merchantRequestID/i) ||
-                trimmed.match(/^\d{4}-\d{2}-\d{2}/) // ISO date format
-            ) {
-              return false;
-            }
-            return true;
-          });
-          
-          return noteLines.join('\n').trim();
-        };
-        
         // First, try to get from customerDeliveryInfo
         const savedDeliveryInfo = localStorage.getItem('customerDeliveryInfo');
         if (savedDeliveryInfo) {
           const parsed = JSON.parse(savedDeliveryInfo);
           setCustomerInfo({
             name: parsed.name || '',
-            phone: parsed.phone || '',
+            phone: formatPhoneForDisplay(parsed.phone) || '',
             email: parsed.email || '',
             address: parsed.address || '',
             apartmentHouseNumber: parsed.apartmentHouseNumber || '',
             floorNumber: parsed.floorNumber || '',
-            notes: cleanNotes(parsed.notes) // Clean notes from technical details
+            notes: sanitizeCustomerNotes(parsed.notes) // Clean notes from technical details
           });
           return;
         }
@@ -139,7 +120,7 @@ const Cart = () => {
           const orderData = JSON.parse(savedOrder);
           setCustomerInfo(prev => ({
             ...prev,
-            phone: orderData.phone || prev.phone,
+            phone: formatPhoneForDisplay(orderData.phone) || prev.phone,
             email: orderData.email || prev.email,
             name: orderData.customerName || prev.name
           }));
@@ -266,6 +247,21 @@ const Cart = () => {
     setError('');
 
     try {
+      console.log('🛒 Submitting order with items:', items);
+      console.log('🛒 Order payload preview:', {
+        customerName: customerInfo.name,
+        customerPhone: customerInfo.phone,
+        customerEmail: customerInfo.email,
+        deliveryAddress: customerInfo.address,
+        apartmentHouseNumber: customerInfo.apartmentHouseNumber,
+        floorNumber: customerInfo.floorNumber,
+        paymentType,
+        paymentMethod,
+        mobileMoneyProvider,
+        mpesaPhoneNumber,
+        tipAmount
+      });
+
       // Build complete address
       let completeAddress = customerInfo.address.trim();
       if (customerInfo.apartmentHouseNumber) {

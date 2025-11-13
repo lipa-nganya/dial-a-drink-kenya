@@ -4,6 +4,7 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const pushNotifications = require('../services/pushNotifications');
 
 /**
@@ -514,6 +515,13 @@ router.patch('/:orderId/status', async (req, res) => {
         } catch (tipError) {
           console.error('❌ Error crediting tip to driver wallet:', tipError);
           // Don't fail the order status update if tip transaction fails
+        }
+      }
+      if (order.paymentStatus === 'paid') {
+        try {
+          await ensureDeliveryFeeSplit(order, { context: 'driver-status-update' });
+        } catch (syncError) {
+          console.error('❌ Error syncing delivery fee transactions (driver status update):', syncError);
         }
       }
     } else if (finalStatus === 'out_for_delivery') {
@@ -1254,6 +1262,12 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       } catch (driverPayError) {
         console.error('❌ Error crediting delivery pay during manual confirmation:', driverPayError);
       }
+    }
+
+    try {
+      await ensureDeliveryFeeSplit(order, { context: 'driver-cash-confirmation' });
+    } catch (syncError) {
+      console.error('❌ Error syncing delivery fee transactions (driver cash confirmation):', syncError);
     }
 
     await order.reload({
