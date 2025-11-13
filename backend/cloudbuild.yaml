@@ -41,8 +41,12 @@ steps:
       - '512Mi'
       - '--timeout'
       - '300'
-      - '--set-env-vars'
+      - '--add-cloudsql-instances'
+      - 'drink-suite:us-central1:drink-suite-db'
+      - '--update-env-vars'
       - 'NODE_ENV=production,PORT=8080'
+      # Note: DATABASE_URL and other sensitive env vars should be set manually
+      # or via Secret Manager to preserve them across deployments
 
 images:
   - 'gcr.io/$PROJECT_ID/dialadrink-backend:$SHORT_SHA'
@@ -53,4 +57,5 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'
+
 
