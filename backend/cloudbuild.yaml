@@ -44,7 +44,7 @@ steps:
       - '--add-cloudsql-instances'
       - 'drink-suite:us-central1:drink-suite-db'
       - '--update-env-vars'
-      - 'NODE_ENV=production,PORT=8080'
+      - 'NODE_ENV=production'
       # Note: DATABASE_URL and other sensitive env vars should be set manually
       # or via Secret Manager to preserve them across deployments
 
