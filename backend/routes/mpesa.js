@@ -193,54 +193,54 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
           });
 
           await driverDeliveryTransaction.update({
-          driverWalletId: driverWallet.id,
-          status: 'completed',
-          paymentStatus: 'paid',
-          notes: `Driver delivery fee payment for Order #${effectiveOrderId} (${context}) - credited to driver wallet`
-        });
-        
-        // Reload wallet to get updated balance
-        await driverWallet.reload();
-        
-        console.log(`✅ Delivery pay credited for Order #${effectiveOrderId}:`);
-        console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
-        console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(driverWallet.balance).toFixed(2)}`);
-        console.log(`   Total delivery pay: ${oldTotalDeliveryPay.toFixed(2)} → ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
-        console.log(`   Delivery pay count: ${oldCount} → ${driverWallet.totalDeliveryPayCount}`);
-
-        await orderInstance.update({
-          driverPayCredited: true,
-          driverPayCreditedAt: resolvedTransactionDate,
-          driverPayAmount: driverPayAmount
-        });
-
-        const driver = await db.Driver.findByPk(orderInstance.driverId).catch(() => null);
-        
-        // Emit socket event to notify driver about delivery pay
-        const io = req?.app?.get('io');
-        if (io) {
-          io.to(`driver-${orderInstance.driverId}`).emit('delivery-pay-received', {
-            orderId: effectiveOrderId,
-            amount: driverPayAmount,
-            customerName: orderInstance.customerName,
-            walletBalance: parseFloat(driverWallet.balance)
+            driverWalletId: driverWallet.id,
+            status: 'completed',
+            paymentStatus: 'paid',
+            notes: `Driver delivery fee payment for Order #${effectiveOrderId} (${context}) - credited to driver wallet`
           });
-          console.log(`📬 Delivery pay notification sent to driver #${orderInstance.driverId} for Order #${effectiveOrderId}`);
-        }
-        
-        if (driver?.pushToken) {
-          pushNotifications.sendPushNotification(driver.pushToken, {
-            title: 'Delivery Fee Payment',
-            body: `KES ${driverPayAmount.toFixed(2)} for Order #${effectiveOrderId} has been added to your wallet.`,
-            data: {
-              type: 'delivery_pay',
+          
+          // Reload wallet to get updated balance
+          await driverWallet.reload();
+          
+          console.log(`✅ Delivery pay credited for Order #${effectiveOrderId}:`);
+          console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
+          console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(driverWallet.balance).toFixed(2)}`);
+          console.log(`   Total delivery pay: ${oldTotalDeliveryPay.toFixed(2)} → ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
+          console.log(`   Delivery pay count: ${oldCount} → ${driverWallet.totalDeliveryPayCount}`);
+
+          await orderInstance.update({
+            driverPayCredited: true,
+            driverPayCreditedAt: resolvedTransactionDate,
+            driverPayAmount: driverPayAmount
+          });
+
+          const driver = await db.Driver.findByPk(orderInstance.driverId).catch(() => null);
+          
+          // Emit socket event to notify driver about delivery pay
+          const io = req?.app?.get('io');
+          if (io) {
+            io.to(`driver-${orderInstance.driverId}`).emit('delivery-pay-received', {
               orderId: effectiveOrderId,
-              amount: driverPayAmount
-            }
-          }).catch((pushError) => {
-            console.error('❌ Error sending delivery fee payment push notification (finalizeOrderPayment):', pushError);
-          });
-        }
+              amount: driverPayAmount,
+              customerName: orderInstance.customerName,
+              walletBalance: parseFloat(driverWallet.balance)
+            });
+            console.log(`📬 Delivery pay notification sent to driver #${orderInstance.driverId} for Order #${effectiveOrderId}`);
+          }
+          
+          if (driver?.pushToken) {
+            pushNotifications.sendPushNotification(driver.pushToken, {
+              title: 'Delivery Fee Payment',
+              body: `KES ${driverPayAmount.toFixed(2)} for Order #${effectiveOrderId} has been added to your wallet.`,
+              data: {
+                type: 'delivery_pay',
+                orderId: effectiveOrderId,
+                amount: driverPayAmount
+              }
+            }).catch((pushError) => {
+              console.error('❌ Error sending delivery fee payment push notification (finalizeOrderPayment):', pushError);
+            });
+          }
         } else {
           console.log(`ℹ️ Delivery pay already credited for Order #${effectiveOrderId} (transaction already linked to wallet)`);
         }
