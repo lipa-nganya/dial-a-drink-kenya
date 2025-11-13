@@ -19,6 +19,13 @@ const { Server } = require('socket.io');
 
 const PORT = process.env.PORT || 5001;
 
+// Log port configuration immediately
+console.log('🔧 PORT configuration:', {
+  PORT_ENV: process.env.PORT,
+  PORT_USED: PORT,
+  NODE_ENV: process.env.NODE_ENV
+});
+
 // Create HTTP server
 const server = http.createServer(app);
 
@@ -834,17 +841,24 @@ const startServer = async () => {
     // This is critical for Cloud Run health checks
     const HOST = process.env.HOST || '0.0.0.0';
     
-    server.listen(PORT, HOST, () => {
-      console.log(`🚀 Server is running on ${HOST}:${PORT}`);
-      console.log(`🔗 Health check: http://${HOST}:${PORT}/api/health`);
-      console.log(`📊 API endpoints:`);
-      console.log(`   - GET  /api/health`);
-      console.log(`   - GET  /api/categories`);
-      console.log(`   - GET  /api/drinks`);
-      console.log(`   - POST /api/orders`);
-      console.log(`   - GET  /api/admin/orders`);
-      console.log(`🌐 Server ready to accept requests!`);
-    });
+    console.log(`📡 Attempting to start server on ${HOST}:${PORT}...`);
+    
+    try {
+      server.listen(PORT, HOST, () => {
+        console.log(`✅ Server successfully started and listening on ${HOST}:${PORT}`);
+        console.log(`🔗 Health check: http://${HOST}:${PORT}/api/health`);
+        console.log(`📊 API endpoints:`);
+        console.log(`   - GET  /api/health`);
+        console.log(`   - GET  /api/categories`);
+        console.log(`   - GET  /api/drinks`);
+        console.log(`   - POST /api/orders`);
+        console.log(`   - GET  /api/admin/orders`);
+        console.log(`🌐 Server ready to accept requests!`);
+      });
+    } catch (listenError) {
+      console.error('❌ Failed to start server:', listenError);
+      throw listenError;
+    }
     
     // Handle server errors gracefully
     server.on('error', (error) => {
