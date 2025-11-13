@@ -24,3 +24,4 @@ echo ""
 echo "✅ Build started! Check status with: eas build:list"
 echo "📥 Download when ready: eas build:download"
 
+
