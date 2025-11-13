@@ -43,8 +43,13 @@ const Header = () => {
   const drawer = (
     <Box sx={{ 
       width: 220, 
+      backgroundColor: `${colors.paper} !important`,
+      height: '100%',
+      minHeight: '100vh',
+      background: colors.paper,
+    }} style={{
       backgroundColor: colors.paper,
-      height: '100%'
+      color: colors.textPrimary,
     }}>
       <Toolbar sx={{ 
         minHeight: '48px !important',
@@ -292,12 +297,20 @@ const Header = () => {
             backgroundColor: `${colors.paper} !important`,
             color: `${colors.textPrimary} !important`,
             backgroundImage: 'none !important',
+            background: `${colors.paper} !important`,
           },
         }}
         PaperProps={{
           sx: {
             backgroundColor: `${colors.paper} !important`,
             color: `${colors.textPrimary} !important`,
+            background: `${colors.paper} !important`,
+            backgroundImage: 'none !important',
+          },
+          style: {
+            backgroundColor: colors.paper,
+            color: colors.textPrimary,
+            background: colors.paper,
           }
         }}
       >
