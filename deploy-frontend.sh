@@ -1,0 +1,33 @@
+#!/bin/bash
+# Deploy Customer Frontend to Google Cloud Run
+
+set -e
+
+echo "🚀 Deploying Customer Frontend to Google Cloud Run..."
+echo ""
+
+cd "$(dirname "$0")/frontend"
+
+# Set project and region
+gcloud config set project drink-suite
+gcloud config set run/region us-central1
+
+# Build React app
+echo "📦 Building React app..."
+npm install
+npm run build
+
+# Deploy to Cloud Run
+echo "🚀 Deploying to Cloud Run..."
+gcloud run deploy dialadrink-frontend \
+  --source . \
+  --platform managed \
+  --allow-unauthenticated \
+  --set-env-vars "REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api" \
+  --memory 256Mi
+
+echo ""
+echo "✅ Frontend deployed successfully!"
+echo "📋 Service URL:"
+gcloud run services describe dialadrink-frontend --format="value(status.url)"
+
