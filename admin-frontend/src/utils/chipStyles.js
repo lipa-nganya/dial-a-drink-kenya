@@ -156,7 +156,8 @@ export const getTransactionTypeChipProps = (type) => {
 
   if (normalized === 'delivery' || normalized === 'delivery_pay') {
     return (transaction = {}) => {
-      const isDriverPayment = Boolean(transaction?.driverWalletId);
+      // Check if it's a driver payment (has driverWalletId or driverId)
+      const isDriverPayment = Boolean(transaction?.driverWalletId || transaction?.driverId);
 
       if (isDriverPayment) {
         return {
@@ -169,8 +170,9 @@ export const getTransactionTypeChipProps = (type) => {
         };
       }
 
+      // Merchant share of delivery fee
       return {
-        label: 'Delivery Fee Payment',
+        label: 'Delivery Fee Payment (Merchant)',
         sx: {
           backgroundColor: '#2196F3',
           color: '#002A54',
@@ -180,8 +182,9 @@ export const getTransactionTypeChipProps = (type) => {
     };
   }
 
+  // Default fallback - ensure we always return a label
   return {
-    label: type,
+    label: type || 'Unknown',
     sx: {
       backgroundColor: '#616161',
       color: '#FFFFFF',
