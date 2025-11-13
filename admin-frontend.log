@@ -1,0 +1,184 @@
+
+> admin-frontend@0.1.0 start
+> PORT=3001 react-scripts start
+
+(node:6078) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:6078) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+Starting the development server...
+
+Compiled successfully!
+
+You can now view admin-frontend in the browser.
+
+  Local:            http://localhost:3001
+  On Your Network:  http://192.168.1.66:3001
+
+Note that the development build is not optimized.
+To create a production build, use npm run build.
+
+webpack compiled successfully
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+webpack compiled with 1 warning
+Compiling...
+Failed to compile.
+
+[eslint] 
+src/pages/Settings.js
+  Line 1276:32:  'createCountdown' is not defined  no-undef
+
+Search for the keywords to learn more about each error.
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 101:10:   'countdownFormError' is assigned a value but never used                                                                                                                                          no-unused-vars
+  Line 170:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 327:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 327:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 327:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 466:9:    'handleNewCountdown' is assigned a value but never used                                                                                                                                          no-unused-vars
+  Line 488:9:    'handleEditCountdown' is assigned a value but never used                                                                                                                                         no-unused-vars
+  Line 499:9:    'handleSaveCountdown' is assigned a value but never used                                                                                                                                         no-unused-vars
+  Line 1415:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1559:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+ERROR in [eslint] 
+src/pages/Settings.js
+  Line 1276:32:  'createCountdown' is not defined  no-undef
+
+Search for the keywords to learn more about each error.
+
+webpack compiled with 1 error and 1 warning
+Compiling...
+Failed to compile.
+
+[eslint] 
+src/pages/Settings.js
+  Line 1279:32:  'createCountdown' is not defined  no-undef
+
+Search for the keywords to learn more about each error.
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 101:10:   'countdownFormError' is assigned a value but never used                                                                                                                                          no-unused-vars
+  Line 145:9:    'isCountdownSaveDisabled' is assigned a value but never used                                                                                                                                     no-unused-vars
+  Line 173:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 330:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 330:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 330:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 469:9:    'handleNewCountdown' is assigned a value but never used                                                                                                                                          no-unused-vars
+  Line 491:9:    'handleEditCountdown' is assigned a value but never used                                                                                                                                         no-unused-vars
+  Line 502:9:    'handleSaveCountdown' is assigned a value but never used                                                                                                                                         no-unused-vars
+  Line 1418:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1562:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+ERROR in [eslint] 
+src/pages/Settings.js
+  Line 1279:32:  'createCountdown' is not defined  no-undef
+
+Search for the keywords to learn more about each error.
+
+webpack compiled with 1 error and 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 173:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 330:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 330:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 330:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1451:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1595:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 173:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 330:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 330:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 330:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1451:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1595:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+webpack compiled with 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 173:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 330:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 330:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 330:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1451:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1595:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/pages/AdminOverview.js
+  Line 21:3:   'Dashboard' is defined but never used                                                                                       no-unused-vars
+  Line 24:3:   'LocalBar' is defined but never used                                                                                        no-unused-vars
+  Line 49:10:  'socket' is assigned a value but never used                                                                                 no-unused-vars
+  Line 98:6:   React Hook useEffect has a missing dependency: 'fetchPendingOrdersCount'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+src/pages/Settings.js
+  Line 173:6:    React Hook useEffect has a missing dependency: 'fetchAllData'. Either include it or remove the dependency array                                                                                  react-hooks/exhaustive-deps
+  Line 330:33:   Unnecessary escape character: \+                                                                                                                                                                 no-useless-escape
+  Line 330:35:   Unnecessary escape character: \(                                                                                                                                                                 no-useless-escape
+  Line 330:37:   Unnecessary escape character: \)                                                                                                                                                                 no-useless-escape
+  Line 1451:25:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+  Line 1595:23:  Redundant alt attribute. Screen-readers already announce `img` tags as an image. You don’t need to use the words `image`, `photo,` or `picture` (or any specified custom words) in the alt prop  jsx-a11y/img-redundant-alt
+
+webpack compiled with 1 warning

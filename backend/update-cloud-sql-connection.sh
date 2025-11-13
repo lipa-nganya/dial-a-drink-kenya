@@ -65,3 +65,4 @@ echo "   1. Wait for the new revision to deploy"
 echo "   2. Check logs: gcloud run services logs read $SERVICE_NAME --region=$REGION --project=$PROJECT_ID"
 echo "   3. Test health endpoint: curl https://dialadrink-backend-910510650031.us-central1.run.app/api/health"
 
+

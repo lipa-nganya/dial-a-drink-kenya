@@ -296,3 +296,4 @@ This automatically suspends all services when budget is exceeded, no Cloud Funct
 - **Budget Management**: https://console.cloud.google.com/billing/budgets
 - **Current Spending**: https://console.cloud.google.com/billing/projects
 
+

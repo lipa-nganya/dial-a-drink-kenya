@@ -31,3 +31,4 @@ echo "✅ Frontend deployed successfully!"
 echo "📋 Service URL:"
 gcloud run services describe dialadrink-frontend --format="value(status.url)"
 
+
