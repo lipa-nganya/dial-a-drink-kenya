@@ -41,61 +41,121 @@ const Header = () => {
   };
 
   const drawer = (
-    <Box sx={{ width: 220 }}>
-      <Toolbar sx={{ minHeight: '48px !important' }}>
-        <LocalBar sx={{ mr: 1, fontSize: '1.2rem' }} />
-        <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem' }}>
+    <Box sx={{ 
+      width: 220, 
+      backgroundColor: colors.paper,
+      height: '100%'
+    }}>
+      <Toolbar sx={{ 
+        minHeight: '48px !important',
+        backgroundColor: colors.paper,
+        borderBottom: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+      }}>
+        <LocalBar sx={{ mr: 1, fontSize: '1.2rem', color: colors.textPrimary }} />
+        <Typography variant="subtitle1" component="div" sx={{ 
+          fontSize: '0.9rem',
+          color: colors.textPrimary
+        }}>
           Drink Suite
         </Typography>
       </Toolbar>
-      <List>
-        <ListItem component="button" onClick={() => handleNavigation('/')}>
+      <List sx={{ backgroundColor: colors.paper }}>
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/')}
+          sx={{ 
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
           <ListItemIcon>
-            <Home />
+            <Home sx={{ color: colors.textPrimary }} />
           </ListItemIcon>
-          <ListItemText primary="Home" />
+          <ListItemText primary="Home" sx={{ color: colors.textPrimary }} />
         </ListItem>
-        <ListItem component="button" onClick={() => handleNavigation('/menu')}>
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/menu')}
+          sx={{ 
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
           <ListItemIcon>
-            <Restaurant />
+            <Restaurant sx={{ color: colors.textPrimary }} />
           </ListItemIcon>
-          <ListItemText primary="Menu" />
+          <ListItemText primary="Menu" sx={{ color: colors.textPrimary }} />
         </ListItem>
-        <ListItem component="button" onClick={() => handleNavigation('/offers')}>
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/offers')}
+          sx={{ 
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
           <ListItemIcon>
-            <LocalOffer />
+            <LocalOffer sx={{ color: colors.textPrimary }} />
           </ListItemIcon>
-          <ListItemText primary="Offers" />
+          <ListItemText primary="Offers" sx={{ color: colors.textPrimary }} />
         </ListItem>
-        <ListItem component="button" onClick={() => handleNavigation('/cart')}>
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/cart')}
+          sx={{ 
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
           <ListItemIcon>
             <Badge badgeContent={getTotalItems()} color="secondary">
-              <ShoppingCart />
+              <ShoppingCart sx={{ color: colors.textPrimary }} />
             </Badge>
           </ListItemIcon>
-          <ListItemText primary="Cart" />
+          <ListItemText primary="Cart" sx={{ color: colors.textPrimary }} />
         </ListItem>
-        <ListItem component="button" onClick={() => {
-          handleNavigation(isLoggedIn ? '/orders' : '/login');
-        }}>
+        <ListItem 
+          component="button" 
+          onClick={() => {
+            handleNavigation(isLoggedIn ? '/orders' : '/login');
+          }}
+          sx={{ 
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
           <ListItemIcon>
-            <ShoppingCart />
+            <ShoppingCart sx={{ color: colors.textPrimary }} />
           </ListItemIcon>
-          <ListItemText primary="My Orders" />
+          <ListItemText primary="My Orders" sx={{ color: colors.textPrimary }} />
         </ListItem>
         {isLoggedIn ? (
-          <ListItem component="button" onClick={() => handleNavigation('/profile')}>
+          <ListItem 
+            component="button" 
+            onClick={() => handleNavigation('/profile')}
+            sx={{ 
+              color: colors.textPrimary,
+              '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+            }}
+          >
             <ListItemIcon>
-              <Person />
+              <Person sx={{ color: colors.textPrimary }} />
             </ListItemIcon>
-            <ListItemText primary="Profile" />
+            <ListItemText primary="Profile" sx={{ color: colors.textPrimary }} />
           </ListItem>
         ) : (
-          <ListItem component="button" onClick={() => handleNavigation('/login')}>
+          <ListItem 
+            component="button" 
+            onClick={() => handleNavigation('/login')}
+            sx={{ 
+              color: colors.textPrimary,
+              '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+            }}
+          >
             <ListItemIcon>
-              <Login />
+              <Login sx={{ color: colors.textPrimary }} />
             </ListItemIcon>
-            <ListItemText primary="Login" />
+            <ListItemText primary="Login" sx={{ color: colors.textPrimary }} />
           </ListItem>
         )}
       </List>
@@ -226,7 +286,12 @@ const Header = () => {
         }}
         sx={{
           display: { xs: 'block', md: 'none' },
-          '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 250 },
+          '& .MuiDrawer-paper': { 
+            boxSizing: 'border-box', 
+            width: 250,
+            backgroundColor: colors.paper,
+            color: colors.textPrimary
+          },
         }}
       >
         {drawer}
