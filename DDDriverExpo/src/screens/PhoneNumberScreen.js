@@ -73,15 +73,31 @@ const PhoneNumberScreen = ({ route, navigation }) => {
           console.log('ℹ️ No PIN found in database for this phone, proceeding with OTP flow');
         }
       } catch (driverError) {
-        console.log('Error checking driver PIN:', driverError);
-        // If driver doesn't exist (404), show error
+        console.error('Error checking driver PIN:', driverError);
+        console.error('Error details:', {
+          status: driverError.response?.status,
+          data: driverError.response?.data,
+          message: driverError.message,
+          url: driverError.config?.url,
+          baseURL: driverError.config?.baseURL
+        });
+        
+        // If driver doesn't exist (404), show error with more details
         if (driverError.response?.status === 404) {
-          Alert.alert('Error', 'Driver account not found. Please contact admin.');
+          const errorMsg = driverError.response?.data?.error || 'Driver account not found';
+          console.error('❌ Driver lookup failed:', {
+            phone: formattedPhone,
+            apiUrl: driverError.config?.baseURL,
+            endpoint: driverError.config?.url,
+            error: errorMsg
+          });
+          Alert.alert('Error', `Driver account not found for ${formattedPhone}. Please contact admin.\n\nAPI: ${driverError.config?.baseURL || 'unknown'}`);
           setLoading(false);
           return;
         }
-        // For other errors, continue with OTP flow (might be network issue)
-        console.log('Continuing with OTP flow despite database check error');
+        // For other errors (network, timeout, etc.), continue with OTP flow
+        console.log('⚠️ Network/connection error during driver check, continuing with OTP flow');
+        console.log('This might be a connection issue. Will try OTP flow anyway.');
       }
       
       // If forgotPin flag is set, always send OTP (even if PIN exists)
