@@ -163,6 +163,13 @@ const WalletScreen = ({ route }) => {
           setSnackbarVisible(true);
         });
 
+        socket.on('delivery-pay-received', (data) => {
+          loadWalletData();
+          setSnackbarMessage(`Delivery fee of KES ${data.amount} received for Order #${data.orderId}!`);
+          setSnackbarType('success');
+          setSnackbarVisible(true);
+        });
+
         socket.on('order-status-updated', (data) => {
           if (data.status === 'completed' && data.order?.driverId === driverId) {
             loadWalletData();
