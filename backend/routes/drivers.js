@@ -119,6 +119,39 @@ router.get('/phone/:phoneNumber', async (req, res) => {
 });
 
 /**
+ * Diagnostic endpoint: List all drivers (for debugging phone number formats)
+ * GET /api/drivers/debug/list
+ */
+router.get('/debug/list', async (req, res) => {
+  try {
+    const drivers = await db.Driver.findAll({
+      attributes: ['id', 'name', 'phoneNumber', 'status'],
+      limit: 50,
+      order: [['createdAt', 'DESC']]
+    });
+    
+    res.json({
+      success: true,
+      count: drivers.length,
+      drivers: drivers.map(d => ({
+        id: d.id,
+        name: d.name,
+        phoneNumber: d.phoneNumber,
+        phoneLength: d.phoneNumber ? d.phoneNumber.length : 0,
+        phoneFormat: d.phoneNumber ? 
+          (d.phoneNumber.startsWith('254') ? '254' : 
+           d.phoneNumber.startsWith('0') ? '0' : 
+           d.phoneNumber.length === 9 ? '9-digit' : 'other') : 'null',
+        status: d.status
+      }))
+    });
+  } catch (error) {
+    console.error('Error listing drivers for debug:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Update driver activity by phone number (for driver app)
  * PATCH /api/drivers/phone/:phoneNumber/activity
  */
