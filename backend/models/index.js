@@ -8,8 +8,9 @@ let sequelize;
 try {
   if (dbConfig.use_env_variable) {
     const databaseUrl = process.env[dbConfig.use_env_variable];
-    if (!databaseUrl) {
-      console.warn(`⚠️ Warning: ${dbConfig.use_env_variable} environment variable is not set.`);
+    // Check if DATABASE_URL is missing or is a placeholder value
+    if (!databaseUrl || databaseUrl.includes('[YOUR_DB_URL]') || databaseUrl.includes('placeholder')) {
+      console.warn(`⚠️ Warning: ${dbConfig.use_env_variable} environment variable is not properly set.`);
       console.warn('⚠️ Creating placeholder Sequelize instance. Database connection will be deferred.');
       // Create a minimal Sequelize instance with dummy connection so models can initialize
       // The actual connection will be established later when DATABASE_URL is available
