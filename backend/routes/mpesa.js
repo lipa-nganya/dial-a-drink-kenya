@@ -187,12 +187,12 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
           const oldCount = driverWallet.totalDeliveryPayCount || 0;
           
           await driverWallet.update({
-          balance: oldBalance + driverPayAmount,
-          totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
-          totalDeliveryPayCount: oldCount + 1
-        });
+            balance: oldBalance + driverPayAmount,
+            totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
+            totalDeliveryPayCount: oldCount + 1
+          });
 
-        await driverDeliveryTransaction.update({
+          await driverDeliveryTransaction.update({
           driverWalletId: driverWallet.id,
           status: 'completed',
           paymentStatus: 'paid',
