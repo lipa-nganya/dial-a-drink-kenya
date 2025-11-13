@@ -31,6 +31,18 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
+  // TEMPORARY FIX: Hardcode ngrok URL for local-dev builds
+  // Check if this is a local-dev build by checking bundle identifier or app name
+  const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
+  const appName = Constants.expoConfig?.name || '';
+  const isLocalDevBuild = bundleId?.includes('.local') || appName?.includes('Local');
+  
+  if (isLocalDevBuild) {
+    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] Local-dev build detected, using ngrok URL:', `${ngrokUrl}/api`);
+    return `${ngrokUrl}/api`;
+  }
+
   // Priority 1: Environment variable (set at build time or runtime)
   const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
   if (envBase) {
