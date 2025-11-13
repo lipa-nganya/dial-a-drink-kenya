@@ -28,6 +28,7 @@ import Notifications from './pages/admin/Notifications';
 import Drivers from './pages/admin/Drivers';
 import AdminLogin from './pages/admin/AdminLogin';
 import PrivateRoute from './components/PrivateRoute';
+import CustomerPrivateRoute from './components/CustomerPrivateRoute';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -165,7 +166,7 @@ function AppContent() {
           <Route path="/cart" element={<Cart />} />
           <Route path="/order-success" element={<OrderSuccess />} />
           <Route path="/order-tracking" element={<OrderTracking />} />
-          <Route path="/profile" element={<Profile />} />
+          <Route path="/profile" element={<CustomerPrivateRoute><Profile /></CustomerPrivateRoute>} />
           <Route path="/orders" element={<MyOrders />} />
           <Route path="/login" element={<CustomerLogin />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
