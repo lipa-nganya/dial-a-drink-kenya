@@ -1232,43 +1232,98 @@ router.post('/callback', async (req, res) => {
           }
 
           if (!transaction) {
-            // CRITICAL: Double-check that no transaction with this checkoutRequestID exists (even if completed)
-            // This prevents duplicates if callback is called multiple times
-            const existingByCheckoutID = await db.Transaction.findOne({
-              where: {
-                checkoutRequestID: checkoutRequestID,
-                transactionType: 'payment'
-              }
-            });
+            // CRITICAL: Use database transaction to prevent race conditions
+            // Multiple callbacks might arrive simultaneously - use a lock
+            const dbTransaction = await db.sequelize.transaction();
             
-            if (existingByCheckoutID) {
-              console.log(`⚠️  Found existing payment transaction #${existingByCheckoutID.id} with same checkoutRequestID. Using it instead of creating duplicate.`);
-              transaction = existingByCheckoutID;
-            } else {
-              // Create new transaction if not found
-              const paymentAmount = itemsTotal;
-              
-              console.log(`📝 Creating new transaction for Order #${order.id} with CheckoutRequestID: ${checkoutRequestID}`);
-              console.log(`   Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} (items: KES ${itemsTotal.toFixed(2)}, delivery: KES ${deliveryFee.toFixed(2)}, tip: KES ${tipAmount.toFixed(2)})`);
-              console.log(`   Creating item payment transaction: KES ${paymentAmount.toFixed(2)}`);
-              console.log(`   Delivery fee and tip transactions will be handled separately with same payment attributes`);
-              
-              transaction = await db.Transaction.create({
-                orderId: order.id,
-                transactionType: 'payment',
-                paymentMethod: 'mobile_money',
-                paymentProvider: 'mpesa',
-                amount: paymentAmount,
-                status: 'completed',
-                paymentStatus: 'paid',
-                receiptNumber: receiptNumber,
-                checkoutRequestID: checkoutRequestID,
-                merchantRequestID: stkCallback.MerchantRequestID,
-                phoneNumber: phoneNumber,
-                transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-                notes: `Item payment via M-Pesa. Receipt: ${receiptNumber}. Breakdown: items KES ${paymentAmount.toFixed(2)}, delivery KES ${deliveryFee.toFixed(2)}, tip KES ${tipAmount.toFixed(2)} (tip recorded separately).`
+            try {
+              // Double-check within transaction to prevent race conditions
+              const existingByCheckoutID = await db.Transaction.findOne({
+                where: {
+                  checkoutRequestID: checkoutRequestID,
+                  transactionType: 'payment'
+                },
+                lock: dbTransaction.LOCK.UPDATE, // Lock the row to prevent concurrent access
+                transaction: dbTransaction
               });
-              console.log(`✅ Created transaction #${transaction.id} with status: ${transaction.status}`);
+              
+              // Also check for any completed payment transaction for this order
+              const existingCompletedPayment = await db.Transaction.findOne({
+                where: {
+                  orderId: order.id,
+                  transactionType: 'payment',
+                  status: 'completed',
+                  paymentStatus: 'paid',
+                  receiptNumber: receiptNumber // Same receipt number = same payment
+                },
+                lock: dbTransaction.LOCK.UPDATE,
+                transaction: dbTransaction
+              });
+              
+              if (existingByCheckoutID) {
+                console.log(`⚠️  Found existing payment transaction #${existingByCheckoutID.id} with same checkoutRequestID. Using it instead of creating duplicate.`);
+                transaction = existingByCheckoutID;
+                await dbTransaction.commit();
+              } else if (existingCompletedPayment) {
+                console.log(`⚠️  Found existing completed payment transaction #${existingCompletedPayment.id} with same receipt number. Using it instead of creating duplicate.`);
+                // Update it with checkoutRequestID if missing
+                if (!existingCompletedPayment.checkoutRequestID && checkoutRequestID) {
+                  await existingCompletedPayment.update({ checkoutRequestID }, { transaction: dbTransaction });
+                }
+                transaction = existingCompletedPayment;
+                await dbTransaction.commit();
+              } else {
+                // Create new transaction if not found
+                const paymentAmount = itemsTotal;
+                
+                console.log(`📝 Creating new transaction for Order #${order.id} with CheckoutRequestID: ${checkoutRequestID}`);
+                console.log(`   Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} (items: KES ${itemsTotal.toFixed(2)}, delivery: KES ${deliveryFee.toFixed(2)}, tip: KES ${tipAmount.toFixed(2)})`);
+                console.log(`   Creating item payment transaction: KES ${paymentAmount.toFixed(2)}`);
+                console.log(`   Delivery fee and tip transactions will be handled separately with same payment attributes`);
+                
+                transaction = await db.Transaction.create({
+                  orderId: order.id,
+                  transactionType: 'payment',
+                  paymentMethod: 'mobile_money',
+                  paymentProvider: 'mpesa',
+                  amount: paymentAmount,
+                  status: 'completed',
+                  paymentStatus: 'paid',
+                  receiptNumber: receiptNumber,
+                  checkoutRequestID: checkoutRequestID,
+                  merchantRequestID: stkCallback.MerchantRequestID,
+                  phoneNumber: phoneNumber,
+                  transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+                  notes: `Item payment via M-Pesa. Receipt: ${receiptNumber}. Breakdown: items KES ${paymentAmount.toFixed(2)}, delivery KES ${deliveryFee.toFixed(2)}, tip KES ${tipAmount.toFixed(2)} (tip recorded separately).`
+                }, { transaction: dbTransaction });
+                
+                await dbTransaction.commit();
+                console.log(`✅ Created transaction #${transaction.id} with status: ${transaction.status}`);
+              }
+            } catch (createError) {
+              await dbTransaction.rollback();
+              console.error(`❌ Error creating/checking transaction:`, createError);
+              // Try to find existing transaction one more time after rollback
+              transaction = await db.Transaction.findOne({
+                where: {
+                  checkoutRequestID: checkoutRequestID,
+                  transactionType: 'payment'
+                }
+              }) || await db.Transaction.findOne({
+                where: {
+                  orderId: order.id,
+                  transactionType: 'payment',
+                  status: 'completed',
+                  paymentStatus: 'paid',
+                  receiptNumber: receiptNumber
+                }
+              });
+              
+              if (transaction) {
+                console.log(`✅ Found existing transaction #${transaction.id} after error recovery`);
+              } else {
+                throw createError; // Re-throw if we can't recover
+              }
             }
           } else {
             // Update existing transaction - ensure orderId is set if it wasn't
