@@ -1,3 +1,4 @@
+// Load environment variables - don't fail if .env doesn't exist
 require('dotenv').config();
 
 // Handle unhandled promise rejections to prevent crashes
@@ -17,7 +18,8 @@ const seedData = require('./seed');
 const http = require('http');
 const { Server } = require('socket.io');
 
-const PORT = process.env.PORT || 5001;
+// Cloud Run sets PORT automatically - use it or default to 8080 for Cloud Run
+const PORT = process.env.PORT || 8080;
 
 // Log port configuration immediately
 console.log('🔧 PORT configuration:', {
