@@ -48,9 +48,26 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       });
       
       // If a completed driver delivery transaction exists, this order has already been finalized
-      // Return early to prevent duplicate transaction creation
+      // But we still need to ensure order status is updated if payment is completed
       if (existingDriverDeliveryTxn) {
         console.log(`⚠️  Order #${effectiveOrderId} already has completed driver delivery transaction #${existingDriverDeliveryTxn.id}. Skipping duplicate finalization.`);
+        
+        // CRITICAL: Still update order status if payment is completed but order status isn't updated
+        if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid') {
+          const needsStatusUpdate = orderInstance.status === 'pending' || orderInstance.paymentStatus !== 'paid';
+          if (needsStatusUpdate) {
+            console.log(`⚠️  Order #${effectiveOrderId} needs status update. Updating status and paymentStatus...`);
+            await orderInstance.update({
+              paymentStatus: 'paid',
+              status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
+            }, { transaction: dbTransaction });
+            await dbTransaction.commit();
+            await orderInstance.reload().catch(() => {});
+            await paymentTransaction.reload().catch(() => {});
+            return { order: orderInstance, receipt: paymentTransaction.receiptNumber || normalizedReceipt };
+          }
+        }
+        
         await dbTransaction.rollback();
         await orderInstance.reload().catch(() => {});
         await paymentTransaction.reload().catch(() => {});
@@ -601,16 +618,27 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   
   // CRITICAL: Verify order status was updated correctly after transaction commit
   // If not, force update to prevent orders stuck at pending
-  if (orderInstance.paymentStatus !== 'paid') {
-    console.error(`⚠️  Order #${effectiveOrderId} paymentStatus is still '${orderInstance.paymentStatus}' after update. Forcing update...`);
-    await orderInstance.update({ paymentStatus: 'paid' });
-    await orderInstance.reload();
-  }
-  
-  if (orderInstance.status === 'pending' && orderUpdatePayload.status === 'confirmed') {
-    console.error(`⚠️  Order #${effectiveOrderId} status is still 'pending' after update. Forcing update to 'confirmed'...`);
-    await orderInstance.update({ status: 'confirmed' });
-    await orderInstance.reload();
+  // Use raw SQL to ensure update works even if Sequelize has issues
+  if (orderInstance.paymentStatus !== 'paid' || orderInstance.status === 'pending') {
+    console.error(`⚠️  Order #${effectiveOrderId} status mismatch detected. paymentStatus: '${orderInstance.paymentStatus}', status: '${orderInstance.status}'. Forcing update...`);
+    try {
+      // Use raw SQL first to ensure it works
+      await db.sequelize.query(
+        `UPDATE orders SET "paymentStatus" = 'paid', status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END, "updatedAt" = NOW() WHERE id = :id`,
+        {
+          replacements: { id: effectiveOrderId }
+        }
+      );
+      // Also try Sequelize update as backup
+      await orderInstance.update({ 
+        paymentStatus: 'paid',
+        status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
+      });
+      await orderInstance.reload();
+      console.log(`✅ Forced order #${effectiveOrderId} status update: paymentStatus='paid', status='${orderInstance.status}'`);
+    } catch (forceUpdateError) {
+      console.error(`❌ Error forcing order status update:`, forceUpdateError);
+    }
   }
 
   // CRITICAL: Don't call ensureDeliveryFeeSplit here - it's already handled above
