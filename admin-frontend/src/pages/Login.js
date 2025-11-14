@@ -76,7 +76,7 @@ const Login = () => {
             Admin Login
           </Typography>
           <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-            Dial A Drink Kenya
+            Drink Suite
           </Typography>
         </Box>
 
