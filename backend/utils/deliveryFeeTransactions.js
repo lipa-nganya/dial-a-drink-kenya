@@ -230,7 +230,15 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
     };
 
     if (merchantTransaction) {
-      await merchantTransaction.update(merchantPayload);
+      // CRITICAL: Don't cancel merchant transactions that are already completed/paid
+      // Only update if not cancelled and payment is completed
+      if (merchantTransaction.status === 'cancelled' && paymentCompleted) {
+        // Reactivate cancelled merchant transaction if payment is completed
+        await merchantTransaction.update(merchantPayload);
+        console.log(`✅ Reactivated cancelled merchant transaction #${merchantTransaction.id} for Order #${orderId} (payment completed)`);
+      } else if (merchantTransaction.status !== 'cancelled') {
+        await merchantTransaction.update(merchantPayload);
+      }
     } else {
       merchantTransaction = await db.Transaction.create({
         orderId,
@@ -239,15 +247,22 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       });
     }
   } else if (merchantTransaction && merchantTransaction.status !== 'cancelled') {
-    await merchantTransaction.update({
-      status: 'cancelled',
-      paymentStatus: 'cancelled',
-      amount: 0,
-      driverId: null,
-      driverWalletId: null,
-      notes: `${merchantTransaction.notes || ''}\nMerchant share not applicable (${context}).`.trim()
-    });
-    merchantTransaction = null;
+    // CRITICAL: Only cancel merchant transaction if payment is NOT completed
+    // If payment is completed, merchant should always get their share (even if 0, keep transaction)
+    if (!paymentCompleted) {
+      await merchantTransaction.update({
+        status: 'cancelled',
+        paymentStatus: 'cancelled',
+        amount: 0,
+        driverId: null,
+        driverWalletId: null,
+        notes: `${merchantTransaction.notes || ''}\nMerchant share not applicable (${context}).`.trim()
+      });
+      merchantTransaction = null;
+    } else {
+      // Payment completed but merchantAmount is 0 - this shouldn't happen, but keep transaction
+      console.warn(`⚠️  Warning: Payment completed but merchantAmount is 0 for Order #${orderId}. Keeping merchant transaction.`);
+    }
   }
 
   let driverWallet = null;
