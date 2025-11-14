@@ -31,14 +31,25 @@ module.exports = {
   production: {
     use_env_variable: 'DATABASE_URL',
     dialect: 'postgres',
-    dialectOptions: shouldUseSsl
-      ? {
-          ssl: {
-            require: true,
-            rejectUnauthorized: false
+    dialectOptions: (() => {
+      const databaseUrl = process.env.DATABASE_URL || '';
+      const isCloudSql = databaseUrl.includes('/cloudsql/');
+      
+      // For Cloud SQL Unix socket connections, don't use SSL
+      if (isCloudSql) {
+        return {};
+      }
+      
+      // For external connections, use SSL if required
+      return shouldUseSsl
+        ? {
+            ssl: {
+              require: true,
+              rejectUnauthorized: false
+            }
           }
-        }
-      : {},
+        : {};
+    })(),
     logging: false // Disable SQL logging in production
   }
 };

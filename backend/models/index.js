@@ -8,6 +8,15 @@ let sequelize;
 try {
   if (dbConfig.use_env_variable) {
     const databaseUrl = process.env[dbConfig.use_env_variable];
+    
+    // Log DATABASE_URL status (without exposing password)
+    if (databaseUrl) {
+      const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':***@');
+      console.log(`📊 DATABASE_URL found: ${maskedUrl.substring(0, 80)}...`);
+    } else {
+      console.warn(`⚠️ Warning: ${dbConfig.use_env_variable} environment variable is not set.`);
+    }
+    
     // Check if DATABASE_URL is missing or is a placeholder value
     if (!databaseUrl || databaseUrl.includes('[YOUR_DB_URL]') || databaseUrl.includes('placeholder')) {
       console.warn(`⚠️ Warning: ${dbConfig.use_env_variable} environment variable is not properly set.`);
@@ -20,6 +29,7 @@ try {
         pool: { max: 1, min: 0, idle: 10000 } // Minimal pool for placeholder
       });
     } else {
+      console.log('✅ Initializing Sequelize with DATABASE_URL...');
       sequelize = new Sequelize(databaseUrl, dbConfig);
     }
   } else {
