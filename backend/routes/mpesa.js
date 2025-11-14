@@ -735,51 +735,35 @@ router.post('/stk-push', async (req, res) => {
       try {
         const paymentNote = `STK Push initiated. ${stkResponse.CustomerMessage || ''} Order portion: KES ${itemsTotal.toFixed(2)}.${tipAmount > 0 ? ` Tip (KES ${tipAmount.toFixed(2)}) will be recorded separately.` : ''}`;
 
-        // CRITICAL: Check for existing transaction by checkoutRequestID first to prevent duplicates
-        // This handles the case where STK push is initiated multiple times for the same order
+        // CRITICAL: Check for ANY existing payment transaction for this order FIRST
+        // This prevents duplicates even if checkoutRequestID is different or null
         let paymentTransaction = await db.Transaction.findOne({
           where: {
-            checkoutRequestID: checkoutRequestID,
+            orderId: order.id,
             transactionType: 'payment'
-          }
+          },
+          order: [['createdAt', 'DESC']]
         });
 
         if (paymentTransaction) {
-          console.log(`⚠️  Found existing payment transaction #${paymentTransaction.id} with same checkoutRequestID. Updating it instead of creating duplicate.`);
+          // Found existing payment transaction - update it instead of creating duplicate
+          console.log(`⚠️  Found existing payment transaction #${paymentTransaction.id} for Order #${orderId}. Updating it instead of creating duplicate.`);
           await paymentTransaction.update({
             ...baseTransactionPayload,
             amount: itemsTotal,
             notes: paymentNote,
-            orderId: order.id // Ensure orderId is set
+            checkoutRequestID: checkoutRequestID // Update checkoutRequestID if it was missing
           });
           console.log(`✅ Payment transaction updated for Order #${orderId} (transaction #${paymentTransaction.id})`);
         } else {
-          // Check for pending payment transaction for this order
-          paymentTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: order.id,
-              transactionType: 'payment',
-              status: { [Op.ne]: 'completed' }
-            },
-            order: [['createdAt', 'DESC']]
+          // No payment transaction exists - safe to create new one
+          paymentTransaction = await db.Transaction.create({
+            ...baseTransactionPayload,
+            transactionType: 'payment',
+            amount: itemsTotal,
+            notes: paymentNote
           });
-
-          if (paymentTransaction) {
-            await paymentTransaction.update({
-              ...baseTransactionPayload,
-              amount: itemsTotal,
-              notes: paymentNote
-            });
-            console.log(`✅ Payment transaction updated for Order #${orderId} (transaction #${paymentTransaction.id})`);
-          } else {
-            paymentTransaction = await db.Transaction.create({
-              ...baseTransactionPayload,
-              transactionType: 'payment',
-              amount: itemsTotal,
-              notes: paymentNote
-            });
-            console.log(`✅ Payment transaction created for Order #${orderId} (transaction #${paymentTransaction.id})`);
-          }
+          console.log(`✅ Payment transaction created for Order #${orderId} (transaction #${paymentTransaction.id})`);
         }
 
         const deliveryNote = driverPayAmount > 0
@@ -1185,101 +1169,71 @@ router.post('/callback', async (req, res) => {
           console.log(`   Phone: ${phoneNumber || 'N/A'}`);
           console.log(`   Transaction Date: ${transactionDate || 'N/A'}`);
 
-          // Find transaction record by checkoutRequestID first (most reliable)
-          // CRITICAL: Must filter by transactionType='payment' to avoid matching delivery_pay or tip transactions
+          // CRITICAL: Check for ANY existing payment transaction for this order FIRST
+          // This is the most reliable way to prevent duplicates - check by orderId + transactionType
+          // Don't rely on checkoutRequestID alone as it might be null or different
           let transaction = await db.Transaction.findOne({
             where: {
-              checkoutRequestID: checkoutRequestID,
-              transactionType: 'payment' // Only match payment transactions, not delivery_pay or tip
-            }
+              orderId: order.id,
+              transactionType: 'payment' // CRITICAL: Only match payment transactions
+            },
+            order: [['createdAt', 'DESC']] // Get most recent one
           });
           
-          console.log(`🔍 Transaction lookup by checkoutRequestID + transactionType='payment': ${transaction ? `Found #${transaction.id} (status: ${transaction.status})` : 'Not found'}`);
+          console.log(`🔍 Transaction lookup by orderId + transactionType='payment': ${transaction ? `Found #${transaction.id} (status: ${transaction.status}, checkoutID: ${transaction.checkoutRequestID || 'N/A'})` : 'Not found'}`);
           
-          // If not found by checkoutRequestID, try by orderId + transactionType (get most recent pending payment transaction)
-          if (!transaction) {
-            transaction = await db.Transaction.findOne({
-              where: {
-                orderId: order.id,
-                transactionType: 'payment' // CRITICAL: Only match payment transactions
-              },
-              order: [['createdAt', 'DESC']]
-            });
-            console.log(`🔍 Transaction lookup by orderId + transactionType='payment': ${transaction ? `Found #${transaction.id} (status: ${transaction.status}, checkoutID: ${transaction.checkoutRequestID || 'N/A'})` : 'Not found'}`);
+          // If found but checkoutRequestID doesn't match, update it
+          if (transaction && checkoutRequestID && transaction.checkoutRequestID !== checkoutRequestID) {
+            console.log(`⚠️  Found transaction #${transaction.id} but checkoutRequestID differs. Updating checkoutRequestID.`);
+            await transaction.update({ checkoutRequestID });
           }
           
-          // If still not found, try to find by matching checkoutRequestID in payment transactions only
+          // If not found by orderId, try by checkoutRequestID as fallback
           if (!transaction && checkoutRequestID) {
-            // Try fuzzy match - but only in payment transactions
-            const paymentTransactions = await db.Transaction.findAll({
+            transaction = await db.Transaction.findOne({
               where: {
-                orderId: order.id,
-                transactionType: 'payment' // CRITICAL: Only search payment transactions
-              },
-              order: [['createdAt', 'DESC']]
+                checkoutRequestID: checkoutRequestID,
+                transactionType: 'payment'
+              }
             });
-            
-            // Find transaction with matching checkoutRequestID (exact or partial)
-            transaction = paymentTransactions.find(t => 
-              t.checkoutRequestID === checkoutRequestID || 
-              (t.checkoutRequestID && checkoutRequestID.includes(t.checkoutRequestID.substring(0, 20))) ||
-              (t.checkoutRequestID && t.checkoutRequestID.includes(checkoutRequestID.substring(0, 20)))
-            );
-            
-            if (transaction) {
-              console.log(`🔍 Found payment transaction via fuzzy match: #${transaction.id}`);
-            }
+            console.log(`🔍 Transaction lookup by checkoutRequestID + transactionType='payment': ${transaction ? `Found #${transaction.id} (status: ${transaction.status})` : 'Not found'}`);
           }
 
           if (!transaction) {
-            // CRITICAL: Use database transaction to prevent race conditions
-            // Multiple callbacks might arrive simultaneously - use a lock
+            // CRITICAL: Final check - if we still don't have a transaction, check one more time
+            // This handles race conditions where transaction was just created
+            // Use database transaction with lock to prevent concurrent creation
             const dbTransaction = await db.sequelize.transaction();
             
             try {
-              // Double-check within transaction to prevent race conditions
-              const existingByCheckoutID = await db.Transaction.findOne({
-                where: {
-                  checkoutRequestID: checkoutRequestID,
-                  transactionType: 'payment'
-                },
-                lock: dbTransaction.LOCK.UPDATE, // Lock the row to prevent concurrent access
-                transaction: dbTransaction
-              });
-              
-              // Also check for any completed payment transaction for this order
-              const existingCompletedPayment = await db.Transaction.findOne({
+              // Final check within locked transaction
+              const finalCheck = await db.Transaction.findOne({
                 where: {
                   orderId: order.id,
-                  transactionType: 'payment',
-                  status: 'completed',
-                  paymentStatus: 'paid',
-                  receiptNumber: receiptNumber // Same receipt number = same payment
+                  transactionType: 'payment'
                 },
                 lock: dbTransaction.LOCK.UPDATE,
                 transaction: dbTransaction
               });
               
-              if (existingByCheckoutID) {
-                console.log(`⚠️  Found existing payment transaction #${existingByCheckoutID.id} with same checkoutRequestID. Using it instead of creating duplicate.`);
-                transaction = existingByCheckoutID;
-                await dbTransaction.commit();
-              } else if (existingCompletedPayment) {
-                console.log(`⚠️  Found existing completed payment transaction #${existingCompletedPayment.id} with same receipt number. Using it instead of creating duplicate.`);
-                // Update it with checkoutRequestID if missing
-                if (!existingCompletedPayment.checkoutRequestID && checkoutRequestID) {
-                  await existingCompletedPayment.update({ checkoutRequestID }, { transaction: dbTransaction });
+              if (finalCheck) {
+                console.log(`⚠️  Found existing payment transaction #${finalCheck.id} during final check. Using it instead of creating duplicate.`);
+                transaction = finalCheck;
+                // Update checkoutRequestID and receiptNumber if missing
+                const updates = {};
+                if (checkoutRequestID && !finalCheck.checkoutRequestID) updates.checkoutRequestID = checkoutRequestID;
+                if (receiptNumber && !finalCheck.receiptNumber) updates.receiptNumber = receiptNumber;
+                if (Object.keys(updates).length > 0) {
+                  await finalCheck.update(updates, { transaction: dbTransaction });
                 }
-                transaction = existingCompletedPayment;
                 await dbTransaction.commit();
               } else {
-                // Create new transaction if not found
+                // Truly no transaction exists - safe to create
                 const paymentAmount = itemsTotal;
                 
                 console.log(`📝 Creating new transaction for Order #${order.id} with CheckoutRequestID: ${checkoutRequestID}`);
                 console.log(`   Customer paid KES ${parseFloat(order.totalAmount).toFixed(2)} (items: KES ${itemsTotal.toFixed(2)}, delivery: KES ${deliveryFee.toFixed(2)}, tip: KES ${tipAmount.toFixed(2)})`);
                 console.log(`   Creating item payment transaction: KES ${paymentAmount.toFixed(2)}`);
-                console.log(`   Delivery fee and tip transactions will be handled separately with same payment attributes`);
                 
                 transaction = await db.Transaction.create({
                   orderId: order.id,
@@ -1303,27 +1257,18 @@ router.post('/callback', async (req, res) => {
             } catch (createError) {
               await dbTransaction.rollback();
               console.error(`❌ Error creating/checking transaction:`, createError);
-              // Try to find existing transaction one more time after rollback
+              // Final recovery attempt
               transaction = await db.Transaction.findOne({
                 where: {
-                  checkoutRequestID: checkoutRequestID,
-                  transactionType: 'payment'
-                }
-              }) || await db.Transaction.findOne({
-                where: {
                   orderId: order.id,
-                  transactionType: 'payment',
-                  status: 'completed',
-                  paymentStatus: 'paid',
-                  receiptNumber: receiptNumber
+                  transactionType: 'payment'
                 }
               });
               
-              if (transaction) {
-                console.log(`✅ Found existing transaction #${transaction.id} after error recovery`);
-              } else {
+              if (!transaction) {
                 throw createError; // Re-throw if we can't recover
               }
+              console.log(`✅ Found existing transaction #${transaction.id} after error recovery`);
             }
           } else {
             // Update existing transaction - ensure orderId is set if it wasn't
