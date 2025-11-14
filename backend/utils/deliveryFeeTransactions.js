@@ -49,6 +49,11 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
 
   const orderId = orderModel.id;
   const driverId = orderModel.driverId || null;
+  const paymentType = orderModel.paymentType || 'pay_now';
+  
+  // CRITICAL: For pay_now orders, don't manage driver transactions until driver is assigned
+  // For pay_on_delivery orders, driver should already be assigned, so we can manage them
+  const isPayNowWithoutDriver = paymentType === 'pay_now' && !driverId;
 
   const breakdown = await getOrderFinancialBreakdown(orderId);
   const deliveryFeeAmount = toNumeric(breakdown.deliveryFee);
@@ -345,7 +350,11 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
     if ((!orderModel.driverPayAmount || Math.abs(toNumeric(orderModel.driverPayAmount) - driverPayAmount) > 0.009)) {
       await orderModel.update({ driverPayAmount });
     }
-  } else if (driverTransaction && driverTransaction.status !== 'cancelled') {
+  } else if (!isPayNowWithoutDriver && driverTransaction && driverTransaction.status !== 'cancelled') {
+    // Only cancel driver transactions if:
+    // 1. NOT a pay_now order without driver (leave those alone until driver is assigned)
+    // 2. Driver transaction exists and isn't already cancelled
+    // This handles pay_on_delivery orders where driver pay is disabled
     await driverTransaction.update({
       status: 'cancelled',
       paymentStatus: 'cancelled',
@@ -356,6 +365,7 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
     });
     driverTransaction = null;
   }
+  // For pay_now orders without driver: Leave driver transactions alone until driver is assigned
 
   return {
     deliveryFee: deliveryFeeAmount,
