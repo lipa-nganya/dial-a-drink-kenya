@@ -105,9 +105,21 @@ export const AdminProvider = ({ children }) => {
     if (!isAuthenticated) return;
 
     // Initialize socket connection for admin
-    const socketUrl = window.location.hostname.includes('onrender.com') 
-      ? 'https://dialadrink-backend.onrender.com'
-      : 'http://localhost:5001';
+    // Use the same backend URL as API calls
+    const getBackendUrl = () => {
+      const apiUrl = process.env.REACT_APP_API_URL;
+      if (apiUrl) {
+        // Extract base URL from API URL (remove /api suffix)
+        return apiUrl.replace('/api', '');
+      }
+      // Fallback logic
+      const hostname = window.location.hostname;
+      if (hostname.includes('run.app')) {
+        return 'https://dialadrink-backend-910510650031.us-central1.run.app';
+      }
+      return 'http://localhost:5001';
+    };
+    const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
     
