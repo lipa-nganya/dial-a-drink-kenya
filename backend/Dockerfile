@@ -53,8 +53,7 @@ RUN npm ci --omit=dev
 # Copy application source
 COPY . .
 
-# Ensure Cloud Run uses the correct port
-ENV PORT=8080
+# Cloud Run will set PORT automatically - don't hardcode it
 EXPOSE 8080
 
 CMD ["npm", "start"]
