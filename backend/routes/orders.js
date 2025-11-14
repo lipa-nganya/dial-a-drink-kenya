@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../models');
 const { ensureCustomerFromOrder } = require('../utils/customerSync');
 const smsService = require('../services/sms');
+const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 
 // Helper function to calculate delivery fee
 const calculateDeliveryFee = async (items) => {
@@ -177,6 +178,10 @@ router.post('/', async (req, res) => {
         paymentStatus = 'paid';
       }
 
+      // Assign HOLD Driver to all orders during creation
+      // This ensures there's always a driverId/walletId available when payment happens
+      const { driver: holdDriver } = await getOrCreateHoldDriver();
+
       const order = await db.Order.create({
         customerName,
         customerPhone,
@@ -188,7 +193,8 @@ router.post('/', async (req, res) => {
         paymentType: paymentType || 'pay_on_delivery',
         paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
         paymentStatus,
-        status: orderStatus
+        status: orderStatus,
+        driverId: holdDriver.id // Assign HOLD Driver
       }, { transaction });
 
       createdOrderId = order.id;
