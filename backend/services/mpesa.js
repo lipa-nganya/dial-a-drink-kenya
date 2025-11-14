@@ -6,15 +6,18 @@ const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE;
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY;
 
-// Validate required credentials
-if (!MPESA_CONSUMER_KEY || !MPESA_CONSUMER_SECRET || !MPESA_SHORTCODE || !MPESA_PASSKEY) {
-  console.error('❌ M-Pesa credentials missing! Please set:');
-  console.error('   MPESA_CONSUMER_KEY');
-  console.error('   MPESA_CONSUMER_SECRET');
-  console.error('   MPESA_SHORTCODE');
-  console.error('   MPESA_PASSKEY');
-  throw new Error('M-Pesa credentials are required. Please set environment variables.');
-}
+// Validate required credentials - don't throw during module load, check at runtime
+const validateMpesaCredentials = () => {
+  if (!MPESA_CONSUMER_KEY || !MPESA_CONSUMER_SECRET || !MPESA_SHORTCODE || !MPESA_PASSKEY) {
+    console.error('❌ M-Pesa credentials missing! Please set:');
+    console.error('   MPESA_CONSUMER_KEY');
+    console.error('   MPESA_CONSUMER_SECRET');
+    console.error('   MPESA_SHORTCODE');
+    console.error('   MPESA_PASSKEY');
+    return false;
+  }
+  return true;
+};
 // Determine callback URL based on environment
 const getCallbackUrl = () => {
   let callbackUrl = process.env.MPESA_CALLBACK_URL;
@@ -170,6 +173,11 @@ function formatPhoneNumber(phone) {
  * @param {string} transactionDesc - Description of the transaction
  */
 async function initiateSTKPush(phoneNumber, amount, accountReference, transactionDesc) {
+  // Validate credentials at runtime
+  if (!validateMpesaCredentials()) {
+    throw new Error('M-Pesa credentials are required. Please set environment variables: MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY');
+  }
+  
   try {
     // Format phone number first to catch any formatting errors early
     let formattedPhone;
@@ -297,6 +305,11 @@ async function checkTransactionStatus(checkoutRequestID) {
  * @param {string} occasion - Occasion description (optional)
  */
 async function initiateB2C(phoneNumber, amount, remarks = 'Driver withdrawal', occasion = 'Withdrawal') {
+  // Validate credentials at runtime
+  if (!validateMpesaCredentials()) {
+    throw new Error('M-Pesa credentials are required. Please set environment variables: MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY');
+  }
+  
   try {
     // Format phone number first
     let formattedPhone;
