@@ -1,6 +1,6 @@
-# Dial A Drink - Admin Dashboard
+# Drink Suite - Admin Dashboard
 
-Separate admin frontend application for managing Dial A Drink operations.
+Separate admin frontend application for managing Drink Suite operations.
 
 ## Setup
 
