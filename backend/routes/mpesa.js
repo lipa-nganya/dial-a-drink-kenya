@@ -132,7 +132,8 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
   let driverDeliveryTransaction = null;
   if (driverPayAmount > 0.009 && orderInstance.driverId) {
-    // First check for existing transaction with this driverId
+    // CRITICAL: Check for ANY existing driver delivery transaction for this order and driver
+    // Check by driverId first (most specific)
     driverDeliveryTransaction = await db.Transaction.findOne({
       where: {
         orderId: effectiveOrderId,
@@ -149,9 +150,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
           orderId: effectiveOrderId,
           transactionType: 'delivery_pay',
           driverId: null,
-          paymentStatus: {
-            [Op.in]: ['pending', 'unpaid', 'paid']
-          }
+          driverWalletId: null // Must be merchant transaction, not driver transaction
         },
         order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
       });
@@ -175,11 +174,15 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     };
 
     if (driverDeliveryTransaction) {
+      // Found existing transaction - update it instead of creating duplicate
       await driverDeliveryTransaction.update(driverDeliveryPayload);
       // Reload transaction to get updated values
       await driverDeliveryTransaction.reload();
+      console.log(`✅ Updated existing driver delivery transaction #${driverDeliveryTransaction.id} for Order #${effectiveOrderId}`);
     } else {
+      // No driver delivery transaction exists - safe to create new one
       driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload);
+      console.log(`✅ Created driver delivery transaction #${driverDeliveryTransaction.id} for Order #${effectiveOrderId}`);
     }
 
     try {
@@ -800,12 +803,13 @@ router.post('/stk-push', async (req, res) => {
         if (driverPayAmount > 0 && order.driverId) {
           const driverDeliveryNote = `Driver delivery fee payment for Order #${orderId}. Amount: KES ${driverPayAmount.toFixed(2)}. Pending confirmation.`;
 
+          // CRITICAL: Check for ANY existing driver delivery transaction for this order and driver
+          // Don't filter by status - if one exists (even completed), update it instead of creating duplicate
           let driverDeliveryTransaction = await db.Transaction.findOne({
             where: {
               orderId: order.id,
               transactionType: 'delivery_pay',
-              driverId: order.driverId,
-              status: { [Op.ne]: 'completed' }
+              driverId: order.driverId
             },
             order: [['createdAt', 'DESC']]
           });
@@ -820,9 +824,11 @@ router.post('/stk-push', async (req, res) => {
           };
 
           if (driverDeliveryTransaction) {
+            // Found existing driver delivery transaction - update it instead of creating duplicate
             await driverDeliveryTransaction.update(driverDeliveryPayload);
             console.log(`✅ Driver delivery fee transaction updated for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
           } else {
+            // No driver delivery transaction exists - safe to create new one
             driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload);
             console.log(`✅ Driver delivery fee transaction created for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
           }
