@@ -1362,103 +1362,27 @@ router.post('/callback', async (req, res) => {
             }
           }
 
-          // Ensure delivery fee transaction is present and marked as completed
-          // CRITICAL: Check for merchant delivery transaction (driverId: null) separately from driver delivery transaction
-          // This prevents creating duplicates when driver delivery transaction already exists
+          // CRITICAL: Call finalizeOrderPayment to handle all transaction creation/updates
+          // This centralizes transaction creation and prevents duplicates
+          // finalizeOrderPayment will create/update payment, delivery, and driver delivery transactions
           try {
-            const deliveryTransactionNote = `Delivery fee settled via M-Pesa. Receipt: ${receiptNumber || 'N/A'}. Delivery amount: KES ${deliveryFee.toFixed(2)}.`;
-
-            // First, check for merchant delivery transaction (driverId: null, driverWalletId: null)
-            // This is the transaction that represents the merchant's portion of the delivery fee
-            let deliveryTransaction = await db.Transaction.findOne({
-              where: {
-                orderId: order.id,
-                transactionType: 'delivery_pay',
-                driverId: null,
-                driverWalletId: null
-              },
-              order: [['createdAt', 'DESC']]
+            console.log(`📞 Calling finalizeOrderPayment for Order #${order.id}...`);
+            await finalizeOrderPayment({
+              orderId: order.id,
+              paymentTransaction: transaction,
+              receiptNumber: receiptNumber,
+              req,
+              context: 'M-Pesa callback'
             });
-
-            if (!deliveryTransaction) {
-              // No merchant delivery transaction exists - create it
-              // But first check if ANY delivery_pay transaction exists to avoid duplicates
-              const anyDeliveryTransaction = await db.Transaction.findOne({
-                where: {
-                  orderId: order.id,
-                  transactionType: 'delivery_pay'
-                },
-                order: [['createdAt', 'DESC']]
-              });
-
-              if (anyDeliveryTransaction) {
-                // A delivery transaction exists but it's a driver transaction
-                // Update it to be a merchant transaction if it doesn't have driverId set
-                if (!anyDeliveryTransaction.driverId && !anyDeliveryTransaction.driverWalletId) {
-                  deliveryTransaction = anyDeliveryTransaction;
-                  console.log(`⚠️  Found existing delivery transaction #${deliveryTransaction.id} without driverId. Using it as merchant transaction.`);
-                } else {
-                  // It's a driver transaction - create merchant transaction separately
-                  deliveryTransaction = await db.Transaction.create({
-                    orderId: order.id,
-                    transactionType: 'delivery_pay',
-                    paymentMethod: 'mobile_money',
-                    paymentProvider: 'mpesa',
-                    amount: deliveryFee,
-                    status: 'completed',
-                    paymentStatus: 'paid',
-                    receiptNumber: receiptNumber,
-                    checkoutRequestID: checkoutRequestID,
-                    merchantRequestID: stkCallback.MerchantRequestID,
-                    phoneNumber: phoneNumber,
-                    transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-                    notes: deliveryTransactionNote,
-                    driverId: null,
-                    driverWalletId: null
-                  });
-                  console.log(`✅ Created merchant delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
-                }
-              } else {
-                // No delivery transaction exists at all - create merchant one
-                deliveryTransaction = await db.Transaction.create({
-                  orderId: order.id,
-                  transactionType: 'delivery_pay',
-                  paymentMethod: 'mobile_money',
-                  paymentProvider: 'mpesa',
-                  amount: deliveryFee,
-                  status: 'completed',
-                  paymentStatus: 'paid',
-                  receiptNumber: receiptNumber,
-                  checkoutRequestID: checkoutRequestID,
-                  merchantRequestID: stkCallback.MerchantRequestID,
-                  phoneNumber: phoneNumber,
-                  transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-                  notes: deliveryTransactionNote,
-                  driverId: null,
-                  driverWalletId: null
-                });
-                console.log(`✅ Created merchant delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
-              }
-            } else {
-              // Merchant delivery transaction exists - update it
-              await deliveryTransaction.update({
-                amount: deliveryFee,
-                status: 'completed',
-                paymentStatus: 'paid',
-                receiptNumber: receiptNumber,
-                checkoutRequestID: checkoutRequestID,
-                merchantRequestID: stkCallback.MerchantRequestID || deliveryTransaction.merchantRequestID,
-                phoneNumber: phoneNumber || deliveryTransaction.phoneNumber,
-                transactionDate: transactionDate ? new Date(transactionDate) : (deliveryTransaction.transactionDate || new Date()),
-                notes: deliveryTransaction.notes ? `${deliveryTransaction.notes}\n${deliveryTransactionNote}` : deliveryTransactionNote,
-                driverId: null, // Ensure it's marked as merchant transaction
-                driverWalletId: null
-              });
-              console.log(`✅ Updated merchant delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
-            }
-          } catch (deliveryTxnError) {
-            console.error('❌ Error ensuring delivery fee transaction:', deliveryTxnError);
+            console.log(`✅ finalizeOrderPayment completed for Order #${order.id}`);
+          } catch (finalizeError) {
+            console.error(`❌ Error in finalizeOrderPayment:`, finalizeError);
+            // Don't fail the callback - payment transaction is already updated
+            // Delivery transactions can be synced later via ensureDeliveryFeeSplit
           }
+
+          // Reload order after finalizeOrderPayment to get updated status
+          await order.reload();
 
           // Update order - Transaction status is the single source of truth
           // Determine the correct order status based on current status
@@ -1507,128 +1431,9 @@ router.post('/callback', async (req, res) => {
             );
             console.log(`✅ Order #${order.id} updated via raw SQL: status=${newOrderStatus}, paymentStatus=paid`);
             
-            // Create tip transaction if order has tip (only after payment is completed)
-            if (order.tipAmount && parseFloat(order.tipAmount) > 0) {
-              try {
-                // Check if tip transaction already exists (shouldn't, but just in case)
-                const existingTipTransaction = await db.Transaction.findOne({
-                  where: {
-                    orderId: order.id,
-                    transactionType: 'tip'
-                  }
-                });
-
-                if (!existingTipTransaction) {
-                  const tipAmount = parseFloat(order.tipAmount);
-                  let tipTransactionData = {
-                    orderId: order.id,
-                    transactionType: 'tip',
-                    paymentMethod: 'mobile_money', // Tip comes from same M-Pesa payment
-                    paymentProvider: 'mpesa', // Same payment provider as order payment
-                    amount: tipAmount,
-                    status: 'completed', // Tip is paid when order payment is paid
-                    paymentStatus: 'paid', // Tip is paid when order payment is paid
-                    receiptNumber: receiptNumber, // Same receipt number as order payment
-                    checkoutRequestID: checkoutRequestID, // Same checkout request ID
-                    merchantRequestID: stkCallback.MerchantRequestID, // Same merchant request ID
-                    phoneNumber: phoneNumber, // Same phone number
-                    transactionDate: transactionDate ? new Date(transactionDate) : new Date(), // Same transaction date
-                    notes: `Tip for Order #${order.id} - ${order.customerName} (from same M-Pesa payment)`
-                  };
-
-                  // If driver is already assigned, credit tip immediately
-                  if (order.driverId) {
-                    try {
-                      // Get or create driver wallet
-                      let driverWallet = await db.DriverWallet.findOne({ where: { driverId: order.driverId } });
-                      if (!driverWallet) {
-                        driverWallet = await db.DriverWallet.create({
-                          driverId: order.driverId,
-                          balance: 0,
-                          totalTipsReceived: 0,
-                          totalTipsCount: 0
-                        });
-                      }
-
-                      // Credit tip to driver wallet
-                      await driverWallet.update({
-                        balance: parseFloat(driverWallet.balance) + tipAmount,
-                        totalTipsReceived: parseFloat(driverWallet.totalTipsReceived) + tipAmount,
-                        totalTipsCount: driverWallet.totalTipsCount + 1
-                      });
-
-                      // Update tip transaction data with driver info
-                      tipTransactionData.driverId = order.driverId;
-                      tipTransactionData.driverWalletId = driverWallet.id;
-                      tipTransactionData.status = 'completed'; // Completed since driver is assigned
-                      tipTransactionData.notes = `Tip for Order #${order.id} - ${order.customerName} (credited to driver wallet)`;
-
-                      console.log(`✅ Tip of KES ${tipAmount} credited to driver #${order.driverId} wallet for Order #${order.id}`);
-                    } catch (walletError) {
-                      console.error('❌ Error crediting tip to driver wallet:', walletError);
-                      // Continue with tip transaction creation even if wallet credit fails
-                      tipTransactionData.status = 'pending'; // Will be completed when driver is assigned
-                      tipTransactionData.notes = `Tip for Order #${order.id} - ${order.customerName} (pending driver assignment)`;
-                    }
-                  } else {
-                    tipTransactionData.status = 'pending'; // Will be completed when driver is assigned
-                    tipTransactionData.notes = `Tip for Order #${order.id} - ${order.customerName} (pending driver assignment)`;
-                  }
-
-                  await db.Transaction.create(tipTransactionData);
-                  console.log(`✅ Tip transaction created for Order #${order.id}: KES ${tipAmount} (after payment completion)`);
-                } else {
-                  console.log(`⚠️  Tip transaction already exists for Order #${order.id}`);
-                }
-              } catch (tipError) {
-                console.error('❌ Error creating tip transaction:', tipError);
-                // Don't fail payment update if tip transaction fails
-              }
-            }
-
-            // Credit order payment to admin wallet (order total minus tip, since tip goes to driver)
-            try {
-              // Get or create admin wallet (single wallet for all admin revenue)
-              let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
-              if (!adminWallet) {
-                adminWallet = await db.AdminWallet.create({
-                  id: 1,
-                  balance: 0,
-                  totalRevenue: 0,
-                  totalOrders: 0
-                });
-              }
-
-              const { deliveryFee } = await getOrderFinancialBreakdown(order.id);
-              const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-                db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-                db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-              ]);
-
-              const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
-              const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-              const deliveryFeeNumeric = parseFloat(deliveryFee) || 0;
-              const driverPayoutPortion = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
-                ? Math.min(deliveryFeeNumeric, configuredDriverPayAmount)
-                : 0;
-
-              // Order total for admin excludes tips and driver delivery payouts
-              const tipAmount = parseFloat(order.tipAmount) || 0;
-              const orderTotalForAdmin = Math.max(parseFloat(order.totalAmount) - tipAmount - driverPayoutPortion, 0);
-
-              // Update admin wallet
-              await adminWallet.update({
-                balance: parseFloat(adminWallet.balance) + orderTotalForAdmin,
-                totalRevenue: parseFloat(adminWallet.totalRevenue) + orderTotalForAdmin,
-                totalOrders: adminWallet.totalOrders + 1
-              });
-
-              console.log(`✅ Order payment of KES ${orderTotalForAdmin} credited to admin wallet for Order #${order.id}`);
-            } catch (adminWalletError) {
-              console.error('❌ Error crediting order payment to admin wallet:', adminWalletError);
-              // Don't fail payment update if admin wallet credit fails
-            }
-
+            // CRITICAL: Tip transaction and admin wallet credit are handled by finalizeOrderPayment
+            // Don't duplicate them here to avoid double crediting
+            
             // Also update via Sequelize as backup
             try {
               await order.update({

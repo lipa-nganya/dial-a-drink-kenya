@@ -321,13 +321,37 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       if (!wasAlreadyCredited || driverTransaction.status !== 'completed' || driverTransaction.driverWalletId !== driverWallet.id) {
         await driverTransaction.update(driverPayload);
         await driverTransaction.reload();
+      } else {
+        console.log(`ℹ️  Driver transaction #${driverTransaction.id} already finalized for Order #${orderId} (skipping update)`);
       }
     } else {
-      driverTransaction = await db.Transaction.create({
-        orderId,
-        transactionType: 'delivery_pay',
-        ...driverPayload
+      // CRITICAL: Double-check that no driver delivery transaction exists before creating
+      // This prevents duplicates when finalizeOrderPayment already created one
+      const existingDriverTxn = await db.Transaction.findOne({
+        where: {
+          orderId,
+          transactionType: 'delivery_pay',
+          driverId
+        },
+        order: [['createdAt', 'DESC']]
       });
+      
+      if (existingDriverTxn) {
+        console.log(`⚠️  Found existing driver delivery transaction #${existingDriverTxn.id} for Order #${orderId}. Using it instead of creating duplicate.`);
+        driverTransaction = existingDriverTxn;
+        // Update it if needed
+        if (!wasAlreadyCredited || driverTransaction.status !== 'completed' || driverTransaction.driverWalletId !== driverWallet.id) {
+          await driverTransaction.update(driverPayload);
+          await driverTransaction.reload();
+        }
+      } else {
+        driverTransaction = await db.Transaction.create({
+          orderId,
+          transactionType: 'delivery_pay',
+          ...driverPayload
+        });
+        console.log(`✅ Created driver delivery transaction #${driverTransaction.id} for Order #${orderId}`);
+      }
     }
 
     // Credit driver wallet if not already credited (check both transaction state and order flag)
@@ -383,11 +407,29 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
     if (driverTransaction) {
       await driverTransaction.update(driverPayload);
     } else {
-      driverTransaction = await db.Transaction.create({
-        orderId,
-        transactionType: 'delivery_pay',
-        ...driverPayload
+      // CRITICAL: Double-check that no driver delivery transaction exists before creating
+      // This prevents duplicates when finalizeOrderPayment already created one
+      const existingDriverTxn = await db.Transaction.findOne({
+        where: {
+          orderId,
+          transactionType: 'delivery_pay',
+          driverId
+        },
+        order: [['createdAt', 'DESC']]
       });
+      
+      if (existingDriverTxn) {
+        console.log(`⚠️  Found existing driver delivery transaction #${existingDriverTxn.id} for Order #${orderId}. Using it instead of creating duplicate.`);
+        driverTransaction = existingDriverTxn;
+        await driverTransaction.update(driverPayload);
+      } else {
+        driverTransaction = await db.Transaction.create({
+          orderId,
+          transactionType: 'delivery_pay',
+          ...driverPayload
+        });
+        console.log(`✅ Created pending driver delivery transaction #${driverTransaction.id} for Order #${orderId}`);
+      }
     }
 
     if ((!orderModel.driverPayAmount || Math.abs(toNumeric(orderModel.driverPayAmount) - driverPayAmount) > 0.009)) {
