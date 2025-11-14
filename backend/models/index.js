@@ -17,7 +17,7 @@ try {
       sequelize = new Sequelize('postgres://placeholder:placeholder@localhost:5432/placeholder', {
         ...dbConfig,
         logging: false,
-        pool: { max: 0 } // Disable connection pooling for placeholder
+        pool: { max: 1, min: 0, idle: 10000 } // Minimal pool for placeholder
       });
     } else {
       sequelize = new Sequelize(databaseUrl, dbConfig);
@@ -32,7 +32,7 @@ try {
   sequelize = new Sequelize('postgres://placeholder:placeholder@localhost:5432/placeholder', {
     dialect: 'postgres',
     logging: false,
-    pool: { max: 0 }
+    pool: { max: 1, min: 0, idle: 10000 } // Minimal pool for placeholder
   });
 }
 

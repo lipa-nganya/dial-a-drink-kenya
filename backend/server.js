@@ -13,8 +13,18 @@ process.on('uncaughtException', (error) => {
 });
 
 const app = require('./app');
-const db = require('./models');
-const seedData = require('./seed');
+// Load models with error handling - server should start even if models fail
+let db, seedData;
+try {
+  db = require('./models');
+  seedData = require('./seed');
+} catch (modelError) {
+  console.error('⚠️ Error loading models:', modelError.message);
+  console.warn('⚠️ Server will start but database operations will fail');
+  // Create minimal db object to prevent crashes
+  db = { sequelize: { authenticate: () => Promise.reject(new Error('Models not loaded')), sync: () => Promise.resolve() } };
+  seedData = () => Promise.resolve();
+}
 const http = require('http');
 const { Server } = require('socket.io');
 
