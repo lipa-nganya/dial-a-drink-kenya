@@ -38,9 +38,23 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
   const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
   const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-  const driverPayAmount = driverPaySettingEnabled && configuredDriverPayAmount > 0
-    ? Math.min(deliveryFee, configuredDriverPayAmount)
-    : 0;
+  
+  // CRITICAL: Use same calculation logic as ensureDeliveryFeeSplit to avoid mismatches
+  // First check orderInstance.driverPayAmount, then fall back to configuredDriverPayAmount
+  let driverPayAmount = 0;
+  if (driverPaySettingEnabled && orderInstance.driverId) {
+    driverPayAmount = parseFloat(orderInstance.driverPayAmount || '0');
+    
+    if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPayAmount > 0) {
+      driverPayAmount = Math.min(deliveryFee, configuredDriverPayAmount);
+    }
+    
+    if (driverPayAmount > deliveryFee) {
+      driverPayAmount = deliveryFee;
+    }
+  }
+  // If driverPayEnabled is false or no driver, driverPayAmount stays 0
+  
   const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
 
   const normalizedReceipt = receiptNumber || paymentTransaction.receiptNumber;
@@ -595,7 +609,17 @@ router.post('/stk-push', async (req, res) => {
 
     const testModeSetting = await db.Settings.findOne({ where: { key: 'deliveryTestMode' } }).catch(() => null);
     const isTestMode = testModeSetting?.value === 'true';
-    const shouldSimulatePayment = isTestMode || (process.env.NODE_ENV !== 'production' && process.env.FORCE_REAL_MPESA !== 'true');
+    
+    // Determine if we should simulate payment
+    // On Cloud Run, we want real payments unless explicitly in test mode
+    // Check if we're on Cloud Run (GCP environment)
+    const isCloudRun = process.env.K_SERVICE || process.env.GCP_PROJECT || false;
+    const isProduction = process.env.NODE_ENV === 'production' || isCloudRun;
+    
+    // Only simulate if:
+    // 1. Test mode is explicitly enabled in database, OR
+    // 2. We're NOT in production/cloud AND FORCE_REAL_MPESA is not set to 'true'
+    const shouldSimulatePayment = isTestMode || (!isProduction && process.env.FORCE_REAL_MPESA !== 'true');
 
     // Initiate STK Push
     const reference = accountReference || `ORDER-${orderId}`;
@@ -610,9 +634,13 @@ router.post('/stk-push', async (req, res) => {
       orderId,
       testMode: isTestMode,
       simulate: shouldSimulatePayment,
+      isCloudRun: !!isCloudRun,
+      isProduction: isProduction,
       NODE_ENV: process.env.NODE_ENV,
       FORCE_REAL_MPESA: process.env.FORCE_REAL_MPESA,
-      MPESA_ENVIRONMENT: process.env.MPESA_ENVIRONMENT
+      MPESA_ENVIRONMENT: process.env.MPESA_ENVIRONMENT,
+      K_SERVICE: process.env.K_SERVICE || 'not set',
+      GCP_PROJECT: process.env.GCP_PROJECT || 'not set'
     });
     console.log('═══════════════════════════════════════════════════════');
 

@@ -375,7 +375,7 @@ const AdminOverview = () => {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ color: '#00E0B8' }}>Txn #</TableCell>
+                        <TableCell sx={{ color: '#00E0B8' }}>Transaction Number</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }}>Order #</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }}>Customer</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }} align="right">Amount</TableCell>
@@ -389,6 +389,9 @@ const AdminOverview = () => {
 
                         return (
                           <TableRow key={order.id}>
+                            <TableCell sx={{ color: '#F5F5F5' }}>
+                              {order.transactionNumber ? `#${order.transactionNumber}` : 'N/A'}
+                            </TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }}>#{order.orderNumber}</TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }}>{order.customerName}</TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }} align="right">
@@ -408,7 +411,7 @@ const AdminOverview = () => {
                       })}
                       {latestOrders.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={5} sx={{ color: '#999', textAlign: 'center' }}>
+                          <TableCell colSpan={6} sx={{ color: '#999', textAlign: 'center' }}>
                             No recent orders found.
                           </TableCell>
                         </TableRow>
@@ -467,6 +470,7 @@ const AdminOverview = () => {
                   <Table size="small">
                     <TableHead>
                       <TableRow>
+                        <TableCell sx={{ color: '#00E0B8' }}>Transaction Number</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }}>Order #</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }}>Type</TableCell>
                         <TableCell sx={{ color: '#00E0B8' }}>Payment Method</TableCell>
@@ -478,12 +482,57 @@ const AdminOverview = () => {
                     </TableHead>
                     <TableBody>
                       {latestTransactions.map((txn) => {
-                        const typeChip = getTransactionTypeChipProps(txn.transactionType);
+                        // Ensure transactionType is always present (normalize on frontend as well)
+                        const safeTransactionType = (txn.transactionType && 
+                          typeof txn.transactionType === 'string' && 
+                          txn.transactionType.trim() !== '') 
+                          ? txn.transactionType.trim() 
+                          : 'payment';
+                        
+                        const typeChipRaw = getTransactionTypeChipProps(safeTransactionType);
+                        // Handle function returns (e.g., delivery_pay which needs transaction context)
+                        const typeChip = typeof typeChipRaw === 'function'
+                          ? typeChipRaw(txn)
+                          : typeChipRaw;
+                        
+                        // Ensure typeChip always has a label
+                        let chipLabel = typeChip?.label;
+                        let chipSx = typeChip?.sx;
+                        
+                        if (!chipLabel || chipLabel.trim() === '') {
+                          if (safeTransactionType === 'delivery_pay' || safeTransactionType === 'delivery') {
+                            const isDriverPayment = Boolean(txn?.driverWalletId || txn?.driverId);
+                            chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
+                            chipSx = {
+                              backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
+                              color: isDriverPayment ? '#000' : '#002A54',
+                              fontWeight: 700
+                            };
+                          } else if (safeTransactionType && safeTransactionType.trim() !== '') {
+                            chipLabel = safeTransactionType
+                              .split('_')
+                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                              .join(' ');
+                            chipSx = {
+                              backgroundColor: '#616161',
+                              color: '#FFFFFF',
+                              fontWeight: 600
+                            };
+                          } else {
+                            chipLabel = 'Payment';
+                            chipSx = {
+                              backgroundColor: '#616161',
+                              color: '#FFFFFF',
+                              fontWeight: 600
+                            };
+                          }
+                        }
+                        
                         const methodChip = getPaymentMethodChipProps(txn.paymentMethod);
                         const statusChip = getTransactionStatusChipProps(
                           txn.transactionStatus || txn.status || txn.paymentStatus
                         );
-                        const isTip = (txn.transactionType || '').toLowerCase() === 'tip';
+                        const isTip = safeTransactionType.toLowerCase() === 'tip';
 
                         return (
                           <TableRow
@@ -498,15 +547,15 @@ const AdminOverview = () => {
                             <TableCell sx={{ color: '#F5F5F5' }}>#{txn.id}</TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }}>#{txn.orderId}</TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }}>
-                              {typeChip ? (
-                                <Chip
-                                  size="small"
-                                  label={typeChip.label}
-                                  sx={{ fontWeight: 700, ...typeChip.sx }}
-                                />
-                              ) : (
-                                '—'
-                              )}
+                              <Chip
+                                size="small"
+                                label={chipLabel || 'Payment'}
+                                sx={{ fontWeight: 700, ...(chipSx || {
+                                  backgroundColor: '#616161',
+                                  color: '#FFFFFF',
+                                  fontWeight: 600
+                                }) }}
+                              />
                             </TableCell>
                             <TableCell sx={{ color: '#F5F5F5' }}>
                               {methodChip ? (

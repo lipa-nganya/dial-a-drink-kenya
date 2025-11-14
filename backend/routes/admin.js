@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
-const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const jwt = require('jsonwebtoken');
@@ -482,7 +481,20 @@ router.get('/transactions', async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    res.json(transactions);
+    // Ensure all transactions have a transactionType (default to 'payment' if null, undefined, or empty string)
+    const normalizedTransactions = transactions.map(transaction => {
+      const transactionData = transaction.toJSON ? transaction.toJSON() : transaction;
+      // If transactionType is null, undefined, empty string, or not a valid string, default to 'payment'
+      if (!transactionData.transactionType || 
+          typeof transactionData.transactionType !== 'string' || 
+          transactionData.transactionType.trim() === '') {
+        console.log(`⚠️  Transaction #${transactionData.id} has missing/null transactionType, defaulting to 'payment'`);
+        transactionData.transactionType = 'payment';
+      }
+      return transactionData;
+    });
+
+    res.json(normalizedTransactions);
   } catch (error) {
     console.error('Error fetching transactions:', error);
     res.status(500).json({ error: error.message });
@@ -1286,153 +1298,9 @@ router.patch('/orders/:id/driver', async (req, res) => {
     }
 
     const oldDriverId = order.driverId;
-    const { driver: holdDriver } = await getOrCreateHoldDriver();
-    const isChangingDriver = oldDriverId !== driverId && driverId && oldDriverId;
 
     // Update driver assignment
     await order.update({ driverId: driverId || null });
-
-    // If changing driver assignment, transfer delivery fee and tip transactions to new driver
-    if (isChangingDriver && driverId) {
-      try {
-        // Get new driver's wallet
-        let newDriverWallet = await db.DriverWallet.findOne({ where: { driverId } });
-        if (!newDriverWallet) {
-          newDriverWallet = await db.DriverWallet.create({
-            driverId,
-            balance: 0,
-            totalTipsReceived: 0,
-            totalTipsCount: 0,
-            totalDeliveryPay: 0,
-            totalDeliveryPayCount: 0
-          });
-        }
-
-        // Transfer delivery fee transaction (if applicable and driver pay is enabled)
-        const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-        ]);
-
-        const driverPayEnabled = driverPayEnabledSetting?.value === 'true';
-        const configuredDriverPay = parseFloat(driverPayAmountSetting?.value || '0');
-
-        if (driverPayEnabled && configuredDriverPay > 0) {
-          // Find delivery fee transaction assigned to old driver
-          const deliveryTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: order.id,
-              transactionType: 'delivery_pay',
-              driverId: oldDriverId,
-              status: { [Op.in]: ['completed', 'pending'] }
-            }
-          });
-
-          if (deliveryTransaction) {
-            const driverPayAmount = Math.min(configuredDriverPay, parseFloat(deliveryTransaction.amount) || 0);
-            
-            // Update transaction to new driver
-            await deliveryTransaction.update({
-              driverId,
-              driverWalletId: newDriverWallet.id
-            });
-
-            // Credit new driver's wallet if payment is completed
-            if (deliveryTransaction.status === 'completed' && deliveryTransaction.paymentStatus === 'paid') {
-              // Debit old driver's wallet if it was credited
-              if (oldDriverId && oldDriverId !== driverId) {
-                const oldDriverWallet = await db.DriverWallet.findOne({ where: { driverId: oldDriverId } });
-                if (oldDriverWallet && deliveryTransaction.driverWalletId === oldDriverWallet.id) {
-                  const oldBalance = parseFloat(oldDriverWallet.balance) || 0;
-                  const oldTotalDeliveryPay = parseFloat(oldDriverWallet.totalDeliveryPay || 0);
-                  const oldCount = oldDriverWallet.totalDeliveryPayCount || 0;
-
-                  await oldDriverWallet.update({
-                    balance: Math.max(0, oldBalance - driverPayAmount),
-                    totalDeliveryPay: Math.max(0, oldTotalDeliveryPay - driverPayAmount),
-                    totalDeliveryPayCount: Math.max(0, oldCount - 1)
-                  });
-                  console.log(`   Debited old driver #${oldDriverId} wallet: -KES ${driverPayAmount.toFixed(2)}`);
-                }
-              }
-
-              // Credit new driver's wallet
-              const oldBalance = parseFloat(newDriverWallet.balance) || 0;
-              const oldTotalDeliveryPay = parseFloat(newDriverWallet.totalDeliveryPay || 0);
-              const oldCount = newDriverWallet.totalDeliveryPayCount || 0;
-
-              await newDriverWallet.update({
-                balance: oldBalance + driverPayAmount,
-                totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
-                totalDeliveryPayCount: oldCount + 1
-              });
-
-              console.log(`✅ Transferred delivery fee payment (KES ${driverPayAmount.toFixed(2)}) from driver #${oldDriverId} to driver #${driverId} for Order #${order.id}`);
-            }
-          }
-        }
-
-        // Transfer tip transaction
-        const tipTransaction = await db.Transaction.findOne({
-          where: {
-            orderId: order.id,
-            transactionType: 'tip',
-            driverId: oldDriverId,
-            status: { [Op.in]: ['completed', 'pending'] }
-          }
-        });
-
-        if (tipTransaction && order.tipAmount && parseFloat(order.tipAmount) > 0) {
-          const tipAmount = parseFloat(order.tipAmount);
-
-          // Debit old driver's wallet if tip was already credited
-          if (oldDriverId && oldDriverId !== driverId && tipTransaction.status === 'completed') {
-            const oldDriverWallet = await db.DriverWallet.findOne({ where: { driverId: oldDriverId } });
-            if (oldDriverWallet && tipTransaction.driverWalletId === oldDriverWallet.id) {
-              const oldBalance = parseFloat(oldDriverWallet.balance) || 0;
-              const oldTotalTips = parseFloat(oldDriverWallet.totalTipsReceived || 0);
-              const oldCount = oldDriverWallet.totalTipsCount || 0;
-
-              await oldDriverWallet.update({
-                balance: Math.max(0, oldBalance - tipAmount),
-                totalTipsReceived: Math.max(0, oldTotalTips - tipAmount),
-                totalTipsCount: Math.max(0, oldCount - 1)
-              });
-              console.log(`   Debited old driver #${oldDriverId} wallet: -KES ${tipAmount.toFixed(2)}`);
-            }
-          }
-
-          // Update transaction to new driver
-          await tipTransaction.update({
-            driverId,
-            driverWalletId: newDriverWallet.id
-          });
-
-          // Credit new driver's wallet if payment is completed
-          if (order.paymentStatus === 'paid') {
-            const oldBalance = parseFloat(newDriverWallet.balance) || 0;
-            const oldTotalTips = parseFloat(newDriverWallet.totalTipsReceived || 0);
-            const oldCount = newDriverWallet.totalTipsCount || 0;
-
-            await newDriverWallet.update({
-              balance: oldBalance + tipAmount,
-              totalTipsReceived: oldTotalTips + tipAmount,
-              totalTipsCount: oldCount + 1
-            });
-
-            await tipTransaction.update({
-              status: 'completed',
-              paymentStatus: 'paid'
-            });
-
-            console.log(`✅ Transferred tip (KES ${tipAmount.toFixed(2)}) from driver #${oldDriverId} to driver #${driverId} for Order #${order.id}`);
-          }
-        }
-      } catch (transferError) {
-        console.error('❌ Error transferring transactions from HOLD driver:', transferError);
-        // Don't fail the driver assignment if transfer fails
-      }
-    }
 
     // Reload order to get updated data
     await order.reload({
@@ -2036,10 +1904,19 @@ router.get('/latest-transactions', async (req, res) => {
         }
       }
 
+      // Ensure transactionType is always present (default to 'payment' if null, undefined, or empty)
+      let transactionType = tx.transactionType;
+      if (!transactionType || 
+          typeof transactionType !== 'string' || 
+          transactionType.trim() === '') {
+        console.log(`⚠️  Latest Transactions: Transaction #${tx.id} has missing/null transactionType, defaulting to 'payment'`);
+        transactionType = 'payment';
+      }
+
       return {
         id: tx.id,
         orderId: tx.orderId,
-        transactionType: tx.transactionType,
+        transactionType: transactionType,
         amount: amount,
         paymentMethod: tx.paymentMethod || null,
         status: status || null,
