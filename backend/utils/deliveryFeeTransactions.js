@@ -237,7 +237,18 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
         await merchantTransaction.update(merchantPayload);
         console.log(`✅ Reactivated cancelled merchant transaction #${merchantTransaction.id} for Order #${orderId} (payment completed)`);
       } else if (merchantTransaction.status !== 'cancelled') {
-        await merchantTransaction.update(merchantPayload);
+        // CRITICAL: Don't overwrite completed merchant transactions if payment is already completed
+        // This prevents ensureDeliveryFeeSplit from overwriting transactions finalized by finalizeOrderPayment
+        // Only update if the transaction is not already completed, or if amounts don't match significantly
+        const currentAmount = toNumeric(merchantTransaction.amount);
+        const amountMismatch = Math.abs(currentAmount - merchantAmount) > 0.009;
+        const isNotCompleted = merchantTransaction.status !== 'completed' || merchantTransaction.paymentStatus !== 'paid';
+        
+        if (isNotCompleted || amountMismatch) {
+          await merchantTransaction.update(merchantPayload);
+        } else {
+          console.log(`ℹ️  Merchant transaction #${merchantTransaction.id} already finalized for Order #${orderId} (skipping update)`);
+        }
       }
     } else {
       merchantTransaction = await db.Transaction.create({
@@ -297,13 +308,20 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       notes: `Driver delivery fee payment for Order #${orderId} (${context}). Amount: KES ${driverPayAmount.toFixed(2)}.${paymentCompleted ? '' : ' Pending payment confirmation.'}`
     };
 
-    const wasAlreadyCredited = driverTransaction?.driverWalletId === driverWallet.id && 
+    // CRITICAL: Check both transaction state AND order flag to prevent double crediting
+    // This is especially important for pay_now orders where finalizeOrderPayment already credited the wallet
+    const wasAlreadyCredited = (driverTransaction?.driverWalletId === driverWallet.id && 
                                 driverTransaction?.status === 'completed' &&
-                                driverTransaction?.driverId === driverId;
+                                driverTransaction?.driverId === driverId) ||
+                                orderModel.driverPayCredited;
 
     if (driverTransaction) {
-      await driverTransaction.update(driverPayload);
-      await driverTransaction.reload();
+      // Only update transaction if it's not already completed and linked to wallet
+      // This prevents overwriting transactions that were finalized by finalizeOrderPayment
+      if (!wasAlreadyCredited || driverTransaction.status !== 'completed' || driverTransaction.driverWalletId !== driverWallet.id) {
+        await driverTransaction.update(driverPayload);
+        await driverTransaction.reload();
+      }
     } else {
       driverTransaction = await db.Transaction.create({
         orderId,
@@ -312,7 +330,7 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       });
     }
 
-    // Credit driver wallet if not already credited
+    // Credit driver wallet if not already credited (check both transaction state and order flag)
     if (!wasAlreadyCredited && paymentCompleted) {
       const oldBalance = toNumeric(driverWallet.balance);
       const oldTotalDeliveryPay = toNumeric(driverWallet.totalDeliveryPay);
@@ -331,13 +349,16 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${toNumeric(driverWallet.balance).toFixed(2)}`);
       console.log(`   Total delivery pay: ${oldTotalDeliveryPay.toFixed(2)} → ${toNumeric(driverWallet.totalDeliveryPay).toFixed(2)}`);
       console.log(`   Delivery pay count: ${oldCount} → ${driverWallet.totalDeliveryPayCount}`);
-    }
 
-    await orderModel.update({
-      driverPayCredited: true,
-      driverPayCreditedAt: transactionDate || new Date(),
-      driverPayAmount
-    });
+      await orderModel.update({
+        driverPayCredited: true,
+        driverPayCreditedAt: transactionDate || new Date(),
+        driverPayAmount
+      });
+    } else if (orderModel.driverPayCredited) {
+      // Wallet already credited, just ensure order flag and amount are correct
+      console.log(`ℹ️  Driver wallet already credited for Order #${orderId} (skipping duplicate credit)`);
+    }
 
     if ((!orderModel.driverPayAmount || Math.abs(toNumeric(orderModel.driverPayAmount) - driverPayAmount) > 0.009)) {
       await orderModel.update({ driverPayAmount });

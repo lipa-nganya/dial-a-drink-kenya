@@ -111,8 +111,19 @@ const Transactions = () => {
   const fetchTransactions = async () => {
     try {
       const response = await api.get('/admin/transactions');
-      setTransactions(response.data);
-      setFilteredTransactions(response.data);
+      // Normalize transactions on the frontend as well (double safety)
+      const normalizedTransactions = response.data.map(transaction => {
+        // Ensure transactionType is always present
+        if (!transaction.transactionType || 
+            typeof transaction.transactionType !== 'string' || 
+            transaction.transactionType.trim() === '') {
+          console.warn(`⚠️ Frontend: Transaction #${transaction.id} has missing/null transactionType, defaulting to 'payment'`);
+          transaction.transactionType = 'payment';
+        }
+        return transaction;
+      });
+      setTransactions(normalizedTransactions);
+      setFilteredTransactions(normalizedTransactions);
     } catch (error) {
       console.error('Error fetching transactions:', error);
       setError(error.response?.data?.error || error.message);
@@ -394,7 +405,7 @@ const Transactions = () => {
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">Completed</Typography>
+          <Typography variant="body2" color="text.secondary">Complete Transactions</Typography>
           <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
             {filteredTransactions.filter(t => t.status === 'completed').length}
           </Typography>
@@ -403,7 +414,14 @@ const Transactions = () => {
           <Typography variant="body2" color="text.secondary">Total Amount (Excludes Tips)</Typography>
           <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
             KES {filteredTransactions
-              .filter(t => t.status === 'completed' && t.transactionType !== 'tip')
+              .filter(t => {
+                // Exclude tips
+                if (t.transactionType === 'tip') return false;
+                // Exclude driver delivery fee payments (delivery_pay transactions with driverWalletId)
+                // Only include merchant delivery fee payments (delivery_pay with driverId/driverWalletId null)
+                if (t.transactionType === 'delivery_pay' && t.driverWalletId) return false;
+                return t.status === 'completed';
+              })
               .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
               .toFixed(2)}
           </Typography>
@@ -561,21 +579,53 @@ const Transactions = () => {
             <TableBody>
               {paginatedTransactions.map((transaction) => {
                 const isExpanded = expandedRows.has(transaction.id);
-                const typeChipRaw = getTransactionTypeChipProps(transaction.transactionType);
+                // Ensure transactionType is always present (fallback to 'payment' if missing)
+                // Double-check: normalize transactionType to ensure it's a valid string
+                const transactionType = (transaction.transactionType && 
+                  typeof transaction.transactionType === 'string' && 
+                  transaction.transactionType.trim() !== '') 
+                  ? transaction.transactionType.trim() 
+                  : 'payment';
+                
+                const typeChipRaw = getTransactionTypeChipProps(transactionType);
+                
+                // Handle function returns (e.g., delivery_pay which needs transaction context)
                 let typeChip = typeof typeChipRaw === 'function'
                   ? typeChipRaw(transaction)
                   : typeChipRaw;
                 
-                // Ensure typeChip always has a label
-                if (!typeChip || !typeChip.label) {
-                  typeChip = {
-                    label: transaction.transactionType || 'Unknown',
-                    sx: {
-                      backgroundColor: '#616161',
-                      color: '#FFFFFF',
-                      fontWeight: 600
-                    }
-                  };
+                // Ensure typeChip always has a label - if null, undefined, empty string, or missing label, create default
+                if (!typeChip || !typeChip.label || typeChip.label.trim() === '') {
+                  // Special handling for delivery_pay transactions
+                  if (transactionType === 'delivery_pay' || transactionType === 'delivery') {
+                    // Check if it's a driver payment (has driverWalletId or driverId)
+                    const isDriverPayment = Boolean(transaction?.driverWalletId || transaction?.driverId);
+                    typeChip = {
+                      label: isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)',
+                      sx: {
+                        backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
+                        color: isDriverPayment ? '#000' : '#002A54',
+                        fontWeight: 700
+                      }
+                    };
+                  } else {
+                    // Format the transaction type for display (capitalize first letter, replace underscores)
+                    const formattedLabel = transactionType && transactionType.trim() !== ''
+                      ? transactionType
+                          .split('_')
+                          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                          .join(' ')
+                      : 'Payment';
+                    
+                    typeChip = {
+                      label: formattedLabel,
+                      sx: {
+                        backgroundColor: '#616161',
+                        color: '#FFFFFF',
+                        fontWeight: 600
+                      }
+                    };
+                  }
                 }
                 const methodChip = getPaymentMethodChipProps(transaction.paymentMethod);
                 const statusChip = getTransactionStatusChipProps(transaction.status);
@@ -592,8 +642,8 @@ const Transactions = () => {
                 const normalizedProvider = providerLabel
                   ? providerLabel.replace(/[^a-z0-9]/gi, '').toLowerCase()
                   : '';
-                const isTip = transaction.transactionType === 'tip';
-                const isDriverDelivery = transaction.transactionType === 'delivery_pay' && !!transaction.driverWalletId;
+                const isTip = transactionType === 'tip';
+                const isDriverDelivery = transactionType === 'delivery_pay' && !!transaction.driverWalletId;
                 const highlighted = isTip || isDriverDelivery;
                 const highlightBackground = 'rgba(255, 193, 7, 0.15)';
                 const highlightBorder = '4px solid #FFC107';
@@ -625,23 +675,73 @@ const Transactions = () => {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        {typeChip && typeChip.label ? (
-                          <Chip
-                            size="small"
-                            label={typeChip.label}
-                            sx={{ fontWeight: 700, ...(typeChip.sx || {}) }}
-                          />
-                        ) : (
-                          <Chip
-                            size="small"
-                            label={transaction.transactionType || 'Unknown'}
-                            sx={{
+                        {(() => {
+                          // Double-check transactionType is valid (defensive programming)
+                          const safeTransactionType = (transaction.transactionType && 
+                            typeof transaction.transactionType === 'string' && 
+                            transaction.transactionType.trim() !== '') 
+                            ? transaction.transactionType.trim() 
+                            : 'payment';
+                          
+                          // Ensure we always have a valid label (not empty string, null, or undefined)
+                          let chipLabel = (typeChip?.label && typeof typeChip.label === 'string') ? typeChip.label.trim() : '';
+                          let chipSx = typeChip?.sx;
+                          
+                          // If label is missing or empty, determine the correct label based on transaction type
+                          if (!chipLabel || chipLabel === '') {
+                            if (safeTransactionType === 'delivery_pay' || safeTransactionType === 'delivery') {
+                              // Check if it's a driver payment
+                              const isDriverPayment = Boolean(transaction?.driverWalletId || transaction?.driverId);
+                              chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
+                              chipSx = {
+                                backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
+                                color: isDriverPayment ? '#000' : '#002A54',
+                                fontWeight: 700
+                              };
+                            } else if (safeTransactionType && typeof safeTransactionType === 'string' && safeTransactionType.trim() !== '') {
+                              // Format other transaction types
+                              chipLabel = safeTransactionType
+                                .split('_')
+                                .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                .join(' ');
+                              chipSx = {
+                                backgroundColor: '#616161',
+                                color: '#FFFFFF',
+                                fontWeight: 600
+                              };
+                            } else {
+                              chipLabel = 'Payment';
+                              chipSx = {
+                                backgroundColor: '#616161',
+                                color: '#FFFFFF',
+                                fontWeight: 600
+                              };
+                            }
+                          }
+                          
+                          // Final safety check - ensure chipLabel is never empty
+                          if (!chipLabel || chipLabel.trim() === '') {
+                            console.warn(`⚠️ Frontend: Transaction #${transaction.id} still has empty label after all checks, forcing 'Payment'`);
+                            chipLabel = 'Payment';
+                            chipSx = {
                               backgroundColor: '#616161',
                               color: '#FFFFFF',
                               fontWeight: 600
-                            }}
-                          />
-                        )}
+                            };
+                          }
+                          
+                          return (
+                            <Chip
+                              size="small"
+                              label={chipLabel}
+                              sx={{ fontWeight: 700, ...(chipSx || {
+                                backgroundColor: '#616161',
+                                color: '#FFFFFF',
+                                fontWeight: 600
+                              }) }}
+                            />
+                          );
+                        })()}
                       </TableCell>
                   <TableCell>
                     <Typography variant="body2">
@@ -666,7 +766,7 @@ const Transactions = () => {
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.5 }}>
-                      {transaction.transactionType === 'tip' ? (
+                      {transactionType === 'tip' ? (
                         typeChip ? (
                           <Chip
                             size="small"
@@ -695,7 +795,7 @@ const Transactions = () => {
                       )}
                       {(() => {
                         let detailText;
-                        if ((transaction.transactionType || '').toLowerCase() === 'tip') {
+                        if (transactionType.toLowerCase() === 'tip') {
                           detailText = providerLabel
                             ? `From ${providerLabel.toLowerCase()} payment`
                             : 'Tip transaction';
@@ -725,7 +825,7 @@ const Transactions = () => {
                       variant="body1" 
                       sx={{ 
                         fontWeight: 600, 
-                        color: transaction.transactionType === 'tip' ? '#FFC107' : '#FF3366'
+                        color: transactionType === 'tip' ? '#FFC107' : '#FF3366'
                       }}
                     >
                       KES {Number(transaction.amount).toFixed(2)}
@@ -733,7 +833,7 @@ const Transactions = () => {
                   </TableCell>
                   <TableCell>
                     {(() => {
-                      const categoryChip = getCategoryChipProps(transaction.transactionType);
+                      const categoryChip = getCategoryChipProps(transactionType);
                       return (
                         <Chip
                           size="small"
@@ -829,21 +929,50 @@ const Transactions = () => {
                                       <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700 }}>
                                         Transaction Information
                                       </Typography>
-                                      {transaction.transactionType && (
-                                        <Chip
-                                          label={(transaction.transactionType || '').toUpperCase()}
-                                          size="small"
-                                          sx={{
-                                            backgroundColor: transaction.transactionType.toLowerCase() === 'tip'
-                                              ? '#FFC107'
-                                              : '#00E0B8',
-                                            color: transaction.transactionType.toLowerCase() === 'tip'
-                                              ? '#000'
-                                              : '#002A54',
-                                            fontWeight: 700
-                                          }}
-                                        />
-                                      )}
+                                      {(() => {
+                                        // Ensure we always have a valid label for the expanded view
+                                        let expandedLabel = typeChip?.label;
+                                        
+                                        if (!expandedLabel || expandedLabel.trim() === '') {
+                                          if (transactionType === 'delivery_pay' || transactionType === 'delivery') {
+                                            // Check if it's a driver payment
+                                            const isDriverPayment = Boolean(transaction?.driverWalletId || transaction?.driverId);
+                                            expandedLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
+                                          } else if (transactionType && transactionType.trim() !== '') {
+                                            expandedLabel = transactionType
+                                              .split('_')
+                                              .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                                              .join(' ');
+                                          } else {
+                                            expandedLabel = 'Payment';
+                                          }
+                                        }
+                                        
+                                        // Determine chip styling based on transaction type
+                                        let chipBackgroundColor = '#00E0B8';
+                                        let chipColor = '#002A54';
+                                        
+                                        if (transactionType === 'tip') {
+                                          chipBackgroundColor = '#FFC107';
+                                          chipColor = '#000';
+                                        } else if (transactionType === 'delivery_pay' || transactionType === 'delivery') {
+                                          const isDriverPayment = Boolean(transaction?.driverWalletId || transaction?.driverId);
+                                          chipBackgroundColor = isDriverPayment ? '#FFC107' : '#2196F3';
+                                          chipColor = isDriverPayment ? '#000' : '#002A54';
+                                        }
+                                        
+                                        return (
+                                          <Chip
+                                            label={expandedLabel.toUpperCase()}
+                                            size="small"
+                                            sx={{
+                                              backgroundColor: chipBackgroundColor,
+                                              color: chipColor,
+                                              fontWeight: 700
+                                            }}
+                                          />
+                                        );
+                                      })()}
                                     </Box>
                                     <Typography variant="body1" sx={{ mb: 1.5 }}>
                                       <strong>Transaction ID:</strong> #{transaction.id}
@@ -852,7 +981,7 @@ const Transactions = () => {
                                       <strong>Amount:</strong> KES {Number(transaction.amount || 0).toFixed(2)}
                                     </Typography>
                                     <Typography variant="body1" sx={{ mb: 1.5 }}>
-                                      <strong>Category:</strong> {getTransactionCategory(transaction.transactionType)}
+                                      <strong>Category:</strong> {getTransactionCategory(transactionType)}
                                     </Typography>
                                     <Typography variant="body1" sx={{ mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
                                       <strong>Status:</strong>
@@ -1002,11 +1131,56 @@ const Transactions = () => {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="body1"><strong>Transaction Type:</strong></Typography>
                     {(() => {
-                      const typeChip = getTransactionTypeChipProps(selectedTransaction.transactionType);
-                      return typeChip ? (
-                        <Chip size="small" label={typeChip.label} sx={{ fontWeight: 700, ...typeChip.sx }} />
-                      ) : (
-                        <Typography variant="body1">{selectedTransaction.transactionType || 'N/A'}</Typography>
+                      const dialogTransactionType = selectedTransaction?.transactionType || 'payment';
+                      const typeChipRaw = getTransactionTypeChipProps(dialogTransactionType);
+                      let typeChip = typeof typeChipRaw === 'function'
+                        ? typeChipRaw(selectedTransaction)
+                        : typeChipRaw;
+                      
+                      // Ensure we always have a valid label
+                      let chipLabel = typeChip?.label;
+                      let chipSx = typeChip?.sx;
+                      
+                      if (!chipLabel || chipLabel.trim() === '') {
+                        if (dialogTransactionType === 'delivery_pay' || dialogTransactionType === 'delivery') {
+                          // Check if it's a driver payment
+                          const isDriverPayment = Boolean(selectedTransaction?.driverWalletId || selectedTransaction?.driverId);
+                          chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
+                          chipSx = {
+                            backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
+                            color: isDriverPayment ? '#000' : '#002A54',
+                            fontWeight: 700
+                          };
+                        } else if (dialogTransactionType && dialogTransactionType.trim() !== '') {
+                          chipLabel = dialogTransactionType
+                            .split('_')
+                            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+                            .join(' ');
+                          chipSx = {
+                            backgroundColor: '#616161',
+                            color: '#FFFFFF',
+                            fontWeight: 600
+                          };
+                        } else {
+                          chipLabel = 'Payment';
+                          chipSx = {
+                            backgroundColor: '#616161',
+                            color: '#FFFFFF',
+                            fontWeight: 600
+                          };
+                        }
+                      }
+                      
+                      return (
+                        <Chip 
+                          size="small" 
+                          label={chipLabel} 
+                          sx={{ fontWeight: 700, ...(chipSx || {
+                            backgroundColor: '#616161',
+                            color: '#FFFFFF',
+                            fontWeight: 600
+                          }) }} 
+                        />
                       );
                     })()}
                   </Box>

@@ -94,8 +94,16 @@ export const getPaymentMethodChipProps = (method) => {
 };
 
 export const getTransactionTypeChipProps = (type) => {
-  if (!type) {
-    return null;
+  // Ensure type is a valid string (not null, undefined, or empty)
+  if (!type || typeof type !== 'string' || type.trim() === '') {
+    return {
+      label: 'Payment',
+      sx: {
+        backgroundColor: '#616161',
+        color: '#FFFFFF',
+        fontWeight: 600
+      }
+    };
   }
 
   const normalized = type.toLowerCase();
@@ -183,8 +191,16 @@ export const getTransactionTypeChipProps = (type) => {
   }
 
   // Default fallback - ensure we always return a label
+  // Format the transaction type for display (capitalize first letter, replace underscores)
+  const formattedLabel = type && type.trim() !== ''
+    ? type
+        .split('_')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')
+    : 'Payment';
+  
   return {
-    label: type || 'Unknown',
+    label: formattedLabel,
     sx: {
       backgroundColor: '#616161',
       color: '#FFFFFF',
