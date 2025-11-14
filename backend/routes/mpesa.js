@@ -6,6 +6,7 @@ const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const pushNotifications = require('../services/pushNotifications');
+const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 
 const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber, req, context = 'Payment confirmation' }) => {
   if (!paymentTransaction) {
@@ -320,6 +321,26 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       }
     });
 
+    // CRITICAL: Always assign tip to the order's current driver (usually HOLD driver at payment time)
+    // This ensures tip is assigned even if no real driver is assigned yet
+    const tipDriverId = orderInstance.driverId;
+    
+    // Get driver wallet (will be HOLD driver's wallet if no real driver assigned)
+    let driverWallet = null;
+    if (tipDriverId) {
+      driverWallet = await db.DriverWallet.findOne({ where: { driverId: tipDriverId } });
+      if (!driverWallet) {
+        driverWallet = await db.DriverWallet.create({
+          driverId: tipDriverId,
+          balance: 0,
+          totalTipsReceived: 0,
+          totalTipsCount: 0,
+          totalDeliveryPay: 0,
+          totalDeliveryPayCount: 0
+        });
+      }
+    }
+
     const tipPayload = {
       orderId: effectiveOrderId,
       transactionType: 'tip',
@@ -333,7 +354,9 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       merchantRequestID: paymentTransaction.merchantRequestID,
       phoneNumber: paymentTransaction.phoneNumber,
       transactionDate: resolvedTransactionDate,
-      notes: `Tip for Order #${effectiveOrderId} (${context})`
+      driverId: tipDriverId,
+      driverWalletId: driverWallet?.id || null,
+      notes: `Tip for Order #${effectiveOrderId} (${context})${tipDriverId ? ' - assigned to driver' : ''}`
     };
 
     if (tipTransaction) {
@@ -342,19 +365,12 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       tipTransaction = await db.Transaction.create(tipPayload);
     }
 
-    if (orderInstance.driverId) {
+    // Credit driver wallet (HOLD driver's wallet if no real driver assigned yet)
+    if (tipDriverId && driverWallet) {
       try {
-        let driverWallet = await db.DriverWallet.findOne({ where: { driverId: orderInstance.driverId } });
-        if (!driverWallet) {
-          driverWallet = await db.DriverWallet.create({
-            driverId: orderInstance.driverId,
-            balance: 0,
-            totalTipsReceived: 0,
-            totalTipsCount: 0
-          });
-        }
-
-        const driver = await db.Driver.findByPk(orderInstance.driverId).catch(() => null);
+        const driver = await db.Driver.findByPk(tipDriverId).catch(() => null);
+        const { driver: holdDriver } = await getOrCreateHoldDriver();
+        const isHoldDriver = tipDriverId === holdDriver.id;
 
         const tipAlreadyCredited =
           tipTransaction.driverWalletId === driverWallet.id && tipTransaction.status === 'completed';
@@ -367,14 +383,15 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
           });
 
           await tipTransaction.update({
-            driverId: orderInstance.driverId,
+            driverId: tipDriverId,
             driverWalletId: driverWallet.id,
             paymentStatus: 'paid',
             status: 'completed',
-            notes: `Tip for Order #${effectiveOrderId} (${context}) - credited to driver wallet`
+            notes: `Tip for Order #${effectiveOrderId} (${context})${isHoldDriver ? ' - assigned to HOLD driver (will transfer when real driver assigned)' : ' - credited to driver wallet'}`
           });
 
-          if (driver?.pushToken) {
+          // Only send push notification if NOT HOLD driver
+          if (!isHoldDriver && driver?.pushToken) {
             pushNotifications.sendPushNotification(driver.pushToken, {
               title: 'Tip Received',
               body: `You received a tip of KES ${tipAmountNumeric.toFixed(2)} for Order #${effectiveOrderId}.`,
