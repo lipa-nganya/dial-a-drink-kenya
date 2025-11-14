@@ -489,6 +489,8 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     }
   }
 
+  // CRITICAL: Update order status as part of the transaction
+  // This ensures the order status is updated atomically with payment finalization
   const orderUpdatePayload = {
     paymentStatus: 'paid',
     status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
@@ -498,7 +500,9 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     orderUpdatePayload.driverPayAmount = driverPayAmount;
   }
 
-  await orderInstance.update(orderUpdatePayload);
+  // Update order within the transaction to ensure it's committed atomically
+  await orderInstance.update(orderUpdatePayload, { transaction: dbTransaction });
+  console.log(`✅ Updated order #${effectiveOrderId} status to '${orderUpdatePayload.status}', paymentStatus to 'paid'`);
 
   await orderInstance.reload({
     include: [
