@@ -1357,35 +1357,84 @@ router.post('/callback', async (req, res) => {
           }
 
           // Ensure delivery fee transaction is present and marked as completed
+          // CRITICAL: Check for merchant delivery transaction (driverId: null) separately from driver delivery transaction
+          // This prevents creating duplicates when driver delivery transaction already exists
           try {
             const deliveryTransactionNote = `Delivery fee settled via M-Pesa. Receipt: ${receiptNumber || 'N/A'}. Delivery amount: KES ${deliveryFee.toFixed(2)}.`;
 
+            // First, check for merchant delivery transaction (driverId: null, driverWalletId: null)
+            // This is the transaction that represents the merchant's portion of the delivery fee
             let deliveryTransaction = await db.Transaction.findOne({
               where: {
                 orderId: order.id,
-                transactionType: 'delivery_pay'
+                transactionType: 'delivery_pay',
+                driverId: null,
+                driverWalletId: null
               },
               order: [['createdAt', 'DESC']]
             });
 
             if (!deliveryTransaction) {
-              deliveryTransaction = await db.Transaction.create({
-                orderId: order.id,
-                transactionType: 'delivery_pay',
-                paymentMethod: 'mobile_money',
-                paymentProvider: 'mpesa',
-                amount: deliveryFee,
-                status: 'completed',
-                paymentStatus: 'paid',
-                receiptNumber: receiptNumber,
-                checkoutRequestID: checkoutRequestID,
-                merchantRequestID: stkCallback.MerchantRequestID,
-                phoneNumber: phoneNumber,
-                transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-                notes: deliveryTransactionNote
+              // No merchant delivery transaction exists - create it
+              // But first check if ANY delivery_pay transaction exists to avoid duplicates
+              const anyDeliveryTransaction = await db.Transaction.findOne({
+                where: {
+                  orderId: order.id,
+                  transactionType: 'delivery_pay'
+                },
+                order: [['createdAt', 'DESC']]
               });
-              console.log(`✅ Created delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
+
+              if (anyDeliveryTransaction) {
+                // A delivery transaction exists but it's a driver transaction
+                // Update it to be a merchant transaction if it doesn't have driverId set
+                if (!anyDeliveryTransaction.driverId && !anyDeliveryTransaction.driverWalletId) {
+                  deliveryTransaction = anyDeliveryTransaction;
+                  console.log(`⚠️  Found existing delivery transaction #${deliveryTransaction.id} without driverId. Using it as merchant transaction.`);
+                } else {
+                  // It's a driver transaction - create merchant transaction separately
+                  deliveryTransaction = await db.Transaction.create({
+                    orderId: order.id,
+                    transactionType: 'delivery_pay',
+                    paymentMethod: 'mobile_money',
+                    paymentProvider: 'mpesa',
+                    amount: deliveryFee,
+                    status: 'completed',
+                    paymentStatus: 'paid',
+                    receiptNumber: receiptNumber,
+                    checkoutRequestID: checkoutRequestID,
+                    merchantRequestID: stkCallback.MerchantRequestID,
+                    phoneNumber: phoneNumber,
+                    transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+                    notes: deliveryTransactionNote,
+                    driverId: null,
+                    driverWalletId: null
+                  });
+                  console.log(`✅ Created merchant delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
+                }
+              } else {
+                // No delivery transaction exists at all - create merchant one
+                deliveryTransaction = await db.Transaction.create({
+                  orderId: order.id,
+                  transactionType: 'delivery_pay',
+                  paymentMethod: 'mobile_money',
+                  paymentProvider: 'mpesa',
+                  amount: deliveryFee,
+                  status: 'completed',
+                  paymentStatus: 'paid',
+                  receiptNumber: receiptNumber,
+                  checkoutRequestID: checkoutRequestID,
+                  merchantRequestID: stkCallback.MerchantRequestID,
+                  phoneNumber: phoneNumber,
+                  transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+                  notes: deliveryTransactionNote,
+                  driverId: null,
+                  driverWalletId: null
+                });
+                console.log(`✅ Created merchant delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
+              }
             } else {
+              // Merchant delivery transaction exists - update it
               await deliveryTransaction.update({
                 amount: deliveryFee,
                 status: 'completed',
@@ -1395,9 +1444,11 @@ router.post('/callback', async (req, res) => {
                 merchantRequestID: stkCallback.MerchantRequestID || deliveryTransaction.merchantRequestID,
                 phoneNumber: phoneNumber || deliveryTransaction.phoneNumber,
                 transactionDate: transactionDate ? new Date(transactionDate) : (deliveryTransaction.transactionDate || new Date()),
-                notes: deliveryTransaction.notes ? `${deliveryTransaction.notes}\n${deliveryTransactionNote}` : deliveryTransactionNote
+                notes: deliveryTransaction.notes ? `${deliveryTransaction.notes}\n${deliveryTransactionNote}` : deliveryTransactionNote,
+                driverId: null, // Ensure it's marked as merchant transaction
+                driverWalletId: null
               });
-              console.log(`✅ Updated delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
+              console.log(`✅ Updated merchant delivery fee transaction #${deliveryTransaction.id} for Order #${order.id}`);
             }
           } catch (deliveryTxnError) {
             console.error('❌ Error ensuring delivery fee transaction:', deliveryTxnError);
