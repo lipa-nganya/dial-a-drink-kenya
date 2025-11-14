@@ -14,17 +14,55 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   }
 
   const effectiveOrderId = orderId || paymentTransaction.orderId;
-  const orderInstance = await db.Order.findByPk(effectiveOrderId);
-  if (!orderInstance) {
-    throw new Error(`Order ${effectiveOrderId} not found during payment finalization`);
-  }
+  
+  // CRITICAL: Use database transaction with lock to prevent concurrent execution
+  // This prevents duplicate driver delivery transactions when finalizeOrderPayment is called multiple times
+  const dbTransaction = await db.sequelize.transaction();
+  
+  try {
+    // Lock the order row to prevent concurrent finalization
+    const orderInstance = await db.Order.findByPk(effectiveOrderId, {
+      lock: dbTransaction.LOCK.UPDATE,
+      transaction: dbTransaction
+    });
+    
+    if (!orderInstance) {
+      await dbTransaction.rollback();
+      throw new Error(`Order ${effectiveOrderId} not found during payment finalization`);
+    }
 
-  const orderWasPreviouslyPaid = orderInstance.paymentStatus === 'paid';
+    const orderWasPreviouslyPaid = orderInstance.paymentStatus === 'paid';
 
-  if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid' && orderWasPreviouslyPaid) {
-    await paymentTransaction.reload().catch(() => {});
-    return { order: orderInstance, receipt: paymentTransaction.receiptNumber };
-  }
+    // CRITICAL: Check if driver delivery transaction already exists before proceeding
+    // This prevents duplicates even if finalizeOrderPayment is called multiple times concurrently
+    if (orderInstance.driverId) {
+      const existingDriverDeliveryTxn = await db.Transaction.findOne({
+        where: {
+          orderId: effectiveOrderId,
+          transactionType: 'delivery_pay',
+          driverId: orderInstance.driverId,
+          status: 'completed'
+        },
+        transaction: dbTransaction,
+        lock: dbTransaction.LOCK.UPDATE
+      });
+      
+      // If a completed driver delivery transaction exists, this order has already been finalized
+      // Return early to prevent duplicate transaction creation
+      if (existingDriverDeliveryTxn) {
+        console.log(`⚠️  Order #${effectiveOrderId} already has completed driver delivery transaction #${existingDriverDeliveryTxn.id}. Skipping duplicate finalization.`);
+        await dbTransaction.rollback();
+        await orderInstance.reload().catch(() => {});
+        await paymentTransaction.reload().catch(() => {});
+        return { order: orderInstance, receipt: paymentTransaction.receiptNumber || normalizedReceipt };
+      }
+    }
+
+    if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid' && orderWasPreviouslyPaid) {
+      await paymentTransaction.reload().catch(() => {});
+      await dbTransaction.rollback();
+      return { order: orderInstance, receipt: paymentTransaction.receiptNumber };
+    }
 
   const breakdown = await getOrderFinancialBreakdown(effectiveOrderId);
   const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
@@ -132,15 +170,17 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
   let driverDeliveryTransaction = null;
   if (driverPayAmount > 0.009 && orderInstance.driverId) {
-    // CRITICAL: Check for ANY existing driver delivery transaction for this order and driver
-    // Check by driverId first (most specific)
+    // CRITICAL: Check for ANY existing driver delivery transaction for this order and driver WITH LOCK
+    // This prevents duplicates even if finalizeOrderPayment is called concurrently
     driverDeliveryTransaction = await db.Transaction.findOne({
       where: {
         orderId: effectiveOrderId,
         transactionType: 'delivery_pay',
         driverId: orderInstance.driverId
       },
-      order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+      order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']],
+      transaction: dbTransaction,
+      lock: dbTransaction.LOCK.UPDATE
     });
     
     // If not found, check for pending transaction with null driverId (created before driver assignment)
@@ -152,7 +192,9 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
           driverId: null,
           driverWalletId: null // Must be merchant transaction, not driver transaction
         },
-        order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
+        order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']],
+        transaction: dbTransaction,
+        lock: dbTransaction.LOCK.UPDATE
       });
     }
 
@@ -175,14 +217,33 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
     if (driverDeliveryTransaction) {
       // Found existing transaction - update it instead of creating duplicate
-      await driverDeliveryTransaction.update(driverDeliveryPayload);
+      await driverDeliveryTransaction.update(driverDeliveryPayload, { transaction: dbTransaction });
       // Reload transaction to get updated values
-      await driverDeliveryTransaction.reload();
+      await driverDeliveryTransaction.reload({ transaction: dbTransaction });
       console.log(`✅ Updated existing driver delivery transaction #${driverDeliveryTransaction.id} for Order #${effectiveOrderId}`);
     } else {
-      // No driver delivery transaction exists - safe to create new one
-      driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload);
-      console.log(`✅ Created driver delivery transaction #${driverDeliveryTransaction.id} for Order #${effectiveOrderId}`);
+      // CRITICAL: Double-check with lock before creating to prevent race conditions
+      const finalCheck = await db.Transaction.findOne({
+        where: {
+          orderId: effectiveOrderId,
+          transactionType: 'delivery_pay',
+          driverId: orderInstance.driverId
+        },
+        transaction: dbTransaction,
+        lock: dbTransaction.LOCK.UPDATE
+      });
+      
+      if (finalCheck) {
+        // Another concurrent call created it - use that one
+        driverDeliveryTransaction = finalCheck;
+        await driverDeliveryTransaction.update(driverDeliveryPayload, { transaction: dbTransaction });
+        await driverDeliveryTransaction.reload({ transaction: dbTransaction });
+        console.log(`✅ Found concurrent driver delivery transaction #${driverDeliveryTransaction.id}, updated it for Order #${effectiveOrderId}`);
+      } else {
+        // No driver delivery transaction exists - safe to create new one
+        driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload, { transaction: dbTransaction });
+        console.log(`✅ Created driver delivery transaction #${driverDeliveryTransaction.id} for Order #${effectiveOrderId}`);
+      }
     }
 
     try {
@@ -510,19 +571,48 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     }
   }
 
-  try {
-    await ensureDeliveryFeeSplit(orderInstance, { context: 'mpesa-finalize' });
-  } catch (syncError) {
-    console.error('❌ Error syncing delivery fee transactions (finalizeOrderPayment):', syncError);
-  }
+  // Commit the transaction before returning
+  // This ensures all transactions are committed atomically
+  await dbTransaction.commit();
+  console.log(`✅ Database transaction committed for Order #${effectiveOrderId}`);
 
+  // Reload order outside of transaction to get latest state
+  await orderInstance.reload({
+    include: [
+      {
+        model: db.OrderItem,
+        as: 'orderItems',
+        include: [{ model: db.Drink, as: 'drink' }]
+      },
+      {
+        model: db.Transaction,
+        as: 'transactions'
+      },
+      {
+        model: db.Driver,
+        as: 'driver'
+      }
+    ]
+  }).catch(() => {});
+
+  // CRITICAL: Don't call ensureDeliveryFeeSplit here - it's already handled above
+  // Calling it again would create duplicates. The driver delivery transaction is already created/updated above.
+  // ensureDeliveryFeeSplit is only needed for syncing, but we've already created the transactions correctly.
+  
   return {
     order: orderInstance,
     receipt: normalizedReceipt,
-    deliveryTransaction,
-      driverPayTransaction: driverDeliveryTransaction,
+    deliveryTransaction: merchantDeliveryTransaction,
+    driverPayTransaction: driverDeliveryTransaction,
     tipTransaction
   };
+  
+  } catch (error) {
+    // Rollback on any error
+    await dbTransaction.rollback();
+    console.error(`❌ Error in finalizeOrderPayment for Order #${effectiveOrderId}:`, error);
+    throw error;
+  }
 };
 
 // Helper function to calculate delivery fee (same as in orders.js)
