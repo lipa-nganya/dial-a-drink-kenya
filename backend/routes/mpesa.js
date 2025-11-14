@@ -598,6 +598,20 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       }
     ]
   }).catch(() => {});
+  
+  // CRITICAL: Verify order status was updated correctly after transaction commit
+  // If not, force update to prevent orders stuck at pending
+  if (orderInstance.paymentStatus !== 'paid') {
+    console.error(`⚠️  Order #${effectiveOrderId} paymentStatus is still '${orderInstance.paymentStatus}' after update. Forcing update...`);
+    await orderInstance.update({ paymentStatus: 'paid' });
+    await orderInstance.reload();
+  }
+  
+  if (orderInstance.status === 'pending' && orderUpdatePayload.status === 'confirmed') {
+    console.error(`⚠️  Order #${effectiveOrderId} status is still 'pending' after update. Forcing update to 'confirmed'...`);
+    await orderInstance.update({ status: 'confirmed' });
+    await orderInstance.reload();
+  }
 
   // CRITICAL: Don't call ensureDeliveryFeeSplit here - it's already handled above
   // Calling it again would create duplicates. The driver delivery transaction is already created/updated above.
