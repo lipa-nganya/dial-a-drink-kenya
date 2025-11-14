@@ -145,15 +145,22 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
   const driverPayEnabled = driverPayEnabledSetting?.value === 'true';
   const configuredDriverPay = toNumeric(driverPayAmountSetting?.value);
 
-  let driverPayAmount = toNumeric(orderModel.driverPayAmount);
+  // CRITICAL: If driver pay is disabled, driverPayAmount must be 0 (full delivery fee goes to merchant)
+  let driverPayAmount = 0;
+  
+  if (driverPayEnabled) {
+    // Only calculate driver pay if the feature is enabled
+    driverPayAmount = toNumeric(orderModel.driverPayAmount);
 
-  if ((!driverPayAmount || driverPayAmount < 0.009) && driverPayEnabled && configuredDriverPay > 0) {
-    driverPayAmount = Math.min(deliveryFeeAmount, configuredDriverPay);
-  }
+    if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPay > 0) {
+      driverPayAmount = Math.min(deliveryFeeAmount, configuredDriverPay);
+    }
 
-  if (driverPayAmount > deliveryFeeAmount) {
-    driverPayAmount = deliveryFeeAmount;
+    if (driverPayAmount > deliveryFeeAmount) {
+      driverPayAmount = deliveryFeeAmount;
+    }
   }
+  // If driverPayEnabled is false, driverPayAmount stays 0
 
   const merchantAmount = Math.max(deliveryFeeAmount - driverPayAmount, 0);
 
