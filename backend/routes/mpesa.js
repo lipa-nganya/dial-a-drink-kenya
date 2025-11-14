@@ -2073,18 +2073,11 @@ router.get('/transaction-status/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
     
-    // Get the most recent transaction for this order (by updatedAt to catch status changes)
-    const transaction = await db.Transaction.findOne({
-      where: { orderId },
-      order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']], // Prioritize by updatedAt to get the latest status
-      include: [{
-        model: db.Order,
-        as: 'order',
-        attributes: ['id', 'status', 'paymentStatus', 'customerName', 'customerEmail', 'customerPhone']
-      }]
-    });
+    // CRITICAL: Use getPaymentTransaction helper to ensure we ONLY get payment transactions
+    // This prevents delivery_pay or tip transactions from being returned
+    const transaction = await getPaymentTransaction(orderId);
     
-    console.log(`🔍 Transaction lookup for order ${orderId}: ${transaction ? `Found transaction #${transaction.id} with status: ${transaction.status}, receipt: ${transaction.receiptNumber || 'none'}` : 'No transaction found'}`);
+    console.log(`🔍 Transaction lookup for order ${orderId}: ${transaction ? `Found payment transaction #${transaction.id} with status: ${transaction.status}, receipt: ${transaction.receiptNumber || 'none'}` : 'No payment transaction found'}`);
     
     // CRITICAL AUTO-FIX: If transaction has a receipt number but status isn't 'completed',
     // it means callback processed payment but status update might have failed
