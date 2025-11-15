@@ -5,6 +5,9 @@ const { Op } = require('sequelize');
 
 // Get all drinks
 router.get('/', async (req, res) => {
+  // Set request timeout to prevent hanging
+  req.setTimeout(5000); // 5 second timeout
+  
   try {
     const { category, search, popular, available_only } = req.query;
     let whereClause = {};
@@ -29,27 +32,55 @@ router.get('/', async (req, res) => {
       whereClause.isPopular = true;
     }
     
-    const drinks = await db.Drink.findAll({
-      where: whereClause,
-      include: [{
-        model: db.Category,
-        as: 'category'
-      }, {
-        model: db.SubCategory,
-        as: 'subCategory'
-      }],
-      order: [['name', 'ASC']]
-    });
+    // Add query timeout to prevent hanging on database connection issues
+    const queryTimeout = setTimeout(() => {
+      console.error('⚠️ Drinks query timeout - database may be unresponsive');
+      if (!res.headersSent) {
+        res.status(503).json({ error: 'Database query timeout. Please try again.' });
+      }
+    }, 8000); // 8 second timeout
     
-    console.log('Returning drinks with capacity pricing:', drinks.map(d => ({ 
-      id: d.id, 
-      name: d.name, 
-      capacityPricing: d.capacityPricing 
-    })));
-    
-    res.json(drinks);
+    try {
+      const drinks = await Promise.race([
+        db.Drink.findAll({
+          where: whereClause,
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }, {
+            model: db.SubCategory,
+            as: 'subCategory'
+          }],
+          order: [['name', 'ASC']]
+        }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Query timeout')), 8000)
+        )
+      ]);
+      
+      clearTimeout(queryTimeout);
+      
+      console.log('Returning drinks with capacity pricing:', drinks.map(d => ({ 
+        id: d.id, 
+        name: d.name, 
+        capacityPricing: d.capacityPricing 
+      })));
+      
+      if (!res.headersSent) {
+        res.json(drinks);
+      }
+    } catch (queryError) {
+      clearTimeout(queryTimeout);
+      throw queryError;
+    }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error fetching drinks:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: error.message || 'Failed to fetch drinks',
+        message: 'Database connection issue. Please try again in a moment.'
+      });
+    }
   }
 });
 

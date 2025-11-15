@@ -30,7 +30,22 @@ try {
       });
     } else {
       console.log('✅ Initializing Sequelize with DATABASE_URL...');
-      sequelize = new Sequelize(databaseUrl, dbConfig);
+      sequelize = new Sequelize(databaseUrl, {
+        ...dbConfig,
+        pool: {
+          max: 10,
+          min: 2,
+          acquire: 10000,
+          idle: 10000,
+          evict: 1000
+        },
+        dialectOptions: {
+          ...(dbConfig.dialectOptions || {}),
+          connectTimeout: 10000,
+          statement_timeout: 5000,
+          query_timeout: 5000
+        }
+      });
     }
   } else {
     sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, dbConfig);
