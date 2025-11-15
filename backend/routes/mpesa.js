@@ -663,6 +663,53 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     }
   }
 
+  // CRITICAL: Verify all driver delivery transactions are marked as completed with correct payment details
+  // This ensures driver delivery transactions match the payment transaction status
+  if (orderInstance.driverId && driverDeliveryTransaction) {
+    const paymentTransactionReloaded = await db.Transaction.findByPk(paymentTransaction.id).catch(() => null);
+    if (paymentTransactionReloaded && paymentTransactionReloaded.status === 'completed' && paymentTransactionReloaded.paymentStatus === 'paid') {
+      await driverDeliveryTransaction.reload().catch(() => {});
+      const needsDriverTxnUpdate = driverDeliveryTransaction.status !== 'completed' ||
+                                    driverDeliveryTransaction.paymentStatus !== 'paid' ||
+                                    driverDeliveryTransaction.receiptNumber !== paymentTransactionReloaded.receiptNumber ||
+                                    driverDeliveryTransaction.checkoutRequestID !== paymentTransactionReloaded.checkoutRequestID;
+      
+      if (needsDriverTxnUpdate) {
+        console.error(`⚠️  Driver delivery transaction #${driverDeliveryTransaction.id} status mismatch. Current: status='${driverDeliveryTransaction.status}', paymentStatus='${driverDeliveryTransaction.paymentStatus}'. Forcing update...`);
+        try {
+          // Use raw SQL first to ensure it works
+          await db.sequelize.query(
+            `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "receiptNumber" = :receiptNumber, "checkoutRequestID" = :checkoutRequestID, "merchantRequestID" = :merchantRequestID, "phoneNumber" = :phoneNumber, "transactionDate" = :transactionDate, "updatedAt" = NOW() WHERE id = :id`,
+            {
+              replacements: {
+                id: driverDeliveryTransaction.id,
+                receiptNumber: paymentTransactionReloaded.receiptNumber,
+                checkoutRequestID: paymentTransactionReloaded.checkoutRequestID,
+                merchantRequestID: paymentTransactionReloaded.merchantRequestID,
+                phoneNumber: paymentTransactionReloaded.phoneNumber,
+                transactionDate: paymentTransactionReloaded.transactionDate || new Date()
+              }
+            }
+          );
+          // Also try Sequelize update as backup
+          await driverDeliveryTransaction.update({
+            status: 'completed',
+            paymentStatus: 'paid',
+            receiptNumber: paymentTransactionReloaded.receiptNumber,
+            checkoutRequestID: paymentTransactionReloaded.checkoutRequestID,
+            merchantRequestID: paymentTransactionReloaded.merchantRequestID,
+            phoneNumber: paymentTransactionReloaded.phoneNumber,
+            transactionDate: paymentTransactionReloaded.transactionDate || new Date()
+          });
+          await driverDeliveryTransaction.reload();
+          console.log(`✅ Forced driver delivery transaction #${driverDeliveryTransaction.id} update: status='completed', paymentStatus='paid'`);
+        } catch (forceTxnUpdateError) {
+          console.error(`❌ Error forcing driver delivery transaction update:`, forceTxnUpdateError);
+        }
+      }
+    }
+  }
+
   // CRITICAL: Don't call ensureDeliveryFeeSplit here - it's already handled above
   // Calling it again would create duplicates. The driver delivery transaction is already created/updated above.
   // ensureDeliveryFeeSplit is only needed for syncing, but we've already created the transactions correctly.
