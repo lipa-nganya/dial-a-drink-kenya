@@ -48,12 +48,32 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       });
       
       // If a completed driver delivery transaction exists, this order has already been finalized
-      // But we still need to ensure order status is updated if payment is completed
+      // But we still need to ensure order status and transaction details are updated if payment is completed
       if (existingDriverDeliveryTxn) {
-        console.log(`⚠️  Order #${effectiveOrderId} already has completed driver delivery transaction #${existingDriverDeliveryTxn.id}. Skipping duplicate finalization.`);
+        console.log(`⚠️  Order #${effectiveOrderId} already has driver delivery transaction #${existingDriverDeliveryTxn.id} (status: ${existingDriverDeliveryTxn.status}).`);
         
-        // CRITICAL: Still update order status if payment is completed but order status isn't updated
+        // CRITICAL: If payment is completed, ensure driver delivery transaction is also marked as completed
+        // and has correct payment details (receiptNumber, checkoutRequestID, etc.)
         if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid') {
+          const normalizedReceipt = receiptNumber || paymentTransaction.receiptNumber;
+          const needsTxnUpdate = existingDriverDeliveryTxn.status !== 'completed' || 
+                                 existingDriverDeliveryTxn.paymentStatus !== 'paid' ||
+                                 existingDriverDeliveryTxn.receiptNumber !== normalizedReceipt ||
+                                 existingDriverDeliveryTxn.checkoutRequestID !== paymentTransaction.checkoutRequestID;
+          
+          if (needsTxnUpdate) {
+            console.log(`⚠️  Driver delivery transaction #${existingDriverDeliveryTxn.id} needs update. Updating to completed with payment details...`);
+            await existingDriverDeliveryTxn.update({
+              status: 'completed',
+              paymentStatus: 'paid',
+              receiptNumber: normalizedReceipt,
+              checkoutRequestID: paymentTransaction.checkoutRequestID,
+              merchantRequestID: paymentTransaction.merchantRequestID,
+              phoneNumber: paymentTransaction.phoneNumber,
+              transactionDate: paymentTransaction.transactionDate || new Date()
+            }, { transaction: dbTransaction });
+          }
+          
           const needsStatusUpdate = orderInstance.status === 'pending' || orderInstance.paymentStatus !== 'paid';
           if (needsStatusUpdate) {
             console.log(`⚠️  Order #${effectiveOrderId} needs status update. Updating status and paymentStatus...`);
@@ -61,11 +81,13 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
               paymentStatus: 'paid',
               status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
             }, { transaction: dbTransaction });
-            await dbTransaction.commit();
-            await orderInstance.reload().catch(() => {});
-            await paymentTransaction.reload().catch(() => {});
-            return { order: orderInstance, receipt: paymentTransaction.receiptNumber || normalizedReceipt };
           }
+          
+          await dbTransaction.commit();
+          await orderInstance.reload().catch(() => {});
+          await paymentTransaction.reload().catch(() => {});
+          await existingDriverDeliveryTxn.reload().catch(() => {});
+          return { order: orderInstance, receipt: paymentTransaction.receiptNumber || normalizedReceipt };
         }
         
         await dbTransaction.rollback();
