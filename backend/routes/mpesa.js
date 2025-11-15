@@ -98,8 +98,21 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     }
 
     if (paymentTransaction.status === 'completed' && paymentTransaction.paymentStatus === 'paid' && orderWasPreviouslyPaid) {
+      // CRITICAL: Still verify order status is correct even if already paid
+      // This prevents orders from being stuck at pending
+      const needsStatusUpdate = orderInstance.status === 'pending' || orderInstance.paymentStatus !== 'paid';
+      if (needsStatusUpdate) {
+        console.log(`⚠️  Order #${effectiveOrderId} was already paid but status needs update. Updating...`);
+        await orderInstance.update({
+          paymentStatus: 'paid',
+          status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
+        }, { transaction: dbTransaction });
+        await dbTransaction.commit();
+      } else {
+        await dbTransaction.rollback();
+      }
       await paymentTransaction.reload().catch(() => {});
-      await dbTransaction.rollback();
+      await orderInstance.reload().catch(() => {});
       return { order: orderInstance, receipt: paymentTransaction.receiptNumber };
     }
 
@@ -1570,6 +1583,7 @@ router.post('/callback', async (req, res) => {
           // CRITICAL: Call finalizeOrderPayment to handle all transaction creation/updates
           // This centralizes transaction creation and prevents duplicates
           // finalizeOrderPayment will create/update payment, delivery, and driver delivery transactions
+          let finalizeSuccess = false;
           try {
             console.log(`📞 Calling finalizeOrderPayment for Order #${order.id}...`);
             await finalizeOrderPayment({
@@ -1580,14 +1594,42 @@ router.post('/callback', async (req, res) => {
               context: 'M-Pesa callback'
             });
             console.log(`✅ finalizeOrderPayment completed for Order #${order.id}`);
+            finalizeSuccess = true;
           } catch (finalizeError) {
             console.error(`❌ Error in finalizeOrderPayment:`, finalizeError);
             // Don't fail the callback - payment transaction is already updated
-            // Delivery transactions can be synced later via ensureDeliveryFeeSplit
+            // But we still need to update order status
           }
 
           // Reload order after finalizeOrderPayment to get updated status
           await order.reload();
+          
+          // CRITICAL: Ensure order status is updated even if finalizeOrderPayment failed or returned early
+          // This prevents orders from being stuck at pending
+          if (transaction.status === 'completed' && transaction.paymentStatus === 'paid') {
+            const needsStatusUpdate = order.status === 'pending' || order.paymentStatus !== 'paid';
+            if (needsStatusUpdate) {
+              console.error(`⚠️  Order #${order.id} status not updated by finalizeOrderPayment. Current: status='${order.status}', paymentStatus='${order.paymentStatus}'. Forcing update...`);
+              try {
+                // Use raw SQL first to ensure it works
+                await db.sequelize.query(
+                  `UPDATE orders SET "paymentStatus" = 'paid', status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END, "updatedAt" = NOW() WHERE id = :id`,
+                  {
+                    replacements: { id: order.id }
+                  }
+                );
+                // Also try Sequelize update as backup
+                await order.update({
+                  paymentStatus: 'paid',
+                  status: order.status === 'pending' ? 'confirmed' : order.status
+                });
+                await order.reload();
+                console.log(`✅ Forced order #${order.id} status update: paymentStatus='paid', status='${order.status}'`);
+              } catch (forceUpdateError) {
+                console.error(`❌ Error forcing order status update:`, forceUpdateError);
+              }
+            }
+          }
 
           // Update order - Transaction status is the single source of truth
           // Determine the correct order status based on current status
