@@ -37,7 +37,11 @@ module.exports = {
       
       // For Cloud SQL Unix socket connections, don't use SSL
       if (isCloudSql) {
-        return {};
+        return {
+          connectTimeout: 10000, // 10 second connection timeout
+          statement_timeout: 5000, // 5 second statement timeout
+          query_timeout: 5000 // 5 second query timeout
+        };
       }
       
       // For external connections, use SSL if required
@@ -46,10 +50,24 @@ module.exports = {
             ssl: {
               require: true,
               rejectUnauthorized: false
-            }
+            },
+            connectTimeout: 10000,
+            statement_timeout: 5000,
+            query_timeout: 5000
           }
-        : {};
+        : {
+            connectTimeout: 10000,
+            statement_timeout: 5000,
+            query_timeout: 5000
+          };
     })(),
+    pool: {
+      max: 10, // Maximum number of connections in pool
+      min: 2, // Minimum number of connections in pool
+      acquire: 10000, // Maximum time (ms) to wait for a connection
+      idle: 10000, // Maximum time (ms) a connection can be idle
+      evict: 1000 // Time interval (ms) to check for idle connections
+    },
     logging: false // Disable SQL logging in production
   }
 };

@@ -40,6 +40,18 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Global request timeout middleware - prevent requests from hanging indefinitely
+app.use((req, res, next) => {
+  // Set a 30 second timeout for all requests
+  req.setTimeout(30000, () => {
+    if (!res.headersSent) {
+      console.error(`⚠️ Request timeout for ${req.method} ${req.path}`);
+      res.status(504).json({ error: 'Request timeout. Please try again.' });
+    }
+  });
+  next();
+});
+
 // Serve static files (images)
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
