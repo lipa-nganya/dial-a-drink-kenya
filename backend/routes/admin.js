@@ -980,31 +980,6 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
     if (orderData.items) {
       orderData.orderItems = orderData.items;
     }
-    orderData.status = finalStatus;
-
-    await order.reload({
-      include: [
-        {
-          model: db.OrderItem,
-          as: 'items',
-          include: [{ model: db.Drink, as: 'drink' }]
-        },
-        {
-          model: db.Transaction,
-          as: 'transactions'
-        },
-        {
-          model: db.Driver,
-          as: 'driver',
-          attributes: ['id', 'name', 'phoneNumber', 'status']
-        }
-      ]
-    });
-
-    orderData = order.toJSON();
-    if (orderData.items) {
-      orderData.orderItems = orderData.items;
-    }
 
     // Emit socket events for real-time updates
     const io = req.app.get('io');
