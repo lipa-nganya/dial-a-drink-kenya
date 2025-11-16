@@ -4,6 +4,10 @@ const { getOrderFinancialBreakdown } = require('./orderFinancials');
 const pushNotifications = require('../services/pushNotifications');
 const { getOrCreateHoldDriver } = require('./holdDriver');
 
+// In-memory lock to prevent concurrent execution for the same order
+// This prevents race conditions where multiple calls create duplicate transactions
+const processingOrders = new Set();
+
 /**
  * Credit all wallets when an order is completed (delivery completed)
  * This function handles:
@@ -17,6 +21,19 @@ const { getOrCreateHoldDriver } = require('./holdDriver');
  * @returns {Promise<object>} Result object with credited amounts
  */
 const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
+  // CRITICAL: Prevent concurrent execution for the same order
+  // This prevents race conditions where multiple calls create duplicate transactions
+  if (processingOrders.has(orderId)) {
+    console.log(`⚠️  Order #${orderId} is already being processed - skipping duplicate call`);
+    return {
+      orderId,
+      skipped: true,
+      reason: 'already_processing'
+    };
+  }
+
+  processingOrders.add(orderId);
+  
   const dbTransaction = await db.sequelize.transaction();
   
   try {
