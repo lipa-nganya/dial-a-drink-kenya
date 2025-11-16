@@ -1,238 +1,749 @@
-# 🍹 Dial A Drink Kenya
+# LiquorOS - Complete Ecosystem Documentation
 
-A modern, mobile-responsive e-commerce platform for beverage delivery in Kenya. Built with React, Node.js, PostgreSQL, and real-time WebSocket notifications.
+## Overview
 
-## ✨ Features
+LiquorOS is a comprehensive beverage delivery platform ecosystem consisting of three integrated applications:
 
-### 🛍️ Customer Features
-- **Mobile-First Design**: Fully responsive across all devices
-- **Category Browsing**: Browse drinks by categories (Cocktails, Mocktails, etc.)
-- **Shopping Cart**: Add/remove items with quantity management
-- **Order Placement**: Complete checkout with customer information
-- **Real-time Updates**: Live inventory status
+1. **Customer Site** - Web application for customers to browse, order, and track deliveries
+2. **Driver App** - Mobile application (React Native/Expo) for drivers to manage deliveries and earnings
+3. **Admin Dashboard** - Web application for administrators to manage orders, inventory, drivers, and financials
 
-### 👨‍💼 Admin Dashboard
-- **Real-time Notifications**: Instant alerts with sound when new orders arrive
-- **Order Management**: View, update, and track order status
-- **Inventory Control**: Toggle drink availability (in stock/out of stock)
-- **Dashboard Analytics**: View total orders, pending orders, and inventory stats
-- **Mobile Responsive**: Full admin functionality on mobile devices
-
-### 🔧 Technical Features
-- **WebSocket Integration**: Real-time communication between frontend and backend
-- **RESTful API**: Complete CRUD operations for all entities
-- **Database Seeding**: Pre-populated with sample drinks and categories
-- **Error Handling**: Comprehensive error management
-- **Mobile Optimization**: Touch-friendly interface
-
-## 🚀 Tech Stack
-
-### Frontend
-- **React 18** - Modern React with hooks
-- **Material-UI** - Beautiful, responsive components
-- **React Router** - Client-side routing
-- **Axios** - HTTP client for API calls
-- **Socket.io Client** - Real-time WebSocket communication
-
-### Backend
-- **Node.js** - JavaScript runtime
-- **Express.js** - Web application framework
-- **Sequelize** - PostgreSQL ORM
-- **Socket.io** - Real-time WebSocket server
-- **CORS** - Cross-origin resource sharing
-
-### Database
-- **PostgreSQL** - Relational database
-- **Sequelize Models** - Category, Drink, Order, OrderItem
-
-## 📱 Mobile Responsive Design
-
-The application is fully optimized for mobile devices with:
-- **Responsive Grid System**: Adapts to different screen sizes
-- **Touch-Friendly Interface**: Optimized for mobile interactions
-- **Mobile Navigation**: Hamburger menu for mobile devices
-- **Adaptive Typography**: Text scales appropriately
-- **Mobile-First Approach**: Designed mobile-first, enhanced for desktop
-
-## 🛠️ Installation & Setup
-
-### Prerequisites
-- Node.js (v14 or higher)
-- PostgreSQL database
-- npm or yarn package manager
-
-### Backend Setup
-```bash
-cd backend
-npm install
-```
-
-### Frontend Setup
-```bash
-cd frontend
-npm install
-```
-
-### Database Setup
-1. Create a PostgreSQL database named `dialadrink`
-2. Update database credentials in `backend/config.js`
-3. Run the backend server to auto-create tables and seed data
-
-### Running the Application
-
-#### Development Mode
-```bash
-# Terminal 1 - Backend
-cd backend
-npm run dev
-
-# Terminal 2 - Frontend
-cd frontend
-npm start
-```
-
-#### Production Mode
-```bash
-# Backend
-cd backend
-npm start
-
-# Frontend
-cd frontend
-npm run build
-```
-
-## 🌐 Application URLs
-
-- **Customer App**: `http://localhost:3000`
-- **Admin Dashboard**: `http://localhost:3001`
-- **API Health Check**: `http://localhost:5001/api/health`
-
-## 📊 Database Schema
-
-### Categories
-- id, name, description, image, isActive
-
-### Drinks
-- id, name, description, price, image, categoryId, isAvailable, isPopular
-
-### Orders
-- id, customerName, customerPhone, customerEmail, deliveryAddress, totalAmount, status, notes
-
-### Order Items
-- id, orderId, drinkId, quantity, price
-
-## 🔌 API Endpoints
-
-### Categories
-- `GET /api/categories` - Get all categories
-- `GET /api/categories/:id` - Get category by ID
-
-### Drinks
-- `GET /api/drinks` - Get all drinks
-- `GET /api/drinks/:id` - Get drink by ID
-
-### Orders
-- `POST /api/orders` - Create new order
-- `GET /api/orders` - Get all orders
-
-### Admin
-- `GET /api/admin/orders` - Get all orders for admin
-- `GET /api/admin/drinks` - Get all drinks for inventory
-- `PATCH /api/admin/drinks/:id/availability` - Update drink availability
-- `PATCH /api/admin/orders/:id/status` - Update order status
-- `GET /api/admin/stats` - Get dashboard statistics
-
-## 🔔 Real-time Features
-
-### WebSocket Events
-- **new-order**: Triggered when a customer places an order
-- **join-admin**: Admin joins the admin room for notifications
-
-### Notification System
-- **Visual Alerts**: Popup notifications for new orders
-- **Sound Alerts**: Audio notifications for admin
-- **Real-time Updates**: Live inventory and order status updates
-
-## 📱 Mobile Features
-
-### Responsive Breakpoints
-- **xs (0-600px)**: Mobile phones
-- **sm (600-960px)**: Tablets  
-- **md (960px+)**: Desktop
-
-### Mobile Optimizations
-- **Touch Targets**: Properly sized buttons and interactive elements
-- **Navigation**: Hamburger menu for mobile
-- **Typography**: Responsive font sizes
-- **Layout**: Stacked layouts on mobile, side-by-side on desktop
-
-## 🚀 Deployment
-
-### Render.com (Recommended)
-1. Connect your GitHub repository to Render
-2. Deploy backend as a Web Service
-3. Deploy frontend as a Static Site
-4. Add PostgreSQL database
-5. Update environment variables
-
-### Environment Variables
-```env
-# Backend
-PORT=5001
-DB_USER=your_db_user
-DB_PASSWORD=your_db_password
-DB_NAME=dialadrink
-DB_HOST=localhost
-DB_PORT=5432
-
-# Frontend
-REACT_APP_API_URL=http://localhost:5001/api
-```
-
-## 🧪 Testing the Application
-
-### Customer Flow
-1. Browse categories and drinks
-2. Add items to cart
-3. Fill in customer information
-4. Place order
-5. Receive confirmation
-
-### Admin Flow
-1. Open admin dashboard
-2. Monitor real-time notifications
-3. Update order status
-4. Manage inventory (toggle availability)
-5. View analytics
-
-## 📈 Future Enhancements
-
-- [ ] User authentication and accounts
-- [ ] Payment integration (M-Pesa, Stripe)
-- [ ] Order tracking for customers
-- [ ] Push notifications
-- [ ] Multi-language support
-- [ ] Advanced analytics dashboard
-- [ ] Inventory management with stock levels
-- [ ] Delivery tracking system
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Test thoroughly
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
-
-## 👥 Team
-
-Built with ❤️ for the Kenyan beverage delivery market.
+All three platforms connect to a unified backend API hosted on Google Cloud Run, with data stored in Google Cloud SQL (PostgreSQL).
 
 ---
 
-**Ready to revolutionize beverage delivery in Kenya! 🇰🇪🍹**
+## Architecture
+
+### System Components
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Customer Site  │     │   Driver App    │     │  Admin Dashboard│
+│   (React SPA)   │     │  (React Native)  │     │   (React SPA)   │
+│   Port: 3000    │     │   (Expo/OTA)    │     │   Port: 3001    │
+└────────┬────────┘     └────────┬─────────┘     └────────┬────────┘
+         │                      │                         │
+         │                      │                         │
+         └──────────────────────┼─────────────────────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │   Backend API         │
+                    │   (Node.js/Express)   │
+                    │   Cloud Run           │
+                    │   Port: 8080          │
+                    └───────────┬───────────┘
+                                │
+                    ┌───────────▼───────────┐
+                    │   PostgreSQL Database │
+                    │   Cloud SQL           │
+                    └───────────────────────┘
+```
+
+### Technology Stack
+
+**Backend:**
+- Node.js with Express.js
+- Sequelize ORM
+- PostgreSQL (Cloud SQL)
+- Socket.IO for real-time updates
+- M-Pesa API integration
+- Google Maps API for delivery calculations
+
+**Frontend (Customer & Admin):**
+- React.js
+- Material-UI
+- Axios for API calls
+- Socket.IO client for real-time updates
+
+**Driver App:**
+- React Native with Expo
+- Expo Application Services (EAS) for builds
+- OTA (Over-The-Air) updates
+- Socket.IO client for real-time updates
+
+**Infrastructure:**
+- Google Cloud Platform (GCP)
+- Cloud Run for backend and frontend hosting
+- Cloud SQL for database
+- Cloud Build for container builds
+- Expo for mobile app distribution
+
+---
+
+## Core Features
+
+### 1. Order Management
+
+**Order Flow:**
+1. Customer browses drinks and adds to cart
+2. Customer selects delivery address and payment method
+3. Order is created with status `pending`
+4. Admin confirms order → status `confirmed`
+5. Admin marks as preparing → status `preparing`
+6. Driver assigned → status `out_for_delivery`
+7. Driver marks as delivered → status `delivered`
+8. Payment confirmed → status `completed`
+
+**Payment Methods:**
+- **Pay Now**: M-Pesa STK Push (immediate payment)
+- **Pay on Delivery**: M-Pesa STK Push or Cash/Mobile Money (payment on delivery)
+
+### 2. Transaction Management
+
+The system creates and manages multiple transaction types for each order:
+
+#### Transaction Types
+
+1. **Order Payment** (`transactionType: 'payment'`)
+   - Represents customer payment for order items
+   - Amount: Items total only (excludes delivery fee and tip)
+   - Created when M-Pesa callback is received
+   - Credited to merchant wallet when order is completed
+
+2. **Delivery Fee Payment (Merchant)** (`transactionType: 'delivery_pay'`, `driverId: null`)
+   - Merchant's share of delivery fee
+   - Amount: Delivery fee - Driver pay amount
+   - Credited to merchant wallet when order is completed
+
+3. **Delivery Fee Payment (Driver)** (`transactionType: 'delivery_pay'`, `driverId: <id>`)
+   - Driver's share of delivery fee (if enabled)
+   - Amount: Configured driver pay per delivery
+   - Credited to driver wallet when order is completed
+   - **Note**: Skipped for cash/mobile money payments (driver already has cash)
+
+4. **Tip** (`transactionType: 'tip'`)
+   - Customer tip for driver
+   - Amount: From order `tipAmount` field
+   - Credited to driver wallet when order is completed
+   - **Note**: Skipped for cash/mobile money payments (driver already has cash)
+
+#### Transaction Creation Flow
+
+See [TRANSACTION_CREATION_FLOW.md](./TRANSACTION_CREATION_FLOW.md) for detailed documentation.
+
+**Key Principles:**
+- All wallet crediting happens in `creditWalletsOnDeliveryCompletion()` when order status is `completed`
+- Duplicate prevention using database locks and in-memory locks
+- Cash/mobile money payments skip driver wallet crediting (driver already has cash)
+- Transactions are created/updated atomically within database transactions
+
+### 3. Wallet Management
+
+#### Merchant Wallet (`AdminWallet`)
+- **Credited with:**
+  - Order payment (items total)
+  - Delivery fee (merchant share)
+- **Updated when:** Order status becomes `completed` and payment is `paid`
+- **Fields:**
+  - `balance`: Current available balance
+  - `totalRevenue`: Total revenue accumulated
+  - `totalOrders`: Total number of completed orders
+
+#### Driver Wallet (`DriverWallet`)
+- **Credited with:**
+  - Delivery fee (driver share) - only for M-Pesa payments
+  - Tips - only for M-Pesa payments
+- **Updated when:** Order status becomes `completed` and payment is `paid`
+- **Fields:**
+  - `balance`: Current available balance
+  - `totalDeliveryPay`: Total delivery fees received
+  - `totalDeliveryPayCount`: Number of deliveries paid
+  - `totalTipsReceived`: Total tips received
+  - `totalTipsCount`: Number of tips received
+
+**Important:** For cash/mobile money payments, driver wallets are **NOT** credited because the driver already received the cash/mobile money directly from the customer.
+
+### 4. Real-Time Updates
+
+All platforms use Socket.IO for real-time updates:
+
+- **Order Status Changes**: All platforms notified when order status updates
+- **Payment Confirmations**: Real-time payment status updates
+- **Driver Assignments**: Drivers notified when assigned to orders
+- **Wallet Updates**: Drivers notified when wallet is credited
+
+### 5. Delivery Fee Calculation
+
+Delivery fees are calculated based on:
+- **Order Type**: With alcohol vs. without alcohol
+- **Distance**: Calculated using Google Maps API
+- **Settings**: Configurable in Admin Dashboard
+
+**Delivery Fee Split:**
+- If "Pay Driver Per Delivery" is enabled:
+  - Driver receives configured amount (or delivery fee, whichever is less)
+  - Merchant receives: Delivery fee - Driver pay amount
+- If disabled:
+  - Merchant receives full delivery fee
+  - Driver receives nothing
+
+### 6. M-Pesa Integration
+
+**Supported Operations:**
+- STK Push (Lipa na M-Pesa)
+- B2C (Business to Customer) - for driver payouts (future)
+
+**Environments:**
+- Sandbox: For testing
+- Production: For live payments
+
+**Configuration:**
+- Consumer Key and Secret
+- Shortcode
+- Passkey
+- Callback URL (automatically set to Cloud Run backend URL)
+
+---
+
+## Platform-Specific Details
+
+### Customer Site (`frontend/`)
+
+**Purpose:** Allow customers to browse drinks, place orders, and track deliveries
+
+**Key Features:**
+- Product browsing and search
+- Shopping cart management
+- Address selection and delivery fee calculation
+- Payment initiation (M-Pesa STK Push)
+- Order tracking
+- Order history
+
+**Deployment:**
+- Hosted on Cloud Run as `dialadrink-customer`
+- URL: `https://dialadrink-customer-910510650031.us-central1.run.app`
+
+### Driver App (`DDDriverExpo/`)
+
+**Purpose:** Enable drivers to view assigned orders, update delivery status, confirm payments, and track earnings
+
+**Key Features:**
+- Order list (assigned orders)
+- Order details with navigation (Google Maps integration)
+- Status updates (On the Way, Delivered)
+- Payment confirmation (M-Pesa or Cash/Mobile Money)
+- Wallet balance and transaction history
+- Push notifications for new orders and wallet credits
+
+**Build Profiles:**
+- **local-dev**: Connects to localhost/ngrok backend
+  - Bundle ID: `com.dialadrink.driver.local`
+  - Channel: `local-dev`
+- **cloud-dev**: Connects to cloud-dev backend
+  - Bundle ID: `com.dialadrink.driver`
+  - Channel: `cloud-dev`
+- **production**: Connects to cloud-dev backend
+  - Bundle ID: `com.dialadrink.driver`
+  - Channel: `production`
+
+**OTA Updates:**
+- Updates published to channels via `publish-update.sh`
+- API URL determined by update channel and environment variables
+- Updates download automatically on app launch
+
+**Deployment:**
+- Built via EAS Build
+- Distributed via Expo Application Services
+- OTA updates for code changes (no rebuild needed)
+
+### Admin Dashboard (`admin-frontend/`)
+
+**Purpose:** Comprehensive management interface for administrators
+
+**Key Features:**
+- **Dashboard**: Overview of orders, revenue, drivers
+- **Orders Management**: View, filter, update order status and payment status
+- **Inventory Management**: Add, edit, delete drinks and categories
+- **Driver Management**: Add drivers, assign orders, view driver wallets
+- **Transactions**: View all transactions with filtering and search
+- **Settings**: Configure delivery fees, driver pay, M-Pesa settings
+- **Financial Reports**: Revenue tracking, wallet balances
+
+**Deployment:**
+- Hosted on Cloud Run as `dialadrink-admin`
+- URL: `https://dialadrink-admin-910510650031.us-central1.run.app`
+
+---
+
+## Database Schema
+
+### Core Tables
+
+**Orders:**
+- Order details (customer info, delivery address, items)
+- Status tracking (`pending`, `confirmed`, `preparing`, `out_for_delivery`, `delivered`, `completed`)
+- Payment tracking (`unpaid`, `pending`, `paid`)
+- Financial fields (`totalAmount`, `deliveryFee`, `tipAmount`, `driverPayAmount`)
+
+**Transactions:**
+- All financial transactions
+- Types: `payment`, `delivery_pay`, `tip`, `cash_settlement`
+- Links to orders, drivers, wallets
+- Status tracking (`pending`, `completed`, `cancelled`)
+
+**Wallets:**
+- `AdminWallet`: Merchant wallet (single record)
+- `DriverWallet`: Driver wallets (one per driver)
+
+**Drivers:**
+- Driver information
+- Phone number (used for authentication)
+- Push notification tokens
+- Wallet relationship
+
+**Drinks:**
+- Product catalog
+- Categories, subcategories
+- Pricing (including capacity-based pricing)
+- Inventory tracking
+
+---
+
+## API Structure
+
+### Authentication
+
+- **Admin**: JWT tokens stored in localStorage
+- **Driver**: Phone number-based authentication
+- **Customer**: Session-based (no authentication required for browsing)
+
+### Key Endpoints
+
+**Orders:**
+- `GET /api/orders` - List orders (with filters)
+- `GET /api/orders/:id` - Get order details
+- `PATCH /api/orders/:id` - Update order status
+- `POST /api/orders` - Create new order
+
+**Transactions:**
+- `GET /api/transactions` - List transactions (with filters)
+- `GET /api/transactions/:id` - Get transaction details
+
+**M-Pesa:**
+- `POST /api/mpesa/stk-push` - Initiate STK Push
+- `POST /api/mpesa/callback` - M-Pesa callback handler
+
+**Drivers:**
+- `GET /api/drivers` - List drivers
+- `GET /api/drivers/phone/:phone` - Get driver by phone
+- `GET /api/drivers/:id/wallet` - Get driver wallet
+
+**Wallets:**
+- `GET /api/admin/wallet` - Get merchant wallet
+- `GET /api/drivers/:id/wallet` - Get driver wallet
+
+---
+
+## Environment Configuration
+
+### Backend Environment Variables
+
+**Database:**
+- `DATABASE_URL`: PostgreSQL connection string
+
+**M-Pesa:**
+- `MPESA_CONSUMER_KEY`: M-Pesa API consumer key
+- `MPESA_CONSUMER_SECRET`: M-Pesa API consumer secret
+- `MPESA_SHORTCODE`: M-Pesa shortcode
+- `MPESA_PASSKEY`: M-Pesa passkey
+- `MPESA_ENVIRONMENT`: `sandbox` or `production`
+- `MPESA_CALLBACK_URL`: Callback URL for M-Pesa
+
+**Google Maps:**
+- `GOOGLE_MAPS_API_KEY`: API key for distance calculations
+
+**Email (SMTP):**
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`
+- `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`
+
+**JWT:**
+- `JWT_SECRET`: Secret for JWT token generation
+
+### Frontend Environment Variables
+
+**Customer Site:**
+- `REACT_APP_API_URL`: Backend API URL (optional, defaults to production)
+
+**Admin Dashboard:**
+- `REACT_APP_API_URL`: Backend API URL (optional, auto-detects localhost)
+
+**Driver App:**
+- `EXPO_PUBLIC_API_BASE_URL`: Backend API URL (set per build profile)
+- `EXPO_PUBLIC_ENV`: Environment (`local`, `cloud`, `production`)
+- `EXPO_PUBLIC_BUILD_PROFILE`: Build profile (`local-dev`, `cloud-dev`, `production`)
+
+---
+
+## Deployment
+
+### Backend Deployment
+
+```bash
+# Deploy backend to Cloud Run
+./deploy-backend.sh
+
+# Sync environment variables from .env
+./sync-env-to-cloud-run.sh
+
+# Update production-specific variables
+./update-production-env.sh
+```
+
+### Frontend Deployment
+
+```bash
+# Deploy customer site
+./deploy-frontend.sh
+
+# Deploy admin dashboard
+./deploy-admin.sh
+```
+
+### Driver App Deployment
+
+**Build APK:**
+```bash
+cd DDDriverExpo
+eas build --platform android --profile production
+```
+
+**Publish OTA Update:**
+```bash
+cd DDDriverExpo
+./publish-update.sh production "Update message"
+```
+
+**Available Channels:**
+- `local-dev`: For local development (uses ngrok/localhost)
+- `cloud-dev`: For cloud-dev testing (uses cloud-dev API)
+- `production`: For production (uses cloud-dev API)
+- `development`: For development builds (uses cloud-dev API)
+
+---
+
+## Local Development
+
+### Starting All Servers
+
+```bash
+# Start all local servers (backend, frontend, admin, ngrok)
+./start-all-servers.sh
+```
+
+**Services:**
+- Backend: `http://localhost:5001`
+- Customer Site: `http://localhost:3000`
+- Admin Dashboard: `http://localhost:3001`
+- ngrok: Check `http://localhost:4040` for URL
+
+### Backend Setup
+
+1. Install dependencies: `cd backend && npm install`
+2. Set up `.env` file (see `ENV_SETUP.md`)
+3. Start server: `PORT=5001 node server.js`
+
+### Frontend Setup
+
+**Customer Site:**
+```bash
+cd frontend
+npm install
+npm start  # Runs on port 3000
+```
+
+**Admin Dashboard:**
+```bash
+cd admin-frontend
+npm install
+PORT=3001 npm start  # Runs on port 3001
+```
+
+### Driver App Setup
+
+**Local Development:**
+```bash
+cd DDDriverExpo
+npm install
+npm start  # Expo Dev Server
+```
+
+**Build Local-Dev APK:**
+```bash
+cd DDDriverExpo
+./build-local.sh
+```
+
+**Connect to Local Backend:**
+- Ensure ngrok is running: `ngrok http 5001`
+- Update `EXPO_PUBLIC_API_BASE_URL` in `eas.json` or use `./rebuild-local-with-ngrok.sh`
+
+---
+
+## Key Workflows
+
+### Order Placement Flow
+
+1. Customer browses drinks and adds to cart
+2. Customer enters delivery address
+3. System calculates delivery fee using Google Maps API
+4. Customer selects payment method (Pay Now or Pay on Delivery)
+5. If Pay Now: M-Pesa STK Push initiated immediately
+6. Order created with status `pending`
+7. Admin receives notification
+8. Admin confirms order → status `confirmed`
+
+### Delivery Flow
+
+1. Admin marks order as `preparing`
+2. Admin assigns driver to order
+3. Order status → `out_for_delivery`
+4. Driver receives push notification
+5. Driver navigates to delivery address (Google Maps)
+6. Driver marks as `delivered`
+7. If Pay on Delivery: Driver confirms payment (M-Pesa or Cash)
+8. Order status → `completed` (if payment confirmed)
+9. Wallets credited automatically via `creditWalletsOnDeliveryCompletion()`
+
+### Payment Flow
+
+**Pay Now (M-Pesa):**
+1. Customer initiates payment
+2. Backend calls M-Pesa STK Push API
+3. Customer receives M-Pesa prompt
+4. Customer enters PIN
+5. M-Pesa sends callback to backend
+6. Backend creates `payment` transaction
+7. Order payment status → `paid`
+8. If order already delivered → status `completed` → wallets credited
+
+**Pay on Delivery (M-Pesa):**
+1. Driver marks order as `delivered`
+2. Driver initiates M-Pesa STK Push
+3. Customer receives M-Pesa prompt
+4. Customer enters PIN
+5. M-Pesa sends callback to backend
+6. Backend creates `payment` transaction
+7. Order status → `completed` → wallets credited
+
+**Pay on Delivery (Cash/Mobile Money):**
+1. Driver marks order as `delivered`
+2. Driver confirms cash/mobile money received
+3. Backend creates `payment` transaction with `paymentMethod: 'cash'`
+4. Order status → `completed`
+5. Wallets credited (merchant only - driver already has cash)
+
+---
+
+## Wallet Crediting Logic
+
+### When Wallets Are Credited
+
+Wallets are credited **only** when:
+- Order status is `completed`
+- Order payment status is `paid`
+- Function: `creditWalletsOnDeliveryCompletion()` is called
+
+### What Gets Credited
+
+**Merchant Wallet:**
+- Order payment (items total)
+- Delivery fee (merchant share)
+
+**Driver Wallet (M-Pesa payments only):**
+- Delivery fee (driver share) - if enabled
+- Tip - if applicable
+
+**Driver Wallet (Cash/Mobile Money payments):**
+- **Nothing** - driver already received cash/mobile money directly
+
+### Duplicate Prevention
+
+- In-memory lock (`processingOrders` Set) prevents concurrent execution
+- Database transaction with row-level locking (`LOCK.UPDATE`)
+- Multiple checks for existing transactions before creation
+- Idempotent design - safe to call multiple times
+
+---
+
+## Transaction Types Reference
+
+| Type | Description | Amount | Credited To | When Created |
+|------|-------------|--------|-------------|--------------|
+| `payment` | Customer payment for items | Items total | Merchant wallet | M-Pesa callback |
+| `delivery_pay` (merchant) | Merchant delivery fee share | Delivery fee - Driver pay | Merchant wallet | Order completed |
+| `delivery_pay` (driver) | Driver delivery fee share | Driver pay amount | Driver wallet | Order completed (M-Pesa only) |
+| `tip` | Customer tip | Tip amount | Driver wallet | Order completed (M-Pesa only) |
+| `cash_settlement` | Cash payment confirmation | Order total | N/A | Cash payment confirmed |
+
+---
+
+## Security Considerations
+
+### Authentication
+- Admin: JWT tokens with expiration
+- Driver: Phone number-based (no password required)
+- Tokens stored in localStorage (frontend) or AsyncStorage (mobile)
+
+### API Security
+- CORS configured for specific origins
+- Rate limiting on critical endpoints
+- Input validation on all endpoints
+- SQL injection prevention via Sequelize ORM
+
+### Data Protection
+- Passwords never stored in plain text
+- Environment variables for sensitive data
+- Database credentials in Cloud Run secrets
+- M-Pesa credentials encrypted in transit
+
+---
+
+## Monitoring and Logging
+
+### Backend Logs
+- Cloud Run logs available in Google Cloud Console
+- Structured logging with emoji prefixes for easy scanning
+- Error tracking for failed transactions
+
+### Key Log Patterns
+
+**Wallet Crediting:**
+- `🚀 creditWalletsOnDeliveryCompletion CALLED` - Function started
+- `🔒 Lock acquired` - Lock obtained
+- `✅ Credited merchant wallet` - Merchant wallet updated
+- `✅ Credited driver wallet` - Driver wallet updated
+- `⚠️ SKIPPING` - Crediting skipped (with reason)
+
+**M-Pesa:**
+- `🔑 Requesting M-Pesa access token` - Token request
+- `✅ STK Push initiated` - Payment initiated
+- `💰 M-Pesa callback received` - Callback received
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+**Orders Stuck at Pending:**
+- Check M-Pesa callback was received
+- Verify payment transaction was created
+- Check backend logs for errors
+
+**Duplicate Transactions:**
+- Check for concurrent `creditWalletsOnDeliveryCompletion` calls
+- Verify in-memory lock is working
+- Check database transaction logs
+
+**Driver Wallet Not Credited:**
+- Verify order status is `completed`
+- Check payment method (cash payments skip driver crediting)
+- Verify driver pay settings are enabled
+- Check backend logs for skip reasons
+
+**API Connection Issues:**
+- Verify environment variables are set correctly
+- Check Cloud Run service is running
+- Verify network connectivity
+- Check CORS configuration
+
+---
+
+## File Structure
+
+```
+dial-a-drink/
+├── backend/                 # Backend API server
+│   ├── models/            # Sequelize models
+│   ├── routes/            # API routes
+│   ├── services/          # Business logic services
+│   ├── utils/             # Utility functions
+│   │   ├── walletCredits.js      # Wallet crediting logic
+│   │   ├── deliveryFeeTransactions.js  # Delivery fee management
+│   │   └── orderFinancials.js    # Financial calculations
+│   └── server.js          # Entry point
+│
+├── frontend/              # Customer site
+│   ├── src/
+│   │   ├── components/   # React components
+│   │   ├── pages/        # Page components
+│   │   └── services/     # API service
+│   └── public/           # Static assets
+│
+├── admin-frontend/       # Admin dashboard
+│   ├── src/
+│   │   ├── components/   # React components
+│   │   ├── pages/        # Page components
+│   │   ├── contexts/      # React contexts
+│   │   └── services/     # API service
+│   └── public/           # Static assets
+│
+├── DDDriverExpo/        # Driver mobile app
+│   ├── src/
+│   │   ├── screens/      # Screen components
+│   │   ├── services/     # API service
+│   │   └── components/   # Reusable components
+│   ├── app.config.js    # Expo configuration
+│   ├── eas.json         # EAS build configuration
+│   └── publish-update.sh # OTA update script
+│
+├── deploy-backend.sh     # Backend deployment script
+├── deploy-frontend.sh    # Customer site deployment
+├── deploy-admin.sh       # Admin dashboard deployment
+├── sync-env-to-cloud-run.sh  # Environment variable sync
+└── start-all-servers.sh  # Local development startup
+```
+
+---
+
+## Key Documentation Files
+
+- **[TRANSACTION_CREATION_FLOW.md](./TRANSACTION_CREATION_FLOW.md)**: Detailed transaction creation and wallet crediting flow
+- **[ENV_SETUP.md](./ENV_SETUP.md)**: Environment variable setup guide
+- **[DDDriverExpo/ENVIRONMENT_SETUP.md](./DDDriverExpo/ENVIRONMENT_SETUP.md)**: Driver app environment configuration
+
+---
+
+## Version Information
+
+**Current Version:** Stable Release
+**Last Updated:** November 2024
+
+**Key Features Implemented:**
+- ✅ Complete order management system
+- ✅ M-Pesa payment integration (sandbox and production)
+- ✅ Real-time updates via Socket.IO
+- ✅ Wallet management (merchant and driver)
+- ✅ Transaction splitting and crediting
+- ✅ Cash/mobile money payment handling
+- ✅ OTA updates for driver app
+- ✅ Multi-environment support (local, cloud-dev, production)
+
+---
+
+## Support and Maintenance
+
+### Regular Maintenance Tasks
+
+1. **Monitor Cloud Run Logs**: Check for errors and performance issues
+2. **Review Transactions**: Verify wallet crediting is working correctly
+3. **Update Dependencies**: Keep npm packages up to date
+4. **Database Backups**: Cloud SQL automatic backups enabled
+5. **M-Pesa Credentials**: Rotate credentials periodically
+
+### Getting Help
+
+- Check logs in Google Cloud Console
+- Review transaction creation flow documentation
+- Check environment variable configuration
+- Verify database connectivity
+
+---
+
+## License
+
+Proprietary - All rights reserved
+
+---
+
+**Last Updated:** November 16, 2024
