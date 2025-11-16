@@ -781,11 +781,23 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       driverPayAmount: driverPayAmount > 0 ? driverPayAmount : order.driverPayAmount
     });
 
-    // If order already delivered, upgrade to completed to follow paid workflow
-    let finalStatus = order.status;
-    if (order.status === 'delivered') {
+    // Determine final order status based on current status
+    // If order was "out_for_delivery" or "delivered", mark as completed (delivered + paid = completed)
+    // Same logic as M-Pesa callback handler
+    const currentOrderStatus = order.status;
+    let finalStatus = currentOrderStatus;
+    
+    if (currentOrderStatus === 'out_for_delivery' || currentOrderStatus === 'delivered') {
+      // If order was out for delivery or delivered when payment is confirmed, mark as completed
+      // (delivered + paid = completed)
       await order.update({ status: 'completed' });
       finalStatus = 'completed';
+      console.log(`📝 Order #${order.id} was "${currentOrderStatus}", updating to "completed" after cash payment confirmation`);
+    } else if (currentOrderStatus === 'pending' || currentOrderStatus === 'cancelled') {
+      // For newly paid orders, move them into confirmed
+      await order.update({ status: 'confirmed' });
+      finalStatus = 'confirmed';
+      console.log(`📝 Order #${order.id} was "${currentOrderStatus}", updating to "confirmed" after cash payment confirmation`);
     }
 
     // CRITICAL: Wallet crediting is now handled by creditWalletsOnDeliveryCompletion
@@ -794,7 +806,6 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     // Same logic as pay_now and pay_on_delivery M-Pesa flows.
     if (finalStatus === 'completed' && order.driverId) {
       try {
-        const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
         await creditWalletsOnDeliveryCompletion(order.id, req);
         console.log(`✅ Wallets credited for Order #${order.id} on cash payment confirmation (order completed)`);
       } catch (walletError) {
