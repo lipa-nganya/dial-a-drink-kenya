@@ -1,6 +1,8 @@
 // Dynamic Expo configuration based on environment
 // This allows separate local and cloud builds without additional costs
 
+const withFullScreenIntent = require('./plugins/withFullScreenIntent');
+
 module.exports = ({ config }) => {
   // Determine environment from EAS build profile or environment variable
   const buildProfile = process.env.EAS_BUILD_PROFILE || process.env.EXPO_PUBLIC_BUILD_PROFILE || 'development';
@@ -86,7 +88,8 @@ module.exports = ({ config }) => {
           'ACCESS_NETWORK_STATE',
           'ACCESS_FINE_LOCATION',
           'ACCESS_COARSE_LOCATION',
-          'ACCESS_BACKGROUND_LOCATION'
+          'ACCESS_BACKGROUND_LOCATION',
+          'USE_FULL_SCREEN_INTENT' // Allows notifications to wake screen and bring app to foreground
         ]
       },
       web: {
@@ -101,7 +104,11 @@ module.exports = ({ config }) => {
       },
       runtimeVersion: {
         policy: 'appVersion'
-      }
+      },
+      plugins: [
+        // Add full-screen intent plugin for Android notifications
+        withFullScreenIntent
+      ]
     }
   };
 };

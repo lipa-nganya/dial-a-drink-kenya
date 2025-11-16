@@ -37,6 +37,18 @@ const HomeScreen = ({ route, navigation }) => {
   const processingOrdersRef = useRef(new Set()); // Track orders being processed to prevent duplicates
   const { colors, isDarkMode } = useTheme();
   
+  // Track app state changes (foreground/background)
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      console.log('📱 App state changed:', appState.current, '->', nextAppState);
+      appState.current = nextAppState;
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+
   // Get phoneNumber from route params or AsyncStorage
   useEffect(() => {
     const getPhoneNumber = async () => {
@@ -93,10 +105,40 @@ const HomeScreen = ({ route, navigation }) => {
 
   // Set up notification handlers
   useEffect(() => {
-    // Handle notification tap (when user taps notification) - only handle taps, not received events
-    // This prevents the loop: socket event -> handleOrderAssigned -> scheduleNotification -> notification received -> handleOrderAssigned (loop!)
+    // Handle notification received (when app is in foreground or background)
+    // With full-screen intent, Android can automatically bring app to foreground
+    const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
+      console.log('📱 Notification received:', notification);
+      console.log('📱 App state:', appState.current);
+      const { data } = notification.request.content;
+      
+      if (data?.type === 'order-assigned' && data?.order) {
+        const orderId = data.order.id;
+        
+        // Check if this order was already handled
+        const existingOrder = orders.find(o => o.id === orderId);
+        if (existingOrder && existingOrder.driverAccepted === true) {
+          console.log('📱 Notification received but order already accepted, ignoring');
+          return;
+        }
+        
+        // Prevent duplicate processing
+        if (processingOrdersRef.current.has(orderId)) {
+          console.log('📱 Notification received but order already being processed, ignoring');
+          return;
+        }
+        
+        // Handle the order assignment - this will bring app to foreground if in background
+        console.log('📱 Notification received - handling order assignment (will bring app to foreground)');
+        processingOrdersRef.current.add(orderId);
+        handleOrderAssigned(data.order, true);
+      }
+    });
+
+    // Handle notification tap (when user taps notification - brings app to foreground)
+    // This is the primary way app comes to foreground when in background
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('📱 Notification tapped:', response);
+      console.log('📱 Notification tapped - bringing app to foreground:', response);
       const { data } = response.notification.request.content;
       
       if (data?.type === 'order-assigned' && data?.order) {
@@ -104,7 +146,8 @@ const HomeScreen = ({ route, navigation }) => {
         // Only handle if not already processing this order
         if (!processingOrdersRef.current.has(orderId)) {
           processingOrdersRef.current.add(orderId);
-          // Navigate to OrderAcceptance screen
+          console.log('📱 App brought to foreground via notification tap, navigating to order...');
+          // Navigate to OrderAcceptance screen (this brings app to foreground)
           handleOrderAssigned(data.order, true);
         } else {
           console.log('⚠️ Order already being processed, ignoring notification tap:', orderId);
@@ -113,9 +156,10 @@ const HomeScreen = ({ route, navigation }) => {
     });
 
     return () => {
+      receivedSubscription.remove();
       responseSubscription.remove();
     };
-  }, [navigation, driverInfo?.id]);
+  }, [navigation, driverInfo?.id, orders]);
 
   // Handle order assignment (from socket or notification)
   const handleOrderAssigned = async (order, playSound = true) => {
@@ -263,6 +307,7 @@ const HomeScreen = ({ route, navigation }) => {
       console.log('📦 Order ID:', data?.order?.id);
       console.log('📦 Driver ID in event:', driverInfo?.id);
       console.log('📦 PlaySound flag:', data?.playSound);
+      console.log('📱 App state:', appState.current);
       
       if (data && data.order) {
         // Check if this order is already in the orders list (already accepted)
@@ -273,7 +318,18 @@ const HomeScreen = ({ route, navigation }) => {
           return;
         }
         
-        // Use the centralized handleOrderAssigned function
+        // If app is in background, schedule notification first to wake screen
+        // The notification tap will bring app to foreground and trigger handleOrderAssigned
+        if (appState.current !== 'active') {
+          console.log('📱 App is in background - scheduling notification to wake screen');
+          await scheduleOrderNotification(data.order);
+          // Don't call handleOrderAssigned here - let notification tap handle it
+          // This prevents duplicate processing
+          return;
+        }
+        
+        // If app is in foreground, handle immediately
+        console.log('📱 App is in foreground - handling order assignment immediately');
         await handleOrderAssigned(data.order, data.playSound !== false);
       } else {
         console.error('❌❌❌ NO ORDER DATA IN SOCKET EVENT ❌❌❌');
