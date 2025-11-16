@@ -641,24 +641,13 @@ router.post('/stk-push', async (req, res) => {
             order: [['createdAt', 'DESC']]
           });
 
-          const driverDeliveryPayload = {
-            ...baseTransactionPayload,
-            transactionType: 'delivery_pay',
-            amount: driverPayAmount,
-            notes: driverDeliveryNote,
-            driverId: order.driverId,
-            driverWalletId: null
-          };
-
-          if (driverDeliveryTransaction) {
-            // Found existing driver delivery transaction - update it instead of creating duplicate
-            await driverDeliveryTransaction.update(driverDeliveryPayload);
-            console.log(`✅ Driver delivery fee transaction updated for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
-          } else {
-            // No driver delivery transaction exists - safe to create new one
-            driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload);
-            console.log(`✅ Driver delivery fee transaction created for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
-          }
+          // CRITICAL: DO NOT create driver delivery transactions here!
+          // Driver delivery transactions should ONLY be created by creditWalletsOnDeliveryCompletion
+          // when delivery is completed. Creating them here causes duplicates.
+          // 
+          // We only create merchant delivery fee transactions here. Driver delivery transactions
+          // will be created when the order is marked as completed.
+          console.log(`ℹ️  Skipping driver delivery transaction creation for Order #${orderId} - will be created by creditWalletsOnDeliveryCompletion on delivery completion`);
         } else {
           const existingDriverDeliveryTransaction = await db.Transaction.findOne({
             where: {
