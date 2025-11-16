@@ -300,8 +300,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     }
 
     // 3. Credit Driver Wallet: Delivery Fee (driver share) + Tip
-    // CRITICAL: Use the maximum of tipAmount and orderTipAmount to ensure tips are ALWAYS credited
-    const effectiveTipAmount = Math.max(tipAmount, orderTipAmount);
+    // CRITICAL: Use the maximum of tipAmount and orderTipAmountAfterReload to ensure tips are ALWAYS credited
+    // Use the reloaded value, not the early value, to ensure we have the latest tip amount
+    const effectiveTipAmount = Math.max(tipAmount, orderTipAmountAfterReload);
     
     console.log(`💳 Driver wallet crediting check for Order #${orderId}:`);
     console.log(`   driverId: ${order.driverId}`);
