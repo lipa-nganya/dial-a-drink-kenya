@@ -9,7 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import api from './src/services/api';
-import LocationGate from './src/components/LocationGate';
+// LocationGate removed - causing performance issues
+// import LocationGate from './src/components/LocationGate';
 import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
@@ -99,13 +100,10 @@ const MainTabs = () => {
   );
 };
 
-// Wrap MainTabs with LocationGate - only enforce location after login
+// MainTabs - location gate removed due to performance issues
+// Location will be requested when needed (e.g., when accepting orders)
 const MainTabsWithLocationGate = () => {
-  return (
-    <LocationGate>
-      <MainTabs />
-    </LocationGate>
-  );
+  return <MainTabs />;
 };
 
 const AppNavigator = ({ initialRoute }) => {
