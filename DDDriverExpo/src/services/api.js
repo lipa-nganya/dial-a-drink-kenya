@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 
 // Configuration for API base URL
 // IMPORTANT: Choose the correct method based on how you're testing:
@@ -31,7 +32,18 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
-  // CRITICAL: Check build profile/environment FIRST before checking __DEV__
+  // CRITICAL: Check update channel FIRST (for OTA updates)
+  // This ensures QR code scans load the correct API URL based on the update channel
+  let updateChannel = null;
+  try {
+    if (Updates && Updates.channel) {
+      updateChannel = Updates.channel;
+    }
+  } catch (e) {
+    // Updates module not available (development mode)
+  }
+  
+  // CRITICAL: Check build profile/environment SECOND before checking __DEV__
   // This ensures production and cloud-dev builds use the correct API URL
   const buildProfile = Constants.expoConfig?.extra?.environment || process.env.EXPO_PUBLIC_ENV || process.env.EXPO_PUBLIC_BUILD_PROFILE;
   const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
@@ -40,6 +52,7 @@ const getBaseURL = () => {
   const isExpoGo = Constants.executionEnvironment === 'storeClient'; // Running in Expo Go
   
   console.log('🔍 [API] Environment Detection:', {
+    updateChannel,
     buildProfile,
     bundleId,
     appName,
@@ -48,6 +61,26 @@ const getBaseURL = () => {
     __DEV__,
     expoConfig: Constants.expoConfig?.extra
   });
+  
+  // Priority 0: Check update channel (for OTA updates via QR code)
+  // local-dev channel → localhost/ngrok
+  // production/development/cloud-dev channels → cloud-dev API
+  if (updateChannel === 'local-dev') {
+    const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+    if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {
+      console.log('🌐 [API] local-dev channel - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
+      return `${ngrokEnvUrl}/api`;
+    }
+    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] local-dev channel - using ngrok URL:', `${ngrokUrl}/api`);
+    return `${ngrokUrl}/api`;
+  }
+  
+  if (updateChannel === 'production' || updateChannel === 'development' || updateChannel === 'cloud-dev') {
+    const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
+    console.log(`🌐 [API] ${updateChannel} channel - using cloud-dev API URL:`, `${cloudApiUrl}/api`);
+    return `${cloudApiUrl}/api`;
+  }
   
   // Priority 1: Check if explicitly in local-dev mode (from build profile or bundle ID)
   // ONLY use localhost/ngrok if explicitly configured as local-dev
@@ -114,6 +147,7 @@ const getBaseURL = () => {
   const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
   console.warn('⚠️ [API] No API URL configured, using cloud-dev fallback:', `${cloudApiUrl}/api`);
   console.error('📱 [API] Debug info:', {
+    updateChannel,
     buildProfile,
     isLocalDevBuild,
     isExpoGo,
