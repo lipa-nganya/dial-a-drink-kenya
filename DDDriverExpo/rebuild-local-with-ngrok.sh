@@ -5,9 +5,6 @@
 cd "$(dirname "$0")"
 
 # Build limit removed - builds are now unlimited
-if [ $? -ne 0 ]; then
-    exit 1
-fi
 
 echo "🔧 Rebuilding Local Dev APK with ngrok URL..."
 echo ""
