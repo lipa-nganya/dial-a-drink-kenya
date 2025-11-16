@@ -72,14 +72,13 @@ async function sendOrderNotification(pushToken, order) {
       orderId: order.id,
       order: order,
       type: 'order-assigned',
-      autoLaunch: true
+      autoLaunch: true,
+      channelId: 'order-assignments' // Tell app to use our custom channel
     },
     priority: 'high', // High priority for immediate delivery
     badge: 1,
-    // Android-specific: Use the notification channel we configured
-    // Note: Expo push notifications will use the default channel unless we specify
-    // For Android, we need to ensure the notification uses our MAX importance channel
-    // The channelId 'order-assignments' is configured in the app with MAX importance
+    // Android-specific: Ensure notification plays sound and vibrates
+    // The app will handle mapping this to the correct channel
   };
 
   try {
