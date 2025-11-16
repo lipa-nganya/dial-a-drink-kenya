@@ -472,17 +472,21 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             }
           }
 
-          // Credit driver wallet
-          const balanceAfterDeliveryPay = oldBalance + driverPayAmount;
+          // CRITICAL: Reload wallet to get current balance (after driver delivery fee was credited if applicable)
+          // This ensures we use the correct balance when crediting the tip
+          await driverWallet.reload({ transaction: dbTransaction });
+          const currentBalance = parseFloat(driverWallet.balance) || 0;
+          
+          // Credit driver wallet with tip
           await driverWallet.update({
-            balance: balanceAfterDeliveryPay + tipAmount,
+            balance: currentBalance + tipAmount,
             totalTipsReceived: oldTotalTipsReceived + tipAmount,
             totalTipsCount: oldTipsCount + 1
           }, { transaction: dbTransaction });
 
           console.log(`✅ Credited tip for Order #${orderId}:`);
           console.log(`   Amount: KES ${tipAmount.toFixed(2)}`);
-          console.log(`   Wallet balance: ${balanceAfterDeliveryPay.toFixed(2)} → ${(balanceAfterDeliveryPay + tipAmount).toFixed(2)}`);
+          console.log(`   Wallet balance: ${currentBalance.toFixed(2)} → ${(currentBalance + tipAmount).toFixed(2)}`);
         }
 
         await driverWallet.reload({ transaction: dbTransaction });
