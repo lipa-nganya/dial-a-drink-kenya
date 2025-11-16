@@ -106,11 +106,28 @@ const HomeScreen = ({ route, navigation }) => {
   // Set up notification handlers
   useEffect(() => {
     // Handle notification received (when app is in foreground or background)
-    // With full-screen intent, Android can automatically bring app to foreground
-    const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
+    // When a push notification arrives, reschedule it as a local notification with proper channel
+    // This ensures sound and vibration work even when app is backgrounded or screen is off
+    const receivedSubscription = Notifications.addNotificationReceivedListener(async (notification) => {
       console.log('📱 Notification received:', notification);
       console.log('📱 App state:', appState.current);
+      console.log('📱 Notification origin:', notification.request.trigger?.type || 'push');
       const { data } = notification.request.content;
+      
+      // If this is a push notification (from Expo), reschedule it as local notification
+      // with proper channel configuration to ensure sound/vibration work
+      if (notification.request.trigger?.type === undefined || notification.request.trigger?.type === null) {
+        // This is likely a push notification - reschedule with proper channel
+        if (data?.type === 'order-assigned' && data?.order) {
+          console.log('📱 Push notification received - rescheduling as local notification with proper channel');
+          try {
+            await scheduleOrderNotification(data.order);
+            console.log('✅ Rescheduled push notification as local notification');
+          } catch (rescheduleError) {
+            console.error('❌ Error rescheduling notification:', rescheduleError);
+          }
+        }
+      }
       
       if (data?.type === 'order-assigned' && data?.order) {
         const orderId = data.order.id;

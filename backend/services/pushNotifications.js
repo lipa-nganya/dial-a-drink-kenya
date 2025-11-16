@@ -57,9 +57,11 @@ async function sendPushNotification(tokens, message = {}) {
 
 async function sendOrderNotification(pushToken, order) {
   if (!pushToken || !Expo.isExpoPushToken(pushToken)) {
-    console.warn('Invalid push token provided for order notification');
+    console.warn('❌ Invalid push token provided for order notification');
     return { success: false, message: 'Invalid push token' };
   }
+
+  console.log(`📤 Sending push notification to token: ${pushToken.substring(0, 20)}... for order #${order.id}`);
 
   const payload = {
     to: pushToken,
@@ -73,10 +75,11 @@ async function sendOrderNotification(pushToken, order) {
       autoLaunch: true
     },
     priority: 'high', // High priority for immediate delivery
-    // Android-specific settings for sound and vibration when screen is off
-    channelId: 'order-assignments', // Use the high-priority channel we configured
-    // These settings ensure notification works when app is backgrounded or screen is off
-    badge: 1
+    badge: 1,
+    // Android-specific: Use the notification channel we configured
+    // Note: Expo push notifications will use the default channel unless we specify
+    // For Android, we need to ensure the notification uses our MAX importance channel
+    // The channelId 'order-assignments' is configured in the app with MAX importance
   };
 
   try {

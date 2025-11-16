@@ -252,14 +252,21 @@ router.post('/', async (req, res) => {
     }
 
     const completeOrder = await db.Order.findByPk(createdOrderId, {
-      include: [{
-        model: db.OrderItem,
-        as: 'items',
-        include: [{
-          model: db.Drink,
-          as: 'drink'
-        }]
-      }]
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          attributes: ['id', 'name', 'phoneNumber', 'pushToken']
+        }
+      ]
     });
 
     const io = req.app.get('io');
@@ -275,6 +282,11 @@ router.post('/', async (req, res) => {
       if (completeOrder.driverId && assignedDriver && assignedDriver.name !== 'HOLD Driver') {
         console.log(`📢 Notifying driver ${assignedDriver.name} (ID: ${assignedDriver.id}) about auto-assigned order #${completeOrder.id}`);
         
+        // Get the driver's push token (might be updated since assignment)
+        const driverWithToken = await db.Driver.findByPk(assignedDriver.id, {
+          attributes: ['id', 'name', 'pushToken']
+        });
+        
         // Send socket event (for foreground app)
         io.to(`driver-${completeOrder.driverId}`).emit('order-assigned', {
           order: completeOrder,
@@ -283,17 +295,26 @@ router.post('/', async (req, res) => {
         
         // Send push notification (for background/screen-off scenarios)
         // This ensures sound and vibration work even when app is backgrounded
-        if (assignedDriver.pushToken) {
+        if (driverWithToken && driverWithToken.pushToken) {
           try {
+            console.log(`📤 Attempting to send push notification to driver ${assignedDriver.name}`);
+            console.log(`📤 Push token: ${driverWithToken.pushToken.substring(0, 30)}...`);
             const pushNotifications = require('../services/pushNotifications');
-            await pushNotifications.sendOrderNotification(assignedDriver.pushToken, completeOrder);
-            console.log(`✅ Push notification sent to driver ${assignedDriver.name} (Token: ${assignedDriver.pushToken.substring(0, 20)}...)`);
+            const result = await pushNotifications.sendOrderNotification(driverWithToken.pushToken, completeOrder);
+            if (result.success) {
+              console.log(`✅ Push notification sent successfully to driver ${assignedDriver.name}`);
+            } else {
+              console.error(`❌ Push notification failed:`, result);
+            }
           } catch (pushError) {
             console.error(`❌ Error sending push notification to driver ${assignedDriver.name}:`, pushError);
+            console.error(`❌ Error stack:`, pushError.stack);
             // Don't fail the order creation if push notification fails
           }
         } else {
-          console.log(`⚠️ Driver ${assignedDriver.name} has no push token - only socket notification sent`);
+          console.log(`⚠️ Driver ${assignedDriver.name} has no push token registered`);
+          console.log(`⚠️ Driver pushToken:`, driverWithToken?.pushToken || 'null');
+          console.log(`⚠️ Only socket notification sent - push notification skipped`);
         }
       }
     }
