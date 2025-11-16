@@ -492,35 +492,14 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
           console.log(`✅ Delivery fee transaction created for Order #${orderId} (transaction #${deliveryTransaction.id})`);
         }
 
+        // CRITICAL: DO NOT create driver delivery transactions here!
+        // Driver delivery transactions should ONLY be created by creditWalletsOnDeliveryCompletion
+        // when delivery is completed. Creating them here causes duplicates.
+        // 
+        // We only create merchant delivery fee transactions here. Driver delivery transactions
+        // will be created when the order is marked as completed.
         if (driverPayAmount > 0 && order.driverId) {
-          const driverDeliveryNote = `Driver delivery fee payment for Order #${orderId}. Amount: KES ${driverPayAmount.toFixed(2)}. Pending confirmation.`;
-
-          let driverDeliveryTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: order.id,
-              transactionType: 'delivery_pay',
-              driverId: order.driverId,
-              status: { [Op.ne]: 'completed' }
-            },
-            order: [['createdAt', 'DESC']]
-          });
-
-          const driverDeliveryPayload = {
-            ...baseTransactionPayload,
-            transactionType: 'delivery_pay',
-            amount: driverPayAmount,
-            notes: driverDeliveryNote,
-            driverId: order.driverId,
-            driverWalletId: null
-          };
-
-          if (driverDeliveryTransaction) {
-            await driverDeliveryTransaction.update(driverDeliveryPayload);
-            console.log(`✅ Driver delivery fee transaction updated for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
-          } else {
-            driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload);
-            console.log(`✅ Driver delivery fee transaction created for Order #${orderId} (transaction #${driverDeliveryTransaction.id})`);
-          }
+          console.log(`ℹ️  Skipping driver delivery transaction creation for Order #${orderId} - will be created by creditWalletsOnDeliveryCompletion on delivery completion`);
         } else {
           const existingDriverDeliveryTransaction = await db.Transaction.findOne({
             where: {

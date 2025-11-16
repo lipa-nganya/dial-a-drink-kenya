@@ -1023,48 +1023,19 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
             driverPayAmount = parseFloat(driverDeliveryTransaction.amount || 0) || 0;
           }
 
+          // CRITICAL: DO NOT create driver delivery transactions or credit driver wallet here!
+          // Driver delivery transactions and wallet credits should ONLY be created by creditWalletsOnDeliveryCompletion
+          // when delivery is completed. Creating them here causes duplicates and credits drivers before delivery.
+          // 
+          // We only update order.driverPayAmount here for tracking purposes.
+          // The actual transaction creation and wallet crediting will happen when the order is marked as completed.
           if (driverPayAmount > 0.009) {
-            const driverDeliveryNotes = driverDeliveryTransaction
-            ? `Driver delivery fee payment for Order #${order.id}. Credited after driver assignment.`
-            : `Driver delivery fee payment for Order #${order.id}. Credited to driver wallet.`;
-
-          const driverTransactionPayload = {
-            paymentMethod: paymentTransaction?.paymentMethod || driverDeliveryTransaction?.paymentMethod || 'mobile_money',
-            paymentProvider: paymentTransaction?.paymentProvider || driverDeliveryTransaction?.paymentProvider || 'mpesa',
-            amount: driverPayAmount,
-            status: 'completed',
-            paymentStatus: 'paid',
-            receiptNumber: receiptNumberToUse || driverDeliveryTransaction?.receiptNumber || null,
-            checkoutRequestID: paymentTransaction?.checkoutRequestID || driverDeliveryTransaction?.checkoutRequestID || null,
-            merchantRequestID: paymentTransaction?.merchantRequestID || driverDeliveryTransaction?.merchantRequestID || null,
-            phoneNumber: paymentTransaction?.phoneNumber || driverDeliveryTransaction?.phoneNumber || null,
-            transactionDate: transactionDateToUse,
-            driverId,
-            driverWalletId: driverWallet.id,
-            notes: driverDeliveryNotes
-          };
-
-          if (driverDeliveryTransaction) {
-            await driverDeliveryTransaction.update(driverTransactionPayload);
-          } else {
-            driverDeliveryTransaction = await db.Transaction.create({
-              orderId: order.id,
-              transactionType: 'delivery_pay',
-              ...driverTransactionPayload
+            console.log(`ℹ️  Skipping driver delivery transaction creation and wallet credit for Order #${order.id} on driver assignment - will be created by creditWalletsOnDeliveryCompletion on delivery completion`);
+            
+            // Only update order.driverPayAmount for tracking - don't create transactions or credit wallet
+            await order.update({
+              driverPayAmount: driverPayAmount
             });
-          }
-
-          await driverWallet.update({
-            balance: parseFloat(driverWallet.balance) + driverPayAmount,
-            totalDeliveryPay: parseFloat(driverWallet.totalDeliveryPay || 0) + driverPayAmount,
-            totalDeliveryPayCount: (driverWallet.totalDeliveryPayCount || 0) + 1
-          });
-
-          await order.update({
-            driverPayCredited: true,
-            driverPayCreditedAt: new Date(),
-            driverPayAmount: driverPayAmount
-          });
           }
         }
       } catch (deliveryPayError) {
