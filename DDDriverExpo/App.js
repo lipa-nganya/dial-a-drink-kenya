@@ -22,6 +22,7 @@ import ProfileScreen from './src/screens/ProfileScreen';
 import OrderAcceptanceScreen from './src/screens/OrderAcceptanceScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import WalletScreen from './src/screens/WalletScreen';
+import { registerForPushNotifications, configureNotificationChannel } from './src/services/notifications';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -279,6 +280,16 @@ const App = () => {
       checkAuthStatus();
     }
   };
+
+  // Configure notification channels immediately on app start
+  // This ensures push notifications use the correct channel with MAX importance
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      configureNotificationChannel().catch(error => {
+        console.error('❌ Error configuring notification channels:', error);
+      });
+    }
+  }, []);
 
   useEffect(() => {
     // Start with update check, then auth check
