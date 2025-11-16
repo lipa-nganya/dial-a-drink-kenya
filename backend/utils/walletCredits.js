@@ -347,10 +347,14 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         // Only tip transactions should be created when there's no driver pay
         if (driverPayAmount > 0.009) {
           console.log(`💵 Creating/updating driver delivery transaction for Order #${orderId} with amount KES ${driverPayAmount.toFixed(2)}`);
+          console.log(`   CRITICAL: This is for DRIVER DELIVERY FEE, NOT tip. Tip will be handled separately.`);
           
           // CRITICAL: Use the transaction found in the initial check above (existingDriverDeliveryTxn)
           // This prevents duplicates - we already checked for it with a lock at the beginning
-          let driverDeliveryTransaction = existingDriverDeliveryTxn;
+          // BUT: Only use it if it's actually a delivery_pay transaction, not a tip transaction
+          let driverDeliveryTransaction = existingDriverDeliveryTxn && existingDriverDeliveryTxn.transactionType === 'delivery_pay' 
+            ? existingDriverDeliveryTxn 
+            : null;
           
           // If not found in initial check, check for pending transaction with null driverId that might be converted
           if (!driverDeliveryTransaction) {
