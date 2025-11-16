@@ -738,93 +738,11 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       });
     }
 
-    if (tipAmount > 0.01) {
-      let tipTransaction = await db.Transaction.findOne({
-        where: {
-          orderId: order.id,
-          transactionType: 'tip'
-        },
-        order: [['createdAt', 'DESC']]
-      });
-
-      const tipNote = `Tip recorded via ${methodLabel} confirmation by driver #${driverId}.`;
-
-      if (tipTransaction) {
-        await tipTransaction.update({
-          paymentMethod,
-          paymentProvider,
-          status: 'completed',
-          paymentStatus: 'paid',
-          receiptNumber: tipTransaction.receiptNumber || normalizedReceipt,
-          transactionDate: now,
-          driverId: order.driverId,
-          notes: tipTransaction.notes ? `${tipTransaction.notes}\n${tipNote}` : tipNote
-        });
-      } else {
-        tipTransaction = await db.Transaction.create({
-          orderId: order.id,
-          transactionType: 'tip',
-          paymentMethod,
-          paymentProvider,
-          amount: tipAmount,
-          status: 'completed',
-          paymentStatus: 'paid',
-          receiptNumber: normalizedReceipt,
-          transactionDate: now,
-          driverId: order.driverId,
-          notes: tipNote
-        });
-      }
-
-      try {
-        const driverWallet = await ensureDriverWallet();
-        if (driverWallet && tipTransaction) {
-          const alreadyCredited =
-            tipTransaction.driverWalletId === driverWallet.id && tipTransaction.status === 'completed';
-
-          if (!alreadyCredited) {
-            await driverWallet.update({
-              balance: parseFloat(driverWallet.balance) + tipAmount,
-              totalTipsReceived: (parseFloat(driverWallet.totalTipsReceived) || 0) + tipAmount,
-              totalTipsCount: (driverWallet.totalTipsCount || 0) + 1
-            });
-
-            await tipTransaction.update({
-              driverWalletId: driverWallet.id,
-              status: 'completed',
-              paymentStatus: 'paid',
-              notes: `${tipNote} Credited to driver wallet.`
-            });
-          }
-        }
-      } catch (tipWalletError) {
-        console.error('❌ Error crediting tip during manual confirmation:', tipWalletError);
-      }
-    }
-
-    const adminCreditAmount = Math.max((parseFloat(itemsTotal) || 0) + merchantDeliveryAmount, 0);
-
-    try {
-      let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
-      if (!adminWallet) {
-        adminWallet = await db.AdminWallet.create({
-          id: 1,
-          balance: 0,
-          totalRevenue: 0,
-          totalOrders: 0
-        });
-      }
-
-      await adminWallet.update({
-        balance: parseFloat(adminWallet.balance) + adminCreditAmount,
-        totalRevenue: parseFloat(adminWallet.totalRevenue) + adminCreditAmount,
-        totalOrders: adminWallet.totalOrders + 1
-      });
-
-      console.log(`✅ Credited admin wallet with KES ${adminCreditAmount.toFixed(2)} for Order #${order.id} (manual confirmation)`);
-    } catch (adminWalletError) {
-      console.error('❌ Error crediting admin wallet during manual confirmation:', adminWalletError);
-    }
+    // CRITICAL: Tip and admin wallet crediting are now handled by creditWalletsOnDeliveryCompletion
+    // when the order is marked as completed. This ensures consistent transaction creation.
+    // We only create tip transaction here if order is not yet completed, otherwise creditWalletsOnDeliveryCompletion handles it.
+    // For admin wallet, creditWalletsOnDeliveryCompletion handles it when order is completed.
+    console.log(`ℹ️  Skipping tip and admin wallet crediting for Order #${order.id} - will be handled by creditWalletsOnDeliveryCompletion when order is completed`);
 
     const cashSettlementAmount = Math.max(totalAmount - (parseFloat(tipAmount) || 0) - driverPayAmount, 0);
 
@@ -864,70 +782,24 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     });
 
     // If order already delivered, upgrade to completed to follow paid workflow
+    let finalStatus = order.status;
     if (order.status === 'delivered') {
       await order.update({ status: 'completed' });
+      finalStatus = 'completed';
     }
 
-    // Credit driver pay per delivery if enabled and not yet credited
-    if ((order.status === 'completed' || order.status === 'delivered') && !order.driverPayCredited) {
+    // CRITICAL: Wallet crediting is now handled by creditWalletsOnDeliveryCompletion
+    // when the order is marked as completed, not when payment is confirmed.
+    // This ensures delivery fee and tip transactions are created correctly.
+    // Same logic as pay_now and pay_on_delivery M-Pesa flows.
+    if (finalStatus === 'completed' && order.driverId) {
       try {
-        const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-        ]);
-
-        const isDriverPayEnabled = driverPayEnabledSetting?.value === 'true';
-        const driverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-
-        if (isDriverPayEnabled && driverPayAmount > 0 && order.driverId) {
-          const driverWallet = await ensureDriverWallet();
-          if (!driverWallet) {
-            throw new Error('Driver wallet not available for delivery pay credit');
-          }
-
-          const currentBalance = parseFloat(driverWallet.balance) || 0;
-          const currentDeliveryPayTotal = parseFloat(driverWallet.totalDeliveryPay) || 0;
-          const currentDeliveryPayCount = driverWallet.totalDeliveryPayCount || 0;
-
-          await driverWallet.update({
-            balance: currentBalance + driverPayAmount,
-            totalDeliveryPay: currentDeliveryPayTotal + driverPayAmount,
-            totalDeliveryPayCount: currentDeliveryPayCount + 1
-          });
-
-          await order.update({
-            driverPayCredited: true,
-            driverPayCreditedAt: now,
-            driverPayAmount: driverPayAmount
-          });
-
-          const io = req.app.get('io');
-          if (io) {
-            io.to(`driver-${order.driverId}`).emit('delivery-pay-received', {
-              orderId: order.id,
-              amount: driverPayAmount,
-              customerName: order.customerName,
-              walletBalance: currentBalance + driverPayAmount
-            });
-          }
-
-          const driver = await db.Driver.findByPk(order.driverId).catch(() => null);
-          if (driver?.pushToken) {
-            pushNotifications.sendPushNotification(driver.pushToken, {
-              title: 'Delivery Fee Received',
-              body: `KES ${driverPayAmount.toFixed(2)} for Order #${order.id} has been added to your wallet.`,
-              data: {
-                type: 'delivery_pay',
-                orderId: order.id,
-                amount: driverPayAmount
-              }
-            }).catch((pushError) => {
-              console.error('❌ Error sending delivery pay push notification (manual confirmation):', pushError);
-            });
-          }
-        }
-      } catch (driverPayError) {
-        console.error('❌ Error crediting delivery pay during manual confirmation:', driverPayError);
+        const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+        await creditWalletsOnDeliveryCompletion(order.id, req);
+        console.log(`✅ Wallets credited for Order #${order.id} on cash payment confirmation (order completed)`);
+      } catch (walletError) {
+        console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
+        // Don't fail the cash confirmation if wallet crediting fails - payment is already confirmed
       }
     }
 
