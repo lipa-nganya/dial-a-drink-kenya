@@ -139,20 +139,24 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
     const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
     
+    // CRITICAL: Reload order to ensure we have the latest tipAmount value
+    await order.reload({ transaction: dbTransaction });
+    
     // CRITICAL: Get tip amount from MULTIPLE sources to ensure we never miss tips
+    // Handle both string and number types for tipAmount
     const tipAmountFromBreakdown = parseFloat(breakdown.tipAmount) || 0;
-    const tipAmountFromOrderField = parseFloat(order.tipAmount || '0') || 0;
-    const tipAmountFromOrderTipAmount = parseFloat(order.tipAmount || '0') || 0;
+    const orderTipRaw = order.tipAmount;
+    const tipAmountFromOrder = orderTipRaw != null ? (typeof orderTipRaw === 'string' ? parseFloat(orderTipRaw) : parseFloat(orderTipRaw)) || 0 : 0;
     
     // Use the MAXIMUM of all sources - this ensures we never miss a tip
-    const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrderField, tipAmountFromOrderTipAmount);
+    const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrder);
     
     // ALWAYS log tip detection for debugging
     console.log(`💰 Tip detection for Order #${orderId}:`);
     console.log(`   Breakdown tipAmount: KES ${tipAmountFromBreakdown.toFixed(2)}`);
-    console.log(`   Order.tipAmount: KES ${tipAmountFromOrderField.toFixed(2)}`);
+    console.log(`   Order.tipAmount (after reload): KES ${tipAmountFromOrder.toFixed(2)}`);
+    console.log(`   Order.tipAmount raw value: "${order.tipAmount}" (type: ${typeof order.tipAmount})`);
     console.log(`   Final tipAmount: KES ${tipAmount.toFixed(2)}`);
-    console.log(`   Order tipAmount field value: "${order.tipAmount}"`);
 
     // Get driver pay settings
     const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
@@ -585,8 +589,18 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         result.driverCreditAmount = driverPayAmount + effectiveTipAmount;
       } catch (driverError) {
         console.error(`❌ Error crediting driver wallet for Order #${orderId}:`, driverError);
+        console.error(`   Error stack:`, driverError.stack);
         result.driverError = driverError.message;
+        // Don't throw - allow function to complete even if driver wallet crediting fails
       }
+    } else {
+      console.log(`⚠️  SKIPPING driver wallet crediting for Order #${orderId}:`);
+      console.log(`   Reason: ${!order.driverId ? 'No driverId' : 'No driverPayAmount and no tip'}`);
+      console.log(`   driverId: ${order.driverId}`);
+      console.log(`   driverPayAmount: ${driverPayAmount.toFixed(2)}`);
+      console.log(`   effectiveTipAmount: ${effectiveTipAmount.toFixed(2)}`);
+      console.log(`   tipAmount: ${tipAmount.toFixed(2)}`);
+      console.log(`   orderTipAmount: ${orderTipAmount.toFixed(2)}`);
     }
 
     // Note: We don't mark order with a flag since Order model doesn't have walletsCredited field
