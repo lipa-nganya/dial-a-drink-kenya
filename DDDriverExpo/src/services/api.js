@@ -31,40 +31,65 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
-  // CRITICAL: Priority 0 - Always use local environment when running in development mode
-  // This ensures local development always works, regardless of OTA updates or app config
-  const isDevelopment = __DEV__;
+  // CRITICAL: Check build profile/environment FIRST before checking __DEV__
+  // This ensures production and cloud-dev builds use the correct API URL
+  const buildProfile = Constants.expoConfig?.extra?.environment || process.env.EXPO_PUBLIC_ENV || process.env.EXPO_PUBLIC_BUILD_PROFILE;
   const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
   const appName = Constants.expoConfig?.name || '';
   const isLocalDevBuild = bundleId?.includes('.local') || appName?.includes('Local');
   const isExpoGo = Constants.executionEnvironment === 'storeClient'; // Running in Expo Go
   
-  // If running in development mode OR local build OR Expo Go, prioritize local environment
-  if (isDevelopment || isLocalDevBuild || isExpoGo) {
+  console.log('🔍 [API] Environment Detection:', {
+    buildProfile,
+    bundleId,
+    appName,
+    isLocalDevBuild,
+    isExpoGo,
+    __DEV__,
+    expoConfig: Constants.expoConfig?.extra
+  });
+  
+  // Priority 1: Check if explicitly in local-dev mode (from build profile or bundle ID)
+  // ONLY use localhost/ngrok if explicitly configured as local-dev
+  if (buildProfile === 'local' || isLocalDevBuild) {
     // Try to get ngrok URL from environment variable first (for physical devices)
     const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
     if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {
-      console.log('🌐 [API] Local dev mode - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
+      console.log('🌐 [API] Local-dev mode - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
       return `${ngrokEnvUrl}/api`;
     }
     
     // Fallback to hardcoded ngrok URL for local development
     const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Local dev mode detected (__DEV__ or local build) - using ngrok URL:', `${ngrokUrl}/api`);
-    console.log('📱 [API] Debug:', { isDevelopment, isLocalDevBuild, isExpoGo, bundleId, appName });
+    console.log('🌐 [API] Local-dev mode detected - using ngrok URL:', `${ngrokUrl}/api`);
+    return `${ngrokUrl}/api`;
+  }
+  
+  // Priority 2: Check if running in Expo Go (development client)
+  // Only use localhost if explicitly in Expo Go AND no build profile is set
+  if (isExpoGo && !buildProfile) {
+    const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+    if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {
+      console.log('🌐 [API] Expo Go mode - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
+      return `${ngrokEnvUrl}/api`;
+    }
+    
+    // Fallback for Expo Go
+    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] Expo Go mode - using ngrok URL:', `${ngrokUrl}/api`);
     return `${ngrokUrl}/api`;
   }
 
-  // Priority 1: Environment variable (set at build time or runtime)
-  // Only use this if NOT in development mode (already handled above)
+  // Priority 3: Environment variable (set at build time for cloud-dev/production)
+  // This is set in eas.json for cloud-dev builds
   const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
   if (envBase) {
     console.log('🌐 [API] Using URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
     return `${envBase}/api`;
   }
 
-  // Priority 2: App config extra.apiBaseUrl (set in app.config.js based on build profile)
-  // Only use this if NOT in development mode (already handled above)
+  // Priority 4: App config extra.apiBaseUrl (set in app.config.js based on build profile)
+  // This is the PRIMARY source for production and cloud-dev builds
   const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
   if (configBase) {
     console.log('🌐 [API] Using URL from app config extra.apiBaseUrl:', `${configBase}/api`);
@@ -72,38 +97,32 @@ const getBaseURL = () => {
     return `${configBase}/api`;
   }
 
-  // Priority 3: Check if we're in local-dev mode and use ngrok
-  const buildProfile = Constants.expoConfig?.extra?.environment || process.env.EXPO_PUBLIC_ENV;
-  if (buildProfile === 'local') {
-    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Using ngrok URL for local-dev:', `${ngrokUrl}/api`);
-    return `${ngrokUrl}/api`;
+  // Fallback for development (emulator only) - ONLY if __DEV__ is true AND no build profile
+  if (__DEV__ && !buildProfile) {
+    if (Platform.OS === 'android') {
+      console.warn('⚠️ [API] Using emulator fallback URL (10.0.2.2). For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
+      return 'http://10.0.2.2:5001/api';
+    }
+    
+    if (Platform.OS === 'ios') {
+      console.warn('⚠️ [API] Using localhost fallback. For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
+      return 'http://localhost:5001/api';
+    }
   }
 
-  // Fallback for development (emulator only)
-  if (Platform.OS === 'android' && __DEV__) {
-    console.warn('⚠️ [API] Using emulator fallback URL (10.0.2.2). For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
-    return 'http://10.0.2.2:5001/api';
-  }
-
-  if (Platform.OS === 'ios' && __DEV__) {
-    console.warn('⚠️ [API] Using localhost fallback. For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
-    return 'http://localhost:5001/api';
-  }
-
-  console.error(
-    '❌ [API] No API base URL configured. Set EXPO_PUBLIC_API_BASE_URL or extra.apiBaseUrl in app.config.js.'
-  );
+  // Final fallback: Use cloud-dev API URL for production/cloud-dev builds
+  const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
+  console.warn('⚠️ [API] No API URL configured, using cloud-dev fallback:', `${cloudApiUrl}/api`);
   console.error('📱 [API] Debug info:', {
-    isDevelopment,
+    buildProfile,
     isLocalDevBuild,
     isExpoGo,
+    __DEV__,
     envBase,
     configBase,
-    buildProfile,
     expoConfig: Constants.expoConfig?.extra
   });
-  return 'http://localhost:5001/api';
+  return `${cloudApiUrl}/api`;
 };
 
 const api = axios.create({

@@ -28,7 +28,8 @@
       "channel": "cloud-dev",
       "env": {
         "EXPO_PUBLIC_ENV": "cloud",
-        "EXPO_PUBLIC_BUILD_PROFILE": "cloud-dev"
+        "EXPO_PUBLIC_BUILD_PROFILE": "cloud-dev",
+        "EXPO_PUBLIC_API_BASE_URL": "https://dialadrink-backend-910510650031.us-central1.run.app"
       }
     },
     "preview": {
@@ -42,7 +43,12 @@
       "android": {
         "buildType": "apk"
       },
-      "channel": "production"
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_BUILD_PROFILE": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://dialadrink-backend-910510650031.us-central1.run.app"
+      }
     }
   },
   "submit": {
