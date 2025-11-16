@@ -357,34 +357,23 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           
           // CRITICAL: Use the transaction found in the initial check above (existingDriverDeliveryTxn)
           // This prevents duplicates - we already checked for it with a lock at the beginning
-          // BUT: Only use it if it's actually a delivery_pay transaction, not a tip transaction
-          let driverDeliveryTransaction = existingDriverDeliveryTxn && existingDriverDeliveryTxn.transactionType === 'delivery_pay' 
+          // BUT: Only use it if it's actually a delivery_pay transaction with the correct driverId
+          // CRITICAL: NEVER convert merchant transactions (driverId: null) to driver transactions!
+          // Merchant transactions must remain merchant transactions
+          let driverDeliveryTransaction = existingDriverDeliveryTxn && 
+                                         existingDriverDeliveryTxn.transactionType === 'delivery_pay' &&
+                                         existingDriverDeliveryTxn.driverId === order.driverId
             ? existingDriverDeliveryTxn 
             : null;
           
-          // If not found in initial check, check for pending transaction with null driverId that might be converted
-          if (!driverDeliveryTransaction) {
-            driverDeliveryTransaction = await db.Transaction.findOne({
-              where: {
-                orderId: orderId,
-                transactionType: 'delivery_pay',
-                driverId: null,
-                driverWalletId: null,
-                status: { [Op.ne]: 'cancelled' }
-              },
-              transaction: dbTransaction,
-              lock: dbTransaction.LOCK.UPDATE
-            });
-          }
-          
           // CRITICAL: Double-check with lock to prevent race conditions
-          // Even if we found one above, another process might have created one between checks
+          // Only look for transactions that already have the driverId set - NEVER convert merchant transactions
           if (!driverDeliveryTransaction) {
             driverDeliveryTransaction = await db.Transaction.findOne({
               where: {
                 orderId: orderId,
                 transactionType: 'delivery_pay',
-                driverId: order.driverId,
+                driverId: order.driverId, // CRITICAL: Must have driverId - don't match merchant transactions
                 status: { [Op.ne]: 'cancelled' }
               },
               transaction: dbTransaction,
