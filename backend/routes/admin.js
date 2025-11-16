@@ -967,79 +967,18 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
     }
     orderData.status = finalStatus;
 
-    if (driverId && order.paymentStatus === 'paid' && !order.driverPayCredited) {
+    // CRITICAL: Wallet crediting is now handled by creditWalletsOnDeliveryCompletion
+    // when the order is marked as completed, not when payment status is updated.
+    // This prevents crediting wallets before delivery is completed.
+    // If order is marked as completed and payment is paid, credit wallets
+    if (finalStatus === 'completed' && paymentStatus === 'paid' && order.driverId) {
       try {
-        const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-        ]);
-
-        const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
-        const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-        const breakdown = await getOrderFinancialBreakdown(order.id);
-        const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-
-        let driverPayAmount = parseFloat(order.driverPayAmount || 0) || 0;
-        if (driverPayAmount <= 0 && driverPaySettingEnabled && configuredDriverPayAmount > 0) {
-          driverPayAmount = Math.min(deliveryFee, configuredDriverPayAmount);
-        }
-
-        if (driverPayAmount > 0.009) {
-          let driverWallet = await db.DriverWallet.findOne({ where: { driverId } });
-          if (!driverWallet) {
-            driverWallet = await db.DriverWallet.create({
-              driverId,
-              balance: 0,
-              totalTipsReceived: 0,
-              totalTipsCount: 0,
-              totalDeliveryPay: 0,
-              totalDeliveryPayCount: 0
-            });
-          }
-
-          const paymentTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: order.id,
-              transactionType: 'payment',
-              status: 'completed'
-            },
-            order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']]
-          });
-
-          const transactionDateToUse = paymentTransaction?.transactionDate || paymentTransaction?.createdAt || new Date();
-          const receiptNumberToUse = paymentTransaction?.receiptNumber || null;
-
-          let driverDeliveryTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: order.id,
-              transactionType: 'delivery_pay',
-              driverId: null,
-              paymentStatus: { [Op.in]: ['pending', 'unpaid'] }
-            },
-            order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']]
-          });
-
-          if (driverPayAmount <= 0.009 && driverDeliveryTransaction) {
-            driverPayAmount = parseFloat(driverDeliveryTransaction.amount || 0) || 0;
-          }
-
-          // CRITICAL: DO NOT create driver delivery transactions or credit driver wallet here!
-          // Driver delivery transactions and wallet credits should ONLY be created by creditWalletsOnDeliveryCompletion
-          // when delivery is completed. Creating them here causes duplicates and credits drivers before delivery.
-          // 
-          // We only update order.driverPayAmount here for tracking purposes.
-          // The actual transaction creation and wallet crediting will happen when the order is marked as completed.
-          if (driverPayAmount > 0.009) {
-            console.log(`ℹ️  Skipping driver delivery transaction creation and wallet credit for Order #${order.id} on driver assignment - will be created by creditWalletsOnDeliveryCompletion on delivery completion`);
-            
-            // Only update order.driverPayAmount for tracking - don't create transactions or credit wallet
-            await order.update({
-              driverPayAmount: driverPayAmount
-            });
-          }
-        }
-      } catch (deliveryPayError) {
-        console.error('❌ Error crediting delivery fee payment when driver assigned:', deliveryPayError);
+        const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+        await creditWalletsOnDeliveryCompletion(order.id, req);
+        console.log(`✅ Wallets credited for Order #${order.id} on payment status update (order already completed)`);
+      } catch (walletError) {
+        console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
+        // Don't fail the payment status update if wallet crediting fails
       }
     }
 
