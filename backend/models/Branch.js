@@ -1,5 +1,5 @@
 module.exports = (sequelize, DataTypes) => {
-  const OrderNotification = sequelize.define('OrderNotification', {
+  const Branch = sequelize.define('Branch', {
     id: {
       type: DataTypes.INTEGER,
       primaryKey: true,
@@ -9,38 +9,20 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: false
     },
-    phoneNumber: {
-      type: DataTypes.STRING,
+    address: {
+      type: DataTypes.TEXT,
       allowNull: false
     },
     isActive: {
       type: DataTypes.BOOLEAN,
+      allowNull: false,
       defaultValue: true
-    },
-    notes: {
-      type: DataTypes.TEXT,
-      allowNull: true
     }
   }, {
-    tableName: 'order_notifications',
+    tableName: 'branches',
     timestamps: true
   });
 
-  return OrderNotification;
+  return Branch;
 };
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

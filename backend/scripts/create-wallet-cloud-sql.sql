@@ -9,3 +9,4 @@ FROM driver_wallets
 WHERE "driverId" = 4;
 
 
+

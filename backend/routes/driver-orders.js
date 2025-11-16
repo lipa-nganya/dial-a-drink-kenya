@@ -53,6 +53,11 @@ router.get('/:driverId', async (req, res) => {
               as: 'drink'
             }
           ]
+        },
+        {
+          model: db.Branch,
+          as: 'branch',
+          required: false
         }
       ],
       order: [['createdAt', 'DESC']]

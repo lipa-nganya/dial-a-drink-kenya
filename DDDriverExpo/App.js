@@ -146,7 +146,7 @@ const AppNavigator = ({ initialRoute }) => {
           name="Home" 
           component={MainTabs}
           options={{ 
-            title: 'Dial A Drink Delivery App',
+            title: 'Liquor OS',
             headerLeft: () => null, // Hide back button completely
             headerBackVisible: false, // Also hide back button
             gestureEnabled: false, // Disable swipe back gesture

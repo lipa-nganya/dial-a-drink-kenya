@@ -732,7 +732,7 @@ const WalletScreen = ({ route }) => {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: safeColors.background }}>
       <Snackbar
         visible={snackbarVisible}
         message={snackbarMessage}
