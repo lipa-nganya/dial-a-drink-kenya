@@ -354,13 +354,23 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       }
     }
 
-    // Credit driver wallet if not already credited (check both transaction state and order flag)
-    if (!wasAlreadyCredited && paymentCompleted) {
-      const oldBalance = toNumeric(driverWallet.balance);
-      const oldTotalDeliveryPay = toNumeric(driverWallet.totalDeliveryPay);
-      const oldCount = driverWallet.totalDeliveryPayCount || 0;
-
-      await driverWallet.update({
+    // CRITICAL: DO NOT credit driver wallet here!
+    // Driver wallet crediting should ONLY happen in creditWalletsOnDeliveryCompletion
+    // when delivery is completed. Crediting here causes duplicates and credits drivers before delivery.
+    // 
+    // This function (ensureDeliveryFeeSplit) is only for syncing merchant delivery fee transactions
+    // and ensuring order.driverPayAmount is set correctly.
+    // 
+    // The creditWalletsOnDeliveryCompletion function will handle wallet crediting when the order is completed.
+    console.log(`ℹ️  Skipping driver wallet credit for Order #${orderId} - will be credited by creditWalletsOnDeliveryCompletion on delivery completion`);
+    
+    // OLD CODE REMOVED - DO NOT CREDIT WALLET HERE
+    // if (!wasAlreadyCredited && paymentCompleted) {
+    //   const oldBalance = toNumeric(driverWallet.balance);
+    //   const oldTotalDeliveryPay = toNumeric(driverWallet.totalDeliveryPay);
+    //   const oldCount = driverWallet.totalDeliveryPayCount || 0;
+    //
+    //   await driverWallet.update({
         balance: oldBalance + driverPayAmount,
         totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
         totalDeliveryPayCount: oldCount + 1
