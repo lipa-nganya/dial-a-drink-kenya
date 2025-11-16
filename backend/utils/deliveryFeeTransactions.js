@@ -368,34 +368,25 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
     console.log(`ℹ️  Skipping driver wallet credit for Order #${orderId} - will be credited by creditWalletsOnDeliveryCompletion on delivery completion`);
     
     // OLD CODE REMOVED - DO NOT CREDIT WALLET HERE
+    // Wallet crediting is now handled by creditWalletsOnDeliveryCompletion when delivery is completed
+    // The following code was removed to prevent duplicate wallet credits:
+    // 
     // if (!wasAlreadyCredited && paymentCompleted) {
     //   const oldBalance = toNumeric(driverWallet.balance);
     //   const oldTotalDeliveryPay = toNumeric(driverWallet.totalDeliveryPay);
     //   const oldCount = driverWallet.totalDeliveryPayCount || 0;
-    //
     //   await driverWallet.update({
-        balance: oldBalance + driverPayAmount,
-        totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
-        totalDeliveryPayCount: oldCount + 1
-      });
-
-      await driverWallet.reload();
-
-      console.log(`✅ Delivery pay credited to driver wallet for Order #${orderId}:`);
-      console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
-      console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${toNumeric(driverWallet.balance).toFixed(2)}`);
-      console.log(`   Total delivery pay: ${oldTotalDeliveryPay.toFixed(2)} → ${toNumeric(driverWallet.totalDeliveryPay).toFixed(2)}`);
-      console.log(`   Delivery pay count: ${oldCount} → ${driverWallet.totalDeliveryPayCount}`);
-
-      await orderModel.update({
-        driverPayCredited: true,
-        driverPayCreditedAt: transactionDate || new Date(),
-        driverPayAmount
-      });
-    } else if (orderModel.driverPayCredited) {
-      // Wallet already credited, just ensure order flag and amount are correct
-      console.log(`ℹ️  Driver wallet already credited for Order #${orderId} (skipping duplicate credit)`);
-    }
+    //     balance: oldBalance + driverPayAmount,
+    //     totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
+    //     totalDeliveryPayCount: oldCount + 1
+    //   });
+    //   await driverWallet.reload();
+    //   await orderModel.update({
+    //     driverPayCredited: true,
+    //     driverPayCreditedAt: transactionDate || new Date(),
+    //     driverPayAmount
+    //   });
+    // }
 
     if ((!orderModel.driverPayAmount || Math.abs(toNumeric(orderModel.driverPayAmount) - driverPayAmount) > 0.009)) {
       await orderModel.update({ driverPayAmount });
