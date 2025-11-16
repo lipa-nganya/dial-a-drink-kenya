@@ -345,12 +345,15 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
           await driverTransaction.reload();
         }
       } else {
-        driverTransaction = await db.Transaction.create({
-          orderId,
-          transactionType: 'delivery_pay',
-          ...driverPayload
-        });
-        console.log(`✅ Created driver delivery transaction #${driverTransaction.id} for Order #${orderId}`);
+        // CRITICAL: DO NOT create driver delivery transactions here!
+        // Driver delivery transactions should ONLY be created by creditWalletsOnDeliveryCompletion
+        // when delivery is completed. Creating them here causes duplicates (e.g., transaction 252, 253).
+        // 
+        // This function (ensureDeliveryFeeSplit) is only for syncing merchant delivery fee transactions
+        // and ensuring order.driverPayAmount is set correctly.
+        // 
+        // The creditWalletsOnDeliveryCompletion function will handle creation when the order is completed.
+        console.log(`ℹ️  Skipping driver delivery transaction creation for Order #${orderId} (pay_on_delivery) - will be created by creditWalletsOnDeliveryCompletion on delivery completion`);
       }
     }
 
