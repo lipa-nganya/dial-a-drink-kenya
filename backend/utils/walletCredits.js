@@ -21,6 +21,8 @@ const processingOrders = new Set();
  * @returns {Promise<object>} Result object with credited amounts
  */
 const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
+  console.log(`🚀 creditWalletsOnDeliveryCompletion CALLED for Order #${orderId}`);
+  
   // CRITICAL: Prevent concurrent execution for the same order
   // This prevents race conditions where multiple calls create duplicate transactions
   if (processingOrders.has(orderId)) {
@@ -33,6 +35,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
   }
 
   processingOrders.add(orderId);
+  console.log(`🔒 Lock acquired for Order #${orderId}`);
   
   const dbTransaction = await db.sequelize.transaction();
   
@@ -51,8 +54,15 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     
     if (!order) {
       await dbTransaction.rollback();
+      processingOrders.delete(orderId);
       throw new Error(`Order ${orderId} not found`);
     }
+    
+    console.log(`📦 Order #${orderId} loaded:`);
+    console.log(`   status: ${order.status}`);
+    console.log(`   paymentStatus: ${order.paymentStatus}`);
+    console.log(`   driverId: ${order.driverId}`);
+    console.log(`   tipAmount field: "${order.tipAmount}" (type: ${typeof order.tipAmount})`);
 
     // Check if wallets have already been credited for this order
     // We check by looking at transactions - if they're already linked to wallets, they've been credited
