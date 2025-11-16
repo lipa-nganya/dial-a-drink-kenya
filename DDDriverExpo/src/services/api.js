@@ -32,7 +32,22 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
-  // CRITICAL: Check update channel FIRST (for OTA updates)
+  // CRITICAL: Check environment variable FIRST (set by OTA updates)
+  // OTA updates embed EXPO_PUBLIC_API_BASE_URL in the update manifest
+  // This is the most reliable way to detect which API URL to use after an OTA update
+  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+  if (envBase) {
+    // Check if it's a local/ngrok URL or cloud URL
+    if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
+      console.log('🌐 [API] Using LOCAL API URL from EXPO_PUBLIC_API_BASE_URL (OTA update):', `${envBase}/api`);
+      return `${envBase}/api`;
+    } else {
+      console.log('🌐 [API] Using CLOUD API URL from EXPO_PUBLIC_API_BASE_URL (OTA update):', `${envBase}/api`);
+      return `${envBase}/api`;
+    }
+  }
+  
+  // CRITICAL: Check update channel SECOND (for OTA updates)
   // This ensures QR code scans load the correct API URL based on the update channel
   let updateChannel = null;
   try {
@@ -43,7 +58,7 @@ const getBaseURL = () => {
     // Updates module not available (development mode)
   }
   
-  // CRITICAL: Check build profile/environment SECOND before checking __DEV__
+  // CRITICAL: Check build profile/environment THIRD before checking __DEV__
   // This ensures production and cloud-dev builds use the correct API URL
   const buildProfile = Constants.expoConfig?.extra?.environment || process.env.EXPO_PUBLIC_ENV || process.env.EXPO_PUBLIC_BUILD_PROFILE;
   const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
@@ -52,6 +67,7 @@ const getBaseURL = () => {
   const isExpoGo = Constants.executionEnvironment === 'storeClient'; // Running in Expo Go
   
   console.log('🔍 [API] Environment Detection:', {
+    envBase,
     updateChannel,
     buildProfile,
     bundleId,
@@ -62,15 +78,10 @@ const getBaseURL = () => {
     expoConfig: Constants.expoConfig?.extra
   });
   
-  // Priority 0: Check update channel (for OTA updates via QR code)
+  // Priority 1: Check update channel (for OTA updates via QR code)
   // local-dev channel → localhost/ngrok
   // production/development/cloud-dev channels → cloud-dev API
   if (updateChannel === 'local-dev') {
-    const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
-    if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {
-      console.log('🌐 [API] local-dev channel - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
-      return `${ngrokEnvUrl}/api`;
-    }
     const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
     console.log('🌐 [API] local-dev channel - using ngrok URL:', `${ngrokUrl}/api`);
     return `${ngrokUrl}/api`;
@@ -113,13 +124,8 @@ const getBaseURL = () => {
     return `${ngrokUrl}/api`;
   }
 
-  // Priority 3: Environment variable (set at build time for cloud-dev/production)
-  // This is set in eas.json for cloud-dev builds
-  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
-  if (envBase) {
-    console.log('🌐 [API] Using URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
-    return `${envBase}/api`;
-  }
+  // Priority 3: Environment variable already checked above (Priority 0)
+  // This is set in eas.json for builds and in OTA updates
 
   // Priority 4: App config extra.apiBaseUrl (set in app.config.js based on build profile)
   // This is the PRIMARY source for production and cloud-dev builds
