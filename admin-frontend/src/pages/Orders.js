@@ -58,6 +58,7 @@ const Orders = () => {
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [reassignDriver, setReassignDriver] = useState(false);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonError, setCancelReasonError] = useState('');
@@ -467,6 +468,7 @@ const Orders = () => {
   const handleOpenBranchDialog = (order) => {
     setSelectedOrder(order);
     setSelectedBranchId(order.branchId || '');
+    setReassignDriver(false); // Reset reassign driver option
     setBranchDialogOpen(true);
   };
 
@@ -474,6 +476,7 @@ const Orders = () => {
     setBranchDialogOpen(false);
     setSelectedOrder(null);
     setSelectedBranchId('');
+    setReassignDriver(false);
   };
 
   const handleAssignBranch = async () => {
@@ -481,7 +484,15 @@ const Orders = () => {
     
     try {
       const branchId = selectedBranchId === '' ? null : parseInt(selectedBranchId);
-      await api.patch(`/admin/orders/${selectedOrder.id}/branch`, { branchId });
+      const oldBranchId = selectedOrder.branchId;
+      
+      // Only show driver reassignment option if branch is actually changing and new branch is set
+      const shouldReassignDriver = reassignDriver && branchId !== oldBranchId && branchId !== null;
+      
+      await api.patch(`/admin/orders/${selectedOrder.id}/branch`, { 
+        branchId,
+        reassignDriver: shouldReassignDriver
+      });
       
       // Refresh orders to get updated data
       await fetchOrders();
@@ -1022,7 +1033,11 @@ const Orders = () => {
               <Select
                 value={selectedBranchId}
                 label="Select Branch"
-                onChange={(e) => setSelectedBranchId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedBranchId(e.target.value);
+                  // Reset reassign driver option when branch changes
+                  setReassignDriver(false);
+                }}
               >
                 <MenuItem value="">
                   <em>No Branch (Unassign)</em>
@@ -1041,6 +1056,39 @@ const Orders = () => {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Delivery: {selectedOrder.deliveryAddress}
+                </Typography>
+                {selectedOrder.driver && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Current Driver: {selectedOrder.driver.name}
+                  </Typography>
+                )}
+              </Box>
+            )}
+            {/* Show driver reassignment option only if branch is changing and new branch is selected */}
+            {selectedOrder && 
+             selectedBranchId !== '' && 
+             parseInt(selectedBranchId) !== selectedOrder.branchId && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                  Driver Assignment
+                </Typography>
+                <FormControl fullWidth>
+                  <Select
+                    value={reassignDriver ? 'reassign' : 'keep'}
+                    onChange={(e) => setReassignDriver(e.target.value === 'reassign')}
+                  >
+                    <MenuItem value="keep">
+                      Keep Current Driver ({selectedOrder.driver?.name || 'No Driver'})
+                    </MenuItem>
+                    <MenuItem value="reassign">
+                      Auto-assign Nearest Active Driver to New Branch
+                    </MenuItem>
+                  </Select>
+                </FormControl>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  {reassignDriver 
+                    ? 'A new active driver nearest to the selected branch will be assigned.'
+                    : 'The current driver will remain assigned to this order.'}
                 </Typography>
               </Box>
             )}

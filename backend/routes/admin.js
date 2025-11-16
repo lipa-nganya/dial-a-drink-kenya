@@ -1011,7 +1011,7 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
 
       // Also emit order status update
       io.to('admin').emit('order-status-updated', {
-        orderId: order.id,
+              orderId: order.id,
         status: finalStatus,
         paymentStatus: paymentStatus,
         order: orderData
@@ -1019,7 +1019,7 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
 
       if (order.driverId) {
         io.to(`driver-${order.driverId}`).emit('order-status-updated', {
-          orderId: order.id,
+              orderId: order.id,
           status: finalStatus,
           paymentStatus: paymentStatus,
           order: orderData
@@ -1038,7 +1038,7 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
 router.patch('/orders/:id/branch', async (req, res) => {
   try {
     const { id } = req.params;
-    const { branchId } = req.body;
+    const { branchId, reassignDriver } = req.body;
 
     const order = await db.Order.findByPk(id);
     if (!order) {
@@ -1061,6 +1061,19 @@ router.patch('/orders/:id/branch', async (req, res) => {
 
     // Update order branch
     await order.update({ branchId: newBranchId });
+
+    // If reassignDriver is true and new branch is set, find nearest active driver to new branch
+    if (reassignDriver === true && newBranchId !== null) {
+      const { findNearestActiveDriverToBranch } = require('../utils/driverAssignment');
+      const nearestDriver = await findNearestActiveDriverToBranch(newBranchId);
+      
+      if (nearestDriver) {
+        await order.update({ driverId: nearestDriver.id });
+        console.log(`✅ Reassigned driver to ${nearestDriver.name} (ID: ${nearestDriver.id}) for order ${order.id}`);
+      } else {
+        console.log(`⚠️  No active driver found for branch ${newBranchId}. Keeping current driver.`);
+      }
+    }
 
     // Reload order with branch
     await order.reload({
@@ -1092,15 +1105,15 @@ router.patch('/orders/:id/branch', async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       io.to('admin').emit('order-branch-updated', {
-        orderId: order.id,
-        branchId: newBranchId,
-        order: orderData
-      });
-
-      // Notify driver if assigned
-      if (order.driverId) {
-        io.to(`driver-${order.driverId}`).emit('order-branch-updated', {
           orderId: order.id,
+        branchId: newBranchId,
+          order: orderData
+        });
+
+        // Notify driver if assigned
+        if (order.driverId) {
+        io.to(`driver-${order.driverId}`).emit('order-branch-updated', {
+            orderId: order.id,
           branchId: newBranchId,
           order: orderData
         });
