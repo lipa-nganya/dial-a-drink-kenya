@@ -67,9 +67,11 @@ api.interceptors.response.use(
       console.warn('Unauthorized access - admin token may be invalid or expired');
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
-      // Only redirect if not already on login page
-      if (!window.location.pathname.includes('/login')) {
-        window.location.href = '/login';
+      // Only redirect if not already on login or setup-password page
+      const currentPath = window.location.pathname;
+      if (!currentPath.includes('/login') && !currentPath.includes('/setup-password')) {
+        // Use replace to avoid adding to history
+        window.location.replace('/login');
       }
     }
     return Promise.reject(error);

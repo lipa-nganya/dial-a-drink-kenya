@@ -15,6 +15,6 @@
   <circle cx="30" cy="30" r="0.6" fill="#F5F5F5" opacity="0.7"/>
   
   <!-- Text -->
-  <text x="60" y="25" font-family="Montserrat, sans-serif" font-size="18" font-weight="700" fill="#F5F5F5">Drink Suite</text>
+  <text x="60" y="25" font-family="Montserrat, sans-serif" font-size="18" font-weight="700" fill="#F5F5F5">LiquorOS</text>
   <text x="60" y="45" font-family="Lato, sans-serif" font-size="12" font-weight="400" fill="#B0B0B0">Premium Drinks</text>
 </svg>

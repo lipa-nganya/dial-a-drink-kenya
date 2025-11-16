@@ -656,7 +656,7 @@ const Settings = () => {
           </Typography>
         </Box>
         <Typography variant="h6" color="text.secondary">
-          Manage your Drink Suite configuration
+          Manage your LiquorOS configuration
         </Typography>
       </Box>
 

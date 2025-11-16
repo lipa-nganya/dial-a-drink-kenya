@@ -62,7 +62,7 @@ const AdminHeader = () => {
           sx={{ flexGrow: 1, color: isDarkMode ? colors.accentText : colors.textPrimary, fontWeight: 700, cursor: 'pointer' }}
           onClick={() => navigate('/dashboard')}
         >
-          Drink Suite Admin
+          LiquorOS Admin
         </Typography>
         
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

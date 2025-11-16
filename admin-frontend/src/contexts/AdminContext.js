@@ -85,6 +85,7 @@ export const AdminProvider = ({ children }) => {
       const token = localStorage.getItem('adminToken');
       if (!token) {
         console.warn('No admin token found, skipping stats fetch');
+        setIsAuthenticated(false);
         return;
       }
       const response = await api.get('/admin/stats');
@@ -92,9 +93,15 @@ export const AdminProvider = ({ children }) => {
     } catch (error) {
       if (error.response?.status === 401) {
         console.warn('Unauthorized access - admin token may be invalid or expired');
-        // Token is invalid, clear it and let the interceptor handle redirect
+        // Token is invalid, clear it and update state
         localStorage.removeItem('adminToken');
         localStorage.removeItem('adminUser');
+        setIsAuthenticated(false);
+        setUser(null);
+        // Redirect to login if not already there
+        if (!window.location.pathname.includes('/login') && !window.location.pathname.includes('/setup-password')) {
+          window.location.href = '/login';
+        }
       } else {
         console.error('Error fetching pending orders count:', error);
       }
@@ -102,7 +109,8 @@ export const AdminProvider = ({ children }) => {
   };
 
   useEffect(() => {
-    if (!isAuthenticated) return;
+    const token = localStorage.getItem('adminToken');
+    if (!token || !isAuthenticated) return;
 
     // Initialize socket connection for admin
     // Use the same backend URL as API calls
@@ -137,7 +145,12 @@ export const AdminProvider = ({ children }) => {
 
     // Poll for pending orders count every 30 seconds as backup
     const pollInterval = setInterval(() => {
-      fetchPendingOrdersCount();
+      // Check token still exists before polling
+      if (localStorage.getItem('adminToken')) {
+        fetchPendingOrdersCount();
+      } else {
+        clearInterval(pollInterval);
+      }
     }, 30000);
 
     return () => {

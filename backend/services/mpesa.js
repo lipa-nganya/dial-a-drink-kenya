@@ -86,9 +86,19 @@ async function getAccessToken() {
       return accessToken;
     }
 
+    // Validate credentials are set
+    if (!MPESA_CONSUMER_KEY || !MPESA_CONSUMER_SECRET) {
+      throw new Error('M-Pesa credentials (CONSUMER_KEY and CONSUMER_SECRET) are required');
+    }
+
     const auth = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString('base64');
+    const tokenUrl = `${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`;
     
-    const response = await fetch(`${MPESA_BASE_URL}/oauth/v1/generate?grant_type=client_credentials`, {
+    console.log(`🔑 Requesting M-Pesa access token from: ${MPESA_BASE_URL}`);
+    console.log(`📋 Environment: ${MPESA_ENVIRONMENT}`);
+    console.log(`🔐 Consumer Key: ${MPESA_CONSUMER_KEY.substring(0, 10)}...`);
+    
+    const response = await fetch(tokenUrl, {
       method: 'GET',
       headers: {
         'Authorization': `Basic ${auth}`
@@ -96,17 +106,38 @@ async function getAccessToken() {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to get access token: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.error(`❌ M-Pesa OAuth Error (${response.status}):`, errorText);
+      console.error(`❌ Token URL: ${tokenUrl}`);
+      console.error(`❌ Environment: ${MPESA_ENVIRONMENT}`);
+      console.error(`❌ Base URL: ${MPESA_BASE_URL}`);
+      
+      // Provide helpful error message
+      if (response.status === 400) {
+        throw new Error(`M-Pesa authentication failed (400). This usually means:
+1. Credentials are invalid or expired
+2. Credentials don't match the environment (sandbox creds with production API or vice versa)
+3. Consumer Key or Consumer Secret is incorrect
+Current environment: ${MPESA_ENVIRONMENT}, API: ${MPESA_BASE_URL}`);
+      }
+      throw new Error(`Failed to get access token: ${response.status} ${response.statusText}. Response: ${errorText}`);
     }
 
     const data = await response.json();
+    
+    if (!data.access_token) {
+      console.error('❌ No access_token in M-Pesa response:', data);
+      throw new Error('M-Pesa did not return an access token. Response: ' + JSON.stringify(data));
+    }
+    
     accessToken = data.access_token;
     // Set expiry to 55 minutes (tokens expire in 1 hour, but we refresh earlier)
     tokenExpiry = Date.now() + (55 * 60 * 1000);
     
+    console.log(`✅ M-Pesa access token obtained successfully (expires in 55 minutes)`);
     return accessToken;
   } catch (error) {
-    console.error('Error getting M-Pesa access token:', error);
+    console.error('❌ Error getting M-Pesa access token:', error);
     throw error;
   }
 }

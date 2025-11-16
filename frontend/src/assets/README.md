@@ -1,6 +1,6 @@
 # Assets Folder
 
-This folder contains static assets for the Drink Suite application.
+This folder contains static assets for the LiquorOS application.
 
 ## Structure
 
