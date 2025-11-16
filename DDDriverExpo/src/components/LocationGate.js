@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { useTheme } from '../contexts/ThemeContext';
 const LocationGate = ({ children }) => {
   const [locationEnabled, setLocationEnabled] = useState(null);
   const [checking, setChecking] = useState(true);
+  const checkingRef = useRef(false);
+  const lastCheckRef = useRef(0);
   const { colors, isDarkMode } = useTheme();
 
   const safeColors = colors || {
@@ -30,26 +32,41 @@ const LocationGate = ({ children }) => {
   };
 
   const checkLocationStatus = async () => {
+    // Prevent concurrent checks and throttle checks (max once per 2 seconds)
+    const now = Date.now();
+    if (checkingRef.current || (now - lastCheckRef.current < 2000)) {
+      return;
+    }
+
+    checkingRef.current = true;
+    lastCheckRef.current = now;
+
     try {
-      setChecking(true);
+      // Don't set checking state immediately - let it be async
+      // Only set checking if we don't have a result yet
+      if (locationEnabled === null) {
+        setChecking(true);
+      }
       
-      // Request permissions first
+      // Request permissions first (non-blocking)
       const { status } = await Location.requestForegroundPermissionsAsync();
       
       if (status !== 'granted') {
         console.log('❌ Location permission denied');
         setLocationEnabled(false);
         setChecking(false);
+        checkingRef.current = false;
         return;
       }
 
-      // Check if location services are enabled
+      // Check if location services are enabled (non-blocking)
       const servicesEnabled = await Location.hasServicesEnabledAsync();
       
       if (!servicesEnabled) {
         console.log('❌ Location services are disabled');
         setLocationEnabled(false);
         setChecking(false);
+        checkingRef.current = false;
         return;
       }
 
@@ -60,25 +77,35 @@ const LocationGate = ({ children }) => {
       console.error('❌ Error checking location status:', error);
       setLocationEnabled(false);
       setChecking(false);
+    } finally {
+      checkingRef.current = false;
     }
   };
 
   useEffect(() => {
-    // Check location status on mount
+    // Initial check on mount (non-blocking)
     checkLocationStatus();
 
-    // Monitor app state changes (when user returns to app)
+    // Monitor app state changes (when user returns to app) - throttled
+    let timeoutId;
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        // Re-check location when app becomes active (with a small delay to avoid rapid checks)
-        setTimeout(() => {
+        // Clear any pending timeout
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        // Re-check location when app becomes active (with delay to avoid rapid checks)
+        timeoutId = setTimeout(() => {
           checkLocationStatus();
-        }, 1000);
+        }, 2000); // Increased delay to 2 seconds
       }
     });
 
     return () => {
       subscription?.remove();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
     };
   }, []);
 
