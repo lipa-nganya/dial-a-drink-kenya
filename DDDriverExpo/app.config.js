@@ -68,7 +68,12 @@ module.exports = ({ config }) => {
       ],
       ios: {
         supportsTablet: true,
-        bundleIdentifier: bundleIdentifier
+        bundleIdentifier: bundleIdentifier,
+        infoPlist: {
+          NSLocationWhenInUseUsageDescription: 'This app requires location access to assign orders to the nearest driver and provide accurate delivery tracking.',
+          NSLocationAlwaysAndWhenInUseUsageDescription: 'This app requires location access to assign orders to the nearest driver and provide accurate delivery tracking.',
+          NSLocationAlwaysUsageDescription: 'This app requires location access to assign orders to the nearest driver and provide accurate delivery tracking.'
+        }
       },
       android: {
         adaptiveIcon: {
@@ -78,7 +83,10 @@ module.exports = ({ config }) => {
         package: packageName,
         permissions: [
           'INTERNET',
-          'ACCESS_NETWORK_STATE'
+          'ACCESS_NETWORK_STATE',
+          'ACCESS_FINE_LOCATION',
+          'ACCESS_COARSE_LOCATION',
+          'ACCESS_BACKGROUND_LOCATION'
         ]
       },
       web: {
