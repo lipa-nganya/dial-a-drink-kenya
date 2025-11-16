@@ -1,5 +1,6 @@
 #!/bin/bash
 # Deploy Backend to Google Cloud Run
+# This script preserves existing environment variables
 
 set -e
 
@@ -17,12 +18,14 @@ echo "📦 Building container image..."
 gcloud builds submit --tag gcr.io/drink-suite/dialadrink-backend .
 
 # Deploy to Cloud Run
+# Note: We only set NODE_ENV here. Other env vars should be set via sync-env-to-cloud-run.sh
+# This preserves existing environment variables
 echo "🚀 Deploying to Cloud Run..."
 gcloud run deploy dialadrink-backend \
   --image gcr.io/drink-suite/dialadrink-backend \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars "NODE_ENV=production,PORT=8080" \
+  --update-env-vars "NODE_ENV=production" \
   --memory 512Mi \
   --timeout 300
 
@@ -30,5 +33,6 @@ echo ""
 echo "✅ Backend deployed successfully!"
 echo "📋 Service URL:"
 gcloud run services describe dialadrink-backend --format="value(status.url)"
-
-
+echo ""
+echo "💡 Note: Environment variables are preserved during deployment."
+echo "   To update env vars, use: ./sync-env-to-cloud-run.sh"

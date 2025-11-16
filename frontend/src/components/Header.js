@@ -63,7 +63,7 @@ const Header = () => {
           fontSize: '0.9rem',
           color: colors.textPrimary
         }}>
-          Drink Suite
+          LiquorOS
         </Typography>
       </Toolbar>
       <List sx={{ backgroundColor: colors.paper }}>
@@ -197,7 +197,7 @@ const Header = () => {
                   }}
                   onClick={() => navigate('/')}
                 >
-                  Drink Suite
+                  LiquorOS
                 </Typography>
               </Box>
           

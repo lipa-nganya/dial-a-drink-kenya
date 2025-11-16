@@ -139,7 +139,7 @@ const SetupPassword = () => {
             Set Your Password
           </Typography>
           <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-            You've been invited to join the Drink Suite admin team. Please set your password to continue.
+            You've been invited to join the LiquorOS admin team. Please set your password to continue.
           </Typography>
         </Box>
 

@@ -1,6 +1,6 @@
-# Drink Suite - Admin Dashboard
+# LiquorOS - Admin Dashboard
 
-Separate admin frontend application for managing Drink Suite operations.
+Separate admin frontend application for managing LiquorOS operations.
 
 ## Setup
 
