@@ -40,22 +40,28 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
   const dbTransaction = await db.sequelize.transaction();
   
   try {
-    // Lock the order row to prevent concurrent crediting
+    // CRITICAL: Load order with lock FIRST, then load driver separately
+    // PostgreSQL doesn't allow FOR UPDATE on nullable side of outer join
+    // So we must lock the order first, then load the driver association separately
     const order = await db.Order.findByPk(orderId, {
       lock: dbTransaction.LOCK.UPDATE,
-      transaction: dbTransaction,
-      include: [
-        {
-          model: db.Driver,
-          as: 'driver'
-        }
-      ]
+      transaction: dbTransaction
     });
     
     if (!order) {
       await dbTransaction.rollback();
       processingOrders.delete(orderId);
       throw new Error(`Order ${orderId} not found`);
+    }
+    
+    // Load driver separately if driverId exists
+    if (order.driverId) {
+      const driver = await db.Driver.findByPk(order.driverId, {
+        transaction: dbTransaction
+      });
+      if (driver) {
+        order.driver = driver;
+      }
     }
     
     console.log(`📦 Order #${orderId} loaded:`);
