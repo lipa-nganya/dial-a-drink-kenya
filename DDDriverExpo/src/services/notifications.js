@@ -65,30 +65,10 @@ export async function configureNotificationChannel() {
     });
     console.log('✅ Configured order-assignments channel with MAX importance for full-screen intents');
     
-    // Also configure default channel with MAX importance as fallback
-    // This ensures push notifications that don't specify a channel still get MAX importance
-    try {
-      await Notifications.deleteNotificationChannelAsync('default');
-      console.log('🗑️ Deleted existing default channel');
-    } catch (e) {
-      // Channel might not exist, that's okay
-    }
-    
-    try {
-      await Notifications.setNotificationChannelAsync('default', {
-        name: 'Default',
-        description: 'Default notifications',
-        importance: Notifications.AndroidImportance.MAX,
-        vibrationPattern: [500, 100, 500, 100, 500, 100, 500],
-        sound: 'default',
-        enableVibrate: true,
-        playSound: true,
-        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      });
-      console.log('✅ Configured default channel with MAX importance as fallback');
-    } catch (e) {
-      console.log('⚠️ Could not configure default channel:', e.message);
-    }
+    // Note: We cannot delete or modify the "default" channel in Android
+    // Expo push notifications will use whatever default channel Android provides
+    // Instead, we intercept push notifications and reschedule them with our custom channel
+    console.log('ℹ️ Default channel cannot be modified - push notifications will be intercepted and rescheduled');
   }
 }
 
