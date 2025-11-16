@@ -164,8 +164,10 @@ export const getTransactionTypeChipProps = (type) => {
 
   if (normalized === 'delivery' || normalized === 'delivery_pay') {
     return (transaction = {}) => {
-      // Check if it's a driver payment (has driverWalletId or driverId)
-      const isDriverPayment = Boolean(transaction?.driverWalletId || transaction?.driverId);
+      // Check if it's a driver payment (has driverId that is not null/undefined)
+      // CRITICAL: driverId must be explicitly checked for null/undefined, not just truthy
+      // Merchant transactions have driverId: null, driver transactions have driverId: <number>
+      const isDriverPayment = transaction?.driverId != null && transaction?.driverId !== undefined;
 
       if (isDriverPayment) {
         return {
