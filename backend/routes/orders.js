@@ -279,28 +279,46 @@ router.post('/', async (req, res) => {
 
       // If order was auto-assigned to a real driver (not HOLD driver), notify the driver
       // This triggers sound and vibration alerts in the driver app
+      console.log(`🔍 Checking driver notification conditions:`);
+      console.log(`  - completeOrder.driverId: ${completeOrder?.driverId}`);
+      console.log(`  - assignedDriver: ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'null'}`);
+      console.log(`  - assignedDriver.name: ${assignedDriver?.name}`);
+      console.log(`  - Is HOLD Driver: ${assignedDriver?.name === 'HOLD Driver'}`);
+      
       if (completeOrder.driverId && assignedDriver && assignedDriver.name !== 'HOLD Driver') {
         console.log(`📢 Notifying driver ${assignedDriver.name} (ID: ${assignedDriver.id}) about auto-assigned order #${completeOrder.id}`);
         
         // Get the driver's push token (might be updated since assignment)
+        console.log(`🔍 Fetching driver push token for driver ID: ${assignedDriver.id}`);
         const driverWithToken = await db.Driver.findByPk(assignedDriver.id, {
           attributes: ['id', 'name', 'pushToken']
         });
+        console.log(`🔍 Driver fetched:`, {
+          id: driverWithToken?.id,
+          name: driverWithToken?.name,
+          hasPushToken: !!driverWithToken?.pushToken,
+          pushTokenPreview: driverWithToken?.pushToken ? driverWithToken.pushToken.substring(0, 30) + '...' : 'null'
+        });
         
         // Send socket event (for foreground app)
+        console.log(`📡 Sending socket event to driver room: driver-${completeOrder.driverId}`);
         io.to(`driver-${completeOrder.driverId}`).emit('order-assigned', {
           order: completeOrder,
           playSound: true
         });
+        console.log(`✅ Socket event sent`);
         
         // Send push notification (for background/screen-off scenarios)
         // This ensures sound and vibration work even when app is backgrounded
         if (driverWithToken && driverWithToken.pushToken) {
+          console.log(`📤 Driver has push token - attempting to send push notification`);
           try {
             console.log(`📤 Attempting to send push notification to driver ${assignedDriver.name}`);
             console.log(`📤 Push token: ${driverWithToken.pushToken.substring(0, 30)}...`);
             const pushNotifications = require('../services/pushNotifications');
+            console.log(`📤 Push notification service loaded, calling sendOrderNotification...`);
             const result = await pushNotifications.sendOrderNotification(driverWithToken.pushToken, completeOrder);
+            console.log(`📤 Push notification result:`, JSON.stringify(result, null, 2));
             if (result.success) {
               console.log(`✅ Push notification sent successfully to driver ${assignedDriver.name}`);
             } else {
@@ -308,14 +326,22 @@ router.post('/', async (req, res) => {
             }
           } catch (pushError) {
             console.error(`❌ Error sending push notification to driver ${assignedDriver.name}:`, pushError);
+            console.error(`❌ Error message:`, pushError.message);
             console.error(`❌ Error stack:`, pushError.stack);
             // Don't fail the order creation if push notification fails
           }
         } else {
           console.log(`⚠️ Driver ${assignedDriver.name} has no push token registered`);
+          console.log(`⚠️ driverWithToken:`, driverWithToken ? 'exists' : 'null');
           console.log(`⚠️ Driver pushToken:`, driverWithToken?.pushToken || 'null');
           console.log(`⚠️ Only socket notification sent - push notification skipped`);
         }
+      } else {
+        console.log(`⚠️ Skipping driver notification - conditions not met:`);
+        console.log(`  - completeOrder.driverId: ${completeOrder?.driverId}`);
+        console.log(`  - assignedDriver exists: ${!!assignedDriver}`);
+        console.log(`  - assignedDriver.name: ${assignedDriver?.name}`);
+        console.log(`  - Is HOLD Driver: ${assignedDriver?.name === 'HOLD Driver'}`);
       }
     }
     
