@@ -132,7 +132,16 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     // This ensures tips are always captured even if breakdown calculation misses them
     const tipAmountFromBreakdown = parseFloat(breakdown.tipAmount) || 0;
     const tipAmountFromOrder = parseFloat(order.tipAmount || '0') || 0;
-    const tipAmount = tipAmountFromBreakdown > 0.009 ? tipAmountFromBreakdown : tipAmountFromOrder;
+    // Use whichever is greater, ensuring we don't miss tips
+    const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrder);
+    
+    // Log tip amount for debugging
+    if (tipAmount > 0.009) {
+      console.log(`💰 Tip detected for Order #${orderId}:`);
+      console.log(`   From breakdown: KES ${tipAmountFromBreakdown.toFixed(2)}`);
+      console.log(`   From order: KES ${tipAmountFromOrder.toFixed(2)}`);
+      console.log(`   Using: KES ${tipAmount.toFixed(2)}`);
+    }
 
     // Get driver pay settings
     const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
@@ -276,7 +285,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     }
 
     // 3. Credit Driver Wallet: Delivery Fee (driver share) + Tip
-    if (order.driverId && (driverPayAmount > 0.009 || tipAmount > 0.009)) {
+    // CRITICAL: Check both tipAmount and orderTipAmount to ensure tips are credited even if breakdown is wrong
+    const effectiveTipAmount = Math.max(tipAmount, orderTipAmount);
+    if (order.driverId && (driverPayAmount > 0.009 || effectiveTipAmount > 0.009)) {
       try {
         let driverWallet = await db.DriverWallet.findOne({ 
           where: { driverId: order.driverId },
@@ -402,7 +413,8 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         }
 
         // Credit tip
-        if (tipAmount > 0.009) {
+        // CRITICAL: Use effectiveTipAmount to ensure tips are credited even if breakdown is wrong
+        if (effectiveTipAmount > 0.009) {
           // CRITICAL: Use the transaction found in the initial check above (existingTipTxn)
           // This prevents duplicates - we already checked for it with a lock at the beginning
           let tipTransaction = existingTipTxn;
@@ -428,7 +440,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             transactionType: 'tip',
             paymentMethod,
             paymentProvider,
-            amount: tipAmount,
+            amount: effectiveTipAmount,
             status: 'completed',
             paymentStatus: 'paid',
             receiptNumber: receiptNumber,
@@ -479,22 +491,22 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           
           // Credit driver wallet with tip
           await driverWallet.update({
-            balance: currentBalance + tipAmount,
-            totalTipsReceived: oldTotalTipsReceived + tipAmount,
+            balance: currentBalance + effectiveTipAmount,
+            totalTipsReceived: oldTotalTipsReceived + effectiveTipAmount,
             totalTipsCount: oldTipsCount + 1
           }, { transaction: dbTransaction });
 
           console.log(`✅ Credited tip for Order #${orderId}:`);
-          console.log(`   Amount: KES ${tipAmount.toFixed(2)}`);
-          console.log(`   Wallet balance: ${currentBalance.toFixed(2)} → ${(currentBalance + tipAmount).toFixed(2)}`);
+          console.log(`   Amount: KES ${effectiveTipAmount.toFixed(2)}`);
+          console.log(`   Wallet balance: ${currentBalance.toFixed(2)} → ${(currentBalance + effectiveTipAmount).toFixed(2)}`);
         }
 
         await driverWallet.reload({ transaction: dbTransaction });
 
         console.log(`✅ Credited driver wallet for Order #${orderId}:`);
         console.log(`   Delivery fee: KES ${driverPayAmount.toFixed(2)}`);
-        console.log(`   Tip: KES ${tipAmount.toFixed(2)}`);
-        console.log(`   Total: KES ${(driverPayAmount + tipAmount).toFixed(2)}`);
+        console.log(`   Tip: KES ${effectiveTipAmount.toFixed(2)}`);
+        console.log(`   Total: KES ${(driverPayAmount + effectiveTipAmount).toFixed(2)}`);
         console.log(`   Final wallet balance: ${parseFloat(driverWallet.balance).toFixed(2)}`);
         console.log(`   Total delivery pay: ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
         console.log(`   Total tips received: ${parseFloat(driverWallet.totalTipsReceived).toFixed(2)}`);
@@ -507,24 +519,24 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           io.to(`driver-${order.driverId}`).emit('delivery-completed', {
             orderId: orderId,
             deliveryPayAmount: driverPayAmount,
-            tipAmount: tipAmount,
-            totalCredited: driverPayAmount + tipAmount,
+            tipAmount: effectiveTipAmount,
+            totalCredited: driverPayAmount + effectiveTipAmount,
             walletBalance: parseFloat(driverWallet.balance)
           });
         }
 
         if (driver?.pushToken) {
-          const notificationTitle = driverPayAmount > 0 && tipAmount > 0 
+          const notificationTitle = driverPayAmount > 0 && effectiveTipAmount > 0 
             ? 'Delivery Completed - Payment Credited'
             : driverPayAmount > 0 
             ? 'Delivery Fee Credited'
             : 'Tip Credited';
           
-          const notificationBody = driverPayAmount > 0 && tipAmount > 0
-            ? `KES ${(driverPayAmount + tipAmount).toFixed(2)} (Delivery: ${driverPayAmount.toFixed(2)}, Tip: ${tipAmount.toFixed(2)}) credited for Order #${orderId}`
+          const notificationBody = driverPayAmount > 0 && effectiveTipAmount > 0
+            ? `KES ${(driverPayAmount + effectiveTipAmount).toFixed(2)} (Delivery: ${driverPayAmount.toFixed(2)}, Tip: ${effectiveTipAmount.toFixed(2)}) credited for Order #${orderId}`
             : driverPayAmount > 0
             ? `KES ${driverPayAmount.toFixed(2)} delivery fee credited for Order #${orderId}`
-            : `KES ${tipAmount.toFixed(2)} tip credited for Order #${orderId}`;
+            : `KES ${effectiveTipAmount.toFixed(2)} tip credited for Order #${orderId}`;
 
           pushNotifications.sendPushNotification(driver.pushToken, {
             title: notificationTitle,
@@ -533,7 +545,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
               type: 'delivery_completed',
               orderId: orderId,
               deliveryPayAmount: driverPayAmount,
-              tipAmount: tipAmount
+              tipAmount: effectiveTipAmount
             }
           }).catch((pushError) => {
             console.error('❌ Error sending delivery completion push notification:', pushError);
@@ -541,7 +553,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         }
 
         result.driverCredited = true;
-        result.driverCreditAmount = driverPayAmount + tipAmount;
+        result.driverCreditAmount = driverPayAmount + effectiveTipAmount;
       } catch (driverError) {
         console.error(`❌ Error crediting driver wallet for Order #${orderId}:`, driverError);
         result.driverError = driverError.message;
