@@ -81,6 +81,7 @@ const Driver = require('./Driver')(sequelize, Sequelize.DataTypes);
 const DriverWallet = require('./DriverWallet')(sequelize, Sequelize.DataTypes);
 const AdminWallet = require('./AdminWallet')(sequelize, Sequelize.DataTypes);
 const SavedAddress = require('./SavedAddress')(sequelize, Sequelize.DataTypes);
+const Branch = require('./Branch')(sequelize, Sequelize.DataTypes);
 
 // Define associations
 Category.hasMany(SubCategory, { foreignKey: 'categoryId', as: 'subcategories' });
@@ -118,6 +119,12 @@ if (Driver) {
   Driver.hasMany(Order, { foreignKey: 'driverId', as: 'orders' });
 }
 
+// Branch-Order associations
+if (Branch) {
+  Order.belongsTo(Branch, { foreignKey: 'branchId', as: 'branch' });
+  Branch.hasMany(Order, { foreignKey: 'branchId', as: 'orders' });
+}
+
 db.Category = Category;
 db.SubCategory = SubCategory;
 db.Drink = Drink;
@@ -135,6 +142,7 @@ db.Driver = Driver;
 db.DriverWallet = DriverWallet;
 db.AdminWallet = AdminWallet;
 db.SavedAddress = SavedAddress;
+db.Branch = Branch;
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 

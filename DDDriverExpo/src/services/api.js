@@ -32,23 +32,10 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
-  // CRITICAL: Check environment variable FIRST (set by OTA updates)
-  // OTA updates embed EXPO_PUBLIC_API_BASE_URL in the update manifest
-  // This is the most reliable way to detect which API URL to use after an OTA update
-  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
-  if (envBase) {
-    // Check if it's a local/ngrok URL or cloud URL
-    if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
-      console.log('🌐 [API] Using LOCAL API URL from EXPO_PUBLIC_API_BASE_URL (OTA update):', `${envBase}/api`);
-      return `${envBase}/api`;
-    } else {
-      console.log('🌐 [API] Using CLOUD API URL from EXPO_PUBLIC_API_BASE_URL (OTA update):', `${envBase}/api`);
-      return `${envBase}/api`;
-    }
-  }
-  
-  // CRITICAL: Check update channel SECOND (for OTA updates)
-  // This ensures QR code scans load the correct API URL based on the update channel
+  // CRITICAL: Check update channel FIRST (for OTA updates via QR code)
+  // This MUST be checked before EXPO_PUBLIC_API_BASE_URL to ensure channel takes precedence
+  // local-dev channel → localhost/ngrok
+  // production/development/cloud-dev channels → cloud-dev API
   let updateChannel = null;
   try {
     if (Updates && Updates.channel) {
@@ -58,7 +45,7 @@ const getBaseURL = () => {
     // Updates module not available (development mode)
   }
   
-  // CRITICAL: Check build profile/environment THIRD before checking __DEV__
+  // CRITICAL: Check build profile/environment SECOND
   // This ensures production and cloud-dev builds use the correct API URL
   const buildProfile = Constants.expoConfig?.extra?.environment || process.env.EXPO_PUBLIC_ENV || process.env.EXPO_PUBLIC_BUILD_PROFILE;
   const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
@@ -66,8 +53,9 @@ const getBaseURL = () => {
   const isLocalDevBuild = bundleId?.includes('.local') || appName?.includes('Local');
   const isExpoGo = Constants.executionEnvironment === 'storeClient'; // Running in Expo Go
   
+  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+  
   console.log('🔍 [API] Environment Detection:', {
-    envBase,
     updateChannel,
     buildProfile,
     bundleId,
@@ -75,27 +63,43 @@ const getBaseURL = () => {
     isLocalDevBuild,
     isExpoGo,
     __DEV__,
+    envBase,
     expoConfig: Constants.expoConfig?.extra
   });
   
-  // Priority 1: Check update channel (for OTA updates via QR code)
-  // local-dev channel → localhost/ngrok
-  // production/development/cloud-dev channels → cloud-dev API
+  // Priority 1: Check update channel FIRST (for OTA updates via QR code)
+  // This ensures channel-based routing takes precedence over environment variables
   if (updateChannel === 'local-dev') {
-    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] local-dev channel - using ngrok URL:', `${ngrokUrl}/api`);
+    // For local-dev channel, use ngrok URL (from env if set, otherwise hardcoded)
+    const ngrokUrl = envBase && (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1'))
+      ? envBase
+      : 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] local-dev channel detected - using ngrok URL:', `${ngrokUrl}/api`);
     return `${ngrokUrl}/api`;
   }
   
-  if (updateChannel === 'production' || updateChannel === 'development' || updateChannel === 'cloud-dev') {
+  if (updateChannel === 'production' || updateChannel === 'development' || updateChannel === 'cloud-dev' || updateChannel === 'preview') {
     const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
-    console.log(`🌐 [API] ${updateChannel} channel - using cloud-dev API URL:`, `${cloudApiUrl}/api`);
+    console.log(`🌐 [API] ${updateChannel} channel detected - using cloud-dev API URL:`, `${cloudApiUrl}/api`);
     return `${cloudApiUrl}/api`;
   }
   
-  // Priority 1: Check if explicitly in local-dev mode (from build profile or bundle ID)
+  // Priority 2: Check environment variable (set by OTA updates or build config)
+  // Only use this if channel is not set or doesn't match expected channels
+  if (envBase) {
+    // Check if it's a local/ngrok URL or cloud URL
+    if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
+      console.log('🌐 [API] Using LOCAL API URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
+      return `${envBase}/api`;
+    } else {
+      console.log('🌐 [API] Using CLOUD API URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
+      return `${envBase}/api`;
+    }
+  }
+  
+  // Priority 3: Check if explicitly in local-dev mode (from build profile or bundle ID)
   // ONLY use localhost/ngrok if explicitly configured as local-dev
-  if (buildProfile === 'local' || isLocalDevBuild) {
+  if (buildProfile === 'local-dev' || buildProfile === 'local' || isLocalDevBuild) {
     // Try to get ngrok URL from environment variable first (for physical devices)
     const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
     if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {

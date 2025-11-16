@@ -60,3 +60,4 @@ echo "  gcloud builds submit --config admin-frontend/cloudbuild.yaml admin-front
 echo "  gcloud builds submit --config frontend/cloudbuild.yaml frontend/"
 
 
+

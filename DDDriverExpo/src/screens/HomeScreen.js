@@ -612,8 +612,11 @@ const HomeScreen = ({ route, navigation }) => {
         }
       >
         <View style={styles.content}>
-          <View style={{ marginBottom: 15 }}>
+          <View style={{ marginBottom: 15, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text style={[styles.sectionTitle, { color: safeColors.accentText }]}>Active Orders</Text>
+            {driverInfo?.name && (
+              <Text style={[styles.driverName, { color: safeColors.textSecondary }]}>{driverInfo.name}</Text>
+            )}
           </View>
 
         {orders.length === 0 ? (
@@ -727,6 +730,10 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginBottom: 15,
+  },
+  driverName: {
+    fontSize: 14,
+    fontWeight: '500',
   },
   noOrdersCard: {
     padding: 30,

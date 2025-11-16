@@ -802,6 +802,11 @@ router.get('/orders', async (req, res) => {
           model: db.Driver,
           as: 'driver',
           attributes: ['id', 'name', 'phoneNumber', 'status']
+        },
+        {
+          model: db.Branch,
+          as: 'branch',
+          required: false
         }
       ],
       order: [['createdAt', 'DESC']]
@@ -1029,7 +1034,86 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
   }
 });
 
-// Assign/remove driver (admin)
+// Update order branch (admin)
+router.patch('/orders/:id/branch', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { branchId } = req.body;
+
+    const order = await db.Order.findByPk(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // If branchId is null or empty string, set to null
+    const newBranchId = branchId === '' || branchId === null || branchId === undefined ? null : parseInt(branchId);
+
+    // Validate branch exists if provided
+    if (newBranchId !== null) {
+      const branch = await db.Branch.findByPk(newBranchId);
+      if (!branch) {
+        return res.status(404).json({ error: 'Branch not found' });
+      }
+      if (!branch.isActive) {
+        return res.status(400).json({ error: 'Cannot assign order to inactive branch' });
+      }
+    }
+
+    // Update order branch
+    await order.update({ branchId: newBranchId });
+
+    // Reload order with branch
+    await order.reload({
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{ model: db.Drink, as: 'drink' }]
+        },
+        {
+          model: db.Branch,
+          as: 'branch',
+          required: false
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          required: false
+        }
+      ]
+    });
+
+    const orderData = order.toJSON();
+    if (orderData.items) {
+      orderData.orderItems = orderData.items;
+    }
+
+    // Emit socket event for real-time updates
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('order-branch-updated', {
+        orderId: order.id,
+        branchId: newBranchId,
+        order: orderData
+      });
+
+      // Notify driver if assigned
+      if (order.driverId) {
+        io.to(`driver-${order.driverId}`).emit('order-branch-updated', {
+          orderId: order.id,
+          branchId: newBranchId,
+          order: orderData
+        });
+      }
+    }
+
+    res.json(orderData);
+  } catch (error) {
+    console.error('Error updating order branch:', error);
+    res.status(500).json({ error: 'Failed to update order branch' });
+  }
+});
+
 router.patch('/orders/:id/driver', async (req, res) => {
   try {
     const { id } = req.params;

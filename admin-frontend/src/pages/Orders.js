@@ -36,7 +36,8 @@ import {
   Person,
   Delete,
   Search,
-  Clear
+  Clear,
+  Store
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -51,9 +52,12 @@ const Orders = () => {
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [drivers, setDrivers] = useState([]);
+  const [branches, setBranches] = useState([]);
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
+  const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [selectedDriverId, setSelectedDriverId] = useState('');
+  const [selectedBranchId, setSelectedBranchId] = useState('');
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonError, setCancelReasonError] = useState('');
@@ -62,7 +66,17 @@ const Orders = () => {
   useEffect(() => {
     fetchOrders();
     fetchDrivers();
+    fetchBranches();
   }, []);
+
+  const fetchBranches = async () => {
+    try {
+      const response = await api.get('/branches?activeOnly=true');
+      setBranches(response.data || []);
+    } catch (error) {
+      console.error('Error fetching branches:', error);
+    }
+  };
 
   const fetchDrivers = async () => {
     try {
@@ -450,6 +464,34 @@ const Orders = () => {
     }
   };
 
+  const handleOpenBranchDialog = (order) => {
+    setSelectedOrder(order);
+    setSelectedBranchId(order.branchId || '');
+    setBranchDialogOpen(true);
+  };
+
+  const handleCloseBranchDialog = () => {
+    setBranchDialogOpen(false);
+    setSelectedOrder(null);
+    setSelectedBranchId('');
+  };
+
+  const handleAssignBranch = async () => {
+    if (!selectedOrder) return;
+    
+    try {
+      const branchId = selectedBranchId === '' ? null : parseInt(selectedBranchId);
+      await api.patch(`/admin/orders/${selectedOrder.id}/branch`, { branchId });
+      
+      // Refresh orders to get updated data
+      await fetchOrders();
+      handleCloseBranchDialog();
+    } catch (error) {
+      console.error('Error assigning branch:', error);
+      setError(error.response?.data?.error || error.message);
+    }
+  };
+
   const handleRemoveDriver = async (order) => {
     if (!window.confirm(`Are you sure you want to remove ${order.driver?.name || 'the driver'} from Order #${order.id}?`)) {
       return;
@@ -677,6 +719,7 @@ const Orders = () => {
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Total Amount</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Payment Status</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Order Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Branch</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Driver</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Date</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Actions</TableCell>
@@ -758,6 +801,42 @@ const Orders = () => {
                         size="small"
                         {...statusChip}
                       />
+                    </TableCell>
+                    <TableCell>
+                      {order.branch ? (
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {order.branch.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {order.branch.address}
+                          </Typography>
+                          <Button
+                            variant="text"
+                            size="small"
+                            startIcon={<Edit />}
+                            onClick={() => handleOpenBranchDialog(order)}
+                            sx={{ mt: 0.5, p: 0, minWidth: 'auto', fontSize: '0.7rem' }}
+                          >
+                            Change
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">
+                            Not assigned
+                          </Typography>
+                          <Button
+                            variant="text"
+                            size="small"
+                            startIcon={<Edit />}
+                            onClick={() => handleOpenBranchDialog(order)}
+                            sx={{ mt: 0.5, p: 0, minWidth: 'auto', fontSize: '0.7rem' }}
+                          >
+                            Assign
+                          </Button>
+                        </Box>
+                      )}
                     </TableCell>
                     <TableCell>
                       {order.driver ? (
@@ -925,6 +1004,70 @@ const Orders = () => {
           </Table>
         </TableContainer>
       )}
+
+      {/* Branch Assignment Dialog */}
+      <Dialog 
+        open={branchDialogOpen} 
+        onClose={handleCloseBranchDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          {selectedOrder?.branch ? 'Change Branch' : 'Assign Branch'}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <FormControl fullWidth>
+              <InputLabel>Select Branch</InputLabel>
+              <Select
+                value={selectedBranchId}
+                label="Select Branch"
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>No Branch (Unassign)</em>
+                </MenuItem>
+                {branches.map((branch) => (
+                  <MenuItem key={branch.id} value={branch.id}>
+                    {branch.name} - {branch.address}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            {selectedOrder && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Order #{selectedOrder.id} - {selectedOrder.customerName}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Delivery: {selectedOrder.deliveryAddress}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleCloseBranchDialog}
+            sx={{ color: 'text.secondary' }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAssignBranch}
+            variant="contained"
+            sx={{
+              backgroundColor: '#00E0B8',
+              color: '#0D0D0D',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              }
+            }}
+          >
+            {selectedOrder?.branch ? 'Update Branch' : 'Assign Branch'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Driver Assignment Dialog */}
       <Dialog 

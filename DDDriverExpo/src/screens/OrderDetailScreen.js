@@ -527,6 +527,35 @@ const OrderDetailScreen = ({ route, navigation }) => {
           )}
         </View>
 
+        {/* Pickup Location (Branch) */}
+        {currentOrder.branch && (
+          <View style={[styles.section, { backgroundColor: colors.paper }]}>
+            <Text style={[styles.sectionTitle, { color: colors.accentText }]}>Pickup Location</Text>
+            <Text style={[styles.branchName, { color: colors.textPrimary, fontWeight: '600' }]}>
+              {currentOrder.branch.name}
+            </Text>
+            <Text style={[styles.address, { color: colors.textSecondary }]}>{currentOrder.branch.address}</Text>
+            <TouchableOpacity 
+              style={[styles.mapButton, { backgroundColor: colors.accent }]} 
+              onPress={async () => {
+                const address = encodeURIComponent(currentOrder.branch.address);
+                const url = `https://www.google.com/maps/dir/?api=1&destination=${address}`;
+                try {
+                  await Linking.openURL(url);
+                } catch (err) {
+                  console.error('Error opening Google Maps:', err);
+                  setSnackbarMessage('Could not open Google Maps');
+                  setSnackbarType('error');
+                  setSnackbarVisible(true);
+                }
+              }}
+            >
+              <Ionicons name="storefront" size={20} color={isDarkMode ? '#0D0D0D' : colors.textPrimary} style={styles.mapIcon} />
+              <Text style={[styles.mapButtonText, { color: isDarkMode ? '#0D0D0D' : colors.textPrimary }]}>Navigate to Branch</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Delivery Address */}
         {isCompletedOrCancelled ? (
           <View style={[styles.section, { backgroundColor: colors.paper }]}>
@@ -827,6 +856,12 @@ const styles = StyleSheet.create({
     color: '#F5F5F5',
     marginBottom: 10,
     lineHeight: 20,
+  },
+  branchName: {
+    fontSize: 16,
+    color: '#F5F5F5',
+    marginBottom: 6,
+    fontWeight: '600',
   },
   mapButton: {
     backgroundColor: '#00E0B8',

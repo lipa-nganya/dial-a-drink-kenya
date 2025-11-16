@@ -4,6 +4,7 @@ const db = require('../models');
 const { ensureCustomerFromOrder } = require('../utils/customerSync');
 const smsService = require('../services/sms');
 const { getOrCreateHoldDriver } = require('../utils/holdDriver');
+const { findClosestBranch } = require('../utils/branchAssignment');
 
 // Helper function to calculate delivery fee
 const calculateDeliveryFee = async (items) => {
@@ -182,6 +183,10 @@ router.post('/', async (req, res) => {
       // This ensures there's always a driverId/walletId available when payment happens
       const { driver: holdDriver } = await getOrCreateHoldDriver();
 
+      // Find closest branch to delivery address
+      const closestBranch = await findClosestBranch(deliveryAddress);
+      const branchId = closestBranch ? closestBranch.id : null;
+
       const order = await db.Order.create({
         customerName,
         customerPhone,
@@ -194,7 +199,8 @@ router.post('/', async (req, res) => {
         paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
         paymentStatus,
         status: orderStatus,
-        driverId: holdDriver.id // Assign HOLD Driver
+        driverId: holdDriver.id, // Assign HOLD Driver
+        branchId: branchId // Assign closest branch
       }, { transaction });
 
       createdOrderId = order.id;

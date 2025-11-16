@@ -15,6 +15,7 @@ import Inventory from './pages/Inventory';
 import Transactions from './pages/Transactions';
 import OrderNotifications from './pages/OrderNotifications';
 import Drivers from './pages/Drivers';
+import Branches from './pages/Branches';
 import Settings from './pages/Settings';
 import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
@@ -223,6 +224,17 @@ function AppContent() {
                     <>
                       <AdminHeader />
                       <Drivers />
+                    </>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/branches"
+                element={
+                  <PrivateRoute>
+                    <>
+                      <AdminHeader />
+                      <Branches />
                     </>
                   </PrivateRoute>
                 }

@@ -77,6 +77,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
       defaultValue: 0
+    },
+    branchId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'branches',
+        key: 'id'
+      }
     }
   }, {
     tableName: 'orders',

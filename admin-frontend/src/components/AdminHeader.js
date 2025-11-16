@@ -15,7 +15,8 @@ import {
   Settings as SettingsIcon,
   LocalShipping,
   LocalFlorist,
-  People
+  People,
+  Store
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -112,6 +113,14 @@ const AdminHeader = () => {
             sx={buttonStyle('/drivers')}
           >
             Drivers
+          </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/branches')}
+            startIcon={<Store />}
+            sx={buttonStyle('/branches')}
+          >
+            Branches
           </Button>
           {isEasterEggActive && (
             <Button
