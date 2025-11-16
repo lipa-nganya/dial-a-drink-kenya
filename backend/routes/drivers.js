@@ -681,5 +681,55 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+/**
+ * Test push notification endpoint
+ * POST /api/drivers/test-push/:driverId
+ */
+router.post('/test-push/:driverId', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const driver = await db.Driver.findByPk(driverId);
+    
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+    
+    if (!driver.pushToken) {
+      return res.status(400).json({ error: 'Driver has no push token registered' });
+    }
+    
+    const pushNotifications = require('../services/pushNotifications');
+    const testOrder = {
+      id: 999,
+      customerName: 'Test Customer',
+      customerPhone: '0712345678',
+      deliveryAddress: 'Test Address',
+      totalAmount: '100.00'
+    };
+    
+    console.log(`🧪 Testing push notification for driver ${driver.name} (ID: ${driverId})`);
+    console.log(`🧪 Push token: ${driver.pushToken.substring(0, 30)}...`);
+    
+    const result = await pushNotifications.sendOrderNotification(driver.pushToken, testOrder);
+    
+    if (result.success) {
+      res.json({ 
+        success: true, 
+        message: 'Test push notification sent successfully',
+        receipt: result.receipt 
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        error: 'Failed to send push notification',
+        details: result 
+      });
+    }
+  } catch (error) {
+    console.error('Error testing push notification:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
 
