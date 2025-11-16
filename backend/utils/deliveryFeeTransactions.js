@@ -388,50 +388,36 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
       await orderModel.update({ driverPayAmount });
     }
   } else if (driverId && driverPayAmount > 0.009) {
-    const driverPayload = {
-      paymentMethod,
-      paymentProvider,
-      amount: driverPayAmount,
-      status: targetStatus,
-      paymentStatus: targetPaymentStatus,
-      receiptNumber: null,
-      checkoutRequestID,
-      merchantRequestID,
-      phoneNumber,
-      transactionDate: null,
-      driverId,
-      driverWalletId: null,
-      notes: `Driver delivery fee payment for Order #${orderId} (${context}). Amount: KES ${driverPayAmount.toFixed(2)}. Pending payment confirmation.`
-    };
-
+    // CRITICAL: DO NOT create driver delivery transactions here!
+    // Driver delivery transactions should ONLY be created by creditWalletsOnDeliveryCompletion
+    // when delivery is completed. Creating them here causes duplicates (e.g., transaction 224).
+    // 
+    // This function (ensureDeliveryFeeSplit) is only for syncing merchant delivery fee transactions
+    // and ensuring order.driverPayAmount is set correctly.
+    // 
+    // If a driver transaction already exists, we can update its amount if needed, but we should
+    // NOT create new ones. The creditWalletsOnDeliveryCompletion function will handle creation
+    // when the order is completed.
+    
     if (driverTransaction) {
-      await driverTransaction.update(driverPayload);
-    } else {
-      // CRITICAL: Double-check that no driver delivery transaction exists before creating
-      // This prevents duplicates when finalizeOrderPayment already created one
-      const existingDriverTxn = await db.Transaction.findOne({
-        where: {
-          orderId,
-          transactionType: 'delivery_pay',
-          driverId
-        },
-        order: [['createdAt', 'DESC']]
-      });
+      // Only update if amount changed significantly - don't overwrite status/details
+      const currentAmount = toNumeric(driverTransaction.amount);
+      const amountMismatch = Math.abs(currentAmount - driverPayAmount) > 0.009;
       
-      if (existingDriverTxn) {
-        console.log(`⚠️  Found existing driver delivery transaction #${existingDriverTxn.id} for Order #${orderId}. Using it instead of creating duplicate.`);
-        driverTransaction = existingDriverTxn;
-        await driverTransaction.update(driverPayload);
-      } else {
-        driverTransaction = await db.Transaction.create({
-          orderId,
-          transactionType: 'delivery_pay',
-          ...driverPayload
+      if (amountMismatch && driverTransaction.status !== 'completed') {
+        // Only update amount for pending transactions, don't touch completed ones
+        await driverTransaction.update({
+          amount: driverPayAmount,
+          notes: `Driver delivery fee payment for Order #${orderId} (${context}). Amount: KES ${driverPayAmount.toFixed(2)}. Pending delivery completion.`
         });
-        console.log(`✅ Created pending driver delivery transaction #${driverTransaction.id} for Order #${orderId}`);
+        console.log(`⚠️  Updated pending driver delivery transaction #${driverTransaction.id} amount for Order #${orderId} (will be finalized on delivery completion)`);
       }
+    } else {
+      // Don't create driver delivery transactions here - they'll be created on delivery completion
+      console.log(`ℹ️  Skipping driver delivery transaction creation for Order #${orderId} - will be created by creditWalletsOnDeliveryCompletion on delivery completion`);
     }
 
+    // Still update order.driverPayAmount for tracking
     if ((!orderModel.driverPayAmount || Math.abs(toNumeric(orderModel.driverPayAmount) - driverPayAmount) > 0.009)) {
       await orderModel.update({ driverPayAmount });
     }
