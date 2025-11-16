@@ -858,7 +858,9 @@ router.patch('/orders/:id/status', async (req, res) => {
     // Note: All wallet credits (merchant, driver delivery fee, tip) are now handled by creditWalletsOnDeliveryCompletion
     // which is called above when order status is 'completed'
 
-    if (order.paymentStatus === 'paid') {
+    // CRITICAL: Don't call ensureDeliveryFeeSplit when order is completed - creditWalletsOnDeliveryCompletion handles everything
+    // Only call ensureDeliveryFeeSplit for non-completed orders to sync delivery fee transactions
+    if (order.paymentStatus === 'paid' && finalStatus !== 'completed') {
       try {
         await ensureDeliveryFeeSplit(order, { context: 'admin-status-update' });
       } catch (syncError) {

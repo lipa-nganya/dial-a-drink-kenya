@@ -248,7 +248,9 @@ router.patch('/:orderId/status', async (req, res) => {
       // which is called above when order status is 'completed'
 
       // Note: Tip crediting is now handled by creditWalletsOnDeliveryCompletion when order is completed
-      if (order.paymentStatus === 'paid') {
+      // CRITICAL: Don't call ensureDeliveryFeeSplit when order is completed - creditWalletsOnDeliveryCompletion handles everything
+      // Only call ensureDeliveryFeeSplit for non-completed orders to sync delivery fee transactions
+      if (order.paymentStatus === 'paid' && finalStatus !== 'completed') {
         try {
           await ensureDeliveryFeeSplit(order, { context: 'driver-status-update' });
         } catch (syncError) {

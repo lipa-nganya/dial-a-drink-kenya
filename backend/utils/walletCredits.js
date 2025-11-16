@@ -39,34 +39,54 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
 
     // Check if wallets have already been credited for this order
     // We check by looking at transactions - if they're already linked to wallets, they've been credited
+    // CRITICAL: Check for ANY driver delivery transaction (not just completed ones) to prevent duplicates
     const existingDriverDeliveryTxn = order.driverId ? await db.Transaction.findOne({
       where: {
         orderId: orderId,
         transactionType: 'delivery_pay',
         driverId: order.driverId,
-        driverWalletId: { [Op.not]: null }
+        status: { [Op.ne]: 'cancelled' } // Check for any non-cancelled transaction
       },
-      transaction: dbTransaction
+      transaction: dbTransaction,
+      lock: dbTransaction.LOCK.UPDATE
     }) : null;
 
     const existingTipTxn = await db.Transaction.findOne({
       where: {
         orderId: orderId,
         transactionType: 'tip',
-        driverWalletId: { [Op.not]: null }
+        status: { [Op.ne]: 'cancelled' } // Check for any non-cancelled transaction
       },
-      transaction: dbTransaction
+      transaction: dbTransaction,
+      lock: dbTransaction.LOCK.UPDATE
     });
 
-    // Check if merchant wallet was already credited by checking if order was counted
-    // This is a simple heuristic - if driver transactions are linked, assume merchant was also credited
-    if ((order.driverId && existingDriverDeliveryTxn) || existingTipTxn) {
-      console.log(`ℹ️  Wallets appear to already be credited for Order #${orderId}`);
+    // Check if wallets were already fully credited (both transaction completed AND linked to wallet)
+    // If so, we can skip. But if transaction exists but isn't completed, we should update it.
+    const driverTxnFullyCredited = order.driverId && existingDriverDeliveryTxn && 
+                                     existingDriverDeliveryTxn.status === 'completed' && 
+                                     existingDriverDeliveryTxn.driverWalletId &&
+                                     existingDriverDeliveryTxn.paymentStatus === 'paid';
+    
+    const tipTxnFullyCredited = existingTipTxn && 
+                                 existingTipTxn.status === 'completed' && 
+                                 existingTipTxn.driverWalletId &&
+                                 existingTipTxn.paymentStatus === 'paid';
+    
+    // Only skip if BOTH driver and tip transactions are fully credited (if applicable)
+    // If driver transaction exists but isn't completed, we need to update it
+    if (driverTxnFullyCredited && (!tipAmount || tipTxnFullyCredited)) {
+      console.log(`ℹ️  Wallets already fully credited for Order #${orderId} (driver transaction #${existingDriverDeliveryTxn.id} is completed and linked to wallet)`);
       await dbTransaction.rollback();
       return {
         alreadyCredited: true,
         orderId
       };
+    }
+    
+    // If existing transaction found but not completed, we'll update it below
+    if (existingDriverDeliveryTxn && existingDriverDeliveryTxn.status !== 'completed') {
+      console.log(`⚠️  Found existing pending driver delivery transaction #${existingDriverDeliveryTxn.id} for Order #${orderId}. Will update it to completed.`);
     }
 
     // Ensure order is completed and payment is paid
@@ -249,16 +269,39 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
 
         // Credit delivery fee (driver share)
         if (driverPayAmount > 0.009) {
-          // Create or update driver delivery transaction
-          let driverDeliveryTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: orderId,
-              transactionType: 'delivery_pay',
-              driverId: order.driverId
-            },
-            transaction: dbTransaction,
-            lock: dbTransaction.LOCK.UPDATE
-          });
+          // CRITICAL: Use the transaction found in the initial check above (existingDriverDeliveryTxn)
+          // This prevents duplicates - we already checked for it with a lock at the beginning
+          let driverDeliveryTransaction = existingDriverDeliveryTxn;
+          
+          // If not found in initial check, check for pending transaction with null driverId that might be converted
+          if (!driverDeliveryTransaction) {
+            driverDeliveryTransaction = await db.Transaction.findOne({
+              where: {
+                orderId: orderId,
+                transactionType: 'delivery_pay',
+                driverId: null,
+                driverWalletId: null,
+                status: { [Op.ne]: 'cancelled' }
+              },
+              transaction: dbTransaction,
+              lock: dbTransaction.LOCK.UPDATE
+            });
+          }
+          
+          // CRITICAL: Double-check with lock to prevent race conditions
+          // Even if we found one above, another process might have created one between checks
+          if (!driverDeliveryTransaction) {
+            driverDeliveryTransaction = await db.Transaction.findOne({
+              where: {
+                orderId: orderId,
+                transactionType: 'delivery_pay',
+                driverId: order.driverId,
+                status: { [Op.ne]: 'cancelled' }
+              },
+              transaction: dbTransaction,
+              lock: dbTransaction.LOCK.UPDATE
+            });
+          }
 
           const paymentMethod = paymentTransaction.paymentMethod || order.paymentMethod || 'mobile_money';
           const paymentProvider = paymentTransaction.paymentProvider || 'mpesa';
@@ -282,27 +325,32 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           };
 
           if (driverDeliveryTransaction) {
+            // Update existing transaction (found in initial check or double-check above)
             await driverDeliveryTransaction.update(driverDeliveryPayload, { transaction: dbTransaction });
             await driverDeliveryTransaction.reload({ transaction: dbTransaction });
             console.log(`✅ Updated driver delivery transaction #${driverDeliveryTransaction.id} for Order #${orderId}`);
           } else {
-            // Check for pending transaction with null driverId (created before driver assignment)
-            driverDeliveryTransaction = await db.Transaction.findOne({
+            // CRITICAL: Final check before creating - prevent duplicates even at this late stage
+            // This handles edge cases where a transaction was created between our checks
+            const finalCheck = await db.Transaction.findOne({
               where: {
                 orderId: orderId,
                 transactionType: 'delivery_pay',
-                driverId: null,
-                driverWalletId: null
+                driverId: order.driverId,
+                status: { [Op.ne]: 'cancelled' }
               },
               transaction: dbTransaction,
               lock: dbTransaction.LOCK.UPDATE
             });
-
-            if (driverDeliveryTransaction) {
-              await driverDeliveryTransaction.update(driverDeliveryPayload, { transaction: dbTransaction });
-              await driverDeliveryTransaction.reload({ transaction: dbTransaction });
-              console.log(`✅ Updated pending driver delivery transaction #${driverDeliveryTransaction.id} for Order #${orderId}`);
+            
+            if (finalCheck) {
+              // Found one! Update it instead of creating duplicate
+              await finalCheck.update(driverDeliveryPayload, { transaction: dbTransaction });
+              await finalCheck.reload({ transaction: dbTransaction });
+              driverDeliveryTransaction = finalCheck;
+              console.log(`✅ Updated driver delivery transaction #${driverDeliveryTransaction.id} for Order #${orderId} (found in final check)`);
             } else {
+              // Truly no transaction exists - safe to create
               driverDeliveryTransaction = await db.Transaction.create(driverDeliveryPayload, { transaction: dbTransaction });
               console.log(`✅ Created driver delivery transaction #${driverDeliveryTransaction.id} for Order #${orderId}`);
             }
