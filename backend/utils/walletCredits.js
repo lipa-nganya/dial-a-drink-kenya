@@ -110,7 +110,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     // If driver transaction exists but isn't completed, we need to update it
     // CRITICAL: Check tip amount from order, not from breakdown, to ensure we handle tips correctly
     const orderTipAmount = parseFloat(order.tipAmount || '0') || 0;
-    const hasTip = orderTipAmount > 0.009 || tipAmount > 0.009;
+    const hasTip = orderTipAmount > 0.009;
     
     if (driverTxnFullyCredited && (!hasTip || tipTxnFullyCredited)) {
       console.log(`ℹ️  Wallets already fully credited for Order #${orderId} (driver transaction #${existingDriverDeliveryTxn.id} is completed and linked to wallet)`);
