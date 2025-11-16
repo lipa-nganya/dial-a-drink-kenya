@@ -635,10 +635,17 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         // Don't throw - allow function to complete even if driver wallet crediting fails
       }
     } else {
+      const skipReason = !order.driverId 
+        ? 'No driverId' 
+        : isCashPayment 
+        ? 'Cash payment - driver already has delivery fee and tip in cash'
+        : 'No driverPayAmount and no tip';
       console.log(`⚠️  SKIPPING driver wallet crediting for Order #${orderId}:`);
-      console.log(`   Reason: ${!order.driverId ? 'No driverId' : 'No driverPayAmount and no tip'}`);
+      console.log(`   Reason: ${skipReason}`);
       console.log(`   driverId: ${order.driverId}`);
+      console.log(`   isCashPayment: ${isCashPayment}`);
       console.log(`   driverPayAmount: ${driverPayAmount.toFixed(2)}`);
+      console.log(`   effectiveDriverPayAmount: ${effectiveDriverPayAmount.toFixed(2)}`);
       console.log(`   effectiveTipAmount: ${effectiveTipAmount.toFixed(2)}`);
       console.log(`   tipAmount: ${tipAmount.toFixed(2)}`);
       console.log(`   orderTipAmount: ${orderTipAmount.toFixed(2)}`);
