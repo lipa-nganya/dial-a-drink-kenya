@@ -41,7 +41,18 @@ The admin app will run on **http://localhost:3001**
 
 ## Environment Variables
 
-- `REACT_APP_API_URL` - Backend API URL (default: http://localhost:5001/api)
+### Local Development
+The admin app automatically detects when running on `localhost` and uses `http://localhost:5001/api` by default. **No environment variables needed for local development.**
+
+### Cloud Dev Deployment
+For cloud-dev deployments (Cloud Run), set the following environment variable:
+- `REACT_APP_API_URL` - Backend API URL (e.g., `https://dialadrink-backend-910510650031.us-central1.run.app/api`)
+
+**Important**: The app prioritizes hostname detection, so:
+- **Local**: Always uses `localhost:5001` regardless of `REACT_APP_API_URL`
+- **Cloud Dev**: Uses `REACT_APP_API_URL` if set, otherwise falls back to production URL
+
+This ensures local and cloud-dev work independently without conflicts.
 
 
 
