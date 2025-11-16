@@ -19,7 +19,7 @@ npm run build
 
 # Deploy to Cloud Run
 echo "🚀 Deploying to Cloud Run..."
-gcloud run deploy dialadrink-frontend \
+gcloud run deploy dialadrink-customer \
   --source . \
   --platform managed \
   --allow-unauthenticated \
@@ -29,6 +29,6 @@ gcloud run deploy dialadrink-frontend \
 echo ""
 echo "✅ Frontend deployed successfully!"
 echo "📋 Service URL:"
-gcloud run services describe dialadrink-frontend --format="value(status.url)"
+gcloud run services describe dialadrink-customer --format="value(status.url)"
 
 
