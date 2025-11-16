@@ -539,6 +539,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     await dbTransaction.rollback();
     console.error(`❌ Error crediting wallets for Order #${orderId}:`, error);
     throw error;
+  } finally {
+    // Always remove from processing set, even if there was an error
+    processingOrders.delete(orderId);
   }
 };
 
