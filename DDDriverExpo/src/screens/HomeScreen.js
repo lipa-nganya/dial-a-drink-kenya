@@ -512,24 +512,45 @@ const HomeScreen = ({ route, navigation }) => {
     });
   };
 
-  const openGoogleMaps = (address) => {
+  const openGoogleMaps = async (address) => {
     const encodedAddress = encodeURIComponent(address);
     const url = `https://www.google.com/maps/dir/?api=1&destination=${encodedAddress}`;
+    const geoUrl = `geo:0,0?q=${encodedAddress}`;
     
-    Linking.canOpenURL(url).then(supported => {
-      if (supported) {
-        Linking.openURL(url);
+    try {
+      // On Android, canOpenURL can be unreliable for HTTPS URLs
+      // Try opening directly first, with fallback to geo: scheme
+      if (Platform.OS === 'android') {
+        try {
+          await Linking.openURL(url);
+        } catch (androidError) {
+          // Fallback to geo: scheme if HTTPS URL fails
+          try {
+            await Linking.openURL(geoUrl);
+          } catch (geoError) {
+            console.error('Error opening Google Maps:', geoError);
+            setSnackbarMessage('Could not open Google Maps');
+            setSnackbarType('error');
+            setSnackbarVisible(true);
+          }
+        }
       } else {
-        setSnackbarMessage('Google Maps is not available on this device');
-        setSnackbarType('error');
-        setSnackbarVisible(true);
+        // On iOS, check first then open
+        const supported = await Linking.canOpenURL(url);
+        if (supported) {
+          await Linking.openURL(url);
+        } else {
+          setSnackbarMessage('Google Maps is not available on this device');
+          setSnackbarType('error');
+          setSnackbarVisible(true);
+        }
       }
-    }).catch(err => {
+    } catch (err) {
       console.error('Error opening Google Maps:', err);
       setSnackbarMessage('Could not open Google Maps');
       setSnackbarType('error');
       setSnackbarVisible(true);
-    });
+    }
   };
 
   const openOrderDetails = (order) => {
