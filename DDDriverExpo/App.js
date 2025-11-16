@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import api from './src/services/api';
+import LocationGate from './src/components/LocationGate';
 import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
@@ -332,7 +333,9 @@ const App = () => {
         backgroundColor={Platform.OS === 'android' ? '#000000' : undefined} // Pure black background for better contrast
         translucent={false}
       />
-      <AppNavigator initialRoute={initialRoute} />
+      <LocationGate>
+        <AppNavigator initialRoute={initialRoute} />
+      </LocationGate>
     </ThemeProvider>
   );
 };
