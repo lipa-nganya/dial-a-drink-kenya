@@ -4,8 +4,7 @@
 
 cd "$(dirname "$0")"
 
-# Check build limit (max 1 per day)
-source ./build-limiter.sh
+# Build limit removed - builds are now unlimited
 if [ $? -ne 0 ]; then
     exit 1
 fi
