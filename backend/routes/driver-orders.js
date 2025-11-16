@@ -724,63 +724,18 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
 
       const driverDeliveryNote = `Driver delivery fee payment confirmed via ${methodLabel} by driver #${driverId}.`;
 
-      if (driverDeliveryTransaction) {
-        await driverDeliveryTransaction.update({
-          paymentMethod,
-          paymentProvider,
-          status: 'completed',
-          paymentStatus: 'paid',
-          receiptNumber: driverDeliveryTransaction.receiptNumber || normalizedReceipt,
-          transactionDate: now,
-          driverId: order.driverId,
-          notes: driverDeliveryTransaction.notes ? `${driverDeliveryTransaction.notes}\n${driverDeliveryNote}` : driverDeliveryNote,
-          amount: driverPayAmount
-        });
-      } else {
-        driverDeliveryTransaction = await db.Transaction.create({
-          orderId: order.id,
-          transactionType: 'delivery_pay',
-          paymentMethod,
-          paymentProvider,
-          amount: driverPayAmount,
-          status: 'completed',
-          paymentStatus: 'paid',
-          receiptNumber: normalizedReceipt,
-          transactionDate: now,
-          driverId: order.driverId,
-          notes: driverDeliveryNote
-        });
-      }
-
-      try {
-        const driverWallet = await ensureDriverWallet();
-        if (driverWallet) {
-          const alreadyCredited = driverDeliveryTransaction.driverWalletId === driverWallet.id && driverDeliveryTransaction.status === 'completed';
-
-          if (!alreadyCredited) {
-            await driverWallet.update({
-              balance: parseFloat(driverWallet.balance) + driverPayAmount,
-              totalDeliveryPay: parseFloat(driverWallet.totalDeliveryPay || 0) + driverPayAmount,
-              totalDeliveryPayCount: (driverWallet.totalDeliveryPayCount || 0) + 1
-            });
-
-            await driverDeliveryTransaction.update({
-              driverWalletId: driverWallet.id,
-              status: 'completed',
-              paymentStatus: 'paid',
-              notes: `${driverDeliveryNote} Credited to driver wallet.`
-            });
-
-            await order.update({
-              driverPayCredited: true,
-              driverPayCreditedAt: now,
-              driverPayAmount: driverPayAmount
-            });
-          }
-        }
-      } catch (driverPayError) {
-        console.error('❌ Error crediting delivery fee payment during manual confirmation:', driverPayError);
-      }
+      // CRITICAL: DO NOT create driver delivery transactions or credit driver wallet here!
+      // Driver delivery transactions and wallet credits should ONLY be created by creditWalletsOnDeliveryCompletion
+      // when delivery is completed. Creating them here causes duplicates and credits drivers before delivery.
+      // 
+      // We only update order.driverPayAmount here for tracking purposes.
+      // The actual transaction creation and wallet crediting will happen when the order is marked as completed.
+      console.log(`ℹ️  Skipping driver delivery transaction creation and wallet credit for Order #${order.id} on cash confirmation - will be created by creditWalletsOnDeliveryCompletion on delivery completion`);
+      
+      // Only update order.driverPayAmount for tracking - don't create transactions or credit wallet
+      await order.update({
+        driverPayAmount: driverPayAmount
+      });
     }
 
     if (tipAmount > 0.01) {
