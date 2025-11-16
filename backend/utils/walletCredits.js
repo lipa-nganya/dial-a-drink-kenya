@@ -128,20 +128,21 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     const breakdown = await getOrderFinancialBreakdown(orderId);
     const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
     const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-    // CRITICAL: Use breakdown tipAmount, but fallback to order.tipAmount if breakdown doesn't have it
-    // This ensures tips are always captured even if breakdown calculation misses them
-    const tipAmountFromBreakdown = parseFloat(breakdown.tipAmount) || 0;
-    const tipAmountFromOrder = parseFloat(order.tipAmount || '0') || 0;
-    // Use whichever is greater, ensuring we don't miss tips
-    const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrder);
     
-    // Log tip amount for debugging
-    if (tipAmount > 0.009) {
-      console.log(`💰 Tip detected for Order #${orderId}:`);
-      console.log(`   From breakdown: KES ${tipAmountFromBreakdown.toFixed(2)}`);
-      console.log(`   From order: KES ${tipAmountFromOrder.toFixed(2)}`);
-      console.log(`   Using: KES ${tipAmount.toFixed(2)}`);
-    }
+    // CRITICAL: Get tip amount from MULTIPLE sources to ensure we never miss tips
+    const tipAmountFromBreakdown = parseFloat(breakdown.tipAmount) || 0;
+    const tipAmountFromOrderField = parseFloat(order.tipAmount || '0') || 0;
+    const tipAmountFromOrderTipAmount = parseFloat(order.tipAmount || '0') || 0;
+    
+    // Use the MAXIMUM of all sources - this ensures we never miss a tip
+    const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrderField, tipAmountFromOrderTipAmount);
+    
+    // ALWAYS log tip detection for debugging
+    console.log(`💰 Tip detection for Order #${orderId}:`);
+    console.log(`   Breakdown tipAmount: KES ${tipAmountFromBreakdown.toFixed(2)}`);
+    console.log(`   Order.tipAmount: KES ${tipAmountFromOrderField.toFixed(2)}`);
+    console.log(`   Final tipAmount: KES ${tipAmount.toFixed(2)}`);
+    console.log(`   Order tipAmount field value: "${order.tipAmount}"`);
 
     // Get driver pay settings
     const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
@@ -285,8 +286,17 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     }
 
     // 3. Credit Driver Wallet: Delivery Fee (driver share) + Tip
-    // CRITICAL: Check both tipAmount and orderTipAmount to ensure tips are credited even if breakdown is wrong
+    // CRITICAL: Use the maximum of tipAmount and orderTipAmount to ensure tips are ALWAYS credited
     const effectiveTipAmount = Math.max(tipAmount, orderTipAmount);
+    
+    console.log(`💳 Driver wallet crediting check for Order #${orderId}:`);
+    console.log(`   driverId: ${order.driverId}`);
+    console.log(`   driverPayAmount: KES ${driverPayAmount.toFixed(2)}`);
+    console.log(`   tipAmount: KES ${tipAmount.toFixed(2)}`);
+    console.log(`   orderTipAmount: KES ${orderTipAmount.toFixed(2)}`);
+    console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)}`);
+    console.log(`   Will credit driver: ${order.driverId && (driverPayAmount > 0.009 || effectiveTipAmount > 0.009)}`);
+    
     if (order.driverId && (driverPayAmount > 0.009 || effectiveTipAmount > 0.009)) {
       try {
         let driverWallet = await db.DriverWallet.findOne({ 
@@ -414,7 +424,12 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
 
         // Credit tip
         // CRITICAL: Use effectiveTipAmount to ensure tips are credited even if breakdown is wrong
+        console.log(`💵 Tip crediting check for Order #${orderId}:`);
+        console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)}`);
+        console.log(`   Will credit tip: ${effectiveTipAmount > 0.009}`);
+        
         if (effectiveTipAmount > 0.009) {
+          console.log(`✅ STARTING tip crediting for Order #${orderId} with amount KES ${effectiveTipAmount.toFixed(2)}`);
           // CRITICAL: Use the transaction found in the initial check above (existingTipTxn)
           // This prevents duplicates - we already checked for it with a lock at the beginning
           let tipTransaction = existingTipTxn;
