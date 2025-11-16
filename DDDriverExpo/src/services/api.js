@@ -31,19 +31,32 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
-  // TEMPORARY FIX: Hardcode ngrok URL for local-dev builds
-  // Check if this is a local-dev build by checking bundle identifier or app name
+  // CRITICAL: Priority 0 - Always use local environment when running in development mode
+  // This ensures local development always works, regardless of OTA updates or app config
+  const isDevelopment = __DEV__;
   const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
   const appName = Constants.expoConfig?.name || '';
   const isLocalDevBuild = bundleId?.includes('.local') || appName?.includes('Local');
+  const isExpoGo = Constants.executionEnvironment === 'storeClient'; // Running in Expo Go
   
-  if (isLocalDevBuild) {
+  // If running in development mode OR local build OR Expo Go, prioritize local environment
+  if (isDevelopment || isLocalDevBuild || isExpoGo) {
+    // Try to get ngrok URL from environment variable first (for physical devices)
+    const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+    if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {
+      console.log('🌐 [API] Local dev mode - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
+      return `${ngrokEnvUrl}/api`;
+    }
+    
+    // Fallback to hardcoded ngrok URL for local development
     const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Local-dev build detected, using ngrok URL:', `${ngrokUrl}/api`);
+    console.log('🌐 [API] Local dev mode detected (__DEV__ or local build) - using ngrok URL:', `${ngrokUrl}/api`);
+    console.log('📱 [API] Debug:', { isDevelopment, isLocalDevBuild, isExpoGo, bundleId, appName });
     return `${ngrokUrl}/api`;
   }
 
   // Priority 1: Environment variable (set at build time or runtime)
+  // Only use this if NOT in development mode (already handled above)
   const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
   if (envBase) {
     console.log('🌐 [API] Using URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
@@ -51,6 +64,7 @@ const getBaseURL = () => {
   }
 
   // Priority 2: App config extra.apiBaseUrl (set in app.config.js based on build profile)
+  // Only use this if NOT in development mode (already handled above)
   const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
   if (configBase) {
     console.log('🌐 [API] Using URL from app config extra.apiBaseUrl:', `${configBase}/api`);
@@ -81,6 +95,9 @@ const getBaseURL = () => {
     '❌ [API] No API base URL configured. Set EXPO_PUBLIC_API_BASE_URL or extra.apiBaseUrl in app.config.js.'
   );
   console.error('📱 [API] Debug info:', {
+    isDevelopment,
+    isLocalDevBuild,
+    isExpoGo,
     envBase,
     configBase,
     buildProfile,

@@ -113,19 +113,37 @@ export const AdminProvider = ({ children }) => {
     if (!token || !isAuthenticated) return;
 
     // Initialize socket connection for admin
-    // Use the same backend URL as API calls
+    // Use the same backend URL resolution logic as API calls
     const getBackendUrl = () => {
-      const apiUrl = process.env.REACT_APP_API_URL;
-      if (apiUrl) {
-        // Extract base URL from API URL (remove /api suffix)
-        return apiUrl.replace('/api', '');
-      }
-      // Fallback logic
       const hostname = window.location.hostname;
-      if (hostname.includes('run.app')) {
+      const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
+      const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
+      
+      // CRITICAL: Always use localhost when running locally, regardless of REACT_APP_API_URL
+      // This ensures local development always works, even if REACT_APP_API_URL is set for cloud-dev
+      if (isLocalHost || isLanHost) {
+        return 'http://localhost:5001';
+      }
+
+      // For cloud-dev deployments, use REACT_APP_API_URL if set
+      const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
+      if (isManagedHost) {
+        const apiUrl = process.env.REACT_APP_API_URL;
+        if (apiUrl) {
+          // Extract base URL from API URL (remove /api suffix)
+          return apiUrl.replace('/api', '');
+        }
         return 'https://dialadrink-backend-910510650031.us-central1.run.app';
       }
-      return 'http://localhost:5001';
+
+      // Fallback: Use REACT_APP_API_URL if set (for other hosted environments)
+      const apiUrl = process.env.REACT_APP_API_URL;
+      if (apiUrl) {
+        return apiUrl.replace('/api', '');
+      }
+
+      // Final fallback
+      return 'https://dialadrink-backend-910510650031.us-central1.run.app';
     };
     const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);

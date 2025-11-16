@@ -4,24 +4,34 @@ const DEFAULT_LOCAL_API_BASE = 'http://localhost:5001/api';
 const DEFAULT_PRODUCTION_API_BASE = process.env.REACT_APP_PRODUCTION_API_BASE || 'https://dialadrink-backend-910510650031.us-central1.run.app/api';
 
 const resolveApiBaseUrl = () => {
-  const explicitUrl = process.env.REACT_APP_API_URL;
-  if (explicitUrl) {
-    return { url: explicitUrl, source: 'env' };
-  }
-
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
   const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
-
-  if (isLocalHost || isLanHost || process.env.NODE_ENV === 'development') {
-    return { url: DEFAULT_LOCAL_API_BASE, source: 'local-default' };
+  
+  // CRITICAL: Always use localhost when running locally, regardless of REACT_APP_API_URL
+  // This ensures local development always works, even if REACT_APP_API_URL is set for cloud-dev
+  if (isLocalHost || isLanHost) {
+    return { url: DEFAULT_LOCAL_API_BASE, source: 'local-hostname' };
   }
 
+  // For cloud-dev deployments (run.app, onrender.com, etc.), use REACT_APP_API_URL if set
   const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
   if (isManagedHost) {
-    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'managed-host' };
+    const explicitUrl = process.env.REACT_APP_API_URL;
+    if (explicitUrl) {
+      return { url: explicitUrl, source: 'cloud-dev-env' };
+    }
+    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'cloud-dev-default' };
   }
 
+  // Fallback: Use REACT_APP_API_URL if set (for other hosted environments)
+  // But only if NOT running locally (already handled above)
+  const explicitUrl = process.env.REACT_APP_API_URL;
+  if (explicitUrl) {
+    return { url: explicitUrl, source: 'env-explicit' };
+  }
+
+  // Final fallback: production URL
   return { url: DEFAULT_PRODUCTION_API_BASE, source: 'fallback-production' };
 };
 
