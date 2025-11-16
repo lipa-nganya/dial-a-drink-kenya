@@ -342,7 +342,12 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         const oldTipsCount = driverWallet.totalTipsCount || 0;
 
         // Credit delivery fee (driver share)
+        // CRITICAL: Only create/update driver delivery transaction if driverPayAmount > 0
+        // If driverPayAmount is 0, we should NOT create a driver delivery transaction
+        // Only tip transactions should be created when there's no driver pay
         if (driverPayAmount > 0.009) {
+          console.log(`💵 Creating/updating driver delivery transaction for Order #${orderId} with amount KES ${driverPayAmount.toFixed(2)}`);
+          
           // CRITICAL: Use the transaction found in the initial check above (existingDriverDeliveryTxn)
           // This prevents duplicates - we already checked for it with a lock at the beginning
           let driverDeliveryTransaction = existingDriverDeliveryTxn;
@@ -440,6 +445,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           console.log(`✅ Credited driver delivery fee for Order #${orderId}:`);
           console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
           console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${(oldBalance + driverPayAmount).toFixed(2)}`);
+        } else {
+          console.log(`ℹ️  Skipping driver delivery transaction creation for Order #${orderId} - driverPayAmount is ${driverPayAmount.toFixed(2)} (too small)`);
+          console.log(`   Tip will be credited separately if effectiveTipAmount > 0`);
         }
 
         // Credit tip
@@ -470,9 +478,10 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           const paymentMethod = paymentTransaction.paymentMethod || order.paymentMethod || 'mobile_money';
           const paymentProvider = paymentTransaction.paymentProvider || 'mpesa';
 
+          // CRITICAL: Ensure tip transaction is created with transactionType='tip', NOT 'delivery_pay'
           const tipPayload = {
             orderId: orderId,
-            transactionType: 'tip',
+            transactionType: 'tip', // MUST be 'tip', never 'delivery_pay'
             paymentMethod,
             paymentProvider,
             amount: effectiveTipAmount,
@@ -487,6 +496,12 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             driverWalletId: driverWallet.id,
             notes: `Tip for Order #${orderId} - credited to driver wallet on delivery completion.`
           };
+          
+          // Double-check payload before creating
+          if (tipPayload.transactionType !== 'tip') {
+            console.error(`❌ CRITICAL ERROR: tipPayload.transactionType is "${tipPayload.transactionType}" but should be "tip"!`);
+            throw new Error(`Tip transaction must have transactionType='tip', got '${tipPayload.transactionType}'`);
+          }
 
           if (tipTransaction) {
             // Update existing transaction (found in initial check or final check above)
