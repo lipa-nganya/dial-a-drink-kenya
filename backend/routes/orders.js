@@ -5,6 +5,7 @@ const { ensureCustomerFromOrder } = require('../utils/customerSync');
 const smsService = require('../services/sms');
 const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 const { findClosestBranch } = require('../utils/branchAssignment');
+const { findNearestActiveDriverToBranch } = require('../utils/driverAssignment');
 
 // Helper function to calculate delivery fee
 const calculateDeliveryFee = async (items) => {
@@ -132,6 +133,7 @@ router.post('/', async (req, res) => {
     }
     
     let createdOrderId = null;
+    let assignedDriver = null; // Declare outside try block so it's accessible for socket emission
     const transaction = await db.sequelize.transaction();
 
     try {
@@ -179,13 +181,33 @@ router.post('/', async (req, res) => {
         paymentStatus = 'paid';
       }
 
-      // Assign HOLD Driver to all orders during creation
-      // This ensures there's always a driverId/walletId available when payment happens
-      const { driver: holdDriver } = await getOrCreateHoldDriver();
-
       // Find closest branch to delivery address
       const closestBranch = await findClosestBranch(deliveryAddress);
       const branchId = closestBranch ? closestBranch.id : null;
+      console.log(`📍 Closest branch found: ${closestBranch ? `${closestBranch.name} (ID: ${branchId})` : 'None'}`);
+
+      // Find nearest active driver to the assigned branch
+      if (branchId) {
+        console.log(`🔍 Looking for active driver near branch ${branchId}...`);
+        assignedDriver = await findNearestActiveDriverToBranch(branchId);
+        console.log(`🔍 Driver assignment result: ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
+      } else {
+        console.log('⚠️  No branch assigned, looking for any active driver...');
+        // If no branch, still try to find an active driver
+        const { findNearestActiveDriverToAddress } = require('../utils/driverAssignment');
+        assignedDriver = await findNearestActiveDriverToAddress(deliveryAddress);
+        console.log(`🔍 Driver assignment result (no branch): ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
+      }
+
+      // If no active driver found, fall back to HOLD driver
+      // This ensures there's always a driverId/walletId available when payment happens
+      if (!assignedDriver) {
+        const { driver: holdDriver } = await getOrCreateHoldDriver();
+        assignedDriver = holdDriver;
+        console.log('⚠️  No active driver found. Using HOLD driver as fallback.');
+      } else {
+        console.log(`✅ Assigned order to active driver: ${assignedDriver.name} (ID: ${assignedDriver.id})`);
+      }
 
       const order = await db.Order.create({
         customerName,
@@ -199,7 +221,7 @@ router.post('/', async (req, res) => {
         paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
         paymentStatus,
         status: orderStatus,
-        driverId: holdDriver.id, // Assign HOLD Driver
+        driverId: assignedDriver.id, // Assign nearest active driver or HOLD driver
         branchId: branchId // Assign closest branch
       }, { transaction });
 
@@ -241,12 +263,22 @@ router.post('/', async (req, res) => {
     });
 
     const io = req.app.get('io');
-    if (io) {
+    if (io && completeOrder) {
       io.to('admin').emit('new-order', {
         order: completeOrder,
         timestamp: new Date(),
         message: `New order #${completeOrder.id} from ${completeOrder.customerName}`
       });
+
+      // If order was auto-assigned to a real driver (not HOLD driver), notify the driver
+      // This triggers sound and vibration alerts in the driver app
+      if (completeOrder.driverId && assignedDriver && assignedDriver.name !== 'HOLD Driver') {
+        console.log(`📢 Notifying driver ${assignedDriver.name} (ID: ${assignedDriver.id}) about auto-assigned order #${completeOrder.id}`);
+        io.to(`driver-${completeOrder.driverId}`).emit('order-assigned', {
+          order: completeOrder,
+          playSound: true
+        });
+      }
     }
     
     try {
