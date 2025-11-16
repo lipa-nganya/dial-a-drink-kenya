@@ -311,8 +311,8 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     }
 
     // 3. Credit Driver Wallet: Delivery Fee (driver share) + Tip
-    // CRITICAL: For cash/mobile money payments, DO NOT credit tip to driver wallet
-    // because the driver already received the tip in cash. Crediting it would mean they get it twice.
+    // CRITICAL: For cash/mobile money payments, DO NOT credit driver delivery fee or tip to driver wallet
+    // because the driver already received both in cash/mobile money. Crediting them would mean they get them twice.
     const isCashPayment = paymentMethod === 'cash' || 
                           paymentProvider === 'cash_in_hand' || 
                           paymentProvider === 'driver_mpesa_manual';
@@ -322,18 +322,23 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     // BUT: Skip tip crediting if payment is cash/mobile money (driver already received tip in cash)
     const effectiveTipAmount = isCashPayment ? 0 : Math.max(tipAmount, orderTipAmountAfterReload);
     
+    // CRITICAL: For cash payments, also skip driver delivery fee crediting (driver already has it in cash)
+    // Only credit driver delivery fee for M-Pesa payments where payment goes through the system
+    const effectiveDriverPayAmount = isCashPayment ? 0 : driverPayAmount;
+    
     console.log(`💳 Driver wallet crediting check for Order #${orderId}:`);
     console.log(`   driverId: ${order.driverId}`);
     console.log(`   paymentMethod: ${paymentMethod}`);
     console.log(`   paymentProvider: ${paymentProvider}`);
     console.log(`   isCashPayment: ${isCashPayment}`);
-    console.log(`   driverPayAmount: KES ${driverPayAmount.toFixed(2)}`);
+    console.log(`   driverPayAmount: KES ${driverPayAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
+    console.log(`   effectiveDriverPayAmount: KES ${effectiveDriverPayAmount.toFixed(2)}`);
     console.log(`   tipAmount: KES ${tipAmount.toFixed(2)}`);
     console.log(`   orderTipAmount: KES ${orderTipAmount.toFixed(2)}`);
     console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
-    console.log(`   Will credit driver: ${order.driverId && (driverPayAmount > 0.009 || effectiveTipAmount > 0.009)}`);
+    console.log(`   Will credit driver: ${order.driverId && (effectiveDriverPayAmount > 0.009 || effectiveTipAmount > 0.009)}`);
     
-    if (order.driverId && (driverPayAmount > 0.009 || effectiveTipAmount > 0.009)) {
+    if (order.driverId && (effectiveDriverPayAmount > 0.009 || effectiveTipAmount > 0.009)) {
       try {
         let driverWallet = await db.DriverWallet.findOne({ 
           where: { driverId: order.driverId },
@@ -358,11 +363,12 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         const oldTipsCount = driverWallet.totalTipsCount || 0;
 
         // Credit delivery fee (driver share)
-        // CRITICAL: Only create/update driver delivery transaction if driverPayAmount > 0
-        // If driverPayAmount is 0, we should NOT create a driver delivery transaction
+        // CRITICAL: Only create/update driver delivery transaction if effectiveDriverPayAmount > 0
+        // If effectiveDriverPayAmount is 0 (e.g., cash payment), we should NOT create a driver delivery transaction
         // Only tip transactions should be created when there's no driver pay
-        if (driverPayAmount > 0.009) {
-          console.log(`💵 Creating/updating driver delivery transaction for Order #${orderId} with amount KES ${driverPayAmount.toFixed(2)}`);
+        // CRITICAL: For cash payments, skip driver delivery fee crediting (driver already has it in cash)
+        if (effectiveDriverPayAmount > 0.009) {
+          console.log(`💵 Creating/updating driver delivery transaction for Order #${orderId} with amount KES ${effectiveDriverPayAmount.toFixed(2)}`);
           console.log(`   CRITICAL: This is for DRIVER DELIVERY FEE, NOT tip. Tip will be handled separately.`);
           
           // CRITICAL: Use the transaction found in the initial check above (existingDriverDeliveryTxn)
@@ -399,7 +405,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             transactionType: 'delivery_pay',
             paymentMethod,
             paymentProvider,
-            amount: driverPayAmount,
+            amount: effectiveDriverPayAmount,
             status: 'completed',
             paymentStatus: 'paid',
             receiptNumber: receiptNumber,
@@ -446,16 +452,19 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
 
           // Credit driver wallet
           await driverWallet.update({
-            balance: oldBalance + driverPayAmount,
-            totalDeliveryPay: oldTotalDeliveryPay + driverPayAmount,
+            balance: oldBalance + effectiveDriverPayAmount,
+            totalDeliveryPay: oldTotalDeliveryPay + effectiveDriverPayAmount,
             totalDeliveryPayCount: oldDeliveryPayCount + 1
           }, { transaction: dbTransaction });
 
           console.log(`✅ Credited driver delivery fee for Order #${orderId}:`);
-          console.log(`   Amount: KES ${driverPayAmount.toFixed(2)}`);
-          console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${(oldBalance + driverPayAmount).toFixed(2)}`);
+          console.log(`   Amount: KES ${effectiveDriverPayAmount.toFixed(2)}`);
+          console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${(oldBalance + effectiveDriverPayAmount).toFixed(2)}`);
         } else {
-          console.log(`ℹ️  Skipping driver delivery transaction creation for Order #${orderId} - driverPayAmount is ${driverPayAmount.toFixed(2)} (too small)`);
+          const skipReason = isCashPayment 
+            ? 'cash payment (driver already has delivery fee in cash)' 
+            : `driverPayAmount is ${driverPayAmount.toFixed(2)} (too small)`;
+          console.log(`ℹ️  Skipping driver delivery transaction creation for Order #${orderId} - ${skipReason}`);
           console.log(`   Tip will be credited separately if effectiveTipAmount > 0`);
         }
 
