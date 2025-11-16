@@ -24,6 +24,10 @@ async function configureNotificationChannel() {
       showBadge: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true, // Bypass Do Not Disturb
+      // Enable sound and vibration even when screen is off or app is in background
+      playSound: true,
+      enableLights: true,
+      lightColor: '#00E0B8', // Accent color
       // Note: Full-screen intent capability is enabled via USE_FULL_SCREEN_INTENT permission
       // This allows notifications to automatically wake screen and bring app to foreground
     });
@@ -108,7 +112,7 @@ export async function scheduleOrderNotification(order) {
       channelId: 'order-assignments', // Use the high-priority channel
     };
     
-    // Android: Add full-screen intent support
+    // Android: Add full-screen intent support and ensure sound/vibration work in background
     if (Platform.OS === 'android') {
       // The full-screen intent is enabled via:
       // 1. USE_FULL_SCREEN_INTENT permission (added via config plugin)
@@ -118,6 +122,10 @@ export async function scheduleOrderNotification(order) {
       notificationConfig.android = {
         priority: 'max',
         channelId: 'order-assignments',
+        sound: soundFile, // Explicitly set sound for Android
+        vibrate: [500, 100, 500, 100, 500, 100, 500], // Explicit vibration pattern
+        // Ensure notification plays sound and vibrates even when screen is off
+        visibility: Notifications.AndroidNotificationVisibility.PUBLIC,
         // Full-screen intent is automatically enabled for MAX importance notifications
         // when USE_FULL_SCREEN_INTENT permission is granted
       };
