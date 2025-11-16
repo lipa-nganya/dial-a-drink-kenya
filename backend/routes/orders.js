@@ -274,10 +274,27 @@ router.post('/', async (req, res) => {
       // This triggers sound and vibration alerts in the driver app
       if (completeOrder.driverId && assignedDriver && assignedDriver.name !== 'HOLD Driver') {
         console.log(`📢 Notifying driver ${assignedDriver.name} (ID: ${assignedDriver.id}) about auto-assigned order #${completeOrder.id}`);
+        
+        // Send socket event (for foreground app)
         io.to(`driver-${completeOrder.driverId}`).emit('order-assigned', {
           order: completeOrder,
           playSound: true
         });
+        
+        // Send push notification (for background/screen-off scenarios)
+        // This ensures sound and vibration work even when app is backgrounded
+        if (assignedDriver.pushToken) {
+          try {
+            const pushNotifications = require('../services/pushNotifications');
+            await pushNotifications.sendOrderNotification(assignedDriver.pushToken, completeOrder);
+            console.log(`✅ Push notification sent to driver ${assignedDriver.name} (Token: ${assignedDriver.pushToken.substring(0, 20)}...)`);
+          } catch (pushError) {
+            console.error(`❌ Error sending push notification to driver ${assignedDriver.name}:`, pushError);
+            // Don't fail the order creation if push notification fails
+          }
+        } else {
+          console.log(`⚠️ Driver ${assignedDriver.name} has no push token - only socket notification sent`);
+        }
       }
     }
     
