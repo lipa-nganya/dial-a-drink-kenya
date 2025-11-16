@@ -939,8 +939,8 @@ const Transactions = () => {
                                         
                                         if (!expandedLabel || expandedLabel.trim() === '') {
                                           if (transactionType === 'delivery_pay' || transactionType === 'delivery') {
-                                            // Check if it's a driver payment
-                                            const isDriverPayment = Boolean(transaction?.driverWalletId || transaction?.driverId);
+                                            // Check if it's a driver payment (has driverId that is not null/undefined)
+                                            const isDriverPayment = transaction?.driverId != null && transaction?.driverId !== undefined;
                                             expandedLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
                                           } else if (transactionType && transactionType.trim() !== '') {
                                             expandedLabel = transactionType
@@ -1148,8 +1148,8 @@ const Transactions = () => {
                       
                       if (!chipLabel || chipLabel.trim() === '') {
                         if (dialogTransactionType === 'delivery_pay' || dialogTransactionType === 'delivery') {
-                          // Check if it's a driver payment
-                          const isDriverPayment = Boolean(selectedTransaction?.driverWalletId || selectedTransaction?.driverId);
+                          // Check if it's a driver payment (has driverId that is not null/undefined)
+                          const isDriverPayment = selectedTransaction?.driverId != null && selectedTransaction?.driverId !== undefined;
                           chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
                           chipSx = {
                             backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
