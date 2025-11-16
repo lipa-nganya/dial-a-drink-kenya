@@ -511,9 +511,13 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             totalTipsCount: oldTipsCount + 1
           }, { transaction: dbTransaction });
 
-          console.log(`✅ Credited tip for Order #${orderId}:`);
+          console.log(`✅ COMPLETED tip crediting for Order #${orderId}:`);
           console.log(`   Amount: KES ${effectiveTipAmount.toFixed(2)}`);
           console.log(`   Wallet balance: ${currentBalance.toFixed(2)} → ${(currentBalance + effectiveTipAmount).toFixed(2)}`);
+          console.log(`   Total tips received: ${oldTotalTipsReceived.toFixed(2)} → ${(oldTotalTipsReceived + effectiveTipAmount).toFixed(2)}`);
+          console.log(`   Total tips count: ${oldTipsCount} → ${oldTipsCount + 1}`);
+        } else {
+          console.log(`⚠️  SKIPPING tip crediting for Order #${orderId} - effectiveTipAmount (${effectiveTipAmount.toFixed(2)}) is too small`);
         }
 
         await driverWallet.reload({ transaction: dbTransaction });
