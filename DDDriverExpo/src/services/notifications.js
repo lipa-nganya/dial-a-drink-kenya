@@ -32,8 +32,20 @@ Notifications.setNotificationHandler({
 });
 
 // Configure notification channel for Android (high priority to wake screen and bring app to foreground)
-async function configureNotificationChannel() {
+// This function is exported so it can be called immediately on app start
+export async function configureNotificationChannel() {
   if (Platform.OS === 'android') {
+    // Delete existing channel if it exists to recreate with new settings
+    // This ensures MAX importance is always set correctly
+    try {
+      await Notifications.deleteNotificationChannelAsync('order-assignments');
+      console.log('🗑️ Deleted existing order-assignments channel');
+    } catch (e) {
+      // Channel might not exist, that's okay
+      console.log('ℹ️ Channel does not exist yet, will create new one');
+    }
+    
+    // Create channel with MAX importance and all sound/vibration settings
     await Notifications.setNotificationChannelAsync('order-assignments', {
       name: 'Order Assignments',
       description: 'Notifications for new order assignments - wakes screen and brings app to foreground',
@@ -52,6 +64,31 @@ async function configureNotificationChannel() {
       // This allows notifications to automatically wake screen and bring app to foreground
     });
     console.log('✅ Configured order-assignments channel with MAX importance for full-screen intents');
+    
+    // Also configure default channel with MAX importance as fallback
+    // This ensures push notifications that don't specify a channel still get MAX importance
+    try {
+      await Notifications.deleteNotificationChannelAsync('default');
+      console.log('🗑️ Deleted existing default channel');
+    } catch (e) {
+      // Channel might not exist, that's okay
+    }
+    
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Default',
+        description: 'Default notifications',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [500, 100, 500, 100, 500, 100, 500],
+        sound: 'default',
+        enableVibrate: true,
+        playSound: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+      });
+      console.log('✅ Configured default channel with MAX importance as fallback');
+    } catch (e) {
+      console.log('⚠️ Could not configure default channel:', e.message);
+    }
   }
 }
 
