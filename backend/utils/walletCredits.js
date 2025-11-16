@@ -148,6 +148,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     const orderTipRaw = order.tipAmount;
     const tipAmountFromOrder = orderTipRaw != null ? (typeof orderTipRaw === 'string' ? parseFloat(orderTipRaw) : parseFloat(orderTipRaw)) || 0 : 0;
     
+    // Recalculate orderTipAmount AFTER reload to ensure we have the latest value
+    const orderTipAmountAfterReload = tipAmountFromOrder;
+    
     // Use the MAXIMUM of all sources - this ensures we never miss a tip
     const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrder);
     
@@ -157,6 +160,8 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     console.log(`   Order.tipAmount (after reload): KES ${tipAmountFromOrder.toFixed(2)}`);
     console.log(`   Order.tipAmount raw value: "${order.tipAmount}" (type: ${typeof order.tipAmount})`);
     console.log(`   Final tipAmount: KES ${tipAmount.toFixed(2)}`);
+    console.log(`   orderTipAmount (early): KES ${orderTipAmount.toFixed(2)}`);
+    console.log(`   orderTipAmountAfterReload: KES ${orderTipAmountAfterReload.toFixed(2)}`);
 
     // Get driver pay settings
     const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
