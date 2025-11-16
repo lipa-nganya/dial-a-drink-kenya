@@ -519,7 +519,10 @@ const AdminOverview = () => {
                         
                         if (!chipLabel || chipLabel.trim() === '') {
                           if (safeTransactionType === 'delivery_pay' || safeTransactionType === 'delivery') {
-                            const isDriverPayment = Boolean(txn?.driverWalletId || txn?.driverId);
+                            // Check if it's a driver payment (has driverId that is not null/undefined)
+                            // CRITICAL: driverId must be explicitly checked for null/undefined, not just truthy
+                            // Merchant transactions have driverId: null, driver transactions have driverId: <number>
+                            const isDriverPayment = txn?.driverId != null && txn?.driverId !== undefined;
                             chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
                             chipSx = {
                               backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
