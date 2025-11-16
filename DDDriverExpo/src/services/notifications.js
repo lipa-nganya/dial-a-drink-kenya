@@ -4,11 +4,31 @@ import api from './api';
 
 // Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
+  handleNotification: async (notification) => {
+    console.log('📱 Notification handler called:', notification);
+    console.log('📱 Notification data:', notification.request.content.data);
+    
+    // For order-assigned notifications, ensure sound and vibration
+    const data = notification.request.content.data;
+    if (data?.type === 'order-assigned') {
+      console.log('📱 Order assignment notification - ensuring sound/vibration');
+      // Reschedule as local notification with proper channel
+      if (data?.order) {
+        try {
+          await scheduleOrderNotification(data.order);
+          console.log('✅ Rescheduled push notification as local notification with proper channel');
+        } catch (error) {
+          console.error('❌ Error rescheduling notification:', error);
+        }
+      }
+    }
+    
+    return {
+      shouldShowAlert: true,
+      shouldPlaySound: true, // Play sound even in foreground
+      shouldSetBadge: true,
+    };
+  },
 });
 
 // Configure notification channel for Android (high priority to wake screen and bring app to foreground)
