@@ -99,6 +99,15 @@ const MainTabs = () => {
   );
 };
 
+// Wrap MainTabs with LocationGate - only enforce location after login
+const MainTabsWithLocationGate = () => {
+  return (
+    <LocationGate>
+      <MainTabs />
+    </LocationGate>
+  );
+};
+
 const AppNavigator = ({ initialRoute }) => {
   const { isDarkMode, colors } = useTheme();
 
@@ -145,7 +154,7 @@ const AppNavigator = ({ initialRoute }) => {
         />
         <Stack.Screen 
           name="Home" 
-          component={MainTabs}
+          component={MainTabsWithLocationGate}
           options={{ 
             title: 'Liquor OS',
             headerLeft: () => null, // Hide back button completely
@@ -333,9 +342,7 @@ const App = () => {
         backgroundColor={Platform.OS === 'android' ? '#000000' : undefined} // Pure black background for better contrast
         translucent={false}
       />
-      <LocationGate>
-        <AppNavigator initialRoute={initialRoute} />
-      </LocationGate>
+      <AppNavigator initialRoute={initialRoute} />
     </ThemeProvider>
   );
 };
