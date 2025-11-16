@@ -942,6 +942,21 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       finalStatus = 'completed';
     }
 
+    // CRITICAL: Wallet crediting is now handled by creditWalletsOnDeliveryCompletion
+    // when the order is marked as completed, not when payment status is updated.
+    // This prevents crediting wallets before delivery is completed.
+    // If order is marked as completed (or becomes completed) and payment is paid, credit wallets
+    if (finalStatus === 'completed' && paymentStatus === 'paid' && order.driverId) {
+      try {
+        const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+        await creditWalletsOnDeliveryCompletion(order.id, req);
+        console.log(`✅ Wallets credited for Order #${order.id} on payment status update (order completed)`);
+      } catch (walletError) {
+        console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
+        // Don't fail the payment status update if wallet crediting fails
+      }
+    }
+
     // Reload order to get updated data
     await order.reload({
       include: [
@@ -966,21 +981,6 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       orderData.orderItems = orderData.items;
     }
     orderData.status = finalStatus;
-
-    // CRITICAL: Wallet crediting is now handled by creditWalletsOnDeliveryCompletion
-    // when the order is marked as completed, not when payment status is updated.
-    // This prevents crediting wallets before delivery is completed.
-    // If order is marked as completed and payment is paid, credit wallets
-    if (finalStatus === 'completed' && paymentStatus === 'paid' && order.driverId) {
-      try {
-        const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
-        await creditWalletsOnDeliveryCompletion(order.id, req);
-        console.log(`✅ Wallets credited for Order #${order.id} on payment status update (order already completed)`);
-      } catch (walletError) {
-        console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
-        // Don't fail the payment status update if wallet crediting fails
-      }
-    }
 
     await order.reload({
       include: [
