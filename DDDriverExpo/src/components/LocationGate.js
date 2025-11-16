@@ -70,19 +70,15 @@ const LocationGate = ({ children }) => {
     // Monitor app state changes (when user returns to app)
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
-        // Re-check location when app becomes active
-        checkLocationStatus();
+        // Re-check location when app becomes active (with a small delay to avoid rapid checks)
+        setTimeout(() => {
+          checkLocationStatus();
+        }, 1000);
       }
     });
 
-    // Monitor location status periodically
-    const interval = setInterval(() => {
-      checkLocationStatus();
-    }, 5000); // Check every 5 seconds
-
     return () => {
       subscription?.remove();
-      clearInterval(interval);
     };
   }, []);
 
