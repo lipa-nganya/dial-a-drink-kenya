@@ -311,16 +311,26 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     }
 
     // 3. Credit Driver Wallet: Delivery Fee (driver share) + Tip
+    // CRITICAL: For cash/mobile money payments, DO NOT credit tip to driver wallet
+    // because the driver already received the tip in cash. Crediting it would mean they get it twice.
+    const isCashPayment = paymentMethod === 'cash' || 
+                          paymentProvider === 'cash_in_hand' || 
+                          paymentProvider === 'driver_mpesa_manual';
+    
     // CRITICAL: Use the maximum of tipAmount and orderTipAmountAfterReload to ensure tips are ALWAYS credited
     // Use the reloaded value, not the early value, to ensure we have the latest tip amount
-    const effectiveTipAmount = Math.max(tipAmount, orderTipAmountAfterReload);
+    // BUT: Skip tip crediting if payment is cash/mobile money (driver already received tip in cash)
+    const effectiveTipAmount = isCashPayment ? 0 : Math.max(tipAmount, orderTipAmountAfterReload);
     
     console.log(`💳 Driver wallet crediting check for Order #${orderId}:`);
     console.log(`   driverId: ${order.driverId}`);
+    console.log(`   paymentMethod: ${paymentMethod}`);
+    console.log(`   paymentProvider: ${paymentProvider}`);
+    console.log(`   isCashPayment: ${isCashPayment}`);
     console.log(`   driverPayAmount: KES ${driverPayAmount.toFixed(2)}`);
     console.log(`   tipAmount: KES ${tipAmount.toFixed(2)}`);
     console.log(`   orderTipAmount: KES ${orderTipAmount.toFixed(2)}`);
-    console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)}`);
+    console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
     console.log(`   Will credit driver: ${order.driverId && (driverPayAmount > 0.009 || effectiveTipAmount > 0.009)}`);
     
     if (order.driverId && (driverPayAmount > 0.009 || effectiveTipAmount > 0.009)) {
@@ -449,13 +459,15 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           console.log(`   Tip will be credited separately if effectiveTipAmount > 0`);
         }
 
-        // Credit tip
-        // CRITICAL: Use effectiveTipAmount to ensure tips are credited even if breakdown is wrong
-        console.log(`💵 Tip crediting check for Order #${orderId}:`);
-        console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)}`);
-        console.log(`   Will credit tip: ${effectiveTipAmount > 0.009}`);
-        
-        if (effectiveTipAmount > 0.009) {
+            // Credit tip
+            // CRITICAL: Use effectiveTipAmount to ensure tips are credited even if breakdown is wrong
+            // BUT: Skip tip crediting if payment is cash/mobile money (driver already received tip in cash)
+            console.log(`💵 Tip crediting check for Order #${orderId}:`);
+            console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)}`);
+            console.log(`   isCashPayment: ${isCashPayment}`);
+            console.log(`   Will credit tip: ${effectiveTipAmount > 0.009 && !isCashPayment}`);
+            
+            if (effectiveTipAmount > 0.009 && !isCashPayment) {
           console.log(`✅ STARTING tip crediting for Order #${orderId} with amount KES ${effectiveTipAmount.toFixed(2)}`);
           // CRITICAL: Use the transaction found in the initial check above (existingTipTxn)
           // This prevents duplicates - we already checked for it with a lock at the beginning
