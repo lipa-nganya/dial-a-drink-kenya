@@ -1313,20 +1313,6 @@ router.post('/callback', async (req, res) => {
           
           console.log(`✅ Order #${order.id} status updated to '${newOrderStatus}' (triggered by transaction completion)`);
           
-          // CRITICAL: For pay_on_delivery orders, if order is marked as completed, credit wallets
-          // This ensures delivery fee and tip transactions are created/updated correctly
-          // Same logic as pay_now orders - when delivery is completed, credit all wallets
-          if (newOrderStatus === 'completed' && order.paymentStatus === 'paid') {
-            try {
-              console.log(`💰 Order #${order.id} marked as completed - crediting wallets (pay_on_delivery payment received)`);
-              await creditWalletsOnDeliveryCompletion(order.id, req);
-              console.log(`✅ Wallets credited for Order #${order.id} on payment confirmation (pay_on_delivery)`);
-            } catch (walletError) {
-              console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
-              // Don't fail the callback if wallet crediting fails - payment is already confirmed
-            }
-          }
-          
           // Force reload and verify the update with all relationships
           await order.reload({
             include: [
@@ -1348,6 +1334,21 @@ router.post('/callback', async (req, res) => {
           );
           
           const dbOrder = verifyOrder[0];
+          
+          // CRITICAL: For pay_on_delivery orders, if order is marked as completed, credit wallets
+          // This ensures delivery fee and tip transactions are created/updated correctly
+          // Same logic as pay_now orders - when delivery is completed, credit all wallets
+          // Use database values to ensure accuracy
+          if (newOrderStatus === 'completed' && (dbOrder?.paymentStatus === 'paid' || order.paymentStatus === 'paid')) {
+            try {
+              console.log(`💰 Order #${order.id} marked as completed - crediting wallets (pay_on_delivery payment received)`);
+              await creditWalletsOnDeliveryCompletion(order.id, req);
+              console.log(`✅ Wallets credited for Order #${order.id} on payment confirmation (pay_on_delivery)`);
+            } catch (walletError) {
+              console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
+              // Don't fail the callback if wallet crediting fails - payment is already confirmed
+            }
+          }
           
           console.log(`✅✅✅ Order #${order.id} AUTOMATICALLY CONFIRMED via M-Pesa payment`);
           console.log(`   Order Status (DB): ${dbOrder?.status}`);
