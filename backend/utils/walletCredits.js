@@ -75,8 +75,15 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     
     // Only skip if BOTH driver and tip transactions are fully credited (if applicable)
     // If driver transaction exists but isn't completed, we need to update it
-    if (driverTxnFullyCredited && (!tipAmount || tipTxnFullyCredited)) {
+    // CRITICAL: Check tip amount from order, not from breakdown, to ensure we handle tips correctly
+    const orderTipAmount = parseFloat(order.tipAmount || '0') || 0;
+    const hasTip = orderTipAmount > 0.009 || tipAmount > 0.009;
+    
+    if (driverTxnFullyCredited && (!hasTip || tipTxnFullyCredited)) {
       console.log(`ℹ️  Wallets already fully credited for Order #${orderId} (driver transaction #${existingDriverDeliveryTxn.id} is completed and linked to wallet)`);
+      if (hasTip && tipTxnFullyCredited) {
+        console.log(`   Tip transaction #${existingTipTxn.id} is also completed and linked to wallet`);
+      }
       await dbTransaction.rollback();
       return {
         alreadyCredited: true,
@@ -87,6 +94,11 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     // If existing transaction found but not completed, we'll update it below
     if (existingDriverDeliveryTxn && existingDriverDeliveryTxn.status !== 'completed') {
       console.log(`⚠️  Found existing pending driver delivery transaction #${existingDriverDeliveryTxn.id} for Order #${orderId}. Will update it to completed.`);
+    }
+    
+    // If tip transaction exists but isn't completed, we'll update it below
+    if (existingTipTxn && existingTipTxn.status !== 'completed' && hasTip) {
+      console.log(`⚠️  Found existing pending tip transaction #${existingTipTxn.id} for Order #${orderId}. Will update it to completed.`);
     }
 
     // Ensure order is completed and payment is paid
@@ -99,7 +111,11 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     const breakdown = await getOrderFinancialBreakdown(orderId);
     const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
     const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-    const tipAmount = parseFloat(breakdown.tipAmount) || 0;
+    // CRITICAL: Use breakdown tipAmount, but fallback to order.tipAmount if breakdown doesn't have it
+    // This ensures tips are always captured even if breakdown calculation misses them
+    const tipAmountFromBreakdown = parseFloat(breakdown.tipAmount) || 0;
+    const tipAmountFromOrder = parseFloat(order.tipAmount || '0') || 0;
+    const tipAmount = tipAmountFromBreakdown > 0.009 ? tipAmountFromBreakdown : tipAmountFromOrder;
 
     // Get driver pay settings
     const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
@@ -370,15 +386,22 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
 
         // Credit tip
         if (tipAmount > 0.009) {
-          // Create or update tip transaction
-          let tipTransaction = await db.Transaction.findOne({
-            where: {
-              orderId: orderId,
-              transactionType: 'tip'
-            },
-            transaction: dbTransaction,
-            lock: dbTransaction.LOCK.UPDATE
-          });
+          // CRITICAL: Use the transaction found in the initial check above (existingTipTxn)
+          // This prevents duplicates - we already checked for it with a lock at the beginning
+          let tipTransaction = existingTipTxn;
+          
+          // If not found in initial check, do a final check with lock to prevent race conditions
+          if (!tipTransaction) {
+            tipTransaction = await db.Transaction.findOne({
+              where: {
+                orderId: orderId,
+                transactionType: 'tip',
+                status: { [Op.ne]: 'cancelled' }
+              },
+              transaction: dbTransaction,
+              lock: dbTransaction.LOCK.UPDATE
+            });
+          }
 
           const paymentMethod = paymentTransaction.paymentMethod || order.paymentMethod || 'mobile_money';
           const paymentProvider = paymentTransaction.paymentProvider || 'mpesa';
@@ -402,12 +425,34 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           };
 
           if (tipTransaction) {
+            // Update existing transaction (found in initial check or final check above)
             await tipTransaction.update(tipPayload, { transaction: dbTransaction });
             await tipTransaction.reload({ transaction: dbTransaction });
             console.log(`✅ Updated tip transaction #${tipTransaction.id} for Order #${orderId}`);
           } else {
-            tipTransaction = await db.Transaction.create(tipPayload, { transaction: dbTransaction });
-            console.log(`✅ Created tip transaction #${tipTransaction.id} for Order #${orderId}`);
+            // CRITICAL: Final check before creating - prevent duplicates even at this late stage
+            // This handles edge cases where a transaction was created between our checks
+            const finalTipCheck = await db.Transaction.findOne({
+              where: {
+                orderId: orderId,
+                transactionType: 'tip',
+                status: { [Op.ne]: 'cancelled' }
+              },
+              transaction: dbTransaction,
+              lock: dbTransaction.LOCK.UPDATE
+            });
+            
+            if (finalTipCheck) {
+              // Found one! Update it instead of creating duplicate
+              await finalTipCheck.update(tipPayload, { transaction: dbTransaction });
+              await finalTipCheck.reload({ transaction: dbTransaction });
+              tipTransaction = finalTipCheck;
+              console.log(`✅ Updated tip transaction #${tipTransaction.id} for Order #${orderId} (found in final check)`);
+            } else {
+              // Truly no transaction exists - safe to create
+              tipTransaction = await db.Transaction.create(tipPayload, { transaction: dbTransaction });
+              console.log(`✅ Created tip transaction #${tipTransaction.id} for Order #${orderId}`);
+            }
           }
 
           // Credit driver wallet
