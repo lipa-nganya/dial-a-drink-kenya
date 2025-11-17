@@ -37,7 +37,7 @@ const AdminDashboard = () => {
       window.location.hostname.includes('onrender.com') ||
       window.location.hostname.includes('run.app');
     const socketUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
+      ? 'https://liquoros-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');

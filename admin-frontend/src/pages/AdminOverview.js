@@ -82,11 +82,11 @@ const AdminOverview = () => {
         if (apiUrl) {
           socketUrl = apiUrl.replace('/api', '');
         } else {
-          socketUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
+          socketUrl = 'https://liquoros-backend-910510650031.us-central1.run.app';
         }
       } else {
         const apiUrl = process.env.REACT_APP_API_URL;
-        socketUrl = apiUrl ? apiUrl.replace('/api', '') : 'https://dialadrink-backend-910510650031.us-central1.run.app';
+        socketUrl = apiUrl ? apiUrl.replace('/api', '') : 'https://liquoros-backend-910510650031.us-central1.run.app';
       }
     }
     

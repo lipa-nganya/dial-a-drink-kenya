@@ -455,28 +455,48 @@ router.get('/stats', async (req, res) => {
 // Get all transactions (admin)
 router.get('/transactions', async (req, res) => {
   try {
+    // Build includes array conditionally
+    const orderIncludes = [
+      {
+        model: db.OrderItem,
+        as: 'items',
+        required: false,
+        include: [{
+          model: db.Drink,
+          as: 'drink',
+          required: false
+        }]
+      },
+      {
+        model: db.Driver,
+        as: 'driver',
+        required: false,
+        attributes: ['id', 'name', 'phoneNumber', 'status']
+      }
+    ];
+    
+    // Only include Branch if the model exists and association is set up
+    // Skip Branch include to avoid database column errors
+    // TODO: Re-enable when branchId column is confirmed to exist in production
+    // if (db.Branch && db.Order.associations && db.Order.associations.branch) {
+    //   orderIncludes.push({
+    //     model: db.Branch,
+    //     as: 'branch',
+    //     required: false,
+    //     attributes: ['id', 'name', 'address']
+    //   });
+    // }
+    
     const transactions = await db.Transaction.findAll({
       include: [{
         model: db.Order,
         as: 'order',
-        include: [
-          {
-            model: db.OrderItem,
-            as: 'items',
-            include: [{
-              model: db.Drink,
-              as: 'drink'
-            }]
-          },
-          {
-            model: db.Driver,
-            as: 'driver',
-            attributes: ['id', 'name', 'phoneNumber', 'status']
-          }
-        ]
+        required: false,
+        include: orderIncludes
       }, {
         model: db.Driver,
         as: 'driver',
+        required: false,
         attributes: ['id', 'name', 'phoneNumber', 'status']
       }],
       order: [['createdAt', 'DESC']]
@@ -782,33 +802,47 @@ router.get('/save-the-fishes', async (req, res) => {
 // Get all orders (admin)
 router.get('/orders', async (req, res) => {
   try {
+    // Build includes array conditionally
+    const orderIncludes = [
+      {
+        model: db.OrderItem,
+        as: 'items',
+        required: false,
+        include: [
+          {
+            model: db.Drink,
+            as: 'drink',
+            required: false
+          }
+        ]
+      },
+      {
+        model: db.Transaction,
+        as: 'transactions',
+        required: false
+      },
+      {
+        model: db.Driver,
+        as: 'driver',
+        required: false,
+        attributes: ['id', 'name', 'phoneNumber', 'status']
+      }
+    ];
+    
+    // Only include Branch if the model exists and association is set up
+    // Skip Branch include to avoid database column errors
+    // TODO: Re-enable when branchId column is confirmed to exist in production
+    // if (db.Branch && db.Order.associations && db.Order.associations.branch) {
+    //   orderIncludes.push({
+    //     model: db.Branch,
+    //     as: 'branch',
+    //     required: false,
+    //     attributes: ['id', 'name', 'address']
+    //   });
+    // }
+    
     const orders = await db.Order.findAll({
-      include: [
-        {
-          model: db.OrderItem,
-          as: 'items',
-          include: [
-            {
-              model: db.Drink,
-              as: 'drink'
-            }
-          ]
-        },
-        {
-          model: db.Transaction,
-          as: 'transactions'
-        },
-        {
-          model: db.Driver,
-          as: 'driver',
-          attributes: ['id', 'name', 'phoneNumber', 'status']
-        },
-        {
-          model: db.Branch,
-          as: 'branch',
-          required: false
-        }
-      ],
+      include: orderIncludes,
       order: [['createdAt', 'DESC']]
     });
 

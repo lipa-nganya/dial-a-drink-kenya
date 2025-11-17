@@ -7,23 +7,23 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/dialadrink-admin:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/liquoros-admin:$SHORT_SHA'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/dialadrink-admin:latest'
+      - 'gcr.io/$PROJECT_ID/liquoros-admin:latest'
       - '--build-arg'
-      - 'REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api'
+      - 'REACT_APP_API_URL=https://liquoros-backend-910510650031.us-central1.run.app/api'
       - '.'
 
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/dialadrink-admin:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/liquoros-admin:$SHORT_SHA'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/dialadrink-admin:latest'
+      - 'gcr.io/$PROJECT_ID/liquoros-admin:latest'
 
   # Deploy container image to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -31,9 +31,9 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'dialadrink-admin'
+      - 'liquoros-admin'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/dialadrink-admin:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/liquoros-admin:$SHORT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -42,11 +42,11 @@ steps:
       - '--memory'
       - '256Mi'
       - '--set-env-vars'
-      - 'REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api'
+      - 'REACT_APP_API_URL=https://liquoros-backend-910510650031.us-central1.run.app/api'
 
 images:
-  - 'gcr.io/$PROJECT_ID/dialadrink-admin:$SHORT_SHA'
-  - 'gcr.io/$PROJECT_ID/dialadrink-admin:latest'
+  - 'gcr.io/$PROJECT_ID/liquoros-admin:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/liquoros-admin:latest'
 
 options:
   machineType: 'E2_HIGHCPU_8'

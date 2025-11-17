@@ -6,18 +6,36 @@ const { Op } = require('sequelize');
 // Get all transactions (admin only - will be protected)
 router.get('/', async (req, res) => {
   try {
+    // Build order includes conditionally
+    const orderIncludes = [{
+      model: db.OrderItem,
+      as: 'items',
+      required: false,
+      include: [{
+        model: db.Drink,
+        as: 'drink',
+        required: false
+      }]
+    }];
+    
+    // Only include Branch if the model exists and association is set up
+    // Skip Branch include to avoid database column errors
+    // TODO: Re-enable when branchId column is confirmed to exist in production
+    // if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
+    //   orderIncludes.push({
+    //     model: db.Branch,
+    //     as: 'branch',
+    //     required: false,
+    //     attributes: ['id', 'name', 'address']
+    //   });
+    // }
+    
     const transactions = await db.Transaction.findAll({
       include: [{
         model: db.Order,
         as: 'order',
-        include: [{
-          model: db.OrderItem,
-          as: 'items',
-          include: [{
-            model: db.Drink,
-            as: 'drink'
-          }]
-        }]
+        required: false,
+        include: orderIncludes
       }],
       order: [['createdAt', 'DESC']]
     });
@@ -34,11 +52,28 @@ router.get('/order/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
 
+    // Build order includes conditionally
+    const orderIncludes = [];
+    
+    // Only include Branch if the model exists and association is set up
+    // Skip Branch include to avoid database column errors
+    // TODO: Re-enable when branchId column is confirmed to exist in production
+    // if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
+    //   orderIncludes.push({
+    //     model: db.Branch,
+    //     as: 'branch',
+    //     required: false,
+    //     attributes: ['id', 'name', 'address']
+    //   });
+    // }
+
     const transactions = await db.Transaction.findAll({
       where: { orderId },
       include: [{
         model: db.Order,
-        as: 'order'
+        as: 'order',
+        required: false,
+        include: orderIncludes
       }],
       order: [['createdAt', 'DESC']]
     });
@@ -53,18 +88,36 @@ router.get('/order/:orderId', async (req, res) => {
 // Get transaction by ID
 router.get('/:id', async (req, res) => {
   try {
+    // Build order includes conditionally
+    const orderIncludes = [{
+      model: db.OrderItem,
+      as: 'items',
+      required: false,
+      include: [{
+        model: db.Drink,
+        as: 'drink',
+        required: false
+      }]
+    }];
+    
+    // Only include Branch if the model exists and association is set up
+    // Skip Branch include to avoid database column errors
+    // TODO: Re-enable when branchId column is confirmed to exist in production
+    // if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
+    //   orderIncludes.push({
+    //     model: db.Branch,
+    //     as: 'branch',
+    //     required: false,
+    //     attributes: ['id', 'name', 'address']
+    //   });
+    // }
+    
     const transaction = await db.Transaction.findByPk(req.params.id, {
       include: [{
         model: db.Order,
         as: 'order',
-        include: [{
-          model: db.OrderItem,
-          as: 'items',
-          include: [{
-            model: db.Drink,
-            as: 'drink'
-          }]
-        }]
+        required: false,
+        include: orderIncludes
       }]
     });
 
@@ -105,6 +158,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 module.exports = router;
+
 
 
 

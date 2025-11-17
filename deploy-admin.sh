@@ -20,16 +20,16 @@ npm run build
 # Deploy to Cloud Run
 # Use --update-env-vars to preserve existing environment variables
 echo "🚀 Deploying to Cloud Run..."
-gcloud run deploy dialadrink-admin \
+gcloud run deploy liquoros-admin \
   --source . \
   --platform managed \
   --allow-unauthenticated \
-  --update-env-vars "REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api" \
+  --update-env-vars "REACT_APP_API_URL=https://liquoros-backend-910510650031.us-central1.run.app/api" \
   --memory 256Mi
 
 echo ""
 echo "✅ Admin Frontend deployed successfully!"
 echo "📋 Service URL:"
-gcloud run services describe dialadrink-admin --format="value(status.url)"
+gcloud run services describe liquoros-admin --format="value(status.url)"
 
 

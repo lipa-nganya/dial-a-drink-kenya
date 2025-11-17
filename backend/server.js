@@ -108,7 +108,10 @@ async function loadFullApplication() {
           'https://dialadrink-admin-p6bkgryxqa-uc.a.run.app',
           'https://dialadrink-customer-910510650031.us-central1.run.app',
           'https://dialadrink-admin-910510650031.us-central1.run.app',
-          'https://dialadrink-backend-910510650031.us-central1.run.app'
+          'https://dialadrink-backend-910510650031.us-central1.run.app',
+          'https://liquoros-customer-910510650031.us-central1.run.app',
+          'https://liquoros-admin-910510650031.us-central1.run.app',
+          'https://liquoros-backend-910510650031.us-central1.run.app'
         ],
         methods: ["GET", "POST"],
         credentials: true

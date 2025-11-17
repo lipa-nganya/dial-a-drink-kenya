@@ -210,8 +210,8 @@ Delivery fees are calculated based on:
 - Order history
 
 **Deployment:**
-- Hosted on Cloud Run as `dialadrink-customer`
-- URL: `https://dialadrink-customer-910510650031.us-central1.run.app`
+- Hosted on Cloud Run as `liquoros-customer`
+- URL: `https://liquoros-customer-910510650031.us-central1.run.app`
 
 ### Driver App (`DDDriverExpo/`)
 
@@ -260,8 +260,8 @@ Delivery fees are calculated based on:
 - **Financial Reports**: Revenue tracking, wallet balances
 
 **Deployment:**
-- Hosted on Cloud Run as `dialadrink-admin`
-- URL: `https://dialadrink-admin-910510650031.us-central1.run.app`
+- Hosted on Cloud Run as `liquoros-admin`
+- URL: `https://liquoros-admin-910510650031.us-central1.run.app`
 
 ---
 

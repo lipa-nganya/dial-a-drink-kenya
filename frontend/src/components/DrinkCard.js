@@ -18,7 +18,8 @@ import {
   AddShoppingCart,
   Star,
   Cancel,
-  LocalOffer
+  LocalOffer,
+  LocalBar
 } from '@mui/icons-material';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -27,6 +28,7 @@ const DrinkCard = ({ drink }) => {
   const { addToCart } = useCart();
   const { colors, isDarkMode } = useTheme();
   const [selectedCapacity, setSelectedCapacity] = useState('');
+  const [imageError, setImageError] = useState(false);
 
   // Helper function to get full image URL
   const getImageUrl = (imagePath) => {
@@ -37,8 +39,18 @@ const DrinkCard = ({ drink }) => {
       return imagePath;
     }
     
-    // If it's already a full URL, return as is
-    if (imagePath.startsWith('http')) {
+    // If it's already a full URL, check if it's localhost and replace
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      // Replace localhost URLs with production backend URL
+      if (imagePath.includes('localhost:5001')) {
+        const isHosted =
+          window.location.hostname.includes('onrender.com') ||
+          window.location.hostname.includes('run.app');
+        const backendUrl = isHosted
+          ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+          : 'http://localhost:5001';
+        return imagePath.replace('http://localhost:5001', backendUrl);
+      }
       return imagePath;
     }
     
@@ -47,10 +59,15 @@ const DrinkCard = ({ drink }) => {
       window.location.hostname.includes('onrender.com') ||
       window.location.hostname.includes('run.app');
     const baseUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
+      ? 'https://liquoros-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     
-    return `${baseUrl}${imagePath}`;
+    // Use encodeURI which preserves / characters but encodes spaces and special chars
+    // Only encode if the path contains spaces or special characters
+    const needsEncoding = /[\s%]/.test(imagePath);
+    const finalPath = needsEncoding ? encodeURI(imagePath) : imagePath;
+    
+    return `${baseUrl}${finalPath}`;
   };
 
   // Get available capacities from capacityPricing or fallback to capacity array
@@ -107,13 +124,31 @@ const DrinkCard = ({ drink }) => {
         }
       }}
     >
-      <CardMedia
-        component="img"
-        height="120"
-        image={getImageUrl(drink.image)}
-        alt={drink.name}
-        sx={{ objectFit: 'contain', p: 1, backgroundColor: '#fff' }}
-      />
+      {getImageUrl(drink.image) && !imageError ? (
+        <CardMedia
+          component="img"
+          height="120"
+          image={getImageUrl(drink.image)}
+          alt={drink.name}
+          sx={{ objectFit: 'contain', p: 1, backgroundColor: '#fff' }}
+          onError={() => {
+            setImageError(true);
+          }}
+        />
+      ) : (
+        <Box
+          sx={{
+            height: 120,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#fff',
+            color: '#666'
+          }}
+        >
+          <LocalBar sx={{ fontSize: 40 }} />
+        </Box>
+      )}
       <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#fff', pb: availableCapacities.length >= 2 ? 1 : 0 }}>
         {/* Status Label Above Name */}
         <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
