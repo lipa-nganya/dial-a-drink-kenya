@@ -28,7 +28,7 @@ const getCallbackUrl = () => {
     if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
       console.warn('⚠️  Localhost callback URL detected. M-Pesa requires a publicly accessible URL.');
       console.warn('⚠️  Please use ngrok or set a public URL. Falling back to production URL.');
-      callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/callback';
+      callbackUrl = 'https://liquoros-backend-910510650031.us-central1.run.app/api/mpesa/callback';
     } else {
       console.log(`✅ Using callback URL from environment: ${callbackUrl}`);
       return callbackUrl;

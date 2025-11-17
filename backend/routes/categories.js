@@ -16,20 +16,37 @@ router.get('/', async (req, res) => {
           where: { categoryId: category.id }
         });
 
-        // Get the first drink's image if available (prioritize drinks with images)
+        // Get the first drink's image if available
+        // Prioritize backend images (/images/) over Cloudinary URLs for reliability
         let firstDrink = await db.Drink.findOne({
           where: { 
             categoryId: category.id,
             [db.Sequelize.Op.and]: [
               { image: { [db.Sequelize.Op.ne]: null } },
-              { image: { [db.Sequelize.Op.ne]: '' } }
+              { image: { [db.Sequelize.Op.ne]: '' } },
+              { image: { [db.Sequelize.Op.like]: '/images/%' } } // Prefer backend images
             ]
           },
           attributes: ['image'],
           order: [['id', 'ASC']]
         });
         
-        // Fallback to any drink if no drink with image found
+        // Fallback to any drink with an image (including Cloudinary URLs)
+        if (!firstDrink) {
+          firstDrink = await db.Drink.findOne({
+            where: { 
+              categoryId: category.id,
+              [db.Sequelize.Op.and]: [
+                { image: { [db.Sequelize.Op.ne]: null } },
+                { image: { [db.Sequelize.Op.ne]: '' } }
+              ]
+            },
+            attributes: ['image'],
+            order: [['id', 'ASC']]
+          });
+        }
+        
+        // Final fallback to any drink if no drink with image found
         if (!firstDrink) {
           firstDrink = await db.Drink.findOne({
             where: { categoryId: category.id },

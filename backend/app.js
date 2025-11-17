@@ -19,7 +19,11 @@ const allowedOrigins = [
   // New service URLs - numeric format (Cloud Run can use either)
   'https://dialadrink-customer-910510650031.us-central1.run.app',
   'https://dialadrink-admin-910510650031.us-central1.run.app',
-  'https://dialadrink-backend-910510650031.us-central1.run.app'
+  'https://dialadrink-backend-910510650031.us-central1.run.app',
+  // Liquoros service URLs
+  'https://liquoros-customer-910510650031.us-central1.run.app',
+  'https://liquoros-admin-910510650031.us-central1.run.app',
+  'https://liquoros-backend-910510650031.us-central1.run.app'
 ].filter(Boolean);
 
 const corsOptions = {

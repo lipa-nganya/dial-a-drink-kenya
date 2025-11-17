@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Card,
   CardMedia,
@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 
 const CategoryCard = ({ category }) => {
   const navigate = useNavigate();
+  const [imageError, setImageError] = useState(false);
 
   const handleClick = () => {
     navigate(`/menu?category=${category.id}`);
@@ -30,7 +31,7 @@ const CategoryCard = ({ category }) => {
       window.location.hostname.includes('onrender.com') ||
       window.location.hostname.includes('run.app');
     const baseUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
+      ? 'https://liquoros-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     
     return `${baseUrl}${imagePath}`;
@@ -55,13 +56,16 @@ const CategoryCard = ({ category }) => {
       }}
       onClick={handleClick}
     >
-      {imageUrl ? (
+      {imageUrl && !imageError ? (
         <CardMedia
           component="img"
           height="200"
           image={imageUrl}
           alt={category.name}
           sx={{ objectFit: 'contain', p: 1, backgroundColor: '#fff' }}
+          onError={() => {
+            setImageError(true);
+          }}
         />
       ) : (
         <Box

@@ -32,11 +32,39 @@ const Home = () => {
     fetchDrinks();
   }, []);
 
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return '/assets/images/ads/hero-ad.png';
+    
+    // If it's already a full URL (http/https), return as is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      // If it's localhost, replace with backend URL
+      if (imagePath.includes('localhost:5001')) {
+        const isHosted = window.location.hostname.includes('onrender.com') || 
+                        window.location.hostname.includes('run.app');
+        const backendUrl = isHosted 
+          ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+          : 'http://localhost:5001';
+        return imagePath.replace('http://localhost:5001', backendUrl);
+      }
+      return imagePath;
+    }
+    
+    // For relative paths, construct the full URL
+    const isHosted = window.location.hostname.includes('onrender.com') || 
+                    window.location.hostname.includes('run.app');
+    const backendUrl = isHosted 
+      ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+      : 'http://localhost:5001';
+    
+    return `${backendUrl}${imagePath}`;
+  };
+
   const fetchHeroImage = async () => {
     try {
       const response = await api.get('/settings/heroImage');
       if (response.data && response.data.value) {
-        setHeroImage(response.data.value);
+        const imageUrl = getImageUrl(response.data.value);
+        setHeroImage(imageUrl);
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);

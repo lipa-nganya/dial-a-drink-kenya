@@ -19,16 +19,16 @@ npm run build
 
 # Deploy to Cloud Run
 echo "🚀 Deploying to Cloud Run..."
-gcloud run deploy dialadrink-customer \
+gcloud run deploy liquoros-customer \
   --source . \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars "REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api" \
+  --set-env-vars "REACT_APP_API_URL=https://liquoros-backend-910510650031.us-central1.run.app/api" \
   --memory 256Mi
 
 echo ""
 echo "✅ Frontend deployed successfully!"
 echo "📋 Service URL:"
-gcloud run services describe dialadrink-customer --format="value(status.url)"
+gcloud run services describe liquoros-customer --format="value(status.url)"
 
 
