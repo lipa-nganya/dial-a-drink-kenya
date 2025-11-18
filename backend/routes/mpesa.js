@@ -1855,8 +1855,14 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
     console.log(`   Has receipt: ${!!hasReceiptNumber}`);
     
     // Payment is completed ONLY if we have a receipt number AND ResultCode is 0
-    // Just ResultCode 0 alone isn't enough - it can mean the request was received but not yet completed
+    // CRITICAL: ResultCode 0 can mean TWO things:
+    // 1. STK push request was successfully received (but user hasn't entered PIN yet) - NO receipt
+    // 2. Payment was completed successfully - HAS receipt number
+    // We ONLY consider it completed if BOTH ResultCode is 0 AND we have a receipt number
     const isCompleted = mpesaStatus && mpesaStatus.ResultCode === 0 && hasReceiptNumber;
+    
+    // If ResultCode is 0 but no receipt, it means payment is still pending (user hasn't entered PIN)
+    const isPendingUserAction = mpesaStatus && mpesaStatus.ResultCode === 0 && !hasReceiptNumber;
     const isSuccessWithoutReceipt = mpesaStatus && mpesaStatus.ResultCode === 0 && !hasReceiptNumber;
     
     console.log(`🔍 M-Pesa status check: ResultCode=${mpesaStatus?.ResultCode}, hasReceiptNumber=${!!hasReceiptNumber}, isCompleted=${isCompleted}`);
