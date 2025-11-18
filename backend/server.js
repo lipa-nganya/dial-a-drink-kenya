@@ -207,13 +207,31 @@ async function initializeDatabase(db, seedData) {
 // Function to add missing columns (simplified version)
 async function addMissingColumns(db) {
   try {
-    // This is a simplified version - the full version is in the original file
-    // Add only critical columns that might be missing
     console.log('Checking for missing columns...');
-    // Add your column migration logic here if needed
+    
+    // Check if branchId column exists in orders table
+    const [results] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'orders' AND column_name = 'branchId'
+    `);
+    
+    if (results.length === 0) {
+      console.log('📝 Adding missing branchId column to orders table...');
+      await db.sequelize.query(`
+        ALTER TABLE orders 
+        ADD COLUMN "branchId" INTEGER 
+        REFERENCES branches(id)
+      `);
+      console.log('✅ Added branchId column to orders table');
+    } else {
+      console.log('✅ branchId column already exists in orders table');
+    }
+    
     return true;
   } catch (error) {
     console.warn('Column migration failed:', error.message);
+    // Don't fail completely - try to continue
     return false;
   }
 }
