@@ -206,11 +206,18 @@ const OrderSuccess = () => {
             return { data: { status: 'pending', transactionId: null } };
           });
           
-          // If transaction exists and has checkoutRequestID, poll M-Pesa API directly
+          // Only poll M-Pesa API directly every 30 seconds to avoid rate limits
+          // The backend background job handles automatic syncing every 30 seconds, so we don't need frequent polling
           let mpesaPollResponse = null;
-          if (transactionResponse?.data?.checkoutRequestID && transactionResponse.data.status === 'pending') {
+          const timeSinceStart = pollStartRef.current ? Date.now() - pollStartRef.current : 0;
+          const shouldPollMpesa = transactionResponse?.data?.checkoutRequestID && 
+                                   transactionResponse.data.status === 'pending' &&
+                                   timeSinceStart > 0 && 
+                                   timeSinceStart % 30000 < 10000; // Only poll M-Pesa every 30 seconds
+          
+          if (shouldPollMpesa) {
             try {
-              console.log('🔍 Polling M-Pesa API directly for faster status check...');
+              console.log('🔍 Polling M-Pesa API directly (every 30s to avoid rate limits)...');
               mpesaPollResponse = await api.get(`/mpesa/poll-transaction/${transactionResponse.data.checkoutRequestID}`);
               console.log('📊 M-Pesa API poll response:', mpesaPollResponse?.data);
               
@@ -229,7 +236,10 @@ const OrderSuccess = () => {
                 }
               }
             } catch (pollError) {
-              console.log('M-Pesa API poll failed (will continue with regular polling):', pollError.message);
+              // Don't log 429 errors - they're expected when polling too frequently
+              if (!pollError.message?.includes('429') && !pollError.response?.status === 429) {
+                console.log('M-Pesa API poll failed (will continue with regular polling):', pollError.message);
+              }
               // Continue with regular polling if M-Pesa API poll fails
             }
           }
