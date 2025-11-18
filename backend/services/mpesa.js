@@ -40,8 +40,10 @@ const getCallbackUrl = () => {
     return callbackUrl;
   }
   
-  // Priority 3: Check if we're in production
-  if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
+  // Priority 3: Check if we're in production or Cloud Run (cloud-dev)
+  // Cloud Run services have NODE_ENV=production or are detected by hostname
+  const isCloudRun = process.env.K_SERVICE || process.env.GOOGLE_CLOUD_PROJECT;
+  if (process.env.NODE_ENV === 'production' || process.env.RENDER || isCloudRun) {
     callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/callback';
     console.log(`✅ Using production callback URL: ${callbackUrl}`);
     return callbackUrl;
