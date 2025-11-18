@@ -871,6 +871,15 @@ router.post('/callback', async (req, res) => {
       
       const callbackData = req.body;
       
+      // CRITICAL: Log the RAW request body first to see exactly what M-Pesa sends
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('📞 RAW CALLBACK DATA FROM M-PESA:');
+      console.log('   Request body type:', typeof req.body);
+      console.log('   Request body keys:', Object.keys(req.body || {}));
+      console.log('   Full raw body:', JSON.stringify(req.body, null, 2));
+      console.log('   Content-Type:', req.headers['content-type']);
+      console.log('═══════════════════════════════════════════════════════');
+      
       // CRITICAL: Check if body is empty or malformed
       if (!callbackData || (typeof callbackData === 'object' && Object.keys(callbackData).length === 0)) {
         console.error('❌❌❌ CRITICAL: Callback body is empty or undefined!');
@@ -886,22 +895,66 @@ router.post('/callback', async (req, res) => {
       console.log('✅✅✅ Full callback data received:', JSON.stringify(callbackData, null, 2));
       console.log('═══════════════════════════════════════════════════════');
       
-      // Check callback structure
-      if (!callbackData.Body) {
-        console.error('❌❌❌ CRITICAL: Callback missing Body property!');
-        console.error('   Callback structure:', Object.keys(callbackData));
-        console.error('   Full data:', JSON.stringify(callbackData, null, 2));
-        return;
+      // CRITICAL: M-Pesa may send callbacks in different formats
+      // Try multiple possible structures to handle any format M-Pesa sends
+      let stkCallback = null;
+      let checkoutRequestID = null;
+      let resultCode = null;
+      
+      // Format 1: Standard format { Body: { stkCallback: {...} } }
+      if (callbackData.Body && callbackData.Body.stkCallback) {
+        console.log('✅ Found callback in standard format: Body.stkCallback');
+        stkCallback = callbackData.Body.stkCallback;
+        checkoutRequestID = stkCallback.CheckoutRequestID;
+        resultCode = stkCallback.ResultCode;
+      }
+      // Format 2: Direct stkCallback at root { stkCallback: {...} }
+      else if (callbackData.stkCallback) {
+        console.log('✅ Found callback in alternative format: stkCallback (root level)');
+        stkCallback = callbackData.stkCallback;
+        checkoutRequestID = stkCallback.CheckoutRequestID;
+        resultCode = stkCallback.ResultCode;
+      }
+      // Format 3: Direct properties at root { CheckoutRequestID: "...", ResultCode: 0, ... }
+      else if (callbackData.CheckoutRequestID) {
+        console.log('✅ Found callback in root-level format: CheckoutRequestID at root');
+        checkoutRequestID = callbackData.CheckoutRequestID;
+        resultCode = callbackData.ResultCode;
+        // Create a mock stkCallback structure for processing
+        stkCallback = {
+          CheckoutRequestID: callbackData.CheckoutRequestID,
+          MerchantRequestID: callbackData.MerchantRequestID,
+          ResultCode: callbackData.ResultCode,
+          ResultDesc: callbackData.ResultDesc,
+          CallbackMetadata: callbackData.CallbackMetadata || {}
+        };
+      }
+      // Format 4: Check if it's nested differently
+      else if (callbackData.Body) {
+        console.log('⚠️  Found Body property but no stkCallback. Checking Body structure...');
+        console.log('   Body keys:', Object.keys(callbackData.Body));
+        // Maybe the structure is Body.stkCallback but with different casing?
+        const bodyKeys = Object.keys(callbackData.Body);
+        const stkCallbackKey = bodyKeys.find(k => k.toLowerCase().includes('callback') || k.toLowerCase().includes('stk'));
+        if (stkCallbackKey) {
+          console.log(`✅ Found potential callback key: ${stkCallbackKey}`);
+          stkCallback = callbackData.Body[stkCallbackKey];
+          checkoutRequestID = stkCallback?.CheckoutRequestID;
+          resultCode = stkCallback?.ResultCode;
+        }
       }
       
-      if (!callbackData.Body.stkCallback) {
-        console.error('❌❌❌ CRITICAL: Callback missing Body.stkCallback property!');
-        console.error('   Body structure:', Object.keys(callbackData.Body));
+      if (!stkCallback || !checkoutRequestID) {
+        console.error('❌❌❌ CRITICAL: Could not extract callback data from any known format!');
+        console.error('   Callback structure:', Object.keys(callbackData || {}));
         console.error('   Full data:', JSON.stringify(callbackData, null, 2));
+        console.error('   This callback will NOT be processed!');
         return;
       }
       
       console.log(`🎯 CALLBACK RECEIVED - Processing payment...`);
+      console.log(`   CheckoutRequestID: ${checkoutRequestID}`);
+      console.log(`   ResultCode: ${resultCode}`);
 
     // M-Pesa callback structure:
     // {
@@ -923,10 +976,9 @@ router.post('/callback', async (req, res) => {
     //   }
     // }
 
-    if (callbackData.Body && callbackData.Body.stkCallback) {
-      const stkCallback = callbackData.Body.stkCallback;
-      const checkoutRequestID = stkCallback.CheckoutRequestID;
-      const resultCode = stkCallback.ResultCode;
+    // stkCallback, checkoutRequestID, and resultCode are now extracted above
+    // Process the callback using the extracted data
+    if (stkCallback && checkoutRequestID) {
 
       // Find order by checkout request ID
       let order = null;
