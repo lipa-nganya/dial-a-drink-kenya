@@ -1706,7 +1706,77 @@ router.post('/callback', async (req, res) => {
         }
       }
     } else {
-      console.log('⚠️  Callback received but missing stkCallback in Body:', JSON.stringify(callbackData, null, 2));
+      console.error('❌❌❌ CRITICAL: Callback received but structure does not match expected format!');
+      console.error('   Expected: callbackData.Body.stkCallback');
+      console.error('   Actual structure:', JSON.stringify(callbackData, null, 2));
+      console.error('   Callback keys:', Object.keys(callbackData || {}));
+      if (callbackData.Body) {
+        console.error('   Body keys:', Object.keys(callbackData.Body));
+      }
+      
+      // Try alternative callback structures
+      // Sometimes M-Pesa sends the callback directly without Body wrapper
+      if (callbackData.stkCallback) {
+        console.log('✅ Found stkCallback at root level, processing...');
+        const stkCallback = callbackData.stkCallback;
+        const checkoutRequestID = stkCallback.CheckoutRequestID;
+        const resultCode = stkCallback.ResultCode;
+        
+        if (resultCode === 0 && checkoutRequestID) {
+          // Find transaction and process payment
+          const transaction = await db.Transaction.findOne({
+            where: { checkoutRequestID, transactionType: 'payment' },
+            include: [{ model: db.Order, as: 'order' }]
+          });
+          
+          if (transaction && transaction.order) {
+            const callbackMetadata = stkCallback.CallbackMetadata || {};
+            const items = callbackMetadata.Item || [];
+            const receiptNumber = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
+            
+            if (receiptNumber) {
+              console.log(`✅ Processing payment with alternative structure. Receipt: ${receiptNumber}`);
+              await finalizeOrderPayment({
+                orderId: transaction.orderId,
+                paymentTransaction: transaction,
+                receiptNumber: receiptNumber,
+                req,
+                context: 'Callback (alternative structure)'
+              });
+              console.log(`✅✅✅ Payment processed successfully with alternative callback structure!`);
+              return;
+            }
+          }
+        }
+      }
+      
+      // Try if callback is at root level with different structure
+      if (callbackData.CheckoutRequestID) {
+        console.log('✅ Found CheckoutRequestID at root level, attempting to process...');
+        const checkoutRequestID = callbackData.CheckoutRequestID;
+        const transaction = await db.Transaction.findOne({
+          where: { checkoutRequestID, transactionType: 'payment' },
+          include: [{ model: db.Order, as: 'order' }]
+        });
+        
+        if (transaction && transaction.order && callbackData.ResultCode === 0) {
+          const receiptNumber = callbackData.MpesaReceiptNumber || callbackData.ReceiptNumber;
+          if (receiptNumber) {
+            console.log(`✅ Processing payment with root-level structure. Receipt: ${receiptNumber}`);
+            await finalizeOrderPayment({
+              orderId: transaction.orderId,
+              paymentTransaction: transaction,
+              receiptNumber: receiptNumber,
+              req,
+              context: 'Callback (root-level structure)'
+            });
+            console.log(`✅✅✅ Payment processed successfully with root-level callback structure!`);
+            return;
+          }
+        }
+      }
+      
+      console.error('❌ Could not process callback - structure does not match any known format');
     }
       console.log('✅ Callback processing completed');
     } catch (error) {
