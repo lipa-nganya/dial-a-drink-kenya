@@ -1861,9 +1861,48 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
     // We ONLY consider it completed if BOTH ResultCode is 0 AND we have a receipt number
     const isCompleted = mpesaStatus && mpesaStatus.ResultCode === 0 && hasReceiptNumber;
     
-    // If ResultCode is 0 but no receipt, it means payment is still pending (user hasn't entered PIN)
+    // If ResultCode is 0 but no receipt, it could mean:
+    // 1. User hasn't entered PIN yet (pending)
+    // 2. Payment completed but receipt only comes via callback (not in query response)
+    // We need to check if enough time has passed - if yes, payment likely completed and callback should have arrived
     const isPendingUserAction = mpesaStatus && mpesaStatus.ResultCode === 0 && !hasReceiptNumber;
     const isSuccessWithoutReceipt = mpesaStatus && mpesaStatus.ResultCode === 0 && !hasReceiptNumber;
+    
+    // CRITICAL: If ResultCode is 0 but no receipt, check if callback already arrived
+    // Sometimes the callback arrives before the query, or the query doesn't include receipt
+    if (isSuccessWithoutReceipt) {
+      console.log(`⚠️  ResultCode=0 but no receipt in query response. Checking if callback already processed...`);
+      
+      // Check if transaction already has receipt (callback might have arrived)
+      const transaction = await db.Transaction.findOne({
+        where: { checkoutRequestID, transactionType: 'payment' },
+        include: [{ model: db.Order, as: 'order' }]
+      });
+      
+      if (transaction && transaction.receiptNumber) {
+        console.log(`✅ Found receipt number in database: ${transaction.receiptNumber} (callback already processed)`);
+        // Payment was already confirmed via callback, just return success
+        return res.json({
+          success: true,
+          status: 'completed',
+          receiptNumber: transaction.receiptNumber,
+          message: 'Payment already confirmed (receipt found in database)',
+          fromDatabase: true
+        });
+      }
+      
+      // Check if order is already marked as paid (callback might have updated it)
+      if (transaction && transaction.order && transaction.order.paymentStatus === 'paid') {
+        console.log(`✅ Order already marked as paid. Payment was confirmed via callback.`);
+        return res.json({
+          success: true,
+          status: 'completed',
+          receiptNumber: transaction.receiptNumber || 'N/A',
+          message: 'Payment already confirmed (order marked as paid)',
+          fromDatabase: true
+        });
+      }
+    }
     
     console.log(`🔍 M-Pesa status check: ResultCode=${mpesaStatus?.ResultCode}, hasReceiptNumber=${!!hasReceiptNumber}, isCompleted=${isCompleted}`);
     
