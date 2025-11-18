@@ -453,9 +453,9 @@ const OrderSuccess = () => {
           )}
           
           {window.location.hostname === 'localhost' && (
-            <Alert severity="warning" sx={{ mb: 3 }}>
-              <strong>Local Development Notice:</strong> M-Pesa callbacks go to the production server. 
-              If you've completed payment but status hasn't updated, use the button below to manually confirm.
+            <Alert severity="info" sx={{ mb: 3 }}>
+              <strong>Local Development:</strong> M-Pesa callbacks are configured to reach your local server via ngrok. 
+              If you've completed payment but status hasn't updated after a few moments, you can use the button below to manually confirm.
             </Alert>
           )}
           

@@ -222,16 +222,29 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       message: `Payment confirmed for Order #${orderInstance.id}`
     };
 
+    // Emit payment-confirmed event
     io.to(`order-${orderInstance.id}`).emit('payment-confirmed', payload);
+    
+    // Also emit order-status-updated event for broader compatibility
+    const orderStatusUpdateData = {
+      orderId: orderInstance.id,
+      status: orderInstance.status,
+      paymentStatus: 'paid',
+      order: orderInstance.toJSON ? orderInstance.toJSON() : orderInstance,
+      message: `Order #${orderInstance.id} status updated`
+    };
+    io.to(`order-${orderInstance.id}`).emit('order-status-updated', orderStatusUpdateData);
 
     if (orderInstance.driverId) {
       io.to(`driver-${orderInstance.driverId}`).emit('payment-confirmed', payload);
+      io.to(`driver-${orderInstance.driverId}`).emit('order-status-updated', orderStatusUpdateData);
     }
 
     io.to('admin').emit('payment-confirmed', {
       ...payload,
       message: `${context} for Order #${orderInstance.id}`
     });
+    io.to('admin').emit('order-status-updated', orderStatusUpdateData);
   }
 
   // Note: Merchant wallet crediting is now handled by creditWalletsOnDeliveryCompletion when delivery is completed
@@ -803,15 +816,34 @@ router.get('/callback-log', async (req, res) => {
   }
 });
 
+// CRITICAL: Handle OPTIONS requests for M-Pesa callback (CORS preflight)
+router.options('/callback', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('ngrok-skip-browser-warning', 'true');
+  res.status(204).end();
+});
+
 router.post('/callback', async (req, res) => {
   // CRITICAL: Respond to M-Pesa IMMEDIATELY (within 5 seconds)
   // M-Pesa will retry if response is slow or fails
+  
+  // CRITICAL: Set CORS and security headers for M-Pesa callbacks
+  // M-Pesa callbacks don't send Origin header, so we must allow all origins
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('ngrok-skip-browser-warning', 'true');
   
   // Log that callback endpoint was hit
   console.log('🔔 CALLBACK ENDPOINT HIT - Timestamp:', new Date().toISOString());
   console.log('🔔 Request method:', req.method);
   console.log('🔔 Request URL:', req.url);
   console.log('🔔 Request headers:', JSON.stringify(req.headers, null, 2));
+  console.log('🔔 Request IP:', req.ip || req.connection.remoteAddress || req.headers['x-forwarded-for']);
+  console.log('🔔 User-Agent:', req.headers['user-agent']);
+  console.log('🔔 Origin header:', req.headers['origin'] || 'none');
   
   try {
     // Respond immediately
@@ -825,13 +857,30 @@ router.post('/callback', async (req, res) => {
   }
   
   // Process callback asynchronously (don't block the response)
-  setImmediate(async () => {
+  // CRITICAL: Use IIFE pattern to properly handle async errors
+  (async () => {
     try {
-      const callbackData = req.body;
-
+      // CRITICAL: Log request details BEFORE accessing body to catch parsing issues
       console.log('═══════════════════════════════════════════════════════');
       console.log('📞📞📞 M-Pesa Callback received at:', new Date().toISOString());
       console.log('═══════════════════════════════════════════════════════');
+      console.log('Request Content-Type:', req.headers['content-type']);
+      console.log('Request Content-Length:', req.headers['content-length']);
+      console.log('Request Method:', req.method);
+      console.log('Request URL:', req.url);
+      
+      const callbackData = req.body;
+      
+      // CRITICAL: Check if body is empty or malformed
+      if (!callbackData || (typeof callbackData === 'object' && Object.keys(callbackData).length === 0)) {
+        console.error('⚠️  WARNING: Callback body is empty or undefined!');
+        console.error('   This might indicate a request body parsing issue.');
+        console.error('   Body type:', typeof callbackData);
+        console.error('   Body value:', callbackData);
+        console.error('   Headers:', JSON.stringify(req.headers, null, 2));
+        return; // Exit early if no body data
+      }
+
       console.log('Full callback data:', JSON.stringify(callbackData, null, 2));
       console.log('═══════════════════════════════════════════════════════');
       
@@ -1196,6 +1245,15 @@ router.post('/callback', async (req, res) => {
             finalizeSuccess = true;
           } catch (finalizeError) {
             console.error(`❌ Error in finalizeOrderPayment:`, finalizeError);
+            // CRITICAL: If finalizeOrderPayment fails, try to sync transactions as fallback
+            // This ensures transactions are updated even if finalizeOrderPayment has issues
+            try {
+              const { syncPendingTransactionsForOrder } = require('../utils/transactionSync');
+              console.log(`🔄 Attempting transaction sync as fallback for Order #${order.id}...`);
+              await syncPendingTransactionsForOrder(order.id);
+            } catch (syncError) {
+              console.error(`❌ Error in transaction sync fallback:`, syncError);
+            }
             // Don't fail the callback - payment transaction is already updated
             // But we still need to update order status
           }
@@ -1348,6 +1406,17 @@ router.post('/callback', async (req, res) => {
               console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
               // Don't fail the callback if wallet crediting fails - payment is already confirmed
             }
+            
+            // Update driver status if they have no more active orders
+            if (dbOrder?.driverId) {
+              try {
+                const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+                await updateDriverStatusIfNoActiveOrders(dbOrder.driverId);
+              } catch (driverStatusError) {
+                console.error(`❌ Error updating driver status for Order #${order.id}:`, driverStatusError);
+                // Don't fail the callback if driver status update fails
+              }
+            }
           }
           
           console.log(`✅✅✅ Order #${order.id} AUTOMATICALLY CONFIRMED via M-Pesa payment`);
@@ -1470,17 +1539,29 @@ router.post('/callback', async (req, res) => {
             // Emit to a specific order room so the frontend can listen for this specific order
             io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
             
+            // Also emit order-status-updated event for broader compatibility
+            const orderStatusUpdateData = {
+              orderId: order.id,
+              status: actualStatus,
+              paymentStatus: actualPaymentStatus,
+              order: orderData,
+              message: `Order #${order.id} status updated`
+            };
+            io.to(`order-${order.id}`).emit('order-status-updated', orderStatusUpdateData);
+            
             // Notify driver if order is assigned to one - use database driverId
             const driverId = dbOrder?.driverId || finalOrder?.driverId;
             if (driverId) {
               io.to(`driver-${driverId}`).emit('payment-confirmed', paymentConfirmedData);
-              console.log(`📡 Emitted payment-confirmed event to driver-${driverId} for Order #${order.id}`);
+              io.to(`driver-${driverId}`).emit('order-status-updated', orderStatusUpdateData);
+              console.log(`📡 Emitted payment-confirmed and order-status-updated events to driver-${driverId} for Order #${order.id}`);
             } else {
               console.log(`⚠️  No driverId found for Order #${order.id}, skipping driver notification`);
             }
             
             // Also notify admin
             io.to('admin').emit('payment-confirmed', paymentConfirmedData);
+            io.to('admin').emit('order-status-updated', orderStatusUpdateData);
             
             console.log(`📡 Socket.IO events emitted for Order #${order.id} with transaction status: completed`);
           }
@@ -1619,8 +1700,14 @@ router.post('/callback', async (req, res) => {
     } catch (error) {
       console.error('❌ Error processing M-Pesa callback:', error);
       console.error('Error stack:', error.stack);
+      // CRITICAL: Ensure errors are logged and don't crash the process
+      // In production, you might want to send this to an error tracking service
     }
-  })();
+  })().catch((error) => {
+    // Catch any unhandled promise rejections from the async IIFE
+    console.error('❌ Unhandled error in callback processing:', error);
+    console.error('Error stack:', error.stack);
+  });
 });
 
 /**
@@ -1858,14 +1945,21 @@ router.get('/check-payment/:orderId', async (req, res) => {
 /**
  * Check transaction status by order ID
  * This must be placed BEFORE /status/:orderId to avoid route conflicts
+ * 
+ * CRITICAL: This endpoint also queries M-Pesa directly if callbacks are missing
  */
 router.get('/transaction-status/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
     
-    // CRITICAL: Use getPaymentTransaction helper to ensure we ONLY get payment transactions
-    // This prevents delivery_pay or tip transactions from being returned
-    const transaction = await getPaymentTransaction(orderId);
+    // CRITICAL: Get ONLY payment transactions (not delivery_pay or tip transactions)
+    const transaction = await db.Transaction.findOne({
+      where: {
+        orderId: orderId,
+        transactionType: 'payment' // Only payment transactions
+      },
+      order: [['updatedAt', 'DESC'], ['createdAt', 'DESC']] // Get most recent first
+    });
     
     console.log(`🔍 Transaction lookup for order ${orderId}: ${transaction ? `Found payment transaction #${transaction.id} with status: ${transaction.status}, receipt: ${transaction.receiptNumber || 'none'}` : 'No payment transaction found'}`);
     
@@ -1889,6 +1983,45 @@ router.get('/transaction-status/:orderId', async (req, res) => {
         console.log(`✅ Auto-finalized transaction #${transaction.id} and order #${transaction.orderId} (receipt number detected)`);
       } catch (updateError) {
         console.error(`❌ Error auto-finalizing transaction:`, updateError);
+      }
+    }
+    
+    // CRITICAL: ALWAYS query M-Pesa directly if transaction is pending and has checkoutRequestID
+    // This is a workaround for missing callbacks (affects local, cloud-dev, and production)
+    if (transaction && transaction.status === 'pending' && transaction.checkoutRequestID) {
+      console.log(`⚠️  PENDING TRANSACTION DETECTED: Transaction #${transaction.id} is pending.`);
+      console.log(`🔍 Querying M-Pesa API directly for checkoutRequestID: ${transaction.checkoutRequestID}`);
+      
+      try {
+        const mpesaStatus = await mpesaService.checkTransactionStatus(transaction.checkoutRequestID);
+        
+        const callbackMetadata = mpesaStatus?.CallbackMetadata;
+        const items = callbackMetadata?.Item || [];
+        const receiptFromMetadata = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
+        const receiptFromResponse = mpesaStatus?.ReceiptNumber;
+        const receiptNumber = receiptFromMetadata || receiptFromResponse;
+        const resultCode = mpesaStatus?.ResultCode;
+        
+        console.log(`📊 M-Pesa API response: ResultCode=${resultCode}, Receipt=${receiptNumber || 'none'}`);
+        
+        if (resultCode === 0 && receiptNumber) {
+          console.log(`✅ Payment confirmed via M-Pesa API query. Updating transaction...`);
+          await finalizeOrderPayment({
+            orderId: orderId,
+            paymentTransaction: transaction,
+            receiptNumber: receiptNumber,
+            req,
+            context: 'Missing callback recovery (M-Pesa API query)'
+          });
+          console.log(`✅ Transaction #${transaction.id} and Order #${orderId} updated via M-Pesa API query`);
+          // Reload transaction to get updated status
+          await transaction.reload().catch(() => {});
+        } else {
+          console.log(`ℹ️  M-Pesa API shows payment is still pending or failed. ResultCode: ${resultCode}`);
+        }
+      } catch (mpesaQueryError) {
+        console.error(`❌ Error querying M-Pesa API for missing callback:`, mpesaQueryError.message);
+        // Don't fail the request - just log the error
       }
     }
 
@@ -2252,28 +2385,21 @@ router.post('/test-callback/:checkoutRequestID', async (req, res) => {
       const receiptNumber = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
       const amount = items.find(item => item.Name === 'Amount')?.Value;
       
-      // Update transaction using raw SQL
-      await db.sequelize.query(
-        `UPDATE transactions SET status = 'completed', "paymentStatus" = 'paid', "receiptNumber" = :receiptNumber, "updatedAt" = NOW() WHERE id = :id`,
-        {
-          replacements: {
-            id: transaction.id,
-            receiptNumber: receiptNumber || null
-          }
-        }
-      );
-      
-      // Update order
-      await db.sequelize.query(
-        `UPDATE orders SET status = 'confirmed', "updatedAt" = NOW() WHERE id = :id`,
-        {
-          replacements: { id: order.id }
-        }
-      );
-      
-      // Verify updates - reload with all relationships
+      // Reload transaction to ensure we have the latest data
       await transaction.reload();
-      await order.reload({
+      
+      // Use finalizeOrderPayment to properly handle payment confirmation
+      // This ensures all transactions are updated correctly and Socket.IO events are emitted
+      const finalizeResult = await finalizeOrderPayment({
+        orderId: order.id,
+        paymentTransaction: transaction,
+        receiptNumber: receiptNumber || null,
+        req,
+        context: 'Test callback simulation'
+      });
+      
+      // Reload order to get updated data
+      const updatedOrder = finalizeResult.order || await db.Order.findByPk(order.id, {
         include: [
           {
             model: db.OrderItem,
@@ -2283,50 +2409,19 @@ router.post('/test-callback/:checkoutRequestID', async (req, res) => {
         ]
       });
       
-      // Prepare order data for socket event
-      const orderData = order.toJSON ? order.toJSON() : order;
-      const paymentConfirmedAt = new Date().toISOString();
-      
-      const io = req.app.get('io');
-      if (io) {
-        const paymentConfirmedData = {
-          orderId: order.id,
-          status: 'confirmed',
-          paymentStatus: 'paid',
-          receiptNumber: receiptNumber,
-          amount: amount,
-          transactionId: transaction.id,
-          transactionStatus: 'completed',
-          paymentConfirmedAt: paymentConfirmedAt,
-          order: orderData,
-          message: `Payment confirmed for Order #${order.id}`
-        };
-        
-        io.to(`order-${order.id}`).emit('payment-confirmed', paymentConfirmedData);
-        
-        // Notify driver if order is assigned to one
-        if (order.driverId) {
-          io.to(`driver-${order.driverId}`).emit('payment-confirmed', paymentConfirmedData);
-          console.log(`📡 Emitted payment-confirmed event to driver-${order.driverId} for Order #${order.id}`);
-        }
-        
-        io.to('admin').emit('payment-confirmed', {
-          ...paymentConfirmedData,
-          message: `Payment confirmed for Order #${order.id} via M-Pesa`
-        });
-      }
-      
+      // finalizeOrderPayment already emits Socket.IO events, so we just return success
       res.json({
         success: true,
         message: 'Test callback processed successfully',
         transaction: {
           id: transaction.id,
-          status: transaction.status,
-          receiptNumber: transaction.receiptNumber
+          status: 'completed',
+          receiptNumber: receiptNumber || finalizeResult.receipt
         },
         order: {
-          id: order.id,
-          status: order.status
+          id: updatedOrder.id,
+          status: updatedOrder.status,
+          paymentStatus: updatedOrder.paymentStatus
         }
       });
     } else {
@@ -2347,7 +2442,8 @@ router.post('/b2c-callback', (req, res) => {
   res.status(200).json({ ResultCode: 0, ResultDesc: 'Accepted' });
 
   // Process callback in the background
-  setImmediate(async () => {
+  // CRITICAL: Use IIFE pattern to properly handle async errors
+  (async () => {
     try {
       const callbackData = req.body;
 
@@ -2517,7 +2613,12 @@ router.post('/b2c-callback', (req, res) => {
       }
     } catch (error) {
       console.error('❌ Error processing B2C callback:', error);
+      console.error('Error stack:', error.stack);
     }
+  })().catch((error) => {
+    // Catch any unhandled promise rejections from the async IIFE
+    console.error('❌ Unhandled error in B2C callback processing:', error);
+    console.error('Error stack:', error.stack);
   });
 });
 

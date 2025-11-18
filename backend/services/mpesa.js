@@ -26,18 +26,15 @@ const getCallbackUrl = () => {
   if (callbackUrl) {
     // Validate it's a proper URL
     if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
-      console.warn('⚠️  Localhost callback URL detected. M-Pesa requires a publicly accessible URL.');
-      console.warn('⚠️  Please use ngrok or set a public URL. Falling back to production URL.');
-      callbackUrl = 'https://liquoros-backend-910510650031.us-central1.run.app/api/mpesa/callback';
-    } else {
-      console.log(`✅ Using callback URL from environment: ${callbackUrl}`);
-      return callbackUrl;
+      throw new Error('❌ Localhost callback URL detected. M-Pesa requires a publicly accessible URL. Please set MPESA_CALLBACK_URL to your ngrok URL in .env file.');
     }
+    console.log(`✅ Using callback URL from environment: ${callbackUrl}`);
+    return callbackUrl;
   }
   
   // Priority 2: Check for ngrok URL in environment (common ngrok env var)
   const ngrokUrl = process.env.NGROK_URL;
-  if (ngrokUrl && !callbackUrl) {
+  if (ngrokUrl) {
     callbackUrl = `${ngrokUrl}/api/mpesa/callback`;
     console.log(`✅ Using ngrok URL for callbacks: ${callbackUrl}`);
     return callbackUrl;
@@ -50,17 +47,8 @@ const getCallbackUrl = () => {
     return callbackUrl;
   }
   
-  // Priority 4: Local development - use production URL as fallback
-  // This is a fallback - ideally you should use ngrok
-  console.warn('⚠️  No callback URL configured for local development.');
-  console.warn('⚠️  To use ngrok:');
-  console.warn('   1. Install ngrok: https://ngrok.com/download');
-  console.warn('   2. Run: ngrok http 5001');
-  console.warn('   3. Set MPESA_CALLBACK_URL in .env to: https://your-ngrok-url.ngrok.io/api/mpesa/callback');
-  console.warn('⚠️  Falling back to production URL (callbacks will go to production server, not local).');
-  callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/callback';
-  
-  return callbackUrl;
+  // Local development: NO FALLBACK - require explicit configuration
+  throw new Error('❌ No callback URL configured for local development. Please set MPESA_CALLBACK_URL in .env file to your ngrok URL (e.g., https://your-ngrok-url.ngrok-free.dev/api/mpesa/callback)');
 };
 
 // Get callback URL function - call at runtime to ensure environment is loaded
@@ -360,16 +348,14 @@ async function initiateB2C(phoneNumber, amount, remarks = 'Driver withdrawal', o
       
       if (callbackUrl) {
         if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
-          console.warn('⚠️  Localhost B2C callback URL detected. Falling back to production URL.');
-          callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/b2c-callback';
-        } else {
-          console.log(`✅ Using B2C callback URL from environment: ${callbackUrl}`);
-          return callbackUrl;
+          throw new Error('❌ Localhost B2C callback URL detected. M-Pesa requires a publicly accessible URL. Please set MPESA_B2C_CALLBACK_URL to your ngrok URL in .env file.');
         }
+        console.log(`✅ Using B2C callback URL from environment: ${callbackUrl}`);
+        return callbackUrl;
       }
       
       const ngrokUrl = process.env.NGROK_URL;
-      if (ngrokUrl && !callbackUrl) {
+      if (ngrokUrl) {
         callbackUrl = `${ngrokUrl}/api/mpesa/b2c-callback`;
         console.log(`✅ Using ngrok URL for B2C callbacks: ${callbackUrl}`);
         return callbackUrl;
@@ -381,9 +367,7 @@ async function initiateB2C(phoneNumber, amount, remarks = 'Driver withdrawal', o
         return callbackUrl;
       }
       
-      console.warn('⚠️  No B2C callback URL configured. Falling back to production URL.');
-      callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/b2c-callback';
-      return callbackUrl;
+      throw new Error('❌ No B2C callback URL configured for local development. Please set MPESA_B2C_CALLBACK_URL in .env file to your ngrok URL.');
     };
 
     const callbackUrl = getB2CCallbackUrl();
