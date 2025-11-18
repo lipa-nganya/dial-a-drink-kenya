@@ -149,6 +149,9 @@ async function loadFullApplication() {
     // Initialize database asynchronously (non-blocking)
     initializeDatabase(db, seedData);
     
+    // Start background job to auto-sync pending M-Pesa transactions
+    startTransactionSyncJob();
+    
     console.log('✅ Full application loaded successfully');
   } catch (appError) {
     console.error('⚠️ Error loading full application:', appError.message);
