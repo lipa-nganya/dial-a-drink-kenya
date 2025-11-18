@@ -31,7 +31,7 @@ const CategoryCard = ({ category }) => {
       window.location.hostname.includes('onrender.com') ||
       window.location.hostname.includes('run.app');
     const baseUrl = isHosted
-      ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     
     return `${baseUrl}${imagePath}`;
