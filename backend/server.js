@@ -238,3 +238,105 @@ async function addMissingColumns(db) {
     return false;
   }
 }
+
+// Background job to automatically sync pending M-Pesa transactions
+// This runs every 30 seconds to check for completed payments that didn't receive callbacks
+function startTransactionSyncJob() {
+  console.log('🔄 Starting background transaction sync job (runs every 30 seconds)...');
+  
+  // Run immediately on startup, then every 30 seconds
+  setTimeout(() => {
+    syncPendingTransactions();
+  }, 10000); // Wait 10 seconds after startup to ensure DB is ready
+  
+  // Then run every 30 seconds
+  setInterval(() => {
+    syncPendingTransactions();
+  }, 30000); // 30 seconds
+}
+
+async function syncPendingTransactions() {
+  try {
+    const db = require('./models');
+    const { Op } = require('sequelize');
+    const mpesaService = require('./services/mpesa');
+    const { finalizeOrderPayment } = require('./routes/mpesa');
+    
+    // Find all pending payment transactions created in the last 30 minutes
+    // (older transactions are likely failed/cancelled)
+    const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
+    
+    const pendingTransactions = await db.Transaction.findAll({
+      where: {
+        transactionType: 'payment',
+        status: {
+          [Op.in]: ['pending', 'processing']
+        },
+        checkoutRequestID: {
+          [Op.ne]: null
+        },
+        createdAt: {
+          [Op.gte]: thirtyMinutesAgo
+        }
+      },
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: ['id', 'status', 'paymentStatus']
+      }],
+      limit: 20 // Process max 20 at a time to avoid rate limits
+    });
+    
+    if (pendingTransactions.length === 0) {
+      return; // No pending transactions
+    }
+    
+    console.log(`🔄 Background sync: Checking ${pendingTransactions.length} pending transaction(s)...`);
+    
+    for (const transaction of pendingTransactions) {
+      try {
+        // Skip if order is already paid
+        if (transaction.order && transaction.order.paymentStatus === 'paid') {
+          continue;
+        }
+        
+        // Query M-Pesa for status
+        const mpesaStatus = await mpesaService.checkTransactionStatus(transaction.checkoutRequestID);
+        
+        const callbackMetadata = mpesaStatus?.CallbackMetadata;
+        const items = callbackMetadata?.Item || [];
+        const receiptFromMetadata = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
+        const receiptFromResponse = mpesaStatus?.ReceiptNumber;
+        const receiptNumber = receiptFromMetadata || receiptFromResponse;
+        const resultCode = mpesaStatus?.ResultCode;
+        
+        // Payment completed if ResultCode is 0 and we have a receipt number
+        if (resultCode === 0 && receiptNumber) {
+          console.log(`✅✅✅ Background sync: Payment completed for Order #${transaction.orderId}! Receipt: ${receiptNumber}`);
+          
+          // Finalize the payment
+          await finalizeOrderPayment({
+            orderId: transaction.orderId,
+            paymentTransaction: transaction,
+            receiptNumber: receiptNumber,
+            req: null, // No req object in background job
+            context: 'Background auto-sync job'
+          });
+          
+          console.log(`✅✅✅ Background sync: Order #${transaction.orderId} updated automatically!`);
+        }
+      } catch (error) {
+        // Don't log errors for rate limits (429) - these are expected
+        if (!error.message.includes('429')) {
+          console.error(`❌ Background sync error for transaction #${transaction.id}:`, error.message);
+        }
+        // Continue with next transaction
+      }
+    }
+    
+    console.log(`✅ Background sync completed`);
+  } catch (error) {
+    console.error('❌ Background transaction sync job error:', error.message);
+    // Don't throw - this is a background job, failures shouldn't crash the server
+  }
+}
