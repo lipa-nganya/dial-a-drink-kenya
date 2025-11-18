@@ -108,7 +108,7 @@ const OrderSuccess = () => {
         window.location.hostname.includes('onrender.com') ||
         window.location.hostname.includes('run.app');
       const socketUrl = isHosted
-        ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+        ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
         : 'http://localhost:5001';
       
       const socket = io(socketUrl);
@@ -355,7 +355,7 @@ const OrderSuccess = () => {
         }
       };
       
-      pollInterval = setInterval(pollForPayment, 5000); // Poll every 5 seconds
+      pollInterval = setInterval(pollForPayment, 10000); // Poll every 10 seconds (reduced frequency to avoid rate limits - backend handles auto-sync)
 
       return () => {
         if (pollInterval) {
