@@ -214,12 +214,18 @@ const OrderSuccess = () => {
               mpesaPollResponse = await api.get(`/mpesa/poll-transaction/${transactionResponse.data.checkoutRequestID}`);
               console.log('📊 M-Pesa API poll response:', mpesaPollResponse?.data);
               
-              // If M-Pesa says completed, refresh transaction status
-              if (mpesaPollResponse?.data?.status === 'completed') {
+              // If M-Pesa says completed (has receipt number), refresh transaction status
+              // Check both status and receiptNumber to confirm completion
+              if (mpesaPollResponse?.data?.status === 'completed' || mpesaPollResponse?.data?.receiptNumber) {
+                console.log('✅ M-Pesa API confirmed payment completion. Refreshing transaction status...');
                 // Re-fetch transaction status to get updated data
                 const updatedTransactionResponse = await api.get(`/mpesa/transaction-status/${orderId}`).catch(() => null);
                 if (updatedTransactionResponse?.data) {
                   transactionResponse.data = updatedTransactionResponse.data;
+                  // Also update payment check response if available
+                  if (updatedTransactionResponse.data.receiptNumber) {
+                    paymentCheckResponse = { data: { paymentCompleted: true, receiptNumber: updatedTransactionResponse.data.receiptNumber } };
+                  }
                 }
               }
             } catch (pollError) {
