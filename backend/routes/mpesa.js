@@ -2005,19 +2005,31 @@ router.get('/transaction-status/:orderId', async (req, res) => {
         console.log(`📊 M-Pesa API response: ResultCode=${resultCode}, Receipt=${receiptNumber || 'none'}`);
         
         if (resultCode === 0 && receiptNumber) {
-          console.log(`✅ Payment confirmed via M-Pesa API query. Updating transaction...`);
-          await finalizeOrderPayment({
-            orderId: orderId,
-            paymentTransaction: transaction,
-            receiptNumber: receiptNumber,
-            req,
-            context: 'Missing callback recovery (M-Pesa API query)'
-          });
-          console.log(`✅ Transaction #${transaction.id} and Order #${orderId} updated via M-Pesa API query`);
-          // Reload transaction to get updated status
-          await transaction.reload().catch(() => {});
+          console.log(`✅✅✅ Payment confirmed via M-Pesa API query! ResultCode: ${resultCode}, Receipt: ${receiptNumber}`);
+          console.log(`🔄 Updating transaction and order...`);
+          try {
+            await finalizeOrderPayment({
+              orderId: orderId,
+              paymentTransaction: transaction,
+              receiptNumber: receiptNumber,
+              req,
+              context: 'Missing callback recovery (M-Pesa API query)'
+            });
+            console.log(`✅✅✅ Transaction #${transaction.id} and Order #${orderId} updated via M-Pesa API query`);
+            // Reload transaction to get updated status
+            await transaction.reload().catch(() => {});
+            // Also reload order to ensure we return latest status
+            const updatedOrder = await db.Order.findByPk(orderId).catch(() => null);
+            if (updatedOrder) {
+              transaction.order = updatedOrder;
+            }
+          } catch (finalizeError) {
+            console.error(`❌ Error finalizing payment via M-Pesa API query:`, finalizeError);
+            console.error(`❌ Error stack:`, finalizeError.stack);
+            // Don't throw - continue to return current status
+          }
         } else {
-          console.log(`ℹ️  M-Pesa API shows payment is still pending or failed. ResultCode: ${resultCode}`);
+          console.log(`ℹ️  M-Pesa API shows payment is still pending or failed. ResultCode: ${resultCode}, Receipt: ${receiptNumber || 'none'}`);
         }
       } catch (mpesaQueryError) {
         console.error(`❌ Error querying M-Pesa API for missing callback:`, mpesaQueryError.message);
