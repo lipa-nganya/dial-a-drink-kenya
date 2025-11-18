@@ -873,23 +873,35 @@ router.post('/callback', async (req, res) => {
       
       // CRITICAL: Check if body is empty or malformed
       if (!callbackData || (typeof callbackData === 'object' && Object.keys(callbackData).length === 0)) {
-        console.error('⚠️  WARNING: Callback body is empty or undefined!');
+        console.error('❌❌❌ CRITICAL: Callback body is empty or undefined!');
         console.error('   This might indicate a request body parsing issue.');
         console.error('   Body type:', typeof callbackData);
         console.error('   Body value:', callbackData);
         console.error('   Headers:', JSON.stringify(req.headers, null, 2));
+        console.error('   Raw body:', req.body);
+        console.error('   This callback will NOT be processed!');
         return; // Exit early if no body data
       }
 
-      console.log('Full callback data:', JSON.stringify(callbackData, null, 2));
+      console.log('✅✅✅ Full callback data received:', JSON.stringify(callbackData, null, 2));
       console.log('═══════════════════════════════════════════════════════');
       
-      // Also log to a separate file for easier debugging
-      console.log(`🎯 CALLBACK RECEIVED - Check backend logs above for processing details`);
+      // Check callback structure
+      if (!callbackData.Body) {
+        console.error('❌❌❌ CRITICAL: Callback missing Body property!');
+        console.error('   Callback structure:', Object.keys(callbackData));
+        console.error('   Full data:', JSON.stringify(callbackData, null, 2));
+        return;
+      }
       
-      // Log the raw request body for debugging
-      console.log('Raw request body:', JSON.stringify(req.body, null, 2));
-      console.log('Request headers:', JSON.stringify(req.headers, null, 2));
+      if (!callbackData.Body.stkCallback) {
+        console.error('❌❌❌ CRITICAL: Callback missing Body.stkCallback property!');
+        console.error('   Body structure:', Object.keys(callbackData.Body));
+        console.error('   Full data:', JSON.stringify(callbackData, null, 2));
+        return;
+      }
+      
+      console.log(`🎯 CALLBACK RECEIVED - Processing payment...`);
 
     // M-Pesa callback structure:
     // {
