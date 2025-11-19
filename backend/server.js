@@ -231,6 +231,24 @@ async function addMissingColumns(db) {
       console.log('✅ branchId column already exists in orders table');
     }
     
+    // Check if barcode column exists in drinks table
+    const [barcodeResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drinks' AND column_name = 'barcode'
+    `);
+    
+    if (barcodeResults.length === 0) {
+      console.log('📝 Adding missing barcode column to drinks table...');
+      await db.sequelize.query(`
+        ALTER TABLE drinks 
+        ADD COLUMN barcode VARCHAR(255) UNIQUE
+      `);
+      console.log('✅ Added barcode column to drinks table');
+    } else {
+      console.log('✅ barcode column already exists in drinks table');
+    }
+    
     // Check if stock column exists in drinks table
     const [stockResults] = await db.sequelize.query(`
       SELECT column_name 
