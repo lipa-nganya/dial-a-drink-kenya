@@ -372,12 +372,22 @@ const POS = () => {
   };
 
   const handleCheckout = () => {
+    console.log('🛒 handleCheckout called:', {
+      cartLength: cart.length,
+      customerName,
+      customerPhone,
+      paymentMethod,
+      amountReceived,
+      mpesaPhone,
+      total: getTotal()
+    });
+
     if (cart.length === 0) {
       setOrderError('Cart is empty');
       return;
     }
 
-    if (!customerName || !customerPhone) {
+    if (!customerName?.trim() || !customerPhone?.trim()) {
       setOrderError('Please enter customer name and phone number');
       return;
     }
@@ -385,7 +395,7 @@ const POS = () => {
     if (paymentMethod === 'cash') {
       const received = parseFloat(amountReceived) || 0;
       const total = getTotal();
-      if (!amountReceived || received <= 0) {
+      if (!amountReceived || amountReceived.trim() === '' || isNaN(received) || received <= 0) {
         setOrderError('Please enter the amount received from customer');
         return;
       }
@@ -395,7 +405,7 @@ const POS = () => {
       }
     }
 
-    if (paymentMethod === 'mpesa' && !mpesaPhone) {
+    if (paymentMethod === 'mpesa' && !mpesaPhone?.trim()) {
       setOrderError('Please enter M-Pesa phone number');
       return;
     }
@@ -1022,31 +1032,65 @@ const POS = () => {
                     />
                   )}
 
-                  <Button
-                    fullWidth
-                    variant="contained"
-                    size="large"
-                    startIcon={<Payment />}
-                    onClick={handleCheckout}
-                    disabled={
-                      cart.length === 0 || 
-                      !customerName || 
-                      !customerPhone || 
-                      (paymentMethod === 'cash' && (!amountReceived || parseFloat(amountReceived) < getTotal()))
-                    }
-                    sx={{
-                      backgroundColor: colors.accent,
-                      color: '#000',
-                      fontWeight: 'bold',
-                      py: 1.5,
-                      '&:hover': {
-                        backgroundColor: colors.accent,
-                        opacity: 0.9
+                  {(() => {
+                    const isDisabled = cart.length === 0 || 
+                      !customerName?.trim() || 
+                      !customerPhone?.trim() || 
+                      (paymentMethod === 'cash' && (!amountReceived || isNaN(parseFloat(amountReceived)) || parseFloat(amountReceived) < getTotal())) ||
+                      (paymentMethod === 'mpesa' && !mpesaPhone?.trim());
+                    
+                    let disabledReason = '';
+                    if (cart.length === 0) {
+                      disabledReason = 'Cart is empty';
+                    } else if (!customerName?.trim()) {
+                      disabledReason = 'Please enter customer name';
+                    } else if (!customerPhone?.trim()) {
+                      disabledReason = 'Please enter customer phone number';
+                    } else if (paymentMethod === 'cash' && (!amountReceived || isNaN(parseFloat(amountReceived)) || parseFloat(amountReceived) < getTotal())) {
+                      if (!amountReceived) {
+                        disabledReason = 'Please enter amount received';
+                      } else if (parseFloat(amountReceived) < getTotal()) {
+                        disabledReason = `Amount received (KES ${parseFloat(amountReceived).toFixed(2)}) is less than total (KES ${getTotal().toFixed(2)})`;
                       }
-                    }}
-                  >
-                    Process Payment
-                  </Button>
+                    } else if (paymentMethod === 'mpesa' && !mpesaPhone?.trim()) {
+                      disabledReason = 'Please enter M-Pesa phone number';
+                    }
+                    
+                    return (
+                      <Box>
+                        <Button
+                          fullWidth
+                          variant="contained"
+                          size="large"
+                          startIcon={<Payment />}
+                          onClick={handleCheckout}
+                          disabled={isDisabled}
+                          sx={{
+                            backgroundColor: colors.accent,
+                            color: '#000',
+                            fontWeight: 'bold',
+                            py: 1.5,
+                            '&:hover': {
+                              backgroundColor: colors.accent,
+                              opacity: 0.9
+                            },
+                            '&:disabled': {
+                              backgroundColor: colors.textSecondary,
+                              color: colors.textPrimary,
+                              opacity: 0.6
+                            }
+                          }}
+                        >
+                          Process Payment
+                        </Button>
+                        {isDisabled && disabledReason && (
+                          <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>
+                            {disabledReason}
+                          </Typography>
+                        )}
+                      </Box>
+                    );
+                  })()}
                 </>
               )}
             </CardContent>
