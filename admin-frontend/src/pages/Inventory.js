@@ -254,7 +254,7 @@ const InventoryPage = () => {
     try {
       const stockValue = parseInt(newStock) || 0;
       if (isNaN(stockValue) || stockValue < 0) {
-        setOrderError('Stock must be a non-negative whole number');
+        setError('Stock must be a non-negative whole number');
         return;
       }
 
@@ -262,9 +262,11 @@ const InventoryPage = () => {
       setDrinks(drinks.map(drink => 
         drink.id === drinkId ? { ...drink, stock: stockValue } : drink
       ));
+      // Clear any previous errors on success
+      setError(null);
     } catch (error) {
       console.error('Error updating stock:', error);
-      setOrderError(error.response?.data?.error || 'Failed to update stock');
+      setError(error.response?.data?.error || 'Failed to update stock');
     }
   };
 
