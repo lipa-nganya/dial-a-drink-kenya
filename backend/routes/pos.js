@@ -4,6 +4,10 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
 
+// In-memory cart storage (in production, use Redis or database)
+// Key: 'pos_cart', Value: Array of cart items
+let posCart = [];
+
 /**
  * Build phone number variants for lookup (handles Kenyan phone formats)
  */
@@ -588,6 +592,10 @@ router.post('/orders/:id/complete', async (req, res) => {
 
     await transaction.commit();
 
+    // Clear POS cart after successful order
+    posCart = [];
+    console.log('✅ POS cart cleared after order completion');
+
     res.json({
       success: true,
       message: 'POS order completed successfully',
@@ -597,6 +605,149 @@ router.post('/orders/:id/complete', async (req, res) => {
     await transaction.rollback();
     console.error('Error completing POS order:', error);
     res.status(500).json({ error: 'Failed to complete POS order' });
+  }
+});
+
+/**
+ * Get current POS cart
+ * GET /api/pos/cart
+ */
+router.get('/cart', async (req, res) => {
+  try {
+    res.json({ cart: posCart });
+  } catch (error) {
+    console.error('Error fetching POS cart:', error);
+    res.status(500).json({ error: 'Failed to fetch cart' });
+  }
+});
+
+/**
+ * Add item to POS cart
+ * POST /api/pos/cart/add
+ * Body: { drinkId, quantity }
+ */
+router.post('/cart/add', async (req, res) => {
+  try {
+    const { drinkId, quantity = 1 } = req.body;
+
+    if (!drinkId) {
+      return res.status(400).json({ error: 'drinkId is required' });
+    }
+
+    // Fetch drink details
+    const drink = await db.Drink.findByPk(drinkId, {
+      include: [{
+        model: db.Category,
+        as: 'category',
+        attributes: ['id', 'name']
+      }]
+    });
+
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+
+    // Check if item already in cart
+    const existingIndex = posCart.findIndex(item => item.drinkId === drinkId);
+
+    if (existingIndex >= 0) {
+      // Update quantity
+      posCart[existingIndex].quantity += quantity;
+    } else {
+      // Add new item
+      posCart.push({
+        drinkId: drink.id,
+        name: drink.name,
+        price: parseFloat(drink.price) || 0,
+        quantity: quantity,
+        image: drink.image,
+        category: drink.category ? { id: drink.category.id, name: drink.category.name } : null
+      });
+    }
+
+    console.log(`✅ Added item to POS cart: ${drink.name} (qty: ${quantity})`);
+    res.json({ success: true, cart: posCart });
+  } catch (error) {
+    console.error('Error adding item to POS cart:', error);
+    res.status(500).json({ error: 'Failed to add item to cart' });
+  }
+});
+
+/**
+ * Remove item from POS cart
+ * POST /api/pos/cart/remove
+ * Body: { drinkId }
+ */
+router.post('/cart/remove', async (req, res) => {
+  try {
+    const { drinkId } = req.body;
+
+    if (!drinkId) {
+      return res.status(400).json({ error: 'drinkId is required' });
+    }
+
+    const initialLength = posCart.length;
+    posCart = posCart.filter(item => item.drinkId !== drinkId);
+
+    if (posCart.length < initialLength) {
+      console.log(`✅ Removed item from POS cart: drinkId ${drinkId}`);
+      res.json({ success: true, cart: posCart });
+    } else {
+      res.status(404).json({ error: 'Item not found in cart' });
+    }
+  } catch (error) {
+    console.error('Error removing item from POS cart:', error);
+    res.status(500).json({ error: 'Failed to remove item from cart' });
+  }
+});
+
+/**
+ * Update item quantity in POS cart
+ * POST /api/pos/cart/update
+ * Body: { drinkId, quantity }
+ */
+router.post('/cart/update', async (req, res) => {
+  try {
+    const { drinkId, quantity } = req.body;
+
+    if (!drinkId || quantity === undefined) {
+      return res.status(400).json({ error: 'drinkId and quantity are required' });
+    }
+
+    if (quantity <= 0) {
+      // Remove item if quantity is 0 or less
+      posCart = posCart.filter(item => item.drinkId !== drinkId);
+      res.json({ success: true, cart: posCart });
+      return;
+    }
+
+    const itemIndex = posCart.findIndex(item => item.drinkId === drinkId);
+
+    if (itemIndex >= 0) {
+      posCart[itemIndex].quantity = quantity;
+      console.log(`✅ Updated item quantity in POS cart: drinkId ${drinkId}, qty: ${quantity}`);
+      res.json({ success: true, cart: posCart });
+    } else {
+      res.status(404).json({ error: 'Item not found in cart' });
+    }
+  } catch (error) {
+    console.error('Error updating item in POS cart:', error);
+    res.status(500).json({ error: 'Failed to update item in cart' });
+  }
+});
+
+/**
+ * Clear POS cart
+ * DELETE /api/pos/cart
+ */
+router.delete('/cart', async (req, res) => {
+  try {
+    posCart = [];
+    console.log('✅ POS cart cleared');
+    res.json({ success: true, message: 'Cart cleared' });
+  } catch (error) {
+    console.error('Error clearing POS cart:', error);
+    res.status(500).json({ error: 'Failed to clear cart' });
   }
 });
 

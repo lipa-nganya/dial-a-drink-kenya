@@ -47,5 +47,30 @@ export const scanForPOS = async (barcode) => {
   return response.data;
 };
 
+export const getPOSCart = async () => {
+  const response = await api.get('/pos/cart');
+  return response.data;
+};
+
+export const addToPOSCart = async (drinkId, quantity = 1) => {
+  const response = await api.post('/pos/cart/add', { drinkId, quantity });
+  return response.data;
+};
+
+export const removeFromPOSCart = async (drinkId) => {
+  const response = await api.post('/pos/cart/remove', { drinkId });
+  return response.data;
+};
+
+export const updatePOSCartItem = async (drinkId, quantity) => {
+  const response = await api.post('/pos/cart/update', { drinkId, quantity });
+  return response.data;
+};
+
+export const clearPOSCart = async () => {
+  const response = await api.delete('/pos/cart');
+  return response.data;
+};
+
 export default api;
 
