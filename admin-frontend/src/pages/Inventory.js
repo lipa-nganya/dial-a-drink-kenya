@@ -712,6 +712,28 @@ const InventoryPage = () => {
                     )}
                   </Box>
 
+                  {/* Stock Quantity Display */}
+                  {drink.stock !== undefined && drink.stock !== null && (
+                    <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Inventory 
+                        sx={{ 
+                          fontSize: '0.9rem', 
+                          color: drink.stock > 0 ? '#2196F3' : '#F44336' 
+                        }} 
+                      />
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: drink.stock > 0 ? '#2196F3' : '#F44336',
+                          fontWeight: 'bold',
+                          fontSize: '0.75rem'
+                        }}
+                      >
+                        Stock: {drink.stock}
+                      </Typography>
+                    </Box>
+                  )}
+
                   {/* ABV Display */}
                   {drink.abv && (
                     <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1, mt: 0 }}>
