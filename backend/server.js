@@ -267,6 +267,22 @@ async function addMissingColumns(db) {
       console.log('✅ stock column already exists in drinks table');
     }
     
+    // Check if 'cash' exists in payment_method_enum
+    const [enumResults] = await db.sequelize.query(`
+      SELECT unnest(enum_range(NULL::payment_method_enum))::text AS enum_value
+    `);
+    
+    const enumValues = enumResults.map(r => r.enum_value);
+    if (!enumValues.includes('cash')) {
+      console.log('📝 Adding "cash" to payment_method_enum...');
+      await db.sequelize.query(`
+        ALTER TYPE payment_method_enum ADD VALUE IF NOT EXISTS 'cash'
+      `);
+      console.log('✅ Added "cash" to payment_method_enum');
+    } else {
+      console.log('✅ "cash" already exists in payment_method_enum');
+    }
+    
     return true;
   } catch (error) {
     console.warn('Column migration failed:', error.message);

@@ -48,7 +48,7 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'pay_on_delivery'
     },
     paymentMethod: {
-      type: DataTypes.ENUM('card', 'mobile_money'),
+      type: DataTypes.ENUM('card', 'mobile_money', 'cash'),
       allowNull: true
     },
     driverId: {
