@@ -182,9 +182,61 @@ router.post('/', async (req, res) => {
       }
 
       // Find closest branch to delivery address
-      const closestBranch = await findClosestBranch(deliveryAddress);
-      const branchId = closestBranch ? closestBranch.id : null;
-      console.log(`📍 Closest branch found: ${closestBranch ? `${closestBranch.name} (ID: ${branchId})` : 'None'}`);
+      // CRITICAL: Always assign a branch if one exists - this ensures orders are never created without a branch
+      let closestBranch = null;
+      let branchId = null;
+      
+      try {
+        closestBranch = await findClosestBranch(deliveryAddress);
+        branchId = closestBranch ? closestBranch.id : null;
+        console.log(`📍 Closest branch found: ${closestBranch ? `${closestBranch.name} (ID: ${branchId})` : 'None'}`);
+      } catch (branchError) {
+        console.error('❌ Error during branch assignment:', branchError);
+        closestBranch = null;
+        branchId = null;
+      }
+      
+      // ALWAYS ensure a branch is assigned if any active branches exist
+      // This is a critical fallback to ensure orders are never created without a branch
+      if (!branchId) {
+        console.log('⚠️  No branch assigned from findClosestBranch. Attempting fallback to first active branch...');
+        try {
+          const fallbackBranch = await db.Branch.findOne({
+            where: { isActive: true },
+            order: [['id', 'ASC']]
+          });
+          if (fallbackBranch) {
+            branchId = fallbackBranch.id;
+            closestBranch = fallbackBranch;
+            console.log(`✅ Fallback branch assigned: ${fallbackBranch.name} (ID: ${branchId})`);
+          } else {
+            console.error('❌ No active branches found in database. Order will be created without branch assignment.');
+          }
+        } catch (fallbackError) {
+          console.error('❌ Fallback branch assignment failed:', fallbackError);
+          // Last resort: try one more time without transaction
+          try {
+            const lastResortBranch = await db.Branch.findOne({
+              where: { isActive: true },
+              order: [['id', 'ASC']]
+            });
+            if (lastResortBranch) {
+              branchId = lastResortBranch.id;
+              closestBranch = lastResortBranch;
+              console.log(`✅ Last resort branch assigned: ${lastResortBranch.name} (ID: ${branchId})`);
+            }
+          } catch (lastError) {
+            console.error('❌ Last resort branch assignment also failed:', lastError);
+          }
+        }
+      }
+      
+      // Final check: log branch assignment status
+      if (branchId) {
+        console.log(`✅ Branch assignment confirmed: Branch ID ${branchId} will be assigned to order`);
+      } else {
+        console.warn('⚠️  WARNING: Order will be created WITHOUT a branch assignment. This should not happen if branches exist.');
+      }
 
       // Find nearest active driver to the assigned branch
       if (branchId) {

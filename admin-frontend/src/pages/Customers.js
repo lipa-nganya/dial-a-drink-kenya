@@ -40,6 +40,7 @@ import {
   getTransactionStatusChipProps
 } from '../utils/chipStyles';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 const formatCurrency = (value) => `KES ${(Number(value || 0)).toLocaleString('en-KE', {
   minimumFractionDigits: 2,
@@ -69,6 +70,7 @@ const formatDate = (date) => {
 };
 
 const Customers = () => {
+  const { isDarkMode, colors } = useTheme();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -163,9 +165,9 @@ const Customers = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <People sx={{ color: '#00E0B8', fontSize: 40 }} />
+        <People sx={{ color: colors.accentText, fontSize: 40 }} />
         <Box>
-          <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
             Customers
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
@@ -181,8 +183,8 @@ const Customers = () => {
           onClick={fetchCustomers}
           disabled={loading}
           sx={{
-            borderColor: '#00E0B8',
-            color: '#00E0B8',
+            borderColor: colors.accentText,
+            color: colors.accentText,
             '&:hover': {
               borderColor: '#00C4A3',
               backgroundColor: 'rgba(0, 224, 184, 0.1)'
@@ -204,30 +206,30 @@ const Customers = () => {
           <CircularProgress />
         </Box>
       ) : (
-        <TableContainer component={Paper} sx={{ backgroundColor: '#121212', border: '1px solid #333' }}>
+        <TableContainer component={Paper} sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ color: '#00E0B8' }}>Customer</TableCell>
-                <TableCell sx={{ color: '#00E0B8' }}>Contact</TableCell>
-                <TableCell sx={{ color: '#00E0B8' }}>Orders</TableCell>
-                <TableCell sx={{ color: '#00E0B8' }}>Total Spent</TableCell>
-                <TableCell sx={{ color: '#00E0B8' }}>Date Joined</TableCell>
-                <TableCell sx={{ color: '#00E0B8' }}>OTP</TableCell>
-                <TableCell sx={{ color: '#00E0B8' }} align="right">Actions</TableCell>
+                <TableCell sx={{ color: colors.accentText }}>Customer</TableCell>
+                <TableCell sx={{ color: colors.accentText }}>Contact</TableCell>
+                <TableCell sx={{ color: colors.accentText }}>Orders</TableCell>
+                <TableCell sx={{ color: colors.accentText }}>Total Spent</TableCell>
+                <TableCell sx={{ color: colors.accentText }}>Date Joined</TableCell>
+                <TableCell sx={{ color: colors.accentText }}>OTP</TableCell>
+                <TableCell sx={{ color: colors.accentText }} align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {customers.map((customer) => {
                 return (
                   <TableRow key={customer.id}>
-                    <TableCell sx={{ color: '#F5F5F5', fontWeight: 600 }}>
+                    <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                       {customer.name || 'Customer'}
                       <Typography variant="caption" display="block" color="text.secondary">
                         {customer.username}
                       </Typography>
                     </TableCell>
-                    <TableCell sx={{ color: '#F5F5F5' }}>
+                    <TableCell sx={{ color: colors.textPrimary }}>
                       {customer.phone && (
                         <Typography variant="body2" color="text.secondary">
                           {customer.phone}
@@ -239,7 +241,7 @@ const Customers = () => {
                         </Typography>
                       )}
                     </TableCell>
-                    <TableCell sx={{ color: '#F5F5F5' }}>
+                    <TableCell sx={{ color: colors.textPrimary }}>
                       <Chip
                         label={`${customer.totalOrders || 0}`}
                         color={customer.totalOrders > 0 ? 'success' : 'default'}
@@ -252,10 +254,10 @@ const Customers = () => {
                         </Typography>
                       )}
                     </TableCell>
-                    <TableCell sx={{ color: '#F5F5F5' }}>
+                    <TableCell sx={{ color: colors.textPrimary }}>
                       {formatCurrency(customer.totalSpent || 0)}
                     </TableCell>
-                    <TableCell sx={{ color: '#F5F5F5' }}>
+                    <TableCell sx={{ color: colors.textPrimary }}>
                       {formatDate(customer.dateJoined || customer.createdAt)}
                     </TableCell>
                     <TableCell>
@@ -264,7 +266,7 @@ const Customers = () => {
                           <IconButton
                             onClick={() => toggleOtpVisibility(customer)}
                             size="small"
-                            sx={{ color: '#00E0B8' }}
+                            sx={{ color: colors.accentText }}
                           >
                             {showOtps[customer.id] ? <VisibilityOff /> : <VpnKey />}
                           </IconButton>
@@ -275,14 +277,14 @@ const Customers = () => {
                         <Box sx={{ mt: 1 }}>
                           {customerOtps[customer.id].hasOtp ? (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Typography variant="body2" sx={{ color: '#F5F5F5', fontWeight: 600 }}>
+                              <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                                 OTP: {customerOtps[customer.id].otpCode}
                               </Typography>
                               <Tooltip title="Copy OTP">
                                 <IconButton
                                   size="small"
                                   onClick={() => handleCopyOtp(customer.id)}
-                                  sx={{ color: '#00E0B8' }}
+                                  sx={{ color: colors.accentText }}
                                 >
                                   <ContentCopy fontSize="inherit" />
                                 </IconButton>
@@ -303,8 +305,8 @@ const Customers = () => {
                         startIcon={<Visibility />}
                         onClick={() => handleOpenDetails(customer)}
                         sx={{
-                          borderColor: '#00E0B8',
-                          color: '#00E0B8',
+                          borderColor: colors.accentText,
+                          color: colors.accentText,
                           '&:hover': {
                             borderColor: '#00C4A3',
                             backgroundColor: 'rgba(0, 224, 184, 0.1)'
@@ -320,7 +322,7 @@ const Customers = () => {
 
               {customers.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} sx={{ color: '#999', textAlign: 'center', py: 4 }}>
+                  <TableCell colSpan={7} sx={{ color: colors.textSecondary, textAlign: 'center', py: 4 }}>
                     No customers found.
                   </TableCell>
                 </TableRow>
@@ -348,7 +350,7 @@ const Customers = () => {
             )}
           </Box>
         </DialogTitle>
-        <DialogContent dividers sx={{ backgroundColor: '#121212' }}>
+        <DialogContent dividers sx={{ backgroundColor: colors.paper }}>
           {detailsLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
@@ -359,33 +361,33 @@ const Customers = () => {
             <Box>
               <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{ p: 2, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+                  <Paper sx={{ p: 2, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
                     <Typography variant="caption" color="text.secondary">Total Orders</Typography>
-                    <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                    <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700 }}>
                       {customerDetails.stats.totalOrders}
                     </Typography>
                   </Paper>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{ p: 2, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+                  <Paper sx={{ p: 2, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
                     <Typography variant="caption" color="text.secondary">Total Spent</Typography>
-                    <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                    <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700 }}>
                       {formatCurrency(customerDetails.stats.totalSpent)}
                     </Typography>
                   </Paper>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{ p: 2, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+                  <Paper sx={{ p: 2, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
                     <Typography variant="caption" color="text.secondary">Date Joined</Typography>
-                    <Typography variant="h6" sx={{ color: '#F5F5F5', fontWeight: 700 }}>
+                    <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
                       {formatDate(customerDetails.stats.dateJoined)}
                     </Typography>
                   </Paper>
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{ p: 2, backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+                  <Paper sx={{ p: 2, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
                     <Typography variant="caption" color="text.secondary">Last Order</Typography>
-                    <Typography variant="h6" sx={{ color: '#F5F5F5', fontWeight: 700 }}>
+                    <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
                       {customerDetails.stats.lastOrderAt ? formatDateTime(customerDetails.stats.lastOrderAt) : '—'}
                     </Typography>
                   </Paper>
@@ -403,15 +405,15 @@ const Customers = () => {
               </Tabs>
 
               {detailTab === 0 && (
-                <TableContainer component={Paper} sx={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+                <TableContainer component={Paper} sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ color: '#00E0B8' }}>Order #</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Status</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Payment</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Amount</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Created</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Order #</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Status</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Payment</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Amount</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Created</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -422,7 +424,7 @@ const Customers = () => {
 
                         return (
                           <TableRow key={order.id}>
-                            <TableCell sx={{ color: '#F5F5F5' }}>#{order.orderNumber}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>#{order.orderNumber}</TableCell>
                             <TableCell>
                               <Chip
                                 size="small"
@@ -439,7 +441,7 @@ const Customers = () => {
                                     sx={{ fontWeight: 600 }}
                                   />
                                 ) : (
-                                  <Typography variant="body2" sx={{ color: '#F5F5F5' }}>—</Typography>
+                                  <Typography variant="body2" sx={{ color: colors.textPrimary }}>—</Typography>
                                 )}
                                 {paymentMethodChip && (
                                   <Chip
@@ -450,10 +452,10 @@ const Customers = () => {
                                 )}
                               </Box>
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               {formatCurrency(order.totalAmount)}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               {formatDateTime(order.createdAt)}
                             </TableCell>
                           </TableRow>
@@ -461,7 +463,7 @@ const Customers = () => {
                       })}
                       {customerDetails.orders.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={5} sx={{ color: '#999', textAlign: 'center' }}>
+                          <TableCell colSpan={5} sx={{ color: colors.textSecondary, textAlign: 'center' }}>
                             No orders found for this customer.
                           </TableCell>
                         </TableRow>
@@ -472,16 +474,16 @@ const Customers = () => {
               )}
 
               {detailTab === 1 && (
-                <TableContainer component={Paper} sx={{ backgroundColor: '#1a1a1a', border: '1px solid #333' }}>
+                <TableContainer component={Paper} sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ color: '#00E0B8' }}>Order #</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Type</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Payment Method</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Amount</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Status</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Created</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Order #</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Type</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Payment Method</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Amount</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Status</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Created</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -501,16 +503,16 @@ const Customers = () => {
                               }
                             }}
                           >
-                            <TableCell sx={{ color: '#F5F5F5' }}>#{txn.orderId}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>#{txn.orderId}</TableCell>
                             <TableCell>
                               {txnTypeChip ? (
                                 <Chip
                                   size="small"
-                                  label={txnTypeChip.label}
-                                  sx={{ fontWeight: 700, ...txnTypeChip.sx }}
+                                  label={typeof txnTypeChip === 'function' ? (txnTypeChip(txn).label) : txnTypeChip.label}
+                                  sx={{ fontWeight: 700, ...(typeof txnTypeChip === 'function' ? txnTypeChip(txn).sx : txnTypeChip.sx) }}
                                 />
                               ) : (
-                                <Typography variant="body2" sx={{ color: '#F5F5F5' }}>—</Typography>
+                                <Typography variant="body2" sx={{ color: colors.textPrimary }}>—</Typography>
                               )}
                             </TableCell>
                             <TableCell>
@@ -521,10 +523,10 @@ const Customers = () => {
                                   sx={{ fontWeight: 700, ...txnMethodChip.sx }}
                                 />
                               ) : (
-                                <Typography variant="body2" sx={{ color: '#F5F5F5' }}>—</Typography>
+                                <Typography variant="body2" sx={{ color: colors.textPrimary }}>—</Typography>
                               )}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               {formatCurrency(txn.amount)}
                             </TableCell>
                             <TableCell>
@@ -535,10 +537,10 @@ const Customers = () => {
                                   sx={{ fontWeight: 600 }}
                                 />
                               ) : (
-                                <Typography variant="body2" sx={{ color: '#F5F5F5' }}>—</Typography>
+                                <Typography variant="body2" sx={{ color: colors.textPrimary }}>—</Typography>
                               )}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               {formatDateTime(txn.createdAt)}
                             </TableCell>
                           </TableRow>
@@ -546,7 +548,7 @@ const Customers = () => {
                       })}
                       {customerDetails.transactions.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} sx={{ color: '#999', textAlign: 'center' }}>
+                          <TableCell colSpan={6} sx={{ color: colors.textSecondary, textAlign: 'center' }}>
                             No transactions found for this customer.
                           </TableCell>
                         </TableRow>

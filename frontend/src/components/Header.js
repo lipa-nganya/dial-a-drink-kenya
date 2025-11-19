@@ -46,16 +46,11 @@ const Header = () => {
       backgroundColor: isDarkMode ? '#121212' : colors.paper,
       height: '100%',
       minHeight: '100vh',
-      background: isDarkMode ? '#121212' : colors.paper,
-      color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
-    }} style={{
-      backgroundColor: isDarkMode ? '#121212' : colors.paper,
-      color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
-      background: isDarkMode ? '#121212' : colors.paper,
+      color: colors.textPrimary,
     }}>
       <Toolbar sx={{ 
         minHeight: '48px !important',
-        backgroundColor: colors.paper,
+        backgroundColor: isDarkMode ? '#121212' : colors.paper,
         borderBottom: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
       }}>
         <LocalBar sx={{ mr: 1, fontSize: '1.2rem', color: colors.textPrimary }} />
@@ -66,11 +61,15 @@ const Header = () => {
           LiquorOS
         </Typography>
       </Toolbar>
-      <List sx={{ backgroundColor: colors.paper }}>
+      <List sx={{ 
+        backgroundColor: isDarkMode ? '#121212' : colors.paper,
+        color: colors.textPrimary
+      }}>
         <ListItem 
           component="button" 
           onClick={() => handleNavigation('/')}
           sx={{ 
+            backgroundColor: isDarkMode ? '#121212' : 'transparent',
             color: colors.textPrimary,
             '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
           }}
@@ -84,6 +83,7 @@ const Header = () => {
           component="button" 
           onClick={() => handleNavigation('/menu')}
           sx={{ 
+            backgroundColor: isDarkMode ? '#121212' : 'transparent',
             color: colors.textPrimary,
             '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
           }}
@@ -97,6 +97,7 @@ const Header = () => {
           component="button" 
           onClick={() => handleNavigation('/offers')}
           sx={{ 
+            backgroundColor: isDarkMode ? '#121212' : 'transparent',
             color: colors.textPrimary,
             '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
           }}
@@ -110,6 +111,7 @@ const Header = () => {
           component="button" 
           onClick={() => handleNavigation('/cart')}
           sx={{ 
+            backgroundColor: isDarkMode ? '#121212' : 'transparent',
             color: colors.textPrimary,
             '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
           }}
@@ -127,6 +129,7 @@ const Header = () => {
             handleNavigation(isLoggedIn ? '/orders' : '/login');
           }}
           sx={{ 
+            backgroundColor: isDarkMode ? '#121212' : 'transparent',
             color: colors.textPrimary,
             '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
           }}
@@ -141,6 +144,7 @@ const Header = () => {
             component="button" 
             onClick={() => handleNavigation('/profile')}
             sx={{ 
+              backgroundColor: isDarkMode ? '#121212' : 'transparent',
               color: colors.textPrimary,
               '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
             }}
@@ -155,6 +159,7 @@ const Header = () => {
             component="button" 
             onClick={() => handleNavigation('/login')}
             sx={{ 
+              backgroundColor: isDarkMode ? '#121212' : 'transparent',
               color: colors.textPrimary,
               '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
             }}

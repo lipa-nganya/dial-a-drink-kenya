@@ -475,17 +475,15 @@ router.get('/transactions', async (req, res) => {
       }
     ];
     
-    // Only include Branch if the model exists and association is set up
-    // Skip Branch include to avoid database column errors
-    // TODO: Re-enable when branchId column is confirmed to exist in production
-    // if (db.Branch && db.Order.associations && db.Order.associations.branch) {
-    //   orderIncludes.push({
-    //     model: db.Branch,
-    //     as: 'branch',
-    //     required: false,
-    //     attributes: ['id', 'name', 'address']
-    //   });
-    // }
+    // Include Branch association (branchId column exists and association is set up)
+    if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
+      orderIncludes.push({
+        model: db.Branch,
+        as: 'branch',
+        required: false,
+        attributes: ['id', 'name', 'address']
+      });
+    }
     
     const transactions = await db.Transaction.findAll({
       include: [{
@@ -829,17 +827,15 @@ router.get('/orders', async (req, res) => {
       }
     ];
     
-    // Only include Branch if the model exists and association is set up
-    // Skip Branch include to avoid database column errors
-    // TODO: Re-enable when branchId column is confirmed to exist in production
-    // if (db.Branch && db.Order.associations && db.Order.associations.branch) {
-    //   orderIncludes.push({
-    //     model: db.Branch,
-    //     as: 'branch',
-    //     required: false,
-    //     attributes: ['id', 'name', 'address']
-    //   });
-    // }
+    // Include Branch association (branchId column exists and association is set up)
+    if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
+      orderIncludes.push({
+        model: db.Branch,
+        as: 'branch',
+        required: false,
+        attributes: ['id', 'name', 'address']
+      });
+    }
     
     const orders = await db.Order.findAll({
       include: orderIncludes,
@@ -873,6 +869,18 @@ router.patch('/orders/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    // CRITICAL: If order is being marked as completed or delivered and payment is paid, sync pending transactions first
+    // This ensures transactions are updated even if callback wasn't received
+    if ((status === 'completed' || status === 'delivered') && order.paymentStatus === 'paid') {
+      try {
+        const { syncPendingTransactionsForOrder } = require('../utils/transactionSync');
+        await syncPendingTransactionsForOrder(order.id);
+      } catch (syncError) {
+        console.error(`⚠️  Error syncing pending transactions for Order #${order.id}:`, syncError.message);
+        // Don't fail - continue with status update
+      }
+    }
+
     // Update order status
     await order.update({ status });
 
@@ -891,6 +899,28 @@ router.patch('/orders/:id/status', async (req, res) => {
       } catch (walletError) {
         console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
         // Don't fail the status update if wallet crediting fails
+      }
+      
+      // Update driver status if they have no more active orders
+      if (order.driverId) {
+        try {
+          const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+          await updateDriverStatusIfNoActiveOrders(order.driverId);
+        } catch (driverStatusError) {
+          console.error(`❌ Error updating driver status for Order #${order.id}:`, driverStatusError);
+          // Don't fail the status update if driver status update fails
+        }
+      }
+    }
+    
+    // If order is cancelled, also check if driver has more active orders
+    if (status === 'cancelled' && order.driverId) {
+      try {
+        const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+        await updateDriverStatusIfNoActiveOrders(order.driverId);
+      } catch (driverStatusError) {
+        console.error(`❌ Error updating driver status for cancelled Order #${order.id}:`, driverStatusError);
+        // Don't fail the status update if driver status update fails
       }
     }
 
@@ -971,6 +1001,18 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    // CRITICAL: If order is being marked as paid, sync pending transactions first
+    // This ensures transactions are updated even if callback wasn't received
+    if (paymentStatus === 'paid') {
+      try {
+        const { syncPendingTransactionsForOrder } = require('../utils/transactionSync');
+        await syncPendingTransactionsForOrder(order.id);
+      } catch (syncError) {
+        console.error(`⚠️  Error syncing pending transactions for Order #${order.id}:`, syncError.message);
+        // Don't fail - continue with payment status update
+      }
+    }
+
     // Update payment status
     await order.update({ paymentStatus });
 
@@ -993,6 +1035,15 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       } catch (walletError) {
         console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
         // Don't fail the payment status update if wallet crediting fails
+      }
+      
+      // Update driver status if they have no more active orders
+      try {
+        const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+        await updateDriverStatusIfNoActiveOrders(order.driverId);
+      } catch (driverStatusError) {
+        console.error(`❌ Error updating driver status for Order #${order.id}:`, driverStatusError);
+        // Don't fail the payment status update if driver status update fails
       }
     }
 
@@ -1044,20 +1095,19 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       }
 
       // Also emit order status update
-      io.to('admin').emit('order-status-updated', {
-              orderId: order.id,
+      const orderStatusUpdateData = {
+        orderId: order.id,
         status: finalStatus,
         paymentStatus: paymentStatus,
-        order: orderData
-      });
+        order: orderData,
+        message: `Order #${order.id} status updated`
+      };
+      
+      io.to(`order-${order.id}`).emit('order-status-updated', orderStatusUpdateData);
+      io.to('admin').emit('order-status-updated', orderStatusUpdateData);
 
       if (order.driverId) {
-        io.to(`driver-${order.driverId}`).emit('order-status-updated', {
-              orderId: order.id,
-          status: finalStatus,
-          paymentStatus: paymentStatus,
-          order: orderData
-        });
+        io.to(`driver-${order.driverId}`).emit('order-status-updated', orderStatusUpdateData);
       }
     }
 
@@ -1802,7 +1852,9 @@ router.get('/latest-transactions', async (req, res) => {
         paymentStatus: paymentStatus || null,
         transactionStatus: resolvedStatus,
         customerName: customerName || 'Guest Customer',
-        createdAt: tx.createdAt
+        createdAt: tx.createdAt,
+        driverId: tx.driverId || null,
+        driverWalletId: tx.driverWalletId || null
       };
     });
 

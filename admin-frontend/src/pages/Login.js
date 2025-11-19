@@ -127,10 +127,11 @@ const Login = () => {
             startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Lock />}
             sx={{
               backgroundColor: colors.accent,
-              color: isDarkMode ? '#0D0D0D' : colors.textPrimary,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
               py: 1.5,
               '&:hover': {
-                backgroundColor: isDarkMode ? '#00C4A3' : colors.accentText,
+                backgroundColor: isDarkMode ? '#00C4A3' : '#00C4A3',
+                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
               },
               '&:disabled': {
                 backgroundColor: colors.textSecondary,

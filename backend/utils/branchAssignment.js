@@ -1,9 +1,17 @@
 const db = require('../models');
+// Ensure dotenv is loaded if not already loaded
+if (!process.env.GOOGLE_MAPS_API_KEY && !process.env.REACT_APP_GOOGLE_MAPS_API_KEY) {
+  try {
+    require('dotenv').config();
+  } catch (e) {
+    // dotenv might already be loaded or not available
+  }
+}
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
 
 /**
- * Find the closest branch to a delivery address using Google Maps Distance Matrix API
+ * Find the closest branch to a delivery address using Google Routes API
  * @param {string} deliveryAddress - Customer delivery address
  * @returns {Promise<Object|null>} - Closest branch object or null if no branches found
  */
@@ -30,27 +38,89 @@ const findClosestBranch = async (deliveryAddress) => {
       return branches[0];
     }
     
-    // Use Google Maps Distance Matrix API to find closest branch
-    const origins = branches.map(branch => branch.address).join('|');
-    const destinations = deliveryAddress;
+    // Use Google Routes API computeRouteMatrix to find closest branch
+    // NOTE: This requires the Routes API to be enabled in Google Cloud Console
+    // Enable it at: https://console.cloud.google.com/apis/library/routes.googleapis.com
+    const routesApiUrl = `https://routes.googleapis.com/distanceMatrix/v2:computeRouteMatrix?key=${GOOGLE_MAPS_API_KEY}`;
     
-    const distanceMatrixUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origins)}&destinations=${encodeURIComponent(destinations)}&key=${GOOGLE_MAPS_API_KEY}&units=metric`;
+    console.log(`🌐 Calling Google Routes API...`);
+    console.log(`   Origins: ${branches.length} branches`);
+    console.log(`   Destination: ${deliveryAddress}`);
     
-    const response = await fetch(distanceMatrixUrl);
+    // Prepare origins (branches)
+    const origins = branches.map((branch) => ({
+      waypoint: {
+        address: branch.address
+      },
+      routeModifiers: {
+        avoidTolls: false,
+        avoidHighways: false,
+        avoidFerries: false
+      }
+    }));
+    
+    // Prepare destination
+    const destination = {
+      waypoint: {
+        address: deliveryAddress
+      }
+    };
+    
+    // Prepare request body
+    const requestBody = {
+      origins: origins,
+      destinations: [destination],
+      travelMode: 'DRIVE',
+      routingPreference: 'TRAFFIC_AWARE',
+      units: 'METRIC'
+    };
+    
+    let response;
+    try {
+      response = await fetch(routesApiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-FieldMask': 'originIndex,destinationIndex,duration,distanceMeters,status'
+        },
+        body: JSON.stringify(requestBody)
+      });
+    } catch (fetchError) {
+      console.error('❌ Network error calling Routes API:', fetchError.message);
+      return branches[0];
+    }
     
     if (!response.ok) {
-      throw new Error(`Distance Matrix API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`❌ Routes API HTTP error: ${response.status} ${response.statusText}`);
+      console.error(`❌ Error details: ${errorText}`);
+      if (response.status === 403) {
+        console.error('❌ Routes API is not enabled for this API key.');
+        console.error('❌ To enable it, go to: https://console.cloud.google.com/apis/library/routes.googleapis.com');
+        console.error('❌ Click "Enable" and ensure your API key has access to this API.');
+        console.error('⚠️  Falling back to first branch until API is enabled.');
+      }
+      return branches[0];
     }
     
     const data = await response.json();
     
-    if (data.status !== 'OK') {
-      console.error('⚠️  Distance Matrix API error:', data.status, data.error_message);
-      // Fallback to first branch
+    // Check for errors in response (if it's an object with error property)
+    if (data.error) {
+      console.error('⚠️  Routes API error:', data.error.message || JSON.stringify(data.error));
+      if (data.error.message && data.error.message.includes('not enabled')) {
+        console.error('❌ Routes API is not enabled for this API key.');
+        console.error('❌ To enable it, go to: https://console.cloud.google.com/apis/library/routes.googleapis.com');
+        console.error('❌ Click "Enable" and ensure your API key has access to this API.');
+        console.error('⚠️  Falling back to first branch until API is enabled.');
+      }
       return branches[0];
     }
     
-    if (!data.rows || data.rows.length === 0) {
+    // Routes API returns an array of route matrix elements directly
+    const routeMatrixElements = Array.isArray(data) ? data : (data.routeMatrixElements || []);
+    
+    if (!routeMatrixElements || routeMatrixElements.length === 0) {
       console.log('⚠️  No distance data returned. Assigning first branch as fallback.');
       return branches[0];
     }
@@ -59,12 +129,28 @@ const findClosestBranch = async (deliveryAddress) => {
     let closestBranch = null;
     let shortestDistance = Infinity;
     
-    data.rows.forEach((row, index) => {
-      if (row.elements && row.elements[0] && row.elements[0].status === 'OK') {
-        const distance = row.elements[0].distance?.value; // Distance in meters
-        if (distance && distance < shortestDistance) {
+    console.log(`🔍 Calculating distances from ${branches.length} branches to: ${deliveryAddress}`);
+    
+    routeMatrixElements.forEach((element) => {
+      const originIndex = element.originIndex;
+      const branch = branches[originIndex];
+      
+      // Check if status indicates an error (empty object {} means success)
+      if (element.status && Object.keys(element.status).length > 0 && element.status.code !== 'OK') {
+        console.warn(`  ⚠️  ${branch.name}: Status ${element.status.code}`);
+        return;
+      }
+      
+      if (element.distanceMeters) {
+        const distance = element.distanceMeters; // Distance in meters
+        if (distance < shortestDistance) {
           shortestDistance = distance;
-          closestBranch = branches[index];
+          closestBranch = branch;
+          const distanceKm = (distance / 1000).toFixed(2);
+          console.log(`  📍 ${branch.name}: ${distanceKm} km (NEW CLOSEST)`);
+        } else {
+          const distanceKm = (distance / 1000).toFixed(2);
+          console.log(`  📍 ${branch.name}: ${distanceKm} km`);
         }
       }
     });

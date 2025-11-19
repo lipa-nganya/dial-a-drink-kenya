@@ -102,9 +102,9 @@ const Settings = () => {
   const countdownFieldStyles = {
     '& .MuiOutlinedInput-root': {
       backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-      '& fieldset': { borderColor: '#00E0B8' },
-      '&:hover fieldset': { borderColor: '#00E0B8' },
-      '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+      '& fieldset': { borderColor: colors.accentText },
+      '&:hover fieldset': { borderColor: colors.accentText },
+      '&.Mui-focused fieldset': { borderColor: colors.accentText }
     },
     '& .MuiOutlinedInput-input': {
       color: colors.textPrimary
@@ -116,10 +116,10 @@ const Settings = () => {
       color: colors.textPrimary
     },
     '& .MuiInputLabel-root': {
-      color: isDarkMode ? '#00E0B8' : undefined
+      color: isDarkMode ? colors.accentText : undefined
     },
     '& .MuiInputLabel-root.Mui-focused': {
-      color: '#00E0B8'
+      color: colors.accentText
     },
     '& input[type="datetime-local"]::-webkit-calendar-picker-indicator': {
       filter: isDarkMode ? 'invert(75%) sepia(59%) saturate(514%) hue-rotate(116deg) brightness(97%) contrast(93%)' : 'none'
@@ -650,8 +650,8 @@ const Settings = () => {
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <SettingsIcon sx={{ color: '#00E0B8', fontSize: 40 }} />
-          <Typography variant="h4" component="h1" gutterBottom sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <SettingsIcon sx={{ color: colors.accentText, fontSize: 40 }} />
+          <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
             Settings
           </Typography>
         </Box>
@@ -679,12 +679,12 @@ const Settings = () => {
 
       {/* User Management Module - Admin Only */}
       {currentUserRole === 'admin' && (
-        <Card sx={{ mb: 4, backgroundColor: '#121212' }}>
+        <Card sx={{ mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <AdminPanelSettings sx={{ color: '#00E0B8', fontSize: 32 }} />
-                <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+                <AdminPanelSettings sx={{ color: colors.accentText, fontSize: 32 }} />
+                <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
                   User Management
                 </Typography>
               </Box>
@@ -693,8 +693,8 @@ const Settings = () => {
                 startIcon={<PersonAdd />}
                 onClick={handleOpenUserDialog}
                 sx={{
-                  backgroundColor: '#00E0B8',
-                  color: '#0D0D0D',
+                  backgroundColor: colors.accentText,
+                  color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                   '&:hover': { backgroundColor: '#00C4A3' }
                 }}
               >
@@ -707,21 +707,21 @@ const Settings = () => {
                 <CircularProgress />
               </Box>
             ) : (
-              <TableContainer>
+              <TableContainer component={Paper} sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 600 }}>Username</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Role</TableCell>
-                      <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Username</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Email</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Role</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Created</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {users.map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell>{user.username}</TableCell>
-                        <TableCell>{user.email}</TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>{user.username}</TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>{user.email}</TableCell>
                         <TableCell>
                           <Chip
                             label={user.role === 'admin' ? 'Admin' : 'Manager'}
@@ -729,7 +729,7 @@ const Settings = () => {
                             size="small"
                           />
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
                           {new Date(user.createdAt).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'short',
@@ -740,7 +740,7 @@ const Settings = () => {
                     ))}
                     {users.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                        <TableCell colSpan={4} align="center" sx={{ py: 4, color: colors.textSecondary }}>
                           <Typography variant="body2" color="text.secondary">
                             No users found
                           </Typography>
@@ -756,12 +756,12 @@ const Settings = () => {
       )}
 
       {/* Notifications Module */}
-      <Card sx={{ mb: 4, backgroundColor: '#121212' }}>
+      <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Notifications sx={{ color: '#00E0B8', fontSize: 32 }} />
-              <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+              <Notifications sx={{ color: colors.accentText, fontSize: 32 }} />
+              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
                 Notifications
               </Typography>
             </Box>
@@ -770,8 +770,8 @@ const Settings = () => {
               startIcon={<Add />}
               onClick={() => handleOpenDialog()}
               sx={{
-                backgroundColor: '#00E0B8',
-                color: '#0D0D0D',
+                backgroundColor: colors.accentText,
+                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                 '&:hover': { backgroundColor: '#00C4A3' }
               }}
             >
@@ -803,10 +803,10 @@ const Settings = () => {
                   disabled={smsSettingsLoading}
                   sx={{
                     '& .MuiSwitch-switchBase.Mui-checked': {
-                      color: '#00E0B8',
+                      color: colors.accentText,
                     },
                     '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                      backgroundColor: '#00E0B8',
+                      backgroundColor: colors.accentText,
                     },
                   }}
                 />
@@ -833,8 +833,8 @@ const Settings = () => {
                 startIcon={<Add />}
                 onClick={() => handleOpenDialog()}
                 sx={{
-                  backgroundColor: '#00E0B8',
-                  color: '#0D0D0D',
+                  backgroundColor: colors.accentText,
+                  color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                   '&:hover': { backgroundColor: '#00C4A3' }
                 }}
               >
@@ -846,11 +846,11 @@ const Settings = () => {
               <Table>
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Name</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Phone Number</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Status</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Notes</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }} align="right">Actions</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Phone Number</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Notes</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -897,7 +897,7 @@ const Settings = () => {
                           <IconButton
                             size="small"
                             onClick={() => handleOpenDialog(notification)}
-                            sx={{ color: '#00E0B8' }}
+                            sx={{ color: colors.accentText }}
                           >
                             <Edit />
                           </IconButton>
@@ -920,13 +920,13 @@ const Settings = () => {
       </Card>
 
       {/* Delivery Fee Settings */}
-      <Card sx={{ mb: 4, backgroundColor: '#121212' }}>
+      <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <LocalShipping sx={{ fontSize: 32, color: '#00E0B8' }} />
+              <LocalShipping sx={{ fontSize: 32, color: colors.accentText }} />
               <Box>
-                <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+                <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
                   Delivery Fee Settings
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -939,8 +939,8 @@ const Settings = () => {
               onClick={() => setShowDeliverySettings(!showDeliverySettings)}
               startIcon={<Edit />}
               sx={{
-                borderColor: '#00E0B8',
-                color: '#00E0B8',
+                borderColor: colors.accentText,
+                color: colors.accentText,
                 '&:hover': { borderColor: '#00C4A3', backgroundColor: 'rgba(0, 224, 184, 0.1)' }
               }}
             >
@@ -1038,10 +1038,10 @@ const Settings = () => {
                         onChange={(e) => setDeliverySettings(prev => ({ ...prev, maxTipEnabled: e.target.checked }))}
                         sx={{
                           '& .MuiSwitch-switchBase.Mui-checked': {
-                            color: '#00E0B8',
+                            color: colors.accentText,
                           },
                           '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                            backgroundColor: '#00E0B8',
+                            backgroundColor: colors.accentText,
                           },
                         }}
                       />
@@ -1066,10 +1066,10 @@ const Settings = () => {
                         onChange={(e) => setDeliverySettings(prev => ({ ...prev, driverPayPerDeliveryEnabled: e.target.checked }))}
                         sx={{
                           '& .MuiSwitch-switchBase.Mui-checked': {
-                            color: '#00E0B8',
+                            color: colors.accentText,
                           },
                           '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                            backgroundColor: '#00E0B8',
+                            backgroundColor: colors.accentText,
                           },
                         }}
                       />
@@ -1088,13 +1088,23 @@ const Settings = () => {
                       disabled={!deliverySettings.driverPayPerDeliveryEnabled}
                       sx={{
                         '& .MuiOutlinedInput-root': {
-                          '& fieldset': { borderColor: '#00E0B8' },
-                          '&:hover fieldset': { borderColor: '#00E0B8' },
-                          '&.Mui-focused fieldset': { borderColor: '#00E0B8' },
+                          backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                          '& fieldset': { borderColor: colors.border },
+                          '&:hover fieldset': { borderColor: colors.accentText },
+                          '&.Mui-focused fieldset': { borderColor: colors.accentText },
                           '&.Mui-disabled': {
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            color: 'rgba(255, 255, 255, 0.3)'
+                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                            color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'
                           }
+                        },
+                        '& .MuiInputBase-input': {
+                          color: colors.textPrimary
+                        },
+                        '& .MuiInputLabel-root': {
+                          color: colors.textSecondary
+                        },
+                        '& .MuiInputLabel-root.Mui-focused': {
+                          color: colors.accentText
                         }
                       }}
                     />
@@ -1117,9 +1127,19 @@ const Settings = () => {
                         helperText="Applied when order contains alcohol items"
                         sx={{
                           '& .MuiOutlinedInput-root': {
-                            '& fieldset': { borderColor: '#00E0B8' },
-                            '&:hover fieldset': { borderColor: '#00E0B8' },
-                            '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                            '& fieldset': { borderColor: colors.border },
+                            '&:hover fieldset': { borderColor: colors.accentText },
+                            '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                          },
+                          '& .MuiInputBase-input': {
+                            color: colors.textPrimary
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: colors.textSecondary
+                          },
+                          '& .MuiInputLabel-root.Mui-focused': {
+                            color: colors.accentText
                           }
                         }}
                       />
@@ -1138,9 +1158,19 @@ const Settings = () => {
                         helperText="Applied when order only contains soft drinks"
                         sx={{
                           '& .MuiOutlinedInput-root': {
-                            '& fieldset': { borderColor: '#00E0B8' },
-                            '&:hover fieldset': { borderColor: '#00E0B8' },
-                            '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                            '& fieldset': { borderColor: colors.border },
+                            '&:hover fieldset': { borderColor: colors.accentText },
+                            '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                          },
+                          '& .MuiInputBase-input': {
+                            color: colors.textPrimary
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: colors.textSecondary
+                          },
+                          '& .MuiInputLabel-root.Mui-focused': {
+                            color: colors.accentText
                           }
                         }}
                       />
@@ -1157,9 +1187,12 @@ const Settings = () => {
                         fetchDeliverySettings();
                       }}
                       sx={{
-                        borderColor: '#666',
-                        color: '#F5F5F5',
-                        '&:hover': { borderColor: '#888' }
+                        borderColor: colors.border,
+                        color: colors.textSecondary,
+                        '&:hover': { 
+                          borderColor: colors.accentText,
+                          backgroundColor: 'rgba(0, 224, 184, 0.05)'
+                        }
                       }}
                     >
                       Cancel
@@ -1170,8 +1203,8 @@ const Settings = () => {
                       disabled={deliverySettingsLoading}
                       startIcon={deliverySettingsLoading ? <CircularProgress size={20} /> : <Save />}
                       sx={{
-                        backgroundColor: '#00E0B8',
-                        color: '#0D0D0D',
+                        backgroundColor: colors.accentText,
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                         '&:hover': { backgroundColor: '#00C4A3' }
                       }}
                     >
@@ -1203,12 +1236,12 @@ const Settings = () => {
       </Card>
 
       {/* Countdown Offers */}
-      <Card sx={{ mb: 4, backgroundColor: '#121212' }}>
+      <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <LocalOffer sx={{ color: '#00E0B8', fontSize: 32 }} />
-              <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+              <LocalOffer sx={{ color: colors.accentText, fontSize: 32 }} />
+              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
                 Countdown Offers
               </Typography>
             </Box>
@@ -1217,8 +1250,8 @@ const Settings = () => {
               onClick={handleNewCountdown}
               startIcon={<Add />}
               sx={{
-                backgroundColor: '#00E0B8',
-                color: '#0D0D0D',
+                backgroundColor: colors.accentText,
+                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                 '&:hover': { backgroundColor: '#00C4A3' }
               }}
             >
@@ -1227,9 +1260,9 @@ const Settings = () => {
           </Box>
 
           {showCountdownForm && (
-            <Card sx={{ mb: 3, backgroundColor: '#121212' }}>
+            <Card sx={{ mb: 3, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ color: '#00E0B8' }}>
+                <Typography variant="h6" gutterBottom sx={{ color: colors.accentText }}>
                   {editingCountdown ? 'Edit Countdown' : 'Create New Countdown'}
                 </Typography>
                 {countdownFormError && (
@@ -1247,9 +1280,19 @@ const Settings = () => {
                       size="small"
                       sx={{
                         '& .MuiOutlinedInput-root': {
-                          '& fieldset': { borderColor: '#00E0B8' },
-                          '&:hover fieldset': { borderColor: '#00E0B8' },
-                          '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                          backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                          '& fieldset': { borderColor: colors.border },
+                          '&:hover fieldset': { borderColor: colors.accentText },
+                          '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                        },
+                        '& .MuiInputBase-input': {
+                          color: colors.textPrimary
+                        },
+                        '& .MuiInputLabel-root': {
+                          color: colors.textSecondary
+                        },
+                        '& .MuiInputLabel-root.Mui-focused': {
+                          color: colors.accentText
                         }
                       }}
                     />
@@ -1284,9 +1327,13 @@ const Settings = () => {
                         variant="outlined"
                         onClick={handleCancelCountdownForm}
                         sx={{
-                          borderColor: '#666',
-                          color: '#F5F5F5',
-                          '&:hover': { borderColor: '#888' }
+                          borderColor: colors.border,
+                          color: colors.textPrimary,
+                          '&:hover': { 
+                            borderColor: colors.accentText,
+                            backgroundColor: 'rgba(0, 224, 184, 0.05)',
+                            color: colors.accentText
+                          }
                         }}
                       >
                         Cancel
@@ -1297,8 +1344,8 @@ const Settings = () => {
                         disabled={isCountdownSaveDisabled}
                       startIcon={<LocalOffer />}
                       sx={{
-                        backgroundColor: '#00E0B8',
-                        color: '#0D0D0D',
+                        backgroundColor: colors.accentText,
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                         '&:hover': { backgroundColor: '#00C4A3' }
                       }}
                     >
@@ -1312,11 +1359,11 @@ const Settings = () => {
           )}
 
           {countdowns.map((countdown) => (
-            <Card key={countdown.id} sx={{ mb: 2, backgroundColor: '#121212' }}>
+            <Card key={countdown.id} sx={{ mb: 2, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Box>
-                    <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+                    <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 600 }}>
                       {countdown.title}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -1355,8 +1402,8 @@ const Settings = () => {
                       startIcon={<Edit />}
                       onClick={() => handleEditCountdown(countdown)}
                       sx={{
-                        borderColor: '#00E0B8',
-                        color: '#00E0B8',
+                        borderColor: colors.accentText,
+                        color: colors.accentText,
                         '&:hover': { borderColor: '#00C4A3', backgroundColor: 'rgba(0, 224, 184, 0.1)' }
                       }}
                     >
@@ -1383,7 +1430,7 @@ const Settings = () => {
       </Card>
 
       {/* Hero Management */}
-      <Card sx={{ mb: 4, backgroundColor: '#121212' }}>
+      <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
         <CardContent>
           <Box 
             display="flex" 
@@ -1392,10 +1439,10 @@ const Settings = () => {
             sx={{ mb: 2 }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <ImageIcon sx={{ color: '#00E0B8', fontSize: 32 }} />
+              <ImageIcon sx={{ color: colors.accentText, fontSize: 32 }} />
               <Typography 
                 variant="h5" 
-                sx={{ color: '#00E0B8', fontWeight: 600 }}
+                sx={{ color: colors.accentText, fontWeight: 600 }}
               >
                 Hero Image Management
               </Typography>
@@ -1415,8 +1462,8 @@ const Settings = () => {
               }}
               startIcon={showHeroImageForm ? <Edit /> : <ImageIcon />}
               sx={{
-                borderColor: '#00E0B8',
-                color: '#00E0B8',
+                borderColor: colors.accentText,
+                color: colors.accentText,
                 '&:hover': { 
                   borderColor: '#00C4A3',
                   backgroundColor: 'rgba(0, 224, 184, 0.1)'
@@ -1428,11 +1475,11 @@ const Settings = () => {
           </Box>
 
           {!showHeroImageForm && (
-            <Card sx={{ backgroundColor: '#121212' }}>
+            <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Box display="flex" alignItems="center" gap={2}>
                   <Box>
-                    <Typography variant="h6" sx={{ color: '#00E0B8', mb: 1 }}>
+                    <Typography variant="h6" sx={{ color: colors.accentText, mb: 1 }}>
                       Current Hero Image
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2, wordBreak: 'break-all' }}>
@@ -1469,9 +1516,9 @@ const Settings = () => {
           )}
 
           {showHeroImageForm && (
-            <Card sx={{ backgroundColor: '#121212' }}>
+            <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom sx={{ color: '#00E0B8' }}>
+                <Typography variant="h6" gutterBottom sx={{ color: colors.accentText }}>
                   Update Hero Image
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1498,7 +1545,7 @@ const Settings = () => {
                         return next;
                       });
                     }}
-                    sx={{ color: '#00E0B8', textTransform: 'none', px: 0, minWidth: 'unset' }}
+                    sx={{ color: colors.accentText, textTransform: 'none', px: 0, minWidth: 'unset' }}
                   >
                     {useHeroImageUrl ? 'Switch to upload' : 'Enter URL instead'}
                   </Button>
@@ -1525,8 +1572,8 @@ const Settings = () => {
                     onClick={openHeroImageFilePicker}
                     disabled={heroImageUploadLoading}
                     sx={{
-                      borderColor: '#00E0B8',
-                      color: '#00E0B8',
+                      borderColor: colors.accentText,
+                      color: colors.accentText,
                       '&:hover': { 
                         borderColor: '#00C4A3',
                         backgroundColor: 'rgba(0, 224, 184, 0.1)'
@@ -1564,9 +1611,19 @@ const Settings = () => {
                     sx={{
                       mb: 2,
                       '& .MuiOutlinedInput-root': {
-                        '& fieldset': { borderColor: '#00E0B8' },
-                        '&:hover fieldset': { borderColor: '#00E0B8' },
-                        '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
                       }
                     }}
                     disabled={heroImageUploadLoading}
@@ -1589,7 +1646,7 @@ const Settings = () => {
                         maxWidth: '400px',
                         borderRadius: '8px',
                         overflow: 'hidden',
-                        border: '2px solid #00E0B8'
+                        border: `2px solid ${colors.accentText}`
                       }}
                     >
                       <img 
@@ -1602,7 +1659,7 @@ const Settings = () => {
                         }}
                         onError={(e) => {
                           e.target.style.display = 'none';
-                          e.target.parentElement.innerHTML = '<div style="padding: 40px; text-align: center; color: #999;">Image not found</div>';
+                          e.target.parentElement.innerHTML = `<div style="padding: 40px; text-align: center; color: ${isDarkMode ? '#999' : '#666'}; background-color: ${colors.paper};">Image not found</div>`;
                         }}
                       />
                     </Box>
@@ -1614,8 +1671,8 @@ const Settings = () => {
                   disabled={!heroImageInput || heroImageUploadLoading}
                   startIcon={<Save />}
                   sx={{
-                    backgroundColor: '#00E0B8',
-                    color: '#0D0D0D',
+                    backgroundColor: colors.accentText,
+                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                     '&:hover': { backgroundColor: '#00C4A3' }
                   }}
                 >
@@ -1628,11 +1685,22 @@ const Settings = () => {
       </Card>
 
       {/* Add/Edit Notification Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: colors.paper,
+            border: `1px solid ${colors.border}`
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
           {editingNotification ? 'Edit Notification' : 'Add Notification'}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ backgroundColor: colors.paper }}>
           {formError && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setFormError('')}>
               {formError}
@@ -1645,7 +1713,24 @@ const Settings = () => {
             required
             value={formData.name}
             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            sx={{ mb: 2 }}
+            sx={{ 
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accentText },
+                '&.Mui-focused fieldset': { borderColor: colors.accentText }
+              },
+              '& .MuiInputBase-input': {
+                color: colors.textPrimary
+              },
+              '& .MuiInputLabel-root': {
+                color: colors.textSecondary
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: colors.accentText
+              }
+            }}
             placeholder="Enter recipient name"
           />
 
@@ -1655,7 +1740,24 @@ const Settings = () => {
             required
             value={formData.phoneNumber}
             onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
-            sx={{ mb: 2 }}
+            sx={{ 
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accentText },
+                '&.Mui-focused fieldset': { borderColor: colors.accentText }
+              },
+              '& .MuiInputBase-input': {
+                color: colors.textPrimary
+              },
+              '& .MuiInputLabel-root': {
+                color: colors.textSecondary
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: colors.accentText
+              }
+            }}
             placeholder="0712345678 or 254712345678"
             helperText="Enter phone number for SMS/WhatsApp notifications"
           />
@@ -1665,11 +1767,18 @@ const Settings = () => {
               <Switch
                 checked={formData.isActive}
                 onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
-                color="primary"
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: colors.accentText,
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: colors.accentText,
+                  },
+                }}
               />
             }
             label="Active"
-            sx={{ mb: 2 }}
+            sx={{ mb: 2, color: colors.textPrimary }}
           />
 
           <TextField
@@ -1680,13 +1789,30 @@ const Settings = () => {
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Additional notes about this notification recipient"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accentText },
+                '&.Mui-focused fieldset': { borderColor: colors.accentText }
+              },
+              '& .MuiInputBase-input': {
+                color: colors.textPrimary
+              },
+              '& .MuiInputLabel-root': {
+                color: colors.textSecondary
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: colors.accentText
+              }
+            }}
           />
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions sx={{ backgroundColor: colors.paper, p: 2 }}>
           <Button
             onClick={handleCloseDialog}
             startIcon={<CancelIcon />}
-            sx={{ color: 'text.secondary' }}
+            sx={{ color: colors.textSecondary }}
           >
             Cancel
           </Button>
@@ -1695,8 +1821,8 @@ const Settings = () => {
             variant="contained"
             startIcon={<Save />}
             sx={{
-              backgroundColor: '#00E0B8',
-              color: '#0D0D0D',
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
               '&:hover': {
                 backgroundColor: '#00C4A3'
               }
@@ -1713,11 +1839,17 @@ const Settings = () => {
         onClose={handleCloseUserDialog}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: colors.paper,
+            border: `1px solid ${colors.border}`
+          }
+        }}
       >
-        <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
           Invite New User
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ backgroundColor: colors.paper }}>
           {userFormError && (
             <Alert severity="error" sx={{ mb: 2 }} onClose={() => setUserFormError('')}>
               {userFormError}
@@ -1730,7 +1862,24 @@ const Settings = () => {
               required
               value={userFormData.username}
               onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })}
-              sx={{ mb: 2 }}
+              sx={{ 
+                mb: 2,
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                  '& fieldset': { borderColor: colors.border },
+                  '&:hover fieldset': { borderColor: colors.accentText },
+                  '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                },
+                '& .MuiInputBase-input': {
+                  color: colors.textPrimary
+                },
+                '& .MuiInputLabel-root': {
+                  color: colors.textSecondary
+                },
+                '& .MuiInputLabel-root.Mui-focused': {
+                  color: colors.accentText
+                }
+              }}
               placeholder="Enter username"
             />
             <TextField
@@ -1740,15 +1889,47 @@ const Settings = () => {
               type="email"
               value={userFormData.email}
               onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
-              sx={{ mb: 2 }}
+              sx={{ 
+                mb: 2,
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                  '& fieldset': { borderColor: colors.border },
+                  '&:hover fieldset': { borderColor: colors.accentText },
+                  '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                },
+                '& .MuiInputBase-input': {
+                  color: colors.textPrimary
+                },
+                '& .MuiInputLabel-root': {
+                  color: colors.textSecondary
+                },
+                '& .MuiInputLabel-root.Mui-focused': {
+                  color: colors.accentText
+                }
+              }}
               placeholder="user@example.com"
             />
             <FormControl fullWidth sx={{ mb: 2 }}>
-              <InputLabel>Role</InputLabel>
+              <InputLabel sx={{ color: colors.textSecondary }}>Role</InputLabel>
               <Select
                 value={userFormData.role}
                 label="Role"
                 onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
+                sx={{
+                  color: colors.textPrimary,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.border,
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText,
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText,
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: colors.accentText,
+                  },
+                }}
               >
                 <MenuItem value="manager">Manager</MenuItem>
                 <MenuItem value="admin">Admin</MenuItem>
@@ -1759,11 +1940,11 @@ const Settings = () => {
             </Alert>
           </Box>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions sx={{ backgroundColor: colors.paper, p: 2 }}>
           <Button
             onClick={handleCloseUserDialog}
             startIcon={<CancelIcon />}
-            sx={{ color: 'text.secondary' }}
+            sx={{ color: colors.textSecondary }}
           >
             Cancel
           </Button>
@@ -1772,8 +1953,8 @@ const Settings = () => {
             variant="contained"
             startIcon={<Save />}
             sx={{
-              backgroundColor: '#00E0B8',
-              color: '#0D0D0D',
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
               '&:hover': {
                 backgroundColor: '#00C4A3'
               }

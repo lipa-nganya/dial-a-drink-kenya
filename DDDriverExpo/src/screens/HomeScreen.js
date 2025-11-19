@@ -105,40 +105,17 @@ const HomeScreen = ({ route, navigation }) => {
 
   // Set up notification handlers
   useEffect(() => {
-    // Handle notification received (when app is in foreground or background)
-    // When a push notification arrives, reschedule it as a local notification with proper channel
-    // This ensures sound and vibration work even when app is backgrounded or screen is off
+    // Handle notification received (when app is in foreground)
     const receivedSubscription = Notifications.addNotificationReceivedListener(async (notification) => {
       console.log('📱 Notification received:', notification);
       console.log('📱 App state:', appState.current);
-      console.log('📱 Notification trigger type:', notification.request.trigger?.type);
-      console.log('📱 Notification channel:', notification.request.content.android?.channelId);
       const { data } = notification.request.content;
       
-      // ALWAYS reschedule order-assigned notifications as local notifications with proper channel
-      // This ensures sound/vibration work even when app is backgrounded
-      // Push notifications from Expo don't specify a channelId, so they use default channel
-      // By rescheduling as local notification, we can use our custom MAX importance channel
-      if (data?.type === 'order-assigned' && data?.order) {
-        console.log('📱 Order-assigned notification detected - rescheduling with proper channel');
-        console.log('📱 Current channel:', notification.request.content.android?.channelId || 'default');
-        console.log('📱 App state:', appState.current);
-        
-        try {
-          // Cancel the original notification to prevent duplicate
-          await Notifications.dismissNotificationAsync(notification.request.identifier);
-          console.log('✅ Dismissed original push notification');
-          
-          // Reschedule with proper channel
-          await scheduleOrderNotification(data.order);
-          console.log('✅ Rescheduled push notification as local notification with MAX importance channel');
-        } catch (rescheduleError) {
-          console.error('❌ Error rescheduling notification:', rescheduleError);
-        }
-      }
-      
+      // Handle order assignment when app is in foreground
       if (data?.type === 'order-assigned' && data?.order) {
         const orderId = data.order.id;
+        
+        console.log('📱 Order-assigned notification detected');
         
         // Check if this order was already handled
         const existingOrder = orders.find(o => o.id === orderId);
@@ -153,8 +130,8 @@ const HomeScreen = ({ route, navigation }) => {
           return;
         }
         
-        // Handle the order assignment - this will bring app to foreground if in background
-        console.log('📱 Notification received - handling order assignment (will bring app to foreground)');
+        // Handle the order assignment (app is in foreground)
+        console.log('📱 Handling order assignment');
         processingOrdersRef.current.add(orderId);
         handleOrderAssigned(data.order, true);
       }

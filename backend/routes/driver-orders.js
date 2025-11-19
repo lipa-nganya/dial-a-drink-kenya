@@ -228,15 +228,11 @@ router.patch('/:orderId/status', async (req, res) => {
       await order.update({ status });
     }
 
-    // If delivered or completed, also update driver status
+    // If delivered or completed, check if driver has more active orders
+    // Only set driver status to 'active' if they have no more active orders
     if (finalStatus === 'delivered' || finalStatus === 'completed') {
-      const driver = await db.Driver.findByPk(driverId);
-      if (driver) {
-        await driver.update({ 
-          status: 'active',
-          lastActivity: new Date()
-        });
-      }
+      const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+      await updateDriverStatusIfNoActiveOrders(driverId);
 
       // Credit all wallets when order is completed (delivery completed)
       if (finalStatus === 'completed') {
@@ -817,6 +813,10 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
         console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
         // Don't fail the cash confirmation if wallet crediting fails - payment is already confirmed
       }
+      
+      // Update driver status if they have no more active orders
+      const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+      await updateDriverStatusIfNoActiveOrders(order.driverId);
     }
 
     try {

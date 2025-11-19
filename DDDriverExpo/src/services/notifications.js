@@ -8,21 +8,6 @@ Notifications.setNotificationHandler({
     console.log('📱 Notification handler called:', notification);
     console.log('📱 Notification data:', notification.request.content.data);
     
-    // For order-assigned notifications, ensure sound and vibration
-    const data = notification.request.content.data;
-    if (data?.type === 'order-assigned') {
-      console.log('📱 Order assignment notification - ensuring sound/vibration');
-      // Reschedule as local notification with proper channel
-      if (data?.order) {
-        try {
-          await scheduleOrderNotification(data.order);
-          console.log('✅ Rescheduled push notification as local notification with proper channel');
-        } catch (error) {
-          console.error('❌ Error rescheduling notification:', error);
-        }
-      }
-    }
-    
     return {
       shouldShowAlert: true,
       shouldPlaySound: true, // Play sound even in foreground
@@ -31,7 +16,7 @@ Notifications.setNotificationHandler({
   },
 });
 
-// Configure notification channel for Android (high priority to wake screen and bring app to foreground)
+// Configure notification channel for Android (high priority for sound and vibration)
 // This function is exported so it can be called immediately on app start
 export async function configureNotificationChannel() {
   if (Platform.OS === 'android') {
@@ -45,30 +30,22 @@ export async function configureNotificationChannel() {
       console.log('ℹ️ Channel does not exist yet, will create new one');
     }
     
-    // Create channel with MAX importance and all sound/vibration settings
+    // Create channel with MAX importance for sound and vibration
     await Notifications.setNotificationChannelAsync('order-assignments', {
       name: 'Order Assignments',
-      description: 'Notifications for new order assignments - wakes screen and brings app to foreground',
-      importance: Notifications.AndroidImportance.MAX, // MAX importance to wake screen and bring app to foreground
+      description: 'Notifications for new order assignments',
+      importance: Notifications.AndroidImportance.MAX, // MAX importance for sound and vibration
       vibrationPattern: [500, 100, 500, 100, 500, 100, 500],
       sound: 'default',
       enableVibrate: true,
       showBadge: true,
       lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
       bypassDnd: true, // Bypass Do Not Disturb
-      // Enable sound and vibration even when screen is off or app is in background
       playSound: true,
       enableLights: true,
       lightColor: '#00E0B8', // Accent color
-      // Note: Full-screen intent capability is enabled via USE_FULL_SCREEN_INTENT permission
-      // This allows notifications to automatically wake screen and bring app to foreground
     });
-    console.log('✅ Configured order-assignments channel with MAX importance for full-screen intents');
-    
-    // Note: We cannot delete or modify the "default" channel in Android
-    // Expo push notifications will use whatever default channel Android provides
-    // Instead, we intercept push notifications and reschedule them with our custom channel
-    console.log('ℹ️ Default channel cannot be modified - push notifications will be intercepted and rescheduled');
+    console.log('✅ Configured order-assignments channel with MAX importance');
   }
 }
 
@@ -121,9 +98,7 @@ export async function registerForPushNotifications(driverId) {
   }
 }
 
-// Schedule a local notification (for immediate display even when app is in background)
-// This notification will wake the screen and automatically bring the app to foreground
-// Uses full-screen intent capability (requires USE_FULL_SCREEN_INTENT permission)
+// Schedule a local notification (for immediate display when app is in foreground)
 export async function scheduleOrderNotification(order) {
   try {
     // Use custom sound if available, otherwise fallback to default
@@ -132,47 +107,35 @@ export async function scheduleOrderNotification(order) {
     const notificationConfig = {
       content: {
         title: '🚨 New Order Assigned!',
-        body: `Order #${order.id} has been assigned to you. Opening app...`,
+        body: `Order #${order.id} has been assigned to you.`,
         data: {
           orderId: order.id,
           order: order,
           type: 'order-assigned',
-          autoLaunch: true, // Flag to indicate this should auto-launch app
         },
         sound: soundFile,
-        priority: Notifications.AndroidNotificationPriority.MAX, // MAX priority to wake screen
+        priority: Notifications.AndroidNotificationPriority.MAX,
         badge: 1,
-        // iOS specific: critical alert (requires special entitlement)
         categoryId: 'order-assignment',
       },
       trigger: null, // Show immediately
       channelId: 'order-assignments', // Use the high-priority channel
     };
     
-    // Android: Add full-screen intent support and ensure sound/vibration work in background
+    // Android: Ensure sound/vibration work
     if (Platform.OS === 'android') {
-      // The full-screen intent is enabled via:
-      // 1. USE_FULL_SCREEN_INTENT permission (added via config plugin)
-      // 2. MAX importance channel (configured above)
-      // 3. MAX priority notification (set above)
-      // Android will automatically use full-screen intent when app is in background
       notificationConfig.android = {
         priority: 'max',
         channelId: 'order-assignments',
-        sound: soundFile, // Explicitly set sound for Android
-        vibrate: [500, 100, 500, 100, 500, 100, 500], // Explicit vibration pattern
-        // Ensure notification plays sound and vibrates even when screen is off
+        sound: soundFile,
+        vibrate: [500, 100, 500, 100, 500, 100, 500],
         visibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-        // Full-screen intent is automatically enabled for MAX importance notifications
-        // when USE_FULL_SCREEN_INTENT permission is granted
       };
     }
     
     await Notifications.scheduleNotificationAsync(notificationConfig);
     console.log('✅ Local notification scheduled for order:', order.id);
-    console.log('📢 Notification will wake screen and automatically bring app to foreground');
     console.log('🔊 Sound:', soundFile);
-    console.log('📱 Full-screen intent enabled (Android)');
   } catch (error) {
     console.error('❌ Error scheduling notification:', error);
     // Fallback to default sound if custom sound fails
@@ -180,12 +143,11 @@ export async function scheduleOrderNotification(order) {
       const fallbackConfig = {
         content: {
           title: '🚨 New Order Assigned!',
-          body: `Order #${order.id} has been assigned to you. Opening app...`,
+          body: `Order #${order.id} has been assigned to you.`,
           data: {
             orderId: order.id,
             order: order,
             type: 'order-assigned',
-            autoLaunch: true,
           },
           sound: 'default',
           priority: Notifications.AndroidNotificationPriority.MAX,

@@ -77,8 +77,11 @@ async function sendOrderNotification(pushToken, order) {
     },
     priority: 'high', // High priority for immediate delivery
     badge: 1,
-    // Android-specific: Ensure notification plays sound and vibrates
-    // The app will handle mapping this to the correct channel
+    // Android-specific: High priority for sound and vibration
+    android: {
+      channelId: 'order-assignments',
+      priority: 'max' // MAX priority for sound and vibration
+    }
   };
 
   try {

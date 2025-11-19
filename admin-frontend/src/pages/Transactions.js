@@ -75,9 +75,9 @@ const Transactions = () => {
     minWidth: 180,
     '& .MuiOutlinedInput-root': {
       backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-      '& fieldset': { borderColor: '#00E0B8' },
+      '& fieldset': { borderColor: colors.accentText },
       '&:hover fieldset': { borderColor: '#00C4A3' },
-      '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+      '&.Mui-focused fieldset': { borderColor: colors.accentText }
     },
     '& .MuiOutlinedInput-input': {
       color: colors.textPrimary
@@ -86,10 +86,10 @@ const Transactions = () => {
       color: colors.textPrimary
     },
     '& .MuiInputLabel-root': {
-      color: isDarkMode ? '#00E0B8' : undefined
+      color: isDarkMode ? colors.accentText : undefined
     },
     '& .MuiInputLabel-root.Mui-focused': {
-      color: '#00E0B8'
+      color: colors.accentText
     },
     '& input[type="date"]::-webkit-calendar-picker-indicator': {
       filter: isDarkMode ? 'invert(75%) sepia(59%) saturate(514%) hue-rotate(116deg) brightness(97%) contrast(93%)' : 'none'
@@ -270,11 +270,11 @@ const Transactions = () => {
 
     return {
       label: 'Credit',
-      sx: {
-        backgroundColor: '#00E0B8',
-        color: '#002A54',
-        fontWeight: 700
-      }
+        sx: {
+          backgroundColor: colors.accentText,
+          color: isDarkMode ? '#002A54' : '#FFFFFF',
+          fontWeight: 700
+        }
     };
   };
 
@@ -337,8 +337,8 @@ const Transactions = () => {
     <Container maxWidth={false} sx={{ py: 4, px: { xs: 2, md: 4 } }}>
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <Receipt sx={{ color: '#00E0B8', fontSize: 40 }} />
-          <Typography variant="h4" component="h1" gutterBottom sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <Receipt sx={{ color: colors.accentText, fontSize: 40 }} />
+          <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
             Transactions
           </Typography>
         </Box>
@@ -350,35 +350,35 @@ const Transactions = () => {
       {/* Merchant Wallet Section */}
       {merchantWallet && (
         <Box sx={{ mb: 3 }}>
-          <Paper sx={{ p: 3, backgroundColor: '#1a1a1a', border: '2px solid #00E0B8' }}>
+          <Paper sx={{ p: 3, backgroundColor: colors.paper, border: `2px solid ${colors.accentText}` }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <AccountBalanceWallet sx={{ fontSize: 32, color: '#00E0B8' }} />
-              <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+              <AccountBalanceWallet sx={{ fontSize: 32, color: colors.accentText }} />
+              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
                 Merchant Wallet
               </Typography>
             </Box>
             <Grid container spacing={3}>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">Current Balance</Typography>
-                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
                   KES {Number(merchantWallet.balance || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">Total Revenue</Typography>
-                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
                   KES {Number(merchantWallet.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">Paid Orders Count</Typography>
-                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
                   {merchantWallet.totalOrders || 0}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6} md={3}>
                 <Typography variant="body2" color="text.secondary">All Orders Count</Typography>
-                <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
                   {merchantWallet.allOrdersCount || 0}
                 </Typography>
               </Grid>
@@ -394,19 +394,19 @@ const Transactions = () => {
       <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Total Transactions</Typography>
-          <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
             {filteredTransactions.length}
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Total Orders</Typography>
-          <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
             {merchantWallet?.allOrdersCount || 0}
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Complete Transactions</Typography>
-          <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
             {filteredTransactions.filter(t => t.status === 'completed').length}
           </Typography>
         </Paper>
@@ -446,13 +446,13 @@ const Transactions = () => {
                 onChange={(e) => setStatusFilter(e.target.value)}
                 sx={{
                   '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
                     borderColor: '#00C4A3',
                   },
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                 }}
               >
@@ -472,13 +472,13 @@ const Transactions = () => {
                 onChange={(e) => setPaymentMethodFilter(e.target.value)}
                 sx={{
                   '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
                     borderColor: '#00C4A3',
                   },
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                 }}
               >
@@ -516,9 +516,9 @@ const Transactions = () => {
                 startIcon={<Clear />}
                 onClick={handleClearFilters}
                 sx={{
-                  borderColor: '#666',
-                  color: '#F5F5F5',
-                  '&:hover': { borderColor: '#888' }
+                  borderColor: colors.border,
+                  color: colors.textPrimary,
+                  '&:hover': { borderColor: colors.textSecondary }
                 }}
               >
                 Clear Filters
@@ -541,9 +541,9 @@ const Transactions = () => {
             }}
             sx={{
               '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#00E0B8' },
-                '&:hover fieldset': { borderColor: '#00E0B8' },
-                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                '& fieldset': { borderColor: colors.accentText },
+                '&:hover fieldset': { borderColor: colors.accentText },
+                '&.Mui-focused fieldset': { borderColor: colors.accentText }
               }
             }}
           />
@@ -562,18 +562,18 @@ const Transactions = () => {
           <Table sx={{ minWidth: 1300 }}>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }} width="40px"></TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Transaction ID</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Transaction Type</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Order ID</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Customer</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Payment Method</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Amount</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Category</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Receipt Number</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Date</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }} align="center">Actions</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }} width="40px"></TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Transaction ID</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Transaction Type</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order ID</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Customer</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Payment Method</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Amount</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Category</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Receipt Number</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -666,7 +666,7 @@ const Transactions = () => {
                         <IconButton
                           size="small"
                           onClick={() => toggleRowExpansion(transaction.id)}
-                          sx={{ color: '#00E0B8' }}
+                          sx={{ color: colors.accentText }}
                         >
                           {isExpanded ? <ExpandLess /> : <ExpandMore />}
                         </IconButton>
@@ -691,11 +691,13 @@ const Transactions = () => {
                           
                           // If label is missing or empty, determine the correct label based on transaction type
                           if (!chipLabel || chipLabel === '') {
-                            if (safeTransactionType === 'delivery_pay' || safeTransactionType === 'delivery') {
-                              // Check if it's a driver payment (has driverId that is not null/undefined)
-                              // CRITICAL: driverId must be explicitly checked for null/undefined, not just truthy
-                              // Merchant transactions have driverId: null, driver transactions have driverId: <number>
-                              const isDriverPayment = transaction?.driverId != null && transaction?.driverId !== undefined;
+                          if (safeTransactionType === 'delivery_pay' || safeTransactionType === 'delivery') {
+                            // Check if it's a driver payment (has driverWalletId or driverId that is not null/undefined)
+                            // CRITICAL: driverWalletId is the primary indicator for driver payments
+                            // Merchant transactions have driverWalletId: null, driver transactions have driverWalletId: <number>
+                            // Also check driverId as fallback for backwards compatibility
+                            const isDriverPayment = (transaction?.driverWalletId != null && transaction?.driverWalletId !== undefined) ||
+                                                   (transaction?.driverId != null && transaction?.driverId !== undefined);
                               chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
                               chipSx = {
                                 backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
@@ -890,7 +892,7 @@ const Transactions = () => {
                     <IconButton
                       size="small"
                       onClick={() => handleViewDetails(transaction)}
-                      sx={{ color: '#00E0B8' }}
+                      sx={{ color: colors.accentText }}
                     >
                       <Info />
                     </IconButton>
@@ -900,12 +902,12 @@ const Transactions = () => {
                   <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={13}>
                     <Collapse in={isExpanded} timeout="auto" unmountOnExit>
                       <Box sx={{ margin: 2 }}>
-                        <Typography variant="h6" gutterBottom sx={{ color: '#00E0B8', mb: 2 }}>
+                        <Typography variant="h6" gutterBottom sx={{ color: colors.accentText, mb: 2 }}>
                           Transaction Details
                         </Typography>
                         <Grid container spacing={2}>
                           <Grid item xs={12} md={6}>
-                            <Paper sx={{ p: 0, backgroundColor: '#101010' }}>
+                            <Paper sx={{ p: 0, backgroundColor: colors.paper }}>
                               <Tabs
                                 value={transactionDialogTab}
                                 onChange={(_event, newValue) => setTransactionDialogTab(newValue)}
@@ -913,13 +915,13 @@ const Transactions = () => {
                                 indicatorColor="secondary"
                                 variant="fullWidth"
                                 sx={{
-                                  borderBottom: '1px solid #333',
+                                  borderBottom: `1px solid ${colors.border}`,
                                   '& .MuiTab-root': {
-                                    color: '#ccc',
+                                    color: colors.textSecondary,
                                     fontWeight: 600
                                   },
                                   '& .Mui-selected': {
-                                    color: '#00E0B8'
+                                    color: colors.accentText
                                   }
                                 }}
                               >
@@ -930,7 +932,7 @@ const Transactions = () => {
                                 {transactionDialogTab === 'transaction' ? (
                                   <Box>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                                      <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                                      <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700 }}>
                                         Transaction Information
                                       </Typography>
                                       {(() => {
@@ -939,8 +941,10 @@ const Transactions = () => {
                                         
                                         if (!expandedLabel || expandedLabel.trim() === '') {
                                           if (transactionType === 'delivery_pay' || transactionType === 'delivery') {
-                                            // Check if it's a driver payment (has driverId that is not null/undefined)
-                                            const isDriverPayment = transaction?.driverId != null && transaction?.driverId !== undefined;
+                                            // Check if it's a driver payment (has driverWalletId or driverId that is not null/undefined)
+                                            // CRITICAL: driverWalletId is the primary indicator for driver payments
+                                            const isDriverPayment = (transaction?.driverWalletId != null && transaction?.driverWalletId !== undefined) ||
+                                                                   (transaction?.driverId != null && transaction?.driverId !== undefined);
                                             expandedLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
                                           } else if (transactionType && transactionType.trim() !== '') {
                                             expandedLabel = transactionType
@@ -960,8 +964,10 @@ const Transactions = () => {
                                           chipBackgroundColor = '#FFC107';
                                           chipColor = '#000';
                                         } else                                         if (transactionType === 'delivery_pay' || transactionType === 'delivery') {
-                                          // Check if it's a driver payment (has driverId that is not null/undefined)
-                                          const isDriverPayment = transaction?.driverId != null && transaction?.driverId !== undefined;
+                                          // Check if it's a driver payment (has driverWalletId or driverId that is not null/undefined)
+                                          // CRITICAL: driverWalletId is the primary indicator for driver payments
+                                          const isDriverPayment = (transaction?.driverWalletId != null && transaction?.driverWalletId !== undefined) ||
+                                                                 (transaction?.driverId != null && transaction?.driverId !== undefined);
                                           chipBackgroundColor = isDriverPayment ? '#FFC107' : '#2196F3';
                                           chipColor = isDriverPayment ? '#000' : '#002A54';
                                         }
@@ -1018,7 +1024,7 @@ const Transactions = () => {
                                   </Box>
                                 ) : (
                                   <Box>
-                                    <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700, mb: 2 }}>
+                                    <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, mb: 2 }}>
                                       Order Information
                                     </Typography>
                                     {transaction.order ? (
@@ -1061,11 +1067,11 @@ const Transactions = () => {
                           </Grid>
                           {transaction.notes && (
                             <Grid item xs={12}>
-                              <Paper sx={{ p: 2, backgroundColor: '#1a1a1a' }}>
+                              <Paper sx={{ p: 2, backgroundColor: colors.paper }}>
                                 <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                                   Notes
                                 </Typography>
-                                <Divider sx={{ my: 1, borderColor: '#333' }} />
+                                <Divider sx={{ my: 1, borderColor: colors.border }} />
                                 <Typography variant="body2" sx={{ mt: 1, whiteSpace: 'pre-wrap' }}>
                                   {transaction.notes}
                                 </Typography>
@@ -1082,6 +1088,39 @@ const Transactions = () => {
               })}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={filteredTransactions.length}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            sx={{
+              borderTop: `1px solid ${colors.border}`,
+              '& .MuiTablePagination-toolbar': {
+                color: colors.textPrimary,
+              },
+              '& .MuiTablePagination-selectLabel': {
+                color: colors.textPrimary,
+              },
+              '& .MuiTablePagination-displayedRows': {
+                color: colors.textPrimary,
+              },
+              '& .MuiTablePagination-select': {
+                color: colors.textPrimary,
+              },
+              '& .MuiTablePagination-selectIcon': {
+                color: colors.textPrimary,
+              },
+              '& .MuiIconButton-root': {
+                color: colors.textPrimary,
+                '&:disabled': {
+                  color: colors.textSecondary,
+                },
+              },
+            }}
+          />
         </TableContainer>
       )}
 
@@ -1097,7 +1136,7 @@ const Transactions = () => {
       >
         {selectedTransaction && (
           <>
-            <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
+            <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
               Transaction Details #{selectedTransaction.id}
             </DialogTitle>
             <DialogContent
@@ -1115,14 +1154,14 @@ const Transactions = () => {
                 variant="fullWidth"
                 sx={{
                   mb: 3,
-                  borderBottom: '1px solid #333',
+                  borderBottom: `1px solid ${colors.border}`,
                   '& .MuiTab-root': {
-                    color: '#ccc',
+                    color: colors.textSecondary,
                     fontWeight: 600,
                     fontSize: '0.95rem'
                   },
                   '& .Mui-selected': {
-                    color: '#00E0B8'
+                    color: colors.accentText
                   }
                 }}
               >
@@ -1148,8 +1187,10 @@ const Transactions = () => {
                       
                       if (!chipLabel || chipLabel.trim() === '') {
                         if (dialogTransactionType === 'delivery_pay' || dialogTransactionType === 'delivery') {
-                          // Check if it's a driver payment (has driverId that is not null/undefined)
-                          const isDriverPayment = selectedTransaction?.driverId != null && selectedTransaction?.driverId !== undefined;
+                          // Check if it's a driver payment (has driverWalletId or driverId that is not null/undefined)
+                          // CRITICAL: driverWalletId is the primary indicator for driver payments
+                          const isDriverPayment = (selectedTransaction?.driverWalletId != null && selectedTransaction?.driverWalletId !== undefined) ||
+                                                 (selectedTransaction?.driverId != null && selectedTransaction?.driverId !== undefined);
                           chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
                           chipSx = {
                             backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
@@ -1296,7 +1337,7 @@ const Transactions = () => {
 
               {selectedTransaction.notes && transactionDialogTab === 'transaction' && (
                 <Box sx={{ mt: 3 }}>
-                  <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700, mb: 1 }}>
+                  <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, mb: 1 }}>
                     Notes
                   </Typography>
                   <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>

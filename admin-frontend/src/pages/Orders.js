@@ -10,6 +10,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   Chip,
   Button,
   Select,
@@ -41,9 +42,11 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
+import { useTheme } from '../contexts/ThemeContext';
 import { getOrderStatusChipProps, getPaymentStatusChipProps } from '../utils/chipStyles';
 
 const Orders = () => {
+  const { isDarkMode, colors } = useTheme();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -63,6 +66,8 @@ const Orders = () => {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelReasonError, setCancelReasonError] = useState('');
   const [cancelTargetOrder, setCancelTargetOrder] = useState(null);
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   useEffect(() => {
     fetchOrders();
@@ -466,6 +471,15 @@ const Orders = () => {
   };
 
   const handleOpenBranchDialog = (order) => {
+    // Prevent opening dialog for cancelled or completed orders
+    if (order.status === 'cancelled') {
+      setError('Cannot change branch assignment for cancelled orders.');
+      return;
+    }
+    if (order.status === 'completed') {
+      setError('Cannot change branch assignment for completed orders.');
+      return;
+    }
     setSelectedOrder(order);
     setSelectedBranchId(order.branchId || '');
     setReassignDriver(false); // Reset reassign driver option
@@ -481,6 +495,16 @@ const Orders = () => {
 
   const handleAssignBranch = async () => {
     if (!selectedOrder) return;
+    
+    // Prevent branch assignment for cancelled or completed orders
+    if (selectedOrder.status === 'cancelled') {
+      setError('Cannot change branch assignment for cancelled orders.');
+      return;
+    }
+    if (selectedOrder.status === 'completed') {
+      setError('Cannot change branch assignment for completed orders.');
+      return;
+    }
     
     try {
       const branchId = selectedBranchId === '' ? null : parseInt(selectedBranchId);
@@ -572,8 +596,8 @@ const Orders = () => {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <Assignment sx={{ color: '#00E0B8', fontSize: 40 }} />
-          <Typography variant="h4" component="h1" gutterBottom sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <Assignment sx={{ color: colors.accentText, fontSize: 40 }} />
+          <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
             Orders Management
           </Typography>
         </Box>
@@ -593,7 +617,7 @@ const Orders = () => {
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
-                <Search sx={{ color: '#00E0B8' }} />
+                <Search sx={{ color: colors.accentText }} />
               </InputAdornment>
             ),
             endAdornment: searchQuery && (
@@ -608,27 +632,27 @@ const Orders = () => {
               </InputAdornment>
             ),
           }}
-          sx={{
-            minWidth: 300,
-            '& .MuiOutlinedInput-root': {
-              '& fieldset': {
-                borderColor: '#00E0B8',
+            sx={{
+              minWidth: 300,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': {
+                  borderColor: colors.accentText,
+                },
+                '&:hover fieldset': {
+                  borderColor: '#00C4A3',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: colors.accentText,
+                },
               },
-              '&:hover fieldset': {
-                borderColor: '#00C4A3',
+              '& .MuiInputBase-input': {
+                color: colors.textPrimary,
               },
-              '&.Mui-focused fieldset': {
-                borderColor: '#00E0B8',
+              '& .MuiInputBase-input::placeholder': {
+                color: colors.textSecondary,
+                opacity: 1,
               },
-            },
-            '& .MuiInputBase-input': {
-              color: '#F5F5F5',
-            },
-            '& .MuiInputBase-input::placeholder': {
-              color: '#B0B0B0',
-              opacity: 1,
-            },
-          }}
+            }}
         />
 
         <FormControl size="small" sx={{ minWidth: 200 }}>
@@ -639,13 +663,13 @@ const Orders = () => {
             onChange={(e) => setOrderStatusFilter(e.target.value)}
             sx={{
               '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: '#00E0B8',
+                borderColor: colors.accentText,
               },
               '&:hover .MuiOutlinedInput-notchedOutline': {
                 borderColor: '#00C4A3',
               },
               '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderColor: '#00E0B8',
+                borderColor: colors.accentText,
               },
             }}
           >
@@ -668,13 +692,13 @@ const Orders = () => {
             onChange={(e) => setTransactionStatusFilter(e.target.value)}
             sx={{
               '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: '#00E0B8',
+                borderColor: colors.accentText,
               },
               '&:hover .MuiOutlinedInput-notchedOutline': {
                 borderColor: '#00C4A3',
               },
               '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderColor: '#00E0B8',
+                borderColor: colors.accentText,
               },
             }}
           >
@@ -696,9 +720,9 @@ const Orders = () => {
               setSearchQuery('');
             }}
             sx={{
-              borderColor: '#666',
-              color: '#F5F5F5',
-              '&:hover': { borderColor: '#888' }
+              borderColor: colors.border,
+              color: colors.textPrimary,
+              '&:hover': { borderColor: colors.textSecondary }
             }}
           >
             Clear Filters
@@ -724,20 +748,20 @@ const Orders = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Order ID</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Customer</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Items</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Total Amount</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Payment Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Order Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Branch</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Driver</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Date</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Actions</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order ID</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Customer</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Items</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Total Amount</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Payment Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Branch</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Driver</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredOrders.map((order) => {
+              {filteredOrders.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((order) => {
                 const isUnpaidDelivered = order.status === 'delivered' && order.paymentStatus === 'unpaid';
                 const statusChip = getOrderStatusChipProps(order.status);
                 const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
@@ -815,11 +839,11 @@ const Orders = () => {
                     </TableCell>
                     <TableCell>
                       {order.branch ? (
-                        <Box>
+                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>
                             {order.branch.name}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
                             {order.branch.address}
                           </Typography>
                           <Button
@@ -827,14 +851,29 @@ const Orders = () => {
                             size="small"
                             startIcon={<Edit />}
                             onClick={() => handleOpenBranchDialog(order)}
-                            sx={{ mt: 0.5, p: 0, minWidth: 'auto', fontSize: '0.7rem' }}
+                            disabled={order.status === 'cancelled' || order.status === 'completed'}
+                            sx={{ 
+                              alignSelf: 'flex-start',
+                              p: 0, 
+                              minWidth: 'auto', 
+                              fontSize: '0.7rem',
+                              color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : colors.accentText,
+                              '&:hover': {
+                                backgroundColor: (order.status === 'cancelled' || order.status === 'completed') ? 'transparent' : 'rgba(0, 224, 184, 0.1)',
+                                color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : '#00C4A3'
+                              },
+                              '&.Mui-disabled': {
+                                color: colors.textSecondary,
+                                opacity: 0.5
+                              }
+                            }}
                           >
                             Change
                           </Button>
                         </Box>
                       ) : (
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
+                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                             Not assigned
                           </Typography>
                           <Button
@@ -842,7 +881,22 @@ const Orders = () => {
                             size="small"
                             startIcon={<Edit />}
                             onClick={() => handleOpenBranchDialog(order)}
-                            sx={{ mt: 0.5, p: 0, minWidth: 'auto', fontSize: '0.7rem' }}
+                            disabled={order.status === 'cancelled' || order.status === 'completed'}
+                            sx={{ 
+                              alignSelf: 'flex-start',
+                              p: 0, 
+                              minWidth: 'auto', 
+                              fontSize: '0.7rem',
+                              color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : colors.accentText,
+                              '&:hover': {
+                                backgroundColor: (order.status === 'cancelled' || order.status === 'completed') ? 'transparent' : 'rgba(0, 224, 184, 0.1)',
+                                color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : '#00C4A3'
+                              },
+                              '&.Mui-disabled': {
+                                color: colors.textSecondary,
+                                opacity: 0.5
+                              }
+                            }}
                           >
                             Assign
                           </Button>
@@ -906,15 +960,15 @@ const Orders = () => {
                           onClick={() => handleOpenDriverDialog(order)}
                           disabled={order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled'}
                           sx={{
-                            borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#00E0B8',
-                            color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#00E0B8',
+                            borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : colors.accentText,
+                            color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.textSecondary : colors.accentText,
                             '&:hover': {
-                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#00C4A3',
+                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : '#00C4A3',
                               backgroundColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? 'transparent' : 'rgba(0, 224, 184, 0.1)'
                             },
                             '&.Mui-disabled': {
-                              borderColor: '#666',
-                              color: '#666'
+                              borderColor: colors.border,
+                              color: colors.textSecondary
                             }
                           }}
                         >
@@ -928,16 +982,16 @@ const Orders = () => {
                             onClick={() => handleRemoveDriver(order)}
                             disabled={order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled'}
                             sx={{
-                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#FF3366',
-                              color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#FF3366',
-                              '&:hover': {
-                                borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? '#666' : '#FF1744',
-                                backgroundColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? 'transparent' : 'rgba(255, 51, 102, 0.1)'
-                              },
-                              '&.Mui-disabled': {
-                                borderColor: '#666',
-                                color: '#666'
-                              }
+                            borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : '#FF3366',
+                            color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.textSecondary : '#FF3366',
+                            '&:hover': {
+                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : '#FF1744',
+                              backgroundColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? 'transparent' : 'rgba(255, 51, 102, 0.1)'
+                            },
+                            '&.Mui-disabled': {
+                              borderColor: colors.border,
+                              color: colors.textSecondary
+                            }
                             }}
                           >
                             Remove Driver
@@ -1001,7 +1055,7 @@ const Orders = () => {
                                 }
                               }
                             }}
-                            sx={{ mt: 1, borderColor: '#00E0B8', color: '#00E0B8' }}
+                            sx={{ mt: 1, borderColor: colors.accentText, color: colors.accentText }}
                           >
                             Verify Payment
                           </Button>
@@ -1013,6 +1067,53 @@ const Orders = () => {
               })}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={filteredOrders.length}
+            page={page}
+            onPageChange={(event, newPage) => setPage(newPage)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(event) => {
+              setRowsPerPage(parseInt(event.target.value, 10));
+              setPage(0);
+            }}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            sx={{
+              backgroundColor: colors.paper,
+              borderTop: `1px solid ${colors.border}`,
+              '& .MuiTablePagination-toolbar': {
+                color: colors.textPrimary
+              },
+              '& .MuiTablePagination-selectLabel': {
+                color: colors.textPrimary
+              },
+              '& .MuiTablePagination-displayedRows': {
+                color: colors.textPrimary
+              },
+              '& .MuiTablePagination-select': {
+                color: colors.textPrimary,
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.border
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accentText
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accentText
+                }
+              },
+              '& .MuiIconButton-root': {
+                color: colors.textPrimary,
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 224, 184, 0.1)',
+                  color: colors.accentText
+                },
+                '&.Mui-disabled': {
+                  color: colors.textSecondary
+                }
+              }
+            }}
+          />
         </TableContainer>
       )}
 
@@ -1023,16 +1124,27 @@ const Orders = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
           {selectedOrder?.branch ? 'Change Branch' : 'Assign Branch'}
         </DialogTitle>
         <DialogContent>
+          {selectedOrder?.status === 'cancelled' && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              This order has been cancelled. Branch assignment cannot be changed.
+            </Alert>
+          )}
+          {selectedOrder?.status === 'completed' && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              This order has been completed. Branch assignment cannot be changed.
+            </Alert>
+          )}
           <Box sx={{ mt: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Select Branch</InputLabel>
               <Select
                 value={selectedBranchId}
                 label="Select Branch"
+                disabled={selectedOrder?.status === 'cancelled' || selectedOrder?.status === 'completed'}
                 onChange={(e) => {
                   setSelectedBranchId(e.target.value);
                   // Reset reassign driver option when branch changes
@@ -1104,11 +1216,16 @@ const Orders = () => {
           <Button
             onClick={handleAssignBranch}
             variant="contained"
+            disabled={selectedOrder?.status === 'cancelled' || selectedOrder?.status === 'completed'}
             sx={{
-              backgroundColor: '#00E0B8',
-              color: '#0D0D0D',
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
               '&:hover': {
                 backgroundColor: '#00C4A3'
+              },
+              '&.Mui-disabled': {
+                backgroundColor: colors.textSecondary,
+                color: colors.paper
               }
             }}
           >
@@ -1124,7 +1241,7 @@ const Orders = () => {
         maxWidth="sm"
         fullWidth
       >
-        <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
           Assign Driver to Order #{selectedOrder?.id}
         </DialogTitle>
         <DialogContent>
@@ -1172,8 +1289,8 @@ const Orders = () => {
             onClick={handleAssignDriver}
             variant="contained"
             sx={{
-              backgroundColor: '#00E0B8',
-              color: '#0D0D0D',
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
               '&:hover': {
                 backgroundColor: '#00C4A3'
               }
@@ -1223,7 +1340,7 @@ const Orders = () => {
           <Button
             onClick={handleConfirmCancel}
             variant="contained"
-            sx={{ backgroundColor: '#FF3366', color: '#0D0D0D', '&:hover': { backgroundColor: '#FF1744' } }}
+            sx={{ backgroundColor: '#FF3366', color: isDarkMode ? '#0D0D0D' : '#FFFFFF', '&:hover': { backgroundColor: '#FF1744' } }}
           >
             Confirm Cancel
           </Button>

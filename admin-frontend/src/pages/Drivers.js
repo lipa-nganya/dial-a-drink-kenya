@@ -40,8 +40,10 @@ import {
   VpnKey
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 const Drivers = () => {
+  const { isDarkMode, colors } = useTheme();
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -230,8 +232,8 @@ const Drivers = () => {
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <LocalShipping sx={{ fontSize: 40, color: '#00E0B8' }} />
-          <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <LocalShipping sx={{ fontSize: 40, color: colors.accentText }} />
+          <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
             Drivers Management
           </Typography>
         </Box>
@@ -240,8 +242,8 @@ const Drivers = () => {
           startIcon={<Add />}
           onClick={() => handleOpenDialog()}
           sx={{
-            backgroundColor: '#00E0B8',
-            color: '#0D0D0D',
+            backgroundColor: colors.accentText,
+            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
             '&:hover': {
               backgroundColor: '#00C4A3'
             }
@@ -261,12 +263,12 @@ const Drivers = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Driver Name</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Phone Number</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Last Activity</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>OTP</TableCell>
-              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }} align="right">Actions</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Driver Name</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Phone Number</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Last Activity</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>OTP</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -309,7 +311,7 @@ const Drivers = () => {
                       <IconButton
                         size="small"
                         onClick={() => toggleOtpVisibility(driver.id)}
-                        sx={{ color: '#00E0B8' }}
+                        sx={{ color: colors.accentText }}
                         title={showOtps[driver.id] ? "Hide OTP" : "Show OTP"}
                       >
                         {showOtps[driver.id] ? <VisibilityOff /> : <VpnKey />}
@@ -342,7 +344,7 @@ const Drivers = () => {
                     <IconButton
                       size="small"
                       onClick={() => handleOpenDialog(driver)}
-                      sx={{ color: '#00E0B8' }}
+                      sx={{ color: colors.accentText }}
                     >
                       <Edit />
                     </IconButton>
@@ -412,8 +414,8 @@ const Drivers = () => {
             onClick={handleSubmit}
             variant="contained"
             sx={{
-              backgroundColor: '#00E0B8',
-              color: '#0D0D0D',
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
               '&:hover': {
                 backgroundColor: '#00C4A3'
               }
