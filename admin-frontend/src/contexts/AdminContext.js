@@ -133,7 +133,7 @@ export const AdminProvider = ({ children }) => {
           // Extract base URL from API URL (remove /api suffix)
           return apiUrl.replace('/api', '');
         }
-        return 'https://liquoros-backend-910510650031.us-central1.run.app';
+        return 'https://dialadrink-backend-910510650031.us-central1.run.app';
       }
 
       // Fallback: Use REACT_APP_API_URL if set (for other hosted environments)
@@ -143,7 +143,7 @@ export const AdminProvider = ({ children }) => {
       }
 
       // Final fallback
-      return 'https://liquoros-backend-910510650031.us-central1.run.app';
+      return 'https://dialadrink-backend-910510650031.us-central1.run.app';
     };
     const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);
