@@ -102,21 +102,24 @@ export default function POSScanScreen() {
       // Add to backend cart (this will sync with Admin POS)
       await addToPOSCart(product.id, 1);
       
-      // Update local cart
-      const existingIndex = scannedItems.findIndex(item => item.id === product.id);
-      
-      if (existingIndex >= 0) {
-        // Increase quantity
-        const updatedItems = [...scannedItems];
-        updatedItems[existingIndex].quantity += 1;
-        setScannedItems(updatedItems);
-      } else {
-        // Add new item
-        setScannedItems([...scannedItems, {
-          ...product,
-          quantity: 1
-        }]);
-      }
+      // Update local cart immediately for better UX
+      // The polling will sync with backend, but this gives instant feedback
+      setScannedItems(prevItems => {
+        const existingIndex = prevItems.findIndex(item => item.id === product.id);
+        
+        if (existingIndex >= 0) {
+          // Increase quantity
+          const updatedItems = [...prevItems];
+          updatedItems[existingIndex].quantity += 1;
+          return updatedItems;
+        } else {
+          // Add new item
+          return [...prevItems, {
+            ...product,
+            quantity: 1
+          }];
+        }
+      });
 
       // Show success feedback
       Alert.alert('Item Added', `${product.name} added to cart`);
