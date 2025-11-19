@@ -11,7 +11,7 @@ import {
   Chip,
   Divider
 } from 'react-native-paper';
-import { scanForPOS, decreaseStock, addToPOSCart, getPOSCart, clearPOSCart } from '../services/api';
+import { scanForPOS, decreaseStock, addToPOSCart, getPOSCart, clearPOSCart, removeFromPOSCart } from '../services/api';
 
 export default function POSScanScreen() {
   const [hasPermission, setHasPermission] = useState(null);
@@ -26,6 +26,65 @@ export default function POSScanScreen() {
       setHasPermission(permission.granted);
     }
   }, [permission]);
+
+  // Poll backend cart to sync with Admin POS
+  useEffect(() => {
+    let isMounted = true;
+    
+    const fetchCart = async () => {
+      try {
+        const response = await getPOSCart();
+        if (!isMounted) return;
+        
+        if (response.cart) {
+          // If backend cart is empty, clear local cart
+          if (response.cart.length === 0) {
+            setScannedItems(prevItems => {
+              if (prevItems.length > 0) {
+                console.log('🛒 Backend cart cleared, clearing local cart');
+                return [];
+              }
+              return prevItems;
+            });
+          } else {
+            // Sync local cart with backend cart
+            const backendCart = response.cart.map(item => ({
+              id: item.drinkId,
+              name: item.name,
+              price: item.price,
+              quantity: item.quantity,
+              image: item.image
+            }));
+            
+            // Update local cart if it differs from backend
+            setScannedItems(prevItems => {
+              const prevCartStr = JSON.stringify(prevItems.map(item => ({ id: item.id, quantity: item.quantity })).sort((a, b) => a.id - b.id));
+              const backendCartStr = JSON.stringify(backendCart.map(item => ({ id: item.id, quantity: item.quantity })).sort((a, b) => a.id - b.id));
+              
+              if (prevCartStr !== backendCartStr) {
+                console.log('🛒 Syncing local cart with backend cart');
+                return backendCart;
+              }
+              return prevItems;
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching POS cart:', error);
+      }
+    };
+
+    // Fetch initial cart
+    fetchCart();
+
+    // Poll every 2 seconds (same as Admin POS)
+    const cartPollInterval = setInterval(fetchCart, 2000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(cartPollInterval);
+    };
+  }, []); // Empty dependency array - only run on mount/unmount
 
   const handleBarCodeScanned = async ({ data }) => {
     if (scanned || loading) return;
