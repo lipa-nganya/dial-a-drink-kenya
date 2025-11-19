@@ -1,0 +1,59 @@
+{
+  "cli": {
+    "version": ">= 5.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development"
+    },
+    "local-dev": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "local-dev",
+      "env": {
+        "EXPO_PUBLIC_ENV": "local",
+        "EXPO_PUBLIC_BUILD_PROFILE": "local-dev",
+        "EXPO_PUBLIC_API_BASE_URL": "https://homiest-psychopharmacologic-anaya.ngrok-free.dev"
+      }
+    },
+    "cloud-dev": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "cloud-dev",
+      "env": {
+        "EXPO_PUBLIC_ENV": "cloud",
+        "EXPO_PUBLIC_BUILD_PROFILE": "cloud-dev",
+        "EXPO_PUBLIC_API_BASE_URL": "https://dialadrink-backend-910510650031.us-central1.run.app"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "preview"
+    },
+    "production": {
+      "android": {
+        "buildType": "apk"
+      },
+      "channel": "production",
+      "env": {
+        "EXPO_PUBLIC_ENV": "production",
+        "EXPO_PUBLIC_BUILD_PROFILE": "production",
+        "EXPO_PUBLIC_API_BASE_URL": "https://dialadrink-backend-910510650031.us-central1.run.app"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}
+
