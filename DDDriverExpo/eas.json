@@ -29,7 +29,7 @@
       "env": {
         "EXPO_PUBLIC_ENV": "cloud",
         "EXPO_PUBLIC_BUILD_PROFILE": "cloud-dev",
-        "EXPO_PUBLIC_API_BASE_URL": "https://liquoros-backend-910510650031.us-central1.run.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://dialadrink-backend-910510650031.us-central1.run.app"
       }
     },
     "preview": {
@@ -47,7 +47,7 @@
       "env": {
         "EXPO_PUBLIC_ENV": "production",
         "EXPO_PUBLIC_BUILD_PROFILE": "production",
-        "EXPO_PUBLIC_API_BASE_URL": "https://liquoros-backend-910510650031.us-central1.run.app"
+        "EXPO_PUBLIC_API_BASE_URL": "https://dialadrink-backend-910510650031.us-central1.run.app"
       }
     }
   },
