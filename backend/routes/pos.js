@@ -135,11 +135,21 @@ router.get('/customer/:phoneNumber', async (req, res) => {
 // Get drink by barcode for POS
 router.get('/drinks/barcode/:barcode', async (req, res) => {
   try {
-    const { barcode } = req.params;
+    let { barcode } = req.params;
     
-    const drink = await db.Drink.findOne({
+    // Normalize barcode: trim whitespace and remove any non-digit characters that might be added by scanner
+    // But keep the original for exact match first
+    const trimmedBarcode = barcode.trim();
+    
+    console.log(`🔍 POS: Looking up barcode: "${barcode}" (trimmed: "${trimmedBarcode}")`);
+    
+    // Try exact match first (with original and trimmed)
+    let drink = await db.Drink.findOne({
       where: {
-        barcode: barcode,
+        [Op.or]: [
+          { barcode: barcode },
+          { barcode: trimmedBarcode }
+        ],
         isAvailable: {
           [Op.ne]: false
         }
@@ -152,10 +162,64 @@ router.get('/drinks/barcode/:barcode', async (req, res) => {
       }]
     });
 
+    // If not found, try with trimmed leading zeros (some scanners add leading zeros)
+    if (!drink && trimmedBarcode.length > 0) {
+      const withoutLeadingZeros = trimmedBarcode.replace(/^0+/, '');
+      if (withoutLeadingZeros !== trimmedBarcode && withoutLeadingZeros.length > 0) {
+        console.log(`🔍 Trying without leading zeros: "${withoutLeadingZeros}"`);
+        drink = await db.Drink.findOne({
+          where: {
+            barcode: withoutLeadingZeros,
+            isAvailable: {
+              [Op.ne]: false
+            }
+          },
+          include: [{
+            model: db.Category,
+            as: 'category',
+            attributes: ['id', 'name'],
+            required: false
+          }]
+        });
+      }
+    }
+
+    // If still not found, try case-insensitive match (though barcodes are usually numeric)
     if (!drink) {
+      drink = await db.Drink.findOne({
+        where: {
+          barcode: {
+            [Op.iLike]: trimmedBarcode
+          },
+          isAvailable: {
+            [Op.ne]: false
+          }
+        },
+        include: [{
+          model: db.Category,
+          as: 'category',
+          attributes: ['id', 'name'],
+          required: false
+        }]
+      });
+    }
+
+    if (!drink) {
+      console.log(`❌ No product found with barcode: "${barcode}"`);
+      // Log available barcodes for debugging (first 5)
+      const sampleBarcodes = await db.Drink.findAll({
+        where: {
+          barcode: { [Op.ne]: null }
+        },
+        limit: 5,
+        attributes: ['id', 'name', 'barcode']
+      });
+      console.log(`📋 Sample barcodes in database:`, sampleBarcodes.map(d => `${d.name}: ${d.barcode}`));
+      
       return res.status(404).json({ error: 'Product not found with barcode: ' + barcode });
     }
 
+    console.log(`✅ Found product: ${drink.name} (barcode: ${drink.barcode})`);
     res.json(drink);
   } catch (error) {
     console.error('Error fetching drink by barcode:', error);

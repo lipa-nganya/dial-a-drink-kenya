@@ -34,7 +34,11 @@ export default function POSScanScreen() {
     setLoading(true);
 
     try {
-      const product = await scanForPOS(data);
+      // Normalize barcode: trim whitespace
+      const normalizedBarcode = data.trim();
+      console.log(`📱 Retail Scanner: Scanned barcode: "${data}" (normalized: "${normalizedBarcode}")`);
+      
+      const product = await scanForPOS(normalizedBarcode);
       
       // Add to backend cart (this will sync with Admin POS)
       await addToPOSCart(product.id, 1);
