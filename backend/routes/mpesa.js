@@ -117,10 +117,14 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       return { order: orderInstance, receipt: paymentTransaction.receiptNumber };
     }
 
+  // Check if this is a POS order (in-store purchase)
+  const isPOSOrder = orderInstance.deliveryAddress === 'In-Store Purchase';
+  
   const breakdown = await getOrderFinancialBreakdown(effectiveOrderId);
   const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-  const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-  const tipAmountNumeric = parseFloat(breakdown.tipAmount) || 0;
+  // POS orders don't have delivery fees
+  const deliveryFee = isPOSOrder ? 0 : (parseFloat(breakdown.deliveryFee) || 0);
+  const tipAmountNumeric = isPOSOrder ? 0 : (parseFloat(breakdown.tipAmount) || 0);
 
   const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
     db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
@@ -130,23 +134,28 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
   const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
   
-  // CRITICAL: Use same calculation logic as ensureDeliveryFeeSplit to avoid mismatches
-  // First check orderInstance.driverPayAmount, then fall back to configuredDriverPayAmount
+  // POS orders don't have drivers or delivery fees
   let driverPayAmount = 0;
-  if (driverPaySettingEnabled && orderInstance.driverId) {
-    driverPayAmount = parseFloat(orderInstance.driverPayAmount || '0');
-    
-    if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPayAmount > 0) {
-      driverPayAmount = Math.min(deliveryFee, configuredDriverPayAmount);
-    }
-    
-    if (driverPayAmount > deliveryFee) {
-      driverPayAmount = deliveryFee;
-    }
-  }
-  // If driverPayEnabled is false or no driver, driverPayAmount stays 0
+  let merchantDeliveryAmount = 0;
   
-  const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
+  if (!isPOSOrder) {
+    // CRITICAL: Use same calculation logic as ensureDeliveryFeeSplit to avoid mismatches
+    // First check orderInstance.driverPayAmount, then fall back to configuredDriverPayAmount
+    if (driverPaySettingEnabled && orderInstance.driverId) {
+      driverPayAmount = parseFloat(orderInstance.driverPayAmount || '0');
+      
+      if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPayAmount > 0) {
+        driverPayAmount = Math.min(deliveryFee, configuredDriverPayAmount);
+      }
+      
+      if (driverPayAmount > deliveryFee) {
+        driverPayAmount = deliveryFee;
+      }
+    }
+    // If driverPayEnabled is false or no driver, driverPayAmount stays 0
+    
+    merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
+  }
 
   const normalizedReceipt = receiptNumber || paymentTransaction.receiptNumber;
 
@@ -185,9 +194,14 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     orderUpdatePayload.driverPayAmount = driverPayAmount;
   }
 
+  // For POS orders, set status to 'completed' immediately (no delivery needed)
+  if (isPOSOrder) {
+    orderUpdatePayload.status = 'completed';
+  }
+  
   // Update order within the transaction to ensure it's committed atomically
   await orderInstance.update(orderUpdatePayload, { transaction: dbTransaction });
-  console.log(`✅ Updated order #${effectiveOrderId} status to '${orderUpdatePayload.status}', paymentStatus to 'paid'`);
+  console.log(`✅ Updated order #${effectiveOrderId} status to '${orderUpdatePayload.status}', paymentStatus to 'paid'${isPOSOrder ? ' (POS Order)' : ''}`);
 
   await orderInstance.reload({
     include: [

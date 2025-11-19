@@ -16,7 +16,8 @@ import {
   LocalShipping,
   LocalFlorist,
   People,
-  Store
+  Store,
+  PointOfSale
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -97,6 +98,14 @@ const AdminHeader = () => {
             sx={buttonStyle('/inventory')}
           >
             Inventory
+          </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/pos')}
+            startIcon={<PointOfSale />}
+            sx={buttonStyle('/pos')}
+          >
+            POS
           </Button>
           <Button
             color="inherit"

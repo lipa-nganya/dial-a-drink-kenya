@@ -19,6 +19,7 @@ import Branches from './pages/Branches';
 import Settings from './pages/Settings';
 import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
+import POS from './pages/POS';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -271,6 +272,17 @@ function AppContent() {
                     <>
                       <AdminHeader />
                       <Customers />
+                    </>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/pos"
+                element={
+                  <PrivateRoute>
+                    <>
+                      <AdminHeader />
+                      <POS />
                     </>
                   </PrivateRoute>
                 }
