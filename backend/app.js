@@ -28,7 +28,12 @@ const allowedOrigins = [
 
 const corsOptions = {
   origin(origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
+    // CRITICAL: Allow requests with no origin (like M-Pesa callbacks)
+    // M-Pesa callbacks don't send Origin header, so we must allow them
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     console.warn(`Blocked CORS origin: ${origin}`);

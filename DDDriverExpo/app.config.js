@@ -12,7 +12,7 @@ module.exports = ({ config }) => {
   // Note: localhost only works in emulator, not on physical devices
   const ngrokUrl = process.env.EXPO_PUBLIC_API_BASE_URL || process.env.NGROK_URL || 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
   const localApiUrl = process.env.EXPO_PUBLIC_API_BASE_URL || ngrokUrl;
-  const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
+  const cloudApiUrl = 'https://liquoros-backend-910510650031.us-central1.run.app';
   
   // Choose API URL based on environment
   // For local-dev, always use ngrok URL (localhost doesn't work on physical devices)
@@ -48,7 +48,7 @@ module.exports = ({ config }) => {
     expo: {
       name: `DD Driver${appNameSuffix}`,
       slug: 'dddriver',
-      version: '1.0.33',
+      version: '1.0.34',
       orientation: 'portrait',
       icon: './assets/icon.png',
       userInterfaceStyle: 'dark',
@@ -66,6 +66,7 @@ module.exports = ({ config }) => {
       assetBundlePatterns: [
         '**/*'
       ],
+      plugins: [],
       ios: {
         supportsTablet: true,
         bundleIdentifier: bundleIdentifier,
@@ -86,8 +87,7 @@ module.exports = ({ config }) => {
           'ACCESS_NETWORK_STATE',
           'ACCESS_FINE_LOCATION',
           'ACCESS_COARSE_LOCATION',
-          'ACCESS_BACKGROUND_LOCATION',
-          'USE_FULL_SCREEN_INTENT' // Allows notifications to wake screen and bring app to foreground
+          'ACCESS_BACKGROUND_LOCATION'
         ]
       },
       web: {

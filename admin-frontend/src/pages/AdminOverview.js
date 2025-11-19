@@ -35,6 +35,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { useAdmin } from '../contexts/AdminContext';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   getOrderStatusChipProps,
   getPaymentMethodChipProps,
@@ -43,6 +44,7 @@ import {
 } from '../utils/chipStyles';
 
 const AdminOverview = () => {
+  const { isDarkMode, colors } = useTheme();
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -346,7 +348,7 @@ const AdminOverview = () => {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       {dashboardSections.map((section) => (
         <Box key={section.title} sx={{ mb: 6 }}>
-          <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 700, mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, mb: 2 }}>
             {section.title}
           </Typography>
           <Grid
@@ -362,15 +364,15 @@ const AdminOverview = () => {
                 <Grid key={card.key} item xs={12} sm={6} md={4} lg={2} sx={{ display: 'flex' }}>
                   <Card
                     sx={{
-                      backgroundColor: '#121212',
+                      backgroundColor: colors.paper,
                       height: '100%',
                       flexGrow: 1,
-                      border: card.border || 'none'
+                      border: card.border || `1px solid ${colors.border}`
                     }}
                   >
                     <CardContent sx={{ textAlign: 'center', py: 3 }}>
                       {card.icon}
-                      <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                      <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
                         {displayValue}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -384,21 +386,21 @@ const AdminOverview = () => {
           </Grid>
 
           {section.title === 'Orders' && (
-            <Card sx={{ backgroundColor: '#121212', border: '1px solid #333' }}>
+            <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
-                <Typography variant="subtitle1" sx={{ color: '#00E0B8', fontWeight: 600, mb: 2 }}>
+                <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
                   Latest Orders
                 </Typography>
-                <TableContainer component={Paper} sx={{ backgroundColor: '#1a1a1a' }}>
+                <TableContainer component={Paper} sx={{ backgroundColor: isDarkMode ? '#1a1a1a' : '#FFFFFF' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ color: '#00E0B8' }}>Transaction Number</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Order #</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Customer</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Amount</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Status</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Created</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Transaction Number</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Order #</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Customer</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Amount</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Status</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Created</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -407,21 +409,21 @@ const AdminOverview = () => {
 
                         return (
                           <TableRow key={order.id}>
-                            <TableCell sx={{ color: '#F5F5F5' }}>
+                            <TableCell sx={{ color: colors.textPrimary }}>
                               {order.transactionNumber ? `#${order.transactionNumber}` : 'N/A'}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }}>#{order.orderNumber}</TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }}>{order.customerName}</TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }}>#{order.orderNumber}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>{order.customerName}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               KES {Number(order.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               <Chip
                                 size="small"
                                 {...statusChip}
                               />
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               {new Date(order.createdAt).toLocaleString('en-KE', { dateStyle: 'short', timeStyle: 'short' })}
                             </TableCell>
                           </TableRow>
@@ -429,7 +431,7 @@ const AdminOverview = () => {
                       })}
                       {latestOrders.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} sx={{ color: '#999', textAlign: 'center' }}>
+                          <TableCell colSpan={6} sx={{ color: colors.textSecondary, textAlign: 'center' }}>
                             No recent orders found.
                           </TableCell>
                         </TableRow>
@@ -442,31 +444,31 @@ const AdminOverview = () => {
           )}
 
           {section.title === 'Inventory' && (
-            <Card sx={{ backgroundColor: '#121212', border: '1px solid #333' }}>
+            <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
-                <Typography variant="subtitle1" sx={{ color: '#00E0B8', fontWeight: 600, mb: 2 }}>
+                <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
                   Top Inventory Items
                 </Typography>
-                <TableContainer component={Paper} sx={{ backgroundColor: '#1a1a1a' }}>
+                <TableContainer component={Paper} sx={{ backgroundColor: isDarkMode ? '#1a1a1a' : '#FFFFFF' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ color: '#00E0B8' }}>Item</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Category</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Total Sold</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Item</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Category</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Total Sold</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {topInventoryItems.map((item) => (
                         <TableRow key={item.drinkId}>
-                          <TableCell sx={{ color: '#F5F5F5' }}>{item.name}</TableCell>
-                          <TableCell sx={{ color: '#F5F5F5' }}>{item.category}</TableCell>
-                          <TableCell sx={{ color: '#F5F5F5' }} align="right">{item.totalQuantity}</TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>{item.name}</TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>{item.category}</TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }} align="right">{item.totalQuantity}</TableCell>
                         </TableRow>
                       ))}
                       {topInventoryItems.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={3} sx={{ color: '#999', textAlign: 'center' }}>
+                          <TableCell colSpan={3} sx={{ color: colors.textSecondary, textAlign: 'center' }}>
                             No inventory data available.
                           </TableCell>
                         </TableRow>
@@ -479,23 +481,23 @@ const AdminOverview = () => {
           )}
 
           {section.title === 'Finance' && (
-            <Card sx={{ backgroundColor: '#121212', border: '1px solid #333' }}>
+            <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
-                <Typography variant="subtitle1" sx={{ color: '#00E0B8', fontWeight: 600, mb: 2 }}>
+                <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
                   Latest Transactions
                 </Typography>
-                <TableContainer component={Paper} sx={{ backgroundColor: '#1a1a1a' }}>
+                <TableContainer component={Paper} sx={{ backgroundColor: isDarkMode ? '#1a1a1a' : '#FFFFFF' }}>
                   <Table size="small">
                     <TableHead>
                       <TableRow>
-                        <TableCell sx={{ color: '#00E0B8' }}>Transaction Number</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Order #</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Type</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Payment Method</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Amount</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Status</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }}>Customer</TableCell>
-                        <TableCell sx={{ color: '#00E0B8' }} align="right">Created</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Transaction Number</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Order #</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Type</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Payment Method</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Amount</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Status</TableCell>
+                        <TableCell sx={{ color: colors.accentText }}>Customer</TableCell>
+                        <TableCell sx={{ color: colors.accentText }} align="right">Created</TableCell>
                       </TableRow>
                     </TableHead>
                     <TableBody>
@@ -519,10 +521,12 @@ const AdminOverview = () => {
                         
                         if (!chipLabel || chipLabel.trim() === '') {
                           if (safeTransactionType === 'delivery_pay' || safeTransactionType === 'delivery') {
-                            // Check if it's a driver payment (has driverId that is not null/undefined)
-                            // CRITICAL: driverId must be explicitly checked for null/undefined, not just truthy
-                            // Merchant transactions have driverId: null, driver transactions have driverId: <number>
-                            const isDriverPayment = txn?.driverId != null && txn?.driverId !== undefined;
+                            // Check if it's a driver payment (has driverWalletId or driverId that is not null/undefined)
+                            // CRITICAL: driverWalletId is the primary indicator for driver payments
+                            // Merchant transactions have driverWalletId: null, driver transactions have driverWalletId: <number>
+                            // Also check driverId as fallback for backwards compatibility
+                            const isDriverPayment = (txn?.driverWalletId != null && txn?.driverWalletId !== undefined) ||
+                                                   (txn?.driverId != null && txn?.driverId !== undefined);
                             chipLabel = isDriverPayment ? 'Delivery Fee Payment (Driver)' : 'Delivery Fee Payment (Merchant)';
                             chipSx = {
                               backgroundColor: isDriverPayment ? '#FFC107' : '#2196F3',
@@ -565,9 +569,9 @@ const AdminOverview = () => {
                               }
                             }}
                           >
-                            <TableCell sx={{ color: '#F5F5F5' }}>#{txn.id}</TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }}>#{txn.orderId}</TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }}>
+                            <TableCell sx={{ color: colors.textPrimary }}>#{txn.id}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>#{txn.orderId}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>
                               <Chip
                                 size="small"
                                 label={chipLabel || 'Payment'}
@@ -578,7 +582,7 @@ const AdminOverview = () => {
                                 }) }}
                               />
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }}>
+                            <TableCell sx={{ color: colors.textPrimary }}>
                               {methodChip ? (
                                 <Chip
                                   size="small"
@@ -589,10 +593,10 @@ const AdminOverview = () => {
                                 '—'
                               )}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               KES {Number(txn.amount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }}>
+                            <TableCell sx={{ color: colors.textPrimary }}>
                               {statusChip ? (
                                 <Chip
                                   size="small"
@@ -603,8 +607,8 @@ const AdminOverview = () => {
                                 '—'
                               )}
                             </TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }}>{txn.customerName}</TableCell>
-                            <TableCell sx={{ color: '#F5F5F5' }} align="right">
+                            <TableCell sx={{ color: colors.textPrimary }}>{txn.customerName}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }} align="right">
                               {new Date(txn.createdAt).toLocaleString('en-KE', {
                                 weekday: 'long',
                                 year: 'numeric',
@@ -620,7 +624,7 @@ const AdminOverview = () => {
                       })}
                       {latestTransactions.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={8} sx={{ color: '#999', textAlign: 'center' }}>
+                          <TableCell colSpan={8} sx={{ color: colors.textSecondary, textAlign: 'center' }}>
                             No recent transactions found.
                           </TableCell>
                         </TableRow>

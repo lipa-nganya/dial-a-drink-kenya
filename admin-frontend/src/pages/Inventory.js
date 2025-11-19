@@ -42,9 +42,11 @@ import {
   LocalOffer
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 import EditDrinkDialog from '../components/EditDrinkDialog';
 
 const InventoryPage = () => {
+  const { isDarkMode, colors } = useTheme();
   const [drinks, setDrinks] = useState([]);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -290,7 +292,7 @@ const InventoryPage = () => {
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom sx={{ color: '#00E0B8', fontWeight: 700 }}>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
             Inventory Management
           </Typography>
           <Typography variant="h6" color="text.secondary">
@@ -305,8 +307,8 @@ const InventoryPage = () => {
             setEditDialogOpen(true);
           }}
           sx={{
-            backgroundColor: '#00E0B8',
-            color: '#0D0D0D',
+            backgroundColor: colors.accentText,
+            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
             '&:hover': { backgroundColor: '#00C4A3' }
           }}
         >
@@ -324,10 +326,10 @@ const InventoryPage = () => {
         >
           {summaryCards.map((card, index) => (
             <Grid key={index} item xs={12} sm={6} md={4} lg={2} sx={{ display: 'flex' }}>
-              <Card sx={{ backgroundColor: '#121212', flexGrow: 1 }}>
+              <Card sx={{ backgroundColor: colors.paper, flexGrow: 1 }}>
                 <CardContent sx={{ textAlign: 'center' }}>
                   {card.icon}
-                  <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
+                  <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
                     {card.value}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -346,10 +348,10 @@ const InventoryPage = () => {
       </Box>
 
       {/* Search and Filter Section */}
-      <Paper sx={{ p: 3, mb: 4, backgroundColor: '#121212', border: '1px solid #333' }}>
+      <Paper sx={{ p: 3, mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <FilterList sx={{ color: '#00E0B8', mr: 1 }} />
-          <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+          <FilterList sx={{ color: colors.accentText, mr: 1 }} />
+          <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 600 }}>
             Search & Filter
           </Typography>
         </Box>
@@ -365,25 +367,25 @@ const InventoryPage = () => {
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Search sx={{ color: '#00E0B8' }} />
+                    <Search sx={{ color: colors.accentText }} />
                   </InputAdornment>
                 ),
               }}
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  color: '#F5F5F5',
+                  color: colors.textPrimary,
                   '& fieldset': {
-                    borderColor: '#333',
+                    borderColor: colors.border,
                   },
                   '&:hover fieldset': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '&.Mui-focused fieldset': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                 },
                 '& .MuiInputBase-input::placeholder': {
-                  color: '#888',
+                  color: colors.textSecondary,
                   opacity: 1,
                 },
               }}
@@ -393,24 +395,24 @@ const InventoryPage = () => {
           {/* Category Filter */}
           <Grid size={{ xs: 12, md: 3 }}>
             <FormControl fullWidth sx={{ minWidth: 120 }}>
-              <InputLabel sx={{ color: '#F5F5F5' }}>Category</InputLabel>
+              <InputLabel sx={{ color: colors.textPrimary }}>Category</InputLabel>
               <Select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 label="Category"
                 sx={{
-                  color: '#F5F5F5',
+                  color: colors.textPrimary,
                   '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#333',
+                    borderColor: colors.border,
                   },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '& .MuiSvgIcon-root': {
-                    color: '#00E0B8',
+                    color: colors.accentText,
                   },
                 }}
               >
@@ -428,24 +430,24 @@ const InventoryPage = () => {
           {/* Availability Filter */}
           <Grid size={{ xs: 12, sm: 6, md: 2 }}>
             <FormControl fullWidth>
-              <InputLabel sx={{ color: '#F5F5F5' }}>Availability</InputLabel>
+              <InputLabel sx={{ color: colors.textPrimary }}>Availability</InputLabel>
               <Select
                 value={availabilityFilter}
                 onChange={(e) => setAvailabilityFilter(e.target.value)}
                 label="Availability"
                 sx={{
-                  color: '#F5F5F5',
+                  color: colors.textPrimary,
                   '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#333',
+                    borderColor: colors.border,
                   },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '& .MuiSvgIcon-root': {
-                    color: '#00E0B8',
+                    color: colors.accentText,
                   },
                 }}
               >
@@ -459,24 +461,24 @@ const InventoryPage = () => {
           {/* On Offer Filter */}
           <Grid size={{ xs: 12, sm: 6, md: 2 }}>
             <FormControl fullWidth>
-              <InputLabel sx={{ color: '#F5F5F5' }}>On Offer</InputLabel>
+              <InputLabel sx={{ color: colors.textPrimary }}>On Offer</InputLabel>
               <Select
                 value={offerFilter}
                 onChange={(e) => setOfferFilter(e.target.value)}
                 label="On Offer"
                 sx={{
-                  color: '#F5F5F5',
+                  color: colors.textPrimary,
                   '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#333',
+                    borderColor: colors.border,
                   },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#00E0B8',
+                    borderColor: colors.accentText,
                   },
                   '& .MuiSvgIcon-root': {
-                    color: '#00E0B8',
+                    color: colors.accentText,
                   },
                 }}
               >
@@ -496,10 +498,10 @@ const InventoryPage = () => {
               startIcon={<Clear />}
               onClick={clearFilters}
               sx={{
-                color: '#00E0B8',
-                borderColor: '#00E0B8',
+                color: colors.accentText,
+                borderColor: colors.accentText,
                 '&:hover': {
-                  borderColor: '#00E0B8',
+                  borderColor: colors.accentText,
                   backgroundColor: 'rgba(0, 224, 184, 0.1)',
                 },
               }}
@@ -541,7 +543,7 @@ const InventoryPage = () => {
                 variant="outlined"
                 startIcon={<Clear />}
                 onClick={clearFilters}
-                sx={{ mt: 2, color: '#00E0B8', borderColor: '#00E0B8' }}
+                sx={{ mt: 2, color: colors.accentText, borderColor: colors.accentText }}
               >
                 Clear Filters
               </Button>
@@ -570,7 +572,7 @@ const InventoryPage = () => {
                   minHeight: '380px',
                   display: 'flex',
                   flexDirection: 'column',
-                  backgroundColor: '#fff',
+                  backgroundColor: colors.paper,
                   transition: 'transform 0.2s',
                   '&:hover': {
                     transform: 'translateY(-2px)',
@@ -583,9 +585,9 @@ const InventoryPage = () => {
                   height="120"
                   image={getImageUrl(drink.image)}
                   alt={drink.name}
-                  sx={{ objectFit: 'contain', p: 1, backgroundColor: '#fff' }}
+                  sx={{ objectFit: 'contain', p: 1, backgroundColor: colors.paper }}
                 />
-                <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#fff' }}>
+                <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: colors.paper }}>
                   {/* Status Label Above Name */}
                   <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
                     {!drink.isAvailable && (
@@ -630,7 +632,7 @@ const InventoryPage = () => {
                   </Box>
 
                   {/* Drink Name */}
-                  <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: '#000' }}>
+                  <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: colors.textPrimary }}>
                     {drink.name}
                   </Typography>
 
@@ -638,7 +640,7 @@ const InventoryPage = () => {
                   {drink.category?.name !== 'Soft Drinks' && drink.description && (
                     <Typography
                       variant="body2"
-                      sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: '#000' }}
+                      sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: colors.textPrimary }}
                     >
                       {drink.description}
                     </Typography>
@@ -670,16 +672,16 @@ const InventoryPage = () => {
                         </Typography>
                       </Box>
                     ) : (
-                      <Typography 
-                        variant="body2" 
-                        sx={{ 
-                          color: '#000', 
-                          fontWeight: 'bold', 
-                          fontSize: '0.7rem' 
-                        }}
-                      >
-                        KES {Number(drink.price).toFixed(2)}
-                      </Typography>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            color: colors.textPrimary, 
+                            fontWeight: 'bold', 
+                            fontSize: '0.7rem' 
+                          }}
+                        >
+                          KES {Number(drink.price).toFixed(2)}
+                        </Typography>
                     )}
                   </Box>
 
@@ -708,8 +710,9 @@ const InventoryPage = () => {
                         sx={{
                           fontSize: '0.65rem',
                           height: '20px',
-                          backgroundColor: '#121212',
-                          color: '#00E0B8'
+                          backgroundColor: isDarkMode ? '#121212' : colors.paper,
+                          color: colors.accentText,
+                          border: `1px solid ${colors.border}`
                         }}
                       />
                     </Box>
@@ -734,7 +737,7 @@ const InventoryPage = () => {
                         />
                       }
                       label={
-                        <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#000' }}>
+                        <Typography variant="body2" sx={{ fontSize: '0.7rem', color: colors.textPrimary }}>
                           {drink.isAvailable ? 'Available' : 'Out of Stock'}
                         </Typography>
                       }
@@ -750,8 +753,8 @@ const InventoryPage = () => {
                       onClick={() => handleEditDrink(drink)}
                       size="small"
                       sx={{
-                        backgroundColor: '#00E0B8',
-                        color: '#0D0D0D',
+                        backgroundColor: colors.accentText,
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                         fontSize: '0.75rem',
                         fontWeight: 600,
                         py: 0.5,
@@ -766,7 +769,7 @@ const InventoryPage = () => {
                   </Box>
 
                   {/* Last Updated */}
-                  <Typography variant="caption" sx={{ fontSize: '0.6rem', color: '#666', mt: 0.5, display: 'block', textAlign: 'center' }}>
+                  <Typography variant="caption" sx={{ fontSize: '0.6rem', color: colors.textSecondary, mt: 0.5, display: 'block', textAlign: 'center' }}>
                     Updated: {new Date(drink.updatedAt).toLocaleDateString()}
                   </Typography>
                 </CardContent>
@@ -783,11 +786,11 @@ const InventoryPage = () => {
                 size="large"
                 sx={{
                   '& .MuiPaginationItem-root': {
-                    color: '#F5F5F5',
+                    color: colors.textPrimary,
                   },
                   '& .MuiPaginationItem-root.Mui-selected': {
-                    backgroundColor: '#00E0B8',
-                    color: '#0D0D0D',
+                    backgroundColor: colors.accentText,
+                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                     '&:hover': {
                       backgroundColor: '#00C4A3',
                     },

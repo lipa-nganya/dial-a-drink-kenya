@@ -31,9 +31,11 @@ import {
   Cancel
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 
 const Branches = () => {
+  const { isDarkMode, colors } = useTheme();
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -146,15 +148,21 @@ const Branches = () => {
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          <Store sx={{ mr: 1, verticalAlign: 'middle' }} />
-          Branch Management
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Store sx={{ color: colors.accentText, fontSize: 40 }} />
+          <Typography variant="h4" component="h1" sx={{ color: colors.accentText, fontWeight: 700 }}>
+            Branch Management
+          </Typography>
+        </Box>
         <Button
           variant="contained"
-          color="primary"
           startIcon={<Add />}
           onClick={() => handleOpenDialog()}
+          sx={{
+            backgroundColor: colors.accentText,
+            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+            '&:hover': { backgroundColor: '#00C4A3' }
+          }}
         >
           Add Branch
         </Button>
@@ -166,30 +174,30 @@ const Branches = () => {
         </Alert>
       )}
 
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>ID</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Address</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>ID</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Name</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Address</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {branches.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center">
+                <TableCell colSpan={5} align="center" sx={{ color: colors.textSecondary, py: 4 }}>
                   No branches found. Add your first branch to get started.
                 </TableCell>
               </TableRow>
             ) : (
               branches.map((branch) => (
                 <TableRow key={branch.id}>
-                  <TableCell>{branch.id}</TableCell>
-                  <TableCell>{branch.name}</TableCell>
-                  <TableCell>{branch.address}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary }}>{branch.id}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary }}>{branch.name}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary }}>{branch.address}</TableCell>
                   <TableCell>
                     <Chip
                       icon={branch.isActive ? <CheckCircle /> : <Cancel />}
@@ -201,19 +209,19 @@ const Branches = () => {
                   <TableCell align="right">
                     <Tooltip title="Edit Branch">
                       <IconButton
-                        color="primary"
                         onClick={() => handleOpenDialog(branch)}
                         size="small"
+                        sx={{ color: colors.accentText }}
                       >
                         <Edit />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Deactivate Branch">
                       <IconButton
-                        color="error"
                         onClick={() => handleDelete(branch.id)}
                         disabled={deletingBranchId === branch.id}
                         size="small"
+                        sx={{ color: '#FF3366' }}
                       >
                         <Delete />
                       </IconButton>
@@ -227,11 +235,22 @@ const Branches = () => {
       </TableContainer>
 
       {/* Add/Edit Dialog */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: colors.paper,
+            border: `1px solid ${colors.border}`
+          }
+        }}
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
           {editingBranch ? 'Edit Branch' : 'Add New Branch'}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ backgroundColor: colors.paper }}>
           <Box sx={{ pt: 2 }}>
             <TextField
               fullWidth
@@ -240,6 +259,23 @@ const Branches = () => {
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               margin="normal"
               required
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                  '& fieldset': { borderColor: colors.border },
+                  '&:hover fieldset': { borderColor: colors.accentText },
+                  '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                },
+                '& .MuiInputBase-input': {
+                  color: colors.textPrimary
+                },
+                '& .MuiInputLabel-root': {
+                  color: colors.textSecondary
+                },
+                '& .MuiInputLabel-root.Mui-focused': {
+                  color: colors.accentText
+                }
+              }}
             />
             <Box sx={{ mt: 2, mb: 1 }}>
               <AddressAutocomplete
@@ -268,9 +304,22 @@ const Branches = () => {
             )}
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained" color="primary">
+        <DialogActions sx={{ backgroundColor: colors.paper, p: 2 }}>
+          <Button 
+            onClick={handleCloseDialog}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSubmit} 
+            variant="contained"
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': { backgroundColor: '#00C4A3' }
+            }}
+          >
             {editingBranch ? 'Update' : 'Create'}
           </Button>
         </DialogActions>

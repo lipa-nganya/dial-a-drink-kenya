@@ -39,3 +39,5 @@ module.exports = (sequelize, DataTypes) => {
 
 
 
+
+
