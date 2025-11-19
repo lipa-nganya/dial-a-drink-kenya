@@ -316,7 +316,7 @@ router.post('/order/cash', async (req, res) => {
       deliveryAddress: 'In-Store Purchase', // POS orders don't need delivery address
       totalAmount,
       tipAmount: 0, // POS orders typically don't have tips
-      status: 'pos_order', // POS orders use special status
+      status: 'completed', // POS orders are completed immediately
       paymentStatus: 'paid',
       paymentType: 'pay_now',
       paymentMethod: 'cash',
@@ -347,6 +347,7 @@ router.post('/order/cash', async (req, res) => {
       amount: totalAmount,
       status: 'completed',
       paymentStatus: 'paid',
+      receiptNumber: 'POS', // POS transactions have receipt number "POS"
       notes: cashNotes
     }, { transaction });
 

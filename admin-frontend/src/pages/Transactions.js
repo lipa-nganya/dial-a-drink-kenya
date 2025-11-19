@@ -646,19 +646,22 @@ const Transactions = () => {
                   : '';
                 const isTip = transactionType === 'tip';
                 const isDriverDelivery = transactionType === 'delivery_pay' && !!transaction.driverWalletId;
+                const isPOS = transaction.receiptNumber === 'POS';
                 const highlighted = isTip || isDriverDelivery;
                 const highlightBackground = 'rgba(255, 193, 7, 0.15)';
                 const highlightBorder = '4px solid #FFC107';
                 const hoverHighlightBackground = 'rgba(255, 193, 7, 0.2)';
+                const posBackground = 'rgba(156, 39, 176, 0.15)'; // Light purple background
+                const posHoverBackground = 'rgba(156, 39, 176, 0.2)'; // Slightly darker purple on hover
 
                 return (
                   <React.Fragment key={transaction.id}>
                     <TableRow
                       sx={{
-                        backgroundColor: highlighted ? highlightBackground : 'transparent',
+                        backgroundColor: isPOS ? posBackground : (highlighted ? highlightBackground : 'transparent'),
                         borderLeft: highlighted ? highlightBorder : 'none',
                         '&:hover': {
-                          backgroundColor: highlighted ? hoverHighlightBackground : 'rgba(0, 224, 184, 0.05)'
+                          backgroundColor: isPOS ? posHoverBackground : (highlighted ? hoverHighlightBackground : 'rgba(0, 224, 184, 0.05)')
                         }
                       }}
                     >
@@ -863,10 +866,26 @@ const Transactions = () => {
                   </TableCell>
                   <TableCell>
                     {transaction.receiptNumber ? (
-                      <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Receipt fontSize="small" />
-                        {transaction.receiptNumber}
-                      </Typography>
+                      transaction.receiptNumber === 'POS' ? (
+                        <Chip
+                          label="POS"
+                          size="small"
+                          icon={<Receipt fontSize="small" />}
+                          sx={{
+                            backgroundColor: '#9C27B0', // Purple background
+                            color: '#FFFFFF', // White text
+                            fontWeight: 600,
+                            '& .MuiChip-icon': {
+                              color: '#FFFFFF'
+                            }
+                          }}
+                        />
+                      ) : (
+                        <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <Receipt fontSize="small" />
+                          {transaction.receiptNumber}
+                        </Typography>
+                      )
                     ) : (
                       <Typography variant="body2" color="text.secondary">
                         N/A
