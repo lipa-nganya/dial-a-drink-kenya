@@ -40,7 +40,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     categoryId: '',
     capacity: [],
     capacityPricing: [],
-    abv: ''
+    abv: '',
+    stock: 0
   });
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -59,7 +60,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         categoryId: drink.categoryId || '',
         capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
-        abv: drink.abv || ''
+        abv: drink.abv || '',
+        stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0
       });
       setImagePreview(drink.image || '');
     } else {
@@ -74,7 +76,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         categoryId: '',
         capacity: [],
         capacityPricing: [],
-        abv: ''
+        abv: '',
+        stock: 0
       });
       setImagePreview('');
     }
@@ -170,18 +173,45 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         categoryId: parseInt(formData.categoryId),
         capacity: formData.capacity,
         capacityPricing: formData.capacityPricing,
-        abv: formData.abv ? parseFloat(formData.abv) : null
+        abv: formData.abv ? parseFloat(formData.abv) : null,
+        stock: formData.stock !== undefined && formData.stock !== null ? parseInt(formData.stock) || 0 : 0
       };
 
       if (drink && drink.id) {
         // Update existing drink
         console.log('Updating drink:', drink.id);
         await api.put(`/admin/drinks/${drink.id}`, saveData);
+        
+        // Also update stock via inventory endpoint
+        try {
+          await api.post('/inventory/update-stock', {
+            drinkId: drink.id,
+            stock: parseInt(formData.stock) || 0
+          });
+        } catch (stockError) {
+          console.warn('Failed to update stock via inventory endpoint:', stockError);
+          // Continue even if stock update fails - main drink update succeeded
+        }
+        
         console.log('Drink updated successfully');
       } else {
         // Create new drink
         console.log('Creating new drink');
-        await api.post('/admin/drinks', saveData);
+        const response = await api.post('/admin/drinks', saveData);
+        const newDrinkId = response.data.id;
+        
+        // Update stock for new drink
+        if (newDrinkId && (formData.stock !== undefined && formData.stock !== null)) {
+          try {
+            await api.post('/inventory/update-stock', {
+              drinkId: newDrinkId,
+              stock: parseInt(formData.stock) || 0
+            });
+          } catch (stockError) {
+            console.warn('Failed to update stock for new drink:', stockError);
+          }
+        }
+        
         console.log('Drink created successfully');
       }
       
@@ -341,6 +371,24 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             inputProps={{ step: "0.1", min: "0", max: "100" }}
             value={formData.abv}
             onChange={(e) => handleInputChange('abv', e.target.value)}
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: '#00E0B8' },
+                '&:hover fieldset': { borderColor: '#00E0B8' },
+                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+              }
+            }}
+          />
+
+          <TextField
+            fullWidth
+            label="Stock Quantity"
+            type="number"
+            inputProps={{ step: "1", min: "0" }}
+            value={formData.stock}
+            onChange={(e) => handleInputChange('stock', e.target.value)}
+            helperText="Number of items currently in stock"
             sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {

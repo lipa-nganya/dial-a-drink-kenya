@@ -699,6 +699,13 @@ router.put('/drinks/:id', async (req, res) => {
     const summary = summarisePricing(normalizedPricing, price, originalPrice);
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : drink.limitedTimeOffer;
 
+    // Handle stock update
+    const stockValue = req.body.stock !== undefined && req.body.stock !== null
+      ? parseInt(req.body.stock) || 0
+      : drink.stock !== undefined && drink.stock !== null
+      ? drink.stock
+      : 0;
+
     await drink.update({
       name: normalizedName,
       description:
@@ -719,7 +726,8 @@ router.put('/drinks/:id', async (req, res) => {
       isOnOffer: summary.isOnOffer,
       capacity: capacities,
       capacityPricing: normalizedPricing,
-      abv: toNumber(abv)
+      abv: toNumber(abv),
+      stock: stockValue
     });
 
     const updatedDrink = await db.Drink.findByPk(id, {
