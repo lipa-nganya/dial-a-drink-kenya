@@ -250,6 +250,24 @@ const InventoryPage = () => {
     }
   };
 
+  const handleStockUpdate = async (drinkId, newStock) => {
+    try {
+      const stockValue = parseInt(newStock) || 0;
+      if (isNaN(stockValue) || stockValue < 0) {
+        setOrderError('Stock must be a non-negative whole number');
+        return;
+      }
+
+      await api.post('/inventory/update-stock', { drinkId, stock: stockValue });
+      setDrinks(drinks.map(drink => 
+        drink.id === drinkId ? { ...drink, stock: stockValue } : drink
+      ));
+    } catch (error) {
+      console.error('Error updating stock:', error);
+      setOrderError(error.response?.data?.error || 'Failed to update stock');
+    }
+  };
+
   const getAvailabilityColor = (isAvailable) => {
     return isAvailable ? 'success' : 'error';
   };
@@ -712,27 +730,66 @@ const InventoryPage = () => {
                     )}
                   </Box>
 
-                  {/* Stock Quantity Display */}
-                  {drink.stock !== undefined && drink.stock !== null && (
-                    <Box sx={{ mb: 1, display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  {/* Stock Quantity Display with Quick Edit */}
+                  <Box sx={{ mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
                       <Inventory 
                         sx={{ 
                           fontSize: '0.9rem', 
-                          color: drink.stock > 0 ? '#2196F3' : '#F44336' 
+                          color: (drink.stock !== undefined && drink.stock !== null && drink.stock > 0) ? '#2196F3' : '#F44336' 
                         }} 
                       />
                       <Typography 
                         variant="body2" 
                         sx={{ 
-                          color: drink.stock > 0 ? '#2196F3' : '#F44336',
+                          color: (drink.stock !== undefined && drink.stock !== null && drink.stock > 0) ? '#2196F3' : '#F44336',
                           fontWeight: 'bold',
                           fontSize: '0.75rem'
                         }}
                       >
-                        Stock: {drink.stock}
+                        Stock: {drink.stock !== undefined && drink.stock !== null ? drink.stock : 0}
                       </Typography>
                     </Box>
-                  )}
+                    <TextField
+                      size="small"
+                      type="number"
+                      inputProps={{ step: "1", min: "0" }}
+                      value={drink.stock !== undefined && drink.stock !== null ? drink.stock : 0}
+                      onChange={(e) => {
+                        const newStock = e.target.value;
+                        // Update immediately in UI for better UX
+                        setDrinks(drinks.map(d => 
+                          d.id === drink.id ? { ...d, stock: newStock === '' ? 0 : parseInt(newStock) || 0 } : d
+                        ));
+                      }}
+                      onBlur={(e) => {
+                        const newStock = parseInt(e.target.value) || 0;
+                        if (newStock !== drink.stock) {
+                          handleStockUpdate(drink.id, newStock);
+                        }
+                      }}
+                      sx={{
+                        width: '100%',
+                        '& .MuiOutlinedInput-root': {
+                          fontSize: '0.7rem',
+                          height: '28px',
+                          '& input': {
+                            padding: '4px 8px',
+                            textAlign: 'center'
+                          },
+                          '& fieldset': {
+                            borderColor: colors.border,
+                          },
+                          '&:hover fieldset': {
+                            borderColor: colors.accentText,
+                          },
+                          '&.Mui-focused fieldset': {
+                            borderColor: colors.accentText,
+                          },
+                        },
+                      }}
+                    />
+                  </Box>
 
                   {/* ABV Display */}
                   {drink.abv && (
