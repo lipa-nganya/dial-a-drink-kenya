@@ -11,7 +11,7 @@ import {
   Chip,
   Divider
 } from 'react-native-paper';
-import { scanForPOS, decreaseStock } from '../services/api';
+import { scanForPOS, decreaseStock, addToPOSCart, getPOSCart, clearPOSCart } from '../services/api';
 
 export default function POSScanScreen() {
   const [hasPermission, setHasPermission] = useState(null);
@@ -36,7 +36,10 @@ export default function POSScanScreen() {
     try {
       const product = await scanForPOS(data);
       
-      // Check if item already in cart
+      // Add to backend cart (this will sync with Admin POS)
+      await addToPOSCart(product.id, 1);
+      
+      // Update local cart
       const existingIndex = scannedItems.findIndex(item => item.id === product.id);
       
       if (existingIndex >= 0) {
@@ -80,6 +83,9 @@ export default function POSScanScreen() {
         await decreaseStock(item.id, item.quantity);
       }
 
+      // Clear backend cart (this will also clear Admin POS cart)
+      await clearPOSCart();
+
       Alert.alert(
         'Success',
         `Order completed! ${scannedItems.length} item(s) processed.`,
@@ -100,8 +106,17 @@ export default function POSScanScreen() {
     }
   };
 
-  const handleRemoveItem = (itemId) => {
-    setScannedItems(scannedItems.filter(item => item.id !== itemId));
+  const handleRemoveItem = async (itemId) => {
+    try {
+      // Remove from backend cart
+      await removeFromPOSCart(itemId);
+      // Update local cart
+      setScannedItems(scannedItems.filter(item => item.id !== itemId));
+    } catch (error) {
+      console.error('Error removing item:', error);
+      // Still update local cart even if backend fails
+      setScannedItems(scannedItems.filter(item => item.id !== itemId));
+    }
   };
 
   const getTotal = () => {

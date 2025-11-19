@@ -84,7 +84,38 @@ const POS = () => {
 
   useEffect(() => {
     fetchData();
+    // Start polling for cart updates from Retail Scanner
+    const cartPollInterval = setInterval(() => {
+      fetchPOSCart();
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(cartPollInterval);
   }, []);
+
+  // Fetch POS cart from backend
+  const fetchPOSCart = async () => {
+    try {
+      const response = await api.get('/pos/cart');
+      if (response.data && response.data.cart) {
+        // Sync cart with backend
+        const backendCart = response.data.cart.map(item => ({
+          drinkId: item.drinkId,
+          name: item.name,
+          price: item.price,
+          quantity: item.quantity,
+          image: item.image
+        }));
+        
+        // Only update if cart has changed
+        if (JSON.stringify(backendCart) !== JSON.stringify(cart)) {
+          setCart(backendCart);
+        }
+      }
+    } catch (error) {
+      // Silently fail - cart polling shouldn't break the UI
+      console.error('Error fetching POS cart:', error);
+    }
+  };
 
   useEffect(() => {
     // Filter drinks whenever drinks, searchTerm, or selectedCategory changes
@@ -258,7 +289,15 @@ const POS = () => {
     return `${baseUrl}${imagePath}`;
   };
 
-  const addToCart = (drink) => {
+  const addToCart = async (drink) => {
+    try {
+      // Add to backend cart (this will sync with Retail Scanner)
+      await api.post('/pos/cart/add', { drinkId: drink.id, quantity: 1 });
+    } catch (error) {
+      console.error('Error adding to backend cart:', error);
+    }
+    
+    // Update local cart
     const existingItem = cart.find(item => item.drinkId === drink.id);
     
     if (existingItem) {
@@ -401,6 +440,13 @@ const POS = () => {
             : 'M-Pesa payment initiated. Please check customer\'s phone.',
           checkoutRequestID: response.data.checkoutRequestID
         });
+        
+        // Clear backend cart (this will also clear Retail Scanner cart)
+        try {
+          await api.delete('/pos/cart');
+        } catch (error) {
+          console.error('Error clearing cart:', error);
+        }
         
         // Clear cart and form
         setCart([]);
