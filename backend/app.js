@@ -70,6 +70,7 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
 app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/pos', require('./routes/pos'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/countdown', require('./routes/countdown'));
 app.use('/api/settings', require('./routes/settings'));

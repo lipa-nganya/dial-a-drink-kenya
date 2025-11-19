@@ -1,0 +1,569 @@
+const express = require('express');
+const router = express.Router();
+const db = require('../models');
+const { Op } = require('sequelize');
+const mpesaService = require('../services/mpesa');
+
+/**
+ * Build phone number variants for lookup (handles Kenyan phone formats)
+ */
+function buildPhoneLookupVariants(phone) {
+  const variants = new Set();
+  if (!phone) return [];
+  
+  const digitsOnly = phone.replace(/\D/g, '');
+  if (!digitsOnly) return [];
+  
+  variants.add(digitsOnly);
+  
+  // Handle Kenyan phone formats
+  if (digitsOnly.startsWith('254') && digitsOnly.length === 12) {
+    // 254712345678 -> 0712345678, 712345678
+    variants.add('0' + digitsOnly.slice(3));
+    variants.add(digitsOnly.slice(3));
+  } else if (digitsOnly.startsWith('0') && digitsOnly.length === 10) {
+    // 0712345678 -> 254712345678, 712345678
+    variants.add('254' + digitsOnly.slice(1));
+    variants.add(digitsOnly.slice(1));
+  } else if (digitsOnly.length === 9 && digitsOnly.startsWith('7')) {
+    // 712345678 -> 254712345678, 0712345678
+    variants.add('254' + digitsOnly);
+    variants.add('0' + digitsOnly);
+  }
+  
+  return Array.from(variants).filter(Boolean);
+}
+
+/**
+ * Lookup customer by phone number
+ * GET /api/pos/customer/:phoneNumber
+ */
+router.get('/customer/:phoneNumber', async (req, res) => {
+  try {
+    const { phoneNumber } = req.params;
+    const variants = buildPhoneLookupVariants(phoneNumber);
+    
+    console.log(`🔍 POS: Looking up customer with phone: ${phoneNumber}`);
+    console.log(`📋 Phone variants:`, variants);
+    
+    if (variants.length === 0) {
+      console.log('❌ No valid phone variants found');
+      return res.json({ customer: null });
+    }
+    
+    // First try to find in Customer table - try exact match and LIKE patterns
+    const customerConditions = [];
+    variants.forEach(variant => {
+      customerConditions.push({ phone: variant });
+      customerConditions.push({ phone: { [Op.iLike]: `%${variant}%` } });
+    });
+    
+    // Also try with trimmed phone using raw SQL
+    variants.forEach(variant => {
+      customerConditions.push(
+        db.sequelize.literal(`TRIM(phone) = '${variant.replace(/'/g, "''")}'`)
+      );
+    });
+    
+    let customer = await db.Customer.findOne({
+      where: {
+        [Op.or]: customerConditions
+      }
+    });
+    
+    console.log(`👤 Customer lookup result:`, customer ? `Found: ${customer.customerName || customer.username} (${customer.phone})` : 'Not found in Customer table');
+    
+    // If not found in Customer table, check Orders table for most recent order with this phone
+    if (!customer) {
+      const orderConditions = [];
+      variants.forEach(variant => {
+        orderConditions.push({ customerPhone: variant });
+        orderConditions.push({ customerPhone: { [Op.iLike]: `%${variant}%` } });
+      });
+      
+      // Also try with trimmed phone using raw SQL
+      variants.forEach(variant => {
+        orderConditions.push(
+          db.sequelize.literal(`TRIM("customerPhone") = '${variant.replace(/'/g, "''")}'`)
+        );
+      });
+      
+      const order = await db.Order.findOne({
+        where: {
+          [Op.or]: orderConditions
+        },
+        order: [['createdAt', 'DESC']],
+        attributes: ['customerName', 'customerPhone', 'customerEmail']
+      });
+      
+      console.log(`📦 Order lookup result:`, order ? `Found: ${order.customerName} (${order.customerPhone})` : 'Not found in Orders table');
+      
+      if (order) {
+        return res.json({
+          customer: {
+            name: order.customerName,
+            phone: order.customerPhone,
+            email: order.customerEmail
+          }
+        });
+      }
+    } else {
+      const customerData = {
+        name: customer.customerName || customer.username || null,
+        phone: customer.phone,
+        email: customer.email || null
+      };
+      console.log(`✅ Returning customer data:`, customerData);
+      return res.json({
+        customer: customerData
+      });
+    }
+    
+    console.log('❌ No customer found for phone:', phoneNumber);
+    res.json({ customer: null });
+  } catch (error) {
+    console.error('❌ Error looking up customer by phone:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to lookup customer', details: error.message });
+  }
+});
+
+// Get all drinks for POS (with inventory info)
+router.get('/drinks', async (req, res) => {
+  try {
+    const drinks = await db.Drink.findAll({
+      where: {
+        isAvailable: {
+          [Op.ne]: false // Include drinks where isAvailable is not explicitly false
+        }
+      },
+      include: [{
+        model: db.Category,
+        as: 'category',
+        attributes: ['id', 'name'],
+        required: false // Left join - include drinks even if category is missing
+      }],
+      order: [['name', 'ASC']]
+    });
+
+    // Map drinks to ensure categoryId is included even if category association failed
+    const drinksWithCategory = drinks.map(drink => {
+      const drinkData = drink.toJSON();
+      // Ensure categoryId is present
+      if (!drinkData.categoryId && drink.categoryId) {
+        drinkData.categoryId = drink.categoryId;
+      }
+      return drinkData;
+    });
+
+    res.json(drinksWithCategory);
+  } catch (error) {
+    console.error('❌ Error fetching drinks for POS:', error);
+    console.error('Error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name
+    });
+    res.status(500).json({ 
+      error: 'Failed to fetch drinks',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Create POS order with cash payment
+router.post('/order/cash', async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  
+  try {
+    const { customerName, customerPhone, customerEmail, items, notes, branchId } = req.body;
+
+    // Validation
+    if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Missing required fields: customerName, customerPhone, and items are required' });
+    }
+
+    // Calculate totals
+    let totalAmount = 0;
+    const orderItems = [];
+
+    for (const item of items) {
+      const drink = await db.Drink.findByPk(item.drinkId, { transaction });
+      if (!drink) {
+        await transaction.rollback();
+        return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
+      }
+
+      const priceToUse = Number.isFinite(item.selectedPrice) && item.selectedPrice > 0
+        ? item.selectedPrice
+        : parseFloat(drink.price) || 0;
+
+      const itemTotal = priceToUse * item.quantity;
+      totalAmount += itemTotal;
+
+      orderItems.push({
+        drinkId: item.drinkId,
+        quantity: item.quantity,
+        price: priceToUse
+      });
+    }
+
+    // Create order (POS orders don't have delivery address or delivery fee)
+    const order = await db.Order.create({
+      customerName,
+      customerPhone,
+      customerEmail: customerEmail || null,
+      deliveryAddress: 'In-Store Purchase', // POS orders don't need delivery address
+      totalAmount,
+      tipAmount: 0, // POS orders typically don't have tips
+      status: 'completed', // POS orders are immediately completed
+      paymentStatus: 'paid',
+      paymentType: 'pay_now',
+      paymentMethod: 'cash',
+      branchId: branchId || null,
+      notes: notes || null
+    }, { transaction });
+
+    // Create order items
+    for (const item of orderItems) {
+      await db.OrderItem.create({
+        orderId: order.id,
+        drinkId: item.drinkId,
+        quantity: item.quantity,
+        price: item.price
+      }, { transaction });
+    }
+
+    // Create cash payment transaction
+    await db.Transaction.create({
+      orderId: order.id,
+      transactionType: 'payment',
+      paymentMethod: 'cash',
+      paymentProvider: 'cash',
+      amount: totalAmount,
+      status: 'completed',
+      paymentStatus: 'paid',
+      notes: `Cash payment for POS order #${order.id}. Customer: ${customerName} (${customerPhone})`
+    }, { transaction });
+
+    await transaction.commit();
+
+    // Emit socket event for admin dashboard
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('new-order', {
+        id: order.id,
+        customerName: order.customerName,
+        totalAmount: order.totalAmount,
+        status: order.status,
+        paymentMethod: 'cash',
+        isPOS: true
+      });
+    }
+
+    // Reload order with items
+    const orderWithItems = await db.Order.findByPk(order.id, {
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        include: [{
+          model: db.Drink,
+          as: 'drink',
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }]
+        }]
+      }]
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'POS order created successfully',
+      order: orderWithItems
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error creating POS cash order:', error);
+    res.status(500).json({ error: 'Failed to create POS order', details: error.message });
+  }
+});
+
+// Create POS order with M-Pesa payment
+router.post('/order/mpesa', async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  
+  try {
+    const { customerName, customerPhone, customerEmail, items, notes, branchId, phoneNumber } = req.body;
+
+    // Validation
+    if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (!phoneNumber) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Phone number is required for M-Pesa payment' });
+    }
+
+    // Calculate totals
+    let totalAmount = 0;
+    const orderItems = [];
+
+    for (const item of items) {
+      const drink = await db.Drink.findByPk(item.drinkId, { transaction });
+      if (!drink) {
+        await transaction.rollback();
+        return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
+      }
+
+      const priceToUse = Number.isFinite(item.selectedPrice) && item.selectedPrice > 0
+        ? item.selectedPrice
+        : parseFloat(drink.price) || 0;
+
+      const itemTotal = priceToUse * item.quantity;
+      totalAmount += itemTotal;
+
+      orderItems.push({
+        drinkId: item.drinkId,
+        quantity: item.quantity,
+        price: priceToUse
+      });
+    }
+
+    // Create order (pending payment)
+    const order = await db.Order.create({
+      customerName,
+      customerPhone,
+      customerEmail: customerEmail || null,
+      deliveryAddress: 'In-Store Purchase',
+      totalAmount,
+      tipAmount: 0,
+      status: 'pending',
+      paymentStatus: 'pending',
+      paymentType: 'pay_now',
+      paymentMethod: 'mobile_money',
+      branchId: branchId || null,
+      notes: notes || null
+    }, { transaction });
+
+    // Create order items
+    for (const item of orderItems) {
+      await db.OrderItem.create({
+        orderId: order.id,
+        drinkId: item.drinkId,
+        quantity: item.quantity,
+        price: item.price
+      }, { transaction });
+    }
+
+    await transaction.commit();
+
+    // Initiate M-Pesa STK Push
+    try {
+      const stkResponse = await mpesaService.initiateSTKPush(
+        phoneNumber,
+        totalAmount,
+        order.id.toString(),
+        `POS Order #${order.id}`
+      );
+
+      if (stkResponse.success && stkResponse.checkoutRequestID) {
+        // Create pending transaction record
+        await db.Transaction.create({
+          orderId: order.id,
+          transactionType: 'payment',
+          paymentMethod: 'mobile_money',
+          paymentProvider: 'mpesa',
+          amount: totalAmount,
+          status: 'pending',
+          paymentStatus: 'pending',
+          checkoutRequestID: stkResponse.checkoutRequestID,
+          merchantRequestID: stkResponse.merchantRequestID,
+          phoneNumber: phoneNumber,
+          notes: `M-Pesa STK Push initiated for POS order #${order.id}. Customer: ${customerName} (${customerPhone})`
+        });
+
+        res.json({
+          success: true,
+          message: 'M-Pesa payment initiated. Please check your phone.',
+          orderId: order.id,
+          checkoutRequestID: stkResponse.checkoutRequestID,
+          customerMessage: stkResponse.CustomerMessage || stkResponse.customerMessage
+        });
+      } else {
+        res.status(400).json({
+          success: false,
+          error: stkResponse.errorMessage || 'Failed to initiate M-Pesa payment',
+          orderId: order.id
+        });
+      }
+    } catch (mpesaError) {
+      console.error('M-Pesa STK Push error:', mpesaError);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to initiate M-Pesa payment',
+        details: mpesaError.message,
+        orderId: order.id
+      });
+    }
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error creating POS M-Pesa order:', error);
+    res.status(500).json({ error: 'Failed to create POS order', details: error.message });
+  }
+});
+
+// Get POS orders (in-store orders)
+router.get('/orders', async (req, res) => {
+  try {
+    const { status, startDate, endDate, limit = 50 } = req.query;
+
+    const where = {
+      deliveryAddress: 'In-Store Purchase'
+    };
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (startDate || endDate) {
+      where.createdAt = {};
+      if (startDate) where.createdAt[Op.gte] = new Date(startDate);
+      if (endDate) where.createdAt[Op.lte] = new Date(endDate);
+    }
+
+    const orders = await db.Order.findAll({
+      where,
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        include: [{
+          model: db.Drink,
+          as: 'drink',
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }]
+        }]
+      }, {
+        model: db.Transaction,
+        as: 'transactions',
+        where: {
+          transactionType: 'payment'
+        },
+        required: false
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit)
+    });
+
+    res.json(orders);
+  } catch (error) {
+    console.error('Error fetching POS orders:', error);
+    res.status(500).json({ error: 'Failed to fetch POS orders' });
+  }
+});
+
+// Get POS order by ID
+router.get('/orders/:id', async (req, res) => {
+  try {
+    const order = await db.Order.findByPk(req.params.id, {
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        include: [{
+          model: db.Drink,
+          as: 'drink',
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }]
+        }]
+      }, {
+        model: db.Transaction,
+        as: 'transactions'
+      }]
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error('Error fetching POS order:', error);
+    res.status(500).json({ error: 'Failed to fetch POS order' });
+  }
+});
+
+// Complete POS order manually (for cash payments that were recorded after order creation)
+router.post('/orders/:id/complete', async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  
+  try {
+    const order = await db.Order.findByPk(req.params.id, { transaction });
+
+    if (!order) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (order.deliveryAddress !== 'In-Store Purchase') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'This endpoint is only for POS orders' });
+    }
+
+    // Update order status
+    await order.update({
+      status: 'completed',
+      paymentStatus: 'paid'
+    }, { transaction });
+
+    // Ensure payment transaction exists
+    const paymentTransaction = await db.Transaction.findOne({
+      where: {
+        orderId: order.id,
+        transactionType: 'payment'
+      },
+      transaction
+    });
+
+    if (!paymentTransaction) {
+      // Create cash transaction if it doesn't exist
+      await db.Transaction.create({
+        orderId: order.id,
+        transactionType: 'payment',
+        paymentMethod: 'cash',
+        paymentProvider: 'cash',
+        amount: order.totalAmount,
+        status: 'completed',
+        paymentStatus: 'paid',
+        notes: `Cash payment for POS order #${order.id}`
+      }, { transaction });
+    } else {
+      // Update existing transaction
+      await paymentTransaction.update({
+        status: 'completed',
+        paymentStatus: 'paid'
+      }, { transaction });
+    }
+
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: 'POS order completed successfully',
+      order
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error completing POS order:', error);
+    res.status(500).json({ error: 'Failed to complete POS order' });
+  }
+});
+
+module.exports = router;
+
