@@ -130,23 +130,10 @@ export default function AddBarcodeScreen() {
     }
   };
 
-  if (hasPermission === null) {
+  if (!permission) {
     return (
       <View style={styles.container}>
         <ActivityIndicator size="large" />
-      </View>
-    );
-  }
-
-  if (hasPermission === false) {
-    return (
-      <View style={styles.container}>
-        <Card>
-          <Card.Content>
-            <Title>Camera Permission Required</Title>
-            <Paragraph>Please grant camera permission to scan barcodes</Paragraph>
-          </Card.Content>
-        </Card>
       </View>
     );
   }
