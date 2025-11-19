@@ -337,7 +337,7 @@ const POS = () => {
       const product = await fetchProductByBarcode(barcode);
       
       if (product) {
-        addToCart(product);
+        await addToCart(product);
         setScannerStatus('connected');
       }
     } catch (error) {
