@@ -39,7 +39,8 @@ import {
   FilterList,
   Clear,
   Add,
-  LocalOffer
+  LocalOffer,
+  QrCodeScanner
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -590,6 +591,32 @@ const InventoryPage = () => {
                 <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: colors.paper }}>
                   {/* Status Label Above Name */}
                   <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    {drink.barcode && (
+                      <Chip
+                        icon={<QrCodeScanner />}
+                        label="Barcode"
+                        size="small"
+                        sx={{ 
+                          fontSize: '0.65rem', 
+                          height: '20px',
+                          backgroundColor: '#4CAF50',
+                          color: '#fff'
+                        }}
+                      />
+                    )}
+                    {drink.stock !== undefined && drink.stock !== null && (
+                      <Chip
+                        icon={<Inventory />}
+                        label={`Stock: ${drink.stock}`}
+                        size="small"
+                        sx={{ 
+                          fontSize: '0.65rem', 
+                          height: '20px',
+                          backgroundColor: drink.stock > 0 ? '#2196F3' : '#F44336',
+                          color: '#fff'
+                        }}
+                      />
+                    )}
                     {!drink.isAvailable && (
                       <Chip
                         icon={<Cancel />}

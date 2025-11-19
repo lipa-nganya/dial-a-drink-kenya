@@ -680,6 +680,7 @@ const Orders = () => {
             <MenuItem value="out_for_delivery">On the Way</MenuItem>
             <MenuItem value="delivered">Delivered</MenuItem>
             <MenuItem value="completed">Completed</MenuItem>
+            <MenuItem value="pos_order">POS Order</MenuItem>
             <MenuItem value="cancelled">Cancelled</MenuItem>
           </Select>
         </FormControl>
@@ -832,10 +833,25 @@ const Orders = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        size="small"
-                        {...statusChip}
-                      />
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        <Chip
+                          size="small"
+                          {...statusChip}
+                        />
+                        {order.deliveryAddress === 'In-Store Purchase' && (
+                          <Chip
+                            label="POS"
+                            size="small"
+                            sx={{
+                              backgroundColor: '#00E0B8',
+                              color: '#003B2F',
+                              fontWeight: 600,
+                              fontSize: '0.65rem',
+                              height: '20px'
+                            }}
+                          />
+                        )}
+                      </Box>
                     </TableCell>
                     <TableCell>
                       {order.branch ? (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { QrCodeScanner, Link as LinkIcon } from '@mui/icons-material';
 import {
   Container,
   Typography,
@@ -49,6 +50,7 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { fetchProductByBarcode } from '../services/barcode';
 
 const POS = () => {
   const { isDarkMode, colors } = useTheme();
@@ -61,6 +63,8 @@ const POS = () => {
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12; // 3 items per row × 4 rows = 12 items per page
+  const [scannerStatus, setScannerStatus] = useState('disconnected'); // disconnected, connected, scanning
+  const [scannerError, setScannerError] = useState(null);
   
   // Customer info
   const [customerName, setCustomerName] = useState('');
@@ -72,6 +76,7 @@ const POS = () => {
   
   // Payment
   const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [amountReceived, setAmountReceived] = useState('');
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(null);
@@ -273,6 +278,36 @@ const POS = () => {
     }
   };
 
+  // Handle barcode scan from Android app (via deep link or message)
+  useEffect(() => {
+    // Listen for messages from Android app
+    const handleMessage = (event) => {
+      if (event.data && event.data.type === 'BARCODE_SCANNED') {
+        handleBarcodeScanned(event.data.barcode);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  const handleBarcodeScanned = async (barcode) => {
+    try {
+      setScannerError(null);
+      setScannerStatus('scanning');
+      const product = await fetchProductByBarcode(barcode);
+      
+      if (product) {
+        addToCart(product);
+        setScannerStatus('connected');
+      }
+    } catch (error) {
+      console.error('Error fetching product by barcode:', error);
+      setScannerError(error.message || 'Product not found');
+      setScannerStatus('connected');
+    }
+  };
+
   const updateQuantity = (drinkId, delta) => {
     setCart(cart.map(item => {
       if (item.drinkId === drinkId) {
@@ -291,6 +326,12 @@ const POS = () => {
     return cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
 
+  const getChange = () => {
+    const total = getTotal();
+    const received = parseFloat(amountReceived) || 0;
+    return received - total;
+  };
+
   const handleCheckout = () => {
     if (cart.length === 0) {
       setOrderError('Cart is empty');
@@ -300,6 +341,19 @@ const POS = () => {
     if (!customerName || !customerPhone) {
       setOrderError('Please enter customer name and phone number');
       return;
+    }
+
+    if (paymentMethod === 'cash') {
+      const received = parseFloat(amountReceived) || 0;
+      const total = getTotal();
+      if (!amountReceived || received <= 0) {
+        setOrderError('Please enter the amount received from customer');
+        return;
+      }
+      if (received < total) {
+        setOrderError(`Amount received (KES ${received.toFixed(2)}) is less than total (KES ${total.toFixed(2)})`);
+        return;
+      }
     }
 
     if (paymentMethod === 'mpesa' && !mpesaPhone) {
@@ -325,7 +379,8 @@ const POS = () => {
           quantity: item.quantity,
           selectedPrice: item.price
         })),
-        notes: `POS Order - Payment: ${paymentMethod}`
+        notes: `POS Order - Payment: ${paymentMethod}${paymentMethod === 'cash' && amountReceived ? ` - Amount Received: KES ${parseFloat(amountReceived).toFixed(2)}, Change: KES ${getChange().toFixed(2)}` : ''}`,
+        amountPaid: paymentMethod === 'cash' ? parseFloat(amountReceived) : null
       };
 
       let response;
@@ -353,6 +408,7 @@ const POS = () => {
         setCustomerPhone('');
         setCustomerEmail('');
         setMpesaPhone('');
+        setAmountReceived('');
         setPaymentMethod('cash');
       }
     } catch (error) {
@@ -450,64 +506,106 @@ const POS = () => {
         <Box sx={{ flex: '1 1 50%', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Card sx={{ mb: 2, backgroundColor: colors.paper }}>
             <CardContent>
-              <Box display="flex" gap={2} mb={2}>
+              <Box display="flex" gap={2} mb={2} flexDirection="column">
+                <Box display="flex" gap={2}>
                   <TextField
-                  fullWidth
-                  placeholder="Search products..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  InputProps={{
-                    startAdornment: <Search sx={{ mr: 1, color: colors.textSecondary }} />
-                  }}
-                  sx={{
-                    '& .MuiInputBase-input': { color: colors.textPrimary },
-                    '& .MuiInputLabel-root': { color: colors.textSecondary },
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border || colors.textSecondary },
-                    '& .MuiInputBase-input::placeholder': { color: colors.textSecondary, opacity: 0.7 }
-                  }}
-                />
-                <FormControl sx={{ minWidth: 200 }}>
-                  <InputLabel sx={{ color: colors.textSecondary }}>Category</InputLabel>
-                  <Select
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    label="Category"
-                    sx={{
-                      color: colors.textPrimary,
-                      '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border || colors.textSecondary },
-                      '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.accent },
-                      '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: colors.accent },
-                      '& .MuiSvgIcon-root': { color: colors.textSecondary }
+                    fullWidth
+                    placeholder="Search products..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    InputProps={{
+                      startAdornment: <Search sx={{ mr: 1, color: colors.textSecondary }} />
                     }}
-                    MenuProps={{
-                      PaperProps: {
-                        sx: {
-                          backgroundColor: colors.paper,
-                          color: colors.textPrimary,
-                          '& .MuiMenuItem-root': {
+                    sx={{
+                      '& .MuiInputBase-input': { color: colors.textPrimary },
+                      '& .MuiInputLabel-root': { color: colors.textSecondary },
+                      '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border || colors.textSecondary },
+                      '& .MuiInputBase-input::placeholder': { color: colors.textSecondary, opacity: 0.7 }
+                    }}
+                  />
+                  <FormControl sx={{ minWidth: 200 }}>
+                    <InputLabel sx={{ color: colors.textSecondary }}>Category</InputLabel>
+                    <Select
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      label="Category"
+                      sx={{
+                        color: colors.textPrimary,
+                        '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border || colors.textSecondary },
+                        '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.accent },
+                        '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: colors.accent },
+                        '& .MuiSvgIcon-root': { color: colors.textSecondary }
+                      }}
+                      MenuProps={{
+                        PaperProps: {
+                          sx: {
+                            backgroundColor: colors.paper,
                             color: colors.textPrimary,
-                            '&:hover': {
-                              backgroundColor: colors.accent + '20'
-                            },
-                            '&.Mui-selected': {
-                              backgroundColor: colors.accent + '40',
+                            '& .MuiMenuItem-root': {
+                              color: colors.textPrimary,
                               '&:hover': {
-                                backgroundColor: colors.accent + '60'
+                                backgroundColor: colors.accent + '20'
+                              },
+                              '&.Mui-selected': {
+                                backgroundColor: colors.accent + '40',
+                                '&:hover': {
+                                  backgroundColor: colors.accent + '60'
+                                }
                               }
                             }
                           }
                         }
+                      }}
+                    >
+                      <MenuItem value="">
+                        <em>All Categories</em>
+                      </MenuItem>
+                      {categories.map(cat => (
+                        <MenuItem key={cat.id} value={cat.id}>{cat.name}</MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+                
+                {/* Android App Scanner Launcher */}
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<QrCodeScanner />}
+                    onClick={() => {
+                      // Launch Android app via deep link
+                      const deepLink = 'retailscanner://pos-scan';
+                      window.location.href = deepLink;
+                      setScannerStatus('connected');
+                    }}
+                    sx={{
+                      backgroundColor: colors.accent,
+                      color: '#000',
+                      mb: 1,
+                      '&:hover': {
+                        backgroundColor: colors.accent,
+                        opacity: 0.9
                       }
                     }}
                   >
-                    <MenuItem value="">
-                      <em>All Categories</em>
-                    </MenuItem>
-                    {categories.map(cat => (
-                      <MenuItem key={cat.id} value={cat.id}>{cat.name}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
+                    Launch Retail Scanner App
+                  </Button>
+                  
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                    <Chip
+                      label={`Scanner: ${scannerStatus === 'connected' ? 'Connected' : scannerStatus === 'scanning' ? 'Scanning...' : 'Disconnected'}`}
+                      color={scannerStatus === 'connected' ? 'success' : scannerStatus === 'scanning' ? 'info' : 'default'}
+                      size="small"
+                      icon={scannerStatus === 'connected' ? <CheckCircle /> : <LinkIcon />}
+                    />
+                  </Box>
+                  
+                  {scannerError && (
+                    <Alert severity="error" onClose={() => setScannerError(null)} sx={{ mt: 1 }}>
+                      {scannerError}
+                    </Alert>
+                  )}
+                </Box>
               </Box>
             </CardContent>
           </Card>
@@ -782,7 +880,12 @@ const POS = () => {
                     <FormLabel component="legend">Payment Method</FormLabel>
                     <RadioGroup
                       value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
+                      onChange={(e) => {
+                        setPaymentMethod(e.target.value);
+                        if (e.target.value !== 'cash') {
+                          setAmountReceived('');
+                        }
+                      }}
                     >
                       <FormControlLabel
                         value="cash"
@@ -807,6 +910,55 @@ const POS = () => {
                     </RadioGroup>
                   </FormControl>
 
+                  {paymentMethod === 'cash' && (
+                    <Box mb={2}>
+                      <TextField
+                        fullWidth
+                        label="Amount Received"
+                        type="number"
+                        value={amountReceived}
+                        onChange={(e) => setAmountReceived(e.target.value)}
+                        placeholder="0.00"
+                        InputProps={{
+                          startAdornment: <InputAdornment position="start">KES</InputAdornment>
+                        }}
+                        sx={{
+                          mb: 1,
+                          '& .MuiInputBase-input': { color: colors.textPrimary },
+                          '& .MuiInputLabel-root': { color: colors.textSecondary },
+                          '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border || colors.textSecondary },
+                          '& .MuiInputBase-input::placeholder': { color: colors.textSecondary, opacity: 0.7 }
+                        }}
+                      />
+                      {amountReceived && parseFloat(amountReceived) > 0 && (
+                        <Box
+                          sx={{
+                            p: 1.5,
+                            borderRadius: 1,
+                            backgroundColor: getChange() >= 0 ? 'rgba(76, 175, 80, 0.1)' : 'rgba(244, 67, 54, 0.1)',
+                            border: `1px solid ${getChange() >= 0 ? 'rgba(76, 175, 80, 0.3)' : 'rgba(244, 67, 54, 0.3)'}`
+                          }}
+                        >
+                          <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                            Total Due: KES {getTotal().toFixed(2)}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                            Amount Received: KES {parseFloat(amountReceived || 0).toFixed(2)}
+                          </Typography>
+                          <Typography 
+                            variant="h6" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              color: getChange() >= 0 ? '#4CAF50' : '#F44336'
+                            }}
+                          >
+                            {getChange() >= 0 ? 'Change: ' : 'Short: '}KES {Math.abs(getChange()).toFixed(2)}
+                          </Typography>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
+
                   {paymentMethod === 'mpesa' && (
                     <TextField
                       fullWidth
@@ -830,7 +982,12 @@ const POS = () => {
                     size="large"
                     startIcon={<Payment />}
                     onClick={handleCheckout}
-                    disabled={cart.length === 0 || !customerName || !customerPhone}
+                    disabled={
+                      cart.length === 0 || 
+                      !customerName || 
+                      !customerPhone || 
+                      (paymentMethod === 'cash' && (!amountReceived || parseFloat(amountReceived) < getTotal()))
+                    }
                     sx={{
                       backgroundColor: colors.accent,
                       color: '#000',

@@ -231,6 +231,24 @@ async function addMissingColumns(db) {
       console.log('✅ branchId column already exists in orders table');
     }
     
+    // Check if stock column exists in drinks table
+    const [stockResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drinks' AND column_name = 'stock'
+    `);
+    
+    if (stockResults.length === 0) {
+      console.log('📝 Adding missing stock column to drinks table...');
+      await db.sequelize.query(`
+        ALTER TABLE drinks 
+        ADD COLUMN stock INTEGER DEFAULT 0
+      `);
+      console.log('✅ Added stock column to drinks table');
+    } else {
+      console.log('✅ stock column already exists in drinks table');
+    }
+    
     return true;
   } catch (error) {
     console.warn('Column migration failed:', error.message);
