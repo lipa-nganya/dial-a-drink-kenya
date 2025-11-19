@@ -103,7 +103,7 @@ const AdminOverview = () => {
       window.location.hostname.includes('onrender.com') ||
       window.location.hostname.includes('run.app');
     const socketUrl = isHosted
-      ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
@@ -201,7 +201,7 @@ const AdminOverview = () => {
         const isHosted = window.location.hostname.includes('onrender.com') || 
                         window.location.hostname.includes('run.app');
         const backendUrl = isHosted 
-          ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+          ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
           : 'http://localhost:5001';
         return imagePath.replace('http://localhost:5001', backendUrl);
       }
@@ -212,7 +212,7 @@ const AdminOverview = () => {
     const isHosted = window.location.hostname.includes('onrender.com') || 
                     window.location.hostname.includes('run.app');
     const backendUrl = isHosted 
-      ? 'https://liquoros-backend-910510650031.us-central1.run.app'
+      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
       : 'http://localhost:5001';
     
     return `${backendUrl}${imagePath}`;
