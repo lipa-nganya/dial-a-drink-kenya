@@ -70,6 +70,16 @@ module.exports = (sequelize, DataTypes) => {
     abv: {
       type: DataTypes.DECIMAL(5, 2),
       allowNull: true
+    },
+    barcode: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true
+    },
+    stock: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0
     }
   }, {
     tableName: 'drinks',

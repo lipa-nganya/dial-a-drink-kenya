@@ -22,6 +22,8 @@ export const getOrderStatusChipProps = (status) => {
     case 'delivered':
     case 'completed':
       return { label: normalized === 'completed' ? 'Completed' : 'Delivered', color: 'success', icon: <DoneAll fontSize="small" /> };
+    case 'pos_order':
+      return { label: 'POS Order', color: 'success', icon: <ShoppingCart fontSize="small" /> };
     case 'cancelled':
       return { label: 'Cancelled', color: 'error', icon: <Cancel fontSize="small" /> };
     default:

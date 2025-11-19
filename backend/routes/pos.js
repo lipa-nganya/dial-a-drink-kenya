@@ -128,6 +128,37 @@ router.get('/customer/:phoneNumber', async (req, res) => {
   }
 });
 
+// Get drink by barcode for POS
+router.get('/drinks/barcode/:barcode', async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    
+    const drink = await db.Drink.findOne({
+      where: {
+        barcode: barcode,
+        isAvailable: {
+          [Op.ne]: false
+        }
+      },
+      include: [{
+        model: db.Category,
+        as: 'category',
+        attributes: ['id', 'name'],
+        required: false
+      }]
+    });
+
+    if (!drink) {
+      return res.status(404).json({ error: 'Product not found with barcode: ' + barcode });
+    }
+
+    res.json(drink);
+  } catch (error) {
+    console.error('Error fetching drink by barcode:', error);
+    res.status(500).json({ error: 'Failed to fetch product by barcode', details: error.message });
+  }
+});
+
 // Get all drinks for POS (with inventory info)
 router.get('/drinks', async (req, res) => {
   try {
@@ -176,7 +207,7 @@ router.post('/order/cash', async (req, res) => {
   const transaction = await db.sequelize.transaction();
   
   try {
-    const { customerName, customerPhone, customerEmail, items, notes, branchId } = req.body;
+    const { customerName, customerPhone, customerEmail, items, notes, branchId, amountPaid } = req.body;
 
     // Validation
     if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
@@ -217,7 +248,7 @@ router.post('/order/cash', async (req, res) => {
       deliveryAddress: 'In-Store Purchase', // POS orders don't need delivery address
       totalAmount,
       tipAmount: 0, // POS orders typically don't have tips
-      status: 'completed', // POS orders are immediately completed
+      status: 'pos_order', // POS orders use special status
       paymentStatus: 'paid',
       paymentType: 'pay_now',
       paymentMethod: 'cash',
@@ -236,6 +267,10 @@ router.post('/order/cash', async (req, res) => {
     }
 
     // Create cash payment transaction
+    const cashNotes = amountPaid && parseFloat(amountPaid) > totalAmount
+      ? `Cash payment for POS order #${order.id}. Customer: ${customerName} (${customerPhone}). Amount received: KES ${parseFloat(amountPaid).toFixed(2)}, Change given: KES ${(parseFloat(amountPaid) - totalAmount).toFixed(2)}`
+      : `Cash payment for POS order #${order.id}. Customer: ${customerName} (${customerPhone})${amountPaid ? `. Amount received: KES ${parseFloat(amountPaid).toFixed(2)}` : ''}`;
+    
     await db.Transaction.create({
       orderId: order.id,
       transactionType: 'payment',
@@ -244,7 +279,7 @@ router.post('/order/cash', async (req, res) => {
       amount: totalAmount,
       status: 'completed',
       paymentStatus: 'paid',
-      notes: `Cash payment for POS order #${order.id}. Customer: ${customerName} (${customerPhone})`
+      notes: cashNotes
     }, { transaction });
 
     await transaction.commit();

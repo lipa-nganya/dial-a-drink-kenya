@@ -83,7 +83,7 @@ module.exports = ({ config }) => {
       scheme: 'retailscanner',
       plugins: [
         [
-          'expo-barcode-scanner',
+          'expo-camera',
           {
             cameraPermission: 'Allow Retail Scanner to access your camera to scan barcodes.'
           }

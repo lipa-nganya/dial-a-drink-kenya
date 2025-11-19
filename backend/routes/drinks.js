@@ -141,6 +141,35 @@ router.get('/offers', async (req, res) => {
   }
 });
 
+// Get drink by barcode
+router.get('/barcode/:barcode', async (req, res) => {
+  try {
+    const { barcode } = req.params;
+    
+    const drink = await db.Drink.findOne({
+      where: {
+        barcode: barcode
+      },
+      include: [{
+        model: db.Category,
+        as: 'category'
+      }, {
+        model: db.SubCategory,
+        as: 'subCategory'
+      }]
+    });
+
+    if (!drink) {
+      return res.status(404).json({ error: 'Product not found with this barcode' });
+    }
+
+    res.json(drink);
+  } catch (error) {
+    console.error('Error fetching drink by barcode:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get drink by ID
 router.get('/:id', async (req, res) => {
   try {

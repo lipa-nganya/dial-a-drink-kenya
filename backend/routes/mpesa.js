@@ -194,9 +194,9 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     orderUpdatePayload.driverPayAmount = driverPayAmount;
   }
 
-  // For POS orders, set status to 'completed' immediately (no delivery needed)
+  // For POS orders, set status to 'pos_order' immediately (no delivery needed)
   if (isPOSOrder) {
-    orderUpdatePayload.status = 'completed';
+    orderUpdatePayload.status = 'pos_order';
   }
   
   // Update order within the transaction to ensure it's committed atomically

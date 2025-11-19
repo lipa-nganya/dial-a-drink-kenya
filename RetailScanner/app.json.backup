@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Retail Scanner",
+    "slug": "retail-scanner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "updates": {
+      "fallbackToCacheTimeout": 0
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.dialadrink.retailscanner"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.dialadrink.retailscanner",
+      "permissions": [
+        "CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "scheme": "retailscanner",
+    "plugins": [
+      [
+        "expo-barcode-scanner",
+        {
+          "cameraPermission": "Allow Retail Scanner to access your camera to scan barcodes."
+        }
+      ]
+    ]
+  }
+}
