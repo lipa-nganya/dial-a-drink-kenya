@@ -85,8 +85,19 @@ export const getPaymentMethodChipProps = (method) => {
     };
   }
 
+  if (normalized === 'cash') {
+    return {
+      label: 'Cash',
+      sx: {
+        backgroundColor: '#4CAF50',
+        color: '#FFFFFF',
+        fontWeight: 700
+      }
+    };
+  }
+
   return {
-    label: method,
+    label: method.charAt(0).toUpperCase() + method.slice(1).replace('_', ' '),
     sx: {
       backgroundColor: '#424242',
       color: '#FFFFFF',

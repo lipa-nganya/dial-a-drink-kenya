@@ -866,26 +866,61 @@ const Transactions = () => {
                   </TableCell>
                   <TableCell>
                     {transaction.receiptNumber ? (
-                      transaction.receiptNumber === 'POS' ? (
-                        <Chip
-                          label="POS"
-                          size="small"
-                          icon={<Receipt fontSize="small" />}
-                          sx={{
-                            backgroundColor: '#9C27B0', // Purple background
-                            color: '#FFFFFF', // White text
-                            fontWeight: 600,
-                            '& .MuiChip-icon': {
-                              color: '#FFFFFF'
-                            }
-                          }}
-                        />
-                      ) : (
-                        <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <Receipt fontSize="small" />
-                          {transaction.receiptNumber}
-                        </Typography>
-                      )
+                      (() => {
+                        // Check if this is a POS order (cash or M-Pesa)
+                        const isPOSOrder = transaction.order?.deliveryAddress === 'In-Store Purchase';
+                        const isCashPOS = transaction.receiptNumber === 'POS';
+                        const isMpesaPOS = isPOSOrder && transaction.paymentMethod === 'mobile_money' && transaction.receiptNumber !== 'POS';
+                        
+                        if (isCashPOS) {
+                          // Cash POS order - show POS chip
+                          return (
+                            <Chip
+                              label="POS"
+                              size="small"
+                              icon={<Receipt fontSize="small" />}
+                              sx={{
+                                backgroundColor: '#9C27B0', // Purple background
+                                color: '#FFFFFF', // White text
+                                fontWeight: 600,
+                                '& .MuiChip-icon': {
+                                  color: '#FFFFFF'
+                                }
+                              }}
+                            />
+                          );
+                        } else if (isMpesaPOS) {
+                          // M-Pesa POS order - show POS label above receipt number
+                          return (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                              <Chip
+                                label="POS"
+                                size="small"
+                                sx={{
+                                  backgroundColor: '#9C27B0', // Purple background
+                                  color: '#FFFFFF', // White text
+                                  fontWeight: 600,
+                                  fontSize: '0.7rem',
+                                  height: '20px',
+                                  alignSelf: 'flex-start'
+                                }}
+                              />
+                              <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Receipt fontSize="small" />
+                                {transaction.receiptNumber}
+                              </Typography>
+                            </Box>
+                          );
+                        } else {
+                          // Regular transaction - show receipt number normally
+                          return (
+                            <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Receipt fontSize="small" />
+                              {transaction.receiptNumber}
+                            </Typography>
+                          );
+                        }
+                      })()
                     ) : (
                       <Typography variant="body2" color="text.secondary">
                         N/A

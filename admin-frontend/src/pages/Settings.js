@@ -76,6 +76,14 @@ const Settings = () => {
   const [smsEnabled, setSmsEnabled] = useState(true);
   const [smsSettingsLoading, setSmsSettingsLoading] = useState(false);
 
+  // Stock Alert Settings state
+  const [stockAlertSettings, setStockAlertSettings] = useState({
+    stockAlertQuantity: 10,
+    stockAlertRecipient: ''
+  });
+  const [stockAlertSettingsLoading, setStockAlertSettingsLoading] = useState(false);
+  const [showStockAlertSettings, setShowStockAlertSettings] = useState(false);
+
   // Delivery Fee Settings state
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
@@ -170,6 +178,7 @@ const Settings = () => {
   useEffect(() => {
     fetchAllData();
     fetchCurrentUser();
+    fetchStockAlertSettings();
   }, []);
 
   const fetchCurrentUser = async () => {
@@ -386,6 +395,69 @@ const Settings = () => {
       setSmsEnabled(!enabled);
     } finally {
       setSmsSettingsLoading(false);
+    }
+  };
+
+  // ========== STOCK ALERT SETTINGS ==========
+  const fetchStockAlertSettings = async () => {
+    try {
+      const [quantityRes, recipientRes] = await Promise.all([
+        api.get('/settings/stockAlertQuantity').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/stockAlertRecipient').catch(() => ({ data: null, status: 404 }))
+      ]);
+
+      // Convert comma-separated recipients to newline-separated for better display in multiline field
+      const recipientValue = recipientRes.data?.value || '';
+      const formattedRecipients = recipientValue
+        .split(',')
+        .map(r => r.trim())
+        .filter(r => r.length > 0)
+        .join('\n');
+
+      setStockAlertSettings({
+        stockAlertQuantity: parseInt(quantityRes.data?.value || '10'),
+        stockAlertRecipient: formattedRecipients
+      });
+    } catch (error) {
+      console.error('Error fetching stock alert settings:', error);
+      setStockAlertSettings({
+        stockAlertQuantity: 10,
+        stockAlertRecipient: ''
+      });
+    }
+  };
+
+  const saveStockAlertSettings = async () => {
+    // Parse recipients (comma or newline separated)
+    const recipients = stockAlertSettings.stockAlertRecipient
+      .split(/[,\n]/)
+      .map(r => r.trim())
+      .filter(r => r.length > 0);
+
+    if (recipients.length === 0) {
+      setError('At least one stock alert recipient is required');
+      return;
+    }
+
+    if (stockAlertSettings.stockAlertQuantity < 0) {
+      setError('Stock alert quantity must be a non-negative number');
+      return;
+    }
+
+    try {
+      setStockAlertSettingsLoading(true);
+      // Save as comma-separated string
+      await Promise.all([
+        api.put('/settings/stockAlertQuantity', { value: stockAlertSettings.stockAlertQuantity.toString() }),
+        api.put('/settings/stockAlertRecipient', { value: recipients.join(',') })
+      ]);
+      setNotification({ message: `Stock alert settings saved successfully! ${recipients.length} recipient(s) configured.` });
+      setShowStockAlertSettings(false);
+    } catch (error) {
+      console.error('Error saving stock alert settings:', error);
+      setError('Failed to save stock alert settings');
+    } finally {
+      setStockAlertSettingsLoading(false);
     }
   };
 
@@ -1228,6 +1300,231 @@ const Settings = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                   With Alcohol: KES {deliverySettings.deliveryFeeWithAlcohol.toFixed(2)} | 
                   Without Alcohol: KES {deliverySettings.deliveryFeeWithoutAlcohol.toFixed(2)}
+                </Typography>
+              )}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Stock Alert Settings */}
+      <Card sx={{ mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Warning sx={{ color: colors.accentText, fontSize: 32 }} />
+              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
+                Stock Alert Settings
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              startIcon={showStockAlertSettings ? <CancelIcon /> : <Edit />}
+              onClick={() => {
+                setShowStockAlertSettings(!showStockAlertSettings);
+                if (!showStockAlertSettings) {
+                  fetchStockAlertSettings();
+                }
+              }}
+              sx={{
+                borderColor: colors.accentText,
+                color: colors.accentText,
+                '&:hover': { borderColor: '#00C4A3', backgroundColor: 'rgba(0, 224, 184, 0.1)' }
+              }}
+            >
+              {showStockAlertSettings ? 'Hide Settings' : 'Edit Settings'}
+            </Button>
+          </Box>
+
+          {showStockAlertSettings && (
+            <Box sx={{ mt: 3 }}>
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Configure when to receive alerts for low stock levels. Alerts will be sent when any product's stock falls below the threshold.
+              </Alert>
+
+              {/* SMS Enable/Disable Toggle */}
+              <Box sx={{ mb: 3, p: 2, bgcolor: colors.paper, borderRadius: 1, border: `1px solid ${colors.border}` }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography variant="body1" fontWeight="medium" sx={{ color: colors.textPrimary }}>
+                      Enable SMS Alerts
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {smsEnabled ? 'SMS alerts are enabled and will be sent when stock falls below threshold' : 'SMS alerts are disabled - no alerts will be sent'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Chip
+                      label={smsEnabled ? 'ENABLED' : 'DISABLED'}
+                      color={smsEnabled ? 'success' : 'default'}
+                      sx={{ mr: 1 }}
+                    />
+                    {smsSettingsLoading && <CircularProgress size={20} />}
+                    <Switch
+                      checked={smsEnabled}
+                      onChange={(e) => updateSmsSettings(e.target.checked)}
+                      disabled={smsSettingsLoading}
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': {
+                          color: colors.accentText,
+                        },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                          backgroundColor: colors.accentText,
+                        },
+                      }}
+                    />
+                  </Box>
+                </Box>
+              </Box>
+
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Stock Alert Quantity"
+                    type="number"
+                    value={stockAlertSettings.stockAlertQuantity}
+                    onChange={(e) => setStockAlertSettings(prev => ({
+                      ...prev,
+                      stockAlertQuantity: parseInt(e.target.value) || 0
+                    }))}
+                    inputProps={{ min: 0, step: 1 }}
+                    helperText="Alert when stock falls below this quantity"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label="Stock Alert Recipients"
+                    value={stockAlertSettings.stockAlertRecipient}
+                    onChange={(e) => setStockAlertSettings(prev => ({
+                      ...prev,
+                      stockAlertRecipient: e.target.value
+                    }))}
+                    placeholder="0712345678&#10;0723456789&#10;0734567890"
+                    helperText="Enter phone numbers separated by commas or new lines. Each number will receive stock alerts."
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
+                  />
+                  {stockAlertSettings.stockAlertRecipient && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        {stockAlertSettings.stockAlertRecipient
+                          .split(/[,\n]/)
+                          .map(r => r.trim())
+                          .filter(r => r.length > 0).length} recipient(s) configured
+                      </Typography>
+                    </Box>
+                  )}
+                </Grid>
+
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="outlined"
+                      onClick={() => {
+                        setShowStockAlertSettings(false);
+                        fetchStockAlertSettings();
+                      }}
+                      sx={{
+                        borderColor: colors.border,
+                        color: colors.textSecondary,
+                        '&:hover': { 
+                          borderColor: colors.accentText,
+                          backgroundColor: 'rgba(0, 224, 184, 0.05)'
+                        }
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="contained"
+                      onClick={saveStockAlertSettings}
+                      disabled={stockAlertSettingsLoading}
+                      startIcon={stockAlertSettingsLoading ? <CircularProgress size={20} /> : <Save />}
+                      sx={{
+                        backgroundColor: colors.accentText,
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                        '&:hover': { backgroundColor: '#00C4A3' }
+                      }}
+                    >
+                      {stockAlertSettingsLoading ? 'Saving...' : 'Save Settings'}
+                    </Button>
+                  </Box>
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+
+          {!showStockAlertSettings && (
+            <Box sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                <Typography variant="body2" color="text.secondary" component="span">
+                  Alert Threshold:
+                </Typography>
+                <Chip label={`${stockAlertSettings.stockAlertQuantity} units`} size="small" color="warning" />
+              </Box>
+              {stockAlertSettings.stockAlertRecipient && (
+                <Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                    Recipients ({stockAlertSettings.stockAlertRecipient.split(/[,\n]/).map(r => r.trim()).filter(r => r.length > 0).length}):
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {stockAlertSettings.stockAlertRecipient
+                      .split(/[,\n]/)
+                      .map(r => r.trim())
+                      .filter(r => r.length > 0)
+                      .map((recipient, index) => (
+                        <Chip 
+                          key={index}
+                          label={recipient} 
+                          size="small" 
+                          sx={{ 
+                            backgroundColor: colors.accentText + '20',
+                            color: colors.accentText
+                          }} 
+                        />
+                      ))}
+                  </Box>
+                </Box>
+              )}
+              {!stockAlertSettings.stockAlertRecipient && (
+                <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                  No recipients configured
                 </Typography>
               )}
             </Box>

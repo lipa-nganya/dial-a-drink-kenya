@@ -43,7 +43,7 @@ import {
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { useTheme } from '../contexts/ThemeContext';
-import { getOrderStatusChipProps, getPaymentStatusChipProps } from '../utils/chipStyles';
+import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChipProps } from '../utils/chipStyles';
 
 const Orders = () => {
   const { isDarkMode, colors } = useTheme();
@@ -816,21 +816,40 @@ const Orders = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      {paymentStatusChip ? (
-                        <Chip
-                          size="small"
-                          {...paymentStatusChip}
-                        />
-                      ) : (
-                        <Chip size="small" label="—" />
-                      )}
-                      {isUnpaidDelivered && (
-                        <Tooltip title="This order has been delivered but payment is still unpaid">
-                          <IconButton size="small" sx={{ ml: 1, color: 'error.main' }}>
-                            <Warning />
-                          </IconButton>
-                        </Tooltip>
-                      )}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
+                        {paymentStatusChip ? (
+                          <Chip
+                            size="small"
+                            {...paymentStatusChip}
+                          />
+                        ) : (
+                          <Chip size="small" label="—" />
+                        )}
+                        {order.paymentMethod && (() => {
+                          const methodChip = getPaymentMethodChipProps(order.paymentMethod);
+                          if (methodChip) {
+                            return (
+                              <Chip
+                                size="small"
+                                label={methodChip.label}
+                                sx={{
+                                  fontSize: '0.7rem',
+                                  height: '20px',
+                                  ...methodChip.sx
+                                }}
+                              />
+                            );
+                          }
+                          return null;
+                        })()}
+                        {isUnpaidDelivered && (
+                          <Tooltip title="This order has been delivered but payment is still unpaid">
+                            <IconButton size="small" sx={{ color: 'error.main' }}>
+                              <Warning />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
