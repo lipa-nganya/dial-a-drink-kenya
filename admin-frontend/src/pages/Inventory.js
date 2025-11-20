@@ -593,7 +593,7 @@ const InventoryPage = () => {
                   minHeight: '380px',
                   display: 'flex',
                   flexDirection: 'column',
-                  backgroundColor: colors.paper,
+                  backgroundColor: '#ffffff',
                   transition: 'transform 0.2s',
                   '&:hover': {
                     transform: 'translateY(-2px)',
@@ -606,9 +606,9 @@ const InventoryPage = () => {
                   height="120"
                   image={getImageUrl(drink.image)}
                   alt={drink.name}
-                  sx={{ objectFit: 'contain', p: 1, backgroundColor: colors.paper }}
+                  sx={{ objectFit: 'contain', p: 1, backgroundColor: '#ffffff' }}
                 />
-                <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: colors.paper }}>
+                <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff' }}>
                   {/* Status Label Above Name */}
                   <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
                     {drink.barcode && (
