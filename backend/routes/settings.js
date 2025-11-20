@@ -89,6 +89,12 @@ router.get('/:key', async (req, res) => {
       if (key === 'driverPayPerDeliveryAmount') {
         return res.json({ key: 'driverPayPerDeliveryAmount', value: '0' });
       }
+      if (key === 'stockAlertQuantity') {
+        return res.json({ key: 'stockAlertQuantity', value: '10' });
+      }
+      if (key === 'stockAlertRecipient') {
+        return res.json({ key: 'stockAlertRecipient', value: '' });
+      }
       return res.status(404).json({ error: 'Setting not found' });
     }
     

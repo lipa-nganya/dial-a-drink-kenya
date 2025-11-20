@@ -46,11 +46,16 @@ function formatPhoneNumber(phone) {
  */
 async function sendSMS(phoneNumber, message) {
   // Check if we're in local development
-  const isLocalDev = process.env.NODE_ENV !== 'production' || 
-                     process.env.ENVIRONMENT === 'local' ||
-                     process.env.FORCE_LOCAL_SMS === 'true';
+  // For stock alerts on local, we want to enable actual SMS sending
+  const isLocalDev = (process.env.NODE_ENV !== 'production' || 
+                     process.env.ENVIRONMENT === 'local') &&
+                     process.env.FORCE_LOCAL_SMS !== 'false' &&
+                     !process.env.ENABLE_STOCK_ALERTS_SMS;
   
-  if (isLocalDev) {
+  // If ENABLE_STOCK_ALERTS_SMS is set, send actual SMS even in local
+  const enableSMS = process.env.ENABLE_STOCK_ALERTS_SMS === 'true' || !isLocalDev;
+  
+  if (!enableSMS) {
     // Local development: Only log SMS, don't send actual SMS
     const formattedPhone = formatPhoneNumber(phoneNumber);
     console.log('');
@@ -59,6 +64,8 @@ async function sendSMS(phoneNumber, message) {
     console.log('═══════════════════════════════════════════════════════════');
     console.log(`Phone Number: ${formattedPhone || phoneNumber}`);
     console.log(`Message: ${message}`);
+    console.log('═══════════════════════════════════════════════════════════');
+    console.log('ℹ️  Set ENABLE_STOCK_ALERTS_SMS=true to send actual SMS in local');
     console.log('═══════════════════════════════════════════════════════════');
     console.log('');
     

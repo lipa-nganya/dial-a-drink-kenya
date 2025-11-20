@@ -4,6 +4,51 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
 
+/**
+ * Credit merchant wallet for POS order
+ * POS orders don't have delivery fees, so we only credit the order total
+ */
+const creditMerchantWalletForPOSOrder = async (orderId, totalAmount, transaction = null) => {
+  try {
+    let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } }, { transaction });
+    if (!adminWallet) {
+      adminWallet = await db.AdminWallet.create({
+        id: 1,
+        balance: 0,
+        totalRevenue: 0,
+        totalOrders: 0
+      }, { transaction });
+    }
+
+    const oldBalance = parseFloat(adminWallet.balance) || 0;
+    const oldTotalRevenue = parseFloat(adminWallet.totalRevenue) || 0;
+    const oldTotalOrders = adminWallet.totalOrders || 0;
+
+    await adminWallet.update({
+      balance: oldBalance + totalAmount,
+      totalRevenue: oldTotalRevenue + totalAmount,
+      totalOrders: oldTotalOrders + 1
+    }, { transaction });
+
+    await adminWallet.reload({ transaction });
+
+    console.log(`✅ Credited merchant wallet for POS Order #${orderId}:`);
+    console.log(`   Order total: KES ${totalAmount.toFixed(2)}`);
+    console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(adminWallet.balance).toFixed(2)}`);
+    console.log(`   Total revenue: ${oldTotalRevenue.toFixed(2)} → ${parseFloat(adminWallet.totalRevenue).toFixed(2)}`);
+    console.log(`   Total orders: ${oldTotalOrders} → ${adminWallet.totalOrders}`);
+
+    return {
+      success: true,
+      merchantCreditAmount: totalAmount,
+      walletBalance: parseFloat(adminWallet.balance)
+    };
+  } catch (error) {
+    console.error(`❌ Error crediting merchant wallet for POS Order #${orderId}:`, error);
+    throw error;
+  }
+};
+
 // In-memory cart storage (in production, use Redis or database)
 // Key: 'pos_cart', Value: Array of cart items
 let posCart = [];
@@ -351,6 +396,19 @@ router.post('/order/cash', async (req, res) => {
       notes: cashNotes
     }, { transaction });
 
+    // Credit merchant wallet with order total
+    await creditMerchantWalletForPOSOrder(order.id, totalAmount, transaction);
+
+    // Decrease inventory stock for POS cash orders
+    try {
+      const { decreaseInventoryForOrder } = require('../utils/inventory');
+      await decreaseInventoryForOrder(order.id, transaction);
+      console.log(`📦 Inventory decreased for POS Order #${order.id}`);
+    } catch (inventoryError) {
+      console.error(`❌ Error decreasing inventory for POS Order #${order.id}:`, inventoryError);
+      // Don't fail the order creation if inventory update fails
+    }
+
     await transaction.commit();
 
     // Emit socket event for admin dashboard
@@ -474,7 +532,11 @@ router.post('/order/mpesa', async (req, res) => {
         `POS Order #${order.id}`
       );
 
-      if (stkResponse.success && stkResponse.checkoutRequestID) {
+      // M-Pesa API returns ResponseCode: '0' for success
+      const isSuccess = stkResponse.ResponseCode === '0' || stkResponse.ResponseCode === 0;
+      const checkoutRequestID = stkResponse.CheckoutRequestID || stkResponse.checkoutRequestID;
+      
+      if (isSuccess && checkoutRequestID) {
         // Create pending transaction record
         await db.Transaction.create({
           orderId: order.id,
@@ -484,24 +546,49 @@ router.post('/order/mpesa', async (req, res) => {
           amount: totalAmount,
           status: 'pending',
           paymentStatus: 'pending',
-          checkoutRequestID: stkResponse.checkoutRequestID,
-          merchantRequestID: stkResponse.merchantRequestID,
+          checkoutRequestID: checkoutRequestID,
+          merchantRequestID: stkResponse.MerchantRequestID || stkResponse.merchantRequestID,
           phoneNumber: phoneNumber,
           notes: `M-Pesa STK Push initiated for POS order #${order.id}. Customer: ${customerName} (${customerPhone})`
         });
+
+        // CRITICAL: Verify order is still pending before responding
+        await order.reload();
+        if (order.status !== 'pending' || order.paymentStatus !== 'pending') {
+          console.error(`⚠️  WARNING: POS Order #${order.id} status changed unexpectedly! Status: ${order.status}, PaymentStatus: ${order.paymentStatus}`);
+        } else {
+          console.log(`✅ POS Order #${order.id} created successfully with status: 'pending', paymentStatus: 'pending'`);
+        }
 
         res.json({
           success: true,
           message: 'M-Pesa payment initiated. Please check your phone.',
           orderId: order.id,
-          checkoutRequestID: stkResponse.checkoutRequestID,
-          customerMessage: stkResponse.CustomerMessage || stkResponse.customerMessage
+          checkoutRequestID: checkoutRequestID,
+          customerMessage: stkResponse.CustomerMessage || stkResponse.customerMessage,
+          orderStatus: order.status, // Include status in response for debugging
+          paymentStatus: order.paymentStatus
         });
       } else {
+        // M-Pesa API returned an error
+        const errorMessage = stkResponse.errorMessage || 
+                            stkResponse.ErrorMessage ||
+                            stkResponse.CustomerMessage ||
+                            `M-Pesa error: ResponseCode ${stkResponse.ResponseCode}` ||
+                            'Failed to initiate M-Pesa payment';
+        
+        console.error('M-Pesa STK Push failed:', {
+          ResponseCode: stkResponse.ResponseCode,
+          ResponseDescription: stkResponse.ResponseDescription,
+          CustomerMessage: stkResponse.CustomerMessage,
+          ErrorMessage: stkResponse.ErrorMessage || stkResponse.errorMessage
+        });
+        
         res.status(400).json({
           success: false,
-          error: stkResponse.errorMessage || 'Failed to initiate M-Pesa payment',
-          orderId: order.id
+          error: errorMessage,
+          orderId: order.id,
+          responseCode: stkResponse.ResponseCode
         });
       }
     } catch (mpesaError) {

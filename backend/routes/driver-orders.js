@@ -243,6 +243,16 @@ router.patch('/:orderId/status', async (req, res) => {
           console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
           // Don't fail the status update if wallet crediting fails
         }
+        
+        // Decrease inventory stock for completed orders
+        try {
+          const { decreaseInventoryForOrder } = require('../utils/inventory');
+          await decreaseInventoryForOrder(order.id);
+          console.log(`📦 Inventory decreased for Order #${order.id} (driver status update)`);
+        } catch (inventoryError) {
+          console.error(`❌ Error decreasing inventory for Order #${order.id}:`, inventoryError);
+          // Don't fail the status update if inventory update fails
+        }
       }
 
       // Note: All wallet credits (merchant, driver delivery fee, tip) are now handled by creditWalletsOnDeliveryCompletion
@@ -808,6 +818,16 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     if (finalStatus === 'completed' && order.driverId) {
       try {
         await creditWalletsOnDeliveryCompletion(order.id, req);
+        
+        // Decrease inventory stock for completed orders
+        try {
+          const { decreaseInventoryForOrder } = require('../utils/inventory');
+          await decreaseInventoryForOrder(order.id);
+          console.log(`📦 Inventory decreased for Order #${order.id} (driver cash confirmation)`);
+        } catch (inventoryError) {
+          console.error(`❌ Error decreasing inventory for Order #${order.id}:`, inventoryError);
+          // Don't fail the order completion if inventory update fails
+        }
         console.log(`✅ Wallets credited for Order #${order.id} on cash payment confirmation (order completed)`);
       } catch (walletError) {
         console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);

@@ -194,14 +194,26 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     orderUpdatePayload.driverPayAmount = driverPayAmount;
   }
 
-  // For POS orders, set status to 'pos_order' immediately (no delivery needed)
+  // For POS orders, set status to 'completed' immediately (no delivery needed)
   if (isPOSOrder) {
-    orderUpdatePayload.status = 'pos_order';
+    orderUpdatePayload.status = 'completed';
   }
   
   // Update order within the transaction to ensure it's committed atomically
   await orderInstance.update(orderUpdatePayload, { transaction: dbTransaction });
   console.log(`✅ Updated order #${effectiveOrderId} status to '${orderUpdatePayload.status}', paymentStatus to 'paid'${isPOSOrder ? ' (POS Order)' : ''}`);
+
+  // Decrease inventory stock for completed orders
+  if (orderUpdatePayload.status === 'completed' && orderUpdatePayload.paymentStatus === 'paid') {
+    try {
+      const { decreaseInventoryForOrder } = require('../utils/inventory');
+      await decreaseInventoryForOrder(effectiveOrderId, dbTransaction);
+      console.log(`📦 Inventory decreased for Order #${effectiveOrderId}`);
+    } catch (inventoryError) {
+      console.error(`❌ Error decreasing inventory for Order #${effectiveOrderId}:`, inventoryError);
+      // Don't fail the payment finalization if inventory update fails
+    }
+  }
 
   await orderInstance.reload({
     include: [
@@ -259,10 +271,60 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
       message: `${context} for Order #${orderInstance.id}`
     });
     io.to('admin').emit('order-status-updated', orderStatusUpdateData);
+    
+    // For POS orders, send 'new-order' notification similar to cash orders
+    if (isPOSOrder && orderInstance.status === 'completed') {
+      io.to('admin').emit('new-order', {
+        id: orderInstance.id,
+        customerName: orderInstance.customerName,
+        totalAmount: orderInstance.totalAmount,
+        status: orderInstance.status,
+        paymentMethod: 'mobile_money',
+        isPOS: true,
+        receiptNumber: normalizedReceipt
+      });
+      console.log(`📢 Sent 'new-order' socket notification for POS Order #${orderInstance.id} (M-Pesa)`);
+    }
   }
 
-  // Note: Merchant wallet crediting is now handled by creditWalletsOnDeliveryCompletion when delivery is completed
-  // We only create/update transactions here, not credit wallets
+  // Credit merchant wallet for POS orders immediately (no delivery needed)
+  if (isPOSOrder && orderInstance.status === 'completed' && orderInstance.paymentStatus === 'paid') {
+    try {
+      let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } }, { transaction: dbTransaction });
+      if (!adminWallet) {
+        adminWallet = await db.AdminWallet.create({
+          id: 1,
+          balance: 0,
+          totalRevenue: 0,
+          totalOrders: 0
+        }, { transaction: dbTransaction });
+      }
+
+      const oldBalance = parseFloat(adminWallet.balance) || 0;
+      const oldTotalRevenue = parseFloat(adminWallet.totalRevenue) || 0;
+      const oldTotalOrders = adminWallet.totalOrders || 0;
+
+      await adminWallet.update({
+        balance: oldBalance + itemsTotal,
+        totalRevenue: oldTotalRevenue + itemsTotal,
+        totalOrders: oldTotalOrders + 1
+      }, { transaction: dbTransaction });
+
+      await adminWallet.reload({ transaction: dbTransaction });
+
+      console.log(`✅ Credited merchant wallet for POS Order #${effectiveOrderId}:`);
+      console.log(`   Order total: KES ${itemsTotal.toFixed(2)}`);
+      console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(adminWallet.balance).toFixed(2)}`);
+      console.log(`   Total revenue: ${oldTotalRevenue.toFixed(2)} → ${parseFloat(adminWallet.totalRevenue).toFixed(2)}`);
+      console.log(`   Total orders: ${oldTotalOrders} → ${adminWallet.totalOrders}`);
+    } catch (merchantError) {
+      console.error(`❌ Error crediting merchant wallet for POS Order #${effectiveOrderId}:`, merchantError);
+      // Don't throw - allow payment finalization to complete even if wallet crediting fails
+    }
+  } else {
+    // Note: Merchant wallet crediting for delivery orders is handled by creditWalletsOnDeliveryCompletion when delivery is completed
+    // We only create/update transactions here, not credit wallets
+  }
 
   // Commit the transaction before returning
   // This ensures all transactions are committed atomically
@@ -567,6 +629,12 @@ router.post('/stk-push', async (req, res) => {
         tipAmount
       } = await getOrderFinancialBreakdown(order.id);
 
+      // Check if this is a POS order (no delivery fee)
+      const isPOSOrder = order.deliveryAddress === 'In-Store Purchase';
+      
+      // POS orders don't have delivery fees, so skip delivery fee transaction creation
+      const effectiveDeliveryFee = isPOSOrder ? 0 : deliveryFee;
+
       const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
         db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
         db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
@@ -574,10 +642,10 @@ router.post('/stk-push', async (req, res) => {
 
       const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
       const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-      const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
-        ? Math.min(deliveryFee, configuredDriverPayAmount)
+      const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0 && !isPOSOrder
+        ? Math.min(effectiveDeliveryFee, configuredDriverPayAmount)
         : 0;
-      const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
+      const merchantDeliveryAmount = isPOSOrder ? 0 : Math.max(effectiveDeliveryFee - driverPayAmount, 0);
 
       const baseTransactionPayload = {
           orderId: order.id,
@@ -624,35 +692,58 @@ router.post('/stk-push', async (req, res) => {
           console.log(`✅ Payment transaction created for Order #${orderId} (transaction #${paymentTransaction.id})`);
         }
 
-        const deliveryNote = driverPayAmount > 0
-          ? `Delivery fee portion for Order #${orderId}. Merchant share: KES ${merchantDeliveryAmount.toFixed(2)}. Driver payout KES ${driverPayAmount.toFixed(2)} pending.`
-          : `Delivery fee portion for Order #${orderId}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
+        // CRITICAL: Only create delivery fee transactions for non-POS orders
+        if (!isPOSOrder && merchantDeliveryAmount > 0.009) {
+          const deliveryNote = driverPayAmount > 0
+            ? `Delivery fee portion for Order #${orderId}. Merchant share: KES ${merchantDeliveryAmount.toFixed(2)}. Driver payout KES ${driverPayAmount.toFixed(2)} pending.`
+            : `Delivery fee portion for Order #${orderId}. Amount: KES ${effectiveDeliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
 
-        let deliveryTransaction = await db.Transaction.findOne({
-          where: {
-            orderId: order.id,
-            transactionType: 'delivery_pay',
-            status: { [Op.ne]: 'completed' }
-          },
-          order: [['createdAt', 'DESC']]
-        });
+          let deliveryTransaction = await db.Transaction.findOne({
+            where: {
+              orderId: order.id,
+              transactionType: 'delivery_pay',
+              status: { [Op.ne]: 'completed' }
+            },
+            order: [['createdAt', 'DESC']]
+          });
 
-        if (deliveryTransaction) {
-          await deliveryTransaction.update({
-            ...baseTransactionPayload,
-            amount: merchantDeliveryAmount,
-            notes: deliveryNote,
-            transactionType: 'delivery_pay'
+          if (deliveryTransaction) {
+            await deliveryTransaction.update({
+              ...baseTransactionPayload,
+              amount: merchantDeliveryAmount,
+              notes: deliveryNote,
+              transactionType: 'delivery_pay'
+            });
+            console.log(`✅ Delivery fee transaction updated for Order #${orderId} (transaction #${deliveryTransaction.id})`);
+          } else {
+            deliveryTransaction = await db.Transaction.create({
+              ...baseTransactionPayload,
+              transactionType: 'delivery_pay',
+              amount: merchantDeliveryAmount,
+              notes: deliveryNote
+            });
+            console.log(`✅ Delivery fee transaction created for Order #${orderId} (transaction #${deliveryTransaction.id})`);
+          }
+        } else if (isPOSOrder) {
+          // For POS orders, cancel any existing delivery fee transactions
+          const existingDeliveryTransactions = await db.Transaction.findAll({
+            where: {
+              orderId: order.id,
+              transactionType: 'delivery_pay'
+            }
           });
-          console.log(`✅ Delivery fee transaction updated for Order #${orderId} (transaction #${deliveryTransaction.id})`);
-        } else {
-          deliveryTransaction = await db.Transaction.create({
-            ...baseTransactionPayload,
-            transactionType: 'delivery_pay',
-            amount: merchantDeliveryAmount,
-            notes: deliveryNote
-          });
-          console.log(`✅ Delivery fee transaction created for Order #${orderId} (transaction #${deliveryTransaction.id})`);
+          
+          for (const existingTxn of existingDeliveryTransactions) {
+            if (existingTxn.status !== 'cancelled') {
+              await existingTxn.update({
+                status: 'cancelled',
+                paymentStatus: 'cancelled',
+                amount: 0,
+                notes: `${existingTxn.notes || ''}\nCancelled - POS orders do not have delivery fees.`.trim()
+              });
+              console.log(`✅ Cancelled delivery fee transaction #${existingTxn.id} for POS Order #${order.id}`);
+            }
+          }
         }
 
         if (driverPayAmount > 0 && order.driverId) {
@@ -1339,6 +1430,9 @@ router.post('/callback', async (req, res) => {
           // Reload order after finalizeOrderPayment to get updated status
           await order.reload();
           
+          // Check if this is a POS order
+          const isPOSOrder = order.deliveryAddress === 'In-Store Purchase';
+          
           // CRITICAL: Ensure order status is updated even if finalizeOrderPayment failed or returned early
           // This prevents orders from being stuck at pending
           if (transaction.status === 'completed' && transaction.paymentStatus === 'paid') {
@@ -1346,20 +1440,39 @@ router.post('/callback', async (req, res) => {
             if (needsStatusUpdate) {
               console.error(`⚠️  Order #${order.id} status not updated by finalizeOrderPayment. Current: status='${order.status}', paymentStatus='${order.paymentStatus}'. Forcing update...`);
               try {
+                // For POS orders, set status to 'completed', for delivery orders set to 'confirmed'
+                const targetStatus = isPOSOrder ? 'completed' : (order.status === 'pending' ? 'confirmed' : order.status);
+                
                 // Use raw SQL first to ensure it works
                 await db.sequelize.query(
-                  `UPDATE orders SET "paymentStatus" = 'paid', status = CASE WHEN status = 'pending' THEN 'confirmed' ELSE status END, "updatedAt" = NOW() WHERE id = :id`,
+                  `UPDATE orders SET "paymentStatus" = 'paid', status = CASE WHEN :isPOS = true THEN 'completed' WHEN status = 'pending' THEN 'confirmed' ELSE status END, "updatedAt" = NOW() WHERE id = :id`,
                   {
-                    replacements: { id: order.id }
+                    replacements: { id: order.id, isPOS: isPOSOrder }
                   }
                 );
                 // Also try Sequelize update as backup
                 await order.update({
                   paymentStatus: 'paid',
-                  status: order.status === 'pending' ? 'confirmed' : order.status
+                  status: targetStatus
                 });
                 await order.reload();
-                console.log(`✅ Forced order #${order.id} status update: paymentStatus='paid', status='${order.status}'`);
+                console.log(`✅ Forced order #${order.id} status update: paymentStatus='paid', status='${order.status}'${isPOSOrder ? ' (POS Order)' : ''}`);
+                
+                // For POS orders, send socket notification similar to cash orders
+                if (isPOSOrder) {
+                  const io = req?.app?.get('io');
+                  if (io) {
+                    io.to('admin').emit('new-order', {
+                      id: order.id,
+                      customerName: order.customerName,
+                      totalAmount: order.totalAmount,
+                      status: order.status,
+                      paymentMethod: 'mobile_money',
+                      isPOS: true
+                    });
+                    console.log(`📢 Sent 'new-order' socket notification for POS Order #${order.id}`);
+                  }
+                }
               } catch (forceUpdateError) {
                 console.error(`❌ Error forcing order status update:`, forceUpdateError);
               }
@@ -1368,13 +1481,18 @@ router.post('/callback', async (req, res) => {
 
           // Update order - Transaction status is the single source of truth
           // Determine the correct order status based on current status
+          // For POS orders, always set to 'completed' after payment
           // If order was "out_for_delivery", update directly to "completed" (delivered + paid = completed)
           // If order was "delivered", update to "completed"
           // Otherwise, only update paymentStatus to 'paid' without changing status
           const currentOrderStatus = order.status;
           let newOrderStatus = currentOrderStatus;
           
-          if (currentOrderStatus === 'out_for_delivery') {
+          // POS orders should always be 'completed' after payment
+          if (isPOSOrder) {
+            newOrderStatus = 'completed';
+            console.log(`📝 POS Order #${order.id} - setting status to 'completed' after payment confirmation`);
+          } else if (currentOrderStatus === 'out_for_delivery') {
             // If order was out for delivery when payment is confirmed, mark as completed directly
             // (delivered + paid = completed, and it should be moved to completed orders on driver app)
             newOrderStatus = 'completed';
@@ -1412,6 +1530,24 @@ router.post('/callback', async (req, res) => {
               }
             );
             console.log(`✅ Order #${order.id} updated via raw SQL: status=${newOrderStatus}, paymentStatus=paid`);
+            
+            // For POS orders, send socket notification similar to cash orders
+            if (isPOSOrder && newOrderStatus === 'completed') {
+              const io = req?.app?.get('io');
+              if (io) {
+                await order.reload(); // Reload to get latest order data
+                io.to('admin').emit('new-order', {
+                  id: order.id,
+                  customerName: order.customerName,
+                  totalAmount: order.totalAmount,
+                  status: order.status,
+                  paymentMethod: 'mobile_money',
+                  isPOS: true,
+                  receiptNumber: receiptNumber
+                });
+                console.log(`📢 Sent 'new-order' socket notification for POS Order #${order.id} (M-Pesa callback)`);
+              }
+            }
             
             // CRITICAL: Tip transaction and admin wallet credit are handled by finalizeOrderPayment
             // Don't duplicate them here to avoid double crediting

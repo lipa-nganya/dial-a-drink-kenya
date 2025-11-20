@@ -706,6 +706,14 @@ router.put('/drinks/:id', async (req, res) => {
       ? drink.stock
       : 0;
 
+    // Automatically set isAvailable based on stock if stock is being updated
+    const shouldAutoSetAvailable = req.body.stock !== undefined && req.body.stock !== null;
+    const autoAvailable = shouldAutoSetAvailable ? stockValue > 0 : undefined;
+    
+    // Store current stock for alert checking
+    const currentStock = parseInt(drink.stock) || 0;
+    const isStockBeingUpdated = req.body.stock !== undefined && req.body.stock !== null;
+
     await drink.update({
       name: normalizedName,
       description:
@@ -719,7 +727,9 @@ router.put('/drinks/:id', async (req, res) => {
       categoryId: parsedCategoryId,
       subCategoryId: parsedSubCategoryId,
       isAvailable:
-        typeof isAvailable === 'boolean' ? isAvailable : drink.isAvailable,
+        autoAvailable !== undefined 
+          ? autoAvailable 
+          : (typeof isAvailable === 'boolean' ? isAvailable : drink.isAvailable),
       isPopular:
         typeof isPopular === 'boolean' ? isPopular : drink.isPopular,
       limitedTimeOffer: limitedTimeFlag,
@@ -728,6 +738,7 @@ router.put('/drinks/:id', async (req, res) => {
       capacityPricing: normalizedPricing,
       abv: toNumber(abv),
       stock: stockValue
+      // isAvailable is set above based on stock if stock is being updated
     });
 
     const updatedDrink = await db.Drink.findByPk(id, {
@@ -907,6 +918,16 @@ router.patch('/orders/:id/status', async (req, res) => {
       } catch (walletError) {
         console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
         // Don't fail the status update if wallet crediting fails
+      }
+      
+      // Decrease inventory stock for completed orders
+      try {
+        const { decreaseInventoryForOrder } = require('../utils/inventory');
+        await decreaseInventoryForOrder(order.id);
+        console.log(`📦 Inventory decreased for Order #${order.id} (admin status update)`);
+      } catch (inventoryError) {
+        console.error(`❌ Error decreasing inventory for Order #${order.id}:`, inventoryError);
+        // Don't fail the status update if inventory update fails
       }
       
       // Update driver status if they have no more active orders
@@ -1821,7 +1842,7 @@ router.get('/latest-transactions', async (req, res) => {
       include: [{
         model: db.Order,
         as: 'order',
-        attributes: ['customerName']
+        attributes: ['customerName', 'deliveryAddress']
       }]
     });
 
@@ -1850,6 +1871,8 @@ router.get('/latest-transactions', async (req, res) => {
         transactionType = 'payment';
       }
 
+      const isPOS = tx.order?.deliveryAddress === 'In-Store Purchase';
+      
       return {
         id: tx.id,
         orderId: tx.orderId,
@@ -1862,7 +1885,9 @@ router.get('/latest-transactions', async (req, res) => {
         customerName: customerName || 'Guest Customer',
         createdAt: tx.createdAt,
         driverId: tx.driverId || null,
-        driverWalletId: tx.driverWalletId || null
+        driverWalletId: tx.driverWalletId || null,
+        isPOS: isPOS,
+        deliveryAddress: tx.order?.deliveryAddress || null
       };
     });
 
@@ -2130,20 +2155,24 @@ router.get('/customers/:id/latest-otp', async (req, res) => {
 router.get('/latest-orders', async (req, res) => {
   try {
     const orders = await db.Order.findAll({
-      attributes: ['id', 'customerName', 'status', 'totalAmount', 'createdAt'],
+      attributes: ['id', 'customerName', 'status', 'totalAmount', 'createdAt', 'deliveryAddress'],
       order: [['createdAt', 'DESC']],
       limit: 10
     });
 
     const formatted = orders.map(order => {
       const orderJson = order.toJSON();
+      const isPOS = orderJson.deliveryAddress === 'In-Store Purchase';
       return {
         id: orderJson.id,
         orderNumber: orderJson.id,
         customerName: orderJson.customerName || 'Guest Customer',
         totalAmount: parseFloat(orderJson.totalAmount) || 0,
         status: orderJson.status,
-        createdAt: orderJson.createdAt
+        createdAt: orderJson.createdAt,
+        isPOS: isPOS,
+        deliveryAddress: orderJson.deliveryAddress,
+        transactionNumber: null // Not available in orders table
       };
     });
 
