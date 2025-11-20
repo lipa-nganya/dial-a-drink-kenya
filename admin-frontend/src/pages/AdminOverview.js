@@ -136,9 +136,11 @@ const AdminOverview = () => {
   const fetchLatestOrders = async () => {
     try {
       const response = await api.get('/admin/latest-orders');
-      setLatestOrders(response.data);
+      console.log('📦 Latest orders response:', response.data);
+      setLatestOrders(response.data || []);
     } catch (error) {
       console.error('Error fetching latest orders:', error);
+      setLatestOrders([]);
     }
   };
 
@@ -154,9 +156,11 @@ const AdminOverview = () => {
   const fetchLatestTransactions = async () => {
     try {
       const response = await api.get('/admin/latest-transactions');
-      setLatestTransactions(response.data);
+      console.log('💰 Latest transactions response:', response.data);
+      setLatestTransactions(response.data || []);
     } catch (error) {
       console.error('Error fetching latest transactions:', error);
+      setLatestTransactions([]);
     }
   };
 
@@ -406,13 +410,38 @@ const AdminOverview = () => {
                     <TableBody>
                       {latestOrders.map((order) => {
                         const statusChip = getOrderStatusChipProps(order.status);
+                        const isPOS = order.isPOS || order.deliveryAddress === 'In-Store Purchase';
 
                         return (
-                          <TableRow key={order.id}>
+                          <TableRow 
+                            key={order.id}
+                            sx={{
+                              backgroundColor: isPOS ? 'rgba(156, 39, 176, 0.08)' : 'transparent',
+                              '&:hover': {
+                                backgroundColor: isPOS ? 'rgba(156, 39, 176, 0.12)' : 'rgba(0, 224, 184, 0.05)'
+                              }
+                            }}
+                          >
                             <TableCell sx={{ color: colors.textPrimary }}>
-                              {order.transactionNumber ? `#${order.transactionNumber}` : 'N/A'}
+                              #{order.orderNumber}
                             </TableCell>
-                            <TableCell sx={{ color: colors.textPrimary }}>#{order.orderNumber}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>
+                              Order #{order.orderNumber}
+                              {isPOS && (
+                                <Chip
+                                  label="POS"
+                                  size="small"
+                                  sx={{
+                                    ml: 1,
+                                    backgroundColor: '#9C27B0',
+                                    color: '#FFFFFF',
+                                    fontWeight: 700,
+                                    fontSize: '0.65rem',
+                                    height: '20px'
+                                  }}
+                                />
+                              )}
+                            </TableCell>
                             <TableCell sx={{ color: colors.textPrimary }}>{order.customerName}</TableCell>
                             <TableCell sx={{ color: colors.textPrimary }} align="right">
                               KES {Number(order.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -558,19 +587,44 @@ const AdminOverview = () => {
                           txn.transactionStatus || txn.status || txn.paymentStatus
                         );
                         const isTip = safeTransactionType.toLowerCase() === 'tip';
+                        const isPOS = txn.isPOS || txn.deliveryAddress === 'In-Store Purchase';
 
                         return (
                           <TableRow
                             key={txn.id}
                             sx={{
-                              backgroundColor: isTip ? 'rgba(255, 193, 7, 0.12)' : 'transparent',
+                              backgroundColor: isPOS 
+                                ? 'rgba(156, 39, 176, 0.08)' 
+                                : isTip 
+                                  ? 'rgba(255, 193, 7, 0.12)' 
+                                  : 'transparent',
                               '&:hover': {
-                                backgroundColor: isTip ? 'rgba(255, 193, 7, 0.18)' : 'rgba(0, 224, 184, 0.05)'
+                                backgroundColor: isPOS 
+                                  ? 'rgba(156, 39, 176, 0.12)' 
+                                  : isTip 
+                                    ? 'rgba(255, 193, 7, 0.18)' 
+                                    : 'rgba(0, 224, 184, 0.05)'
                               }
                             }}
                           >
                             <TableCell sx={{ color: colors.textPrimary }}>#{txn.id}</TableCell>
-                            <TableCell sx={{ color: colors.textPrimary }}>#{txn.orderId}</TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>
+                              #{txn.orderId}
+                              {isPOS && (
+                                <Chip
+                                  label="POS"
+                                  size="small"
+                                  sx={{
+                                    ml: 1,
+                                    backgroundColor: '#9C27B0',
+                                    color: '#FFFFFF',
+                                    fontWeight: 700,
+                                    fontSize: '0.65rem',
+                                    height: '20px'
+                                  }}
+                                />
+                              )}
+                            </TableCell>
                             <TableCell sx={{ color: colors.textPrimary }}>
                               <Chip
                                 size="small"

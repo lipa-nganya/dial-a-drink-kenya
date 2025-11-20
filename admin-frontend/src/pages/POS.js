@@ -51,6 +51,7 @@ import {
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { fetchProductByBarcode } from '../services/barcode';
+import io from 'socket.io-client';
 
 const POS = () => {
   const { isDarkMode, colors } = useTheme();
@@ -81,6 +82,7 @@ const POS = () => {
   const [processing, setProcessing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(null);
   const [orderError, setOrderError] = useState(null);
+  const [pendingMpesaOrder, setPendingMpesaOrder] = useState(null); // Track pending M-Pesa orders
 
   useEffect(() => {
     fetchData();
@@ -89,8 +91,85 @@ const POS = () => {
       fetchPOSCart();
     }, 2000); // Poll every 2 seconds
 
-    return () => clearInterval(cartPollInterval);
-  }, []);
+    // Initialize socket connection for payment confirmation
+    const hostname = window.location.hostname;
+    const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
+    const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
+    
+    let socketUrl;
+    if (isLocalHost || isLanHost) {
+      socketUrl = 'http://localhost:5001';
+    } else {
+      const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
+      if (isManagedHost) {
+        const apiUrl = process.env.REACT_APP_API_URL;
+        socketUrl = apiUrl ? apiUrl.replace('/api', '') : 'https://dialadrink-backend-910510650031.us-central1.run.app';
+      } else {
+        const apiUrl = process.env.REACT_APP_API_URL;
+        socketUrl = apiUrl ? apiUrl.replace('/api', '') : 'https://dialadrink-backend-910510650031.us-central1.run.app';
+      }
+    }
+    
+    const socket = io(socketUrl);
+    socket.emit('join-admin');
+    
+    // Listen for payment confirmation for pending M-Pesa orders
+    socket.on('payment-confirmed', (data) => {
+      if (pendingMpesaOrder && data.orderId === pendingMpesaOrder.orderId) {
+        console.log('✅ M-Pesa payment confirmed for POS order:', data);
+        setPendingMpesaOrder(null);
+        setOrderSuccess({
+          orderId: data.orderId,
+          message: `Payment confirmed! Receipt: ${data.receiptNumber || 'N/A'}`,
+          checkoutRequestID: null
+        });
+        
+        // Clear backend cart and local cart
+        api.delete('/pos/cart').catch(err => console.error('Error clearing cart:', err));
+        setCart([]);
+        setCustomerName('');
+        setCustomerPhone('');
+        setCustomerEmail('');
+        setMpesaPhone('');
+        setAmountReceived('');
+        setPaymentMethod('cash');
+        setProcessing(false);
+        setShowPaymentDialog(false);
+      }
+    });
+    
+    // Listen for order status updates
+    socket.on('order-status-updated', (data) => {
+      if (pendingMpesaOrder && data.orderId === pendingMpesaOrder.orderId) {
+        if (data.status === 'completed' && data.paymentStatus === 'paid') {
+          console.log('✅ POS order completed via socket:', data);
+          setPendingMpesaOrder(null);
+          setOrderSuccess({
+            orderId: data.orderId,
+            message: 'Payment confirmed and order completed!',
+            checkoutRequestID: null
+          });
+          
+          // Clear backend cart and local cart
+          api.delete('/pos/cart').catch(err => console.error('Error clearing cart:', err));
+          setCart([]);
+          setCustomerName('');
+          setCustomerPhone('');
+          setCustomerEmail('');
+          setMpesaPhone('');
+          setAmountReceived('');
+          setPaymentMethod('cash');
+          setProcessing(false);
+          setShowPaymentDialog(false);
+        }
+      }
+    });
+
+    return () => {
+      clearInterval(cartPollInterval);
+      socket.close();
+    };
+  }, [pendingMpesaOrder]);
 
   // Fetch POS cart from backend
   const fetchPOSCart = async () => {
@@ -442,37 +521,116 @@ const POS = () => {
         });
       }
 
+      // Handle success response
       if (response.data.success) {
-        setOrderSuccess({
-          orderId: response.data.order.id,
-          message: paymentMethod === 'cash'
-            ? 'Order completed successfully!'
-            : 'M-Pesa payment initiated. Please check customer\'s phone.',
-          checkoutRequestID: response.data.checkoutRequestID
-        });
+        const orderId = response.data.order?.id || response.data.orderId;
         
-        // Clear backend cart (this will also clear Retail Scanner cart)
-        try {
-          await api.delete('/pos/cart');
-        } catch (error) {
-          console.error('Error clearing cart:', error);
+        if (paymentMethod === 'cash') {
+          // Cash payment: complete immediately
+          setOrderSuccess({
+            orderId: orderId,
+            message: 'Order completed successfully!',
+            checkoutRequestID: null
+          });
+          
+          // Clear backend cart (this will also clear Retail Scanner cart)
+          try {
+            await api.delete('/pos/cart');
+          } catch (error) {
+            console.error('Error clearing cart:', error);
+          }
+          
+          // Clear cart and form
+          setCart([]);
+          setCustomerName('');
+          setCustomerPhone('');
+          setCustomerEmail('');
+          setMpesaPhone('');
+          setAmountReceived('');
+          setPaymentMethod('cash');
+          setProcessing(false);
+          setShowPaymentDialog(false);
+        } else {
+          // M-Pesa payment: wait for customer confirmation
+          setPendingMpesaOrder({
+            orderId: orderId,
+            checkoutRequestID: response.data.checkoutRequestID,
+            startTime: Date.now()
+          });
+          
+          // Don't clear cart yet - wait for payment confirmation
+          // Don't close dialog yet - show pending state
+          // Keep processing state true to show spinner
+          
+          // Start polling for order status as fallback (in case socket doesn't work)
+          const pollInterval = setInterval(async () => {
+            try {
+              const orderResponse = await api.get(`/pos/orders/${orderId}`);
+              const order = orderResponse.data.order || orderResponse.data;
+              
+              if (order.status === 'completed' && order.paymentStatus === 'paid') {
+                clearInterval(pollInterval);
+                setPendingMpesaOrder(null);
+                setOrderSuccess({
+                  orderId: orderId,
+                  message: 'Payment confirmed and order completed!',
+                  checkoutRequestID: null
+                });
+                
+                // Clear backend cart and local cart
+                api.delete('/pos/cart').catch(err => console.error('Error clearing cart:', err));
+                setCart([]);
+                setCustomerName('');
+                setCustomerPhone('');
+                setCustomerEmail('');
+                setMpesaPhone('');
+                setAmountReceived('');
+                setPaymentMethod('cash');
+                setProcessing(false);
+                setShowPaymentDialog(false);
+              }
+            } catch (error) {
+              console.error('Error polling order status:', error);
+            }
+          }, 2000); // Poll every 2 seconds
+          
+          // Stop polling after 5 minutes (timeout)
+          setTimeout(() => {
+            clearInterval(pollInterval);
+            if (pendingMpesaOrder && pendingMpesaOrder.orderId === orderId) {
+              setPendingMpesaOrder(null);
+              setOrderError('Payment timeout. Please check order status manually.');
+              setProcessing(false);
+            }
+          }, 5 * 60 * 1000); // 5 minutes
         }
-        
-        // Clear cart and form
-        setCart([]);
-        setCustomerName('');
-        setCustomerPhone('');
-        setCustomerEmail('');
-        setMpesaPhone('');
-        setAmountReceived('');
-        setPaymentMethod('cash');
+      } else {
+        // If response doesn't indicate success, show error
+        setOrderError(response.data.error || response.data.errorMessage || 'Payment initiation failed');
+        setProcessing(false);
       }
     } catch (error) {
       console.error('Error processing payment:', error);
-      setOrderError(error.response?.data?.error || 'Failed to process payment');
-    } finally {
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url
+      });
+      
+      // Provide more detailed error messages
+      const errorMessage = error.response?.data?.error || 
+                          error.response?.data?.errorMessage ||
+                          error.response?.data?.message ||
+                          error.message || 
+                          'Failed to process payment';
+      
+      setOrderError(errorMessage);
       setProcessing(false);
-      setShowPaymentDialog(false);
+      // Only close dialog if not waiting for M-Pesa confirmation
+      if (!pendingMpesaOrder) {
+        setShowPaymentDialog(false);
+      }
     }
   };
 
@@ -1037,10 +1195,13 @@ const POS = () => {
                       !customerName?.trim() || 
                       !customerPhone?.trim() || 
                       (paymentMethod === 'cash' && (!amountReceived || isNaN(parseFloat(amountReceived)) || parseFloat(amountReceived) < getTotal())) ||
-                      (paymentMethod === 'mpesa' && !mpesaPhone?.trim());
+                      (paymentMethod === 'mpesa' && !mpesaPhone?.trim()) ||
+                      pendingMpesaOrder !== null; // Disable if M-Pesa payment is pending
                     
                     let disabledReason = '';
-                    if (cart.length === 0) {
+                    if (pendingMpesaOrder !== null) {
+                      disabledReason = 'Waiting for M-Pesa payment confirmation...';
+                    } else if (cart.length === 0) {
                       disabledReason = 'Cart is empty';
                     } else if (!customerName?.trim()) {
                       disabledReason = 'Please enter customer name';
@@ -1062,7 +1223,7 @@ const POS = () => {
                           fullWidth
                           variant="contained"
                           size="large"
-                          startIcon={<Payment />}
+                          startIcon={pendingMpesaOrder !== null ? <CircularProgress size={20} sx={{ color: '#000' }} /> : <Payment />}
                           onClick={handleCheckout}
                           disabled={isDisabled}
                           sx={{
@@ -1081,12 +1242,21 @@ const POS = () => {
                             }
                           }}
                         >
-                          Process Payment
+                          {pendingMpesaOrder !== null ? 'Waiting for Payment...' : 'Process Payment'}
                         </Button>
                         {isDisabled && disabledReason && (
-                          <Typography variant="caption" color="error" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>
+                          <Typography 
+                            variant="caption" 
+                            color={pendingMpesaOrder !== null ? 'info.main' : 'error'} 
+                            sx={{ mt: 1, display: 'block', textAlign: 'center' }}
+                          >
                             {disabledReason}
                           </Typography>
+                        )}
+                        {pendingMpesaOrder !== null && (
+                          <Alert severity="info" sx={{ mt: 2 }}>
+                            Waiting for customer to complete M-Pesa payment. Order #{pendingMpesaOrder.orderId} is pending.
+                          </Alert>
                         )}
                       </Box>
                     );
@@ -1106,22 +1276,29 @@ const POS = () => {
             Process payment of <strong>KES {getTotal().toFixed(2)}</strong> via {paymentMethod === 'cash' ? 'Cash' : 'M-Pesa'}?
           </Typography>
           {paymentMethod === 'mpesa' && (
-            <Alert severity="info" sx={{ mt: 2 }}>
-              Customer will receive an M-Pesa prompt on {mpesaPhone}
-            </Alert>
+            <>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Customer will receive an M-Pesa prompt on {mpesaPhone}
+              </Alert>
+              {pendingMpesaOrder !== null && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  Waiting for customer to complete payment. Order #{pendingMpesaOrder.orderId} is pending confirmation.
+                </Alert>
+              )}
+            </>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowPaymentDialog(false)} disabled={processing}>
+          <Button onClick={() => setShowPaymentDialog(false)} disabled={processing || pendingMpesaOrder !== null}>
             Cancel
           </Button>
           <Button
             onClick={processPayment}
             variant="contained"
-            disabled={processing}
-            startIcon={processing ? <CircularProgress size={20} /> : <Payment />}
+            disabled={processing || pendingMpesaOrder !== null}
+            startIcon={(processing || pendingMpesaOrder !== null) ? <CircularProgress size={20} /> : <Payment />}
           >
-            {processing ? 'Processing...' : 'Confirm'}
+            {(processing || pendingMpesaOrder !== null) ? 'Processing...' : 'Confirm'}
           </Button>
         </DialogActions>
       </Dialog>
