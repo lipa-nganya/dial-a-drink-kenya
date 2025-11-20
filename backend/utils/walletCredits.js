@@ -140,6 +140,82 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
       throw new Error(`Order ${orderId} must be completed and paid before crediting wallets. Current status: ${order.status}, paymentStatus: ${order.paymentStatus}`);
     }
 
+    // CRITICAL: Check if this is a POS order - POS orders don't have delivery fees
+    const isPOSOrder = order.deliveryAddress === 'In-Store Purchase';
+    if (isPOSOrder) {
+      console.log(`ℹ️  Order #${orderId} is a POS order - skipping delivery fee transactions and driver wallet credits`);
+      
+      // Cancel any existing delivery fee transactions for POS orders
+      const existingDeliveryTransactions = await db.Transaction.findAll({
+        where: {
+          orderId: orderId,
+          transactionType: 'delivery_pay'
+        },
+        transaction: dbTransaction
+      });
+      
+      for (const existingTxn of existingDeliveryTransactions) {
+        if (existingTxn.status !== 'cancelled') {
+          await existingTxn.update({
+            status: 'cancelled',
+            paymentStatus: 'cancelled',
+            amount: 0,
+            notes: `${existingTxn.notes || ''}\nCancelled - POS orders do not have delivery fees.`.trim()
+          }, { transaction: dbTransaction });
+          console.log(`✅ Cancelled delivery fee transaction #${existingTxn.id} for POS Order #${orderId}`);
+        }
+      }
+      
+      // For POS orders, only credit merchant wallet with order total (no delivery fee)
+      const breakdown = await getOrderFinancialBreakdown(orderId);
+      const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+      const tipAmount = parseFloat(breakdown.tipAmount) || 0;
+      
+      // Credit merchant wallet with order total only
+      try {
+        let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } }, { transaction: dbTransaction });
+        if (!adminWallet) {
+          adminWallet = await db.AdminWallet.create({
+            id: 1,
+            balance: 0,
+            totalRevenue: 0,
+            totalOrders: 0
+          }, { transaction: dbTransaction });
+        }
+
+        const oldBalance = parseFloat(adminWallet.balance) || 0;
+        const oldTotalRevenue = parseFloat(adminWallet.totalRevenue) || 0;
+        const oldTotalOrders = adminWallet.totalOrders || 0;
+
+        await adminWallet.update({
+          balance: oldBalance + itemsTotal,
+          totalRevenue: oldTotalRevenue + itemsTotal,
+          totalOrders: oldTotalOrders + 1
+        }, { transaction: dbTransaction });
+
+        await adminWallet.reload({ transaction: dbTransaction });
+        console.log(`✅ Credited merchant wallet for POS Order #${orderId}: KES ${itemsTotal.toFixed(2)}`);
+      } catch (walletError) {
+        console.error(`❌ Error crediting merchant wallet for POS Order #${orderId}:`, walletError);
+        throw walletError;
+      }
+      
+      await dbTransaction.commit();
+      processingOrders.delete(orderId);
+      console.log(`✅ POS Order #${orderId} wallet crediting completed (no delivery fees)`);
+      
+      return {
+        orderId,
+        itemsTotal,
+        deliveryFee: 0,
+        merchantDeliveryAmount: 0,
+        driverPayAmount: 0,
+        tipAmount,
+        merchantTotal: itemsTotal,
+        isPOSOrder: true
+      };
+    }
+
     // Get financial breakdown
     const breakdown = await getOrderFinancialBreakdown(orderId);
     const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;

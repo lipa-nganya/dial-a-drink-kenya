@@ -51,6 +51,36 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
   const driverId = orderModel.driverId || null;
   const paymentType = orderModel.paymentType || 'pay_now';
   
+  // CRITICAL: Skip POS orders - they don't have delivery fees
+  const isPOSOrder = orderModel.deliveryAddress === 'In-Store Purchase';
+  if (isPOSOrder) {
+    // Cancel any existing delivery fee transactions for POS orders
+    const existingDeliveryTransactions = await db.Transaction.findAll({
+      where: {
+        orderId,
+        transactionType: 'delivery_pay'
+      }
+    });
+    
+    for (const existingTxn of existingDeliveryTransactions) {
+      if (existingTxn.status !== 'cancelled') {
+        await existingTxn.update({
+          status: 'cancelled',
+          paymentStatus: 'cancelled',
+          amount: 0,
+          notes: `${existingTxn.notes || ''}\nCancelled - POS orders do not have delivery fees.`.trim()
+        });
+        console.log(`✅ Cancelled delivery fee transaction #${existingTxn.id} for POS Order #${orderId}`);
+      }
+    }
+    
+    return {
+      skipped: true,
+      reason: 'pos_order_no_delivery_fee',
+      deliveryFee: 0
+    };
+  }
+  
   // CRITICAL: For pay_now orders, don't manage driver transactions until driver is assigned
   // For pay_on_delivery orders, driver should already be assigned, so we can manage them
   const isPayNowWithoutDriver = paymentType === 'pay_now' && !driverId;
