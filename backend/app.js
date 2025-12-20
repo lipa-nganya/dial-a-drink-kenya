@@ -9,7 +9,9 @@ const app = express();
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
   process.env.ADMIN_URL || 'http://localhost:3001',
+  process.env.ZEUS_URL || 'http://localhost:3003',
   'http://localhost:3002',
+  'http://localhost:8080', // Wolfgang website
   // Old service URLs (kept for backward compatibility)
   'https://drink-suite-customer-910510650031.us-central1.run.app',
   'https://drink-suite-admin-910510650031.us-central1.run.app',
@@ -23,7 +25,9 @@ const allowedOrigins = [
   // Liquoros service URLs
   'https://liquoros-customer-910510650031.us-central1.run.app',
   'https://liquoros-admin-910510650031.us-central1.run.app',
-  'https://liquoros-backend-910510650031.us-central1.run.app'
+  'https://liquoros-backend-910510650031.us-central1.run.app',
+  // Wolfgang website production URL
+  'https://thewolfgang.tech'
 ].filter(Boolean);
 
 const corsOptions = {
@@ -69,6 +73,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
 app.use('/api/drinks', require('./routes/drinks'));
+app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/pos', require('./routes/pos'));
 app.use('/api/inventory', require('./routes/inventory')); // Inventory management
@@ -98,6 +103,7 @@ app.use('/api/add-specific-wines', require('./routes/add-specific-wines'));
 app.use('/api/add-out-of-stock-whisky', require('./routes/add-out-of-stock-whisky'));
 app.use('/api/add-cognac-items', require('./routes/add-cognac-items'));
 app.use('/api/add-missing-beer-items', require('./routes/add-missing-beer-items'));
+app.use('/api/assign-wine-subcategories', require('./routes/assign-wine-subcategories'));
 app.use('/api/cleanup', require('./routes/cleanup-drinks'));
 app.use('/api/scrape-images', require('./routes/scrape-images'));
 app.use('/api/places', require('./routes/places'));
@@ -109,6 +115,23 @@ app.use('/api/drivers', require('./routes/drivers'));
 app.use('/api/driver-orders', require('./routes/driver-orders'));
 app.use('/api/driver-wallet', require('./routes/driver-wallet'));
 app.use('/api/branches', require('./routes/branches'));
+app.use('/api/developers', require('./routes/developers'));
+
+// Valkyrie Partner API (feature flag controlled)
+if (process.env.ENABLE_VALKYRIE === 'true' || process.env.ENABLE_VALKYRIE === '1') {
+  app.use('/api/valkyrie/v1', require('./routes/valkyrie'));
+  console.log('✅ Valkyrie Partner API enabled at /api/valkyrie/v1');
+} else {
+  console.log('ℹ️  Valkyrie Partner API disabled (set ENABLE_VALKYRIE=true to enable)');
+}
+
+// Zeus Super Admin API (feature flag controlled)
+if (process.env.ENABLE_ZEUS === 'true' || process.env.ENABLE_ZEUS === '1') {
+  app.use('/api/zeus/v1', require('./routes/zeus'));
+  console.log('✅ Zeus Super Admin API enabled at /api/zeus/v1');
+} else {
+  console.log('ℹ️  Zeus Super Admin API disabled (set ENABLE_ZEUS=true to enable)');
+}
 
 // Root endpoint
 app.get('/', (req, res) => {

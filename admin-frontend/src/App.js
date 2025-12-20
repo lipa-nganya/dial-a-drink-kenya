@@ -20,6 +20,7 @@ import Settings from './pages/Settings';
 import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
 import POS from './pages/POS';
+import Payables from './pages/Payables';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -226,6 +227,17 @@ function AppContent() {
                     <>
                       <AdminHeader />
                       <Drivers />
+                    </>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/payables"
+                element={
+                  <PrivateRoute>
+                    <>
+                      <AdminHeader />
+                      <Payables />
                     </>
                   </PrivateRoute>
                 }

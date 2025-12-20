@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const { syncSubcategories } = require('../scripts/sync-subcategories-from-website');
 
 // Get all subcategories
 router.get('/', async (req, res) => {
@@ -109,6 +110,21 @@ router.delete('/:id', async (req, res) => {
     res.json({ message: 'SubCategory deleted successfully' });
   } catch (error) {
     console.error('Error deleting subcategory:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Sync subcategories from website
+router.post('/sync', async (req, res) => {
+  try {
+    console.log('🔄 Starting subcategory sync from website...');
+    await syncSubcategories();
+    res.json({ 
+      success: true, 
+      message: 'Subcategories synced successfully' 
+    });
+  } catch (error) {
+    console.error('Error syncing subcategories:', error);
     res.status(500).json({ error: error.message });
   }
 });

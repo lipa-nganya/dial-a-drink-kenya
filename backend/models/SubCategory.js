@@ -9,8 +9,7 @@ module.exports = (sequelize) => {
     },
     name: {
       type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
+      allowNull: false
     },
     categoryId: {
       type: DataTypes.INTEGER,
@@ -26,7 +25,13 @@ module.exports = (sequelize) => {
     }
   }, {
     tableName: 'subcategories',
-    timestamps: true
+    timestamps: true,
+    indexes: [
+      {
+        unique: true,
+        fields: ['name', 'categoryId']
+      }
+    ]
   });
 
   return SubCategory;
