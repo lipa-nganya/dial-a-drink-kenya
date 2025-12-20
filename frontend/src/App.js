@@ -20,12 +20,14 @@ import Profile from './pages/Profile';
 import MyOrders from './pages/MyOrders';
 import CustomerLogin from './pages/CustomerLogin';
 import VerifyEmail from './pages/VerifyEmail';
+import ProductPage from './pages/ProductPage';
 import AdminOverview from './pages/admin/AdminOverview';
 import Orders from './pages/admin/Orders';
 import Inventory from './pages/admin/Inventory';
 import Transactions from './pages/admin/Transactions';
 import Notifications from './pages/admin/Notifications';
 import Drivers from './pages/admin/Drivers';
+import Payables from './pages/admin/Payables';
 import AdminLogin from './pages/admin/AdminLogin';
 import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
@@ -189,6 +191,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
+          <Route path="/product/:id" element={<ProductPage />} />
           <Route path="/offers" element={<Offers />} />
           <Route path="/test-offers" element={<TestOffers />} />
           <Route path="/cart" element={<Cart />} />
@@ -207,6 +210,7 @@ function AppContent() {
           <Route path="/admin/transactions" element={<PrivateRoute><Transactions /></PrivateRoute>} />
           <Route path="/admin/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
           <Route path="/admin/drivers" element={<PrivateRoute><Drivers /></PrivateRoute>} />
+          <Route path="/admin/payables" element={<PrivateRoute><Payables /></PrivateRoute>} />
         </Routes>
         
         {/* Cart Snackbar */}

@@ -19,9 +19,11 @@ const Menu = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [drinks, setDrinks] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(0);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(0);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   
@@ -32,22 +34,47 @@ const Menu = () => {
   }, []);
 
   useEffect(() => {
-    // Read category from URL query parameter
+    // Read category and subcategory from URL query parameters
     const categoryParam = searchParams.get('category');
+    const subcategoryParam = searchParams.get('subcategory');
+    
     if (categoryParam) {
       const categoryId = parseInt(categoryParam, 10);
       if (!isNaN(categoryId)) {
         setSelectedCategory(categoryId);
       }
     } else {
-      // If no category param, reset to "All"
       setSelectedCategory(0);
     }
+    
+    if (subcategoryParam) {
+      const subcategoryId = parseInt(subcategoryParam, 10);
+      if (!isNaN(subcategoryId)) {
+        setSelectedSubcategory(subcategoryId);
+      }
+    } else {
+      setSelectedSubcategory(0);
+    }
   }, [searchParams]);
+  
+  // Fetch subcategories when category changes
+  useEffect(() => {
+    if (selectedCategory > 0) {
+      fetchSubcategories(selectedCategory);
+      // Reset subcategory when category changes (but don't update URL here to avoid loops)
+      if (selectedSubcategory > 0) {
+        setSelectedSubcategory(0);
+      }
+    } else {
+      setSubcategories([]);
+      setSelectedSubcategory(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCategory]);
 
   useEffect(() => {
     filterDrinks();
-  }, [drinks, searchTerm, selectedCategory]);
+  }, [drinks, searchTerm, selectedCategory, selectedSubcategory]);
 
   // Reset pagination when category or search changes
   useEffect(() => {
@@ -66,6 +93,16 @@ const Menu = () => {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSubcategories = async (categoryId) => {
+    try {
+      const response = await api.get(`/subcategories?categoryId=${categoryId}`);
+      setSubcategories(response.data);
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
+      setSubcategories([]);
     }
   };
 
@@ -100,6 +137,11 @@ const Menu = () => {
     } else if (selectedCategory > 0) {
       // Regular category selected
       filtered = filtered.filter(drink => drink && drink.categoryId === selectedCategory);
+      
+      // Filter by subcategory if one is selected
+      if (selectedSubcategory > 0) {
+        filtered = filtered.filter(drink => drink && drink.subCategoryId === selectedSubcategory);
+      }
     }
     // If selectedCategory === 0, show all drinks (no filter)
 
@@ -108,6 +150,7 @@ const Menu = () => {
 
   const handleCategoryChange = (event, newValue) => {
     setSelectedCategory(newValue);
+    setSelectedSubcategory(0); // Reset subcategory when category changes
     // Update URL query parameter
     if (newValue > 0) {
       setSearchParams({ category: newValue.toString() });
@@ -115,6 +158,16 @@ const Menu = () => {
       // Clear category param for "All" (0) or "Popular" (-1)
       setSearchParams({});
     }
+  };
+
+  const handleSubcategoryChange = (subcategoryId) => {
+    setSelectedSubcategory(subcategoryId);
+    // Update URL query parameter
+    const params = { category: selectedCategory.toString() };
+    if (subcategoryId > 0) {
+      params.subcategory = subcategoryId.toString();
+    }
+    setSearchParams(params);
   };
 
   const handlePageChange = (event, value) => {
@@ -175,6 +228,29 @@ const Menu = () => {
         </Tabs>
       </Box>
 
+      {/* Subcategory Chips - Show when a category is selected */}
+      {selectedCategory > 0 && subcategories.length > 0 && (
+        <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Chip
+            label="All"
+            onClick={() => handleSubcategoryChange(0)}
+            color={selectedSubcategory === 0 ? 'primary' : 'default'}
+            variant={selectedSubcategory === 0 ? 'filled' : 'outlined'}
+            sx={{ cursor: 'pointer' }}
+          />
+          {subcategories.map((subcategory) => (
+            <Chip
+              key={subcategory.id}
+              label={subcategory.name}
+              onClick={() => handleSubcategoryChange(subcategory.id)}
+              color={selectedSubcategory === subcategory.id ? 'primary' : 'default'}
+              variant={selectedSubcategory === subcategory.id ? 'filled' : 'outlined'}
+              sx={{ cursor: 'pointer' }}
+            />
+          ))}
+        </Box>
+      )}
+
       {/* All Drinks */}
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -187,7 +263,15 @@ const Menu = () => {
             ) : selectedCategory === 0 ? (
               'ALL'
             ) : (
-              categories.find(c => c.id === selectedCategory)?.name
+              <>
+                {categories.find(c => c.id === selectedCategory)?.name}
+                {selectedSubcategory > 0 && (
+                  <span style={{ color: '#666', fontSize: '0.9rem' }}>
+                    {' / '}
+                    {subcategories.find(s => s.id === selectedSubcategory)?.name}
+                  </span>
+                )}
+              </>
             )}
           </Typography>
           

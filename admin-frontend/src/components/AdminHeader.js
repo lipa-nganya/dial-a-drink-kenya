@@ -17,7 +17,8 @@ import {
   LocalFlorist,
   People,
   Store,
-  PointOfSale
+  PointOfSale,
+  AccountBalance
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -64,7 +65,7 @@ const AdminHeader = () => {
           sx={{ flexGrow: 1, color: isDarkMode ? colors.accentText : colors.textPrimary, fontWeight: 700, cursor: 'pointer' }}
           onClick={() => navigate('/dashboard')}
         >
-          LiquorOS Admin
+          Dial a Drink Kenya Admin
         </Typography>
         
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -98,6 +99,14 @@ const AdminHeader = () => {
             sx={buttonStyle('/inventory')}
           >
             Inventory
+          </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/payables')}
+            startIcon={<AccountBalance />}
+            sx={buttonStyle('/payables')}
+          >
+            Payables
           </Button>
           <Button
             color="inherit"

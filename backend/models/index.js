@@ -82,6 +82,52 @@ const DriverWallet = require('./DriverWallet')(sequelize, Sequelize.DataTypes);
 const AdminWallet = require('./AdminWallet')(sequelize, Sequelize.DataTypes);
 const SavedAddress = require('./SavedAddress')(sequelize, Sequelize.DataTypes);
 const Branch = require('./Branch')(sequelize, Sequelize.DataTypes);
+const Supplier = require('./Supplier')(sequelize, Sequelize.DataTypes);
+
+// Valkyrie models (conditionally loaded if they exist)
+let ValkyriePartner, ValkyriePartnerUser, ValkyriePartnerDriver, ValkyriePartnerOrder, PartnerGeofence;
+// Zeus models (conditionally loaded if they exist)
+let ZeusAdmin, PartnerUsage, PartnerInvoice;
+try {
+  ValkyriePartner = require('./ValkyriePartner')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ ValkyriePartner model not found:', error.message);
+}
+try {
+  ValkyriePartnerUser = require('./ValkyriePartnerUser')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ ValkyriePartnerUser model not found:', error.message);
+}
+try {
+  ValkyriePartnerDriver = require('./ValkyriePartnerDriver')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ ValkyriePartnerDriver model not found:', error.message);
+}
+try {
+  ValkyriePartnerOrder = require('./ValkyriePartnerOrder')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ ValkyriePartnerOrder model not found:', error.message);
+}
+try {
+  PartnerGeofence = require('./PartnerGeofence')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ PartnerGeofence model not found:', error.message);
+}
+try {
+  ZeusAdmin = require('./ZeusAdmin')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ ZeusAdmin model not found:', error.message);
+}
+try {
+  PartnerUsage = require('./PartnerUsage')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ PartnerUsage model not found:', error.message);
+}
+try {
+  PartnerInvoice = require('./PartnerInvoice')(sequelize, Sequelize.DataTypes);
+} catch (error) {
+  console.warn('⚠️ PartnerInvoice model not found:', error.message);
+}
 
 // Define associations
 Category.hasMany(SubCategory, { foreignKey: 'categoryId', as: 'subcategories' });
@@ -143,6 +189,58 @@ db.DriverWallet = DriverWallet;
 db.AdminWallet = AdminWallet;
 db.SavedAddress = SavedAddress;
 db.Branch = Branch;
+db.Supplier = Supplier;
+
+// Add Valkyrie models if they exist
+if (ValkyriePartner) db.ValkyriePartner = ValkyriePartner;
+if (ValkyriePartnerUser) db.ValkyriePartnerUser = ValkyriePartnerUser;
+if (ValkyriePartnerDriver) db.ValkyriePartnerDriver = ValkyriePartnerDriver;
+if (ValkyriePartnerOrder) db.ValkyriePartnerOrder = ValkyriePartnerOrder;
+if (PartnerGeofence) db.PartnerGeofence = PartnerGeofence;
+// Add Zeus models if they exist
+if (ZeusAdmin) db.ZeusAdmin = ZeusAdmin;
+if (PartnerUsage) db.PartnerUsage = PartnerUsage;
+if (PartnerInvoice) db.PartnerInvoice = PartnerInvoice;
+
+// Valkyrie model associations
+if (ValkyriePartner && ValkyriePartnerUser) {
+  ValkyriePartner.hasMany(ValkyriePartnerUser, { foreignKey: 'partnerId', as: 'users' });
+  ValkyriePartnerUser.belongsTo(ValkyriePartner, { foreignKey: 'partnerId', as: 'partner' });
+}
+if (ValkyriePartner && PartnerGeofence) {
+  ValkyriePartner.hasMany(PartnerGeofence, { foreignKey: 'partnerId', as: 'geofences' });
+  PartnerGeofence.belongsTo(ValkyriePartner, { foreignKey: 'partnerId', as: 'partner' });
+}
+if (ZeusAdmin && PartnerGeofence) {
+  PartnerGeofence.belongsTo(ZeusAdmin, { foreignKey: 'createdBy', as: 'creator' });
+}
+if (ValkyriePartner && PartnerUsage) {
+  ValkyriePartner.hasMany(PartnerUsage, { foreignKey: 'partnerId', as: 'usage' });
+  PartnerUsage.belongsTo(ValkyriePartner, { foreignKey: 'partnerId', as: 'partner' });
+}
+if (ValkyriePartner && PartnerInvoice) {
+  ValkyriePartner.hasMany(PartnerInvoice, { foreignKey: 'partnerId', as: 'invoices' });
+  PartnerInvoice.belongsTo(ValkyriePartner, { foreignKey: 'partnerId', as: 'partner' });
+}
+
+// ValkyriePartnerDriver associations
+if (ValkyriePartnerDriver && Driver) {
+  ValkyriePartnerDriver.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasMany(ValkyriePartnerDriver, { foreignKey: 'driverId', as: 'partnerDrivers' });
+}
+if (ValkyriePartnerDriver && ValkyriePartner) {
+  ValkyriePartnerDriver.belongsTo(ValkyriePartner, { foreignKey: 'partnerId', as: 'partner' });
+  ValkyriePartner.hasMany(ValkyriePartnerDriver, { foreignKey: 'partnerId', as: 'partnerDrivers' });
+}
+if (ValkyriePartnerOrder && ValkyriePartner) {
+  ValkyriePartnerOrder.belongsTo(ValkyriePartner, { foreignKey: 'partnerId', as: 'partner' });
+  ValkyriePartner.hasMany(ValkyriePartnerOrder, { foreignKey: 'partnerId', as: 'partnerOrders' });
+}
+if (ValkyriePartnerOrder && Order) {
+  ValkyriePartnerOrder.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
+  Order.hasMany(ValkyriePartnerOrder, { foreignKey: 'orderId', as: 'partnerOrders' });
+}
+
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
 

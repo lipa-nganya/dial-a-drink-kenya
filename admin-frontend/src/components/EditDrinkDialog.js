@@ -27,9 +27,11 @@ import {
   Image as ImageIcon
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 import CapacityPricingCombined from './CapacityPricingCombined';
 
 const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
+  const { isDarkMode, colors } = useTheme();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -38,12 +40,14 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     limitedTimeOffer: false,
     image: '',
     categoryId: '',
+    subCategoryId: '',
     capacity: [],
     capacityPricing: [],
     abv: '',
     stock: 0
   });
   const [categories, setCategories] = useState([]);
+  const [subcategories, setSubcategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -58,11 +62,16 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         limitedTimeOffer: drink.limitedTimeOffer || false,
         image: drink.image || '',
         categoryId: drink.categoryId || '',
+        subCategoryId: drink.subCategoryId || '',
         capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || '',
         stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0
       });
+      // Fetch subcategories for the drink's category
+      if (drink.categoryId) {
+        fetchSubcategories(drink.categoryId);
+      }
       setImagePreview(drink.image || '');
     } else {
       // Reset form for new drink creation
@@ -74,12 +83,14 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         limitedTimeOffer: false,
         image: '',
         categoryId: '',
+        subCategoryId: '',
         capacity: [],
         capacityPricing: [],
         abv: '',
         stock: 0
       });
       setImagePreview('');
+      setSubcategories([]);
     }
     setError(null);
   }, [drink, open]);
@@ -88,12 +99,47 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     fetchCategories();
   }, []);
 
+  // Fetch subcategories when category changes
+  useEffect(() => {
+    if (formData.categoryId) {
+      fetchSubcategories(formData.categoryId).then((fetchedSubcategories) => {
+        // After fetching subcategories, check if current subcategory belongs to new category
+        if (formData.subCategoryId && fetchedSubcategories.length > 0) {
+          // Verify the subcategory belongs to the selected category
+          const subcategoryExists = fetchedSubcategories.some(
+            sub => sub.id === parseInt(formData.subCategoryId)
+          );
+          if (!subcategoryExists) {
+            // Reset subcategory if it doesn't belong to the new category
+            setFormData(prev => ({ ...prev, subCategoryId: '' }));
+          }
+        }
+      });
+    } else {
+      setSubcategories([]);
+      setFormData(prev => ({ ...prev, subCategoryId: '' }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.categoryId]);
+
   const fetchCategories = async () => {
     try {
       const response = await api.get('/categories');
       setCategories(response.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchSubcategories = async (categoryId) => {
+    try {
+      const response = await api.get(`/subcategories?categoryId=${categoryId}`);
+      setSubcategories(response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
+      setSubcategories([]);
+      return [];
     }
   };
 
@@ -171,6 +217,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         limitedTimeOffer: !!formData.limitedTimeOffer,
         image: formData.image,
         categoryId: parseInt(formData.categoryId),
+        subCategoryId: formData.subCategoryId ? parseInt(formData.subCategoryId) : null,
         capacity: formData.capacity,
         capacityPricing: formData.capacityPricing,
         abv: formData.abv ? parseFloat(formData.abv) : null,
@@ -233,8 +280,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       fullWidth
       PaperProps={{
         sx: {
-          backgroundColor: '#121212',
-          color: '#F5F5F5'
+          backgroundColor: colors.paper,
+          color: colors.textPrimary
         }
       }}
     >
@@ -242,9 +289,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         display: 'flex', 
         justifyContent: 'space-between', 
         alignItems: 'center',
-        color: '#00E0B8',
+        color: colors.accentText,
         fontWeight: 700,
-        borderBottom: '1px solid #333'
+        borderBottom: `1px solid ${colors.border}`
       }}>
         <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
           {drink && drink.id ? 'Edit Drink' : 'Create new Item'}
@@ -263,7 +310,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
 
         <Box sx={{ width: '100%' }}>
           {/* Basic Information */}
-          <Typography variant="h6" sx={{ color: '#00E0B8', mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.accentText, mb: 2 }}>
             Basic Information
           </Typography>
 
@@ -275,9 +322,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#00E0B8' },
-                '&:hover fieldset': { borderColor: '#00E0B8' },
-                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
               }
             }}
           />
@@ -287,13 +334,13 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#00E0B8' },
-                '&:hover fieldset': { borderColor: '#00E0B8' },
-                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
               }
             }}
           >
-            <InputLabel id="category-select-label" sx={{ color: '#00E0B8' }}>
+            <InputLabel id="category-select-label" sx={{ color: colors.textPrimary }}>
               Category
             </InputLabel>
             <Select
@@ -302,25 +349,25 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
               onChange={(e) => handleInputChange('categoryId', e.target.value)}
               label="Category"
               sx={{
-                color: '#F5F5F5',
+                color: colors.textPrimary,
                 '& .MuiOutlinedInput-notchedOutline': {
-                  borderColor: '#00E0B8',
+                  borderColor: colors.border,
                 },
                 '&:hover .MuiOutlinedInput-notchedOutline': {
-                  borderColor: '#00E0B8',
+                  borderColor: colors.accent,
                 },
                 '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                  borderColor: '#00E0B8',
+                  borderColor: colors.accent,
                 },
                 '& .MuiSvgIcon-root': {
-                  color: '#00E0B8',
+                  color: colors.accent,
                 }
               }}
               MenuProps={{
                 PaperProps: {
                   sx: {
-                    backgroundColor: '#1E1E1E',
-                    color: '#F5F5F5',
+                    backgroundColor: colors.paper,
+                    color: colors.textPrimary,
                     '& .MuiMenuItem-root': {
                       '&:hover': {
                         backgroundColor: 'rgba(0, 224, 184, 0.1)',
@@ -347,6 +394,74 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             </Select>
           </FormControl>
 
+          {/* Subcategory Selection */}
+          {formData.categoryId && subcategories.length > 0 && (
+            <FormControl
+              fullWidth
+              sx={{
+                mb: 2,
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: colors.border },
+                  '&:hover fieldset': { borderColor: colors.accent },
+                  '&.Mui-focused fieldset': { borderColor: colors.accent }
+                }
+              }}
+            >
+              <InputLabel id="subcategory-select-label" sx={{ color: colors.textPrimary }}>
+                Subcategory (Optional)
+              </InputLabel>
+              <Select
+                labelId="subcategory-select-label"
+                value={formData.subCategoryId || ''}
+                onChange={(e) => handleInputChange('subCategoryId', e.target.value)}
+                label="Subcategory (Optional)"
+                sx={{
+                  color: colors.textPrimary,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.border,
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accent,
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accent,
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: colors.accent,
+                  }
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      backgroundColor: colors.paper,
+                      color: colors.textPrimary,
+                      '& .MuiMenuItem-root': {
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 224, 184, 0.1)',
+                        },
+                        '&.Mui-selected': {
+                          backgroundColor: 'rgba(0, 224, 184, 0.2)',
+                          '&:hover': {
+                            backgroundColor: 'rgba(0, 224, 184, 0.3)',
+                          }
+                        }
+                      }
+                    }
+                  }
+                }}
+              >
+                <MenuItem value="">
+                  <em>No Subcategory</em>
+                </MenuItem>
+                {subcategories.map(subcategory => (
+                  <MenuItem key={subcategory.id} value={subcategory.id}>
+                    {subcategory.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+
           <TextField
             fullWidth
             multiline
@@ -357,9 +472,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#00E0B8' },
-                '&:hover fieldset': { borderColor: '#00E0B8' },
-                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
               }
             }}
           />
@@ -374,9 +489,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#00E0B8' },
-                '&:hover fieldset': { borderColor: '#00E0B8' },
-                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
               }
             }}
           />
@@ -392,9 +507,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {
-                '& fieldset': { borderColor: '#00E0B8' },
-                '&:hover fieldset': { borderColor: '#00E0B8' },
-                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
               }
             }}
           />
@@ -402,7 +517,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
 
         <Box sx={{ width: '100%', mt: 2 }}>
           {/* Image Upload */}
-          <Typography variant="h6" sx={{ color: '#00E0B8', mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.accentText, mb: 2 }}>
             Image
           </Typography>
           <Box sx={{ mb: 2 }}>
@@ -419,11 +534,11 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                 component="span"
                 startIcon={<CloudUpload />}
                 sx={{
-                  borderColor: '#00E0B8',
-                  color: '#00E0B8',
+                  borderColor: colors.accent,
+                  color: colors.accentText,
                   '&:hover': {
-                    borderColor: '#00C4A3',
-                    backgroundColor: 'rgba(0, 224, 184, 0.1)'
+                    borderColor: colors.accent,
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)'
                   }
                 }}
               >
@@ -444,7 +559,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                   maxHeight: '150px',
                   objectFit: 'cover',
                   borderRadius: '8px',
-                  border: '2px solid #00E0B8'
+                  border: `2px solid ${colors.accent}`
                 }}
                 onError={(e) => {
                   e.target.style.display = 'none';
@@ -454,11 +569,11 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
           )}
         </Box>
 
-        <Divider sx={{ my: 3, borderColor: '#333', width: '100%' }} />
+        <Divider sx={{ my: 3, borderColor: colors.border, width: '100%' }} />
 
         <Box sx={{ width: '100%' }}>
           {/* Capacities and Pricing */}
-          <Typography variant="h6" sx={{ color: '#00E0B8', mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.accentText, mb: 2 }}>
             Capacities and Pricing
           </Typography>
 
@@ -474,13 +589,13 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
           </Box>
         </Box>
 
-        <Divider sx={{ my: 3, borderColor: '#333', width: '100%' }} />
+        <Divider sx={{ my: 3, borderColor: colors.border, width: '100%' }} />
 
         <Grid container spacing={3}>
 
           {/* Status */}
           <Grid item xs={12}>
-            <Typography variant="h6" sx={{ color: '#00E0B8', mb: 2 }}>
+            <Typography variant="h6" sx={{ color: colors.accentText, mb: 2 }}>
               Status
             </Typography>
           </Grid>
@@ -493,10 +608,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                   onChange={(e) => handleInputChange('isAvailable', e.target.checked)}
                   sx={{
                     '& .MuiSwitch-switchBase.Mui-checked': {
-                      color: '#00E0B8',
+                      color: colors.accent,
                     },
                     '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                      backgroundColor: '#00E0B8',
+                      backgroundColor: colors.accent,
                     },
                   }}
                 />
@@ -513,10 +628,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                   onChange={(e) => handleInputChange('isPopular', e.target.checked)}
                   sx={{
                     '& .MuiSwitch-switchBase.Mui-checked': {
-                      color: '#FF3366',
+                      color: colors.error,
                     },
                     '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                      backgroundColor: '#FF3366',
+                      backgroundColor: colors.error,
                     },
                   }}
                 />
@@ -533,10 +648,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                   onChange={(e) => handleInputChange('limitedTimeOffer', e.target.checked)}
                   sx={{
                     '& .MuiSwitch-switchBase.Mui-checked': {
-                      color: '#00E0B8',
+                      color: colors.accent,
                     },
                     '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                      backgroundColor: '#00E0B8',
+                      backgroundColor: colors.accent,
                     },
                   }}
                 />
@@ -560,9 +675,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
           disabled={loading}
           startIcon={loading ? <CircularProgress size={20} /> : <AttachMoney />}
           sx={{
-            backgroundColor: '#00E0B8',
-            color: '#0D0D0D',
-            '&:hover': { backgroundColor: '#00C4A3' }
+            backgroundColor: colors.accent,
+            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+            '&:hover': { backgroundColor: isDarkMode ? '#00C4A3' : '#00B89A' }
           }}
         >
           {loading ? 'Saving...' : (drink && drink.id ? 'Save Changes' : 'Create Drink')}
