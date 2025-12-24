@@ -6,6 +6,7 @@ import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { EasterEggProvider, useEasterEgg } from './contexts/EasterEggContext';
 import AdminHeader from './components/AdminHeader';
+import AdminLayout from './components/AdminLayout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
 import SetupPassword from './pages/SetupPassword';
@@ -181,10 +182,9 @@ function AppContent() {
                 path="/dashboard"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <AdminOverview />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -192,10 +192,9 @@ function AppContent() {
                 path="/orders"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Orders />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -203,10 +202,9 @@ function AppContent() {
                 path="/inventory"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Inventory />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -214,10 +212,9 @@ function AppContent() {
                 path="/transactions"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Transactions />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -225,10 +222,9 @@ function AppContent() {
                 path="/drivers"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Drivers />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -236,10 +232,9 @@ function AppContent() {
                 path="/payables"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Payables />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -247,10 +242,9 @@ function AppContent() {
                 path="/branches"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Branches />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -258,10 +252,9 @@ function AppContent() {
                 path="/territories"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Territories />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -269,10 +262,9 @@ function AppContent() {
                 path="/settings"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Settings />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -281,10 +273,9 @@ function AppContent() {
                   path="/save-the-fishes"
                   element={
                     <PrivateRoute>
-                      <>
-                        <AdminHeader />
+                      <AdminLayout>
                         <SaveTheFishes />
-                      </>
+                      </AdminLayout>
                     </PrivateRoute>
                   }
                 />
@@ -293,10 +284,9 @@ function AppContent() {
                 path="/admin/customers"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <Customers />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
@@ -304,10 +294,9 @@ function AppContent() {
                 path="/pos"
                 element={
                   <PrivateRoute>
-                    <>
-                      <AdminHeader />
+                    <AdminLayout>
                       <POS />
-                    </>
+                    </AdminLayout>
                   </PrivateRoute>
                 }
               />
