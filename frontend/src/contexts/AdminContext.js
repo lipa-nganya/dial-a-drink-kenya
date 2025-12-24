@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
 import io from 'socket.io-client';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const AdminContext = createContext();
 
@@ -61,12 +62,7 @@ export const AdminProvider = ({ children }) => {
 
   useEffect(() => {
     // Initialize socket connection for admin
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const socketUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
+    const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
     

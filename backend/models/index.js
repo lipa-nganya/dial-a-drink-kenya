@@ -82,6 +82,7 @@ const DriverWallet = require('./DriverWallet')(sequelize, Sequelize.DataTypes);
 const AdminWallet = require('./AdminWallet')(sequelize, Sequelize.DataTypes);
 const SavedAddress = require('./SavedAddress')(sequelize, Sequelize.DataTypes);
 const Branch = require('./Branch')(sequelize, Sequelize.DataTypes);
+const Territory = require('./Territory')(sequelize, Sequelize.DataTypes);
 const Supplier = require('./Supplier')(sequelize, Sequelize.DataTypes);
 
 // Valkyrie models (conditionally loaded if they exist)
@@ -189,6 +190,7 @@ db.DriverWallet = DriverWallet;
 db.AdminWallet = AdminWallet;
 db.SavedAddress = SavedAddress;
 db.Branch = Branch;
+db.Territory = Territory;
 db.Supplier = Supplier;
 
 // Add Valkyrie models if they exist

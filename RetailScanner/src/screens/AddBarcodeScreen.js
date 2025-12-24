@@ -11,7 +11,7 @@ import {
   List,
   Chip
 } from 'react-native-paper';
-import { getDrinkByBarcode, searchDrinks, attachBarcode, updateStock } from '../services/api';
+import { getDrinkByBarcode, searchDrinks, attachBarcode, addStock } from '../services/api';
 
 export default function AddBarcodeScreen() {
   const [hasPermission, setHasPermission] = useState(null);
@@ -20,9 +20,11 @@ export default function AddBarcodeScreen() {
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [selectedDrink, setSelectedDrink] = useState(null);
-  const [stock, setStock] = useState('');
+  const [currentStock, setCurrentStock] = useState(null); // Current stock of selected drink
+  const [stockToAdd, setStockToAdd] = useState(''); // Amount to add to stock
   const [loading, setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
+  const [fetchingStock, setFetchingStock] = useState(false);
 
   const [permission, requestPermission] = useCameraPermissions();
   
@@ -39,14 +41,22 @@ export default function AddBarcodeScreen() {
     setBarcode(data);
     setSelectedDrink(null);
     setSearchResults([]);
+    setCurrentStock(null);
+    setStockToAdd('');
     
     // Check if barcode already exists
     try {
       const existingDrink = await getDrinkByBarcode(data);
       if (existingDrink) {
+        // Barcode exists - show the drink and its current stock
+        setSelectedDrink(existingDrink);
+        const stock = existingDrink.stock !== undefined && existingDrink.stock !== null 
+          ? parseInt(existingDrink.stock) 
+          : 0;
+        setCurrentStock(stock);
         Alert.alert(
           'Barcode Already Exists',
-          `This barcode is already attached to: ${existingDrink.name}`,
+          `This barcode is attached to: ${existingDrink.name}\nCurrent stock: ${stock}`,
           [{ text: 'OK' }]
         );
         setTimeout(() => setScanned(false), 2000);
@@ -77,10 +87,35 @@ export default function AddBarcodeScreen() {
     }
   };
 
-  const handleSelectDrink = (drink) => {
+  const handleSelectDrink = async (drink) => {
     setSelectedDrink(drink);
     setSearchResults([]);
     setSearchTerm('');
+    setStockToAdd('');
+    
+    // Set current stock from the drink object immediately
+    const stock = drink.stock !== undefined && drink.stock !== null 
+      ? parseInt(drink.stock) 
+      : 0;
+    setCurrentStock(stock);
+    
+    // Optionally fetch latest stock to ensure it's up to date
+    setFetchingStock(true);
+    try {
+      const updatedDrink = await searchDrinks(drink.name);
+      const foundDrink = Array.isArray(updatedDrink) 
+        ? updatedDrink.find(d => d.id === drink.id)
+        : updatedDrink;
+      
+      if (foundDrink && foundDrink.stock !== undefined && foundDrink.stock !== null) {
+        setCurrentStock(parseInt(foundDrink.stock) || 0);
+      }
+    } catch (error) {
+      // Keep the stock from the drink object if fetch fails
+      console.error('Error fetching latest stock:', error);
+    } finally {
+      setFetchingStock(false);
+    }
   };
 
   const handleAttachBarcode = async () => {
@@ -94,36 +129,48 @@ export default function AddBarcodeScreen() {
       return;
     }
 
-    const stockValue = parseInt(stock) || 0;
-    if (stockValue < 0) {
-      Alert.alert('Error', 'Stock must be a non-negative whole number');
+    const stockToAddValue = parseInt(stockToAdd) || 0;
+    if (stockToAddValue < 0) {
+      Alert.alert('Error', 'Stock to add must be a non-negative whole number');
+      return;
+    }
+
+    if (stockToAddValue === 0) {
+      Alert.alert('Error', 'Please enter a quantity to add to stock');
       return;
     }
 
     setLoading(true);
     try {
-      await attachBarcode(selectedDrink.id, barcode);
-      if (stockValue > 0) {
-        await updateStock(selectedDrink.id, stockValue);
+      // Attach barcode if not already attached
+      const hasBarcode = selectedDrink.barcode === barcode;
+      if (!hasBarcode) {
+        await attachBarcode(selectedDrink.id, barcode);
       }
+      
+      // Add stock to existing stock
+      const result = await addStock(selectedDrink.id, stockToAddValue);
+      const newStock = result.newStock || (currentStock + stockToAddValue);
       
       Alert.alert(
         'Success',
-        `Barcode ${barcode} attached to ${selectedDrink.name}${stockValue > 0 ? ` with stock ${stockValue}` : ''}`,
+        `Stock added successfully!\n\n${selectedDrink.name}\nPrevious stock: ${currentStock || 0}\nAdded: ${stockToAddValue}\nNew stock: ${newStock}`,
         [
           {
             text: 'OK',
             onPress: () => {
               setBarcode('');
               setSelectedDrink(null);
-              setStock('');
+              setCurrentStock(null);
+              setStockToAdd('');
               setScanned(false);
+              setSearchResults([]);
             }
           }
         ]
       );
     } catch (error) {
-      Alert.alert('Error', error.response?.data?.error || 'Failed to attach barcode');
+      Alert.alert('Error', error.response?.data?.error || 'Failed to attach barcode and add stock');
       console.error(error);
     } finally {
       setLoading(false);
@@ -212,6 +259,12 @@ export default function AddBarcodeScreen() {
                 <Title>Selected Item</Title>
                 <Paragraph>{selectedDrink.name}</Paragraph>
                 <Paragraph>Price: KES {selectedDrink.price}</Paragraph>
+                {currentStock !== null && (
+                  <Paragraph style={styles.stockInfo}>
+                    Current Stock: <Title style={styles.stockValue}>{currentStock}</Title>
+                  </Paragraph>
+                )}
+                {fetchingStock && <ActivityIndicator style={styles.loader} />}
               </Card.Content>
             </Card>
           )}
@@ -221,22 +274,33 @@ export default function AddBarcodeScreen() {
       {selectedDrink && barcode && (
         <Card style={styles.card}>
           <Card.Content>
-            <Title>Enter Stock Quantity</Title>
+            <Title>Add Stock</Title>
+            {currentStock !== null && (
+              <Paragraph style={styles.stockInfo}>
+                Current Stock: <Title style={styles.stockValue}>{currentStock}</Title>
+              </Paragraph>
+            )}
             <TextInput
-              label="Stock (whole numbers only)"
-              value={stock}
-              onChangeText={setStock}
+              label="Quantity to Add (whole numbers only)"
+              value={stockToAdd}
+              onChangeText={setStockToAdd}
               keyboardType="numeric"
               style={styles.input}
+              placeholder="Enter quantity to add"
             />
+            {currentStock !== null && stockToAdd && parseInt(stockToAdd) > 0 && (
+              <Paragraph style={styles.preview}>
+                New stock will be: {currentStock + parseInt(stockToAdd)}
+              </Paragraph>
+            )}
             <Button
               mode="contained"
               onPress={handleAttachBarcode}
               loading={loading}
-              disabled={loading}
+              disabled={loading || !stockToAdd || parseInt(stockToAdd) <= 0}
               style={styles.button}
             >
-              Attach Barcode & Save Stock
+              {selectedDrink.barcode === barcode ? 'Add Stock' : 'Attach Barcode & Add Stock'}
             </Button>
           </Card.Content>
         </Card>
@@ -284,6 +348,21 @@ const styles = StyleSheet.create({
   },
   button: {
     marginTop: 16,
+  },
+  stockInfo: {
+    marginTop: 8,
+    fontSize: 14,
+  },
+  stockValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2196F3',
+  },
+  preview: {
+    marginTop: 8,
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: '#666',
   },
 });
 

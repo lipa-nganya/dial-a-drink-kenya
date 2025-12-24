@@ -69,7 +69,7 @@ const AdminLogin = () => {
             Admin Login
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            LiquorOS
+            Dial a Drink Kenya
           </Typography>
         </Box>
 

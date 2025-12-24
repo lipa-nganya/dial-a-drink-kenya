@@ -111,9 +111,9 @@ exports.suspendServices = async (pubsubMessage) => {
   const projectId = 'drink-suite';
   const region = 'us-central1';
   const services = [
-    'liquoros-backend',
-    'liquoros-customer',
-    'liquoros-admin'
+    'deliveryos-backend',
+    'deliveryos-customer',
+    'deliveryos-admin'
   ];
   
   for (const serviceName of services) {

@@ -16,6 +16,7 @@ import {
 } from '@mui/material';
 import { io } from 'socket.io-client';
 import { api } from '../services/api';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const AdminDashboard = () => {
   const [orders, setOrders] = useState([]);
@@ -32,13 +33,8 @@ const AdminDashboard = () => {
   });
 
   useEffect(() => {
-    // Initialize socket connection - use production URL
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const socketUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
+    // Initialize socket connection - use backend URL utility
+    const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
     

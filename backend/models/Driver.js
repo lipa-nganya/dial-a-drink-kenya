@@ -30,6 +30,12 @@ module.exports = (sequelize, DataTypes) => {
     pinHash: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    valkyrieEligible: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      allowNull: false,
+      comment: 'Whether this driver can be assigned to Valkyrie partner orders'
     }
   }, {
     tableName: 'drivers',

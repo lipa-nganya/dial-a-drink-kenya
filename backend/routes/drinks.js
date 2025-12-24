@@ -170,7 +170,46 @@ router.get('/barcode/:barcode', async (req, res) => {
   }
 });
 
-// Get drink by ID
+// Get detailed product description (must be before /:id route)
+router.get('/:id/detailed-description', async (req, res) => {
+  try {
+    const drink = await db.Drink.findByPk(req.params.id, {
+      include: [{
+        model: db.Category,
+        as: 'category'
+      }, {
+        model: db.SubCategory,
+        as: 'subCategory'
+      }]
+    });
+    
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+    
+    console.log(`[Detailed Description] Generating for product: ${drink.name} (ID: ${drink.id})`);
+    
+    const { generateProductDescription } = require('../services/productDescriptionGenerator');
+    const description = await generateProductDescription(
+      drink.name,
+      drink.category?.name,
+      drink.subCategory?.name
+    );
+    
+    if (!description) {
+      console.log(`[Detailed Description] No description generated for ${drink.name}`);
+      return res.status(404).json({ error: 'Could not generate detailed description' });
+    }
+    
+    console.log(`[Detailed Description] Successfully generated ${description.length} characters for ${drink.name}`);
+    res.json({ description });
+  } catch (error) {
+    console.error('[Detailed Description] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get drink by ID (must be after /:id/detailed-description route)
 router.get('/:id', async (req, res) => {
   try {
     const drink = await db.Drink.findByPk(req.params.id, {

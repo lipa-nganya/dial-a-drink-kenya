@@ -1,6 +1,6 @@
 # Assets Folder
 
-This folder contains static assets for the LiquorOS application.
+This folder contains static assets for the Dial a Drink Kenya application.
 
 ## Structure
 

@@ -1,6 +1,6 @@
 # Transaction Creation Flow
 
-This document describes the complete transaction creation process for all transaction types in the LiquorOS system.
+This document describes the complete transaction creation process for all transaction types in the Dial a Drink Kenya system.
 
 ## Overview
 

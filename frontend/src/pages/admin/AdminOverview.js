@@ -39,6 +39,7 @@ import { api } from '../../services/api';
 import io from 'socket.io-client';
 import { useAdmin } from '../../contexts/AdminContext';
 import { useTheme } from '../../contexts/ThemeContext';
+import { getBackendUrl } from '../../utils/backendUrl';
 
 const AdminOverview = () => {
   const [stats, setStats] = useState({});
@@ -98,13 +99,8 @@ const AdminOverview = () => {
   };
 
   useEffect(() => {
-    // Initialize socket connection - use production URL
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const socketUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
+    // Initialize socket connection - use backend URL utility
+    const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
     
@@ -198,23 +194,14 @@ const AdminOverview = () => {
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       // If it's localhost, replace with backend URL
       if (imagePath.includes('localhost:5001')) {
-        const isHosted = window.location.hostname.includes('onrender.com') || 
-                        window.location.hostname.includes('run.app');
-        const backendUrl = isHosted 
-          ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-          : 'http://localhost:5001';
+        const backendUrl = getBackendUrl();
         return imagePath.replace('http://localhost:5001', backendUrl);
       }
       return imagePath;
     }
     
-    // For relative paths, construct the full URL
-    const isHosted = window.location.hostname.includes('onrender.com') || 
-                    window.location.hostname.includes('run.app');
-    const backendUrl = isHosted 
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
-    
+    // For relative paths, construct the full URL using backend URL utility
+    const backendUrl = getBackendUrl();
     return `${backendUrl}${imagePath}`;
   };
 

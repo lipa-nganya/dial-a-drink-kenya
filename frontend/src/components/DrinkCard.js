@@ -21,10 +21,13 @@ import {
   LocalOffer,
   LocalBar
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const DrinkCard = ({ drink }) => {
+  const navigate = useNavigate();
   const { addToCart } = useCart();
   const { colors, isDarkMode } = useTheme();
   const [selectedCapacity, setSelectedCapacity] = useState('');
@@ -41,33 +44,22 @@ const DrinkCard = ({ drink }) => {
     
     // If it's already a full URL, check if it's localhost and replace
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-      // Replace localhost URLs with production backend URL
+      // Replace localhost URLs with backend URL
       if (imagePath.includes('localhost:5001')) {
-        const isHosted =
-          window.location.hostname.includes('onrender.com') ||
-          window.location.hostname.includes('run.app');
-        const backendUrl = isHosted
-          ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-          : 'http://localhost:5001';
+        const backendUrl = getBackendUrl();
         return imagePath.replace('http://localhost:5001', backendUrl);
       }
       return imagePath;
     }
     
-    // For relative paths, construct the full URL
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const baseUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
-    
+    // For relative paths, construct the full URL using backend URL utility
+    const backendUrl = getBackendUrl();
     // Use encodeURI which preserves / characters but encodes spaces and special chars
     // Only encode if the path contains spaces or special characters
     const needsEncoding = /[\s%]/.test(imagePath);
     const finalPath = needsEncoding ? encodeURI(imagePath) : imagePath;
     
-    return `${baseUrl}${finalPath}`;
+    return `${backendUrl}${finalPath}`;
   };
 
   // Get available capacities from capacityPricing or fallback to capacity array
@@ -93,7 +85,8 @@ const DrinkCard = ({ drink }) => {
     return parseFloat(drink.price) || 0;
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = (e) => {
+    e.stopPropagation(); // Prevent card click when clicking add to cart
     if (availableCapacities.length > 0 && !selectedCapacity) {
       alert('Please select a capacity first');
       return;
@@ -108,8 +101,13 @@ const DrinkCard = ({ drink }) => {
     addToCart(drinkToAdd, 1);
   };
 
+  const handleCardClick = () => {
+    navigate(`/product/${drink.id}`);
+  };
+
   return (
     <Card
+      onClick={handleCardClick}
       sx={{
         width: '100%',
         height: '100%',
@@ -118,6 +116,7 @@ const DrinkCard = ({ drink }) => {
         flexDirection: 'column',
         backgroundColor: '#fff',
         transition: 'transform 0.2s',
+        cursor: 'pointer',
         '&:hover': {
           transform: 'translateY(-2px)',
           boxShadow: 2
@@ -207,7 +206,11 @@ const DrinkCard = ({ drink }) => {
             <FormControl component="fieldset" sx={{ width: '100%' }}>
               <RadioGroup
                 value={selectedCapacity}
-                onChange={(e) => setSelectedCapacity(e.target.value)}
+                onChange={(e) => {
+                  e.stopPropagation();
+                  setSelectedCapacity(e.target.value);
+                }}
+                onClick={(e) => e.stopPropagation()}
                 sx={{ gap: 0, width: '100%' }}
               >
                 {availableCapacities.map((capacity) => {

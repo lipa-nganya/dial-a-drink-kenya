@@ -43,6 +43,7 @@ import {
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { useTheme } from '../contexts/ThemeContext';
+import { getBackendUrl } from '../utils/backendUrl';
 import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChipProps } from '../utils/chipStyles';
 
 const Orders = () => {
@@ -95,13 +96,7 @@ const Orders = () => {
 
   // Set up Socket.IO for real-time order updates
   useEffect(() => {
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const socketUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
-    
+    const socketUrl = getBackendUrl();
     const socket = io(socketUrl);
     
     // Join admin room to receive order notifications

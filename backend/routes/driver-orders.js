@@ -228,6 +228,17 @@ router.patch('/:orderId/status', async (req, res) => {
       await order.update({ status });
     }
 
+    // Trigger Valkyrie webhooks if enabled
+    if (process.env.ENABLE_VALKYRIE === 'true' || process.env.ENABLE_VALKYRIE === '1') {
+      try {
+        const valkyrieService = require('../services/valkyrie');
+        await valkyrieService.triggerOrderStatusWebhook(order.id, finalStatus);
+      } catch (valkyrieError) {
+        console.error('Valkyrie webhook error (non-blocking):', valkyrieError.message);
+        // Don't fail the order update if webhook fails
+      }
+    }
+
     // If delivered or completed, check if driver has more active orders
     // Only set driver status to 'active' if they have no more active orders
     if (finalStatus === 'delivered' || finalStatus === 'completed') {

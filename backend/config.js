@@ -62,8 +62,8 @@ module.exports = {
           };
     })(),
     pool: {
-      max: 10, // Maximum number of connections in pool
-      min: 2, // Minimum number of connections in pool
+      max: process.env.DB_POOL_MAX ? parseInt(process.env.DB_POOL_MAX) : 5, // Optimized for smaller instances (db-f1-micro)
+      min: process.env.DB_POOL_MIN ? parseInt(process.env.DB_POOL_MIN) : 1, // Reduced minimum for cost optimization
       acquire: 10000, // Maximum time (ms) to wait for a connection
       idle: 10000, // Maximum time (ms) a connection can be idle
       evict: 1000 // Time interval (ms) to check for idle connections

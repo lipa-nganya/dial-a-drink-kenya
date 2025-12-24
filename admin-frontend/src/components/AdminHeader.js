@@ -18,7 +18,8 @@ import {
   People,
   Store,
   PointOfSale,
-  AccountBalance
+  AccountBalance,
+  Map
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -139,6 +140,14 @@ const AdminHeader = () => {
             sx={buttonStyle('/branches')}
           >
             Branches
+          </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/territories')}
+            startIcon={<Map />}
+            sx={buttonStyle('/territories')}
+          >
+            Territories
           </Button>
           {isEasterEggActive && (
             <Button

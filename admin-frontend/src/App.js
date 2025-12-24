@@ -16,6 +16,7 @@ import Transactions from './pages/Transactions';
 import OrderNotifications from './pages/OrderNotifications';
 import Drivers from './pages/Drivers';
 import Branches from './pages/Branches';
+import Territories from './pages/Territories';
 import Settings from './pages/Settings';
 import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
@@ -249,6 +250,17 @@ function AppContent() {
                     <>
                       <AdminHeader />
                       <Branches />
+                    </>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/territories"
+                element={
+                  <PrivateRoute>
+                    <>
+                      <AdminHeader />
+                      <Territories />
                     </>
                   </PrivateRoute>
                 }

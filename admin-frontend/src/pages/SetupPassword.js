@@ -7,9 +7,11 @@ import {
   Typography,
   Box,
   Alert,
-  CircularProgress
+  CircularProgress,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
-import { Lock, CheckCircle } from '@mui/icons-material';
+import { Lock, CheckCircle, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
@@ -22,6 +24,8 @@ const SetupPassword = () => {
   const { setUserInfo } = useAdmin();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -139,7 +143,7 @@ const SetupPassword = () => {
             Set Your Password
           </Typography>
           <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-            You've been invited to join the LiquorOS admin team. Please set your password to continue.
+            You've been invited to join the Dial a Drink Kenya admin team. Please set your password to continue.
           </Typography>
         </Box>
 
@@ -152,7 +156,7 @@ const SetupPassword = () => {
         <Box component="form" onSubmit={handleSubmit}>
           <TextField
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
@@ -164,11 +168,25 @@ const SetupPassword = () => {
             sx={{ mb: 2 }}
             disabled={loading}
             helperText="Must be at least 6 characters"
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                    disabled={loading}
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
           />
 
           <TextField
             label="Confirm Password"
-            type="password"
+            type={showConfirmPassword ? 'text' : 'password'}
             value={confirmPassword}
             onChange={(e) => {
               setConfirmPassword(e.target.value);
@@ -179,6 +197,20 @@ const SetupPassword = () => {
             autoComplete="new-password"
             sx={{ mb: 3 }}
             disabled={loading}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle confirm password visibility"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    edge="end"
+                    disabled={loading}
+                  >
+                    {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
           />
 
           <Button

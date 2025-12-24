@@ -7,9 +7,11 @@ import {
   Typography,
   Box,
   Alert,
-  CircularProgress
+  CircularProgress,
+  InputAdornment,
+  IconButton
 } from '@mui/material';
-import { Lock, Dashboard } from '@mui/icons-material';
+import { Lock, Dashboard, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
@@ -21,6 +23,7 @@ const Login = () => {
   const { setUserInfo } = useAdmin();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -76,7 +79,7 @@ const Login = () => {
             Admin Login
           </Typography>
           <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-            LiquorOS
+            Dial a Drink Kenya
           </Typography>
         </Box>
 
@@ -105,7 +108,7 @@ const Login = () => {
 
           <TextField
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
@@ -116,6 +119,20 @@ const Login = () => {
             autoComplete="current-password"
             sx={{ mb: 3 }}
             disabled={loading}
+            InputProps={{
+              endAdornment: (
+                <InputAdornment position="end">
+                  <IconButton
+                    aria-label="toggle password visibility"
+                    onClick={() => setShowPassword(!showPassword)}
+                    edge="end"
+                    disabled={loading}
+                  >
+                    {showPassword ? <VisibilityOff /> : <Visibility />}
+                  </IconButton>
+                </InputAdornment>
+              )
+            }}
           />
 
           <Button

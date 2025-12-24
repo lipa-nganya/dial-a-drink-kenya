@@ -26,6 +26,11 @@ export const updateStock = async (drinkId, stock) => {
   return response.data;
 };
 
+export const addStock = async (drinkId, quantity) => {
+  const response = await api.post('/inventory/add-stock', { drinkId, quantity });
+  return response.data;
+};
+
 export const decreaseStock = async (drinkId, quantity) => {
   const response = await api.post('/inventory/decrease-stock', { drinkId, quantity });
   return response.data;

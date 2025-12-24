@@ -42,6 +42,7 @@ import {
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 import EditDrinkDialog from '../../components/EditDrinkDialog';
+import { getBackendUrl } from '../../utils/backendUrl';
 
 const InventoryPage = () => {
   const [drinks, setDrinks] = useState([]);
@@ -75,15 +76,9 @@ const InventoryPage = () => {
       return imagePath;
     }
     
-    // For relative paths, construct the full URL
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const baseUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
-    
-    return `${baseUrl}${imagePath}`;
+    // For relative paths, construct the full URL using backend URL utility
+    const backendUrl = getBackendUrl();
+    return `${backendUrl}${imagePath}`;
   };
 
   useEffect(() => {

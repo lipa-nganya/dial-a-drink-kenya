@@ -24,6 +24,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import io from 'socket.io-client';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const OrderTracking = ({ order }) => {
   const navigate = useNavigate();
@@ -58,13 +59,7 @@ const OrderTracking = ({ order }) => {
     })();
     
     if (orderId) {
-      const isHosted =
-        window.location.hostname.includes('onrender.com') ||
-        window.location.hostname.includes('run.app');
-      const socketUrl = isHosted
-        ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-        : 'http://localhost:5001';
-      
+      const socketUrl = getBackendUrl();
       const socket = io(socketUrl);
       
       // Join order-specific room

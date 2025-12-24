@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import { LocalBar } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const CategoryCard = ({ category }) => {
   const navigate = useNavigate();
@@ -26,15 +27,9 @@ const CategoryCard = ({ category }) => {
       return imagePath;
     }
     
-    // For relative paths, construct the full URL
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const baseUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
-    
-    return `${baseUrl}${imagePath}`;
+    // For relative paths, construct the full URL using backend URL utility
+    const backendUrl = getBackendUrl();
+    return `${backendUrl}${imagePath}`;
   };
 
   const imageUrl = getImageUrl(category.image);

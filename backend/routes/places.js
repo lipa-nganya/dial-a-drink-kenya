@@ -167,26 +167,12 @@ router.get('/details/:placeId', async (req, res) => {
   try {
     const { placeId } = req.params;
 
-    // First check if we have this address in database
-    const savedAddress = await db.SavedAddress.findOne({
-      where: { placeId: placeId }
-    });
-
-    if (savedAddress && savedAddress.formattedAddress) {
-      // Update cost saved
-      await savedAddress.update({
-        apiCallsSaved: (savedAddress.apiCallsSaved || 0) + 1,
-        costSaved: parseFloat(savedAddress.costSaved || 0) + (GOOGLE_DETAILS_COST_USD * USD_TO_KES_RATE)
-      });
-
-      console.log(`✅ Found address details in database, saved API call (KES ${(GOOGLE_DETAILS_COST_USD * USD_TO_KES_RATE).toFixed(4)})`);
-
-      // Return saved address details
-      return res.json({
-        place_id: savedAddress.placeId,
-        formatted_address: savedAddress.formattedAddress,
-        name: savedAddress.formattedAddress,
-        fromDatabase: true
+    // Always fetch from Google API to get geometry (coordinates are required)
+    // We'll check database first to see if we need to update it with coordinates
+    let savedAddress = null;
+    if (placeId) {
+      savedAddress = await db.SavedAddress.findOne({
+        where: { placeId: placeId }
       });
     }
 
@@ -208,8 +194,52 @@ router.get('/details/:placeId', async (req, res) => {
       
       const detailsData = await detailsResponse.json();
 
+      // Check for API errors
+      if (detailsData.status && detailsData.status !== 'OK') {
+        console.error('Google Places API error:', detailsData.status, detailsData.error_message);
+        // If we have saved address with coordinates, use them as fallback
+        if (savedAddress && savedAddress.latitude && savedAddress.longitude) {
+          console.log('Using saved coordinates as fallback');
+          return res.json({
+            place_id: savedAddress.placeId,
+            formatted_address: savedAddress.formattedAddress,
+            name: savedAddress.formattedAddress,
+            geometry: {
+              location: {
+                lat: parseFloat(savedAddress.latitude),
+                lng: parseFloat(savedAddress.longitude)
+              }
+            }
+          });
+        }
+        return res.status(500).json({
+          error: 'Google Places API error',
+          message: detailsData.error_message || `API returned status: ${detailsData.status}`
+        });
+      }
+
       if (detailsData && detailsData.result) {
         const placeResult = detailsData.result;
+        
+        // Ensure geometry exists
+        if (!placeResult.geometry || !placeResult.geometry.location) {
+          console.error('Google Places API response missing geometry:', placeResult);
+          // If we have saved address with coordinates, use them as fallback
+          if (savedAddress && savedAddress.latitude && savedAddress.longitude) {
+            console.log('Using saved coordinates as fallback (missing geometry in API response)');
+            placeResult.geometry = {
+              location: {
+                lat: parseFloat(savedAddress.latitude),
+                lng: parseFloat(savedAddress.longitude)
+              }
+            };
+          } else {
+            return res.status(500).json({
+              error: 'Invalid response from Google Places API',
+              message: 'Place details missing geometry/coordinates'
+            });
+          }
+        }
         
         // Check if formatted_address is a Plus Code (e.g., "PP2X+58P, Nairobi, Kenya")
         const plusCodePattern = /^[A-Z0-9]{2,}\+[A-Z0-9]+/;
@@ -265,26 +295,80 @@ router.get('/details/:placeId', async (req, res) => {
           }
         }
         
-        // Save address to database for future use (if not already from database)
-        if (placeResult.formatted_address && !placeResult.fromDatabase) {
+        // Save/update address in database with coordinates for future use
+        if (placeResult.formatted_address && placeResult.geometry && placeResult.geometry.location) {
           const normalizedAddress = placeResult.formatted_address.toLowerCase().trim();
+          const latitude = placeResult.geometry.location.lat;
+          const longitude = placeResult.geometry.location.lng;
           
-          // Check if already exists
-          const existingAddress = await db.SavedAddress.findOne({
-            where: { address: normalizedAddress }
-          });
+          try {
+            // Check if already exists by placeId or address
+            let existingAddress = savedAddress;
+            if (!existingAddress) {
+              // First try by placeId
+              existingAddress = await db.SavedAddress.findOne({
+                where: { placeId: placeId }
+              });
+              // If not found, try by address
+              if (!existingAddress) {
+                existingAddress = await db.SavedAddress.findOne({
+                  where: { address: normalizedAddress }
+                });
+              }
+            }
 
-          if (!existingAddress) {
-            await db.SavedAddress.create({
-              address: normalizedAddress,
-              placeId: placeId,
-              formattedAddress: placeResult.formatted_address
-            });
-            console.log(`✅ Saved new address from Google API: ${normalizedAddress}`);
+            if (!existingAddress) {
+              // Create new address
+              await db.SavedAddress.create({
+                address: normalizedAddress,
+                placeId: placeId,
+                formattedAddress: placeResult.formatted_address,
+                latitude: latitude,
+                longitude: longitude
+              });
+              console.log(`✅ Saved new address with coordinates: ${normalizedAddress}`);
+            } else {
+              // Update existing address with coordinates if missing, or update placeId if different
+              const updates = {};
+              if (!existingAddress.latitude || !existingAddress.longitude) {
+                updates.latitude = latitude;
+                updates.longitude = longitude;
+              }
+              if (placeId && existingAddress.placeId !== placeId) {
+                updates.placeId = placeId;
+              }
+              if (Object.keys(updates).length > 0) {
+                await existingAddress.update(updates);
+                console.log(`✅ Updated existing address: ${normalizedAddress}`);
+              }
+            }
+          } catch (dbError) {
+            // Handle duplicate key errors gracefully
+            if (dbError.name === 'SequelizeUniqueConstraintError') {
+              console.log(`⚠️ Address already exists (duplicate key): ${normalizedAddress}`);
+              // Try to find and update it
+              const existingAddress = await db.SavedAddress.findOne({
+                where: { address: normalizedAddress }
+              });
+              if (existingAddress && (!existingAddress.latitude || !existingAddress.longitude)) {
+                await existingAddress.update({
+                  latitude: latitude,
+                  longitude: longitude
+                });
+                console.log(`✅ Updated existing address with coordinates: ${normalizedAddress}`);
+              }
+            } else {
+              console.error('Error saving address to database:', dbError.message);
+              // Don't throw - continue with returning the place result
+            }
           }
         }
         
-        return res.json(placeResult);
+        // Always return with geometry - remove fromDatabase flag since we fetched from Google
+        const response = { ...placeResult };
+        delete response.fromDatabase; // Remove this flag since we got fresh data from Google
+        
+        return res.json(response);
       }
     } catch (error) {
       console.error('Places Details API failed:', error.message);
@@ -297,6 +381,102 @@ router.get('/details/:placeId', async (req, res) => {
     res.status(500).json({ 
       error: 'Failed to fetch place details',
       message: error.message 
+    });
+  }
+});
+
+/**
+ * POST /api/places/generate-geojson
+ * Generate a GeoJSON polygon from multiple location coordinates
+ * Creates a convex hull or bounding box polygon that encompasses all points
+ */
+router.post('/generate-geojson', async (req, res) => {
+  try {
+    const { locations } = req.body;
+
+    if (!locations || !Array.isArray(locations) || locations.length < 3) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'At least 3 locations are required to generate a polygon'
+      });
+    }
+
+    // Extract coordinates
+    const coordinates = locations.map(loc => {
+      if (loc.coordinates) {
+        return [loc.coordinates.lng, loc.coordinates.lat]; // GeoJSON format: [lng, lat]
+      }
+      return null;
+    }).filter(coord => coord !== null);
+
+    if (coordinates.length < 3) {
+      return res.status(400).json({
+        error: 'Bad Request',
+        message: 'At least 3 valid coordinates are required'
+      });
+    }
+
+    // Calculate bounding box
+    const lngs = coordinates.map(c => c[0]);
+    const lats = coordinates.map(c => c[1]);
+    
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+
+    // Create a buffer around the bounding box (5% padding)
+    const lngBuffer = (maxLng - minLng) * 0.05;
+    const latBuffer = (maxLat - minLat) * 0.05;
+
+    // Generate a rectangular polygon (bounding box with buffer)
+    // For a more accurate polygon, we could use a convex hull algorithm
+    // For now, we'll create a rectangle that encompasses all points
+    const polygon = {
+      type: 'Polygon',
+      coordinates: [[
+        [minLng - lngBuffer, minLat - latBuffer], // Southwest
+        [maxLng + lngBuffer, minLat - latBuffer], // Southeast
+        [maxLng + lngBuffer, maxLat + latBuffer], // Northeast
+        [minLng - lngBuffer, maxLat + latBuffer], // Northwest
+        [minLng - lngBuffer, minLat - latBuffer]  // Close polygon
+      ]]
+    };
+
+    // Create GeoJSON Feature with location data stored in properties
+    const geojson = {
+      type: 'Feature',
+      properties: {
+        name: 'Generated Delivery Zone',
+        description: `Zone covering ${locations.length} locations`,
+        generatedAt: new Date().toISOString(),
+        locationCount: locations.length,
+        sourceLocations: locations.map(loc => ({
+          placeId: loc.placeId,
+          description: loc.description,
+          formattedAddress: loc.formattedAddress,
+          coordinates: loc.coordinates
+        }))
+      },
+      geometry: polygon
+    };
+
+    res.json({
+      success: true,
+      geojson: geojson,
+      geometry: polygon,
+      boundingBox: {
+        minLng,
+        maxLng,
+        minLat,
+        maxLat
+      }
+    });
+  } catch (error) {
+    console.error('Error generating GeoJSON:', error);
+    res.status(500).json({
+      error: 'Internal server error',
+      message: 'Failed to generate GeoJSON'
     });
   }
 });

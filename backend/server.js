@@ -98,21 +98,50 @@ async function loadFullApplication() {
     const { Server } = require('socket.io');
     const io = new Server(server, {
       cors: {
-        origin: [
-          process.env.FRONTEND_URL || 'http://localhost:3000',
-          process.env.ADMIN_URL || 'http://localhost:3001',
-          'http://localhost:3002',
-          'https://drink-suite-customer-910510650031.us-central1.run.app',
-          'https://drink-suite-admin-910510650031.us-central1.run.app',
-          'https://dialadrink-customer-p6bkgryxqa-uc.a.run.app',
-          'https://dialadrink-admin-p6bkgryxqa-uc.a.run.app',
-          'https://dialadrink-customer-910510650031.us-central1.run.app',
-          'https://dialadrink-admin-910510650031.us-central1.run.app',
-          'https://dialadrink-backend-910510650031.us-central1.run.app',
-          'https://liquoros-customer-910510650031.us-central1.run.app',
-          'https://liquoros-admin-910510650031.us-central1.run.app',
-          'https://liquoros-backend-910510650031.us-central1.run.app'
-        ],
+        origin: (origin, callback) => {
+          // Allow requests with no origin (like mobile apps or Postman)
+          if (!origin) {
+            return callback(null, true);
+          }
+          
+          const allowedOrigins = [
+            process.env.FRONTEND_URL || 'http://localhost:3000',
+            process.env.ADMIN_URL || 'http://localhost:3001',
+            process.env.ZEUS_URL || 'http://localhost:3003',
+            'http://localhost:3002',
+            'https://drink-suite-customer-910510650031.us-central1.run.app',
+            'https://drink-suite-admin-910510650031.us-central1.run.app',
+            'https://dialadrink-customer-p6bkgryxqa-uc.a.run.app',
+            'https://dialadrink-admin-p6bkgryxqa-uc.a.run.app',
+            'https://dialadrink-customer-910510650031.us-central1.run.app',
+            'https://dialadrink-admin-910510650031.us-central1.run.app',
+            'https://dialadrink-backend-910510650031.us-central1.run.app',
+            'https://deliveryos-customer-910510650031.us-central1.run.app',
+            'https://deliveryos-admin-910510650031.us-central1.run.app',
+            'https://deliveryos-backend-910510650031.us-central1.run.app',
+            // Netlify Production Domains
+            'https://dialadrink.thewolfgang.tech',
+            'https://dialadrink-admin.thewolfgang.tech'
+          ];
+          
+          // Check exact match
+          if (allowedOrigins.includes(origin)) {
+            return callback(null, true);
+          }
+          
+          // Check regex pattern for thewolfgang.tech subdomains
+          if (/^https:\/\/[^.]+\.thewolfgang\.tech$/.test(origin)) {
+            return callback(null, true);
+          }
+          
+          // Check netlify.app subdomains
+          if (/^https:\/\/[^.]+\.netlify\.app$/.test(origin)) {
+            return callback(null, true);
+          }
+          
+          console.warn(`Socket.IO blocked CORS origin: ${origin}`);
+          callback(new Error('Not allowed by CORS'));
+        },
         methods: ["GET", "POST"],
         credentials: true
       }

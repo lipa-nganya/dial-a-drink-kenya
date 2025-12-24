@@ -47,7 +47,7 @@ module.exports = ({ config }) => {
       owner: 'dialadrink',
       name: `Retail Scanner${appNameSuffix}`,
       slug: 'retail-scanner',
-      version: '1.0.0',
+      version: '1.0.1',
       orientation: 'portrait',
       icon: './assets/icon.png',
       userInterfaceStyle: 'light',

@@ -14,7 +14,7 @@ function generateEmailToken() {
 function createTransporter() {
   // Use SMTP environment variables (matching timelog project format)
   const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com';
-  const smtpPort = process.env.SMTP_PORT || process.env.EMAIL_PORT || 587;
+  let smtpPort = process.env.SMTP_PORT || process.env.EMAIL_PORT || 587;
   const smtpSecure = process.env.SMTP_SECURE === 'true';
   const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
   const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD;
@@ -30,13 +30,34 @@ function createTransporter() {
     return null;
   }
 
+  // Fix incorrect port 5001 (should be 587 for Gmail TLS)
+  if (smtpPort === '5001' || smtpPort === 5001) {
+    console.warn('⚠️  SMTP_PORT 5001 is incorrect for Gmail. Using 587 (TLS) instead.');
+    smtpPort = 587;
+  }
+
+  const portNumber = Number(smtpPort);
+  const isSecure = smtpSecure || portNumber === 465;
+
+  console.log('📧 Creating SMTP transporter:', {
+    host: smtpHost,
+    port: portNumber,
+    secure: isSecure,
+    user: smtpUser,
+    from: smtpFrom
+  });
+
   return nodemailer.createTransport({
     host: smtpHost,
-    port: Number(smtpPort),
-    secure: smtpSecure || Number(smtpPort) === 465, // Use SMTP_SECURE or default based on port
+    port: portNumber,
+    secure: isSecure,
     auth: {
       user: smtpUser,
       pass: smtpPass
+    },
+    tls: {
+      // Do not fail on invalid certs
+      rejectUnauthorized: false
     }
   });
 }
@@ -191,10 +212,149 @@ async function sendAdminInvite(email, token, username) {
   }
 }
 
+/**
+ * Send partner invitation email for sandbox account
+ * @param {string} email - Recipient email address
+ * @param {string} token - Invitation token
+ * @param {string} partnerName - Partner/company name
+ * @param {string} apiKey - Sandbox API key
+ * @returns {Promise<Object>} Result of email sending
+ */
+async function sendPartnerInvite(email, token, partnerName, apiKey) {
+  try {
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      return {
+        success: false,
+        error: 'Email service not configured'
+      };
+    }
+
+    // Determine partner console URL based on environment
+    const hostname = process.env.PARTNER_CONSOLE_URL || 'http://localhost:3002';
+    const inviteUrl = `${hostname}/setup-password?token=${token}`;
+
+    // Use SMTP_FROM from dial-a-drink project configuration
+    const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER;
+    const mailOptions = {
+      from: `"Wolfgang - DeliveryOS" <${smtpFrom}>`,
+      to: email,
+      subject: 'Welcome to DeliveryOS Valkyrie - Sandbox Account Created',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #A22C29 0%, #902923 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 28px;">Welcome to DeliveryOS Valkyrie</h1>
+            <p style="margin: 10px 0 0 0; opacity: 0.9;">Your sandbox account has been created</p>
+          </div>
+          
+          <div style="background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px;">
+            <p style="color: #333; font-size: 16px; line-height: 1.6;">
+              Hello,
+            </p>
+            <p style="color: #333; font-size: 16px; line-height: 1.6;">
+              Your sandbox account for <strong>${partnerName}</strong> has been successfully created!
+            </p>
+            
+            <div style="background: white; border-left: 4px solid #A22C29; padding: 20px; margin: 20px 0; border-radius: 4px;">
+              <h3 style="margin: 0 0 15px 0; color: #A22C29;">Your Sandbox API Key</h3>
+              <p style="margin: 0 0 10px 0; font-family: 'Courier New', monospace; background: #f5f5f5; padding: 10px; border-radius: 4px; word-break: break-all;">
+                ${apiKey}
+              </p>
+              <p style="margin: 10px 0 0 0; color: #666; font-size: 12px;">
+                ⚠️ Store this API key securely. You can regenerate it from the Partner Console.
+              </p>
+            </div>
+            
+            <div style="background: white; padding: 20px; margin: 20px 0; border-radius: 4px; border: 1px solid #e0e0e0;">
+              <h3 style="margin: 0 0 15px 0; color: #333;">Access Your Partner Console</h3>
+              <p style="margin: 0 0 20px 0; color: #666;">
+                Click the button below to set your password and access your partner console:
+              </p>
+              <div style="text-align: center;">
+                <a href="${inviteUrl}" 
+                   style="background-color: #A22C29; color: white; padding: 14px 28px; 
+                          text-decoration: none; border-radius: 6px; font-weight: bold; 
+                          display: inline-block;">
+                  Set Password & Access Console
+                </a>
+              </div>
+              <p style="margin: 20px 0 0 0; color: #666; font-size: 12px;">
+                Or copy and paste this link into your browser:<br>
+                <a href="${inviteUrl}" style="color: #A22C29; word-break: break-all;">${inviteUrl}</a>
+              </p>
+            </div>
+            
+            <div style="background: #FFF3CD; border: 1px solid #FFC107; padding: 15px; margin: 20px 0; border-radius: 4px;">
+              <p style="margin: 0; color: #856404; font-size: 14px;">
+                <strong>Important:</strong> This invitation link will expire in 7 days. If you didn't request this account, please ignore this email.
+              </p>
+            </div>
+            
+            <p style="color: #666; font-size: 14px; margin-top: 30px;">
+              Need help? Visit our <a href="https://thewolfgang.tech/developers-docs.html" style="color: #A22C29;">documentation</a> or contact support.
+            </p>
+          </div>
+          
+          <div style="text-align: center; margin-top: 20px; color: #999; font-size: 12px;">
+            <p>© ${new Date().getFullYear()} Wolfgang - DeliveryOS Valkyrie API</p>
+          </div>
+        </div>
+      `,
+      text: `
+        Welcome to DeliveryOS Valkyrie
+        
+        Your sandbox account for ${partnerName} has been successfully created!
+        
+        Your Sandbox API Key:
+        ${apiKey}
+        
+        ⚠️ Store this API key securely. You can regenerate it from the Partner Console.
+        
+        Access Your Partner Console:
+        Click the link below to set your password and access your partner console:
+        ${inviteUrl}
+        
+        This invitation link will expire in 7 days.
+        
+        Need help? Visit our documentation at https://thewolfgang.tech/developers-docs.html
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log(`✅ Partner invite email sent to ${email}`);
+    return {
+      success: true,
+      messageId: info.messageId
+    };
+  } catch (error) {
+    console.error(`❌ Error sending partner invite email to ${email}:`, error);
+    console.error('   Error details:', {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode,
+      stack: error.stack
+    });
+    return {
+      success: false,
+      error: error.message,
+      details: {
+        code: error.code,
+        command: error.command,
+        response: error.response
+      }
+    };
+  }
+}
+
 module.exports = {
   sendEmailConfirmation,
   generateEmailToken,
   createTransporter,
-  sendAdminInvite
+  sendAdminInvite,
+  sendPartnerInvite
 };
 

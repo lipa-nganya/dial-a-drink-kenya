@@ -36,6 +36,7 @@ import { api } from '../services/api';
 import io from 'socket.io-client';
 import { useAdmin } from '../contexts/AdminContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { getBackendUrl } from '../utils/backendUrl';
 import {
   getOrderStatusChipProps,
   getPaymentMethodChipProps,
@@ -67,31 +68,8 @@ const AdminOverview = () => {
   }, [navigate, setIsAuthenticated]);
 
   useEffect(() => {
-    // Initialize socket connection - use same logic as API calls
-    const hostname = window.location.hostname;
-    const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
-    const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
-    
-    // CRITICAL: Always use localhost when running locally
-    let socketUrl;
-    if (isLocalHost || isLanHost) {
-      socketUrl = 'http://localhost:5001';
-    } else {
-      // For cloud-dev deployments, use REACT_APP_API_URL if set
-      const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
-      if (isManagedHost) {
-        const apiUrl = process.env.REACT_APP_API_URL;
-        if (apiUrl) {
-          socketUrl = apiUrl.replace('/api', '');
-        } else {
-          socketUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
-        }
-      } else {
-        const apiUrl = process.env.REACT_APP_API_URL;
-        socketUrl = apiUrl ? apiUrl.replace('/api', '') : 'https://dialadrink-backend-910510650031.us-central1.run.app';
-      }
-    }
-    
+    // Initialize socket connection - use backend URL utility
+    const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);
     newSocket.emit('join-admin');
     
