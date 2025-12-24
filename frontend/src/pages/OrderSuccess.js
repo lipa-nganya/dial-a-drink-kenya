@@ -9,6 +9,7 @@ import { useCustomer } from '../contexts/CustomerContext';
 import CustomerLogin from '../components/CustomerLogin';
 import OrderTracking from './OrderTracking';
 import io from 'socket.io-client';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const OrderSuccess = () => {
   const navigate = useNavigate();
@@ -104,13 +105,7 @@ const OrderSuccess = () => {
   useEffect(() => {
     if (paymentPending && orderId) {
       // Set up Socket.IO listener for real-time payment confirmation
-      const isHosted =
-        window.location.hostname.includes('onrender.com') ||
-        window.location.hostname.includes('run.app');
-      const socketUrl = isHosted
-        ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-        : 'http://localhost:5001';
-      
+      const socketUrl = getBackendUrl();
       const socket = io(socketUrl);
       
       // Join the order-specific room to listen for payment confirmation

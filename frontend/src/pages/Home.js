@@ -15,6 +15,7 @@ import DrinkCard from '../components/DrinkCard';
 import CountdownTimer from '../components/CountdownTimer';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const Home = () => {
   const [categories, setCategories] = useState([]);
@@ -39,23 +40,14 @@ const Home = () => {
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       // If it's localhost, replace with backend URL
       if (imagePath.includes('localhost:5001')) {
-        const isHosted = window.location.hostname.includes('onrender.com') || 
-                        window.location.hostname.includes('run.app');
-        const backendUrl = isHosted 
-          ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-          : 'http://localhost:5001';
+        const backendUrl = getBackendUrl();
         return imagePath.replace('http://localhost:5001', backendUrl);
       }
       return imagePath;
     }
     
-    // For relative paths, construct the full URL
-    const isHosted = window.location.hostname.includes('onrender.com') ||
-                    window.location.hostname.includes('run.app');
-    const backendUrl = isHosted 
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
-    
+    // For relative paths, construct the full URL using backend URL utility
+    const backendUrl = getBackendUrl();
     return `${backendUrl}${imagePath}`;
   };
 

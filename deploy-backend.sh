@@ -15,14 +15,14 @@ gcloud config set run/region us-central1
 
 # Build and push image
 echo "📦 Building container image..."
-gcloud builds submit --tag gcr.io/drink-suite/liquoros-backend .
+gcloud builds submit --tag gcr.io/drink-suite/deliveryos-backend .
 
 # Deploy to Cloud Run
 # Note: We only set NODE_ENV here. Other env vars should be set via sync-env-to-cloud-run.sh
 # This preserves existing environment variables
 echo "🚀 Deploying to Cloud Run..."
-gcloud run deploy liquoros-backend \
-  --image gcr.io/drink-suite/liquoros-backend \
+gcloud run deploy deliveryos-backend \
+  --image gcr.io/drink-suite/deliveryos-backend \
   --platform managed \
   --allow-unauthenticated \
   --update-env-vars "NODE_ENV=production" \
@@ -32,7 +32,7 @@ gcloud run deploy liquoros-backend \
 echo ""
 echo "✅ Backend deployed successfully!"
 echo "📋 Service URL:"
-gcloud run services describe liquoros-backend --format="value(status.url)"
+gcloud run services describe deliveryos-backend --format="value(status.url)"
 echo ""
 echo "💡 Note: Environment variables are preserved during deployment."
 echo "   To update env vars, use: ./sync-env-to-cloud-run.sh"

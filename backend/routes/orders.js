@@ -641,4 +641,156 @@ router.post('/find-all', async (req, res) => {
   }
 });
 
+// Calculate order cost
+router.get('/:id/cost', async (req, res) => {
+  try {
+    const { calculateFullOrderCost, calculateOrderCreationCost, calculatePaymentCost, calculateStatusUpdateCost, COSTS } = require('../services/orderCostCalculator');
+    const USD_TO_KES_RATE = 130; // Exchange rate: 1 USD = 130 KES
+    
+    const order = await db.Order.findByPk(req.params.id, {
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          attributes: ['id', 'name']
+        }
+      ]
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    // Get order data
+    const orderData = {
+      id: order.id,
+      items: order.items || [],
+      driverId: order.driverId,
+      paymentType: order.paymentType,
+      paymentMethod: order.paymentMethod,
+      status: order.status,
+      smsNotificationsSent: 0 // This would need to be tracked separately
+    };
+    
+    // Calculate costs
+    const creationCost = calculateOrderCreationCost(orderData);
+    
+    let paymentCost = null;
+    if (order.paymentType === 'pay_now' && order.paymentMethod === 'mobile_money') {
+      paymentCost = calculatePaymentCost(order.id, 'mobile_money');
+    }
+    
+    // Determine status updates that occurred
+    const statusFlow = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'];
+    const currentStatusIndex = statusFlow.indexOf(order.status);
+    const statusUpdates = statusFlow.slice(1, currentStatusIndex + 1);
+    
+    const statusUpdateCost = calculateStatusUpdateCost(order.id, statusUpdates);
+    
+    // Calculate total
+    const totalCost = 
+      creationCost.costs.total +
+      (paymentCost ? paymentCost.costs.total : 0) +
+      statusUpdateCost.costs.total;
+    
+    res.json({
+      orderId: order.id,
+      orderStatus: order.status,
+      paymentType: order.paymentType,
+      paymentMethod: order.paymentMethod,
+      costBreakdown: {
+        creation: {
+          cost: {
+            kes: creationCost.costs.total,
+            usd: (creationCost.costs.total / USD_TO_KES_RATE).toFixed(6),
+            formatted: `KES ${creationCost.costs.total.toFixed(4)} ($${(creationCost.costs.total / USD_TO_KES_RATE).toFixed(6)})`
+          },
+          operations: {
+            database: {
+              reads: creationCost.costs.database.reads,
+              writes: creationCost.costs.database.writes,
+              transactions: creationCost.costs.database.transactions
+            },
+            externalAPIs: {
+              sms: creationCost.costs.externalAPIs.sms,
+              pushNotifications: creationCost.costs.externalAPIs.pushNotifications
+            },
+            socket: creationCost.costs.socket.messages
+          }
+        },
+        payment: paymentCost ? {
+          cost: {
+            kes: paymentCost.costs.total,
+            usd: (paymentCost.costs.total / USD_TO_KES_RATE).toFixed(6),
+            formatted: `KES ${paymentCost.costs.total.toFixed(4)} ($${(paymentCost.costs.total / USD_TO_KES_RATE).toFixed(6)})`
+          },
+          operations: {
+            database: {
+              reads: paymentCost.costs.database.reads,
+              writes: paymentCost.costs.database.writes
+            },
+            externalAPIs: {
+              mpesaStkPush: paymentCost.costs.externalAPIs.mpesaStkPush,
+              mpesaCallbacks: paymentCost.costs.externalAPIs.mpesaCallbacks
+            },
+            socket: paymentCost.costs.socket.messages
+          }
+        } : null,
+        statusUpdates: {
+          cost: {
+            kes: statusUpdateCost.costs.total,
+            usd: (statusUpdateCost.costs.total / USD_TO_KES_RATE).toFixed(6),
+            formatted: `KES ${statusUpdateCost.costs.total.toFixed(4)} ($${(statusUpdateCost.costs.total / USD_TO_KES_RATE).toFixed(6)})`
+          },
+          statuses: statusUpdates,
+          operations: {
+            database: {
+              reads: statusUpdateCost.costs.database.reads,
+              writes: statusUpdateCost.costs.database.writes
+            },
+            socket: statusUpdateCost.costs.socket.messages
+          }
+        }
+      },
+      totalCost: {
+        kes: totalCost,
+        usd: (totalCost / USD_TO_KES_RATE).toFixed(6),
+        formatted: `KES ${totalCost.toFixed(4)} ($${(totalCost / USD_TO_KES_RATE).toFixed(6)})`
+      },
+      summary: {
+        totalDatabaseOperations: 
+          creationCost.costs.database.reads + creationCost.costs.database.writes + creationCost.costs.database.transactions +
+          (paymentCost ? paymentCost.costs.database.reads + paymentCost.costs.database.writes : 0) +
+          statusUpdateCost.costs.database.reads + statusUpdateCost.costs.database.writes,
+        totalExternalAPICalls:
+          creationCost.costs.externalAPIs.sms + creationCost.costs.externalAPIs.mpesaStkPush + creationCost.costs.externalAPIs.pushNotifications +
+          (paymentCost ? paymentCost.costs.externalAPIs.mpesaStkPush + paymentCost.costs.externalAPIs.mpesaCallbacks : 0),
+        totalSocketMessages:
+          creationCost.costs.socket.messages +
+          (paymentCost ? paymentCost.costs.socket.messages : 0) +
+          statusUpdateCost.costs.socket.messages,
+        computeTime: {
+          milliseconds: creationCost.duration.milliseconds + 
+                       (paymentCost ? paymentCost.duration.milliseconds : 0) +
+                       statusUpdateCost.duration.milliseconds,
+          seconds: ((creationCost.duration.milliseconds + 
+                    (paymentCost ? paymentCost.duration.milliseconds : 0) +
+                    statusUpdateCost.duration.milliseconds) / 1000).toFixed(2)
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error calculating order cost:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;

@@ -728,7 +728,7 @@ const Settings = () => {
           </Typography>
         </Box>
         <Typography variant="h6" color="text.secondary">
-          Manage your LiquorOS configuration
+          Manage your Dial a Drink Kenya configuration
         </Typography>
       </Box>
 

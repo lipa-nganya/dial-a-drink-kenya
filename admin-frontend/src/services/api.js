@@ -14,14 +14,30 @@ const resolveApiBaseUrl = () => {
     return { url: DEFAULT_LOCAL_API_BASE, source: 'local-hostname' };
   }
 
-  // For cloud-dev deployments (run.app, onrender.com, etc.), use REACT_APP_API_URL if set
-  const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
+  // Cloud Run dev deployments (run.app)
+  const isCloudRunDev = hostname.includes('run.app');
+  if (isCloudRunDev) {
+    const explicitUrl = process.env.REACT_APP_API_URL;
+    if (explicitUrl) {
+      return { url: explicitUrl, source: 'cloud-run-dev-env' };
+    }
+    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'cloud-run-dev-default' };
+  }
+
+  // Netlify production deployments (thewolfgang.tech)
+  const isNetlifyProd = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
+  if (isNetlifyProd) {
+    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'netlify-prod' };
+  }
+
+  // Other managed hosts (onrender.com, etc.)
+  const isManagedHost = hostname.includes('onrender.com');
   if (isManagedHost) {
     const explicitUrl = process.env.REACT_APP_API_URL;
     if (explicitUrl) {
-      return { url: explicitUrl, source: 'cloud-dev-env' };
+      return { url: explicitUrl, source: 'managed-host-env' };
     }
-    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'cloud-dev-default' };
+    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'managed-host-default' };
   }
 
   // Fallback: Use REACT_APP_API_URL if set (for other hosted environments)
@@ -35,13 +51,45 @@ const resolveApiBaseUrl = () => {
   return { url: DEFAULT_PRODUCTION_API_BASE, source: 'fallback-production' };
 };
 
-const { url: API_BASE_URL, source: apiSource } = resolveApiBaseUrl();
+// CRITICAL: Resolve API URL at runtime, not module load time
+// This ensures the hostname is checked when the code runs, not when it's bundled
+const getApiBaseUrl = () => {
+  const { url } = resolveApiBaseUrl();
+  return url;
+};
+
+// Create axios instance with empty baseURL - we'll set it in the interceptor
+// This prevents baseURL from being evaluated at build time
+const api = axios.create({
+  baseURL: '', // Empty string - will be set by interceptor
+  headers: {
+    'Content-Type': 'application/json'
+  }
+});
+
+// CRITICAL: First interceptor - ALWAYS set baseURL at request time
+// This must be the FIRST interceptor to ensure baseURL is always set correctly
+api.interceptors.request.use((config) => {
+  // Always resolve URL at request time to ensure correct hostname detection
+  // This runs on EVERY request, so hostname is always checked at runtime
+  const apiBaseUrl = getApiBaseUrl();
+  config.baseURL = apiBaseUrl;
+  
+  // Debug logging in development
+  if (typeof window !== 'undefined' && window.location.hostname.includes('thewolfgang.tech')) {
+    console.log('[API Interceptor] Setting baseURL to:', apiBaseUrl, 'for request:', config.url);
+  }
+  
+  return config;
+}, (error) => Promise.reject(error));
 
 if (typeof window !== 'undefined') {
   // eslint-disable-next-line no-console
   console.log('=== ADMIN API CONFIGURATION ===');
   // eslint-disable-next-line no-console
-  console.log('API_BASE_URL:', API_BASE_URL);
+  console.log('API_BASE_URL:', getApiBaseUrl());
+  // eslint-disable-next-line no-console
+  const { source: apiSource } = resolveApiBaseUrl();
   // eslint-disable-next-line no-console
   console.log('API source:', apiSource);
   // eslint-disable-next-line no-console
@@ -51,13 +99,6 @@ if (typeof window !== 'undefined') {
   // eslint-disable-next-line no-console
   console.log('==============================');
 }
-
-const api = axios.create({
-  baseURL: API_BASE_URL,
-  headers: {
-    'Content-Type': 'application/json'
-  }
-});
 
 api.interceptors.request.use(
   (config) => {

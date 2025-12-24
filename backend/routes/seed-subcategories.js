@@ -34,7 +34,7 @@ router.post('/seed-subcategories', async (req, res) => {
       ]},
       // Beer
       { categoryName: 'Beer', subcategories: [
-        'All Beer', 'Cider', 'Lager', 'Malt', 'Draught'
+        'Cider Beer', 'Lager Beer', 'Malt Beer', 'Draught Beer', 'Strong Beer', 'Non-alcoholic Beers', 'craft beer'
       ]},
       // Tequila
       { categoryName: 'Tequila', subcategories: [

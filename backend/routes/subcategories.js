@@ -15,14 +15,36 @@ router.get('/', async (req, res) => {
     
     const subcategories = await db.SubCategory.findAll({
       where: whereClause,
-      include: [{
-        model: db.Category,
-        as: 'category'
-      }],
-      order: [['name', 'ASC']]
+      include: [
+        {
+          model: db.Category,
+          as: 'category'
+        },
+        {
+          model: db.Drink,
+          as: 'drinks',
+          required: false,
+          attributes: ['id']
+        }
+      ]
     });
     
-    res.json(subcategories);
+    // Sort by drinks count (descending), then by name (ascending)
+    // Subcategories with 0 items will be at the end
+    const sortedSubcategories = subcategories.sort((a, b) => {
+      const aCount = a.drinks ? a.drinks.length : 0;
+      const bCount = b.drinks ? b.drinks.length : 0;
+      
+      // First sort by count (descending)
+      if (bCount !== aCount) {
+        return bCount - aCount;
+      }
+      
+      // If counts are equal, sort by name (ascending)
+      return a.name.localeCompare(b.name);
+    });
+    
+    res.json(sortedSubcategories);
   } catch (error) {
     console.error('Error fetching subcategories:', error);
     res.status(500).json({ error: error.message });
@@ -39,14 +61,36 @@ router.get('/category/:categoryId', async (req, res) => {
         categoryId: categoryId,
         isActive: true 
       },
-      include: [{
-        model: db.Category,
-        as: 'category'
-      }],
-      order: [['name', 'ASC']]
+      include: [
+        {
+          model: db.Category,
+          as: 'category'
+        },
+        {
+          model: db.Drink,
+          as: 'drinks',
+          required: false,
+          attributes: ['id']
+        }
+      ]
     });
     
-    res.json(subcategories);
+    // Sort by drinks count (descending), then by name (ascending)
+    // Subcategories with 0 items will be at the end
+    const sortedSubcategories = subcategories.sort((a, b) => {
+      const aCount = a.drinks ? a.drinks.length : 0;
+      const bCount = b.drinks ? b.drinks.length : 0;
+      
+      // First sort by count (descending)
+      if (bCount !== aCount) {
+        return bCount - aCount;
+      }
+      
+      // If counts are equal, sort by name (ascending)
+      return a.name.localeCompare(b.name);
+    });
+    
+    res.json(sortedSubcategories);
   } catch (error) {
     console.error('Error fetching subcategories by category:', error);
     res.status(500).json({ error: error.message });

@@ -1,8 +1,8 @@
-# LiquorOS - Complete Ecosystem Documentation
+# Dial a Drink Kenya - Complete Ecosystem Documentation
 
 ## Overview
 
-LiquorOS is a comprehensive beverage delivery platform ecosystem consisting of three integrated applications:
+Dial a Drink Kenya is a comprehensive beverage delivery platform ecosystem consisting of three integrated applications:
 
 1. **Customer Site** - Web application for customers to browse, order, and track deliveries
 2. **Driver App** - Mobile application (React Native/Expo) for drivers to manage deliveries and earnings
@@ -210,8 +210,8 @@ Delivery fees are calculated based on:
 - Order history
 
 **Deployment:**
-- Hosted on Cloud Run as `liquoros-customer`
-- URL: `https://liquoros-customer-910510650031.us-central1.run.app`
+- Hosted on Cloud Run as `deliveryos-customer`
+- URL: `https://deliveryos-customer-910510650031.us-central1.run.app`
 
 ### Driver App (`DDDriverExpo/`)
 
@@ -260,8 +260,8 @@ Delivery fees are calculated based on:
 - **Financial Reports**: Revenue tracking, wallet balances
 
 **Deployment:**
-- Hosted on Cloud Run as `liquoros-admin`
-- URL: `https://liquoros-admin-910510650031.us-central1.run.app`
+- Hosted on Cloud Run as `deliveryos-admin`
+- URL: `https://deliveryos-admin-910510650031.us-central1.run.app`
 
 ---
 

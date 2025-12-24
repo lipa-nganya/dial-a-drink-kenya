@@ -58,7 +58,7 @@ const Header = () => {
           fontSize: '0.9rem',
           color: colors.textPrimary
         }}>
-          LiquorOS
+          Dial a Drink Kenya
         </Typography>
       </Toolbar>
       <List sx={{ 
@@ -202,7 +202,7 @@ const Header = () => {
                   }}
                   onClick={() => navigate('/')}
                 >
-                  LiquorOS
+                  Dial a Drink Kenya
                 </Typography>
               </Box>
           

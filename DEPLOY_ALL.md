@@ -74,7 +74,7 @@ npm install
 npm run build
 
 # Deploy to Cloud Run
-gcloud run deploy liquoros-admin \
+gcloud run deploy deliveryos-admin \
   --source . \
   --platform managed \
   --allow-unauthenticated \

@@ -7,21 +7,21 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/liquoros-backend:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/liquoros-backend:latest'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:latest'
       - '.'
 
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/liquoros-backend:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/liquoros-backend:latest'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:latest'
 
   # Deploy container image to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
@@ -29,9 +29,9 @@ steps:
     args:
       - 'run'
       - 'deploy'
-      - 'liquoros-backend'
+      - 'deliveryos-backend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/liquoros-backend:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -49,8 +49,8 @@ steps:
       # or via Secret Manager to preserve them across deployments
 
 images:
-  - 'gcr.io/$PROJECT_ID/liquoros-backend:$SHORT_SHA'
-  - 'gcr.io/$PROJECT_ID/liquoros-backend:latest'
+  - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/deliveryos-backend:latest'
 
 options:
   machineType: 'E2_HIGHCPU_8'

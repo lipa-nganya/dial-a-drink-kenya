@@ -20,6 +20,7 @@
   "scripts": {
     "start": "PORT=3001 react-scripts start",
     "build": "react-scripts build",
+    "postbuild": "echo 'Admin frontend build completed successfully' && cp public/_redirects build/ 2>/dev/null || echo 'No _redirects file to copy' && cp public/netlify.toml build/ 2>/dev/null || echo 'No netlify.toml file to copy'",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -43,4 +44,9 @@
   },
   "proxy": "http://localhost:5001"
 }
+
+
+
+
+
 

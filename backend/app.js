@@ -104,6 +104,22 @@ app.use('/api/add-out-of-stock-whisky', require('./routes/add-out-of-stock-whisk
 app.use('/api/add-cognac-items', require('./routes/add-cognac-items'));
 app.use('/api/add-missing-beer-items', require('./routes/add-missing-beer-items'));
 app.use('/api/assign-wine-subcategories', require('./routes/assign-wine-subcategories'));
+app.use('/api/assign-beer-subcategories', require('./routes/assign-beer-subcategories'));
+app.use('/api/update-beer-subcategories', require('./routes/update-beer-subcategories'));
+app.use('/api/update-brandy-subcategories', require('./routes/update-brandy-subcategories'));
+app.use('/api/update-champagne-subcategories', require('./routes/update-champagne-subcategories'));
+app.use('/api/update-cognac-subcategories', require('./routes/update-cognac-subcategories'));
+app.use('/api/update-gin-subcategories', require('./routes/update-gin-subcategories'));
+app.use('/api/update-liqueur-subcategories', require('./routes/update-liqueur-subcategories'));
+app.use('/api/update-rum-subcategories', require('./routes/update-rum-subcategories'));
+app.use('/api/update-smokes-subcategories', require('./routes/update-smokes-subcategories'));
+app.use('/api/update-soft-drinks-subcategories', require('./routes/update-soft-drinks-subcategories'));
+app.use('/api/update-tequila-subcategories', require('./routes/update-tequila-subcategories'));
+app.use('/api/move-vapes-to-smokes', require('./routes/move-vapes-to-smokes'));
+app.use('/api/remove-vapes-category', require('./routes/remove-vapes-category'));
+app.use('/api/update-vodka-subcategories', require('./routes/update-vodka-subcategories'));
+app.use('/api/update-whisky-subcategories', require('./routes/update-whisky-subcategories'));
+app.use('/api/update-wine-subcategories', require('./routes/update-wine-subcategories'));
 app.use('/api/cleanup', require('./routes/cleanup-drinks'));
 app.use('/api/scrape-images', require('./routes/scrape-images'));
 app.use('/api/places', require('./routes/places'));
@@ -115,6 +131,7 @@ app.use('/api/drivers', require('./routes/drivers'));
 app.use('/api/driver-orders', require('./routes/driver-orders'));
 app.use('/api/driver-wallet', require('./routes/driver-wallet'));
 app.use('/api/branches', require('./routes/branches'));
+app.use('/api/territories', require('./routes/territories'));
 app.use('/api/developers', require('./routes/developers'));
 
 // Valkyrie Partner API (feature flag controlled)

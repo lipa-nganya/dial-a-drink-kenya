@@ -33,6 +33,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
 import io from 'socket.io-client';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const MyOrders = () => {
   const navigate = useNavigate();
@@ -61,13 +62,7 @@ const MyOrders = () => {
   useEffect(() => {
     if (orders.length === 0) return; // Don't set up socket if no orders yet
     
-    const isHosted =
-      window.location.hostname.includes('onrender.com') ||
-      window.location.hostname.includes('run.app');
-    const socketUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
-    
+    const socketUrl = getBackendUrl();
     const socket = io(socketUrl);
     
     // Join order-specific rooms for all orders

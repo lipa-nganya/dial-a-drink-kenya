@@ -29,6 +29,16 @@ module.exports = (sequelize, DataTypes) => {
     costSaved: {
       type: DataTypes.DECIMAL(10, 4),
       defaultValue: 0
+    },
+    latitude: {
+      type: DataTypes.DECIMAL(10, 8),
+      allowNull: true,
+      comment: 'Latitude coordinate from Google Maps API'
+    },
+    longitude: {
+      type: DataTypes.DECIMAL(11, 8),
+      allowNull: true,
+      comment: 'Longitude coordinate from Google Maps API'
     }
   }, {
     tableName: 'saved_addresses',

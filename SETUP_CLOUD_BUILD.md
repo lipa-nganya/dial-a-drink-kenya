@@ -53,7 +53,7 @@ gcloud services enable containerregistry.googleapis.com
 
 3. **Advanced** (Optional):
    - **Substitution variables**:
-     - `_SERVICE_NAME`: `liquoros-backend`
+     - `_SERVICE_NAME`: `deliveryos-backend`
      - `_REGION`: `us-central1`
 
 4. **Click "Create"**
@@ -152,13 +152,13 @@ gcloud run deploy dialadrink-backend \
 ### View Logs
 ```bash
 # Backend logs
-gcloud run services logs read liquoros-backend --region us-central1
+gcloud run services logs read deliveryos-backend --region us-central1
 
 # Frontend logs
-gcloud run services logs read liquoros-customer --region us-central1
+gcloud run services logs read deliveryos-customer --region us-central1
 
 # Admin logs
-gcloud run services logs read liquoros-admin --region us-central1
+gcloud run services logs read deliveryos-admin --region us-central1
 ```
 
 ## 🎯 How It Works

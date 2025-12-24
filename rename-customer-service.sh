@@ -1,12 +1,12 @@
 #!/bin/bash
-# Script to rename the customer frontend service from dialadrink-customer to liquoros-customer
+# Script to rename the customer frontend service from dialadrink-customer to deliveryos-customer
 # Note: Cloud Run doesn't support renaming services directly, so we deploy a new service
 
 set -e
 
 echo "🔄 Renaming Customer Frontend Service"
 echo "   Old: dialadrink-customer"
-echo "   New: liquoros-customer"
+echo "   New: deliveryos-customer"
 echo ""
 
 # Set project and region
@@ -21,18 +21,18 @@ npm install
 npm run build
 
 # Deploy new service with new name
-echo "🚀 Deploying new service: liquoros-customer..."
-gcloud run deploy liquoros-customer \
+echo "🚀 Deploying new service: deliveryos-customer..."
+gcloud run deploy deliveryos-customer \
   --source . \
   --platform managed \
   --allow-unauthenticated \
-  --set-env-vars "REACT_APP_API_URL=https://liquoros-backend-910510650031.us-central1.run.app/api" \
+  --set-env-vars "REACT_APP_API_URL=https://deliveryos-backend-910510650031.us-central1.run.app/api" \
   --memory 256Mi
 
 echo ""
 echo "✅ New service deployed successfully!"
 echo "📋 New Service URL:"
-NEW_URL=$(gcloud run services describe liquoros-customer --format="value(status.url)")
+NEW_URL=$(gcloud run services describe deliveryos-customer --format="value(status.url)")
 echo "   $NEW_URL"
 
 echo ""

@@ -52,6 +52,7 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { fetchProductByBarcode } from '../services/barcode';
 import io from 'socket.io-client';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const POS = () => {
   const { isDarkMode, colors } = useTheme();
@@ -92,24 +93,7 @@ const POS = () => {
     }, 2000); // Poll every 2 seconds
 
     // Initialize socket connection for payment confirmation
-    const hostname = window.location.hostname;
-    const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
-    const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
-    
-    let socketUrl;
-    if (isLocalHost || isLanHost) {
-      socketUrl = 'http://localhost:5001';
-    } else {
-      const isManagedHost = hostname.includes('onrender.com') || hostname.includes('run.app');
-      if (isManagedHost) {
-        const apiUrl = process.env.REACT_APP_API_URL;
-        socketUrl = apiUrl ? apiUrl.replace('/api', '') : 'https://dialadrink-backend-910510650031.us-central1.run.app';
-      } else {
-        const apiUrl = process.env.REACT_APP_API_URL;
-        socketUrl = apiUrl ? apiUrl.replace('/api', '') : 'https://dialadrink-backend-910510650031.us-central1.run.app';
-      }
-    }
-    
+    const socketUrl = getBackendUrl();
     const socket = io(socketUrl);
     socket.emit('join-admin');
     
@@ -358,14 +342,20 @@ const POS = () => {
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '/assets/images/placeholder.png';
-    if (imagePath.startsWith('http')) return imagePath;
     
-    const isHosted = window.location.hostname.includes('run.app');
-    const baseUrl = isHosted
-      ? 'https://dialadrink-backend-910510650031.us-central1.run.app'
-      : 'http://localhost:5001';
+    // If it's already a full URL, check if it's localhost and replace
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      // Replace localhost URLs with backend URL
+      if (imagePath.includes('localhost:5001')) {
+        const backendUrl = getBackendUrl();
+        return imagePath.replace('http://localhost:5001', backendUrl);
+      }
+      return imagePath;
+    }
     
-    return `${baseUrl}${imagePath}`;
+    // For relative paths, construct the full URL using backend URL utility
+    const backendUrl = getBackendUrl();
+    return `${backendUrl}${imagePath}`;
   };
 
   const addToCart = async (drink) => {

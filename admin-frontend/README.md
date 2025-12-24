@@ -1,6 +1,6 @@
-# LiquorOS - Admin Dashboard
+# Dial a Drink Kenya - Admin Dashboard
 
-Separate admin frontend application for managing LiquorOS operations.
+Separate admin frontend application for managing Dial a Drink Kenya operations.
 
 ## Setup
 
