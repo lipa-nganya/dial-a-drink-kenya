@@ -5,8 +5,25 @@ const db = require('../models');
 // Get all categories
 router.get('/', async (req, res) => {
   try {
+    // Define the order of categories as they appear on dialadrinkkenya.com
+    const categoryOrder = [
+      'Whisky',
+      'Vodka',
+      'Wine',
+      'Champagne',
+      'Brandy',
+      'Cognac',
+      'Beer',
+      'Tequila',
+      'Rum',
+      'Gin',
+      'Liqueur',
+      'Soft Drinks',
+      'Smokes'
+    ];
+
     const categories = await db.Category.findAll({
-      order: [['name', 'ASC']]
+      where: { isActive: true }
     });
 
     // Get counts and first image for each category
@@ -68,7 +85,25 @@ router.get('/', async (req, res) => {
       })
     );
 
-    res.json(categoriesWithData);
+    // Sort categories according to the defined order
+    const sortedCategories = categoriesWithData.sort((a, b) => {
+      const indexA = categoryOrder.indexOf(a.name);
+      const indexB = categoryOrder.indexOf(b.name);
+      
+      // If both categories are in the order list, sort by their position
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      
+      // If only one is in the order list, prioritize it
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      
+      // If neither is in the order list, sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
+
+    res.json(sortedCategories);
   } catch (error) {
     console.error('Error fetching categories:', error);
     res.status(500).json({ error: 'Failed to fetch categories' });
