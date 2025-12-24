@@ -27,7 +27,12 @@ const allowedOrigins = [
   'https://liquoros-admin-910510650031.us-central1.run.app',
   'https://liquoros-backend-910510650031.us-central1.run.app',
   // Wolfgang website production URL
-  'https://thewolfgang.tech'
+  'https://thewolfgang.tech',
+  // Netlify production URLs
+  'https://dialadrink-admin.thewolfgang.tech',
+  'https://dialadrink.thewolfgang.tech',
+  // Netlify preview URLs (wildcard pattern)
+  'https://*.netlify.app'
 ].filter(Boolean);
 
 const corsOptions = {
@@ -37,9 +42,17 @@ const corsOptions = {
     if (!origin) {
       return callback(null, true);
     }
+    
+    // Check exact match first
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
+    
+    // Check for Netlify preview URLs (wildcard pattern)
+    if (origin.includes('.netlify.app') || origin.includes('.thewolfgang.tech')) {
+      return callback(null, true);
+    }
+    
     console.warn(`Blocked CORS origin: ${origin}`);
     return callback(new Error('Not allowed by CORS'));
   },
