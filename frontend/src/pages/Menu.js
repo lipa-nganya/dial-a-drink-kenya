@@ -5,8 +5,7 @@ import {
   Box,
   TextField,
   InputAdornment,
-  Tabs,
-  Tab,
+  Button,
   Chip,
   Pagination
 } from '@mui/material';
@@ -206,26 +205,96 @@ const Menu = () => {
         />
       </Box>
 
-      {/* Category Tabs */}
-      <Box sx={{ mb: 2 }}>
-        <Tabs
-          value={selectedCategory}
-          onChange={handleCategoryChange}
-          variant="scrollable"
-          scrollButtons="auto"
-          sx={{ '& .MuiTab-root': { fontSize: '0.8rem', py: 1 } }}
+      {/* Category Buttons - Two Row Layout */}
+      <Box sx={{ mb: 3 }}>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'repeat(2, 1fr)',
+              sm: 'repeat(3, 1fr)',
+              md: 'repeat(4, 1fr)',
+              lg: 'repeat(5, 1fr)',
+              xl: 'repeat(6, 1fr)'
+            },
+            gap: 1.5,
+            width: '100%'
+          }}
         >
-          <Tab label="All" value={0} />
-          <Tab 
-            label="Popular" 
-            value={-1}
-            icon={<Star sx={{ fontSize: '0.9rem', mb: 0.5 }} />}
-            iconPosition="start"
-          />
+          <Button
+            variant={selectedCategory === 0 ? 'contained' : 'outlined'}
+            onClick={() => handleCategoryChange(null, 0)}
+            sx={{
+              py: 1.5,
+              fontSize: '0.85rem',
+              fontWeight: selectedCategory === 0 ? 600 : 400,
+              textTransform: 'none',
+              borderRadius: 2,
+              minHeight: '48px',
+              color: '#000000',
+              '&.MuiButton-contained': {
+                color: '#000000'
+              },
+              '&.MuiButton-outlined': {
+                color: '#000000',
+                borderColor: 'rgba(0, 0, 0, 0.23)'
+              }
+            }}
+          >
+            All
+          </Button>
+          <Button
+            variant={selectedCategory === -1 ? 'contained' : 'outlined'}
+            onClick={() => handleCategoryChange(null, -1)}
+            startIcon={<Star sx={{ fontSize: '0.9rem' }} />}
+            sx={{
+              py: 1.5,
+              fontSize: '0.85rem',
+              fontWeight: selectedCategory === -1 ? 600 : 400,
+              textTransform: 'none',
+              borderRadius: 2,
+              minHeight: '48px',
+              color: '#000000',
+              '&.MuiButton-contained': {
+                color: '#000000'
+              },
+              '&.MuiButton-outlined': {
+                color: '#000000',
+                borderColor: 'rgba(0, 0, 0, 0.23)'
+              }
+            }}
+          >
+            Popular
+          </Button>
           {categories.map((category) => (
-            <Tab key={category.id} label={category.name} value={category.id} />
+            <Button
+              key={category.id}
+              variant={selectedCategory === category.id ? 'contained' : 'outlined'}
+              onClick={() => handleCategoryChange(null, category.id)}
+              sx={{
+                py: 1.5,
+                fontSize: '0.85rem',
+                fontWeight: selectedCategory === category.id ? 600 : 400,
+                textTransform: 'none',
+                borderRadius: 2,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minHeight: '48px',
+                color: '#000000',
+                '&.MuiButton-contained': {
+                  color: '#000000'
+                },
+                '&.MuiButton-outlined': {
+                  color: '#000000',
+                  borderColor: 'rgba(0, 0, 0, 0.23)'
+                }
+              }}
+            >
+              {category.name}
+            </Button>
           ))}
-        </Tabs>
+        </Box>
       </Box>
 
       {/* Subcategory Chips - Show when a category is selected */}
