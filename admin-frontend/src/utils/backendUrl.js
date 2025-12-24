@@ -14,7 +14,7 @@ export const getBackendUrl = () => {
   }
   
   // Production backend URL (used for all hosted environments)
-  return 'https://dialadrink-backend-910510650031.us-central1.run.app';
+  return 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
 };
 
 /**
