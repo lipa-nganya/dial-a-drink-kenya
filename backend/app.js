@@ -82,39 +82,6 @@ app.use((req, res, next) => {
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-// Temporary migration endpoint - REMOVE AFTER RUNNING
-app.post('/api/migrate-production', async (req, res) => {
-  try {
-    const db = require('./models');
-    console.log('🔌 Running production database migration...');
-    
-    // Add cashAtHand to drivers
-    await db.sequelize.query('ALTER TABLE drivers ADD COLUMN IF NOT EXISTS "cashAtHand" DECIMAL(10, 2) DEFAULT 0');
-    console.log('✅ Added cashAtHand');
-    
-    // Add adminOrder to orders
-    await db.sequelize.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS "adminOrder" BOOLEAN NOT NULL DEFAULT false');
-    console.log('✅ Added adminOrder');
-    
-    // Add territoryId to orders
-    await db.sequelize.query('ALTER TABLE orders ADD COLUMN IF NOT EXISTS "territoryId" INTEGER');
-    console.log('✅ Added territoryId');
-    
-    // Create supplier_transactions
-    await db.sequelize.query(`DO $$ BEGIN CREATE TYPE supplier_transaction_type_enum AS ENUM ('credit', 'debit'); EXCEPTION WHEN duplicate_object THEN null; END $$;`);
-    await db.sequelize.query(`CREATE TABLE IF NOT EXISTS supplier_transactions (id SERIAL PRIMARY KEY, "supplierId" INTEGER NOT NULL REFERENCES suppliers(id) ON DELETE CASCADE, "transactionType" supplier_transaction_type_enum NOT NULL, amount DECIMAL(15, 2) NOT NULL CHECK (amount >= 0), reason TEXT, reference VARCHAR(255), "createdBy" INTEGER REFERENCES admins(id), "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP, "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP);`);
-    await db.sequelize.query(`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_supplier_id ON supplier_transactions("supplierId");`);
-    await db.sequelize.query(`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_created_at ON supplier_transactions("createdAt");`);
-    await db.sequelize.query(`CREATE INDEX IF NOT EXISTS idx_supplier_transactions_type ON supplier_transactions("transactionType");`);
-    console.log('✅ Created supplier_transactions');
-    
-    res.json({ success: true, message: 'Migration completed successfully' });
-  } catch (error) {
-    console.error('❌ Migration error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Routes
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
