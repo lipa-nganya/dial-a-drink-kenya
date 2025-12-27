@@ -195,13 +195,20 @@ db.Territory = Territory;
 db.Supplier = Supplier;
 db.SupplierTransaction = SupplierTransaction;
 
-// Supplier associations
-Supplier.hasMany(SupplierTransaction, { foreignKey: 'supplierId', as: 'transactions' });
-SupplierTransaction.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
-
-if (Admin) {
-  SupplierTransaction.belongsTo(Admin, { foreignKey: 'createdBy', as: 'createdByAdmin' });
-  Admin.hasMany(SupplierTransaction, { foreignKey: 'createdBy', as: 'supplierTransactions' });
+// Supplier associations - only set up if models are loaded successfully
+try {
+  if (Supplier && SupplierTransaction) {
+    Supplier.hasMany(SupplierTransaction, { foreignKey: 'supplierId', as: 'transactions' });
+    SupplierTransaction.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+  }
+  
+  if (Admin && SupplierTransaction) {
+    SupplierTransaction.belongsTo(Admin, { foreignKey: 'createdBy', as: 'createdByAdmin' });
+    Admin.hasMany(SupplierTransaction, { foreignKey: 'createdBy', as: 'supplierTransactions' });
+  }
+} catch (associationError) {
+  console.warn('⚠️  Warning: Could not set up SupplierTransaction associations:', associationError.message);
+  // Continue without associations - they'll be set up when the table exists
 }
 
 // Add Valkyrie models if they exist

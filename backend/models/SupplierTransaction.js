@@ -14,8 +14,11 @@ module.exports = (sequelize, DataTypes) => {
       }
     },
     transactionType: {
-      type: DataTypes.ENUM('credit', 'debit'),
+      type: DataTypes.STRING,
       allowNull: false,
+      validate: {
+        isIn: [['credit', 'debit']]
+      },
       comment: 'credit = money owed to supplier (we owe them), debit = money paid to supplier (we paid them)'
     },
     amount: {
