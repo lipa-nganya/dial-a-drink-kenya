@@ -19,6 +19,7 @@ import Drivers from './pages/Drivers';
 import Branches from './pages/Branches';
 import Territories from './pages/Territories';
 import Settings from './pages/Settings';
+import SupplierDetail from './pages/SupplierDetail';
 import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
 import POS from './pages/POS';
@@ -296,6 +297,16 @@ function AppContent() {
                   <PrivateRoute>
                     <AdminLayout>
                       <POS />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/suppliers/:id"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <SupplierDetail />
                     </AdminLayout>
                   </PrivateRoute>
                 }

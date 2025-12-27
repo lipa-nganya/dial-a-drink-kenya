@@ -37,7 +37,8 @@ import {
   Phone,
   Visibility,
   VisibilityOff,
-  VpnKey
+  VpnKey,
+  WhatsApp
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -57,6 +58,7 @@ const Drivers = () => {
   const [driverOtps, setDriverOtps] = useState({}); // Store OTPs for each driver
   const [showOtps, setShowOtps] = useState({}); // Track which OTPs are visible
   const [loadingOtps, setLoadingOtps] = useState({}); // Track OTP loading state
+  const [invitingDriver, setInvitingDriver] = useState(null); // Track which driver is being invited
 
   useEffect(() => {
     fetchDrivers();
@@ -163,6 +165,25 @@ const Drivers = () => {
     } catch (err) {
       console.error('Error deleting driver:', err);
       setError(err.response?.data?.error || 'Failed to delete driver');
+    }
+  };
+
+  const handleInviteDriver = async (driver) => {
+    try {
+      setInvitingDriver(driver.id);
+      const response = await api.post(`/drivers/${driver.id}/invite-whatsapp`);
+      
+      if (response.data.success && response.data.whatsappLink) {
+        // Open WhatsApp link in a new tab/window
+        window.open(response.data.whatsappLink, '_blank');
+      } else {
+        setError('Failed to generate WhatsApp invitation link');
+      }
+    } catch (err) {
+      console.error('Error inviting driver:', err);
+      setError(err.response?.data?.error || 'Failed to send WhatsApp invitation');
+    } finally {
+      setInvitingDriver(null);
     }
   };
 
@@ -341,20 +362,41 @@ const Drivers = () => {
                     </Box>
                   </TableCell>
                   <TableCell align="right">
-                    <IconButton
-                      size="small"
-                      onClick={() => handleOpenDialog(driver)}
-                      sx={{ color: colors.accentText }}
-                    >
-                      <Edit />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDelete(driver.id)}
-                      sx={{ color: '#FF3366' }}
-                    >
-                      <Delete />
-                    </IconButton>
+                    <Tooltip title="Invite via WhatsApp">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleInviteDriver(driver)}
+                        disabled={invitingDriver === driver.id}
+                        sx={{ 
+                          color: '#25D366',
+                          '&:hover': { backgroundColor: 'rgba(37, 211, 102, 0.1)' }
+                        }}
+                      >
+                        {invitingDriver === driver.id ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <WhatsApp />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit Driver">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDialog(driver)}
+                        sx={{ color: colors.accentText }}
+                      >
+                        <Edit />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete Driver">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(driver.id)}
+                        sx={{ color: '#FF3366' }}
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
                   </TableCell>
                 </TableRow>
               ))

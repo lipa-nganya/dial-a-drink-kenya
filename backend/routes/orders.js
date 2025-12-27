@@ -57,7 +57,23 @@ const calculateDeliveryFee = async (items) => {
 // Create new order
 router.post('/', async (req, res) => {
   try {
-    const { customerName, customerPhone, customerEmail, deliveryAddress, items, notes, paymentType, paymentMethod, tipAmount } = req.body;
+    const { 
+      customerName, 
+      customerPhone, 
+      customerEmail, 
+      deliveryAddress, 
+      items, 
+      notes, 
+      paymentType, 
+      paymentMethod, 
+      tipAmount,
+      adminOrder,
+      territoryId,
+      status,
+      driverId,
+      transactionCode,
+      paymentStatus
+    } = req.body;
     console.log('🛒 Incoming order payload:', JSON.stringify({
       customerName,
       customerPhone,
@@ -173,12 +189,27 @@ router.post('/', async (req, res) => {
       const deliveryFee = await calculateDeliveryFee(normalizedItems);
       const finalTotal = totalAmount + deliveryFee + tip;
 
-      let paymentStatus = paymentType === 'pay_now' ? 'pending' : 'unpaid';
-      let orderStatus = 'pending';
+      // For admin orders, use provided status and paymentStatus, otherwise use defaults
+      let finalPaymentStatus = paymentStatus;
+      let finalOrderStatus = status;
+      
+      if (!adminOrder) {
+        // Regular customer order logic
+        finalPaymentStatus = paymentType === 'pay_now' ? 'pending' : 'unpaid';
+        finalOrderStatus = 'pending';
 
-      if (paymentType === 'pay_now' && paymentMethod === 'card') {
-        orderStatus = 'confirmed';
-        paymentStatus = 'paid';
+        if (paymentType === 'pay_now' && paymentMethod === 'card') {
+          finalOrderStatus = 'confirmed';
+          finalPaymentStatus = 'paid';
+        }
+      } else {
+        // Admin order - validate provided statuses
+        if (!finalPaymentStatus || !['pending', 'paid', 'unpaid'].includes(finalPaymentStatus)) {
+          finalPaymentStatus = 'unpaid';
+        }
+        if (!finalOrderStatus || !['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'].includes(finalOrderStatus)) {
+          finalOrderStatus = 'pending';
+        }
       }
 
       // Find closest branch to delivery address
@@ -238,27 +269,40 @@ router.post('/', async (req, res) => {
         console.warn('⚠️  WARNING: Order will be created WITHOUT a branch assignment. This should not happen if branches exist.');
       }
 
-      // Find nearest active driver to the assigned branch
-      if (branchId) {
-        console.log(`🔍 Looking for active driver near branch ${branchId}...`);
-        assignedDriver = await findNearestActiveDriverToBranch(branchId);
-        console.log(`🔍 Driver assignment result: ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
-      } else {
-        console.log('⚠️  No branch assigned, looking for any active driver...');
-        // If no branch, still try to find an active driver
-        const { findNearestActiveDriverToAddress } = require('../utils/driverAssignment');
-        assignedDriver = await findNearestActiveDriverToAddress(deliveryAddress);
-        console.log(`🔍 Driver assignment result (no branch): ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
+      // For admin orders, use provided driverId if available, otherwise find driver
+      if (adminOrder && driverId) {
+        assignedDriver = await db.Driver.findByPk(driverId, { transaction });
+        if (assignedDriver) {
+          console.log(`✅ Admin order: Using provided driver ${assignedDriver.name} (ID: ${assignedDriver.id})`);
+        } else {
+          console.log(`⚠️  Admin order: Provided driver ID ${driverId} not found, will find nearest driver`);
+        }
       }
 
-      // If no active driver found, fall back to HOLD driver
-      // This ensures there's always a driverId/walletId available when payment happens
+      // If no driver assigned yet (either not admin order or admin didn't provide driver), find nearest
       if (!assignedDriver) {
-        const { driver: holdDriver } = await getOrCreateHoldDriver();
-        assignedDriver = holdDriver;
-        console.log('⚠️  No active driver found. Using HOLD driver as fallback.');
-      } else {
-        console.log(`✅ Assigned order to active driver: ${assignedDriver.name} (ID: ${assignedDriver.id})`);
+        // Find nearest active driver to the assigned branch
+        if (branchId) {
+          console.log(`🔍 Looking for active driver near branch ${branchId}...`);
+          assignedDriver = await findNearestActiveDriverToBranch(branchId);
+          console.log(`🔍 Driver assignment result: ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
+        } else {
+          console.log('⚠️  No branch assigned, looking for any active driver...');
+          // If no branch, still try to find an active driver
+          const { findNearestActiveDriverToAddress } = require('../utils/driverAssignment');
+          assignedDriver = await findNearestActiveDriverToAddress(deliveryAddress);
+          console.log(`🔍 Driver assignment result (no branch): ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
+        }
+
+        // If no active driver found, fall back to HOLD driver
+        // This ensures there's always a driverId/walletId available when payment happens
+        if (!assignedDriver) {
+          const { driver: holdDriver } = await getOrCreateHoldDriver();
+          assignedDriver = holdDriver;
+          console.log('⚠️  No active driver found. Using HOLD driver as fallback.');
+        } else {
+          console.log(`✅ Assigned order to active driver: ${assignedDriver.name} (ID: ${assignedDriver.id})`);
+        }
       }
 
       const order = await db.Order.create({
@@ -270,11 +314,13 @@ router.post('/', async (req, res) => {
         tipAmount: tip,
         notes: notes ? `${notes}\nDelivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}` : `Delivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}`,
         paymentType: paymentType || 'pay_on_delivery',
-        paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
-        paymentStatus,
-        status: orderStatus,
+        paymentMethod: paymentType === 'pay_now' || (adminOrder && finalPaymentStatus === 'paid') ? paymentMethod : null,
+        paymentStatus: finalPaymentStatus,
+        status: finalOrderStatus,
         driverId: assignedDriver.id, // Assign nearest active driver or HOLD driver
-        branchId: branchId // Assign closest branch
+        branchId: branchId, // Assign closest branch
+        adminOrder: adminOrder || false,
+        territoryId: territoryId ? parseInt(territoryId) : null
       }, { transaction });
 
       createdOrderId = order.id;
@@ -287,6 +333,27 @@ router.post('/', async (req, res) => {
           orderId: order.id,
           ...item
         }, { transaction });
+      }
+
+      // For admin orders with paid mobile money payment, create transaction record
+      if (adminOrder && finalPaymentStatus === 'paid' && paymentMethod === 'mobile_money' && transactionCode) {
+        const tipAmount = parseFloat(tip) || 0;
+        const itemsTotal = totalAmount; // Items total without delivery fee and tip
+        
+        await db.Transaction.create({
+          orderId: order.id,
+          transactionType: 'payment',
+          paymentMethod: 'mobile_money',
+          paymentProvider: 'mpesa',
+          amount: itemsTotal,
+          status: 'completed',
+          paymentStatus: 'paid',
+          receiptNumber: transactionCode.trim(),
+          transactionDate: new Date(),
+          notes: `Admin-created order payment. Transaction code: ${transactionCode.trim()}`
+        }, { transaction });
+        
+        console.log(`✅ Created payment transaction for admin order #${order.id} with transaction code: ${transactionCode}`);
       }
 
       await transaction.commit();

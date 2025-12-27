@@ -84,6 +84,7 @@ const SavedAddress = require('./SavedAddress')(sequelize, Sequelize.DataTypes);
 const Branch = require('./Branch')(sequelize, Sequelize.DataTypes);
 const Territory = require('./Territory')(sequelize, Sequelize.DataTypes);
 const Supplier = require('./Supplier')(sequelize, Sequelize.DataTypes);
+const SupplierTransaction = require('./SupplierTransaction')(sequelize, Sequelize.DataTypes);
 
 // Valkyrie models (conditionally loaded if they exist)
 let ValkyriePartner, ValkyriePartnerUser, ValkyriePartnerDriver, ValkyriePartnerOrder, PartnerGeofence;
@@ -192,6 +193,16 @@ db.SavedAddress = SavedAddress;
 db.Branch = Branch;
 db.Territory = Territory;
 db.Supplier = Supplier;
+db.SupplierTransaction = SupplierTransaction;
+
+// Supplier associations
+Supplier.hasMany(SupplierTransaction, { foreignKey: 'supplierId', as: 'transactions' });
+SupplierTransaction.belongsTo(Supplier, { foreignKey: 'supplierId', as: 'supplier' });
+
+if (Admin) {
+  SupplierTransaction.belongsTo(Admin, { foreignKey: 'createdBy', as: 'createdByAdmin' });
+  Admin.hasMany(SupplierTransaction, { foreignKey: 'createdBy', as: 'supplierTransactions' });
+}
 
 // Add Valkyrie models if they exist
 if (ValkyriePartner) db.ValkyriePartner = ValkyriePartner;

@@ -48,10 +48,12 @@ import {
   Cancel as CancelIcon,
   PersonAdd,
   AdminPanelSettings,
-  CloudUpload
+  CloudUpload,
+  WhatsApp
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import RichTextEditor from '../components/RichTextEditor';
 
 const Settings = () => {
   const [loading, setLoading] = useState(true);
@@ -96,6 +98,11 @@ const Settings = () => {
   const [showDeliverySettings, setShowDeliverySettings] = useState(false);
   const [deliverySettingsLoading, setDeliverySettingsLoading] = useState(false);
   const [showTestModeWarning, setShowTestModeWarning] = useState(false);
+
+  // WhatsApp Message Settings state
+  const [whatsappMessage, setWhatsappMessage] = useState('');
+  const [whatsappMessageLoading, setWhatsappMessageLoading] = useState(false);
+  const [showWhatsappSettings, setShowWhatsappSettings] = useState(false);
 
   // Countdown Offers state
   const [countdowns, setCountdowns] = useState([]);
@@ -265,7 +272,8 @@ const Settings = () => {
         fetchDeliverySettings(),
         fetchCountdowns(),
         fetchHeroImage(),
-        fetchUsers()
+        fetchUsers(),
+        fetchWhatsappMessage()
       ]);
     } catch (error) {
       console.error('Error fetching settings data:', error);
@@ -458,6 +466,54 @@ const Settings = () => {
       setError('Failed to save stock alert settings');
     } finally {
       setStockAlertSettingsLoading(false);
+    }
+  };
+
+  // ========== WHATSAPP MESSAGE SETTINGS ==========
+  const fetchWhatsappMessage = async () => {
+    try {
+      const response = await api.get('/settings/whatsappDriverInvitationMessage').catch(() => ({ data: null }));
+      if (response.data && response.data.value) {
+        setWhatsappMessage(response.data.value);
+      } else {
+        // Set default message if none exists
+        const defaultMessage = `Hello {driverName}! 👋
+
+You've been invited to join the Dial A Drink driver app! 🚗
+
+To get started:
+1. Download the driver app
+2. Log in using your phone number (the number we have on file)
+3. You'll receive an OTP code to verify your account
+4. Set up your 4-digit PIN to secure your account
+
+Once logged in, you'll be able to:
+✅ View and accept delivery orders
+✅ Track your earnings
+✅ Update your delivery status
+✅ Manage your profile
+
+If you have any questions, please contact us.
+
+Welcome aboard! 🎉`;
+        setWhatsappMessage(defaultMessage);
+      }
+    } catch (error) {
+      console.error('Error fetching WhatsApp message:', error);
+    }
+  };
+
+  const saveWhatsappMessage = async () => {
+    try {
+      setWhatsappMessageLoading(true);
+      await api.put('/settings/whatsappDriverInvitationMessage', { value: whatsappMessage });
+      setNotification({ message: 'WhatsApp invitation message saved successfully!' });
+      setShowWhatsappSettings(false);
+    } catch (error) {
+      console.error('Error saving WhatsApp message:', error);
+      setError(error.response?.data?.error || 'Failed to save WhatsApp message');
+    } finally {
+      setWhatsappMessageLoading(false);
     }
   };
 
@@ -1527,6 +1583,151 @@ const Settings = () => {
                   No recipients configured
                 </Typography>
               )}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Custom Messages */}
+      <Card sx={{ mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <WhatsApp sx={{ color: '#25D366', fontSize: 32 }} />
+              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
+                Custom Messages
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              startIcon={showWhatsappSettings ? <CancelIcon /> : <Edit />}
+              onClick={() => {
+                setShowWhatsappSettings(!showWhatsappSettings);
+                if (!showWhatsappSettings) {
+                  fetchWhatsappMessage();
+                }
+              }}
+              sx={{
+                borderColor: '#25D366',
+                color: '#25D366',
+                '&:hover': { borderColor: '#20BA5A', backgroundColor: 'rgba(37, 211, 102, 0.1)' }
+              }}
+            >
+              {showWhatsappSettings ? 'Hide Editor' : 'Edit Message'}
+            </Button>
+          </Box>
+
+          {showWhatsappSettings && (
+            <Box sx={{ mt: 3 }}>
+              <Alert severity="info" sx={{ mb: 3 }}>
+                Customize the WhatsApp invitation message sent to drivers. Use {'{driverName}'} as a placeholder for the driver's name.
+                You can format text using bold (*text*), italic (_text_), and links ([text](url)).
+              </Alert>
+
+              <RichTextEditor
+                value={whatsappMessage}
+                onChange={(e) => setWhatsappMessage(e.target.value)}
+                placeholder="Enter your custom WhatsApp invitation message..."
+                rows={15}
+                label="Invitation Message"
+                helperText="Use {driverName} as a placeholder for the driver's name. This will be replaced automatically when sending invitations."
+                sx={{
+                  mb: 3,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                    '& fieldset': { borderColor: colors.border },
+                    '&:hover fieldset': { borderColor: colors.accentText },
+                    '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                  },
+                  '& .MuiInputBase-input': {
+                    color: colors.textPrimary
+                  },
+                  '& .MuiInputLabel-root': {
+                    color: colors.textSecondary
+                  },
+                  '& .MuiInputLabel-root.Mui-focused': {
+                    color: colors.accentText
+                  }
+                }}
+              />
+
+              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setShowWhatsappSettings(false);
+                    fetchWhatsappMessage();
+                  }}
+                  sx={{
+                    borderColor: colors.border,
+                    color: colors.textSecondary,
+                    '&:hover': { 
+                      borderColor: colors.accentText,
+                      backgroundColor: 'rgba(0, 224, 184, 0.05)'
+                    }
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={saveWhatsappMessage}
+                  disabled={whatsappMessageLoading}
+                  startIcon={whatsappMessageLoading ? <CircularProgress size={20} /> : <Save />}
+                  sx={{
+                    backgroundColor: '#25D366',
+                    color: '#FFFFFF',
+                    '&:hover': { backgroundColor: '#20BA5A' }
+                  }}
+                >
+                  {whatsappMessageLoading ? 'Saving...' : 'Save Message'}
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {!showWhatsappSettings && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Preview (first 200 characters):
+              </Typography>
+              <Paper 
+                sx={{ 
+                  p: 2, 
+                  backgroundColor: isDarkMode ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.02)',
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 1
+                }}
+              >
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'monospace',
+                    fontSize: '0.85rem',
+                    color: colors.textSecondary
+                  }}
+                  component="div"
+                >
+                  {whatsappMessage.substring(0, 200).split(/(\*[^*]+\*|_[^_]+_|\[[^\]]+\]\([^)]+\))/g).map((part, index) => {
+                    // Bold text
+                    if (part.startsWith('*') && part.endsWith('*')) {
+                      return <strong key={index}>{part.slice(1, -1)}</strong>;
+                    }
+                    // Italic text
+                    if (part.startsWith('_') && part.endsWith('_')) {
+                      return <em key={index}>{part.slice(1, -1)}</em>;
+                    }
+                    // Links
+                    const linkMatch = part.match(/\[([^\]]+)\]\(([^)]+)\)/);
+                    if (linkMatch) {
+                      return <a key={index} href={linkMatch[2]} target="_blank" rel="noopener noreferrer" style={{ color: '#25D366', textDecoration: 'underline' }}>{linkMatch[1]}</a>;
+                    }
+                    return <span key={index}>{part}</span>;
+                  })}
+                  {whatsappMessage.length > 200 && '...'}
+                </Typography>
+              </Paper>
             </Box>
           )}
         </CardContent>
