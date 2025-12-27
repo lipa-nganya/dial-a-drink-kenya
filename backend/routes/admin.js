@@ -873,7 +873,12 @@ router.get('/orders', async (req, res) => {
     res.json(ordersWithMappedItems);
   } catch (error) {
     console.error('Error fetching admin orders:', error);
-    res.status(500).json({ error: 'Failed to fetch orders' });
+    console.error('Error stack:', error.stack);
+    // Return more detailed error in development, generic in production
+    const errorMessage = process.env.NODE_ENV === 'production' 
+      ? 'Failed to fetch orders' 
+      : error.message || 'Failed to fetch orders';
+    res.status(500).json({ error: errorMessage, details: process.env.NODE_ENV !== 'production' ? error.stack : undefined });
   }
 });
 
