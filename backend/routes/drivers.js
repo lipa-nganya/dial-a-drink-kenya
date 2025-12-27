@@ -527,13 +527,27 @@ router.get('/:id/latest-otp', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const drivers = await db.Driver.findAll({
-      order: [['lastActivity', 'DESC'], ['createdAt', 'DESC']]
-    });
+    // Try to order by lastActivity first, fallback to createdAt if column doesn't exist
+    let drivers;
+    try {
+      drivers = await db.Driver.findAll({
+        order: [['lastActivity', 'DESC'], ['createdAt', 'DESC']]
+      });
+    } catch (orderError) {
+      // If lastActivity column doesn't exist, order by createdAt only
+      if (orderError.message && orderError.message.includes('column') && orderError.message.includes('lastActivity')) {
+        console.warn('⚠️ lastActivity column not found, ordering by createdAt only');
+        drivers = await db.Driver.findAll({
+          order: [['createdAt', 'DESC']]
+        });
+      } else {
+        throw orderError;
+      }
+    }
     res.json(drivers);
   } catch (error) {
     console.error('Error fetching drivers:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || 'Failed to fetch drivers' });
   }
 });
 
