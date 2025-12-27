@@ -131,5 +131,148 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// Get supplier with transactions and financial summary
+router.get('/:id/details', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const supplier = await db.Supplier.findByPk(id, {
+      include: [{
+        model: db.SupplierTransaction,
+        as: 'transactions',
+        order: [['createdAt', 'DESC']],
+        include: [{
+          model: db.Admin,
+          as: 'createdByAdmin',
+          attributes: ['id', 'username', 'email'],
+          required: false
+        }]
+      }]
+    });
+    
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    
+    // Calculate financial summary
+    const openingBalance = parseFloat(supplier.openingBalance) || 0;
+    const transactions = supplier.transactions || [];
+    
+    let totalCredits = 0;
+    let totalDebits = 0;
+    
+    transactions.forEach(transaction => {
+      const amount = parseFloat(transaction.amount) || 0;
+      if (transaction.transactionType === 'credit') {
+        totalCredits += amount;
+      } else if (transaction.transactionType === 'debit') {
+        totalDebits += amount;
+      }
+    });
+    
+    // Current balance = opening balance + credits - debits
+    // Credits = money we owe to supplier (increases what we owe)
+    // Debits = money we paid to supplier (decreases what we owe)
+    const currentBalance = openingBalance + totalCredits - totalDebits;
+    
+    res.json({
+      supplier,
+      financialSummary: {
+        openingBalance,
+        totalCredits,
+        totalDebits,
+        currentBalance,
+        transactionCount: transactions.length
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching supplier details:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create supplier transaction (credit or debit)
+router.post('/:id/transactions', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { transactionType, amount, reason, reference } = req.body;
+    
+    if (!transactionType || !['credit', 'debit'].includes(transactionType)) {
+      return res.status(400).json({ error: 'Transaction type must be "credit" or "debit"' });
+    }
+    
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      return res.status(400).json({ error: 'Amount must be a positive number' });
+    }
+    
+    const supplier = await db.Supplier.findByPk(id);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    
+    // Get admin user from request (if authenticated)
+    const adminId = req.admin?.id || null;
+    
+    const transaction = await db.SupplierTransaction.create({
+      supplierId: id,
+      transactionType,
+      amount: parseFloat(amount),
+      reason: reason || null,
+      reference: reference || null,
+      createdBy: adminId
+    });
+    
+    // Reload with associations
+    const transactionWithDetails = await db.SupplierTransaction.findByPk(transaction.id, {
+      include: [{
+        model: db.Admin,
+        as: 'createdByAdmin',
+        attributes: ['id', 'username', 'email'],
+        required: false
+      }, {
+        model: db.Supplier,
+        as: 'supplier',
+        attributes: ['id', 'name']
+      }]
+    });
+    
+    res.status(201).json(transactionWithDetails);
+  } catch (error) {
+    console.error('Error creating supplier transaction:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get supplier transactions
+router.get('/:id/transactions', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { limit = 100, offset = 0 } = req.query;
+    
+    const supplier = await db.Supplier.findByPk(id);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    
+    const transactions = await db.SupplierTransaction.findAll({
+      where: { supplierId: id },
+      include: [{
+        model: db.Admin,
+        as: 'createdByAdmin',
+        attributes: ['id', 'username', 'email'],
+        required: false
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
+    
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error fetching supplier transactions:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
 

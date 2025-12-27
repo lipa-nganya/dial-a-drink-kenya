@@ -538,6 +538,52 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * Send WhatsApp invitation to driver
+ * POST /api/drivers/:id/invite-whatsapp
+ * NOTE: This route must be defined BEFORE /:id to ensure proper matching
+ */
+router.post('/:id/invite-whatsapp', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { appUrl } = req.body || {}; // Optional app download URL
+    
+    const driver = await db.Driver.findByPk(id);
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+    
+    if (!driver.phoneNumber) {
+      return res.status(400).json({ error: 'Driver has no phone number' });
+    }
+    
+    const whatsappService = require('../services/whatsapp');
+    const result = await whatsappService.sendDriverInvitation(
+      driver.phoneNumber,
+      driver.name,
+      appUrl || process.env.DRIVER_APP_URL || null,
+      null // Will use custom message from settings
+    );
+    
+    if (!result.success) {
+      return res.status(400).json({ error: result.error });
+    }
+    
+    console.log(`📱 WhatsApp invitation generated for driver: ${driver.name} (${driver.phoneNumber})`);
+    
+    res.json({
+      success: true,
+      whatsappLink: result.whatsappLink,
+      message: result.message,
+      phoneNumber: result.phoneNumber,
+      driverName: driver.name
+    });
+  } catch (error) {
+    console.error('Error generating WhatsApp invitation:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Get driver by ID
  * GET /api/drivers/:id
  */

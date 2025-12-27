@@ -85,6 +85,20 @@ module.exports = (sequelize, DataTypes) => {
         model: 'branches',
         key: 'id'
       }
+    },
+    adminOrder: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+      comment: 'Flag to indicate if order was created by admin'
+    },
+    territoryId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'territories',
+        key: 'id'
+      }
     }
   }, {
     tableName: 'orders',

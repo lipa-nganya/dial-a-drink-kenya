@@ -45,6 +45,7 @@ import io from 'socket.io-client';
 import { useTheme } from '../contexts/ThemeContext';
 import { getBackendUrl } from '../utils/backendUrl';
 import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChipProps } from '../utils/chipStyles';
+import NewOrderDialog from '../components/NewOrderDialog';
 
 const Orders = () => {
   const { isDarkMode, colors } = useTheme();
@@ -69,6 +70,7 @@ const Orders = () => {
   const [cancelTargetOrder, setCancelTargetOrder] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [newOrderDialogOpen, setNewOrderDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -590,11 +592,25 @@ const Orders = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <Assignment sx={{ color: colors.accentText, fontSize: 40 }} />
-          <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
-            Orders Management
-          </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Assignment sx={{ color: colors.accentText, fontSize: 40 }} />
+            <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
+              Orders Management
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            startIcon={<ShoppingCart />}
+            onClick={() => setNewOrderDialogOpen(true)}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': { backgroundColor: '#00C4A3' }
+            }}
+          >
+            NEW ORDER
+          </Button>
         </Box>
         <Typography variant="h6" color="text.secondary">
           Manage customer orders and track their status
@@ -859,6 +875,19 @@ const Orders = () => {
                             sx={{
                               backgroundColor: '#00E0B8',
                               color: '#003B2F',
+                              fontWeight: 600,
+                              fontSize: '0.65rem',
+                              height: '20px'
+                            }}
+                          />
+                        )}
+                        {order.adminOrder && (
+                          <Chip
+                            label="Admin Order"
+                            size="small"
+                            sx={{
+                              backgroundColor: '#9C27B0',
+                              color: '#FFFFFF',
                               fontWeight: 600,
                               fontSize: '0.65rem',
                               height: '20px'
@@ -1376,6 +1405,17 @@ const Orders = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* New Order Dialog */}
+      <NewOrderDialog
+        open={newOrderDialogOpen}
+        onClose={() => setNewOrderDialogOpen(false)}
+        onOrderCreated={(newOrder) => {
+          // Refresh orders list
+          fetchOrders();
+          setNewOrderDialogOpen(false);
+        }}
+      />
     </Container>
   );
 };

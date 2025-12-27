@@ -45,8 +45,10 @@ import {
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { Snackbar } from '@mui/material';
+import { useNavigate } from 'react-router-dom';
 
 const Payables = () => {
+  const navigate = useNavigate();
   const { isDarkMode, colors } = useTheme();
   const [view, setView] = useState('menu'); // 'menu', 'list', 'add', 'payables'
   const [suppliers, setSuppliers] = useState([]);
@@ -1000,8 +1002,9 @@ const Payables = () => {
                             <TableCell align="center">
                               <IconButton
                                 size="small"
-                                onClick={() => handleOpenDialog(supplier)}
+                                onClick={() => navigate(`/suppliers/${supplier.id}`)}
                                 sx={{ color: colors.accentText }}
+                                title="View Details"
                               >
                                 <Edit fontSize="small" />
                               </IconButton>
@@ -1309,15 +1312,16 @@ const Payables = () => {
                         <TableCell align="center">
                           <IconButton
                             size="small"
-                            onClick={() => handleOpenDialog(supplier)}
-                                sx={{ color: colors.accentText }}
+                            onClick={() => navigate(`/suppliers/${supplier.id}`)}
+                            sx={{ color: colors.accentText }}
+                            title="View Details"
                           >
                             <Edit fontSize="small" />
                           </IconButton>
                           <IconButton
                             size="small"
                             onClick={() => handleDelete(supplier)}
-                                sx={{ color: '#FF3366' }}
+                            sx={{ color: '#FF3366' }}
                           >
                             <Delete fontSize="small" />
                           </IconButton>

@@ -36,6 +36,12 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: false,
       allowNull: false,
       comment: 'Whether this driver can be assigned to Valkyrie partner orders'
+    },
+    cashAtHand: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Cash at hand amount for the driver'
     }
   }, {
     tableName: 'drivers',

@@ -95,6 +95,29 @@ router.get('/:key', async (req, res) => {
       if (key === 'stockAlertRecipient') {
         return res.json({ key: 'stockAlertRecipient', value: '' });
       }
+      if (key === 'whatsappDriverInvitationMessage') {
+        // Return default invitation message
+        const defaultMessage = `Hello {driverName}! 👋
+
+You've been invited to join the Dial A Drink driver app! 🚗
+
+To get started:
+1. Download the driver app
+2. Log in using your phone number (the number we have on file)
+3. You'll receive an OTP code to verify your account
+4. Set up your 4-digit PIN to secure your account
+
+Once logged in, you'll be able to:
+✅ View and accept delivery orders
+✅ Track your earnings
+✅ Update your delivery status
+✅ Manage your profile
+
+If you have any questions, please contact us.
+
+Welcome aboard! 🎉`;
+        return res.json({ key: 'whatsappDriverInvitationMessage', value: defaultMessage });
+      }
       return res.status(404).json({ error: 'Setting not found' });
     }
     
