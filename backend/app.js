@@ -82,22 +82,6 @@ app.use((req, res, next) => {
 app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
-// Temporary migration endpoint - Add valkyrieEligible column
-app.post('/api/migrate-valkyrie-eligible', async (req, res) => {
-  try {
-    const db = require('./models');
-    console.log('🔌 Adding valkyrieEligible column to drivers table...');
-    
-    await db.sequelize.query('ALTER TABLE drivers ADD COLUMN IF NOT EXISTS "valkyrieEligible" BOOLEAN NOT NULL DEFAULT false');
-    console.log('✅ Added valkyrieEligible column');
-    
-    res.json({ success: true, message: 'valkyrieEligible column added successfully' });
-  } catch (error) {
-    console.error('❌ Migration error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // Routes
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
