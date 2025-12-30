@@ -26,15 +26,25 @@ router.post('/autocomplete', async (req, res) => {
     const normalizedInput = input.toLowerCase().trim();
 
     // First, check database for saved addresses that match the input
-    const savedAddresses = await db.SavedAddress.findAll({
-      where: {
-        address: {
-          [Op.iLike]: `%${normalizedInput}%`
-        }
-      },
-      order: [['searchCount', 'DESC'], ['createdAt', 'DESC']],
-      limit: 5
-    });
+    // Skip database lookup for now if columns are missing - will be fixed with migration
+    let savedAddresses = [];
+    try {
+      // Only query columns that definitely exist
+      savedAddresses = await db.SavedAddress.findAll({
+        where: {
+          address: {
+            [Op.iLike]: `%${normalizedInput}%`
+          }
+        },
+        order: [['createdAt', 'DESC']], // Removed searchCount in case column doesn't exist
+        limit: 5,
+        attributes: ['id', 'address', 'placeId', 'formattedAddress', 'createdAt', 'updatedAt'] // Only select columns that definitely exist
+      });
+    } catch (dbError) {
+      // If there's an error (e.g., missing columns), just skip database lookup
+      console.log('⚠️  Error querying saved addresses, skipping database lookup:', dbError.message);
+      savedAddresses = [];
+    }
 
     // If we found saved addresses, return them as suggestions
     if (savedAddresses.length > 0) {
@@ -48,16 +58,36 @@ router.post('/autocomplete', async (req, res) => {
         fromDatabase: true // Flag to indicate this came from database
       }));
 
-      // Update search count for all matched addresses
-      await Promise.all(
-        savedAddresses.map(addr => 
-          addr.update({
-            searchCount: (addr.searchCount || 0) + 1,
-            apiCallsSaved: (addr.apiCallsSaved || 0) + 1,
-            costSaved: parseFloat(addr.costSaved || 0) + (GOOGLE_AUTOCOMPLETE_COST_USD * USD_TO_KES_RATE)
+      // Update search count for all matched addresses (only if columns exist)
+      try {
+        // Try to update, but don't fail if columns don't exist
+        await Promise.all(
+          savedAddresses.map(async (addr) => {
+            try {
+              const updates = {};
+              // Only update columns that exist
+              if (addr.searchCount !== undefined) {
+                updates.searchCount = (addr.searchCount || 0) + 1;
+              }
+              if (addr.apiCallsSaved !== undefined) {
+                updates.apiCallsSaved = (addr.apiCallsSaved || 0) + 1;
+              }
+              if (addr.costSaved !== undefined) {
+                updates.costSaved = parseFloat(addr.costSaved || 0) + (GOOGLE_AUTOCOMPLETE_COST_USD * USD_TO_KES_RATE);
+              }
+              if (Object.keys(updates).length > 0) {
+                await addr.update(updates);
+              }
+            } catch (updateError) {
+              // Ignore update errors for missing columns
+              console.log('⚠️  Could not update address stats:', updateError.message);
+            }
           })
-        )
-      );
+        );
+      } catch (updateError) {
+        // If update fails, just log and continue
+        console.log('⚠️  Error updating search count, continuing:', updateError.message);
+      }
 
       console.log(`✅ Found ${savedAddresses.length} addresses in database, saved API call (KES ${(GOOGLE_AUTOCOMPLETE_COST_USD * USD_TO_KES_RATE).toFixed(4)})`);
       return res.json({ suggestions, fromDatabase: true });
@@ -197,21 +227,8 @@ router.get('/details/:placeId', async (req, res) => {
       // Check for API errors
       if (detailsData.status && detailsData.status !== 'OK') {
         console.error('Google Places API error:', detailsData.status, detailsData.error_message);
-        // If we have saved address with coordinates, use them as fallback
-        if (savedAddress && savedAddress.latitude && savedAddress.longitude) {
-          console.log('Using saved coordinates as fallback');
-          return res.json({
-            place_id: savedAddress.placeId,
-            formatted_address: savedAddress.formattedAddress,
-            name: savedAddress.formattedAddress,
-            geometry: {
-              location: {
-                lat: parseFloat(savedAddress.latitude),
-                lng: parseFloat(savedAddress.longitude)
-              }
-            }
-          });
-        }
+        // Skip using saved coordinates as fallback (columns may not exist)
+        // This will be re-enabled after migration
         return res.status(500).json({
           error: 'Google Places API error',
           message: detailsData.error_message || `API returned status: ${detailsData.status}`
