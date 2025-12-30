@@ -49,7 +49,12 @@ const corsOptions = {
     }
     
     // Check for Netlify preview URLs (wildcard pattern)
-    if (origin.includes('.netlify.app') || origin.includes('.thewolfgang.tech')) {
+    if (origin.includes('.netlify.app')) {
+      return callback(null, true);
+    }
+    
+    // Check for thewolfgang.tech domains (any subdomain or root domain)
+    if (origin.includes('.thewolfgang.tech') || origin === 'https://thewolfgang.tech') {
       return callback(null, true);
     }
     
