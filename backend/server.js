@@ -109,6 +109,7 @@ async function loadFullApplication() {
             process.env.ADMIN_URL || 'http://localhost:3001',
             process.env.ZEUS_URL || 'http://localhost:3003',
             'http://localhost:3002',
+            'http://localhost:8080', // Wolfgang website
             'https://drink-suite-customer-910510650031.us-central1.run.app',
             'https://drink-suite-admin-910510650031.us-central1.run.app',
             'https://dialadrink-customer-p6bkgryxqa-uc.a.run.app',
@@ -119,6 +120,8 @@ async function loadFullApplication() {
             'https://deliveryos-customer-910510650031.us-central1.run.app',
             'https://deliveryos-admin-910510650031.us-central1.run.app',
             'https://deliveryos-backend-910510650031.us-central1.run.app',
+            // Wolfgang website production URL
+            'https://thewolfgang.tech',
             // Netlify Production Domains
             'https://dialadrink.thewolfgang.tech',
             'https://dialadrink-admin.thewolfgang.tech'
@@ -129,13 +132,13 @@ async function loadFullApplication() {
             return callback(null, true);
           }
           
-          // Check regex pattern for thewolfgang.tech subdomains
-          if (/^https:\/\/[^.]+\.thewolfgang\.tech$/.test(origin)) {
+          // Check for thewolfgang.tech domains (more permissive - matches any subdomain or root)
+          if (origin.includes('.thewolfgang.tech') || origin === 'https://thewolfgang.tech') {
             return callback(null, true);
           }
           
           // Check netlify.app subdomains
-          if (/^https:\/\/[^.]+\.netlify\.app$/.test(origin)) {
+          if (origin.includes('.netlify.app')) {
             return callback(null, true);
           }
           
