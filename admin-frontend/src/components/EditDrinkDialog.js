@@ -37,10 +37,12 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     description: '',
     isAvailable: true,
     isPopular: false,
+    isBrandFocus: false,
     limitedTimeOffer: false,
     image: '',
     categoryId: '',
     subCategoryId: '',
+    brandId: '',
     capacity: [],
     capacityPricing: [],
     abv: '',
@@ -48,21 +50,26 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
   });
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
 
   useEffect(() => {
     if (drink) {
+      // Get brandId from drink.brandId or drink.brand?.id
+      const brandId = drink.brandId || (drink.brand && drink.brand.id) || '';
       setFormData({
         name: drink.name || '',
         description: drink.description || '',
         isAvailable: drink.isAvailable !== undefined ? drink.isAvailable : true,
         isPopular: drink.isPopular || false,
+        isBrandFocus: drink.isBrandFocus || false,
         limitedTimeOffer: drink.limitedTimeOffer || false,
         image: drink.image || '',
         categoryId: drink.categoryId || '',
         subCategoryId: drink.subCategoryId || '',
+        brandId: brandId ? brandId.toString() : '',
         capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || '',
@@ -80,10 +87,12 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         description: '',
         isAvailable: true,
         isPopular: false,
+        isBrandFocus: false,
         limitedTimeOffer: false,
         image: '',
         categoryId: '',
         subCategoryId: '',
+        brandId: '',
         capacity: [],
         capacityPricing: [],
         abv: '',
@@ -97,7 +106,18 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
 
   useEffect(() => {
     fetchCategories();
+    fetchBrands();
   }, []);
+
+  const fetchBrands = async () => {
+    try {
+      const response = await api.get('/brands/all');
+      setBrands(response.data || []);
+    } catch (error) {
+      console.error('Error fetching brands:', error);
+      setBrands([]);
+    }
+  };
 
   // Fetch subcategories when category changes
   useEffect(() => {
@@ -214,10 +234,12 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         originalPrice: lowestOriginalPrice, // Use lowest original price from capacities
         isAvailable: formData.isAvailable,
         isPopular: formData.isPopular,
+        isBrandFocus: !!formData.isBrandFocus,
         limitedTimeOffer: !!formData.limitedTimeOffer,
         image: formData.image,
         categoryId: parseInt(formData.categoryId),
         subCategoryId: formData.subCategoryId ? parseInt(formData.subCategoryId) : null,
+        brandId: formData.brandId ? parseInt(formData.brandId) : null,
         capacity: formData.capacity,
         capacityPricing: formData.capacityPricing,
         abv: formData.abv ? parseFloat(formData.abv) : null,
@@ -462,6 +484,72 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             </FormControl>
           )}
 
+          {/* Brand Selection */}
+          <FormControl
+            fullWidth
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
+              }
+            }}
+          >
+            <InputLabel id="brand-select-label" sx={{ color: colors.textPrimary }}>
+              Brand (Optional)
+            </InputLabel>
+            <Select
+              labelId="brand-select-label"
+              value={formData.brandId || ''}
+              onChange={(e) => handleInputChange('brandId', e.target.value)}
+              label="Brand (Optional)"
+              sx={{
+                color: colors.textPrimary,
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.border,
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accent,
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accent,
+                },
+                '& .MuiSvgIcon-root': {
+                  color: colors.accent,
+                }
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    backgroundColor: colors.paper,
+                    color: colors.textPrimary,
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 224, 184, 0.1)',
+                      },
+                      '&.Mui-selected': {
+                        backgroundColor: 'rgba(0, 224, 184, 0.2)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 224, 184, 0.3)',
+                        }
+                      }
+                    }
+                  }
+                }
+              }}
+            >
+              <MenuItem value="">
+                <em>No Brand</em>
+              </MenuItem>
+              {brands.filter(brand => brand.isActive).map((brand) => (
+                <MenuItem key={brand.id} value={brand.id.toString()}>
+                  {brand.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
           <TextField
             fullWidth
             multiline
@@ -637,6 +725,26 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                 />
               }
               label="Popular"
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.isBrandFocus}
+                  onChange={(e) => handleInputChange('isBrandFocus', e.target.checked)}
+                  sx={{
+                    '& .MuiSwitch-switchBase.Mui-checked': {
+                      color: '#FFA500',
+                    },
+                    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                      backgroundColor: '#FFA500',
+                    },
+                  }}
+                />
+              }
+              label="Brand Focus"
             />
           </Grid>
 

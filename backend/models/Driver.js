@@ -42,6 +42,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: 0,
       comment: 'Cash at hand amount for the driver'
+    },
+    creditLimit: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Maximum amount driver can owe the company. If balance exceeds this, driver cannot accept new deliveries.'
     }
   }, {
     tableName: 'drivers',

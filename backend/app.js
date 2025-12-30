@@ -85,6 +85,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 // Routes
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
+app.use('/api/brands', require('./routes/brands'));
+app.use('/api/import-brands', require('./routes/import-brands'));
 app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/orders', require('./routes/orders'));

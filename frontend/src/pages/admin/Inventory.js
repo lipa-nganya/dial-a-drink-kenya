@@ -48,6 +48,7 @@ const InventoryPage = () => {
   const [drinks, setDrinks] = useState([]);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -56,6 +57,7 @@ const InventoryPage = () => {
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [offerFilter, setOfferFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -87,23 +89,28 @@ const InventoryPage = () => {
 
   useEffect(() => {
     filterDrinks();
-  }, [drinks, searchTerm, selectedCategory, availabilityFilter, offerFilter]);
+  }, [drinks, searchTerm, selectedCategory, selectedBrand, availabilityFilter, offerFilter]);
 
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory, availabilityFilter, offerFilter]);
+  }, [searchTerm, selectedCategory, selectedBrand, availabilityFilter, offerFilter]);
 
   const fetchData = async () => {
     try {
-      const [drinksResponse, categoriesResponse] = await Promise.all([
+      const [drinksResponse, categoriesResponse, brandsResponse] = await Promise.all([
         api.get('/admin/drinks'),
-        api.get('/categories')
+        api.get('/categories'),
+        api.get('/brands/all')
       ]);
       setDrinks(drinksResponse.data);
       setCategories(categoriesResponse.data);
+      setBrands(brandsResponse.data || []);
+      console.log('Brands fetched:', brandsResponse.data?.length || 0);
     } catch (error) {
       console.error('Error fetching data:', error);
+      console.error('Brands fetch error:', error.response?.data || error.message);
+      setBrands([]); // Set empty array on error
       setError(error.response?.data?.error || error.message);
     } finally {
       setLoading(false);
@@ -162,6 +169,13 @@ const InventoryPage = () => {
           }
         }
 
+    // Brand filter
+    if (selectedBrand) {
+      filtered = filtered.filter(drink =>
+        drink.brand && drink.brand.id === parseInt(selectedBrand)
+      );
+    }
+
     // Availability filter
     if (availabilityFilter !== 'all') {
       filtered = filtered.filter(drink =>
@@ -182,6 +196,7 @@ const InventoryPage = () => {
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedCategory('');
+    setSelectedBrand('');
     setAvailabilityFilter('all');
     setOfferFilter('all');
   };
@@ -384,7 +399,7 @@ const InventoryPage = () => {
           </Grid>
 
           {/* Category Filter */}
-          <Grid size={{ xs: 12, md: 3 }}>
+          <Grid size={{ xs: 12, md: 2.5 }}>
             <FormControl fullWidth sx={{ minWidth: 120 }}>
               <InputLabel sx={{ color: '#F5F5F5' }}>Category</InputLabel>
               <Select
@@ -412,6 +427,40 @@ const InventoryPage = () => {
                 {categories.map((category) => (
                   <MenuItem key={category.id} value={category.name}>
                     {category.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Brand Filter */}
+          <Grid size={{ xs: 12, md: 2.5 }}>
+            <FormControl fullWidth sx={{ minWidth: 120 }}>
+              <InputLabel sx={{ color: '#F5F5F5' }}>Brand</InputLabel>
+              <Select
+                value={selectedBrand}
+                onChange={(e) => setSelectedBrand(e.target.value)}
+                label="Brand"
+                sx={{
+                  color: '#F5F5F5',
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#333',
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#00E0B8',
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: '#00E0B8',
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: '#00E0B8',
+                  },
+                }}
+              >
+                <MenuItem value="">All Brands</MenuItem>
+                {brands.filter(brand => brand.isActive).map((brand) => (
+                  <MenuItem key={brand.id} value={brand.id.toString()}>
+                    {brand.name}
                   </MenuItem>
                 ))}
               </Select>

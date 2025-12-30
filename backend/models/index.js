@@ -66,6 +66,7 @@ const db = {};
 // Import models
 const Category = require('./Category')(sequelize, Sequelize.DataTypes);
 const SubCategory = require('./SubCategory')(sequelize, Sequelize.DataTypes);
+const Brand = require('./Brand')(sequelize, Sequelize.DataTypes);
 const Drink = require('./Drink')(sequelize, Sequelize.DataTypes);
 const Order = require('./Order')(sequelize, Sequelize.DataTypes);
 const OrderItem = require('./OrderItem')(sequelize, Sequelize.DataTypes);
@@ -141,6 +142,9 @@ Drink.belongsTo(Category, { foreignKey: 'categoryId', as: 'category' });
 SubCategory.hasMany(Drink, { foreignKey: 'subCategoryId', as: 'drinks' });
 Drink.belongsTo(SubCategory, { foreignKey: 'subCategoryId', as: 'subCategory' });
 
+Brand.hasMany(Drink, { foreignKey: 'brandId', as: 'drinks' });
+Drink.belongsTo(Brand, { foreignKey: 'brandId', as: 'brand' });
+
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'items' });
 Order.hasMany(OrderItem, { foreignKey: 'orderId', as: 'orderItems' });
 OrderItem.belongsTo(Order, { foreignKey: 'orderId', as: 'order' });
@@ -175,6 +179,7 @@ if (Branch) {
 
 db.Category = Category;
 db.SubCategory = SubCategory;
+db.Brand = Brand;
 db.Drink = Drink;
 db.Order = Order;
 db.OrderItem = OrderItem;

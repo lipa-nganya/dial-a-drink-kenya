@@ -37,11 +37,23 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id'
       }
     },
+    brandId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'brands',
+        key: 'id'
+      }
+    },
     isAvailable: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
     isPopular: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false
+    },
+    isBrandFocus: {
       type: DataTypes.BOOLEAN,
       defaultValue: false
     },

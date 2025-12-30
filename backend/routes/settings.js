@@ -118,6 +118,9 @@ If you have any questions, please contact us.
 Welcome aboard! 🎉`;
         return res.json({ key: 'whatsappDriverInvitationMessage', value: defaultMessage });
       }
+      if (key === 'brandFocus') {
+        return res.json({ key: 'brandFocus', value: '' });
+      }
       return res.status(404).json({ error: 'Setting not found' });
     }
     
@@ -133,7 +136,8 @@ router.put('/:key', async (req, res) => {
     const { key } = req.params;
     const { value } = req.body;
     
-    if (!value) {
+    // Allow empty string for certain settings like brandFocus
+    if (value === undefined || value === null) {
       return res.status(400).json({ error: 'Value is required' });
     }
     

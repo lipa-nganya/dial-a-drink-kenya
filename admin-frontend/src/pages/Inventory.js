@@ -40,7 +40,8 @@ import {
   Clear,
   Add,
   LocalOffer,
-  QrCodeScanner
+  QrCodeScanner,
+  Star
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -52,6 +53,7 @@ const InventoryPage = () => {
   const [drinks, setDrinks] = useState([]);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -60,6 +62,8 @@ const InventoryPage = () => {
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedBrand, setSelectedBrand] = useState('');
+  const [showBrandFocusOnly, setShowBrandFocusOnly] = useState(false);
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [offerFilter, setOfferFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
@@ -96,23 +100,28 @@ const InventoryPage = () => {
 
   useEffect(() => {
     filterDrinks();
-  }, [drinks, searchTerm, selectedCategory, availabilityFilter, offerFilter]);
+  }, [drinks, searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
 
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory, availabilityFilter, offerFilter]);
+  }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
 
   const fetchData = async () => {
     try {
-      const [drinksResponse, categoriesResponse] = await Promise.all([
+      const [drinksResponse, categoriesResponse, brandsResponse] = await Promise.all([
         api.get('/admin/drinks'),
-        api.get('/categories')
+        api.get('/categories'),
+        api.get('/brands/all')
       ]);
       setDrinks(drinksResponse.data);
       setCategories(categoriesResponse.data);
+      setBrands(brandsResponse.data || []);
+      console.log('Brands fetched:', brandsResponse.data?.length || 0);
     } catch (error) {
       console.error('Error fetching data:', error);
+      console.error('Brands fetch error:', error.response?.data || error.message);
+      setBrands([]); // Set empty array on error
       setError(error.response?.data?.error || error.message);
     } finally {
       setLoading(false);
@@ -160,25 +169,50 @@ const InventoryPage = () => {
       );
     }
 
-        // Category filter
-        if (selectedCategory) {
-          if (selectedCategory === 'popular') {
-            filtered = filtered.filter(drink => drink.isPopular === true);
-          } else {
-            filtered = filtered.filter(drink =>
-              drink.category && drink.category.name === selectedCategory
-            );
-          }
-        }
+    // Category filter
+    if (selectedCategory) {
+      if (selectedCategory === 'popular') {
+        filtered = filtered.filter(drink => drink.isPopular === true);
+      } else {
+        filtered = filtered.filter(drink =>
+          drink.category && drink.category.name === selectedCategory
+        );
+      }
+    }
 
-    // Availability filter
+    // Brand filter - always apply when a brand is selected
+    if (selectedBrand) {
+      const selectedBrandId = parseInt(selectedBrand);
+      filtered = filtered.filter(drink => {
+        // Check if drink has a brand and it matches the selected brand
+        // Handle both brand object and brandId (in case brand relationship isn't loaded)
+        const drinkBrandId = drink.brand?.id || drink.brandId;
+        const hasMatchingBrand = drinkBrandId === selectedBrandId;
+        return hasMatchingBrand;
+      });
+      
+      // If brand is selected and showBrandFocusOnly is enabled, filter to only brand focus items
+      // This applies whether searching or not
+      if (showBrandFocusOnly) {
+        filtered = filtered.filter(drink => {
+          // Only show items that have brand focus enabled
+          // Also ensure the item still matches the selected brand (double check)
+          const hasBrandFocus = drink.isBrandFocus === true;
+          const drinkBrandId = drink.brand?.id || drink.brandId;
+          const hasMatchingBrand = drinkBrandId === selectedBrandId;
+          return hasBrandFocus && hasMatchingBrand;
+        });
+      }
+    }
+
+    // Availability filter - always apply
     if (availabilityFilter !== 'all') {
       filtered = filtered.filter(drink =>
         availabilityFilter === 'available' ? drink.isAvailable : !drink.isAvailable
       );
     }
 
-    // On Offer filter
+    // On Offer filter - always apply
     if (offerFilter !== 'all') {
       if (offerFilter === 'limited') {
         filtered = filtered.filter(drink => drink.limitedTimeOffer === true);
@@ -195,6 +229,8 @@ const InventoryPage = () => {
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedCategory('');
+    setSelectedBrand('');
+    setShowBrandFocusOnly(false);
     setAvailabilityFilter('all');
     setOfferFilter('all');
   };
@@ -288,8 +324,12 @@ const InventoryPage = () => {
     setSelectedDrink(null);
   };
 
-  const handleSaveDrink = () => {
-    fetchData(); // Refresh the drinks list
+  const handleSaveDrink = async () => {
+    // Refresh the drinks list
+    await fetchData();
+    // Note: If the updated item's brand doesn't match the selected brand filter,
+    // it will be filtered out. Users can search for it to find it, as search
+    // bypasses brand and category filters.
   };
 
   if (loading) {
@@ -414,7 +454,7 @@ const InventoryPage = () => {
           </Grid>
 
           {/* Category Filter */}
-          <Grid size={{ xs: 12, md: 3 }}>
+          <Grid size={{ xs: 12, md: 2.5 }}>
             <FormControl fullWidth sx={{ minWidth: 120 }}>
               <InputLabel sx={{ color: colors.textPrimary }}>Category</InputLabel>
               <Select
@@ -447,6 +487,88 @@ const InventoryPage = () => {
               </Select>
             </FormControl>
           </Grid>
+
+          {/* Brand Filter */}
+          <Grid size={{ xs: 12, md: 2.5 }}>
+            <FormControl fullWidth sx={{ minWidth: 120 }}>
+              <InputLabel sx={{ color: colors.textPrimary }}>Brand</InputLabel>
+              <Select
+                value={selectedBrand}
+                onChange={(e) => {
+                  setSelectedBrand(e.target.value);
+                  // Reset brand focus filter when brand changes
+                  if (!e.target.value) {
+                    setShowBrandFocusOnly(false);
+                  }
+                }}
+                label="Brand"
+                sx={{
+                  color: colors.textPrimary,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.border,
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText,
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText,
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: colors.accentText,
+                  },
+                }}
+              >
+                <MenuItem value="">All Brands</MenuItem>
+                {brands.filter(brand => brand.isActive).map((brand) => (
+                  <MenuItem key={brand.id} value={brand.id.toString()}>
+                    {brand.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+
+          {/* Brand Focus Only Toggle - Only show when a brand is selected */}
+          {selectedBrand && (
+            <Grid size={{ xs: 12, md: 2.5 }}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  height: '100%',
+                  p: 1,
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: 1,
+                  backgroundColor: colors.paper
+                }}
+              >
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showBrandFocusOnly}
+                      onChange={(e) => setShowBrandFocusOnly(e.target.checked)}
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': {
+                          color: '#FFA500',
+                        },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                          backgroundColor: '#FFA500',
+                        },
+                      }}
+                    />
+                  }
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Star sx={{ fontSize: 18, color: '#FFA500' }} />
+                      <Typography variant="body2" sx={{ color: colors.textPrimary }}>
+                        Brand Focus Only
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </Box>
+            </Grid>
+          )}
 
           {/* Availability Filter */}
           <Grid size={{ xs: 12, sm: 6, md: 2 }}>
@@ -660,6 +782,19 @@ const InventoryPage = () => {
                           height: '20px',
                           backgroundColor: '#FF3366',
                           color: '#F5F5F5'
+                        }}
+                      />
+                    )}
+                    {drink.isBrandFocus && (
+                      <Chip
+                        icon={<Star />}
+                        label="Brand Focus"
+                        size="small"
+                        sx={{ 
+                          fontSize: '0.65rem', 
+                          height: '20px',
+                          backgroundColor: '#FFA500',
+                          color: '#0D0D0D'
                         }}
                       />
                     )}

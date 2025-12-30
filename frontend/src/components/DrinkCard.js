@@ -12,19 +12,23 @@ import {
   RadioGroup,
   FormControlLabel,
   FormControl,
-  Alert
+  Alert,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import {
   AddShoppingCart,
   Star,
   Cancel,
   LocalOffer,
-  LocalBar
+  LocalBar,
+  Share
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getBackendUrl } from '../utils/backendUrl';
+import { shareProduct } from '../utils/generateShareImage';
 
 const DrinkCard = ({ drink }) => {
   const navigate = useNavigate();
@@ -103,6 +107,15 @@ const DrinkCard = ({ drink }) => {
 
   const handleCardClick = () => {
     navigate(`/product/${drink.id}`);
+  };
+
+  const handleShare = async (e) => {
+    e.stopPropagation(); // Prevent card click when clicking share
+    try {
+      await shareProduct(drink);
+    } catch (error) {
+      console.error('Error sharing product:', error);
+    }
   };
 
   return (
@@ -357,7 +370,21 @@ const DrinkCard = ({ drink }) => {
                )}
              </CardContent>
 
-             <CardActions sx={{ p: 0, px: 1, pb: 1, pt: 0 }}>
+             <CardActions sx={{ p: 0, px: 1, pb: 1, pt: 0, display: 'flex', gap: 0.5 }}>
+        <Tooltip title="Share on social media">
+          <IconButton
+            size="small"
+            onClick={handleShare}
+            sx={{
+              color: colors.accentText || '#FF6B6B',
+              '&:hover': {
+                backgroundColor: 'rgba(255, 107, 107, 0.1)'
+              }
+            }}
+          >
+            <Share fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Button
           fullWidth
           variant="contained"
@@ -369,6 +396,7 @@ const DrinkCard = ({ drink }) => {
             backgroundColor: '#FF6B6B',
             fontSize: '0.75rem',
             py: 0.5,
+            flex: 1,
             '&:hover': {
               backgroundColor: '#FF5252'
             },

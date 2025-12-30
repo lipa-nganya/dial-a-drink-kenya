@@ -559,6 +559,9 @@ router.get('/drinks', async (req, res) => {
       }, {
         model: db.SubCategory,
         as: 'subCategory'
+      }, {
+        model: db.Brand,
+        as: 'brand'
       }],
       order: [['name', 'ASC']]
     });
@@ -581,8 +584,10 @@ router.post('/drinks', async (req, res) => {
       image,
       categoryId,
       subCategoryId,
+      brandId,
       isAvailable,
       isPopular,
+      isBrandFocus,
       limitedTimeOffer,
       capacity,
       capacityPricing,
@@ -608,6 +613,15 @@ router.post('/drinks', async (req, res) => {
       parsedSubCategoryId = parsed;
     }
 
+    let parsedBrandId = null;
+    if (brandId !== undefined && brandId !== null && brandId !== '') {
+      const parsed = parseInt(brandId, 10);
+      if (Number.isNaN(parsed)) {
+        return res.status(400).json({ error: 'brandId must be a number if provided' });
+      }
+      parsedBrandId = parsed;
+    }
+
     const normalizedPricing = normalizeCapacityPricing(capacityPricing);
     const capacities = deriveCapacities(capacity, normalizedPricing);
     const summary = summarisePricing(normalizedPricing, price, originalPrice);
@@ -625,9 +639,11 @@ router.post('/drinks', async (req, res) => {
         typeof image === 'string' && image.trim() ? image.trim() : null,
       categoryId: parsedCategoryId,
       subCategoryId: parsedSubCategoryId,
+      brandId: parsedBrandId,
       isAvailable:
         typeof isAvailable === 'boolean' ? isAvailable : true,
       isPopular: typeof isPopular === 'boolean' ? isPopular : false,
+      isBrandFocus: typeof isBrandFocus === 'boolean' ? isBrandFocus : false,
       limitedTimeOffer: limitedTimeFlag,
       isOnOffer: summary.isOnOffer,
       capacity: capacities,
@@ -638,7 +654,8 @@ router.post('/drinks', async (req, res) => {
     const drinkWithRelations = await db.Drink.findByPk(newDrink.id, {
       include: [
         { model: db.Category, as: 'category' },
-        { model: db.SubCategory, as: 'subCategory' }
+        { model: db.SubCategory, as: 'subCategory' },
+        { model: db.Brand, as: 'brand' }
       ]
     });
 
@@ -667,8 +684,10 @@ router.put('/drinks/:id', async (req, res) => {
       image,
       categoryId,
       subCategoryId,
+      brandId,
       isAvailable,
       isPopular,
+      isBrandFocus,
       limitedTimeOffer,
       capacity,
       capacityPricing,
@@ -692,6 +711,15 @@ router.put('/drinks/:id', async (req, res) => {
         return res.status(400).json({ error: 'subCategoryId must be a number if provided' });
       }
       parsedSubCategoryId = parsed;
+    }
+
+    let parsedBrandId = null;
+    if (brandId !== undefined && brandId !== null && brandId !== '') {
+      const parsed = parseInt(brandId, 10);
+      if (Number.isNaN(parsed)) {
+        return res.status(400).json({ error: 'brandId must be a number if provided' });
+      }
+      parsedBrandId = parsed;
     }
 
     const normalizedPricing = normalizeCapacityPricing(capacityPricing);
@@ -726,12 +754,17 @@ router.put('/drinks/:id', async (req, res) => {
         typeof image === 'string' && image.trim() ? image.trim() : null,
       categoryId: parsedCategoryId,
       subCategoryId: parsedSubCategoryId,
+      brandId: parsedBrandId,
       isAvailable:
         autoAvailable !== undefined 
           ? autoAvailable 
           : (typeof isAvailable === 'boolean' ? isAvailable : drink.isAvailable),
       isPopular:
         typeof isPopular === 'boolean' ? isPopular : drink.isPopular,
+      isBrandFocus:
+        isBrandFocus !== undefined && isBrandFocus !== null
+          ? (typeof isBrandFocus === 'boolean' ? isBrandFocus : Boolean(isBrandFocus))
+          : drink.isBrandFocus,
       limitedTimeOffer: limitedTimeFlag,
       isOnOffer: summary.isOnOffer,
       capacity: capacities,
@@ -739,12 +772,14 @@ router.put('/drinks/:id', async (req, res) => {
       abv: toNumber(abv),
       stock: stockValue
       // isAvailable is set above based on stock if stock is being updated
+      // brandId is set above
     });
 
     const updatedDrink = await db.Drink.findByPk(id, {
       include: [
         { model: db.Category, as: 'category' },
-        { model: db.SubCategory, as: 'subCategory' }
+        { model: db.SubCategory, as: 'subCategory' },
+        { model: db.Brand, as: 'brand' }
       ]
     });
 

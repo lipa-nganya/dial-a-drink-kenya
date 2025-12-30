@@ -27,17 +27,21 @@ import {
   Cancel,
   Visibility,
   ExpandMore,
-  Payment
+  Payment,
+  Refresh,
+  Phone
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
+import { useCart } from '../contexts/CartContext';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
 
 const MyOrders = () => {
   const navigate = useNavigate();
   const { customer, isLoggedIn } = useCustomer();
+  const { clearCart, addToCart } = useCart();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -186,6 +190,14 @@ const MyOrders = () => {
         const sortedOrders = (response.data.orders || []).sort((a, b) => {
           return new Date(b.createdAt) - new Date(a.createdAt);
         });
+        
+        // Debug: Log delivery addresses to help identify the issue
+        console.log('Fetched orders with delivery addresses:', sortedOrders.map(o => ({
+          id: o.id,
+          deliveryAddress: o.deliveryAddress,
+          status: o.status
+        })));
+        
         setOrders(sortedOrders);
         setPage(0);
       } else {
@@ -348,6 +360,85 @@ const MyOrders = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const formatPhoneForDisplay = (phone) => {
+    if (!phone) return '';
+    const digits = phone.replace(/\D/g, '');
+
+    if (!digits) return '';
+
+    if (digits.startsWith('254') && digits.length === 12) {
+      return `0${digits.slice(3)}`;
+    }
+
+    if (digits.startsWith('0') && digits.length === 10) {
+      return digits;
+    }
+
+    if (digits.length === 9 && digits.startsWith('7')) {
+      return `0${digits}`;
+    }
+
+    return digits;
+  };
+
+  const handleReorder = (order) => {
+    try {
+      // Clear current cart
+      clearCart();
+
+      // Add all items from the order to the cart
+      if (order.items && order.items.length > 0) {
+        order.items.forEach((item) => {
+          if (item.drink) {
+            // Prepare drink object for cart
+            const drinkForCart = {
+              ...item.drink,
+              selectedPrice: item.price,
+              selectedCapacity: item.selectedCapacity || null // Use selectedCapacity if available
+            };
+            
+            // Add item to cart with the original quantity
+            addToCart(drinkForCart, item.quantity);
+          }
+        });
+      }
+
+      // Pre-populate customer delivery information using THIS SPECIFIC ORDER's address
+      // Store delivery info in localStorage so Cart page can load it
+      // Note: order.deliveryAddress is a combined string that includes address, apartment, and floor
+      // We use the order's specific deliveryAddress to ensure each order uses its own address
+      // Skip "In-Store Purchase" addresses - those are POS orders that shouldn't be reordered for delivery
+      const deliveryAddress = order.deliveryAddress || '';
+      
+      console.log('Reorder - Order ID:', order.id, 'Delivery Address:', deliveryAddress);
+      
+      // Only use the order's delivery address if it's not "In-Store Purchase"
+      // If it is "In-Store Purchase", we'll use an empty address and let the user enter a new one
+      const addressToUse = deliveryAddress && deliveryAddress !== 'In-Store Purchase' 
+        ? deliveryAddress 
+        : '';
+      
+      const deliveryInfo = {
+        name: order.customerName || customer?.name || '',
+        phone: formatPhoneForDisplay(order.customerPhone || customer?.phone || ''),
+        email: order.customerEmail || customer?.email || '',
+        address: addressToUse, // Use this specific order's delivery address (skip "In-Store Purchase")
+        apartmentHouseNumber: '', // Address components are combined in deliveryAddress, user can add if needed
+        floorNumber: '', // Address components are combined in deliveryAddress, user can add if needed
+        notes: '' // User can add new notes
+      };
+
+      // Store this order's specific delivery info (overwrites any previous reorder's address)
+      localStorage.setItem('customerDeliveryInfo', JSON.stringify(deliveryInfo));
+
+      // Navigate to cart page
+      navigate('/cart');
+    } catch (error) {
+      console.error('Error reordering:', error);
+      setError('Failed to reorder. Please try again.');
+    }
+  };
+
   const getProgressSteps = (status) => {
     const steps = [
       { label: 'Order Placed', status: 'pending', completed: true },
@@ -485,49 +576,71 @@ const MyOrders = () => {
                     </Box>
                   </Box>
                   
-                  {/* Second Row: Order Progress Steps */}
-                  <Box sx={{ mb: 1 }}>
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                      {getProgressSteps(order.status).map((step, index) => (
-                        <Chip
-                          key={index}
-                          label={step.label}
+                  {/* Second Row: Order Progress Steps and Action Buttons */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {getProgressSteps(order.status).map((step, index) => (
+                          <Chip
+                            key={index}
+                            label={step.label}
+                            size="small"
+                            color={step.completed ? 'success' : 'default'}
+                            icon={step.completed ? <CheckCircle fontSize="small" /> : <AccessTime fontSize="small" />}
+                            sx={{
+                              opacity: step.completed ? 1 : 0.5,
+                              fontSize: '0.7rem',
+                              height: '24px'
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flexShrink: 0, ml: 2 }}>
+                      {/* Reorder Button for Completed/Delivered Orders */}
+                      {(order.status === 'completed' || order.status === 'delivered') && (
+                        <Button
+                          variant="contained"
                           size="small"
-                          color={step.completed ? 'success' : 'default'}
-                          icon={step.completed ? <CheckCircle fontSize="small" /> : <AccessTime fontSize="small" />}
-                          sx={{
-                            opacity: step.completed ? 1 : 0.5,
-                            fontSize: '0.7rem',
-                            height: '24px'
+                          startIcon={<Refresh />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleReorder(order);
                           }}
-                        />
-                      ))}
+                          sx={{
+                            backgroundColor: '#00E0B8',
+                            color: '#0D0D0D',
+                            '&:hover': {
+                              backgroundColor: '#00C4A3'
+                            }
+                          }}
+                        >
+                          Reorder
+                        </Button>
+                      )}
+                      {/* Make Payment Button for Unpaid Orders */}
+                      {order.paymentStatus !== 'paid' && order.paymentType === 'pay_now' && order.status !== 'cancelled' && (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<Payment />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPaymentDialog(order);
+                          }}
+                          sx={{
+                            backgroundColor: '#00E0B8',
+                            color: '#0D0D0D',
+                            '&:hover': {
+                              backgroundColor: '#00C4A3'
+                            }
+                          }}
+                        >
+                          Make Payment
+                        </Button>
+                      )}
                     </Box>
                   </Box>
-                  
-                  {/* Third Row: Make Payment Button for Unpaid Orders */}
-                  {order.paymentStatus !== 'paid' && order.paymentType === 'pay_now' && order.status !== 'cancelled' && (
-                    <Box sx={{ mt: 0.5 }}>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        startIcon={<Payment />}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenPaymentDialog(order);
-                        }}
-                        sx={{
-                          backgroundColor: '#00E0B8',
-                          color: '#0D0D0D',
-                          '&:hover': {
-                            backgroundColor: '#00C4A3'
-                          }
-                        }}
-                      >
-                        Make Payment
-                      </Button>
-                    </Box>
-                  )}
                 </Box>
               </AccordionSummary>
               <Divider />
@@ -558,19 +671,33 @@ const MyOrders = () => {
                   </Box>
                 )}
 
-                {/* Driver Information */}
-                {order.driver && (
+                {/* Driver Information - Only show after order is confirmed */}
+                {order.driver && order.status !== 'pending' && (
                   <Box sx={{ mb: 2, p: 1.5, backgroundColor: 'rgba(0, 224, 184, 0.1)', borderRadius: 1 }}>
                     <Typography variant="caption" sx={{ color: '#000000', fontWeight: 600, display: 'block', mb: 0.5 }}>
                       Delivery Driver
                     </Typography>
-                    <Typography variant="body2" color="text.primary" sx={{ fontSize: '0.85rem', fontWeight: 500 }}>
+                    <Typography variant="body2" color="text.primary" sx={{ fontSize: '0.85rem', fontWeight: 500, mb: 1 }}>
                       {order.driver.name || 'Driver Assigned'}
                     </Typography>
                     {order.driver.phoneNumber && (
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem', mt: 0.5 }}>
-                        Phone: {order.driver.phoneNumber}
-                      </Typography>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<Phone />}
+                        component="a"
+                        href={`tel:${order.driver.phoneNumber}`}
+                        sx={{
+                          backgroundColor: '#00E0B8',
+                          color: '#0D0D0D',
+                          fontSize: '0.85rem',
+                          '&:hover': {
+                            backgroundColor: '#00C4A3'
+                          }
+                        }}
+                      >
+                        Call Driver
+                      </Button>
                     )}
                   </Box>
                 )}
@@ -580,7 +707,10 @@ const MyOrders = () => {
                   variant="outlined"
                   size="small"
                   startIcon={<Visibility />}
-                  onClick={() => navigate(`/order-tracking`, { state: { order } })}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/order-tracking`, { state: { order } });
+                  }}
                   fullWidth
                   sx={{
                     borderColor: '#00E0B8',

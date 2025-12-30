@@ -49,7 +49,8 @@ import {
   PersonAdd,
   AdminPanelSettings,
   CloudUpload,
-  WhatsApp
+  WhatsApp,
+  Star
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -160,7 +161,7 @@ const Settings = () => {
   const isCountdownSaveDisabled =
     !countdownForm.title.trim() || !countdownForm.startDate || !countdownForm.endDate;
 
-  // Hero Management state
+  // Home Settings state
   const [heroImage, setHeroImage] = useState('');
   const [heroImageInput, setHeroImageInput] = useState('');
   const [heroImageFileName, setHeroImageFileName] = useState('');
@@ -169,6 +170,11 @@ const Settings = () => {
   const [useHeroImageUrl, setUseHeroImageUrl] = useState(false);
   const [showHeroImageForm, setShowHeroImageForm] = useState(false);
   const heroImageFileInputRef = useRef(null);
+  
+  // Brand Focus state
+  const [brands, setBrands] = useState([]);
+  const [selectedBrandFocus, setSelectedBrandFocus] = useState('');
+  const [brandFocusLoading, setBrandFocusLoading] = useState(false);
 
   // User Management state
   const [users, setUsers] = useState([]);
@@ -272,6 +278,8 @@ const Settings = () => {
         fetchDeliverySettings(),
         fetchCountdowns(),
         fetchHeroImage(),
+        fetchBrandFocus(),
+        fetchBrands(),
         fetchUsers(),
         fetchWhatsappMessage()
       ]);
@@ -687,7 +695,7 @@ Welcome aboard! 🎉`;
     }
   };
 
-  // ========== HERO MANAGEMENT ==========
+  // ========== HOME SETTINGS ==========
   const fetchHeroImage = async () => {
     try {
       const response = await api.get('/settings/heroImage');
@@ -761,6 +769,47 @@ Welcome aboard! 🎉`;
   const openHeroImageFilePicker = () => {
     if (heroImageFileInputRef.current) {
       heroImageFileInputRef.current.click();
+    }
+  };
+
+  // Brand Focus functions
+  const fetchBrands = async () => {
+    try {
+      const response = await api.get('/brands/all');
+      setBrands(response.data || []);
+    } catch (error) {
+      console.error('Error fetching brands:', error);
+      setBrands([]);
+    }
+  };
+
+  const fetchBrandFocus = async () => {
+    try {
+      const response = await api.get('/settings/brandFocus');
+      if (response.data && response.data.value) {
+        setSelectedBrandFocus(response.data.value);
+      } else {
+        setSelectedBrandFocus('');
+      }
+    } catch (error) {
+      console.error('Error fetching brand focus setting:', error);
+      setSelectedBrandFocus('');
+    }
+  };
+
+  const updateBrandFocus = async () => {
+    try {
+      setBrandFocusLoading(true);
+      await api.put('/settings/brandFocus', { value: selectedBrandFocus || '' });
+      setNotification({ message: 'Brand focus updated successfully!' });
+    } catch (error) {
+      console.error('Error updating brand focus:', error);
+      setNotification({ 
+        message: 'Failed to update brand focus', 
+        severity: 'error' 
+      });
+    } finally {
+      setBrandFocusLoading(false);
     }
   };
 
@@ -1927,24 +1976,43 @@ Welcome aboard! 🎉`;
         </CardContent>
       </Card>
 
-      {/* Hero Management */}
+      {/* Home Settings */}
       <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
         <CardContent>
           <Box 
             display="flex" 
             justifyContent="space-between" 
             alignItems="center" 
-            sx={{ mb: 2 }}
+            sx={{ mb: 3 }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <ImageIcon sx={{ color: colors.accentText, fontSize: 32 }} />
+              <SettingsIcon sx={{ color: colors.accentText, fontSize: 32 }} />
               <Typography 
                 variant="h5" 
                 sx={{ color: colors.accentText, fontWeight: 600 }}
               >
-                Hero Image Management
+                Home Settings
               </Typography>
             </Box>
+          </Box>
+
+          {/* Hero Image Section */}
+          <Box sx={{ mb: 4, pb: 3, borderBottom: `1px solid ${colors.border}` }}>
+            <Box 
+              display="flex" 
+              justifyContent="space-between" 
+              alignItems="center" 
+              sx={{ mb: 2 }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <ImageIcon sx={{ color: colors.accentText, fontSize: 24 }} />
+                <Typography 
+                  variant="h6" 
+                  sx={{ color: colors.accentText, fontWeight: 600 }}
+                >
+                  Hero Image
+                </Typography>
+              </Box>
             <Button 
               variant="outlined" 
               onClick={() => {
@@ -2179,6 +2247,111 @@ Welcome aboard! 🎉`;
               </CardContent>
             </Card>
           )}
+          </Box>
+
+          {/* Brand Focus Section */}
+          <Box sx={{ mt: 4 }}>
+            <Box 
+              display="flex" 
+              justifyContent="space-between" 
+              alignItems="center" 
+              sx={{ mb: 2 }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Star sx={{ color: '#FFA500', fontSize: 24 }} />
+                <Typography 
+                  variant="h6" 
+                  sx={{ color: colors.accentText, fontWeight: 600 }}
+                >
+                  Brand Focus
+                </Typography>
+              </Box>
+            </Box>
+            
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Select a brand to feature on the customer homepage. Only items with Brand Focus enabled for this brand will be displayed.
+            </Typography>
+
+            <FormControl 
+              fullWidth 
+              sx={{ 
+                mb: 2,
+                '& .MuiOutlinedInput-root': {
+                  '& fieldset': { borderColor: colors.border },
+                  '&:hover fieldset': { borderColor: colors.accentText },
+                  '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                }
+              }}
+            >
+              <InputLabel sx={{ color: colors.textPrimary }}>Select Brand</InputLabel>
+              <Select
+                value={selectedBrandFocus}
+                onChange={(e) => setSelectedBrandFocus(e.target.value)}
+                label="Select Brand"
+                sx={{
+                  color: colors.textPrimary,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.border,
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText,
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText,
+                  },
+                  '& .MuiSvgIcon-root': {
+                    color: colors.accentText,
+                  },
+                }}
+                MenuProps={{
+                  PaperProps: {
+                    sx: {
+                      backgroundColor: colors.paper,
+                      color: colors.textPrimary,
+                      '& .MuiMenuItem-root': {
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 224, 184, 0.1)',
+                        },
+                        '&.Mui-selected': {
+                          backgroundColor: 'rgba(0, 224, 184, 0.2)',
+                          '&:hover': {
+                            backgroundColor: 'rgba(0, 224, 184, 0.3)',
+                          }
+                        }
+                      }
+                    }
+                  }
+                }}
+              >
+                <MenuItem value="">
+                  <em>No Brand Selected</em>
+                </MenuItem>
+                {brands.filter(brand => brand.isActive).map((brand) => (
+                  <MenuItem key={brand.id} value={brand.id.toString()}>
+                    {brand.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Button
+              variant="contained"
+              onClick={updateBrandFocus}
+              disabled={brandFocusLoading}
+              startIcon={brandFocusLoading ? <CircularProgress size={20} /> : <Save />}
+              sx={{
+                backgroundColor: colors.accentText,
+                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                '&:hover': { backgroundColor: '#00C4A3' },
+                '&:disabled': {
+                  backgroundColor: colors.border,
+                  color: colors.textSecondary
+                }
+              }}
+            >
+              {brandFocusLoading ? 'Saving...' : 'Save Brand Focus'}
+            </Button>
+          </Box>
         </CardContent>
       </Card>
 

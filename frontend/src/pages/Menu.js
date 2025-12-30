@@ -144,6 +144,18 @@ const Menu = () => {
     }
     // If selectedCategory === 0, show all drinks (no filter)
 
+    // Sort: available items first, then by name
+    filtered.sort((a, b) => {
+      // First sort by availability (available items first)
+      if (a.isAvailable !== b.isAvailable) {
+        return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
+      }
+      // Then sort by name alphabetically
+      const nameA = (a.name || '').toLowerCase();
+      const nameB = (b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+
     setFilteredDrinks(filtered);
   };
 
@@ -205,8 +217,20 @@ const Menu = () => {
         />
       </Box>
 
-      {/* Category Buttons - Two Row Layout */}
-      <Box sx={{ mb: 3 }}>
+      {/* Category Buttons - Sticky */}
+      <Box 
+        sx={{ 
+          position: 'sticky',
+          top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
+          zIndex: 99, // Lower than AppBar (which is typically 1100)
+          backgroundColor: 'background.paper',
+          pt: 2,
+          pb: 2,
+          mb: 3,
+          borderBottom: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
         <Box
           sx={{
             display: 'grid',
@@ -295,30 +319,30 @@ const Menu = () => {
             </Button>
           ))}
         </Box>
-      </Box>
 
-      {/* Subcategory Chips - Show when a category is selected */}
-      {selectedCategory > 0 && subcategories.length > 0 && (
-        <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Chip
-            label="All"
-            onClick={() => handleSubcategoryChange(0)}
-            color={selectedSubcategory === 0 ? 'primary' : 'default'}
-            variant={selectedSubcategory === 0 ? 'filled' : 'outlined'}
-            sx={{ cursor: 'pointer' }}
-          />
-          {subcategories.map((subcategory) => (
+        {/* Subcategory Chips - Show when a category is selected */}
+        {selectedCategory > 0 && subcategories.length > 0 && (
+          <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             <Chip
-              key={subcategory.id}
-              label={subcategory.name}
-              onClick={() => handleSubcategoryChange(subcategory.id)}
-              color={selectedSubcategory === subcategory.id ? 'primary' : 'default'}
-              variant={selectedSubcategory === subcategory.id ? 'filled' : 'outlined'}
+              label="All"
+              onClick={() => handleSubcategoryChange(0)}
+              color={selectedSubcategory === 0 ? 'primary' : 'default'}
+              variant={selectedSubcategory === 0 ? 'filled' : 'outlined'}
               sx={{ cursor: 'pointer' }}
             />
-          ))}
-        </Box>
-      )}
+            {subcategories.map((subcategory) => (
+              <Chip
+                key={subcategory.id}
+                label={subcategory.name}
+                onClick={() => handleSubcategoryChange(subcategory.id)}
+                color={selectedSubcategory === subcategory.id ? 'primary' : 'default'}
+                variant={selectedSubcategory === subcategory.id ? 'filled' : 'outlined'}
+                sx={{ cursor: 'pointer' }}
+              />
+            ))}
+          </Box>
+        )}
+      </Box>
 
       {/* All Drinks */}
       <Box>

@@ -14,6 +14,7 @@ import {
   Alert
 } from '@mui/material';
 import { Add, Delete, Edit, Save, Cancel } from '@mui/icons-material';
+import { useTheme } from '../contexts/ThemeContext';
 
 const CAPACITY_OPTIONS = [
   '1 litre',
@@ -35,6 +36,7 @@ const CAPACITY_OPTIONS = [
 ];
 
 const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChange }) => {
+  const { isDarkMode, colors } = useTheme();
   const [localPricing, setLocalPricing] = useState(capacityPricing);
   const [editingIndex, setEditingIndex] = useState(-1);
   const [editCapacity, setEditCapacity] = useState('');
@@ -190,7 +192,7 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
 
   return (
     <Box>
-      <Typography variant="subtitle2" gutterBottom sx={{ color: '#00E0B8', fontWeight: 600, mb: 2 }}>
+      <Typography variant="subtitle2" gutterBottom sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
         Capacities & Pricing
       </Typography>
 
@@ -203,19 +205,19 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
           alignItems: 'center',
           p: 1.5,
           mb: 1,
-          borderBottom: '2px solid #00E0B8',
-          backgroundColor: 'rgba(0, 224, 184, 0.1)'
+          borderBottom: `2px solid ${colors.accentText}`,
+          backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)'
         }}>
-          <Typography variant="subtitle2" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+          <Typography variant="subtitle2" sx={{ color: colors.accentText, fontWeight: 600 }}>
             Capacity
           </Typography>
-          <Typography variant="subtitle2" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+          <Typography variant="subtitle2" sx={{ color: colors.accentText, fontWeight: 600 }}>
             Original Price
           </Typography>
-          <Typography variant="subtitle2" sx={{ color: '#00E0B8', fontWeight: 600 }}>
+          <Typography variant="subtitle2" sx={{ color: colors.accentText, fontWeight: 600 }}>
             Offer Price
           </Typography>
-          <Typography variant="subtitle2" sx={{ color: '#00E0B8', fontWeight: 600, textAlign: 'center' }}>
+          <Typography variant="subtitle2" sx={{ color: colors.accentText, fontWeight: 600, textAlign: 'center' }}>
             Actions
           </Typography>
         </Box>
@@ -235,21 +237,33 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                     gap: 1.5,
                     alignItems: 'flex-start',
                     p: 2,
-                    border: '1px solid #00E0B8',
+                    border: `1px solid ${colors.accentText}`,
                     borderRadius: 1,
-                    backgroundColor: 'rgba(0, 224, 184, 0.05)'
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.05)' : 'rgba(0, 224, 184, 0.02)'
                   }}>
                     <FormControl size="small" sx={{ minWidth: 180 }}>
-                      <InputLabel>Capacity</InputLabel>
+                      <InputLabel sx={{ color: colors.textPrimary }}>Capacity</InputLabel>
                       <Select
                         value={editCapacity}
                         onChange={(e) => setEditCapacity(e.target.value)}
                         label="Capacity"
                         sx={{
+                          color: colors.textPrimary,
                           '& .MuiOutlinedInput-root': {
-                            '& fieldset': { borderColor: '#00E0B8' },
-                            '&:hover fieldset': { borderColor: '#00E0B8' },
-                            '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                            '& fieldset': { borderColor: colors.border },
+                            '&:hover fieldset': { borderColor: colors.accentText },
+                            '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                          },
+                          '& .MuiSvgIcon-root': {
+                            color: colors.accentText
+                          }
+                        }}
+                        MenuProps={{
+                          PaperProps: {
+                            sx: {
+                              backgroundColor: colors.paper,
+                              color: colors.textPrimary
+                            }
                           }
                         }}
                       >
@@ -270,9 +284,13 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                       error={priceError && priceError.includes('original')}
                       sx={{ 
                         '& .MuiOutlinedInput-root': {
-                          '& fieldset': { borderColor: '#00E0B8' },
-                          '&:hover fieldset': { borderColor: '#00E0B8' },
-                          '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+                          color: colors.textPrimary,
+                          '& fieldset': { borderColor: colors.border },
+                          '&:hover fieldset': { borderColor: colors.accentText },
+                          '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                        },
+                        '& .MuiInputLabel-root': {
+                          color: colors.textPrimary
                         }
                       }}
                     />
@@ -288,9 +306,16 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                       helperText={priceError || 'Leave empty if not on offer'}
                       sx={{ 
                         '& .MuiOutlinedInput-root': {
-                          '& fieldset': { borderColor: priceError ? '#FF3366' : '#00E0B8' },
-                          '&:hover fieldset': { borderColor: priceError ? '#FF3366' : '#00E0B8' },
-                          '&.Mui-focused fieldset': { borderColor: priceError ? '#FF3366' : '#00E0B8' }
+                          color: colors.textPrimary,
+                          '& fieldset': { borderColor: priceError ? colors.error : colors.border },
+                          '&:hover fieldset': { borderColor: priceError ? colors.error : colors.accentText },
+                          '&.Mui-focused fieldset': { borderColor: priceError ? colors.error : colors.accentText }
+                        },
+                        '& .MuiInputLabel-root': {
+                          color: colors.textPrimary
+                        },
+                        '& .MuiFormHelperText-root': {
+                          color: priceError ? colors.error : colors.textSecondary
                         }
                       }}
                     />
@@ -300,15 +325,15 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                         onClick={handleSaveEdit}
                         disabled={!editCapacity || !editOriginalPrice || !!priceError}
                         sx={{ 
-                          color: '#00E0B8',
-                          '&:disabled': { color: '#666' }
+                          color: colors.accentText,
+                          '&:disabled': { color: colors.textSecondary }
                         }}
                       >
                         <Save />
                       </IconButton>
                       <IconButton
                         onClick={handleCancelEdit}
-                        sx={{ color: '#FF3366' }}
+                        sx={{ color: colors.error }}
                       >
                         <Cancel />
                       </IconButton>
@@ -328,9 +353,9 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                   gap: 2,
                   alignItems: 'center',
                   p: 1.5,
-                  border: '1px solid #333',
+                  border: `1px solid ${colors.border}`,
                   borderRadius: 1,
-                  backgroundColor: '#121212'
+                  backgroundColor: colors.paper
                 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center' }}>
                     <Chip
@@ -344,7 +369,7 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                     />
                   </Box>
 
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary }}>
                     KES {(Number(pricing.originalPrice) || 0).toFixed(2)}
                   </Typography>
 
@@ -367,7 +392,7 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                         )}
                       </>
                     ) : (
-                      <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic' }}>
+                      <Typography variant="body2" sx={{ color: colors.textSecondary, fontStyle: 'italic' }}>
                         —
                       </Typography>
                     )}
@@ -377,14 +402,14 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                     <IconButton
                       size="small"
                       onClick={() => handleEdit(index)}
-                      sx={{ color: '#00E0B8' }}
+                      sx={{ color: colors.accentText }}
                     >
                       <Edit fontSize="small" />
                     </IconButton>
                     <IconButton
                       size="small"
                       onClick={() => handleDelete(index)}
-                      sx={{ color: '#FF3366' }}
+                      sx={{ color: colors.error }}
                     >
                       <Delete fontSize="small" />
                     </IconButton>
@@ -403,11 +428,11 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
           startIcon={<Add />}
           onClick={handleAddNew}
           sx={{
-            borderColor: '#00E0B8',
-            color: '#00E0B8',
+            borderColor: colors.accentText,
+            color: colors.accentText,
             '&:hover': {
-              borderColor: '#00C4A3',
-              backgroundColor: 'rgba(0, 224, 184, 0.1)'
+              borderColor: colors.accent,
+              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)'
             }
           }}
         >

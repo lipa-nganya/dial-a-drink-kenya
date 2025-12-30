@@ -44,6 +44,8 @@ const ProductPage = () => {
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [detailedDescription, setDetailedDescription] = useState(null);
   const [descriptionLoading, setDescriptionLoading] = useState(false);
+  const [testingNotes, setTestingNotes] = useState(null);
+  const [testingNotesLoading, setTestingNotesLoading] = useState(false);
 
   useEffect(() => {
     fetchProduct();
@@ -53,6 +55,7 @@ const ProductPage = () => {
     if (product) {
       fetchRelatedProducts();
       fetchDetailedDescription();
+      fetchTestingNotes();
       // Auto-select capacity if there's only one option
       const availableCapacities = Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0 
         ? product.capacityPricing.map(pricing => pricing.capacity)
@@ -149,6 +152,33 @@ const ProductPage = () => {
       setDetailedDescription(null);
     } finally {
       setDescriptionLoading(false);
+    }
+  };
+
+  const fetchTestingNotes = async () => {
+    try {
+      if (!product) return;
+      
+      setTestingNotesLoading(true);
+      console.log(`Fetching testing notes for product: ${product.name} (ID: ${product.id})`);
+      
+      const response = await api.get(`/drinks/${product.id}/testing-notes`);
+      
+      console.log('Testing notes response:', response.data);
+      
+      if (response.data && response.data.testingNotes) {
+        console.log(`Received testing notes, length: ${response.data.testingNotes.length}`);
+        setTestingNotes(response.data.testingNotes);
+      } else {
+        console.log('No testing notes in response');
+        setTestingNotes('N/A');
+      }
+    } catch (err) {
+      console.error('Error fetching testing notes:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      setTestingNotes('N/A');
+    } finally {
+      setTestingNotesLoading(false);
     }
   };
 
@@ -506,15 +536,15 @@ const ProductPage = () => {
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* Product Title at Top */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h3" component="h1" sx={{ fontWeight: 700 }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
           {generateProductTitle()}
         </Typography>
       </Box>
 
-      <Grid container spacing={4}>
+      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: 'flex-start' }}>
         {/* Product Image */}
-        <Grid item xs={12} md={5}>
-          <Card>
+        <Box sx={{ width: { xs: '100%', md: '33.333%' }, flexShrink: 0 }}>
+          <Card sx={{ width: '100%' }}>
             {imageUrl && !imageError ? (
               <CardMedia
                 component="img"
@@ -524,7 +554,7 @@ const ProductPage = () => {
                   objectFit: 'contain', 
                   p: 2, 
                   backgroundColor: '#fff',
-                  maxHeight: '600px',
+                  height: '400px',
                   width: '100%'
                 }}
                 onError={() => setImageError(true)}
@@ -544,17 +574,10 @@ const ProductPage = () => {
               </Box>
             )}
           </Card>
-        </Grid>
+        </Box>
 
         {/* Product Details - Right Side */}
-        <Grid item xs={12} md={7}>
-          {/* Description */}
-          {product.description && (
-            <Typography variant="body1" paragraph sx={{ fontSize: '1rem', lineHeight: 1.7, mb: 3, color: 'text.secondary' }}>
-              {product.description}
-            </Typography>
-          )}
-
+        <Box sx={{ flex: 1, minWidth: 0, width: { xs: '100%', md: '66.666%' } }}>
           {/* Status Chips */}
           <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             {!product.isAvailable && (
@@ -569,45 +592,104 @@ const ProductPage = () => {
           </Box>
 
           {/* Product Details */}
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h5" component="h2" gutterBottom sx={{ fontWeight: 600, mb: 2 }}>
-              Product Details
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={6} sm={4}>
-                <Typography variant="body2" color="text.secondary">Brand:</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                  {product.brand || product.name}
+          <Box sx={{ mb: 4, width: '100%', minWidth: 0 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+              {/* Product name */}
+              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                  Product name:
                 </Typography>
-              </Grid>
-              <Grid item xs={6} sm={4}>
-                <Typography variant="body2" color="text.secondary">Type:</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                <Typography variant="body1">
+                  {product.name}
+                </Typography>
+              </Box>
+
+              {/* Prices by capacity */}
+              {availableCapacities.length > 0 ? (
+                availableCapacities.map((capacity) => {
+                  const price = getPriceForCapacity(capacity);
+                  return (
+                    <Box key={capacity} sx={{ display: 'flex', flexDirection: 'row' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                        {capacity} price:
+                      </Typography>
+                      <Typography variant="body1">
+                        KES {price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                      </Typography>
+                    </Box>
+                  );
+                })
+              ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                  <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                    Price:
+                  </Typography>
+                  <Typography variant="body1">
+                    KES {(Number(product.price) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Product category */}
+              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                  Product category:
+                </Typography>
+                <Typography variant="body1">
                   {getProductType()}
                 </Typography>
-              </Grid>
-              <Grid item xs={6} sm={4}>
-                <Typography variant="body2" color="text.secondary">Alcohol Content:</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+              </Box>
+
+              {/* Alcohol content (ABV) */}
+              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                  Alcohol content (ABV):
+                </Typography>
+                <Typography variant="body1">
                   {product.abv ? `${product.abv}%` : 'N/A'}
                 </Typography>
-              </Grid>
-              {availableCapacities.length > 0 && (
-                <Grid item xs={6} sm={4}>
-                  <Typography variant="body2" color="text.secondary">Available Sizes:</Typography>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                    {availableCapacities.join(', ')}
-                  </Typography>
-                </Grid>
-              )}
-              <Grid item xs={6} sm={4}>
-                <Typography variant="body2" color="text.secondary">Producer:</Typography>
-                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                  {getProducer()}
+              </Box>
+
+              {/* Product rating */}
+              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                  Product rating:
                 </Typography>
-              </Grid>
-            </Grid>
-          </Box>
+                <Typography variant="body1">
+                  {product.rating ? product.rating.toFixed(1) : 'N/A'}
+                </Typography>
+              </Box>
+
+              {/* Country */}
+              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                  Country:
+                </Typography>
+                <Typography variant="body1">
+                  {product.origin || product.country || 'N/A'}
+                </Typography>
+              </Box>
+
+              {/* Brand */}
+              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                  Brand:
+                </Typography>
+                <Typography variant="body1">
+                  {product.brand || product.name}
+                </Typography>
+              </Box>
+
+              {/* Testing notes */}
+              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
+                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px', flexShrink: 0 }}>
+                  Testing notes:
+                </Typography>
+                <Typography variant="body1" sx={{ flex: 1, wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+                  {testingNotesLoading ? 'Loading...' : (testingNotes || 'N/A')}
+                </Typography>
+              </Box>
+            </Box>
 
           <Divider sx={{ my: 4 }} />
 
@@ -697,8 +779,9 @@ const ProductPage = () => {
               Add to Cart
             </Button>
           </Box>
-        </Grid>
-      </Grid>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Why Buy and How to Order Sections - Side by Side */}
       <Box sx={{ mt: 6, mb: 4 }}>
@@ -706,7 +789,7 @@ const ProductPage = () => {
         <Box sx={{ width: '100%', maxWidth: '1200px', mx: 'auto', display: 'flex', justifyContent: 'center' }}>
           <Grid container spacing={3} sx={{ justifyContent: 'center' }}>
           {/* For More About Product Section */}
-          <Grid item xs={12} sm={4} sx={{ display: 'flex' }}>
+          <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex' }}>
             <Card 
               sx={{ 
                 width: '100%',
@@ -810,7 +893,7 @@ const ProductPage = () => {
           </Grid>
 
           {/* Why Buy Section */}
-          <Grid item xs={12} sm={4} sx={{ display: 'flex' }}>
+          <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex' }}>
             <Card 
               sx={{ 
                 width: '100%',
@@ -857,7 +940,7 @@ const ProductPage = () => {
                   } 
                 }}
               >
-                <li>Free delivery within Nairobi</li>
+                <li>Delivery all across Nairobi and its environs</li>
                 <li>Fast delivery (20–30 minutes)</li>
                 <li>Competitive prices</li>
                 <li>Genuine products</li>
@@ -866,7 +949,7 @@ const ProductPage = () => {
           </Grid>
 
           {/* How to Order Section */}
-          <Grid item xs={12} sm={4} sx={{ display: 'flex' }}>
+          <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex' }}>
             <Card 
               sx={{ 
                 width: '100%',
@@ -890,11 +973,76 @@ const ProductPage = () => {
               >
                 How to Order
               </Typography>
-              <Typography variant="body1" paragraph sx={{ fontSize: '1rem', lineHeight: 1.7, textAlign: 'center' }}>
-                Order online or call <strong>0723688108</strong>
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 2 }}>
+                <Button
+                  variant="contained"
+                  fullWidth
+                  onClick={() => navigate('/menu')}
+                  sx={{
+                    backgroundColor: colors.accentText,
+                    color: isDarkMode ? '#000' : '#fff',
+                    fontWeight: 600,
+                    py: 1.5,
+                    '&:hover': {
+                      backgroundColor: colors.accentText,
+                      opacity: 0.9
+                    }
+                  }}
+                >
+                  Order Online
+                </Button>
+                <Button
+                  variant="outlined"
+                  fullWidth
+                  component="a"
+                  href="tel:0723688108"
+                  sx={{
+                    borderColor: colors.accentText,
+                    color: colors.accentText,
+                    fontWeight: 600,
+                    py: 1.5,
+                    '&:hover': {
+                      borderColor: colors.accentText,
+                      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'
+                    }
+                  }}
+                >
+                  Call to Order
+                </Button>
+              </Box>
+              <Typography variant="body1" sx={{ fontSize: '1rem', lineHeight: 1.7, textAlign: 'center' }}>
+                We are available 24/7
+              </Typography>
+            </Card>
+          </Grid>
+
+          {/* Delivery Outside Nairobi Section */}
+          <Grid item xs={12} sm={6} md={3} sx={{ display: 'flex' }}>
+            <Card 
+              sx={{ 
+                width: '100%',
+                height: '100%',
+                p: 3,
+                backgroundColor: isDarkMode ? colors.paper : '#f8f9fa',
+                border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0'}`,
+                borderRadius: 2,
+                boxShadow: 2
+              }}
+            >
+              <Typography 
+                variant="h5" 
+                component="h2" 
+                gutterBottom 
+                sx={{ 
+                  fontWeight: 600, 
+                  mb: 2,
+                  textAlign: 'center'
+                }}
+              >
+                Delivery Outside Nairobi?
               </Typography>
               <Typography variant="body1" sx={{ fontSize: '1rem', lineHeight: 1.7, textAlign: 'center' }}>
-                Delivery available across Nairobi and environs
+                We deliver all over Kenya. Contact us today.
               </Typography>
             </Card>
           </Grid>
