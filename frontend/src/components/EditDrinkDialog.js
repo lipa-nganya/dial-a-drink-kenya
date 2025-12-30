@@ -37,11 +37,13 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     isPopular: false,
     image: '',
     categoryId: '',
+    brandId: '',
     capacity: [],
     capacityPricing: [],
     abv: ''
   });
   const [categories, setCategories] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
@@ -55,6 +57,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         isPopular: drink.isPopular || false,
         image: drink.image || '',
         categoryId: drink.categoryId || '',
+        brandId: drink.brandId || '',
         capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || ''
@@ -69,6 +72,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         isPopular: false,
         image: '',
         categoryId: '',
+        brandId: '',
         capacity: [],
         capacityPricing: [],
         abv: ''
@@ -80,6 +84,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
 
   useEffect(() => {
     fetchCategories();
+    fetchBrands();
   }, []);
 
   const fetchCategories = async () => {
@@ -88,6 +93,15 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       setCategories(response.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
+    }
+  };
+
+  const fetchBrands = async () => {
+    try {
+      const response = await api.get('/brands/all');
+      setBrands(response.data);
+    } catch (error) {
+      console.error('Error fetching brands:', error);
     }
   };
 
@@ -164,6 +178,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         isPopular: formData.isPopular,
         image: formData.image,
         categoryId: parseInt(formData.categoryId),
+        brandId: formData.brandId ? parseInt(formData.brandId) : null,
         capacity: formData.capacity,
         capacityPricing: formData.capacityPricing,
         abv: formData.abv ? parseFloat(formData.abv) : null
@@ -308,6 +323,71 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
               {categories.map(category => (
                 <MenuItem key={category.id} value={category.id}>
                   {category.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
+          <FormControl
+            fullWidth
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: '#00E0B8' },
+                '&:hover fieldset': { borderColor: '#00E0B8' },
+                '&.Mui-focused fieldset': { borderColor: '#00E0B8' }
+              }
+            }}
+          >
+            <InputLabel id="brand-select-label" sx={{ color: '#00E0B8' }}>
+              Brand (Optional)
+            </InputLabel>
+            <Select
+              labelId="brand-select-label"
+              value={formData.brandId}
+              onChange={(e) => handleInputChange('brandId', e.target.value)}
+              label="Brand (Optional)"
+              sx={{
+                color: '#F5F5F5',
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#00E0B8',
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#00E0B8',
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: '#00E0B8',
+                },
+                '& .MuiSvgIcon-root': {
+                  color: '#00E0B8',
+                }
+              }}
+              MenuProps={{
+                PaperProps: {
+                  sx: {
+                    backgroundColor: '#1E1E1E',
+                    color: '#F5F5F5',
+                    '& .MuiMenuItem-root': {
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 224, 184, 0.1)',
+                      },
+                      '&.Mui-selected': {
+                        backgroundColor: 'rgba(0, 224, 184, 0.2)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 224, 184, 0.3)',
+                        }
+                      }
+                    }
+                  }
+                }
+              }}
+            >
+              <MenuItem value="">
+                <em>No Brand</em>
+              </MenuItem>
+              {brands.filter(brand => brand.isActive).map(brand => (
+                <MenuItem key={brand.id} value={brand.id}>
+                  {brand.name}
                 </MenuItem>
               ))}
             </Select>

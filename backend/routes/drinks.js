@@ -50,8 +50,14 @@ router.get('/', async (req, res) => {
           }, {
             model: db.SubCategory,
             as: 'subCategory'
+          }, {
+            model: db.Brand,
+            as: 'brand'
           }],
-          order: [['name', 'ASC']]
+          order: [
+            ['isAvailable', 'DESC'], // Available items first (true = 1, false = 0)
+            ['name', 'ASC']
+          ]
         }),
         new Promise((_, reject) => 
           setTimeout(() => reject(new Error('Query timeout')), 8000)
@@ -209,7 +215,46 @@ router.get('/:id/detailed-description', async (req, res) => {
   }
 });
 
-// Get drink by ID (must be after /:id/detailed-description route)
+// Get testing notes for a product (must be before /:id route)
+router.get('/:id/testing-notes', async (req, res) => {
+  try {
+    const drink = await db.Drink.findByPk(req.params.id, {
+      include: [{
+        model: db.Category,
+        as: 'category'
+      }, {
+        model: db.SubCategory,
+        as: 'subCategory'
+      }]
+    });
+    
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+    
+    console.log(`[Testing Notes] Generating for product: ${drink.name} (ID: ${drink.id})`);
+    
+    const { generateTestingNotes } = require('../services/testingNotesGenerator');
+    const testingNotes = await generateTestingNotes(
+      drink.name,
+      drink.category?.name,
+      drink.subCategory?.name
+    );
+    
+    if (!testingNotes) {
+      console.log(`[Testing Notes] No notes generated for ${drink.name}`);
+      return res.status(404).json({ error: 'Could not generate testing notes' });
+    }
+    
+    console.log(`[Testing Notes] Successfully generated ${testingNotes.length} characters for ${drink.name}`);
+    res.json({ testingNotes });
+  } catch (error) {
+    console.error('[Testing Notes] Error:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get drink by ID (must be after /:id/detailed-description and /:id/testing-notes routes)
 router.get('/:id', async (req, res) => {
   try {
     const drink = await db.Drink.findByPk(req.params.id, {

@@ -140,7 +140,16 @@ const Offers = () => {
         gap: 2,
         width: '100%'
       }}>
-        {offers.map((drink) => (
+        {[...offers].sort((a, b) => {
+          // First sort by availability (available items first)
+          if (a.isAvailable !== b.isAvailable) {
+            return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
+          }
+          // Then sort by name alphabetically
+          const nameA = (a.name || '').toLowerCase();
+          const nameB = (b.name || '').toLowerCase();
+          return nameA.localeCompare(nameB);
+        }).map((drink) => (
           <DrinkCard key={drink.id} drink={drink} />
         ))}
       </Box>

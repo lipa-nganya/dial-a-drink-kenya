@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Container, Typography, Box, Button, Paper, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-import { CheckCircle, ShoppingCart, PhoneAndroid, Assignment, Login } from '@mui/icons-material';
+import { CheckCircle, ShoppingCart, PhoneAndroid, Assignment, Login, WhatsApp } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCart } from '../contexts/CartContext';

@@ -257,9 +257,11 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
       }
     } catch (error) {
       console.error('Error responding to order:', error);
+      const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Failed to respond to order. Please try again.';
       Alert.alert(
-        'Error',
-        error.response?.data?.error || 'Failed to respond to order. Please try again.'
+        error.response?.data?.error === 'Cannot accept order: Credit limit exceeded' ? 'Credit Limit Exceeded' : 'Error',
+        errorMessage,
+        [{ text: 'OK' }]
       );
       // Restart sound if error occurred - vibration will continue via interval in useEffect
     } finally {

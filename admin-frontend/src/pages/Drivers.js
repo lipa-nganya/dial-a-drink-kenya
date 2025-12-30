@@ -53,7 +53,9 @@ const Drivers = () => {
   const [formData, setFormData] = useState({
     name: '',
     phoneNumber: '',
-    status: 'offline'
+    status: 'offline',
+    creditLimit: '',
+    cashAtHand: ''
   });
   const [driverOtps, setDriverOtps] = useState({}); // Store OTPs for each driver
   const [showOtps, setShowOtps] = useState({}); // Track which OTPs are visible
@@ -109,14 +111,18 @@ const Drivers = () => {
       setFormData({
         name: driver.name,
         phoneNumber: driver.phoneNumber,
-        status: driver.status
+        status: driver.status,
+        creditLimit: driver.creditLimit || '',
+        cashAtHand: driver.cashAtHand || ''
       });
     } else {
       setEditingDriver(null);
       setFormData({
         name: '',
         phoneNumber: '',
-        status: 'offline'
+        status: 'offline',
+        creditLimit: '',
+        cashAtHand: ''
       });
     }
     setOpenDialog(true);
@@ -128,7 +134,9 @@ const Drivers = () => {
     setFormData({
       name: '',
       phoneNumber: '',
-      status: 'offline'
+      status: 'offline',
+      creditLimit: '',
+      cashAtHand: ''
     });
   };
 
@@ -287,6 +295,7 @@ const Drivers = () => {
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Driver Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Phone Number</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Credit Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Last Activity</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>OTP</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Actions</TableCell>
@@ -295,14 +304,22 @@ const Drivers = () => {
           <TableBody>
             {drivers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
                     No drivers found. Click "Add Driver" to create one.
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              drivers.map((driver) => (
+              drivers.map((driver) => {
+                const creditStatus = driver.creditStatus || {};
+                const balance = creditStatus.balance || 0;
+                const creditLimit = creditStatus.creditLimit || 0;
+                const debt = creditStatus.debt || 0;
+                const exceeded = creditStatus.exceeded || false;
+                const walletBalance = driver.wallet?.balance || 0;
+                
+                return (
                 <TableRow key={driver.id} hover>
                   <TableCell sx={{ fontWeight: 500 }}>{driver.name}</TableCell>
                   <TableCell>
@@ -319,6 +336,29 @@ const Drivers = () => {
                       size="small"
                       sx={{ fontWeight: 'bold' }}
                     />
+                  </TableCell>
+                  <TableCell>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <Chip
+                        label={exceeded ? 'Limit Exceeded' : 'Within Limit'}
+                        color={exceeded ? 'error' : 'success'}
+                        size="small"
+                        sx={{ fontWeight: 'bold' }}
+                      />
+                      <Typography variant="caption" color="text.secondary">
+                        Balance: KES {parseFloat(walletBalance).toFixed(2)}
+                      </Typography>
+                      {creditLimit > 0 && (
+                        <Typography variant="caption" color="text.secondary">
+                          Limit: KES {parseFloat(creditLimit).toFixed(2)}
+                        </Typography>
+                      )}
+                      {debt > 0 && (
+                        <Typography variant="caption" color={exceeded ? 'error' : 'warning.main'}>
+                          Debt: KES {parseFloat(debt).toFixed(2)}
+                        </Typography>
+                      )}
+                    </Box>
                   </TableCell>
                   <TableCell>
                     <Tooltip title={driver.lastActivity ? new Date(driver.lastActivity).toLocaleString() : 'Never'}>
@@ -399,7 +439,8 @@ const Drivers = () => {
                     </Tooltip>
                   </TableCell>
                 </TableRow>
-              ))
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -448,6 +489,28 @@ const Drivers = () => {
                 <MenuItem value="offline">Offline</MenuItem>
               </Select>
             </FormControl>
+            <TextField
+              label="Credit Limit (KES)"
+              type="number"
+              value={formData.creditLimit}
+              onChange={(e) => setFormData({ ...formData, creditLimit: e.target.value })}
+              fullWidth
+              helperText="Maximum amount driver can owe. Set to 0 to disable credit."
+              InputProps={{
+                inputProps: { min: 0, step: 0.01 }
+              }}
+            />
+            <TextField
+              label="Cash at Hand (KES)"
+              type="number"
+              value={formData.cashAtHand}
+              onChange={(e) => setFormData({ ...formData, cashAtHand: e.target.value })}
+              fullWidth
+              helperText="Current cash amount with the driver"
+              InputProps={{
+                inputProps: { min: 0, step: 0.01 }
+              }}
+            />
           </Box>
         </DialogContent>
         <DialogActions>

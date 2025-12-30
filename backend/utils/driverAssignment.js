@@ -1,6 +1,7 @@
 const db = require('../models');
 const { Op } = require('sequelize');
 const { getOrCreateHoldDriver } = require('./holdDriver');
+const { filterDriversByCreditLimit } = require('./creditLimit');
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
 
@@ -34,15 +35,19 @@ const findNearestActiveDriverToBranch = async (branchId) => {
     console.log(`👥 [DriverAssignment] Found ${availableDrivers.length} available driver(s):`, 
       availableDrivers.map(d => `${d.name} (ID: ${d.id}, status: ${d.status})`).join(', '));
 
-    if (!availableDrivers || availableDrivers.length === 0) {
-      console.log('⚠️  [DriverAssignment] No available drivers found. Defaulting to HOLD driver.');
+    // Filter out drivers who have exceeded their credit limit
+    const eligibleDrivers = await filterDriversByCreditLimit(availableDrivers);
+    console.log(`💳 [DriverAssignment] After credit limit check: ${eligibleDrivers.length} eligible driver(s) (${availableDrivers.length - eligibleDrivers.length} excluded due to credit limit)`);
+
+    if (!eligibleDrivers || eligibleDrivers.length === 0) {
+      console.log('⚠️  [DriverAssignment] No eligible drivers found (all exceeded credit limit). Defaulting to HOLD driver.');
       const holdDriver = await getOrCreateHoldDriver();
       return holdDriver;
     }
     
     // Prefer active drivers over on_delivery drivers
-    const activeDrivers = availableDrivers.filter(d => d.status === 'active');
-    const driversToUse = activeDrivers.length > 0 ? activeDrivers : availableDrivers;
+    const activeDrivers = eligibleDrivers.filter(d => d.status === 'active');
+    const driversToUse = activeDrivers.length > 0 ? activeDrivers : eligibleDrivers;
 
     // If only one available driver, assign to them
     if (driversToUse.length === 1) {
@@ -127,15 +132,19 @@ const findNearestActiveDriverToAddress = async (branchAddress) => {
       }
     });
 
-    if (!availableDrivers || availableDrivers.length === 0) {
-      console.log('⚠️  No available drivers found. Defaulting to HOLD driver.');
+    // Filter out drivers who have exceeded their credit limit
+    const eligibleDrivers = await filterDriversByCreditLimit(availableDrivers);
+    console.log(`💳 [DriverAssignment] After credit limit check: ${eligibleDrivers.length} eligible driver(s) (${availableDrivers.length - eligibleDrivers.length} excluded due to credit limit)`);
+
+    if (!eligibleDrivers || eligibleDrivers.length === 0) {
+      console.log('⚠️  No eligible drivers found (all exceeded credit limit). Defaulting to HOLD driver.');
       const holdDriver = await getOrCreateHoldDriver();
       return holdDriver;
     }
 
     // Prefer active drivers over on_delivery drivers
-    const activeDrivers = availableDrivers.filter(d => d.status === 'active');
-    const driversToUse = activeDrivers.length > 0 ? activeDrivers : availableDrivers;
+    const activeDrivers = eligibleDrivers.filter(d => d.status === 'active');
+    const driversToUse = activeDrivers.length > 0 ? activeDrivers : eligibleDrivers;
 
     // For now, return first available driver
     // TODO: Implement location-based assignment when drivers have location tracking

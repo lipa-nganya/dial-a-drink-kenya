@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const { verifyAdmin } = require('./admin');
 const { Expo } = require('expo-server-sdk');
+const { checkDriverCreditLimit } = require('../utils/creditLimit');
 
 // Public routes (for driver app) - no authentication required
 /**
@@ -531,6 +532,11 @@ router.get('/', async (req, res) => {
     let drivers;
     try {
       drivers = await db.Driver.findAll({
+        include: [{
+          model: db.DriverWallet,
+          as: 'wallet',
+          required: false
+        }],
         order: [['lastActivity', 'DESC'], ['createdAt', 'DESC']]
       });
     } catch (orderError) {
@@ -538,13 +544,33 @@ router.get('/', async (req, res) => {
       if (orderError.message && orderError.message.includes('column') && orderError.message.includes('lastActivity')) {
         console.warn('⚠️ lastActivity column not found, ordering by createdAt only');
         drivers = await db.Driver.findAll({
+          include: [{
+            model: db.DriverWallet,
+            as: 'wallet',
+            required: false
+          }],
           order: [['createdAt', 'DESC']]
         });
       } else {
         throw orderError;
       }
     }
-    res.json(drivers);
+    
+    // Add credit limit status to each driver
+    const driversWithCreditStatus = await Promise.all(drivers.map(async (driver) => {
+      const driverData = driver.toJSON();
+      const creditCheck = await checkDriverCreditLimit(driver.id);
+      driverData.creditStatus = {
+        exceeded: creditCheck.exceeded,
+        balance: creditCheck.balance,
+        creditLimit: creditCheck.creditLimit,
+        debt: creditCheck.debt,
+        canAcceptOrders: creditCheck.canAcceptOrders
+      };
+      return driverData;
+    }));
+    
+    res.json(driversWithCreditStatus);
   } catch (error) {
     console.error('Error fetching drivers:', error);
     res.status(500).json({ error: error.message || 'Failed to fetch drivers' });
@@ -661,7 +687,7 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
-    const { name, phoneNumber, status } = req.body;
+    const { name, phoneNumber, status, creditLimit, cashAtHand } = req.body;
     const driver = await db.Driver.findByPk(req.params.id);
 
     if (!driver) {
@@ -691,6 +717,20 @@ router.put('/:id', async (req, res) => {
       updateData.phoneNumber = cleanedPhone;
     }
     if (status !== undefined) updateData.status = status;
+    if (creditLimit !== undefined) {
+      const parsedLimit = parseFloat(creditLimit);
+      if (isNaN(parsedLimit) || parsedLimit < 0) {
+        return res.status(400).json({ error: 'Credit limit must be a non-negative number' });
+      }
+      updateData.creditLimit = parsedLimit;
+    }
+    if (cashAtHand !== undefined) {
+      const parsedCash = parseFloat(cashAtHand);
+      if (isNaN(parsedCash) || parsedCash < 0) {
+        return res.status(400).json({ error: 'Cash at hand must be a non-negative number' });
+      }
+      updateData.cashAtHand = parsedCash;
+    }
 
     await driver.update(updateData);
     res.json(driver);

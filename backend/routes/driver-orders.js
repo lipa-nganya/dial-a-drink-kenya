@@ -7,6 +7,7 @@ const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
 const pushNotifications = require('../services/pushNotifications');
+const { checkDriverCreditLimit } = require('../utils/creditLimit');
 
 /**
  * Get orders assigned to a driver
@@ -112,6 +113,20 @@ router.post('/:orderId/respond', async (req, res) => {
     // Verify driver is assigned to this order
     if (order.driverId !== parseInt(driverId)) {
       return res.status(403).json({ error: 'Not authorized to respond to this order' });
+    }
+
+    // Check credit limit if driver is trying to accept the order
+    if (accepted === true) {
+      const creditCheck = await checkDriverCreditLimit(parseInt(driverId));
+      if (creditCheck.exceeded) {
+        return res.status(403).json({ 
+          error: 'Cannot accept order: Credit limit exceeded',
+          message: `You owe KES ${creditCheck.debt.toFixed(2)} which exceeds your credit limit of KES ${creditCheck.creditLimit.toFixed(2)}. Please settle your balance before accepting new deliveries.`,
+          creditLimit: creditCheck.creditLimit,
+          currentDebt: creditCheck.debt,
+          balance: creditCheck.balance
+        });
+      }
     }
 
     // Update driver acceptance status

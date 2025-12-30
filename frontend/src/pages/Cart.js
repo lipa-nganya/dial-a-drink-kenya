@@ -18,7 +18,7 @@ import {
   Card,
   CardContent
 } from '@mui/material';
-import { Add, Remove, Delete, ShoppingCart, CreditCard, PhoneAndroid, LocalShipping, AccountBalanceWallet } from '@mui/icons-material';
+import { Add, Remove, Delete, ShoppingCart, CreditCard, PhoneAndroid, LocalShipping, AccountBalanceWallet, WhatsApp } from '@mui/icons-material';
 import { useCart } from '../contexts/CartContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -212,6 +212,87 @@ const Cart = () => {
     return cleaned.length >= 9 && (cleaned.startsWith('07') || cleaned.startsWith('2547') || (cleaned.startsWith('7') && cleaned.length === 9));
   };
 
+  // Format order message for WhatsApp
+  const formatOrderMessage = (orderId, totalAmount) => {
+    let message = `🍷 *Dial A Drink Kenya - New Order*\n\n`;
+    message += `*Order ID:* #${orderId}\n\n`;
+    message += `*Customer Details:*\n`;
+    message += `Name: ${customerInfo.name}\n`;
+    message += `Phone: ${customerInfo.phone}\n`;
+    if (customerInfo.email) {
+      message += `Email: ${customerInfo.email}\n`;
+    }
+    message += `\n*Delivery Address:*\n`;
+    message += `${customerInfo.address}`;
+    if (customerInfo.apartmentHouseNumber) {
+      message += `, ${customerInfo.apartmentHouseNumber}`;
+    }
+    if (customerInfo.floorNumber) {
+      message += `, Floor ${customerInfo.floorNumber}`;
+    }
+    message += `\n\n*Order Items:*\n`;
+    items.forEach((item, index) => {
+      message += `${index + 1}. ${item.drink.name}`;
+      if (item.selectedCapacity) {
+        message += ` (${item.selectedCapacity})`;
+      }
+      message += ` - Qty: ${item.quantity} x KES ${Number(item.price).toFixed(2)} = KES ${(Number(item.price) * item.quantity).toFixed(2)}\n`;
+    });
+    message += `\n*Order Summary:*\n`;
+    message += `Subtotal: KES ${getTotalPrice().toFixed(2)}\n`;
+    message += `Delivery Fee: KES ${deliveryFee.toFixed(2)}\n`;
+    if (tipAmount > 0) {
+      message += `Tip: KES ${tipAmount.toFixed(2)}\n`;
+    }
+    message += `*Total: KES ${totalAmount.toFixed(2)}*\n\n`;
+    message += `*Payment Method:* ${paymentType === 'pay_now' ? 'Pay Now' : 'Pay on Delivery'}`;
+    if (paymentType === 'pay_now' && paymentMethod) {
+      message += ` (${paymentMethod === 'card' ? 'Card' : 'Mobile Money'})`;
+    }
+    if (customerInfo.notes) {
+      message += `\n\n*Special Instructions:*\n${customerInfo.notes}`;
+    }
+    return message;
+  };
+
+  // Send order to WhatsApp
+  const sendOrderToWhatsApp = (orderId, totalAmount) => {
+    try {
+      const whatsappMessage = formatOrderMessage(orderId, totalAmount);
+      const whatsappNumber = '254712674333'; // Dial A Drink WhatsApp number
+      const encodedMessage = encodeURIComponent(whatsappMessage);
+      const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
+      
+      // Try to open WhatsApp
+      // Use window.location for mobile devices (better compatibility)
+      // Use window.open for desktop (but may be blocked by popup blockers)
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // On mobile, use window.location for better WhatsApp app integration
+        window.location.href = whatsappUrl;
+      } else {
+        // On desktop, try window.open
+        const whatsappWindow = window.open(whatsappUrl, '_blank');
+        
+        // Check if popup was blocked
+        if (!whatsappWindow || whatsappWindow.closed || typeof whatsappWindow.closed === 'undefined') {
+          // Popup blocked, try alternative approach - use window.location as fallback
+          setTimeout(() => {
+            window.location.href = whatsappUrl;
+          }, 100);
+        }
+      }
+      
+      // Store WhatsApp URL in sessionStorage as fallback
+      sessionStorage.setItem('whatsappOrderUrl', whatsappUrl);
+      sessionStorage.setItem('whatsappOrderId', orderId.toString());
+    } catch (error) {
+      console.error('Error sending order to WhatsApp:', error);
+      // Don't block the order flow if WhatsApp fails
+    }
+  };
+
   const handleSubmitOrder = async () => {
     if (!customerInfo.name || !customerInfo.phone || !customerInfo.address || !customerInfo.apartmentHouseNumber) {
       setError('Please fill in all required fields');
@@ -355,6 +436,9 @@ const Cart = () => {
             setIsProcessingPayment(false);
             setLoading(false);
             
+            // Send order to WhatsApp before navigating
+            sendOrderToWhatsApp(orderId, totalAmount);
+            
             // Navigate to a waiting page that polls for payment status
             navigate('/order-success', { 
               state: { 
@@ -380,7 +464,8 @@ const Cart = () => {
           setLoading(false);
         }
       } else {
-        // For other payment methods or pay on delivery, clear cart and navigate to success
+        // For other payment methods or pay on delivery, send to WhatsApp and navigate to success
+        sendOrderToWhatsApp(orderId, totalAmount);
         clearCart();
         navigate('/order-success', { state: { orderId: orderId, paymentPending: false } });
       }

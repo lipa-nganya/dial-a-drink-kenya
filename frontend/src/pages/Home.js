@@ -6,11 +6,11 @@ import {
   Box,
   Button,
   TextField,
-  InputAdornment
+  InputAdornment,
+  Chip
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
+import { Search as SearchIcon, Star } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
-import CategoryCard from '../components/CategoryCard';
 import DrinkCard from '../components/DrinkCard';
 import CountdownTimer from '../components/CountdownTimer';
 import { useTheme } from '../contexts/ThemeContext';
@@ -24,6 +24,11 @@ const Home = () => {
   const [drinksLoading, setDrinksLoading] = useState(true);
   const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState(0);
+  const [subcategories, setSubcategories] = useState([]);
+  const [selectedSubcategory, setSelectedSubcategory] = useState(0);
+  const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
+  const [brandFocusLoading, setBrandFocusLoading] = useState(true);
   const navigate = useNavigate();
   const { colors, isDarkMode } = useTheme();
 
@@ -31,7 +36,39 @@ const Home = () => {
     fetchCategories();
     fetchHeroImage();
     fetchDrinks();
+    fetchBrandFocusDrinks();
   }, []);
+
+  // Fetch subcategories when category changes
+  useEffect(() => {
+    if (selectedCategory > 0) {
+      fetchSubcategories(selectedCategory);
+      setSelectedSubcategory(0);
+    } else {
+      setSubcategories([]);
+      setSelectedSubcategory(0);
+    }
+  }, [selectedCategory]);
+
+  const fetchSubcategories = async (categoryId) => {
+    try {
+      const response = await api.get(`/subcategories?categoryId=${categoryId}`);
+      setSubcategories(response.data);
+    } catch (error) {
+      console.error('Error fetching subcategories:', error);
+      setSubcategories([]);
+    }
+  };
+
+  const handleCategoryChange = (categoryId) => {
+    setSelectedCategory(categoryId);
+    navigate(categoryId > 0 ? `/menu?category=${categoryId}` : '/menu');
+  };
+
+  const handleSubcategoryChange = (subcategoryId) => {
+    setSelectedSubcategory(subcategoryId);
+    navigate(`/menu?category=${selectedCategory}${subcategoryId > 0 ? `&subcategory=${subcategoryId}` : ''}`);
+  };
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '/assets/images/ads/hero-ad.png';
@@ -89,8 +126,41 @@ const Home = () => {
     }
   };
 
+  const fetchBrandFocusDrinks = async () => {
+    try {
+      setBrandFocusLoading(true);
+      // Get the selected brand focus from settings
+      const brandFocusResponse = await api.get('/settings/brandFocus');
+      const brandFocusId = brandFocusResponse.data?.value;
+      
+      if (brandFocusId) {
+        // Fetch drinks with brand focus enabled for the selected brand
+        const drinksResponse = await api.get('/drinks');
+        const allDrinks = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+        const brandFocusIdNum = parseInt(brandFocusId);
+        const filtered = allDrinks.filter(drink => {
+          // Check if drink has brand focus enabled
+          if (drink.isBrandFocus !== true) return false;
+          
+          // Check brand match - use brandId as primary check, brand.id as fallback
+          const drinkBrandId = drink.brandId || (drink.brand && drink.brand.id);
+          return drinkBrandId === brandFocusIdNum;
+        });
+        console.log('Brand Focus - Setting ID:', brandFocusIdNum, 'Filtered drinks:', filtered.length, filtered.map(d => ({ id: d.id, name: d.name, brandId: d.brandId })));
+        setBrandFocusDrinks(filtered);
+      } else {
+        setBrandFocusDrinks([]);
+      }
+    } catch (error) {
+      console.error('Error fetching brand focus drinks:', error);
+      setBrandFocusDrinks([]);
+    } finally {
+      setBrandFocusLoading(false);
+    }
+  };
+
   const normalizedSearch = searchTerm.trim().toLowerCase();
-  const filteredDrinks = normalizedSearch
+  let filteredDrinks = normalizedSearch
     ? drinks.filter((drink) => {
         if (!drink) return false;
         const name = typeof drink.name === 'string' ? drink.name.toLowerCase() : '';
@@ -103,6 +173,18 @@ const Home = () => {
         );
       })
     : [];
+  
+  // Sort: available items first, then by name
+  filteredDrinks.sort((a, b) => {
+    // First sort by availability (available items first)
+    if (a.isAvailable !== b.isAvailable) {
+      return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
+    }
+    // Then sort by name alphabetically
+    const nameA = (a.name || '').toLowerCase();
+    const nameB = (b.name || '').toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
 
   return (
     <Box sx={{ backgroundColor: colors.background, minHeight: '100vh' }}>
@@ -118,13 +200,16 @@ const Home = () => {
           {/* Countdown Timer Above Image */}
           <CountdownTimer />
           
-          {/* Advertising Image - Full Size */}
+          {/* Advertising Image - Reduced Size */}
           <Box
             sx={{
-              mb: 4,
+              mt: 4,
+              mb: 3,
               width: '100%',
               display: 'flex',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              maxHeight: '300px',
+              overflow: 'hidden'
             }}
           >
             <img
@@ -132,8 +217,10 @@ const Home = () => {
               alt="Special Offer - Premium Drinks"
               style={{
                 maxWidth: '100%',
+                maxHeight: '300px',
                 height: 'auto',
-                display: 'block'
+                display: 'block',
+                objectFit: 'contain'
               }}
               onError={(e) => {
                 // Fallback to default if image doesn't exist
@@ -248,49 +335,267 @@ const Home = () => {
             </Box>
           )}
 
-          {/* Categories Section */}
-          <Box sx={{ py: { xs: 4, sm: 6 } }}>
+          {/* Categories Section - Sticky */}
+          <Box 
+            sx={{ 
+              position: 'sticky',
+              top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
+              zIndex: 99, // Lower than AppBar (which is typically 1100)
+              backgroundColor: colors.background,
+              pt: 2,
+              pb: 2,
+              mb: 3,
+              borderBottom: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+            }}
+          >
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: 'repeat(2, 1fr)',
+                  sm: 'repeat(3, 1fr)',
+                  md: 'repeat(4, 1fr)',
+                  lg: 'repeat(5, 1fr)',
+                  xl: 'repeat(6, 1fr)'
+                },
+                gap: 1.5,
+                width: '100%'
+              }}
+            >
+              {categoriesLoading ? (
+                <Typography textAlign="center" sx={{ gridColumn: '1 / -1' }}>Loading categories...</Typography>
+              ) : categories.length === 0 ? (
+                <Typography textAlign="center" color="error" sx={{ gridColumn: '1 / -1' }}>
+                  No categories found.
+                </Typography>
+              ) : (
+                <>
+                  <Button
+                    variant={selectedCategory === 0 ? 'contained' : 'outlined'}
+                    onClick={() => handleCategoryChange(0)}
+                    sx={{
+                      py: 1.5,
+                      fontSize: '0.85rem',
+                      fontWeight: selectedCategory === 0 ? 600 : 400,
+                      textTransform: 'none',
+                      borderRadius: 2,
+                      minHeight: '48px',
+                      color: '#000000',
+                      '&.MuiButton-contained': {
+                        color: '#000000'
+                      },
+                      '&.MuiButton-outlined': {
+                        color: '#000000',
+                        borderColor: 'rgba(0, 0, 0, 0.23)'
+                      }
+                    }}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={selectedCategory === -1 ? 'contained' : 'outlined'}
+                    onClick={() => handleCategoryChange(-1)}
+                    startIcon={<Star sx={{ fontSize: '0.9rem' }} />}
+                    sx={{
+                      py: 1.5,
+                      fontSize: '0.85rem',
+                      fontWeight: selectedCategory === -1 ? 600 : 400,
+                      textTransform: 'none',
+                      borderRadius: 2,
+                      minHeight: '48px',
+                      color: '#000000',
+                      '&.MuiButton-contained': {
+                        color: '#000000'
+                      },
+                      '&.MuiButton-outlined': {
+                        color: '#000000',
+                        borderColor: 'rgba(0, 0, 0, 0.23)'
+                      }
+                    }}
+                  >
+                    Popular
+                  </Button>
+                  {categories.map((category) => (
+                    <Button
+                      key={category.id}
+                      variant={selectedCategory === category.id ? 'contained' : 'outlined'}
+                      onClick={() => handleCategoryChange(category.id)}
+                      sx={{
+                        py: 1.5,
+                        fontSize: '0.85rem',
+                        fontWeight: selectedCategory === category.id ? 600 : 400,
+                        textTransform: 'none',
+                        borderRadius: 2,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        minHeight: '48px',
+                        color: '#000000',
+                        '&.MuiButton-contained': {
+                          color: '#000000'
+                        },
+                        '&.MuiButton-outlined': {
+                          color: '#000000',
+                          borderColor: 'rgba(0, 0, 0, 0.23)'
+                        }
+                      }}
+                    >
+                      {category.name}
+                    </Button>
+                  ))}
+                </>
+              )}
+            </Box>
+
+            {/* Subcategory Chips - Show when a category is selected */}
+            {selectedCategory > 0 && subcategories.length > 0 && (
+              <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                <Chip
+                  label="All"
+                  onClick={() => handleSubcategoryChange(0)}
+                  color={selectedSubcategory === 0 ? 'primary' : 'default'}
+                  variant={selectedSubcategory === 0 ? 'filled' : 'outlined'}
+                  sx={{ cursor: 'pointer' }}
+                />
+                {subcategories.map((subcategory) => (
+                  <Chip
+                    key={subcategory.id}
+                    label={subcategory.name}
+                    onClick={() => handleSubcategoryChange(subcategory.id)}
+                    color={selectedSubcategory === subcategory.id ? 'primary' : 'default'}
+                    variant={selectedSubcategory === subcategory.id ? 'filled' : 'outlined'}
+                    sx={{ cursor: 'pointer' }}
+                  />
+                ))}
+              </Box>
+            )}
+          </Box>
+
+          {/* Popular Drinks Section */}
+          <Box sx={{ mt: 6, mb: 4 }}>
             <Typography 
               variant="h4" 
               component="h2" 
               textAlign="center" 
               gutterBottom
-              sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
-            >
-              Browse by Category
-            </Typography>
-            <Grid 
-              container 
-              spacing={{ xs: 2, sm: 3, md: 3 }}
               sx={{ 
-                mt: 2
+                fontSize: { xs: '1.75rem', sm: '2.125rem' },
+                mb: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1
               }}
             >
-              {categoriesLoading ? (
-                <Grid item xs={12}>
-                  <Typography textAlign="center">Loading categories...</Typography>
-                </Grid>
-              ) : categories.length === 0 ? (
-                <Grid item xs={12}>
-                  <Typography textAlign="center" color="error">
-                    No categories found. Check console for errors.
-                  </Typography>
-                </Grid>
-              ) : (
-                categories.map((category) => (
-                  <Grid 
-                    size={{ xs: 12, sm: 6, md: 3, lg: 3 }}
-                    key={category.id}
-                    sx={{
-                      display: 'flex'
-                    }}
-                  >
-                    <CategoryCard category={category} />
-                  </Grid>
-                ))
-              )}
-            </Grid>
+              <Star sx={{ color: '#FFD700' }} />
+              Popular Drinks
+            </Typography>
+            
+            {drinksLoading ? (
+              <Typography textAlign="center">Loading popular drinks...</Typography>
+            ) : (
+              (() => {
+                let popularDrinks = drinks.filter(drink => drink && drink.isPopular);
+                
+                // Sort: available items first, then by name
+                popularDrinks.sort((a, b) => {
+                  // First sort by availability (available items first)
+                  if (a.isAvailable !== b.isAvailable) {
+                    return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
+                  }
+                  // Then sort by name alphabetically
+                  const nameA = (a.name || '').toLowerCase();
+                  const nameB = (b.name || '').toLowerCase();
+                  return nameA.localeCompare(nameB);
+                });
+                
+                if (popularDrinks.length === 0) {
+                  return (
+                    <Typography textAlign="center" color="text.secondary">
+                      No popular drinks available at the moment.
+                    </Typography>
+                  );
+                }
+                
+                return (
+                  <Box sx={{ 
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: '1fr',
+                      sm: 'repeat(2, 1fr)',
+                      md: 'repeat(3, 1fr)',
+                      lg: 'repeat(4, 1fr)'
+                    },
+                    gap: 2,
+                    width: '100%'
+                  }}>
+                    {popularDrinks.slice(0, 8).map((drink) => (
+                      <DrinkCard key={drink.id} drink={drink} />
+                    ))}
+                  </Box>
+                );
+              })()
+            )}
           </Box>
+
+          {/* Brand Focus Section */}
+          {brandFocusDrinks.length > 0 && (
+            <Box sx={{ mt: 6, mb: 4 }}>
+              <Typography 
+                variant="h4" 
+                component="h2" 
+                textAlign="center" 
+                gutterBottom
+                sx={{ 
+                  fontSize: { xs: '1.75rem', sm: '2.125rem' },
+                  mb: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1
+                }}
+              >
+                <Star sx={{ color: '#FFA500' }} />
+                Brand Focus
+              </Typography>
+              
+              {brandFocusLoading ? (
+                <Typography textAlign="center">Loading brand focus items...</Typography>
+              ) : (
+                (() => {
+                  // Sort: available items first, then by name
+                  const sortedBrandFocusDrinks = [...brandFocusDrinks].sort((a, b) => {
+                    // First sort by availability (available items first)
+                    if (a.isAvailable !== b.isAvailable) {
+                      return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
+                    }
+                    // Then sort by name alphabetically
+                    const nameA = (a.name || '').toLowerCase();
+                    const nameB = (b.name || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                  });
+                  
+                  return (
+                    <Box sx={{ 
+                      display: 'grid',
+                      gridTemplateColumns: {
+                        xs: '1fr',
+                        sm: 'repeat(2, 1fr)',
+                        md: 'repeat(3, 1fr)',
+                        lg: 'repeat(4, 1fr)'
+                      },
+                      gap: 2,
+                      width: '100%'
+                    }}>
+                      {sortedBrandFocusDrinks.slice(0, 8).map((drink) => (
+                        <DrinkCard key={drink.id} drink={drink} />
+                      ))}
+                    </Box>
+                  );
+                })()
+              )}
+            </Box>
+          )}
         </Container>
       </Box>
     </Box>
