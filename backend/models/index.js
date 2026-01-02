@@ -31,7 +31,8 @@ try {
     } else {
       console.log('✅ Initializing Sequelize with DATABASE_URL...');
       // Preserve SSL settings from config - Sequelize URL parsing can override them
-      const sslConfig = dbConfig.dialectOptions?.ssl || {};
+      const sslConfig = dbConfig.dialectOptions?.ssl;
+      const baseDialectOptions = dbConfig.dialectOptions || {};
       sequelize = new Sequelize(databaseUrl, {
         ...dbConfig,
         pool: {
@@ -42,17 +43,27 @@ try {
           evict: 1000
         },
         dialectOptions: {
-          ...(dbConfig.dialectOptions || {}),
+          ...baseDialectOptions,
           connectTimeout: 10000,
           statement_timeout: 5000,
           query_timeout: 5000,
-          // Ensure SSL settings are preserved (Sequelize URL parsing can override them)
-          ssl: sslConfig.require ? {
-            require: true,
-            rejectUnauthorized: sslConfig.rejectUnauthorized !== undefined ? sslConfig.rejectUnauthorized : false
-          } : undefined
+          // Force SSL settings to prevent certificate verification errors
+          // Sequelize URL parsing can create empty ssl: {}, so we override it
+          ...(sslConfig ? {
+            ssl: {
+              require: true,
+              rejectUnauthorized: false
+            }
+          } : {})
         }
       });
+      // Ensure SSL settings are applied even if Sequelize URL parsing overrode them
+      if (sslConfig && sequelize.options.dialectOptions) {
+        sequelize.options.dialectOptions.ssl = {
+          require: true,
+          rejectUnauthorized: false
+        };
+      }
     }
   } else {
     sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, dbConfig);
