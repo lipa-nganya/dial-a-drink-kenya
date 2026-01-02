@@ -6,6 +6,7 @@ const smsService = require('../services/sms');
 const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 const { findClosestBranch } = require('../utils/branchAssignment');
 const { findNearestActiveDriverToBranch } = require('../utils/driverAssignment');
+const { generateReceiptPDF } = require('../services/pdfReceipt');
 
 // Helper function to calculate delivery fee
 const calculateDeliveryFee = async (items) => {
@@ -577,6 +578,71 @@ router.post('/find', async (req, res) => {
       success: false,
       error: 'Failed to find order' 
     });
+  }
+});
+
+// Generate PDF receipt for an order (must be before /:id route)
+router.get('/:id/receipt', async (req, res) => {
+  try {
+    const order = await db.Order.findByPk(req.params.id, {
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        },
+        {
+          model: db.Transaction,
+          as: 'transactions',
+          where: {
+            transactionType: 'payment'
+          },
+          required: false
+        }
+      ]
+    });
+    
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+    
+    // Check if request is from admin (has authorization header with admin token)
+    const authHeader = req.headers.authorization || req.headers.Authorization;
+    const isAdminRequest = authHeader && authHeader.toLowerCase().startsWith('bearer ');
+    
+    // For admin requests, allow receipt download for complete orders
+    // For customer requests, only allow for paid orders
+    if (isAdminRequest) {
+      // Admin can download receipts for complete orders (paid or completed)
+      if (order.status !== 'completed' && order.paymentStatus !== 'paid' && order.status !== 'delivered') {
+        return res.status(403).json({ 
+          error: 'Receipt is only available for complete, paid, or delivered orders' 
+        });
+      }
+    } else {
+      // Customer can only download receipts for paid orders
+      if (order.paymentStatus !== 'paid') {
+        return res.status(403).json({ 
+          error: 'Receipt is only available for paid orders' 
+        });
+      }
+    }
+    
+    // Generate PDF
+    const pdf = await generateReceiptPDF(order);
+    
+    // Set response headers
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="receipt-order-${order.id}.pdf"`);
+    
+    // Send PDF
+    res.send(pdf);
+  } catch (error) {
+    console.error('Error generating receipt PDF:', error);
+    res.status(500).json({ error: 'Failed to generate receipt. Please try again.' });
   }
 });
 
