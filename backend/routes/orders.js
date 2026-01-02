@@ -623,10 +623,10 @@ router.get('/:id/receipt', async (req, res) => {
         });
       }
     } else {
-      // Customer can only download receipts for paid orders
-      if (order.paymentStatus !== 'paid') {
+      // Customer can download receipts for paid, completed, or delivered orders
+      if (order.paymentStatus !== 'paid' && order.status !== 'completed' && order.status !== 'delivered') {
         return res.status(403).json({ 
-          error: 'Receipt is only available for paid orders' 
+          error: 'Receipt is only available for paid, completed, or delivered orders' 
         });
       }
     }

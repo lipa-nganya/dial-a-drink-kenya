@@ -29,7 +29,8 @@ import {
   ExpandMore,
   Payment,
   Refresh,
-  Phone
+  Phone,
+  Download
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -54,6 +55,62 @@ const MyOrders = () => {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [page, setPage] = useState(0);
   const rowsPerPage = 10;
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      // Get customer info from context or localStorage
+      const customerData = customer || (localStorage.getItem('customerOrder') ? JSON.parse(localStorage.getItem('customerOrder')) : null);
+      
+      if (!customerData) {
+        setError('Please log in to view your orders.');
+        setLoading(false);
+        navigate('/login');
+        return;
+      }
+
+      const { email, phone } = customerData;
+      
+      if (!email && !phone) {
+        setError('Please log in with your email or phone number.');
+        setLoading(false);
+        navigate('/login');
+        return;
+      }
+      
+      // Fetch orders by email or phone
+      const response = await api.post('/orders/find-all', {
+        email: email || null,
+        phone: phone || null
+      });
+
+      if (response.data.success) {
+        // Show all orders (sorted by most recent first)
+        const sortedOrders = (response.data.orders || []).sort((a, b) => {
+          return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+        
+        // Debug: Log delivery addresses to help identify the issue
+        console.log('Fetched orders with delivery addresses:', sortedOrders.map(o => ({
+          id: o.id,
+          deliveryAddress: o.deliveryAddress,
+          status: o.status
+        })));
+        
+        setOrders(sortedOrders);
+        setPage(0);
+      } else {
+        setError(response.data.message || 'No orders found.');
+      }
+    } catch (err) {
+      console.error('Error fetching orders:', err);
+      setError(err.response?.data?.error || 'Failed to load orders. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, [customer, navigate]);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(orders.length / rowsPerPage));
@@ -147,73 +204,45 @@ const MyOrders = () => {
         setPaymentDialogOpen(false);
         setPaymentError('');
         setPaymentSuccess(false);
+        setProcessingPayment(false);
+        // Refresh orders to get latest data
+        fetchOrders();
       }
     });
     
     return () => {
       socket.close();
     };
-  }, [orders]);
-
-  const fetchOrders = useCallback(async () => {
-    try {
-      setLoading(true);
-      setError('');
-      
-      // Get customer info from context or localStorage
-      const customerData = customer || (localStorage.getItem('customerOrder') ? JSON.parse(localStorage.getItem('customerOrder')) : null);
-      
-      if (!customerData) {
-        setError('Please log in to view your orders.');
-        setLoading(false);
-        navigate('/login');
-        return;
-      }
-
-      const { email, phone } = customerData;
-      
-      if (!email && !phone) {
-        setError('Please log in with your email or phone number.');
-        setLoading(false);
-        navigate('/login');
-        return;
-      }
-      
-      // Fetch orders by email or phone
-      const response = await api.post('/orders/find-all', {
-        email: email || null,
-        phone: phone || null
-      });
-
-      if (response.data.success) {
-        // Show all orders (sorted by most recent first)
-        const sortedOrders = (response.data.orders || []).sort((a, b) => {
-          return new Date(b.createdAt) - new Date(a.createdAt);
-        });
-        
-        // Debug: Log delivery addresses to help identify the issue
-        console.log('Fetched orders with delivery addresses:', sortedOrders.map(o => ({
-          id: o.id,
-          deliveryAddress: o.deliveryAddress,
-          status: o.status
-        })));
-        
-        setOrders(sortedOrders);
-        setPage(0);
-      } else {
-        setError(response.data.message || 'No orders found.');
-      }
-    } catch (err) {
-      console.error('Error fetching orders:', err);
-      setError(err.response?.data?.error || 'Failed to load orders. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  }, [customer, navigate]);
+  }, [orders, fetchOrders]);
 
   useEffect(() => {
     fetchOrders();
   }, [fetchOrders]);
+
+  const handleDownloadReceipt = async (orderId) => {
+    try {
+      // Fetch the PDF as a blob
+      const response = await api.get(`/orders/${orderId}/receipt`, {
+        responseType: 'blob'
+      });
+      
+      // Create a blob URL and trigger download
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `receipt-order-${orderId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+    } catch (error) {
+      console.error('Error downloading receipt:', error);
+      setError(error.response?.data?.error || 'Failed to download receipt. Please try again.');
+    }
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -330,8 +359,13 @@ const MyOrders = () => {
       if (paymentResponse.data.success) {
         setPaymentError('');
         setPaymentSuccess(true);
+        setProcessingPayment(false);
         // Don't close dialog yet - wait for payment confirmation via socket
         // The dialog will close automatically when payment-confirmed event is received
+        // Also refresh orders after a short delay to get updated payment status
+        setTimeout(() => {
+          fetchOrders();
+        }, 2000);
       } else {
         setPaymentError(paymentResponse.data.error || paymentResponse.data.message || 'Failed to initiate payment. Please try again.');
         setProcessingPayment(false);
@@ -596,7 +630,11 @@ const MyOrders = () => {
                         ))}
                       </Box>
                     </Box>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flexShrink: 0, ml: 2 }}>
+                    <Box 
+                      sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flexShrink: 0, ml: 2 }}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                    >
                       {/* Reorder Button for Completed/Delivered Orders */}
                       {(order.status === 'completed' || order.status === 'delivered') && (
                         <Button
@@ -605,8 +643,10 @@ const MyOrders = () => {
                           startIcon={<Refresh />}
                           onClick={(e) => {
                             e.stopPropagation();
+                            e.preventDefault();
                             handleReorder(order);
                           }}
+                          onMouseDown={(e) => e.stopPropagation()}
                           sx={{
                             backgroundColor: '#00E0B8',
                             color: '#0D0D0D',
@@ -618,6 +658,29 @@ const MyOrders = () => {
                           Reorder
                         </Button>
                       )}
+                      {/* Download Receipt Button for Paid or Completed Orders */}
+                      {(order.paymentStatus === 'paid' || order.status === 'completed' || order.status === 'delivered') && (
+                        <Button
+                          variant="contained"
+                          size="small"
+                          startIcon={<Download />}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            handleDownloadReceipt(order.id);
+                          }}
+                          onMouseDown={(e) => e.stopPropagation()}
+                          sx={{
+                            backgroundColor: '#00E0B8',
+                            color: '#0D0D0D',
+                            '&:hover': {
+                              backgroundColor: '#00C4A3'
+                            }
+                          }}
+                        >
+                          Download Receipt
+                        </Button>
+                      )}
                       {/* Make Payment Button for Unpaid Orders */}
                       {order.paymentStatus !== 'paid' && order.paymentType === 'pay_now' && order.status !== 'cancelled' && (
                         <Button
@@ -626,8 +689,10 @@ const MyOrders = () => {
                           startIcon={<Payment />}
                           onClick={(e) => {
                             e.stopPropagation();
+                            e.preventDefault();
                             handleOpenPaymentDialog(order);
                           }}
+                          onMouseDown={(e) => e.stopPropagation()}
                           sx={{
                             backgroundColor: '#00E0B8',
                             color: '#0D0D0D',
