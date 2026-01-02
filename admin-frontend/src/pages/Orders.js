@@ -38,7 +38,8 @@ import {
   Delete,
   Search,
   Clear,
-  Store
+  Store,
+  PictureAsPdf
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -417,6 +418,30 @@ const Orders = () => {
     } catch (error) {
       console.error('Error cancelling order:', error);
       setCancelReasonError(error.response?.data?.error || 'Failed to cancel order');
+    }
+  };
+
+  const handleDownloadReceipt = async (orderId) => {
+    try {
+      const response = await api.get(`/orders/${orderId}/receipt`, {
+        responseType: 'blob', // Important for downloading files
+      });
+
+      // Create a blob from the response data
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+
+      // Create a link element, set the download attribute, and click it
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `receipt-order-${orderId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading receipt:', error);
+      alert('Failed to download receipt: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -1117,6 +1142,27 @@ const Orders = () => {
                             sx={{ mt: 1, borderColor: colors.accentText, color: colors.accentText }}
                           >
                             Verify Payment
+                          </Button>
+                        )}
+                        
+                        {/* Download Receipt button for complete orders */}
+                        {(order.status === 'completed' || order.status === 'delivered' || order.paymentStatus === 'paid') && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<PictureAsPdf />}
+                            onClick={() => handleDownloadReceipt(order.id)}
+                            sx={{ 
+                              mt: 1, 
+                              borderColor: colors.accentText, 
+                              color: colors.accentText,
+                              '&:hover': {
+                                borderColor: '#00C4A3',
+                                backgroundColor: 'rgba(0, 224, 184, 0.08)'
+                              }
+                            }}
+                          >
+                            Download Receipt
                           </Button>
                         )}
                       </Box>
