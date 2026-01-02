@@ -215,6 +215,18 @@ async function initializeDatabase(db, seedData) {
     db.sequelize.sync({ force: false })
       .then(() => {
         console.log('Database synchronized successfully.');
+        // Ensure Brand model is synced
+        if (db.Brand) {
+          return db.Brand.sync({ alter: false }).then(() => {
+            console.log('Brand model synchronized.');
+            return db.Brand.count().then(count => {
+              console.log(`Brands in database: ${count}`);
+            });
+          });
+        }
+        return Promise.resolve();
+      })
+      .then(() => {
         return addMissingColumns(db);
       })
       .then(() => {
