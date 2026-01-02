@@ -20,13 +20,19 @@ router.get('/', async (req, res) => {
 // Get all brands (including inactive) - for admin
 router.get('/all', async (req, res) => {
   try {
+    // Debug logging
+    const brandCount = await db.Brand.count();
+    console.log(`[Brands API] Total brands in database: ${brandCount}`);
+    
     const brands = await db.Brand.findAll({
       order: [['name', 'ASC']]
     });
 
+    console.log(`[Brands API] Found ${brands.length} brands, returning to client`);
     res.json(brands);
   } catch (error) {
     console.error('Error fetching all brands:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ error: 'Failed to fetch brands' });
   }
 });
