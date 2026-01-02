@@ -44,6 +44,7 @@ try {
           connectTimeout: 10000,
           statement_timeout: 5000,
           query_timeout: 5000
+          // SSL settings from dbConfig.dialectOptions are already merged above
         }
       });
     }
