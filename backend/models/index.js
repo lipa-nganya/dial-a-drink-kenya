@@ -30,6 +30,8 @@ try {
       });
     } else {
       console.log('✅ Initializing Sequelize with DATABASE_URL...');
+      // Preserve SSL settings from config - Sequelize URL parsing can override them
+      const sslConfig = dbConfig.dialectOptions?.ssl || {};
       sequelize = new Sequelize(databaseUrl, {
         ...dbConfig,
         pool: {
@@ -43,8 +45,12 @@ try {
           ...(dbConfig.dialectOptions || {}),
           connectTimeout: 10000,
           statement_timeout: 5000,
-          query_timeout: 5000
-          // SSL settings from dbConfig.dialectOptions are already merged above
+          query_timeout: 5000,
+          // Ensure SSL settings are preserved (Sequelize URL parsing can override them)
+          ssl: sslConfig.require ? {
+            require: true,
+            rejectUnauthorized: sslConfig.rejectUnauthorized !== undefined ? sslConfig.rejectUnauthorized : false
+          } : undefined
         }
       });
     }
