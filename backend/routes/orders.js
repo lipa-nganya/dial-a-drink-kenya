@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../models');
 const { ensureCustomerFromOrder } = require('../utils/customerSync');
 const smsService = require('../services/sms');
+const whatsappService = require('../services/whatsapp');
 const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 const { findClosestBranch } = require('../utils/branchAssignment');
 const { findNearestActiveDriverToBranch } = require('../utils/driverAssignment');
@@ -391,11 +392,17 @@ router.post('/', async (req, res) => {
 
     const io = req.app.get('io');
     if (io && completeOrder) {
-      io.to('admin').emit('new-order', {
-        order: completeOrder,
-        timestamp: new Date(),
-        message: `New order #${completeOrder.id} from ${completeOrder.customerName}`
-      });
+      // For "pay now" orders, don't emit new-order event until payment is confirmed
+      // This prevents admin from seeing the order before payment is complete
+      if (completeOrder.paymentType !== 'pay_now') {
+        io.to('admin').emit('new-order', {
+          order: completeOrder,
+          timestamp: new Date(),
+          message: `New order #${completeOrder.id} from ${completeOrder.customerName}`
+        });
+      } else {
+        console.log(`📢 Skipping 'new-order' socket notification for pay_now order #${completeOrder.id} - will be sent after payment confirmation`);
+      }
 
       // If order was auto-assigned to a real driver (not HOLD driver), notify the driver
       // This triggers sound and vibration alerts in the driver app
@@ -465,6 +472,9 @@ router.post('/', async (req, res) => {
       }
     }
     
+    // Send SMS and WhatsApp notifications
+    // For "pay now" orders, WhatsApp will be sent after payment confirmation
+    // For "pay on delivery" orders, WhatsApp is sent immediately
     try {
       const smsEnabledSetting = await db.Settings.findOne({ 
         where: { key: 'smsEnabled' } 
@@ -505,8 +515,54 @@ router.post('/', async (req, res) => {
           console.log('📱 No active notification recipients found');
         }
       }
+
+      // Send WhatsApp notifications for "pay on delivery" orders immediately
+      // For "pay now" orders, WhatsApp will be sent after payment confirmation
+      if (completeOrder.paymentType === 'pay_on_delivery') {
+        console.log('📱 Sending WhatsApp notifications for pay_on_delivery order #' + completeOrder.id);
+        const activeNotifications = await db.OrderNotification.findAll({
+          where: { isActive: true }
+        });
+        
+        if (activeNotifications.length > 0) {
+          const whatsappMessage = `🛒 New Order #${completeOrder.id}\n\n` +
+            `Customer: ${completeOrder.customerName}\n` +
+            `Phone: ${completeOrder.customerPhone}\n` +
+            `Address: ${completeOrder.deliveryAddress}\n` +
+            `Total: KES ${parseFloat(completeOrder.totalAmount).toFixed(2)}\n` +
+            `Payment: Pay on Delivery`;
+          
+          const whatsappPromises = activeNotifications.map(notification => {
+            try {
+              const result = whatsappService.sendCustomMessage(notification.phoneNumber, whatsappMessage);
+              console.log(`📱 WhatsApp link generated for ${notification.name} (${notification.phoneNumber})`);
+              return Promise.resolve({ success: true, phone: notification.phoneNumber, whatsappLink: result.whatsappLink });
+            } catch (error) {
+              console.error(`Failed to generate WhatsApp link for ${notification.name} (${notification.phoneNumber}):`, error);
+              return Promise.resolve({ success: false, phone: notification.phoneNumber, error: error.message });
+            }
+          });
+          
+          Promise.all(whatsappPromises).then(results => {
+            const successful = results.filter(r => r.success).length;
+            const failed = results.filter(r => !r.success).length;
+            console.log(`📱 WhatsApp notifications generated: ${successful} successful, ${failed} failed`);
+            results.forEach(result => {
+              if (result.success && result.whatsappLink) {
+                console.log(`📱 WhatsApp link for ${result.phone}: ${result.whatsappLink}`);
+              }
+            });
+          }).catch(error => {
+            console.error('Error processing WhatsApp notifications:', error);
+          });
+        } else {
+          console.log('📱 No active notification recipients found for WhatsApp');
+        }
+      } else {
+        console.log('📱 Skipping WhatsApp notification for pay_now order #' + completeOrder.id + ' - will be sent after payment confirmation');
+      }
     } catch (error) {
-      console.error('Error sending SMS notifications:', error);
+      console.error('Error sending notifications:', error);
     }
     
     return res.status(201).json(completeOrder);

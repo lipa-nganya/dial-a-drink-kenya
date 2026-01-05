@@ -59,6 +59,12 @@ router.get('/:driverId', async (req, res) => {
           model: db.Branch,
           as: 'branch',
           required: false
+        },
+        {
+          model: db.Transaction,
+          as: 'transactions',
+          required: false,
+          order: [['createdAt', 'DESC']]
         }
       ],
       order: [['createdAt', 'DESC']]

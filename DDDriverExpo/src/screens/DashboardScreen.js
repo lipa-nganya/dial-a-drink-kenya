@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,11 +9,14 @@ import {
   RefreshControl,
   StatusBar,
   Platform,
+  Dimensions,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../services/api';
+
+const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
 const DashboardScreen = ({ navigation }) => {
   const [driverInfo, setDriverInfo] = useState(null);
@@ -26,6 +29,7 @@ const DashboardScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isOnShift, setIsOnShift] = useState(false);
+  const scrollViewRef = useRef(null);
   const { colors, isDarkMode } = useTheme();
 
   useEffect(() => {
@@ -165,17 +169,65 @@ const DashboardScreen = ({ navigation }) => {
     border: '#E0E0E0',
   };
 
+  // Calculate available height for tiles
+  // Screen height - status bar - user card - padding - safe area
+  const statusBarHeight = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
+  const tabBarHeight = 60; // Approximate tab bar height
+  const userCardHeight = 80; // Approximate user card height
+  const topPadding = 15;
+  const bottomMargin = 25; // Margin after last row
+  const availableHeight = SCREEN_HEIGHT - statusBarHeight - tabBarHeight - userCardHeight - topPadding - bottomMargin;
+  const tileHeight = (availableHeight / 4) - 10; // 4 rows, minus some spacing
+  const tileWidth = (SCREEN_WIDTH - 60) / 2; // 2 columns with padding
+  
+  // Calculate total content height: userCard + margin + tiles + spacing + bottom margin
+  const userCardMargin = 12;
+  const tileSpacing = 10; // marginBottom between tiles
+  const totalTileHeight = (tileHeight * 4) + (tileSpacing * 3); // 4 rows with 3 gaps
+  const contentHeight = topPadding + userCardHeight + userCardMargin + totalTileHeight + bottomMargin;
+  const maxScrollHeight = SCREEN_HEIGHT - statusBarHeight - tabBarHeight;
+
   return (
     <View style={[styles.container, { backgroundColor: safeColors.background }]}>
       <StatusBar barStyle="dark-content" backgroundColor={safeColors.background} />
       
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { 
+            paddingBottom: bottomMargin,
+          }
+        ]}
+        bounces={false}
+        showsVerticalScrollIndicator={contentHeight > maxScrollHeight}
+        onScrollEndDrag={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const maxScrollY = Math.max(0, contentSize.height - layoutMeasurement.height);
+          // Clamp scroll position if user dragged beyond limits
+          if (contentOffset.y < 0) {
+            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          } else if (contentOffset.y > maxScrollY) {
+            scrollViewRef.current?.scrollTo({ y: maxScrollY, animated: true });
+          }
+        }}
+        onMomentumScrollEnd={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const maxScrollY = Math.max(0, contentSize.height - layoutMeasurement.height);
+          // Clamp scroll position after momentum scrolling
+          if (contentOffset.y < 0) {
+            scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+          } else if (contentOffset.y > maxScrollY) {
+            scrollViewRef.current?.scrollTo({ y: maxScrollY, animated: true });
+          }
+        }}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={safeColors.accent} />
         }
       >
+        <View style={styles.contentContainer}>
         {/* User Info Card */}
         {driverInfo && (
           <View style={[styles.userCard, { backgroundColor: safeColors.paper }]}>
@@ -198,83 +250,116 @@ const DashboardScreen = ({ navigation }) => {
         <View style={styles.tilesGrid}>
           {/* Row 1 */}
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('pending')}
             activeOpacity={0.7}
           >
-            <Ionicons name="phone-portrait-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>Pending</Text>
-            <Text style={[styles.tileValue, { color: '#FF0000' }]}>{orderStats.pending}</Text>
+            <Ionicons name="phone-portrait-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>Pending</Text>
+            <Text style={[styles.tileValue, { color: '#FF0000', fontSize: tileHeight * 0.12 }]}>{orderStats.pending}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('completed')}
             activeOpacity={0.7}
           >
-            <Ionicons name="checkmark-circle-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>Completed</Text>
-            <Text style={[styles.tileValue, { color: '#FF0000' }]}>{orderStats.completed}</Text>
+            <Ionicons name="checkmark-circle-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>Completed</Text>
+            <Text style={[styles.tileValue, { color: '#FF0000', fontSize: tileHeight * 0.12 }]}>{orderStats.completed}</Text>
           </TouchableOpacity>
 
           {/* Row 2 */}
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('inProgress')}
             activeOpacity={0.7}
           >
-            <Ionicons name="bicycle-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>In Progress</Text>
-            <Text style={[styles.tileValue, { color: '#FF0000' }]}>{orderStats.inProgress}</Text>
+            <Ionicons name="bicycle-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>In Progress</Text>
+            <Text style={[styles.tileValue, { color: '#FF0000', fontSize: tileHeight * 0.12 }]}>{orderStats.inProgress}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('canceled')}
             activeOpacity={0.7}
           >
-            <Ionicons name="close-circle-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>Canceled</Text>
-            <Text style={[styles.tileValue, { color: '#FF0000' }]}>{orderStats.canceled}</Text>
+            <Ionicons name="close-circle-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>Canceled</Text>
+            <Text style={[styles.tileValue, { color: '#FF0000', fontSize: tileHeight * 0.12 }]}>{orderStats.canceled}</Text>
           </TouchableOpacity>
 
           {/* Row 3 */}
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('cashAtHand')}
             activeOpacity={0.7}
           >
-            <Ionicons name="cash-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>Cash At Hand</Text>
+            <Ionicons name="cash-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>Cash At Hand</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('payments')}
             activeOpacity={0.7}
           >
-            <Ionicons name="receipt-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>Payments</Text>
+            <Ionicons name="receipt-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>Payments</Text>
           </TouchableOpacity>
 
           {/* Row 4 */}
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('savings')}
             activeOpacity={0.7}
           >
-            <Ionicons name="wallet-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>My Savings</Text>
+            <Ionicons name="wallet-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>My Savings</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.tile, { backgroundColor: safeColors.paper }]}
+            style={[styles.tile, { 
+              backgroundColor: safeColors.paper,
+              width: tileWidth,
+              height: tileHeight,
+            }]}
             onPress={() => handleTilePress('notice')}
             activeOpacity={0.7}
           >
-            <Ionicons name="notifications-outline" size={32} color={safeColors.accent} />
-            <Text style={[styles.tileTitle, { color: safeColors.textPrimary }]}>Notice</Text>
+            <Ionicons name="notifications-outline" size={tileHeight * 0.15} color={safeColors.accent} />
+            <Text style={[styles.tileTitle, { color: safeColors.textPrimary, fontSize: tileHeight * 0.08 }]}>Notice</Text>
           </TouchableOpacity>
+        </View>
         </View>
       </ScrollView>
     </View>
@@ -289,8 +374,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
-    paddingBottom: 100, // Space for bottom tab
+    flexGrow: 1,
+  },
+  contentContainer: {
+    padding: 15,
+    paddingTop: Platform.OS === 'ios' ? 10 : 15,
   },
   centered: {
     justifyContent: 'center',
@@ -304,9 +392,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 15,
+    padding: 12,
+    paddingVertical: 10,
     borderRadius: 12,
-    marginBottom: 20,
+    marginBottom: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -317,36 +406,35 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   userName: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   userPhone: {
-    fontSize: 14,
+    fontSize: 12,
   },
   shiftButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
     borderRadius: 8,
-    minWidth: 100,
+    minWidth: 90,
     alignItems: 'center',
   },
   shiftButtonText: {
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
   },
   tilesGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    flex: 1,
   },
   tile: {
-    width: '48%',
-    aspectRatio: 1,
     borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
+    padding: 10,
+    marginBottom: 10,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -356,15 +444,24 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   tileTitle: {
-    fontSize: 14,
     fontWeight: '600',
-    marginTop: 8,
+    marginTop: 6,
     textAlign: 'center',
   },
   tileValue: {
-    fontSize: 20,
     fontWeight: 'bold',
     marginTop: 4,
+  },
+  refreshOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
   },
 });
 

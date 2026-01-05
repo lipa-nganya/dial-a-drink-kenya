@@ -227,9 +227,9 @@ const Menu = () => {
           top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
           zIndex: 99, // Lower than AppBar (which is typically 1100)
           backgroundColor: colors.background,
-          pt: 2,
-          pb: 2,
-          mb: 3,
+          pt: 1,
+          pb: 1,
+          mb: 2,
           borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
         }}
       >
@@ -243,7 +243,7 @@ const Menu = () => {
               lg: 'repeat(5, 1fr)',
               xl: 'repeat(6, 1fr)'
             },
-            gap: 1.5,
+            gap: 1,
             width: '100%'
           }}
         >
@@ -251,12 +251,12 @@ const Menu = () => {
             variant={selectedCategory === 0 ? 'contained' : 'outlined'}
             onClick={() => handleCategoryChange(null, 0)}
             sx={{
-              py: 1.5,
-              fontSize: '0.85rem',
+              py: 0.75,
+              fontSize: '0.75rem',
               fontWeight: selectedCategory === 0 ? 600 : 400,
               textTransform: 'none',
-              borderRadius: 2,
-              minHeight: '48px',
+              borderRadius: 1.5,
+              minHeight: '36px',
               color: '#000000',
               '&.MuiButton-contained': {
                 color: '#000000',
@@ -278,14 +278,14 @@ const Menu = () => {
           <Button
             variant={selectedCategory === -1 ? 'contained' : 'outlined'}
             onClick={() => handleCategoryChange(null, -1)}
-            startIcon={<Star sx={{ fontSize: '0.9rem' }} />}
+            startIcon={<Star sx={{ fontSize: '0.75rem' }} />}
             sx={{
-              py: 1.5,
-              fontSize: '0.85rem',
+              py: 0.75,
+              fontSize: '0.75rem',
               fontWeight: selectedCategory === -1 ? 600 : 400,
               textTransform: 'none',
-              borderRadius: 2,
-              minHeight: '48px',
+              borderRadius: 1.5,
+              minHeight: '36px',
               color: '#000000',
               '&.MuiButton-contained': {
                 color: '#000000',
@@ -310,15 +310,15 @@ const Menu = () => {
               variant={selectedCategory === category.id ? 'contained' : 'outlined'}
               onClick={() => handleCategoryChange(null, category.id)}
               sx={{
-                py: 1.5,
-                fontSize: '0.85rem',
+                py: 0.75,
+                fontSize: '0.75rem',
                 fontWeight: selectedCategory === category.id ? 600 : 400,
                 textTransform: 'none',
-                borderRadius: 2,
+                borderRadius: 1.5,
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                minHeight: '48px',
+                minHeight: '36px',
                 color: '#000000',
                 '&.MuiButton-contained': {
                   color: '#000000',

@@ -2253,8 +2253,10 @@ const Orders = () => {
           </Button>
         </DialogActions>
       </Dialog>
+        </Box>
+      )}
 
-      {/* New Order Dialog */}
+      {/* New Order Dialog - Outside conditional blocks so it can appear from any tab */}
       <NewOrderDialog
         open={newOrderDialogOpen}
         onClose={() => setNewOrderDialogOpen(false)}
@@ -2264,8 +2266,6 @@ const Orders = () => {
           setNewOrderDialogOpen(false);
         }}
       />
-        </Box>
-      )}
 
       {/* Route Optimisation Tab */}
       {activeTab === 1 && (

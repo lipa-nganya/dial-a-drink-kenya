@@ -31,6 +31,7 @@ export async function configureNotificationChannel() {
     }
     
     // Create channel with MAX importance for sound and vibration
+    // Full-screen intent is enabled for showing orders when phone is locked
     await Notifications.setNotificationChannelAsync('order-assignments', {
       name: 'Order Assignments',
       description: 'Notifications for new order assignments',
@@ -44,6 +45,8 @@ export async function configureNotificationChannel() {
       playSound: true,
       enableLights: true,
       lightColor: '#00E0B8', // Accent color
+      // Enable full-screen intent for showing orders when phone is locked/asleep
+      enableVibrate: true,
     });
     console.log('✅ Configured order-assignments channel with MAX importance');
   }
@@ -107,11 +110,12 @@ export async function scheduleOrderNotification(order) {
     const notificationConfig = {
       content: {
         title: '🚨 New Order Assigned!',
-        body: `Order #${order.id} has been assigned to you.`,
+        body: `Order #${order.id} has been assigned to you. Tap to view.`,
         data: {
           orderId: order.id,
           order: order,
           type: 'order-assigned',
+          autoLaunch: true,
         },
         sound: soundFile,
         priority: Notifications.AndroidNotificationPriority.MAX,
@@ -122,7 +126,7 @@ export async function scheduleOrderNotification(order) {
       channelId: 'order-assignments', // Use the high-priority channel
     };
     
-    // Android: Ensure sound/vibration work
+    // Android: Ensure sound/vibration work and enable full-screen intent
     if (Platform.OS === 'android') {
       notificationConfig.android = {
         priority: 'max',
@@ -130,6 +134,10 @@ export async function scheduleOrderNotification(order) {
         sound: soundFile,
         vibrate: [500, 100, 500, 100, 500, 100, 500],
         visibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        // Enable full-screen intent to show order screen even when phone is locked
+        fullScreenIntent: true,
+        // Auto-launch the app when notification is tapped
+        autoCancel: false,
       };
     }
     
