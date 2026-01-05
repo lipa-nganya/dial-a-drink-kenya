@@ -44,6 +44,15 @@ const DashboardScreen = ({ navigation }) => {
     loadDashboardData();
   }, []);
 
+  // Refresh dashboard when screen comes into focus (e.g., after accepting/rejecting order)
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('📱 Dashboard: Screen focused - refreshing data');
+      loadDashboardData();
+    });
+    return unsubscribe;
+  }, [navigation]);
+
   // Track app state changes
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
@@ -79,18 +88,28 @@ const DashboardScreen = ({ navigation }) => {
             const orders = ordersResponse.data || [];
             
             // Calculate statistics
+            // Pending: orders with status 'pending' that haven't been rejected (driverAccepted !== false)
+            // In Progress: orders that are confirmed/preparing/out_for_delivery and accepted (driverAccepted === true)
+            // Completed: orders that are completed or delivered
+            // Canceled: orders that are cancelled
             const stats = {
-              pending: orders.filter(o => o.status === 'pending' && o.driverAccepted !== false).length,
+              pending: orders.filter(o => 
+                o.status === 'pending' && 
+                (o.driverAccepted === null || o.driverAccepted === true) // Include pending and accepted pending orders
+              ).length,
               completed: orders.filter(o => o.status === 'completed' || o.status === 'delivered').length,
               inProgress: orders.filter(o => 
                 (o.status === 'confirmed' || o.status === 'preparing' || o.status === 'out_for_delivery') &&
-                o.driverAccepted !== false &&
+                o.driverAccepted === true && // Only count accepted orders
                 o.status !== 'delivered' &&
                 o.status !== 'completed' &&
                 o.status !== 'cancelled'
               ).length,
               canceled: orders.filter(o => o.status === 'cancelled').length,
             };
+            
+            console.log('📊 Dashboard: Updated order stats:', stats);
+            console.log('📊 Dashboard: Total orders:', orders.length);
             
             setOrderStats(stats);
           } catch (error) {
@@ -356,6 +375,17 @@ const DashboardScreen = ({ navigation }) => {
       // If app is in foreground, handle immediately
       console.log('📱 Dashboard: App is in foreground - handling order assignment immediately');
       await handleOrderAssigned(data.order, data.playSound !== false);
+    });
+
+    // Listen for order status updates to refresh dashboard counts
+    socket.on('order-status-updated', (data) => {
+      console.log('📦 Dashboard: Order status updated via socket:', data);
+      if (data.orderId || data.order?.id) {
+        const orderId = data.orderId || data.order?.id;
+        console.log(`📦 Dashboard: Refreshing dashboard for order #${orderId} status change`);
+        // Refresh dashboard data to update counts
+        loadDashboardData();
+      }
     });
 
     // Listen for notification responses (when app comes to foreground from notification)
