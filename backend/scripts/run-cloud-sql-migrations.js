@@ -106,42 +106,6 @@ async function addBrandFocusColumn() {
   }
 }
 
-async function runMigrations() {
-  try {
-    console.log('🚀 Starting Cloud SQL migrations...\n');
-    
-    // Check DATABASE_URL
-    const databaseUrl = process.env.DATABASE_URL;
-    if (!databaseUrl) {
-      console.error('❌ DATABASE_URL environment variable is not set');
-      console.error('   Please set it to your Cloud SQL connection string');
-      console.error('   Example: DATABASE_URL="postgres://user:password@host:port/database"');
-      console.error('\n   For Cloud SQL, you can use:');
-      console.error('   - Unix socket: postgres://user:password@/database?host=/cloudsql/drink-suite:us-central1:drink-suite-db');
-      console.error('   - TCP with proxy: postgres://user:password@localhost:5432/database');
-      process.exit(1);
-    }
-
-    // Mask password in URL for logging
-    const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':***@');
-    console.log(`📊 Connecting to: ${maskedUrl.substring(0, 100)}...\n`);
-
-    // Test connection
-    console.log('🔌 Testing database connection...');
-    
-    // Disable SSL for Cloud SQL Proxy connections
-    if (databaseUrl.includes('localhost:5432') || databaseUrl.includes('/cloudsql/')) {
-      console.log('   ℹ️  Detected Cloud SQL Proxy connection, disabling SSL...');
-      // Update sequelize config to disable SSL
-      db.sequelize.config.dialectOptions = {
-        ...(db.sequelize.config.dialectOptions || {}),
-        ssl: false
-      };
-    }
-    
-    await db.sequelize.authenticate();
-    console.log('✅ Database connection established\n');
-
 async function addDriverLocationColumns() {
   try {
     console.log('📦 Running migration: add-driver-location-columns');
@@ -188,6 +152,42 @@ async function addDriverLocationColumns() {
     throw error;
   }
 }
+
+async function runMigrations() {
+  try {
+    console.log('🚀 Starting Cloud SQL migrations...\n');
+    
+    // Check DATABASE_URL
+    const databaseUrl = process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      console.error('❌ DATABASE_URL environment variable is not set');
+      console.error('   Please set it to your Cloud SQL connection string');
+      console.error('   Example: DATABASE_URL="postgres://user:password@host:port/database"');
+      console.error('\n   For Cloud SQL, you can use:');
+      console.error('   - Unix socket: postgres://user:password@/database?host=/cloudsql/drink-suite:us-central1:drink-suite-db');
+      console.error('   - TCP with proxy: postgres://user:password@localhost:5432/database');
+      process.exit(1);
+    }
+
+    // Mask password in URL for logging
+    const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':***@');
+    console.log(`📊 Connecting to: ${maskedUrl.substring(0, 100)}...\n`);
+
+    // Test connection
+    console.log('🔌 Testing database connection...');
+    
+    // Disable SSL for Cloud SQL Proxy connections
+    if (databaseUrl.includes('localhost:5432') || databaseUrl.includes('/cloudsql/')) {
+      console.log('   ℹ️  Detected Cloud SQL Proxy connection, disabling SSL...');
+      // Update sequelize config to disable SSL
+      db.sequelize.config.dialectOptions = {
+        ...(db.sequelize.config.dialectOptions || {}),
+        ssl: false
+      };
+    }
+    
+    await db.sequelize.authenticate();
+    console.log('✅ Database connection established\n');
 
     // Run migrations in order
     const migrations = [
