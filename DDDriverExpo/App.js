@@ -16,7 +16,8 @@ import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
 import PinConfirmScreen from './src/screens/PinConfirmScreen';
 import PinLoginScreen from './src/screens/PinLoginScreen';
-import HomeScreen from './src/screens/HomeScreen';
+import DashboardScreen from './src/screens/DashboardScreen';
+import ActiveOrdersScreen from './src/screens/ActiveOrdersScreen';
 import OrderHistoryScreen from './src/screens/CompletedOrdersScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import OrderAcceptanceScreen from './src/screens/OrderAcceptanceScreen';
@@ -59,11 +60,11 @@ const MainTabs = () => {
     >
       <Tab.Screen
         name="HomeTab"
-        component={HomeScreen}
+        component={DashboardScreen}
         options={{
-          tabBarLabel: 'Active Orders',
+          tabBarLabel: 'Home',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
+            <Ionicons name="home" size={size} color={color} />
           ),
         }}
       />
@@ -155,7 +156,7 @@ const AppNavigator = ({ initialRoute }) => {
           name="Home" 
           component={MainTabsWithLocationGate}
           options={{ 
-            title: 'Liquor OS',
+            title: 'Dial a Drink, Kenya',
             headerLeft: () => null, // Hide back button completely
             headerBackVisible: false, // Also hide back button
             gestureEnabled: false, // Disable swipe back gesture
@@ -180,6 +181,15 @@ const AppNavigator = ({ initialRoute }) => {
           component={OrderDetailScreen}
           options={{ 
             title: 'Order Details',
+            headerStyle: { backgroundColor: colors.paper },
+            headerTintColor: isDarkMode ? colors.accentText : colors.textPrimary,
+          }}
+        />
+        <Stack.Screen 
+          name="ActiveOrders" 
+          component={ActiveOrdersScreen}
+          options={{ 
+            title: 'Active Orders',
             headerStyle: { backgroundColor: colors.paper },
             headerTintColor: isDarkMode ? colors.accentText : colors.textPrimary,
           }}
