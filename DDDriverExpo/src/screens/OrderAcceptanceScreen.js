@@ -239,13 +239,13 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
           vibrationIntervalRef.current = null;
         }
         
-        // Navigate back to home IMMEDIATELY (before snackbar) to prevent re-triggering
-        // This ensures we're on Home screen before any socket events can re-trigger
+        // Navigate back to Home (which contains Dashboard) IMMEDIATELY to prevent re-triggering
+        // The Dashboard will refresh automatically when it comes into focus via the focus listener
         navigation.replace('Home', { 
           phoneNumber: route.params?.phoneNumber,
           showSnackbar: true,
           snackbarMessage: accepted 
-            ? 'Order accepted successfully. You can view it in your orders list.'
+            ? 'Order accepted successfully. Dashboard will update automatically.'
             : 'Order rejected.',
           snackbarType: accepted ? 'success' : 'info'
         });
