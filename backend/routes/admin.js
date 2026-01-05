@@ -2395,16 +2395,42 @@ router.post('/drivers/:driverId/settle-balance', async (req, res) => {
  */
 router.get('/drivers/locations', verifyAdmin, async (req, res) => {
   try {
-    const drivers = await db.Driver.findAll({
-      attributes: ['id', 'name', 'phoneNumber', 'status', 'locationLatitude', 'locationLongitude', 'lastActivity'],
-      where: {
-        locationLatitude: {
-          [Op.ne]: null
-        },
-        locationLongitude: {
-          [Op.ne]: null
-        }
+    // Try to get drivers with location data
+    // Check which location columns exist in the Driver model
+    const driverAttributes = ['id', 'name', 'phoneNumber', 'status', 'lastActivity'];
+    const locationAttributes = [];
+    const locationWhere = {};
+    
+    // Check if location columns exist in the model
+    if (db.Driver.rawAttributes && db.Driver.rawAttributes.latitude) {
+      driverAttributes.push('latitude');
+      locationAttributes.push('latitude');
+      locationWhere.latitude = { [Op.ne]: null };
+    }
+    if (db.Driver.rawAttributes && db.Driver.rawAttributes.longitude) {
+      driverAttributes.push('longitude');
+      locationAttributes.push('longitude');
+      if (locationAttributes.length === 1) {
+        locationWhere.longitude = { [Op.ne]: null };
+      } else {
+        locationWhere[Op.and] = [
+          { latitude: { [Op.ne]: null } },
+          { longitude: { [Op.ne]: null } }
+        ];
       }
+    }
+    
+    // If no location columns found, return empty array
+    if (locationAttributes.length === 0) {
+      return res.json({
+        success: true,
+        locations: []
+      });
+    }
+    
+    const drivers = await db.Driver.findAll({
+      attributes: driverAttributes,
+      where: locationWhere
     });
     
     const locations = drivers.map(driver => ({
@@ -2412,8 +2438,8 @@ router.get('/drivers/locations', verifyAdmin, async (req, res) => {
       name: driver.name,
       phoneNumber: driver.phoneNumber,
       status: driver.status,
-      latitude: parseFloat(driver.locationLatitude),
-      longitude: parseFloat(driver.locationLongitude),
+      latitude: parseFloat(driver.latitude || 0),
+      longitude: parseFloat(driver.longitude || 0),
       lastActivity: driver.lastActivity
     }));
     
