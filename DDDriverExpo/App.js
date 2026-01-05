@@ -16,7 +16,6 @@ import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
 import PinConfirmScreen from './src/screens/PinConfirmScreen';
 import PinLoginScreen from './src/screens/PinLoginScreen';
-import DashboardScreen from './src/screens/DashboardScreen';
 import ActiveOrdersScreen from './src/screens/ActiveOrdersScreen';
 import OrderHistoryScreen from './src/screens/CompletedOrdersScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
@@ -60,11 +59,11 @@ const MainTabs = () => {
     >
       <Tab.Screen
         name="HomeTab"
-        component={DashboardScreen}
+        component={ActiveOrdersScreen}
         options={{
-          tabBarLabel: 'Home',
+          tabBarLabel: 'Active Orders',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home" size={size} color={color} />
+            <Ionicons name="list" size={size} color={color} />
           ),
         }}
       />
