@@ -787,7 +787,49 @@ router.put('/:id', async (req, res) => {
       updateData.cashAtHand = parsedCash;
     }
 
+    const oldStatus = driver.status;
     await driver.update(updateData);
+    
+    // Reload driver to get updated data
+    await driver.reload();
+    
+    // If status changed, emit notification to admin
+    if (status !== undefined && status !== oldStatus) {
+      const io = req.app.get('io');
+      if (io) {
+        const driverData = driver.toJSON();
+        
+        // Send notification when rider starts or ends shift
+        if ((oldStatus === 'offline' || oldStatus === 'inactive') && status === 'active') {
+          // Rider started shift
+          io.to('admin').emit('driver-shift-started', {
+            driverId: driver.id,
+            driverName: driver.name,
+            message: `${driver.name} has started shift`,
+            driver: driverData
+          });
+          console.log(`📢 Notified admin: ${driver.name} has started shift`);
+        } else if (oldStatus === 'active' && (status === 'offline' || status === 'inactive')) {
+          // Rider ended shift
+          io.to('admin').emit('driver-shift-ended', {
+            driverId: driver.id,
+            driverName: driver.name,
+            message: `${driver.name} has ended shift`,
+            driver: driverData
+          });
+          console.log(`📢 Notified admin: ${driver.name} has ended shift`);
+        }
+        
+        // Also emit a general driver status update
+        io.to('admin').emit('driver-status-updated', {
+          driverId: driver.id,
+          driver: driverData,
+          oldStatus: oldStatus,
+          newStatus: status
+        });
+      }
+    }
+    
     res.json(driver);
   } catch (error) {
     console.error('Error updating driver:', error);

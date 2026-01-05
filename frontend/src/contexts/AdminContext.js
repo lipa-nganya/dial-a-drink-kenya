@@ -83,6 +83,17 @@ export const AdminProvider = ({ children }) => {
       // Refresh pending orders count
       fetchPendingOrdersCount();
     });
+    
+    // Listen for driver shift events
+    newSocket.on('driver-shift-started', (data) => {
+      console.log('Driver started shift:', data);
+      playNotificationSound();
+    });
+    
+    newSocket.on('driver-shift-ended', (data) => {
+      console.log('Driver ended shift:', data);
+      playNotificationSound();
+    });
 
     setSocket(newSocket);
 
