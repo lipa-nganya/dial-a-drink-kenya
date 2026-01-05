@@ -335,7 +335,7 @@ const AdminOverview = () => {
           </Typography>
           <Grid
             container
-            spacing={2}
+            spacing={1.5}
             justifyContent="center"
             alignItems="stretch"
             sx={{ mb: 3 }}
@@ -352,12 +352,14 @@ const AdminOverview = () => {
                       border: card.border || `1px solid ${colors.border}`
                     }}
                   >
-                    <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                      {card.icon}
-                      <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
+                    <CardContent sx={{ textAlign: 'center', py: 1.5, px: 1.5 }}>
+                      <Box sx={{ fontSize: '1.5rem', mb: 0.5 }}>
+                        {card.icon}
+                      </Box>
+                      <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, fontSize: '1.1rem' }}>
                         {displayValue}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
                         {card.label}
                       </Typography>
                     </CardContent>

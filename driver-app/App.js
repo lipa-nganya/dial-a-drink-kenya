@@ -8,6 +8,7 @@ import PinSetupScreen from './src/screens/PinSetupScreen';
 import PinConfirmScreen from './src/screens/PinConfirmScreen';
 import PinLoginScreen from './src/screens/PinLoginScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import WalletScreen from './src/screens/WalletScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -95,6 +96,11 @@ const App = () => {
           name="Home" 
           component={HomeScreen}
           options={{ title: 'Driver Dashboard', headerLeft: null }}
+        />
+        <Stack.Screen 
+          name="Wallet" 
+          component={WalletScreen}
+          options={{ title: 'My Wallet' }}
         />
       </Stack.Navigator>
     </NavigationContainer>
