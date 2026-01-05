@@ -24,7 +24,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { Ionicons } from '@expo/vector-icons';
 import Snackbar from '../components/Snackbar';
 
-const HomeScreen = ({ route, navigation }) => {
+const ActiveOrdersScreen = ({ route, navigation }) => {
   const { phoneNumber } = route.params || {};
   const [driverInfo, setDriverInfo] = useState(null);
   const [orders, setOrders] = useState([]);
@@ -889,7 +889,7 @@ const styles = StyleSheet.create({
   },
 });
 
-export default HomeScreen;
+export default ActiveOrdersScreen;
 
 
 

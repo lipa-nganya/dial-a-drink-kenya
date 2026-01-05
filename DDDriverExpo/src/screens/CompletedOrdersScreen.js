@@ -50,7 +50,7 @@ const formatDateTime = (dateString) =>
   });
 
 const OrderHistoryScreen = ({ route, navigation }) => {
-  const { phoneNumber } = route.params || {};
+  const { phoneNumber, initialTab } = route.params || {};
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,7 +58,7 @@ const OrderHistoryScreen = ({ route, navigation }) => {
   const [endDate, setEndDate] = useState(new Date());
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
-  const [historyType, setHistoryType] = useState('completed');
+  const [historyType, setHistoryType] = useState(initialTab || 'completed');
   const [loadError, setLoadError] = useState(null);
   const { colors, isDarkMode } = useTheme();
 
@@ -121,6 +121,13 @@ const OrderHistoryScreen = ({ route, navigation }) => {
   useEffect(() => {
     loadOrderHistory();
   }, [loadOrderHistory]);
+
+  // Update historyType when initialTab changes from route params
+  useEffect(() => {
+    if (route.params?.initialTab && route.params.initialTab !== historyType) {
+      setHistoryType(route.params.initialTab);
+    }
+  }, [route.params?.initialTab]);
 
   const onRefresh = () => {
     setRefreshing(true);
