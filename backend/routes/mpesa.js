@@ -7,6 +7,7 @@ const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
 const pushNotifications = require('../services/pushNotifications');
+const whatsappService = require('../services/whatsapp');
 const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 
 const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber, req, context = 'Payment confirmation' }) => {
@@ -272,6 +273,23 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     });
     io.to('admin').emit('order-status-updated', orderStatusUpdateData);
     
+    // For "pay now" orders, emit 'new-order' event after payment is confirmed
+    // This ensures admin only sees the order after payment is complete
+    if (orderInstance.paymentType === 'pay_now' && orderInstance.paymentStatus === 'paid') {
+      io.to('admin').emit('new-order', {
+        id: orderInstance.id,
+        customerName: orderInstance.customerName,
+        totalAmount: orderInstance.totalAmount,
+        status: orderInstance.status,
+        paymentMethod: orderInstance.paymentMethod || 'mobile_money',
+        paymentStatus: 'paid',
+        receiptNumber: normalizedReceipt,
+        timestamp: new Date(),
+        message: `New paid order #${orderInstance.id} from ${orderInstance.customerName}`
+      });
+      console.log(`📢 Sent 'new-order' socket notification for pay_now Order #${orderInstance.id} after payment confirmation`);
+    }
+    
     // For POS orders, send 'new-order' notification similar to cash orders
     if (isPOSOrder && orderInstance.status === 'completed') {
       io.to('admin').emit('new-order', {
@@ -284,6 +302,53 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
         receiptNumber: normalizedReceipt
       });
       console.log(`📢 Sent 'new-order' socket notification for POS Order #${orderInstance.id} (M-Pesa)`);
+    }
+  }
+
+  // Send WhatsApp notification to admin after payment confirmation for "pay now" orders
+  if (orderInstance.paymentType === 'pay_now' && orderInstance.paymentStatus === 'paid') {
+    try {
+      const activeNotifications = await db.OrderNotification.findAll({
+        where: { isActive: true }
+      });
+      
+      if (activeNotifications.length > 0) {
+        const whatsappMessage = `✅ Payment Confirmed - Order #${orderInstance.id}\n\n` +
+          `Customer: ${orderInstance.customerName}\n` +
+          `Phone: ${orderInstance.customerPhone}\n` +
+          `Address: ${orderInstance.deliveryAddress}\n` +
+          `Total: KES ${parseFloat(orderInstance.totalAmount).toFixed(2)}\n` +
+          `Receipt: ${normalizedReceipt || 'N/A'}\n` +
+          `Payment: M-Pesa (Paid)`;
+        
+        const whatsappPromises = activeNotifications.map(notification => {
+          try {
+            const result = whatsappService.sendCustomMessage(notification.phoneNumber, whatsappMessage);
+            console.log(`📱 WhatsApp link generated for ${notification.name} (${notification.phoneNumber}) for paid order #${orderInstance.id}`);
+            return Promise.resolve({ success: true, phone: notification.phoneNumber, whatsappLink: result.whatsappLink });
+          } catch (error) {
+            console.error(`Failed to generate WhatsApp link for ${notification.name} (${notification.phoneNumber}):`, error);
+            return Promise.resolve({ success: false, phone: notification.phoneNumber, error: error.message });
+          }
+        });
+        
+        Promise.all(whatsappPromises).then(results => {
+          const successful = results.filter(r => r.success).length;
+          const failed = results.filter(r => !r.success).length;
+          console.log(`📱 WhatsApp notifications generated for paid order #${orderInstance.id}: ${successful} successful, ${failed} failed`);
+          results.forEach(result => {
+            if (result.success && result.whatsappLink) {
+              console.log(`📱 WhatsApp link for ${result.phone}: ${result.whatsappLink}`);
+            }
+          });
+        }).catch(error => {
+          console.error('Error processing WhatsApp notifications:', error);
+        });
+      } else {
+        console.log('📱 No active notification recipients found for WhatsApp');
+      }
+    } catch (error) {
+      console.error('Error sending WhatsApp notifications after payment:', error);
     }
   }
 
@@ -538,7 +603,9 @@ router.post('/stk-push', async (req, res) => {
     // Only simulate if:
     // 1. Test mode is explicitly enabled in database, OR
     // 2. We're NOT in production/cloud AND FORCE_REAL_MPESA is not set to 'true'
-    const shouldSimulatePayment = isTestMode || (!isProd && process.env.FORCE_REAL_MPESA !== 'true');
+    // CRITICAL: Check FORCE_REAL_MPESA as string comparison (env vars are always strings)
+    const forceRealMpesa = process.env.FORCE_REAL_MPESA === 'true' || process.env.FORCE_REAL_MPESA === '1';
+    const shouldSimulatePayment = isTestMode || (!isProd && !forceRealMpesa);
 
     // Initiate STK Push
     const reference = accountReference || `ORDER-${orderId}`;
@@ -556,7 +623,12 @@ router.post('/stk-push', async (req, res) => {
       isProduction: isProd,
       NODE_ENV: process.env.NODE_ENV || 'not set',
       FORCE_REAL_MPESA: process.env.FORCE_REAL_MPESA || 'not set',
-      MPESA_ENVIRONMENT: process.env.MPESA_ENVIRONMENT || 'not set'
+      MPESA_ENVIRONMENT: process.env.MPESA_ENVIRONMENT || 'not set',
+      'FORCE_REAL_MPESA type': typeof process.env.FORCE_REAL_MPESA,
+      'FORCE_REAL_MPESA === "true"': process.env.FORCE_REAL_MPESA === 'true',
+      'shouldSimulatePayment calculation': `${isTestMode} || (${!isProd} && !${forceRealMpesa}) = ${shouldSimulatePayment}`,
+      'forceRealMpesa value': forceRealMpesa,
+      'isTestMode value': isTestMode
     });
     console.log('═══════════════════════════════════════════════════════');
 
@@ -849,9 +921,14 @@ router.post('/stk-push', async (req, res) => {
       
       console.log(`✅ STK Push initiated for Order #${orderId}. CheckoutRequestID: ${checkoutRequestID}`);
 
+      // In test mode, payment is automatically finalized - no actual STK push is sent
+      const responseMessage = shouldSimulatePayment 
+        ? 'Test mode: Payment will be automatically confirmed in a few seconds. No STK push was sent to your phone.'
+        : (stkResponse.CustomerMessage || stkResponse.customerMessage || 'STK Push initiated successfully. Please check your phone to complete payment.');
+      
       res.json({
         success: true,
-        message: stkResponse.CustomerMessage || stkResponse.customerMessage || 'STK Push initiated successfully. Please check your phone to complete payment.',
+        message: responseMessage,
         checkoutRequestID: checkoutRequestID,
         customerMessage: stkResponse.CustomerMessage || stkResponse.customerMessage,
         testMode: shouldSimulatePayment,

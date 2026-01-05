@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,8 +8,10 @@ import {
   Alert,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import io from 'socket.io-client';
 import api from '../services/api';
 
 const HomeScreen = ({ route, navigation }) => {
@@ -18,10 +20,73 @@ const HomeScreen = ({ route, navigation }) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [newOrderAlert, setNewOrderAlert] = useState(null);
+  const socketRef = useRef(null);
+
+  // Get socket URL from API base URL
+  const getSocketUrl = () => {
+    const apiBaseUrl = api.defaults.baseURL;
+    // Remove /api from the end if present
+    return apiBaseUrl.replace(/\/api$/, '');
+  };
 
   useEffect(() => {
     loadDriverData();
   }, []);
+
+  // Set up Socket.IO connection when driver info is loaded
+  useEffect(() => {
+    if (driverInfo && driverInfo.id) {
+      const socketUrl = getSocketUrl();
+      console.log('🔌 Connecting to socket:', socketUrl);
+      
+      const socket = io(socketUrl, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionDelay: 1000,
+        reconnectionAttempts: 5,
+      });
+
+      socket.on('connect', () => {
+        console.log('✅ Socket connected');
+        // Join driver room
+        socket.emit('join-driver', driverInfo.id);
+        console.log(`✅ Joined driver room: driver-${driverInfo.id}`);
+      });
+
+      socket.on('disconnect', () => {
+        console.log('❌ Socket disconnected');
+      });
+
+      socket.on('connect_error', (error) => {
+        console.error('❌ Socket connection error:', error);
+      });
+
+      // Listen for new order assignment
+      socket.on('order-assigned', (data) => {
+        console.log('📦 New order assigned:', data);
+        if (data.order) {
+          setNewOrderAlert(data.order);
+          // Reload orders to show the new one
+          loadDriverData();
+        }
+      });
+
+      // Listen for order updates
+      socket.on('order-status-updated', (data) => {
+        console.log('📦 Order status updated:', data);
+        // Reload orders to get updated status
+        loadDriverData();
+      });
+
+      socketRef.current = socket;
+
+      return () => {
+        console.log('🔌 Disconnecting socket');
+        socket.disconnect();
+      };
+    }
+  }, [driverInfo]);
 
   const loadDriverData = async () => {
     try {
@@ -101,6 +166,16 @@ const HomeScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleCloseAlert = () => {
+    setNewOrderAlert(null);
+  };
+
+  const handleViewOrder = () => {
+    setNewOrderAlert(null);
+    // Scroll to the order or refresh to show it
+    loadDriverData();
+  };
+
   if (loading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -111,13 +186,65 @@ const HomeScreen = ({ route, navigation }) => {
   }
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00E0B8" />
-      }
-    >
-      <View style={styles.content}>
+    <>
+      {/* New Order Alert Modal */}
+      <Modal
+        visible={newOrderAlert !== null}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseAlert}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.alertCard}>
+            <Text style={styles.alertTitle}>🎉 NEW ORDER ASSIGNED</Text>
+            {newOrderAlert && (
+              <>
+                <Text style={styles.alertOrderNumber}>Order #{newOrderAlert.id}</Text>
+                <View style={styles.alertDetails}>
+                  <Text style={styles.alertDetailText}>
+                    <Text style={styles.alertDetailLabel}>Customer: </Text>
+                    {newOrderAlert.customerName}
+                  </Text>
+                  <Text style={styles.alertDetailText}>
+                    <Text style={styles.alertDetailLabel}>Address: </Text>
+                    {newOrderAlert.deliveryAddress}
+                  </Text>
+                  <Text style={styles.alertDetailText}>
+                    <Text style={styles.alertDetailLabel}>Amount: </Text>
+                    <Text style={styles.alertAmountText}>KES {parseFloat(newOrderAlert.totalAmount || 0).toFixed(2)}</Text>
+                  </Text>
+                  <Text style={styles.alertDetailText}>
+                    <Text style={styles.alertDetailLabel}>Payment: </Text>
+                    {newOrderAlert.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
+                  </Text>
+                </View>
+                <View style={styles.alertButtons}>
+                  <TouchableOpacity 
+                    style={[styles.alertButton, styles.alertButtonSecondary]} 
+                    onPress={handleCloseAlert}
+                  >
+                    <Text style={styles.alertButtonTextSecondary}>Close</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity 
+                    style={[styles.alertButton, styles.alertButtonPrimary]} 
+                    onPress={handleViewOrder}
+                  >
+                    <Text style={styles.alertButtonTextPrimary}>View Order</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <ScrollView 
+        style={styles.container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#00E0B8" />
+        }
+      >
+        <View style={styles.content}>
         <Text style={styles.title}>Driver Dashboard</Text>
         
         {driverInfo && (
@@ -203,6 +330,7 @@ const HomeScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </View>
     </ScrollView>
+    </>
   );
 };
 
@@ -341,6 +469,87 @@ const styles = StyleSheet.create({
     color: '#F5F5F5',
     fontSize: 18,
     fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  alertCard: {
+    backgroundColor: '#121212',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    borderWidth: 2,
+    borderColor: '#00E0B8',
+    shadowColor: '#00E0B8',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 20,
+    elevation: 10,
+  },
+  alertTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#00E0B8',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  alertOrderNumber: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#F5F5F5',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  alertDetails: {
+    marginBottom: 24,
+  },
+  alertDetailText: {
+    fontSize: 16,
+    color: '#F5F5F5',
+    marginBottom: 12,
+    lineHeight: 22,
+  },
+  alertDetailLabel: {
+    color: '#B0B0B0',
+    fontWeight: '600',
+  },
+  alertAmountText: {
+    color: '#00E0B8',
+    fontWeight: 'bold',
+  },
+  alertButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  alertButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  alertButtonPrimary: {
+    backgroundColor: '#00E0B8',
+  },
+  alertButtonSecondary: {
+    backgroundColor: '#333',
+    borderWidth: 1,
+    borderColor: '#00E0B8',
+  },
+  alertButtonTextPrimary: {
+    color: '#0D0D0D',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  alertButtonTextSecondary: {
+    color: '#00E0B8',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

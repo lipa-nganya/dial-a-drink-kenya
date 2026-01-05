@@ -1220,13 +1220,18 @@ router.patch('/orders/:id/branch', async (req, res) => {
     // Update order branch
     await order.update({ branchId: newBranchId });
 
+    // Track if driver was auto-reassigned
+    let driverWasReassigned = false;
+    let oldDriverId = order.driverId;
+    
     // If reassignDriver is true and new branch is set, find nearest active driver to new branch
     if (reassignDriver === true && newBranchId !== null) {
       const { findNearestActiveDriverToBranch } = require('../utils/driverAssignment');
       const nearestDriver = await findNearestActiveDriverToBranch(newBranchId);
       
-      if (nearestDriver) {
+      if (nearestDriver && nearestDriver.id !== oldDriverId) {
         await order.update({ driverId: nearestDriver.id });
+        driverWasReassigned = true;
         console.log(`✅ Reassigned driver to ${nearestDriver.name} (ID: ${nearestDriver.id}) for order ${order.id}`);
       } else {
         console.log(`⚠️  No active driver found for branch ${newBranchId}. Keeping current driver.`);
@@ -1274,6 +1279,22 @@ router.patch('/orders/:id/branch', async (req, res) => {
             orderId: order.id,
           branchId: newBranchId,
           order: orderData
+        });
+        
+        // If driver was auto-reassigned, also emit order-assigned event
+        if (driverWasReassigned && order.driver && order.driver.name !== 'HOLD Driver') {
+          io.to(`driver-${order.driverId}`).emit('order-assigned', {
+            order: orderData,
+            playSound: true
+          });
+          console.log(`📢 Notified driver ${order.driver.name} (ID: ${order.driverId}) about auto-reassigned order #${order.id}`);
+        }
+      }
+      
+      // If old driver was removed, notify them
+      if (oldDriverId && oldDriverId !== order.driverId) {
+        io.to(`driver-${oldDriverId}`).emit('driver-removed', {
+          orderId: order.id
         });
       }
     }
@@ -1495,6 +1516,27 @@ router.post('/orders/:id/verify-payment', async (req, res) => {
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // For pay_on_delivery orders, check if payment prompt was sent
+    if (order.paymentType === 'pay_on_delivery') {
+      const hasPaymentPrompt = order.transactions && order.transactions.some(
+        t => t.transactionType === 'payment' && t.checkoutRequestID
+      );
+      
+      if (!hasPaymentPrompt) {
+        // Log warning but allow admin to verify payment (they may have received cash or verified manually)
+        console.log(`⚠️  WARNING: Admin verifying payment for Order #${order.id} (pay_on_delivery) without payment prompt being sent.`);
+        console.log(`   This may indicate payment was received via cash or verified manually.`);
+        console.log(`   Driver will see a warning that payment was marked as paid without prompt.`);
+        
+        // Add note to order about manual verification (this will be visible to driver)
+        const verificationNote = `[ADMIN VERIFICATION] Payment verified manually by admin${receiptNumber ? ` (Receipt: ${receiptNumber})` : ''} without payment prompt being sent.`;
+        const updatedNotes = order.notes ? `${order.notes}\n${verificationNote}` : verificationNote;
+        
+        // Update notes before updating payment status
+        await order.update({ notes: updatedNotes });
+      }
     }
 
     // Update payment status to paid

@@ -107,6 +107,29 @@ const OrderDetailScreen = ({ route, navigation }) => {
     }
   }, [currentOrder?.id]); // Reset when order ID changes
 
+  // Fetch latest order data with transactions when screen loads
+  useEffect(() => {
+    const fetchOrderDetails = async () => {
+      if (!driverId || !currentOrder?.id) return;
+      
+      try {
+        // Fetch latest order data including transactions
+        const response = await api.get(`/driver-orders/${driverId}`);
+        const orders = response.data || [];
+        const updatedOrder = orders.find(o => o.id === currentOrder.id);
+        
+        if (updatedOrder) {
+          setCurrentOrder(updatedOrder);
+        }
+      } catch (error) {
+        console.error('Error fetching order details:', error);
+        // Don't show error to user, just use the order data we have
+      }
+    };
+
+    fetchOrderDetails();
+  }, [currentOrder?.id, driverId]);
+
   // Set up socket connection for real-time order status updates
   useEffect(() => {
     const getSocketUrl = () => {
@@ -635,6 +658,67 @@ const OrderDetailScreen = ({ route, navigation }) => {
               <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Confirmed At:</Text>
               <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
                 {formatDateTimeToSecond(currentOrder.paymentConfirmedAt)}
+              </Text>
+            </View>
+          )}
+          {/* Show payment transaction details if payment is paid */}
+          {isPaymentPaid && currentOrder.transactions && currentOrder.transactions.length > 0 && (
+            <>
+              {currentOrder.transactions
+                .filter(t => t.transactionType === 'payment' && t.status === 'completed')
+                .map((transaction, index) => (
+                  <View key={transaction.id || index} style={{ marginTop: 8 }}>
+                    <View style={styles.infoRow}>
+                      <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Payment Method:</Text>
+                      <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+                        {transaction.paymentMethod === 'mobile_money' ? 'M-Pesa' : 
+                         transaction.paymentMethod === 'cash' ? 'Cash' : 
+                         transaction.paymentMethod || 'N/A'}
+                      </Text>
+                    </View>
+                    {transaction.receiptNumber && (
+                      <View style={styles.infoRow}>
+                        <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Receipt:</Text>
+                        <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+                          {transaction.receiptNumber}
+                        </Text>
+                      </View>
+                    )}
+                    {transaction.checkoutRequestID && (
+                      <View style={styles.infoRow}>
+                        <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Payment Prompt:</Text>
+                        <Text style={[styles.infoValue, { color: '#32CD32' }]}>
+                          ✓ Sent via M-Pesa
+                        </Text>
+                      </View>
+                    )}
+                    {!transaction.checkoutRequestID && transaction.paymentMethod === 'mobile_money' && (
+                      <View style={styles.infoRow}>
+                        <Text style={[styles.infoLabel, { color: '#FFA500' }]}>Note:</Text>
+                        <Text style={[styles.infoValue, { color: '#FFA500', fontStyle: 'italic' }]}>
+                          Payment marked as paid without prompt
+                        </Text>
+                      </View>
+                    )}
+                    {transaction.transactionDate && (
+                      <View style={styles.infoRow}>
+                        <Text style={[styles.infoLabel, { color: colors.textSecondary }]}>Transaction Date:</Text>
+                        <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+                          {formatDateTimeToSecond(transaction.transactionDate)}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+            </>
+          )}
+          {/* Warning if payment is paid but no transaction found (likely marked manually) */}
+          {isPaymentPaid && isPayOnDelivery && 
+           (!currentOrder.transactions || 
+            !currentOrder.transactions.some(t => t.transactionType === 'payment' && t.status === 'completed')) && (
+            <View style={[styles.infoRow, { marginTop: 8, padding: 8, backgroundColor: colors.background, borderRadius: 4 }]}>
+              <Text style={[styles.infoValue, { color: '#FFA500', fontSize: 12, fontStyle: 'italic' }]}>
+                ⚠️ Payment marked as paid, but no payment transaction found. Payment may have been verified manually.
               </Text>
             </View>
           )}

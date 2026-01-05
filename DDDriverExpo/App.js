@@ -298,6 +298,12 @@ const App = () => {
       configureNotificationChannel().catch(error => {
         console.error('❌ Error configuring notification channels:', error);
       });
+      
+      // Request overlay permission on first launch (optional, can be done later)
+      // import { requestOverlayPermission } from './src/utils/overlayPermission';
+      // requestOverlayPermission().catch(error => {
+      //   console.error('❌ Error requesting overlay permission:', error);
+      // });
     }
   }, []);
 

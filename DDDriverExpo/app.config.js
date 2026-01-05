@@ -48,7 +48,7 @@ module.exports = ({ config }) => {
     expo: {
       name: `DD Driver${appNameSuffix}`,
       slug: 'dddriver',
-      version: '1.0.35',
+      version: '1.0.36',
       orientation: 'portrait',
       icon: './assets/icon.png',
       userInterfaceStyle: 'dark',
@@ -87,8 +87,12 @@ module.exports = ({ config }) => {
           'ACCESS_NETWORK_STATE',
           'ACCESS_FINE_LOCATION',
           'ACCESS_COARSE_LOCATION',
-          'ACCESS_BACKGROUND_LOCATION'
+          'ACCESS_BACKGROUND_LOCATION',
+          'FOREGROUND_SERVICE',
+          'WAKE_LOCK'
         ]
+        // Note: SYSTEM_ALERT_WINDOW is a runtime permission requested via Settings
+        // Use the overlayPermission utility to request it at runtime
       },
       web: {
         favicon: './assets/favicon.png'
