@@ -19,6 +19,7 @@ import {
   InputLabel,
   Alert,
   CircularProgress,
+  LinearProgress,
   IconButton,
   Tooltip,
   Dialog,
@@ -26,7 +27,16 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  InputAdornment
+  InputAdornment,
+  Tabs,
+  Tab,
+  Card,
+  CardContent,
+  Divider,
+  Autocomplete,
+  ToggleButton,
+  ToggleButtonGroup,
+  Menu
 } from '@mui/material';
 import {
   Cancel,
@@ -36,10 +46,23 @@ import {
   Edit,
   Person,
   Delete,
+  MoreVert,
   Search,
   Clear,
   Store,
-  PictureAsPdf
+  PictureAsPdf,
+  Route as RouteIcon,
+  LocalShipping,
+  AccessTime,
+  LocationOn,
+  Add,
+  Map,
+  List,
+  Refresh,
+  Close,
+  KeyboardArrowUp,
+  KeyboardArrowDown,
+  AutoAwesome
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -47,6 +70,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getBackendUrl } from '../utils/backendUrl';
 import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChipProps } from '../utils/chipStyles';
 import NewOrderDialog from '../components/NewOrderDialog';
+import { GoogleMap, LoadScript, Marker, Polyline, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
+import AddressAutocomplete from '../components/AddressAutocomplete';
+import RouteMapView from '../components/RouteMapView';
 
 const Orders = () => {
   const { isDarkMode, colors } = useTheme();
@@ -72,6 +98,50 @@ const Orders = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [newOrderDialogOpen, setNewOrderDialogOpen] = useState(false);
+  
+  // Route Optimisation state
+  const [activeTab, setActiveTab] = useState(0);
+  const [riderRoutes, setRiderRoutes] = useState([]);
+  const [allRiderRoutes, setAllRiderRoutes] = useState([]);
+  const [allRiders, setAllRiders] = useState([]);
+  const [routesLoading, setRoutesLoading] = useState(false);
+  const [selectedRiders, setSelectedRiders] = useState([]);
+  const [draggedOrder, setDraggedOrder] = useState(null);
+  const [draggedStop, setDraggedStop] = useState(null);
+  const [dragOverRider, setDragOverRider] = useState(null);
+  const [stopDialogOpen, setStopDialogOpen] = useState(false);
+  const [selectedRiderForStop, setSelectedRiderForStop] = useState(null);
+  const [selectedOrderIndexForStop, setSelectedOrderIndexForStop] = useState(null);
+  const [editingStop, setEditingStop] = useState(null); // null for add, stop object for edit
+  const [stopFormData, setStopFormData] = useState({
+    name: '',
+    location: '',
+    instruction: '',
+    payment: ''
+  });
+  const [stops, setStops] = useState({}); // riderId -> array of { stop, insertAfterIndex }
+  const [routeViewMode, setRouteViewMode] = useState('list');
+  const [riderLocations, setRiderLocations] = useState({});
+  const [refreshingLocations, setRefreshingLocations] = useState(false);
+  const [mapCenter, setMapCenter] = useState({ lat: -1.2921, lng: 36.8219 });
+  const [optimizedRoutes, setOptimizedRoutes] = useState({}); // riderId -> array of order IDs in optimized order
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizationSavings, setOptimizationSavings] = useState({}); // riderId -> { timeSaved, costSaved }
+  const [optimizationProgress, setOptimizationProgress] = useState({
+    open: false,
+    step: 0,
+    totalSteps: 9,
+    currentStep: '',
+    progress: 0
+  });
+
+  
+  // Google Maps API loader
+  const { isLoaded: isMapLoaded } = useJsApiLoader({
+    id: 'google-map-script',
+    googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
+    libraries: ['places', 'geometry']
+  });
 
   useEffect(() => {
     fetchOrders();
@@ -565,6 +635,705 @@ const Orders = () => {
     }
   };
 
+  // Route Optimisation functions
+  const formatDateTime = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const fetchRiderRoutes = async () => {
+    try {
+      setRoutesLoading(true);
+      const [ridersResponse, ordersResponse, locationsResponse] = await Promise.all([
+        api.get('/drivers'),
+        api.get('/admin/orders'),
+        api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
+      ]);
+      
+      const fetchedRiders = ridersResponse.data || [];
+      setAllRiders(fetchedRiders);
+      const allOrders = ordersResponse.data || [];
+      
+      // Store rider locations
+      const locationsMap = {};
+      if (locationsResponse.data?.locations) {
+        locationsResponse.data.locations.forEach(loc => {
+          locationsMap[loc.id] = {
+            lat: loc.latitude,
+            lng: loc.longitude
+          };
+        });
+      }
+      setRiderLocations(locationsMap);
+      
+      // Filter orders that are assigned and active (not cancelled or completed)
+      const activeOrders = allOrders.filter(order => 
+        order.driverId && 
+        order.status !== 'cancelled' && 
+        order.status !== 'completed'
+      );
+      
+      // Group orders by rider and sort by deliverySequence (if available) or createdAt
+      const routes = fetchedRiders.map(rider => {
+        const riderOrders = activeOrders
+          .filter(order => order.driverId === rider.id)
+          .sort((a, b) => {
+            // Sort by deliverySequence if available, otherwise by createdAt
+            if (a.deliverySequence !== null && b.deliverySequence !== null) {
+              return (a.deliverySequence || 0) - (b.deliverySequence || 0);
+            }
+            if (a.deliverySequence !== null) return -1;
+            if (b.deliverySequence !== null) return 1;
+            return new Date(a.createdAt) - new Date(b.createdAt);
+          });
+        
+        return {
+          rider,
+          orders: riderOrders
+        };
+      }).filter(route => route.orders.length > 0);
+      
+      // Fetch stops from database
+      const stopsMap = {};
+      try {
+        for (const route of routes) {
+          const stopsResponse = await api.get(`/admin/stops/driver/${route.rider.id}`);
+          if (stopsResponse.data?.stops) {
+            stopsMap[route.rider.id] = stopsResponse.data.stops.map(stop => ({
+              stop: {
+                id: stop.id,
+                name: stop.name,
+                location: stop.location,
+                instruction: stop.instruction,
+                payment: stop.payment,
+                sequence: stop.sequence
+              },
+              insertAfterIndex: stop.insertAfterIndex
+            }));
+          }
+        }
+        setStops(stopsMap);
+      } catch (stopsError) {
+        console.error('Error fetching stops:', stopsError);
+        // Continue without stops if API fails
+      }
+      
+      // Always update allRiderRoutes with all routes
+      setAllRiderRoutes(routes);
+      
+      // Update riderRoutes based on selectedRiders filter
+      if (selectedRiders.length > 0) {
+        const selectedIds = selectedRiders.map(rider => rider.id);
+        const existingRoutes = routes.filter(route => selectedIds.includes(route.rider.id));
+        const ridersWithoutRoutes = selectedRiders.filter(rider => 
+          !routes.some(route => route.rider.id === rider.id)
+        );
+        const newRoutes = ridersWithoutRoutes.map(rider => ({
+          rider,
+          orders: []
+        }));
+        setRiderRoutes([...existingRoutes, ...newRoutes]);
+      } else {
+        // No selected riders, show all routes
+        setRiderRoutes(routes);
+      }
+    } catch (error) {
+      console.error('Error fetching rider routes:', error);
+      setError(error.response?.data?.error || error.message);
+      setAllRiders([]);
+      setAllRiderRoutes([]);
+      setRiderRoutes([]);
+    } finally {
+      setRoutesLoading(false);
+    }
+  };
+
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+    if (newValue === 1) {
+      // Route Optimisation tab selected
+      fetchRiderRoutes();
+    }
+  };
+
+  const handleRefreshLocations = async () => {
+    setRefreshingLocations(true);
+    try {
+      const locationsResponse = await api.get('/admin/drivers/locations');
+      const locationsMap = {};
+      if (locationsResponse.data?.locations) {
+        locationsResponse.data.locations.forEach(loc => {
+          locationsMap[loc.id] = {
+            lat: loc.latitude,
+            lng: loc.longitude
+          };
+        });
+      }
+      setRiderLocations(locationsMap);
+    } catch (error) {
+      console.error('Error refreshing locations:', error);
+    } finally {
+      setRefreshingLocations(false);
+    }
+  };
+
+  // Check if routes are currently optimized
+  const isRouteOptimized = () => {
+    if (Object.keys(optimizedRoutes).length === 0) return false;
+    
+    // Check if current order matches optimized order for each rider
+    for (const route of riderRoutes) {
+      const optimizedOrder = optimizedRoutes[route.rider.id];
+      if (!optimizedOrder) continue;
+      
+      const currentOrder = route.orders.map(o => o.id);
+      if (currentOrder.length !== optimizedOrder.length) return false;
+      
+      // Check if orders match
+      for (let i = 0; i < currentOrder.length; i++) {
+        if (currentOrder[i] !== optimizedOrder[i]) return false;
+      }
+    }
+    
+    return true;
+  };
+
+
+  // Helper function to update optimization progress
+  const updateOptimizationProgress = (step, currentStep, progress) => {
+    setOptimizationProgress({
+      open: true,
+      step,
+      totalSteps: 9,
+      currentStep,
+      progress
+    });
+  };
+  
+  // Optimize routes using Google Maps and TSP-like algorithm
+  const handleOptimizeRoutes = async () => {
+    if (!window.google || !isMapLoaded) {
+      setError('Google Maps is not loaded. Please wait and try again.');
+      return;
+    }
+
+    setOptimizing(true);
+    setError(null);
+    
+    // Open progress dialog
+    updateOptimizationProgress(0, 'Initializing optimization engine...', 0);
+
+    try {
+      // Step 1: Check current driver locations
+      updateOptimizationProgress(1, 'Checking current driver locations...', 11);
+      await handleRefreshLocations();
+      await new Promise(resolve => setTimeout(resolve, 300)); // Small delay for UX
+      
+      const geocoder = new window.google.maps.Geocoder();
+      const distanceMatrixService = new window.google.maps.DistanceMatrixService();
+      const newOptimizedRoutes = {};
+      const newSavings = {};
+      
+      // Step 2: Check order locations
+      updateOptimizationProgress(2, 'Checking order locations...', 22);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      // Step 3: Check stop locations  
+      updateOptimizationProgress(3, 'Checking stop locations...', 33);
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Step 4: Rearrange orders and stops based on driver locations
+      updateOptimizationProgress(4, 'Rearranging orders and stops based on driver locations...', 44);
+      
+      // Optimize each rider's route
+      for (const route of riderRoutes) {
+        if (route.orders.length < 2) {
+          // No optimization needed for 0 or 1 order
+          continue;
+        }
+
+        // Get rider's current location
+        const riderLocation = riderLocations[route.rider.id];
+        if (!riderLocation) {
+          console.warn(`No location found for rider ${route.rider.id}`);
+          continue;
+        }
+
+        // Geocode all order addresses
+        const orderLocations = [];
+        const geocodePromises = route.orders.map(async (order) => {
+          if (!order.deliveryAddress || order.deliveryAddress === 'In-Store Purchase') {
+            return null;
+          }
+          
+          return new Promise((resolve) => {
+            geocoder.geocode({ address: order.deliveryAddress }, (results, status) => {
+              if (status === window.google.maps.GeocoderStatus.OK && results && results.length > 0) {
+                const location = results[0].geometry.location;
+                resolve({
+                  orderId: order.id,
+                  location: { lat: location.lat(), lng: location.lng() },
+                  address: order.deliveryAddress
+                });
+              } else {
+                resolve(null);
+              }
+            });
+          });
+        });
+
+        const geocoded = (await Promise.all(geocodePromises)).filter(Boolean);
+        
+        if (geocoded.length < 2) {
+          // Not enough geocoded addresses
+          continue;
+        }
+
+        // Calculate distance matrix
+        const origins = [riderLocation, ...geocoded.map(o => o.location)];
+        const destinations = [...geocoded.map(o => o.location), riderLocation];
+        
+        const distanceMatrix = await new Promise((resolve) => {
+          distanceMatrixService.getDistanceMatrix(
+            {
+              origins: origins.map(orig => new window.google.maps.LatLng(orig.lat, orig.lng)),
+              destinations: destinations.map(dest => new window.google.maps.LatLng(dest.lat, dest.lng)),
+              travelMode: window.google.maps.TravelMode.DRIVING,
+              unitSystem: window.google.maps.UnitSystem.METRIC
+            },
+            (response, status) => {
+              if (status === window.google.maps.DistanceMatrixStatus.OK) {
+                resolve(response);
+              } else {
+                resolve(null);
+              }
+            }
+          );
+        });
+
+        if (!distanceMatrix) continue;
+
+        // Extract distances and durations from matrix
+        const distances = [];
+        const durations = [];
+        for (let i = 0; i < origins.length; i++) {
+          distances[i] = [];
+          durations[i] = [];
+          for (let j = 0; j < destinations.length; j++) {
+            const element = distanceMatrix.rows[i].elements[j];
+            distances[i][j] = element.distance.value; // meters
+            durations[i][j] = element.duration.value; // seconds
+          }
+        }
+
+        // Nearest neighbor algorithm for TSP
+        const optimizedOrderIds = [];
+        const unvisited = [...geocoded.map(o => o.orderId)];
+        let currentIndex = 0; // Start from rider location (index 0)
+        
+        while (unvisited.length > 0) {
+          let nearestIndex = -1;
+          let nearestDistance = Infinity;
+          
+          // Find nearest unvisited order
+          for (let i = 0; i < geocoded.length; i++) {
+            const orderId = geocoded[i].orderId;
+            if (!unvisited.includes(orderId)) continue;
+            
+            const destIndex = i; // destination index in distance matrix
+            const distance = distances[currentIndex][destIndex + 1]; // +1 because rider is at index 0
+            
+            if (distance < nearestDistance) {
+              nearestDistance = distance;
+              nearestIndex = i;
+            }
+          }
+          
+          if (nearestIndex === -1) break;
+          
+          const nearestOrderId = geocoded[nearestIndex].orderId;
+          optimizedOrderIds.push(nearestOrderId);
+          unvisited.splice(unvisited.indexOf(nearestOrderId), 1);
+          currentIndex = nearestIndex + 1; // +1 because rider is at index 0
+        }
+
+        // Calculate current route total distance/time
+        let currentTotalDistance = 0;
+        let currentTotalTime = 0;
+        for (let i = 0; i < route.orders.length - 1; i++) {
+          const currentOrder = route.orders[i];
+          const nextOrder = route.orders[i + 1];
+          
+          const currentGeocoded = geocoded.find(g => g.orderId === currentOrder.id);
+          const nextGeocoded = geocoded.find(g => g.orderId === nextOrder.id);
+          
+          if (currentGeocoded && nextGeocoded) {
+            const fromIndex = i === 0 ? 0 : geocoded.findIndex(g => g.orderId === currentOrder.id) + 1;
+            const toIndex = geocoded.findIndex(g => g.orderId === nextOrder.id) + 1;
+            
+            if (distances[fromIndex] && distances[fromIndex][toIndex] !== undefined) {
+              currentTotalDistance += distances[fromIndex][toIndex];
+              currentTotalTime += durations[fromIndex][toIndex];
+            }
+          }
+        }
+
+        // Step 5: Estimate total distance travelled per selected rider
+        // Calculate optimized route total distance/time
+        let optimizedTotalDistance = 0;
+        let optimizedTotalTime = 0;
+        for (let i = 0; i < optimizedOrderIds.length - 1; i++) {
+          const fromIndex = i === 0 ? 0 : geocoded.findIndex(g => g.orderId === optimizedOrderIds[i]) + 1;
+          const toIndex = geocoded.findIndex(g => g.orderId === optimizedOrderIds[i + 1]) + 1;
+          
+          if (distances[fromIndex] && distances[fromIndex][toIndex] !== undefined) {
+            optimizedTotalDistance += distances[fromIndex][toIndex];
+            optimizedTotalTime += durations[fromIndex][toIndex];
+          }
+        }
+        
+        // Step 6: Estimate total travel time per selected rider (already calculated above)
+
+        // Calculate savings
+        const distanceSaved = currentTotalDistance - optimizedTotalDistance; // meters
+        const timeSaved = currentTotalTime - optimizedTotalTime; // seconds
+        
+        // Estimate cost savings (assuming fuel cost per km and time cost)
+        const fuelCostPerKm = 120; // KES per km (approximate)
+        const driverCostPerHour = 500; // KES per hour (approximate)
+        const distanceSavedKm = distanceSaved / 1000;
+        const timeSavedHours = timeSaved / 3600;
+        const costSaved = (distanceSavedKm * fuelCostPerKm) + (timeSavedHours * driverCostPerHour);
+
+        newOptimizedRoutes[route.rider.id] = optimizedOrderIds;
+        newSavings[route.rider.id] = {
+          timeSaved: Math.round(timeSaved / 60), // minutes
+          costSaved: Math.round(costSaved), // KES
+          distanceSaved: Math.round(distanceSavedKm * 10) / 10 // km, 1 decimal
+        };
+
+        // Update order sequences in database
+        for (let i = 0; i < optimizedOrderIds.length; i++) {
+          try {
+            await api.patch(`/admin/orders/${optimizedOrderIds[i]}/sequence`, {
+              deliverySequence: i
+            });
+          } catch (error) {
+            console.error(`Error updating sequence for order ${optimizedOrderIds[i]}:`, error);
+          }
+        }
+      }
+      
+      // Step 5: Update progress after distance calculation
+      updateOptimizationProgress(5, 'Estimating total distance per rider...', 56);
+      
+      // Step 6: Update progress after time calculation
+      updateOptimizationProgress(6, 'Estimating total travel time per rider...', 67);
+      
+      // Step 7: Check if additional riders are required (30min per card)
+      updateOptimizationProgress(7, 'Checking if additional riders are required...', 78);
+      // TODO: Implement logic to check if routes exceed 30 minutes per rider
+      // and recommend additional riders if needed
+      
+      // Step 8: Recommend best additional driver if needed
+      updateOptimizationProgress(8, 'Recommending best additional drivers...', 89);
+      // TODO: Implement logic to recommend best additional drivers
+      
+      setOptimizedRoutes(newOptimizedRoutes);
+      setOptimizationSavings(newSavings);
+      
+      // Step 9: Apply optimization and update UI
+      updateOptimizationProgress(9, 'Applying optimization and updating routes...', 100);
+      
+      // Refresh routes to show optimized order
+      await fetchRiderRoutes();
+      
+      // Close progress dialog
+      setOptimizationProgress(prev => ({ ...prev, open: false }));
+      
+      // Show success message
+      console.log('Routes optimized successfully!');
+    } catch (error) {
+      console.error('Error optimizing routes:', error);
+      setError(error.message || 'Failed to optimize routes');
+      setOptimizationProgress(prev => ({ ...prev, open: false }));
+    } finally {
+      setOptimizing(false);
+    }
+  };
+
+  // Move order up/down in timeline
+  const handleMoveOrder = async (riderId, orderId, direction) => {
+    const route = riderRoutes.find(r => r.rider.id === riderId);
+    if (!route) return;
+    
+    const orders = [...route.orders];
+    const orderIndex = orders.findIndex(o => o.id === orderId);
+    
+    if (orderIndex === -1) return;
+    if (direction === 'up' && orderIndex === 0) return; // Already at top
+    if (direction === 'down' && orderIndex === orders.length - 1) return; // Already at bottom
+    
+    const newIndex = direction === 'up' ? orderIndex - 1 : orderIndex + 1;
+    
+    // Get current deliverySequence values (or use index as fallback)
+    const currentOrder = orders[orderIndex];
+    const swapOrder = orders[newIndex];
+    
+    // Update local state immediately for UI responsiveness
+    setRiderRoutes(prevRoutes => {
+      return prevRoutes.map(r => {
+        if (r.rider.id !== riderId) return r;
+        const updatedOrders = [...r.orders];
+        [updatedOrders[orderIndex], updatedOrders[newIndex]] = [updatedOrders[newIndex], updatedOrders[orderIndex]];
+        return { ...r, orders: updatedOrders };
+      });
+    });
+    
+    setAllRiderRoutes(prevRoutes => {
+      return prevRoutes.map(r => {
+        if (r.rider.id !== riderId) return r;
+        const updatedOrders = [...r.orders];
+        const idx = updatedOrders.findIndex(o => o.id === orderId);
+        if (idx === -1) return r;
+        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+        if (swapIdx < 0 || swapIdx >= updatedOrders.length) return r;
+        [updatedOrders[idx], updatedOrders[swapIdx]] = [updatedOrders[swapIdx], updatedOrders[idx]];
+        return { ...r, orders: updatedOrders };
+      });
+    });
+    
+    // Save to database
+    try {
+      // Swap deliverySequence values
+      const currentSeq = currentOrder.deliverySequence !== null && currentOrder.deliverySequence !== undefined 
+        ? currentOrder.deliverySequence 
+        : orderIndex;
+      const swapSeq = swapOrder.deliverySequence !== null && swapOrder.deliverySequence !== undefined
+        ? swapOrder.deliverySequence 
+        : newIndex;
+      
+      await Promise.all([
+        api.patch(`/admin/orders/${orderId}/sequence`, { deliverySequence: swapSeq }),
+        api.patch(`/admin/orders/${swapOrder.id}/sequence`, { deliverySequence: currentSeq })
+      ]);
+      
+      // Refresh data to ensure consistency
+      await fetchRiderRoutes();
+    } catch (error) {
+      console.error('Error updating order sequence:', error);
+      setError(error.response?.data?.error || 'Failed to update order sequence');
+      // Revert on error
+      await fetchRiderRoutes();
+    }
+  };
+
+  // Move stop up/down in timeline (can move with orders or stops)
+  const handleMoveStop = async (riderId, stopIndex, direction) => {
+    const route = riderRoutes.find(r => r.rider.id === riderId);
+    if (!route) return;
+    
+    const riderStops = stops[riderId] || [];
+    if (stopIndex === -1 || stopIndex >= riderStops.length) return;
+    
+    const stopToMove = riderStops[stopIndex];
+    if (!stopToMove.stop?.id) return;
+    
+    // Build timeline to find current position
+    const timelineItems = [];
+    route.orders.forEach((order, orderIndex) => {
+      timelineItems.push({ type: 'order', data: order, orderIndex });
+      const stopsAfterThisOrder = riderStops.filter(s => s.insertAfterIndex === orderIndex);
+      // Sort stops by sequence
+      stopsAfterThisOrder.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
+      stopsAfterThisOrder.forEach((stopItem) => {
+        const originalIndex = riderStops.findIndex(s => s === stopItem);
+        timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex, stopItem });
+      });
+    });
+    const stopsAfterLastOrder = riderStops.filter(s => s.insertAfterIndex === -1);
+    // Sort stops by sequence
+    stopsAfterLastOrder.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
+    stopsAfterLastOrder.forEach(stopItem => {
+      const originalIndex = riderStops.findIndex(s => s === stopItem);
+      timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex, stopItem });
+    });
+    
+    // Find the stop's position in timeline
+    const currentTimelineIndex = timelineItems.findIndex(item => 
+      item.type === 'stop' && item.stopIndex === stopIndex
+    );
+    
+    if (currentTimelineIndex === -1) return;
+    if (direction === 'up' && currentTimelineIndex === 0) return; // Already at top
+    if (direction === 'down' && currentTimelineIndex === timelineItems.length - 1) return; // Already at bottom
+    
+    const targetTimelineIndex = direction === 'up' ? currentTimelineIndex - 1 : currentTimelineIndex + 1;
+    const targetItem = timelineItems[targetTimelineIndex];
+    
+    try {
+      if (targetItem.type === 'order') {
+        // Moving past an order - update insertAfterIndex
+        const targetOrderIndex = targetItem.orderIndex;
+        const newInsertAfterIndex = direction === 'up' ? targetOrderIndex - 1 : targetOrderIndex;
+        
+        // Calculate new sequence (count of stops at new insertAfterIndex)
+        const stopsAtNewPosition = riderStops.filter(s => 
+          s.insertAfterIndex === newInsertAfterIndex && s !== stopToMove
+        );
+        const newSequence = stopsAtNewPosition.length;
+        
+        // Update stop's insertAfterIndex and sequence
+        await api.patch(`/admin/stops/${stopToMove.stop.id}`, {
+          insertAfterIndex: newInsertAfterIndex,
+          sequence: newSequence
+        });
+      } else {
+        // Moving past another stop - swap sequence if same insertAfterIndex, otherwise update insertAfterIndex
+        const targetStopItem = targetItem.stopItem;
+        if (stopToMove.insertAfterIndex === targetStopItem.insertAfterIndex) {
+          // Same group - swap sequence
+          const stopId = stopToMove.stop.id;
+          const swapStopId = targetStopItem.stop.id;
+          const currentSeq = stopToMove.stop.sequence !== undefined ? stopToMove.stop.sequence : 0;
+          const swapSeq = targetStopItem.stop.sequence !== undefined ? targetStopItem.stop.sequence : 0;
+          
+          await Promise.all([
+            api.patch(`/admin/stops/${stopId}`, { sequence: swapSeq }),
+            api.patch(`/admin/stops/${swapStopId}`, { sequence: currentSeq })
+          ]);
+        } else {
+          // Different group - move to target stop's position
+          const newInsertAfterIndex = targetStopItem.insertAfterIndex;
+          const stopsAtNewPosition = riderStops.filter(s => 
+            s.insertAfterIndex === newInsertAfterIndex && s !== stopToMove
+          );
+          const newSequence = direction === 'up' 
+            ? stopsAtNewPosition.length // Add at end
+            : 0; // Insert at beginning (we'll need to shift others)
+          
+          // If inserting at beginning, we need to increment sequence of existing stops
+          if (newSequence === 0 && stopsAtNewPosition.length > 0) {
+            await Promise.all([
+              api.patch(`/admin/stops/${stopToMove.stop.id}`, {
+                insertAfterIndex: newInsertAfterIndex,
+                sequence: 0
+              }),
+              ...stopsAtNewPosition.map((s, idx) => 
+                api.patch(`/admin/stops/${s.stop.id}`, { sequence: idx + 1 })
+              )
+            ]);
+          } else {
+            await api.patch(`/admin/stops/${stopToMove.stop.id}`, {
+              insertAfterIndex: newInsertAfterIndex,
+              sequence: newSequence
+            });
+          }
+        }
+      }
+      
+      // Refresh data to ensure consistency
+      await fetchRiderRoutes();
+    } catch (error) {
+      console.error('Error updating stop position:', error);
+      setError(error.response?.data?.error || 'Failed to update stop position');
+      // Revert on error
+      await fetchRiderRoutes();
+    }
+  };
+
+  // Handle edit stop
+  const handleEditStop = (stop, riderId) => {
+    const riderStops = stops[riderId] || [];
+    const stopItem = riderStops.find(s => s.stop.id === stop.id);
+    if (stopItem) {
+      setEditingStop(stop);
+      setSelectedRiderForStop(riderId);
+      setSelectedOrderIndexForStop(stopItem.insertAfterIndex);
+      setStopFormData({
+        name: stop.name || '',
+        location: stop.location || '',
+        instruction: stop.instruction || '',
+        payment: stop.payment || 0
+      });
+      setStopDialogOpen(true);
+    }
+  };
+
+  // Handle delete stop
+  const handleDeleteStop = async (stop, riderId) => {
+    if (!window.confirm(`Are you sure you want to delete the stop "${stop.name}"?`)) {
+      return;
+    }
+
+    try {
+      await api.delete(`/admin/stops/${stop.id}`);
+      await fetchRiderRoutes();
+    } catch (error) {
+      console.error('Error deleting stop:', error);
+      setError(error.response?.data?.error || 'Failed to delete stop');
+    }
+  };
+
+  // Stop menu component
+  const StopMenu = ({ stop, riderId, onEdit, onDelete }) => {
+    const [anchorEl, setAnchorEl] = useState(null);
+    const open = Boolean(anchorEl);
+
+    const handleClick = (event) => {
+      event.stopPropagation();
+      setAnchorEl(event.currentTarget);
+    };
+
+    const handleClose = () => {
+      setAnchorEl(null);
+    };
+
+    const handleEditClick = () => {
+      handleClose();
+      onEdit(stop, riderId);
+    };
+
+    const handleDeleteClick = () => {
+      handleClose();
+      onDelete(stop, riderId);
+    };
+
+    return (
+      <>
+        <IconButton
+          size="small"
+          onClick={handleClick}
+          sx={{ color: colors.textSecondary }}
+        >
+          <MoreVert fontSize="small" />
+        </IconButton>
+        <Menu
+          anchorEl={anchorEl}
+          open={open}
+          onClose={handleClose}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MenuItem onClick={handleEditClick}>
+            <Edit fontSize="small" sx={{ mr: 1 }} />
+            Edit
+          </MenuItem>
+          <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
+            <Delete fontSize="small" sx={{ mr: 1 }} />
+            Delete
+          </MenuItem>
+        </Menu>
+      </>
+    );
+  };
+
   const getNextStatusOptions = (currentStatus, paymentType, paymentStatus) => {
     const options = [];
     
@@ -621,27 +1390,57 @@ const Orders = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Assignment sx={{ color: colors.accentText, fontSize: 40 }} />
             <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
-              Orders Management
+              Orders
             </Typography>
           </Box>
-          <Button
-            variant="contained"
-            startIcon={<ShoppingCart />}
-            onClick={() => setNewOrderDialogOpen(true)}
-            sx={{
-              backgroundColor: colors.accentText,
-              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-              '&:hover': { backgroundColor: '#00C4A3' }
-            }}
-          >
-            NEW ORDER
-          </Button>
+          {activeTab === 0 && (
+            <Button
+              variant="contained"
+              startIcon={<ShoppingCart />}
+              onClick={() => setNewOrderDialogOpen(true)}
+              sx={{
+                backgroundColor: colors.accentText,
+                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                '&:hover': { backgroundColor: '#00C4A3' }
+              }}
+            >
+              NEW ORDER
+            </Button>
+          )}
         </Box>
         <Typography variant="h6" color="text.secondary">
-          Manage customer orders and track their status
+          {activeTab === 0 ? 'Manage customer orders and track their status' : 'Optimize rider routes and manage deliveries'}
         </Typography>
       </Box>
 
+      {/* Tabs */}
+      <Paper sx={{ mb: 3, backgroundColor: colors.paper }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: 56,
+              color: colors.textSecondary,
+              '&.Mui-selected': {
+                color: colors.accentText,
+                fontWeight: 600
+              }
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: colors.accentText,
+              height: 3
+            }
+          }}
+        >
+          <Tab icon={<Assignment />} iconPosition="start" label="Orders Management" />
+          <Tab icon={<RouteIcon />} iconPosition="start" label="Route Optimisation" />
+        </Tabs>
+      </Paper>
+
+      {/* Orders Management Tab */}
+      {activeTab === 0 && (
+        <Box>
       {/* Filters */}
       <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         {/* Search Input */}
@@ -1462,7 +2261,1184 @@ const Orders = () => {
           setNewOrderDialogOpen(false);
         }}
       />
-    </Container>
+        </Box>
+      )}
+
+      {/* Route Optimisation Tab */}
+      {activeTab === 1 && (
+        <Box>
+          {routesLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box>
+              {/* View Mode Switcher and Search */}
+              <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+                <ToggleButtonGroup
+                  value={routeViewMode}
+                  exclusive
+                  onChange={(e, newMode) => newMode && setRouteViewMode(newMode)}
+                  sx={{
+                    '& .MuiToggleButton-root': {
+                      color: colors.textSecondary,
+                      borderColor: colors.border,
+                      '&.Mui-selected': {
+                        backgroundColor: colors.accentText,
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                        '&:hover': {
+                          backgroundColor: '#00C4A3'
+                        }
+                      }
+                    }
+                  }}
+                >
+                  <ToggleButton value="list">
+                    <List sx={{ mr: 1 }} />
+                    List View
+                  </ToggleButton>
+                  <ToggleButton value="map">
+                    <Map sx={{ mr: 1 }} />
+                    Map View
+                  </ToggleButton>
+                </ToggleButtonGroup>
+
+                {routeViewMode === 'map' && (
+                  <Tooltip title="Refresh rider locations">
+                    <IconButton
+                      onClick={handleRefreshLocations}
+                      disabled={refreshingLocations}
+                      sx={{
+                        color: colors.accentText,
+                        '&:hover': {
+                          backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)',
+                        },
+                      }}
+                    >
+                      {refreshingLocations ? <CircularProgress size={24} /> : <Refresh />}
+                    </IconButton>
+                  </Tooltip>
+                )}
+
+                <Button
+                  variant="contained"
+                  startIcon={optimizing ? <CircularProgress size={20} /> : <AutoAwesome />}
+                  onClick={handleOptimizeRoutes}
+                  disabled={optimizing || isRouteOptimized()}
+                  sx={{
+                    backgroundColor: colors.accentText,
+                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                    '&:hover': {
+                      backgroundColor: '#00C4A3'
+                    },
+                    '&:disabled': {
+                      backgroundColor: colors.border,
+                      color: colors.textSecondary
+                    }
+                  }}
+                >
+                  {optimizing ? 'Optimizing...' : isRouteOptimized() ? 'Optimized' : 'Optimize Routes'}
+                </Button>
+
+                <Box sx={{ flex: 1, minWidth: '500px' }}>
+                  <Autocomplete
+                    multiple
+                    options={allRiders}
+                    getOptionLabel={(option) => {
+                      const status = option.status || 'offline';
+                      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+                      return `${option.name} (${option.phoneNumber}) - ${statusLabel}`;
+                    }}
+                    value={selectedRiders}
+                    onChange={(event, newValue) => {
+                      if (newValue.length <= 3) {
+                        setSelectedRiders(newValue);
+                        if (newValue.length === 0) {
+                          setRiderRoutes(allRiderRoutes);
+                        } else {
+                          const selectedIds = newValue.map(rider => rider.id);
+                          const existingRoutes = allRiderRoutes.filter(route => selectedIds.includes(route.rider.id));
+                          const ridersWithoutRoutes = newValue.filter(rider => 
+                            !allRiderRoutes.some(route => route.rider.id === rider.id)
+                          );
+                          const newRoutes = ridersWithoutRoutes.map(rider => ({
+                            rider,
+                            orders: []
+                          }));
+                          setRiderRoutes([...existingRoutes, ...newRoutes]);
+                        }
+                      }
+                    }}
+                    filterOptions={(options, params) => {
+                      const { inputValue } = params;
+                      const filtered = options.filter(option => {
+                        const searchTerm = inputValue.toLowerCase();
+                        const name = (option.name || '').toLowerCase();
+                        const phone = (option.phoneNumber || '').toLowerCase();
+                        const status = (option.status || '').toLowerCase();
+                        return name.includes(searchTerm) || phone.includes(searchTerm) || status.includes(searchTerm);
+                      });
+                      return filtered;
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Search and Select Riders (Max 3)"
+                        placeholder="Type to search riders..."
+                        sx={{
+                          width: '100%',
+                          minWidth: '500px',
+                          '& .MuiOutlinedInput-root': {
+                            '& fieldset': {
+                              borderColor: colors.accentText,
+                            },
+                            '&:hover fieldset': {
+                              borderColor: '#00C4A3',
+                            },
+                            '&.Mui-focused fieldset': {
+                              borderColor: colors.accentText,
+                            },
+                          },
+                          '& .MuiInputBase-input': {
+                            color: colors.textPrimary,
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: colors.textSecondary,
+                          },
+                          '& .MuiInputLabel-root.Mui-focused': {
+                            color: colors.accentText,
+                          },
+                        }}
+                      />
+                    )}
+                    renderTags={(value, getTagProps) => 
+                      value.map((option, index) => (
+                        <Chip
+                          label={`${option.name} (${option.phoneNumber})`}
+                          {...getTagProps({ index })}
+                          onDelete={() => {
+                            const updatedSelectedRiders = selectedRiders.filter(rider => rider.id !== option.id);
+                            setSelectedRiders(updatedSelectedRiders);
+                            if (updatedSelectedRiders.length === 0) {
+                              setRiderRoutes(allRiderRoutes);
+                            } else {
+                              const selectedIds = updatedSelectedRiders.map(rider => rider.id);
+                              const existingRoutes = allRiderRoutes.filter(route => selectedIds.includes(route.rider.id));
+                              const ridersWithoutRoutes = updatedSelectedRiders.filter(rider => 
+                                !allRiderRoutes.some(route => route.rider.id === rider.id)
+                              );
+                              const newRoutes = ridersWithoutRoutes.map(rider => ({
+                                rider,
+                                orders: []
+                              }));
+                              setRiderRoutes([...existingRoutes, ...newRoutes]);
+                            }
+                          }}
+                          sx={{
+                            backgroundColor: colors.accentText,
+                            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                            '& .MuiChip-deleteIcon': {
+                              color: isDarkMode ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)',
+                              '&:hover': {
+                                color: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)',
+                              },
+                            },
+                          }}
+                        />
+                      ))
+                    }
+                    filterSelectedOptions
+                    noOptionsText="No riders found"
+                    getOptionDisabled={() => selectedRiders.length >= 3}
+                  />
+                </Box>
+              </Box>
+
+              {routeViewMode === 'map' ? (
+                // Map View
+                <Box sx={{ height: '600px', width: '100%', position: 'relative', mb: 3 }}>
+                  {process.env.REACT_APP_GOOGLE_MAPS_API_KEY && isMapLoaded ? (
+                    <RouteMapView
+                      riderRoutes={riderRoutes}
+                      stops={stops}
+                      riderLocations={riderLocations}
+                      mapCenter={mapCenter}
+                      onMapCenterChange={setMapCenter}
+                      colors={colors}
+                      isDarkMode={isDarkMode}
+                      formatDateTime={formatDateTime}
+                      getOrderStatusChipProps={getOrderStatusChipProps}
+                      getPaymentStatusChipProps={getPaymentStatusChipProps}
+                    />
+                  ) : process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? (
+                    <Paper sx={{ p: 4, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <CircularProgress sx={{ mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary">
+                        Loading Map...
+                      </Typography>
+                    </Paper>
+                  ) : (
+                    <Paper sx={{ p: 4, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                      <Map sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                      <Typography variant="h6" color="text.secondary">
+                        Google Maps API Key Required
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        Please add REACT_APP_GOOGLE_MAPS_API_KEY to your .env file to enable Map View
+                      </Typography>
+                    </Paper>
+                  )}
+                </Box>
+              ) : riderRoutes.length === 0 ? (
+                <Paper sx={{ p: 4, textAlign: 'center' }}>
+                  <LocalShipping sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary">
+                    No routes found
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    {selectedRiders.length > 0 
+                      ? 'No routes match the selected riders'
+                      : 'Routes will appear here when riders have assigned orders'}
+                  </Typography>
+                </Paper>
+              ) : (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    gap: 3,
+                    width: '100%',
+                    alignItems: 'stretch'
+                  }}
+                >
+                  {riderRoutes.map((route) => {
+                    // Build timeline items (orders and stops combined)
+                    const timelineItems = [];
+                    const riderStops = stops[route.rider.id] || [];
+                    
+                    route.orders.forEach((order, orderIndex) => {
+                      timelineItems.push({ type: 'order', data: order, orderIndex });
+                      
+                      const stopsAfterThisOrder = riderStops.filter(stopItem => 
+                        stopItem.insertAfterIndex === orderIndex
+                      );
+                      stopsAfterThisOrder.forEach((stopItem, stopItemIndex) => {
+                        const originalIndex = riderStops.findIndex(s => s === stopItem);
+                        timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex });
+                      });
+                    });
+                    
+                    const stopsAfterLastOrder = riderStops.filter(stopItem => 
+                      stopItem.insertAfterIndex === -1
+                    );
+                    stopsAfterLastOrder.forEach(stopItem => {
+                      const originalIndex = riderStops.findIndex(s => s === stopItem);
+                      timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex });
+                    });
+
+                    return (
+                      <Box
+                        key={route.rider.id}
+                        sx={{
+                          flex: '1 1 0',
+                          minWidth: 0,
+                          display: 'flex',
+                          transition: 'flex 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                        }}
+                      >
+                        <Card 
+                          sx={{ 
+                            backgroundColor: colors.paper, 
+                            width: '100%', 
+                            display: 'flex', 
+                            flexDirection: 'column',
+                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
+                          }}
+                        >
+                          <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
+                              <LocalShipping sx={{ fontSize: 32, color: colors.accentText }} />
+                              <Box sx={{ flex: 1 }}>
+                                <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                                  {route.rider.name}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {route.rider.phoneNumber} • {route.orders.length} order{route.orders.length !== 1 ? 's' : ''}
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                  {riderStops.length} stop{riderStops.length !== 1 ? 's' : ''}
+                                </Typography>
+                              </Box>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  const updatedSelectedRiders = selectedRiders.filter(rider => rider.id !== route.rider.id);
+                                  setSelectedRiders(updatedSelectedRiders);
+                                  if (updatedSelectedRiders.length === 0) {
+                                    setRiderRoutes(allRiderRoutes);
+                                  } else {
+                                    const selectedIds = updatedSelectedRiders.map(rider => rider.id);
+                                    const existingRoutes = allRiderRoutes.filter(routeItem => selectedIds.includes(routeItem.rider.id));
+                                    const ridersWithoutRoutes = updatedSelectedRiders.filter(rider => 
+                                      !allRiderRoutes.some(routeItem => routeItem.rider.id === rider.id)
+                                    );
+                                    const newRoutes = ridersWithoutRoutes.map(rider => ({
+                                      rider,
+                                      orders: []
+                                    }));
+                                    setRiderRoutes([...existingRoutes, ...newRoutes]);
+                                  }
+                                }}
+                                sx={{
+                                  color: colors.textSecondary,
+                                  '&:hover': {
+                                    color: colors.error,
+                                    backgroundColor: isDarkMode ? 'rgba(255, 51, 102, 0.1)' : 'rgba(255, 51, 102, 0.05)',
+                                  },
+                                }}
+                              >
+                                <Close />
+                              </IconButton>
+                            </Box>
+                            <Divider sx={{ mb: 3 }} />
+                            
+                            <Box sx={{ mb: 2, px: 1 }}>
+                              <Typography 
+                                variant="caption" 
+                                color="text.secondary" 
+                                sx={{ 
+                                  fontStyle: 'italic',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 0.5,
+                                  fontSize: '0.75rem'
+                                }}
+                              >
+                                <LocalShipping sx={{ fontSize: 14 }} />
+                                Click and hold an order or stop card to reassign it to another rider
+                              </Typography>
+                            </Box>
+                            
+                            <Box 
+                              sx={{ 
+                                position: 'relative', 
+                                flexGrow: 1,
+                                transition: 'all 0.3s ease',
+                                opacity: dragOverRider === route.rider.id ? 1 : 1,
+                                backgroundColor: dragOverRider === route.rider.id 
+                                  ? (isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)')
+                                  : 'transparent',
+                                borderRadius: dragOverRider === route.rider.id ? 2 : 0,
+                                border: dragOverRider === route.rider.id 
+                                  ? `2px dashed ${colors.accentText}` 
+                                  : '2px solid transparent',
+                                p: dragOverRider === route.rider.id ? 2 : 0,
+                                overflow: 'visible', // Ensure buttons are visible
+                                m: dragOverRider === route.rider.id ? -2 : 0
+                              }}
+                              onDragOver={(e) => {
+                                e.preventDefault();
+                                if ((draggedOrder || draggedStop) && 
+                                    (!draggedOrder || draggedOrder.driverId !== route.rider.id) &&
+                                    (!draggedStop || draggedStop.riderId !== route.rider.id)) {
+                                  setDragOverRider(route.rider.id);
+                                }
+                              }}
+                              onDragLeave={() => {
+                                setDragOverRider(null);
+                              }}
+                              onDrop={async (e) => {
+                                e.preventDefault();
+                                if (draggedOrder) {
+                                  // Only reassign if the order is being moved to a different rider
+                                  if (draggedOrder.driverId !== route.rider.id) {
+                                    try {
+                                      await api.patch(`/admin/orders/${draggedOrder.id}/driver`, {
+                                        driverId: route.rider.id
+                                      });
+                                      // Fetch fresh data from backend to avoid duplicates
+                                      await fetchRiderRoutes();
+                                    } catch (error) {
+                                      console.error('Error reassigning order:', error);
+                                      setError(error.response?.data?.error || 'Failed to reassign order');
+                                    }
+                                  }
+                                  // If same rider, no action needed (order stays in place)
+                                } else if (draggedStop) {
+                                  // Move stop to this rider (same or different)
+                                  const { riderId: oldRiderId, stopIndex } = draggedStop;
+                                  const stopToMove = stops[oldRiderId]?.[stopIndex];
+                                  
+                                  if (stopToMove && stopToMove.stop?.id) {
+                                    try {
+                                      // Calculate new sequence (count of stops at insertAfterIndex -1 for new rider)
+                                      const newRiderStops = stops[route.rider.id] || [];
+                                      const stopsAtEnd = newRiderStops.filter(s => s.insertAfterIndex === -1);
+                                      const newSequence = stopsAtEnd.length;
+                                      
+                                      // Update in database
+                                      await api.patch(`/admin/stops/${stopToMove.stop.id}`, {
+                                        driverId: route.rider.id,
+                                        insertAfterIndex: -1,
+                                        sequence: newSequence
+                                      });
+                                      
+                                      // Update local state
+                                      setStops(prev => {
+                                        const newStops = { ...prev };
+                                        // Remove from old rider
+                                        newStops[oldRiderId] = newStops[oldRiderId].filter((_, idx) => idx !== stopIndex);
+                                        if (newStops[oldRiderId].length === 0) {
+                                          delete newStops[oldRiderId];
+                                        }
+                                        // Add to new rider
+                                        if (!newStops[route.rider.id]) {
+                                          newStops[route.rider.id] = [];
+                                        }
+                                        newStops[route.rider.id].push({
+                                          ...stopToMove,
+                                          insertAfterIndex: -1
+                                        });
+                                        return newStops;
+                                      });
+                                      
+                                      // Refresh to ensure consistency
+                                      await fetchRiderRoutes();
+                                    } catch (error) {
+                                      console.error('Error moving stop:', error);
+                                      setError(error.response?.data?.error || 'Failed to move stop');
+                                    }
+                                  }
+                                }
+                                setDraggedOrder(null);
+                                setDraggedStop(null);
+                                setDragOverRider(null);
+                              }}
+                            >
+                              {timelineItems.length === 0 ? (
+                                <Box sx={{ py: 3, textAlign: 'center' }}>
+                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                    No active orders assigned
+                                  </Typography>
+                                </Box>
+                              ) : (
+                                <>
+                                  {timelineItems.map((item, itemIndex) => {
+                                    if (item.type === 'order') {
+                                      const order = item.data;
+                                      const statusChip = getOrderStatusChipProps(order.status);
+                                      const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
+                                      const isDragging = draggedOrder?.id === order.id;
+                                      
+                                      return (
+                                        <React.Fragment key={`order-${order.id}`}>
+                                          <Box 
+                                            sx={{ 
+                                              position: 'relative', 
+                                              mb: 4,
+                                              ml: 5, // Add left margin for down button
+                                              mr: 5, // Add right margin for up button
+                                              opacity: isDragging ? 0.5 : 1,
+                                              cursor: 'grab',
+                                              '&:active': {
+                                                cursor: 'grabbing'
+                                              },
+                                              transition: 'opacity 0.2s ease, transform 0.2s ease',
+                                              transform: isDragging ? 'scale(0.98)' : 'scale(1)'
+                                            }}
+                                            draggable
+                                            onDragStart={(e) => {
+                                              setDraggedOrder(order);
+                                              e.dataTransfer.effectAllowed = 'move';
+                                              e.dataTransfer.setData('application/json', JSON.stringify(order));
+                                            }}
+                                            onDragEnd={() => {
+                                              setDraggedOrder(null);
+                                              setDragOverRider(null);
+                                            }}
+                                          >
+                                            <Card 
+                                              variant="outlined" 
+                                              sx={{ 
+                                                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.05)' : 'rgba(0, 224, 184, 0.02)',
+                                                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)',
+                                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                                                userSelect: 'none',
+                                                transition: 'all 0.2s ease',
+                                                '&:hover': {
+                                                  boxShadow: isDragging ? '0 2px 8px rgba(0, 0, 0, 0.1)' : `0 4px 12px rgba(0, 224, 184, 0.2)`,
+                                                  transform: isDragging ? 'none' : 'translateY(-2px)'
+                                                }
+                                              }}
+                                            >
+                                              <CardContent>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
+                                                  <Box sx={{ flex: 1 }}>
+                                                    <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                                                      Order #{order.id}
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                                                      {order.customerName}
+                                                    </Typography>
+                                                  </Box>
+                                                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                                    <Chip
+                                                      {...statusChip}
+                                                      size="small"
+                                                    />
+                                                    <Chip
+                                                      {...paymentStatusChip}
+                                                      size="small"
+                                                    />
+                                                  </Box>
+                                                </Box>
+                                                {order.deliveryAddress && (
+                                                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2, gap: 0.5, width: '100%' }}>
+                                                    <LocationOn fontSize="small" sx={{ color: colors.textSecondary, flexShrink: 0 }} />
+                                                    <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
+                                                      {order.deliveryAddress}
+                                                    </Typography>
+                                                  </Box>
+                                                )}
+                                                
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
+                                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <AccessTime fontSize="small" sx={{ color: colors.textSecondary }} />
+                                                    <Typography variant="caption" color="text.secondary">
+                                                      {formatDateTime(order.createdAt)}
+                                                    </Typography>
+                                                  </Box>
+                                                  <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accentText }}>
+                                                    KES {parseFloat(order.totalAmount || 0).toFixed(2)}
+                                                  </Typography>
+                                                </Box>
+                                                
+                                                {order.items && order.items.length > 0 && (
+                                                  <Box sx={{ mt: 2 }}>
+                                                    <Typography variant="caption" color="text.secondary">
+                                                      {order.items.length} item{order.items.length !== 1 ? 's' : ''}
+                                                    </Typography>
+                                                  </Box>
+                                                )}
+                                              </CardContent>
+                                            </Card>
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => handleMoveOrder(route.rider.id, order.id, 'down')}
+                                              disabled={item.orderIndex === route.orders.length - 1}
+                                              sx={{
+                                                position: 'absolute',
+                                                left: -45,
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                p: 0.75,
+                                                color: colors.textSecondary,
+                                                backgroundColor: colors.paper,
+                                                border: `1px solid ${colors.border}`,
+                                                zIndex: 10,
+                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                                '&:hover': {
+                                                  color: colors.accentText,
+                                                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)',
+                                                  borderColor: colors.accentText
+                                                },
+                                                '&:disabled': {
+                                                  color: colors.border,
+                                                  opacity: 0.5
+                                                }
+                                              }}
+                                            >
+                                              <KeyboardArrowDown fontSize="small" />
+                                            </IconButton>
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => handleMoveOrder(route.rider.id, order.id, 'up')}
+                                              disabled={item.orderIndex === 0}
+                                              sx={{
+                                                position: 'absolute',
+                                                right: -45,
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                p: 0.75,
+                                                color: colors.textSecondary,
+                                                backgroundColor: colors.paper,
+                                                border: `1px solid ${colors.border}`,
+                                                zIndex: 10,
+                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                                '&:hover': {
+                                                  color: colors.accentText,
+                                                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)',
+                                                  borderColor: colors.accentText
+                                                },
+                                                '&:disabled': {
+                                                  color: colors.border,
+                                                  opacity: 0.5
+                                                }
+                                              }}
+                                            >
+                                              <KeyboardArrowUp fontSize="small" />
+                                            </IconButton>
+                                          </Box>
+                                          
+                                          {item.orderIndex < route.orders.length - 1 && (
+                                            <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+                                              <Button
+                                                variant="outlined"
+                                                startIcon={<Add />}
+                                                onClick={() => {
+                                                  setSelectedRiderForStop(route.rider.id);
+                                                  setSelectedOrderIndexForStop(item.orderIndex);
+                                                  setStopDialogOpen(true);
+                                                }}
+                                                sx={{
+                                                  borderColor: colors.accentText,
+                                                  color: colors.accentText,
+                                                  '&:hover': {
+                                                    borderColor: colors.accentText,
+                                                    backgroundColor: isDarkMode 
+                                                      ? 'rgba(0, 224, 184, 0.1)' 
+                                                      : 'rgba(0, 224, 184, 0.05)'
+                                                  }
+                                                }}
+                                              >
+                                                Add Stop
+                                              </Button>
+                                            </Box>
+                                          )}
+                                        </React.Fragment>
+                                      );
+                                    } else {
+                                      // Stop card
+                                      const stop = item.data;
+                                      const riderStops = stops[route.rider.id] || [];
+                                      // Use the stopIndex from the timeline item if available, otherwise find it
+                                      const stopIndex = item.stopIndex !== undefined 
+                                        ? item.stopIndex 
+                                        : riderStops.findIndex((s, idx) => {
+                                            // Find the stop in the stops array
+                                            return s.stop.name === stop.name && s.stop.location === stop.location;
+                                          });
+                                      
+                                      // Build timeline to check if stop can move
+                                      const timelineItemsForCheck = [];
+                                      route.orders.forEach((order, orderIdx) => {
+                                        timelineItemsForCheck.push({ type: 'order', data: order, orderIndex: orderIdx });
+                                        const stopsAfterOrder = riderStops.filter(s => s.insertAfterIndex === orderIdx);
+                                        // Sort stops by sequence
+                                        stopsAfterOrder.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
+                                        stopsAfterOrder.forEach((stopItem) => {
+                                          const origIdx = riderStops.findIndex(s => s === stopItem);
+                                          timelineItemsForCheck.push({ type: 'stop', data: stopItem.stop, stopIndex: origIdx, stopItem });
+                                        });
+                                      });
+                                      const stopsAtEnd = riderStops.filter(s => s.insertAfterIndex === -1);
+                                      // Sort stops by sequence
+                                      stopsAtEnd.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
+                                      stopsAtEnd.forEach(stopItem => {
+                                        const origIdx = riderStops.findIndex(s => s === stopItem);
+                                        timelineItemsForCheck.push({ type: 'stop', data: stopItem.stop, stopIndex: origIdx, stopItem });
+                                      });
+                                      
+                                      const currentTimelineIdx = timelineItemsForCheck.findIndex(item => 
+                                        item.type === 'stop' && item.stopIndex === stopIndex
+                                      );
+                                      
+                                      // Disabled conditions: check timeline position (can move with orders or stops)
+                                      const isFirstInTimeline = currentTimelineIdx === 0;
+                                      const isLastInTimeline = currentTimelineIdx === timelineItemsForCheck.length - 1;
+                                      
+                                      const isDragging = draggedStop?.riderId === route.rider.id && draggedStop?.stopIndex === stopIndex;
+                                      
+                                      return (
+                                        <Box key={`stop-${itemIndex}`} sx={{ mb: 4, ml: 5, mr: 5 }}>
+                                          <Box
+                                            sx={{
+                                              position: 'relative',
+                                              opacity: isDragging ? 0.5 : 1,
+                                              cursor: 'grab',
+                                              '&:active': {
+                                                cursor: 'grabbing'
+                                              },
+                                              transition: 'opacity 0.2s ease, transform 0.2s ease',
+                                              transform: isDragging ? 'scale(0.98)' : 'scale(1)'
+                                            }}
+                                            draggable
+                                            onDragStart={(e) => {
+                                              setDraggedStop({ riderId: route.rider.id, stopIndex });
+                                              e.dataTransfer.effectAllowed = 'move';
+                                              e.dataTransfer.setData('application/json', JSON.stringify({ type: 'stop', riderId: route.rider.id, stopIndex }));
+                                            }}
+                                            onDragEnd={() => {
+                                              setDraggedStop(null);
+                                              setDragOverRider(null);
+                                            }}
+                                          >
+                                            <Card
+                                              variant="outlined"
+                                              sx={{
+                                                backgroundColor: isDarkMode 
+                                                  ? 'rgba(255, 193, 7, 0.1)' 
+                                                  : 'rgba(255, 193, 7, 0.05)',
+                                                borderColor: '#FFC107',
+                                                borderWidth: 2,
+                                                borderStyle: 'dashed',
+                                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                                                transition: 'all 0.2s ease',
+                                                '&:hover': {
+                                                  boxShadow: isDragging ? '0 2px 8px rgba(0, 0, 0, 0.1)' : '0 4px 12px rgba(255, 193, 7, 0.3)',
+                                                  transform: isDragging ? 'none' : 'translateY(-2px)'
+                                                }
+                                              }}
+                                            >
+                                              <CardContent sx={{ position: 'relative' }}>
+                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
+                                                  <Box sx={{ flex: 1 }}>
+                                                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#FFC107' }}>
+                                                      {stop.name}
+                                                    </Typography>
+                                                    {stop.location && (
+                                                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2, gap: 0.5, width: '100%' }}>
+                                                        <LocationOn fontSize="small" sx={{ color: colors.textSecondary, flexShrink: 0 }} />
+                                                        <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
+                                                          {stop.location}
+                                                        </Typography>
+                                                      </Box>
+                                                    )}
+                                                    {stop.instruction && (
+                                                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                                                        {stop.instruction}
+                                                      </Typography>
+                                                    )}
+                                                  </Box>
+                                                  {stop.payment && (
+                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#FFC107' }}>
+                                                      KES {parseFloat(stop.payment || 0).toFixed(2)}
+                                                    </Typography>
+                                                  )}
+                                                </Box>
+                                                <Box sx={{ position: 'absolute', bottom: 8, right: 8 }}>
+                                                  <StopMenu stop={stop} riderId={route.rider.id} onEdit={handleEditStop} onDelete={handleDeleteStop} />
+                                                </Box>
+                                              </CardContent>
+                                            </Card>
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => handleMoveStop(route.rider.id, stopIndex, 'down')}
+                                              disabled={stopIndex === -1 || isLastInTimeline}
+                                              sx={{
+                                                position: 'absolute',
+                                                left: -45,
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                p: 0.75,
+                                                color: colors.textSecondary,
+                                                backgroundColor: colors.paper,
+                                                border: `1px solid ${colors.border}`,
+                                                zIndex: 10,
+                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                                '&:hover': {
+                                                  color: '#FFC107',
+                                                  backgroundColor: isDarkMode ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 193, 7, 0.05)',
+                                                  borderColor: '#FFC107'
+                                                },
+                                                '&:disabled': {
+                                                  color: colors.border,
+                                                  opacity: 0.5
+                                                }
+                                              }}
+                                            >
+                                              <KeyboardArrowDown fontSize="small" />
+                                            </IconButton>
+                                            <IconButton
+                                              size="small"
+                                              onClick={() => handleMoveStop(route.rider.id, stopIndex, 'up')}
+                                              disabled={stopIndex === -1 || isFirstInTimeline}
+                                              sx={{
+                                                position: 'absolute',
+                                                right: -45,
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                p: 0.75,
+                                                color: colors.textSecondary,
+                                                backgroundColor: colors.paper,
+                                                border: `1px solid ${colors.border}`,
+                                                zIndex: 10,
+                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                                                '&:hover': {
+                                                  color: '#FFC107',
+                                                  backgroundColor: isDarkMode ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 193, 7, 0.05)',
+                                                  borderColor: '#FFC107'
+                                                },
+                                                '&:disabled': {
+                                                  color: colors.border,
+                                                  opacity: 0.5
+                                                }
+                                              }}
+                                            >
+                                              <KeyboardArrowUp fontSize="small" />
+                                            </IconButton>
+                                          </Box>
+                                        </Box>
+                                      );
+                                    }
+                                  })}
+                                  
+                                  {route.orders.length > 0 && (
+                                    <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+                                      <Button
+                                        variant="outlined"
+                                        startIcon={<Add />}
+                                        onClick={() => {
+                                          setSelectedRiderForStop(route.rider.id);
+                                          setSelectedOrderIndexForStop(-1);
+                                          setStopDialogOpen(true);
+                                        }}
+                                        sx={{
+                                          borderColor: colors.accentText,
+                                          color: colors.accentText,
+                                          '&:hover': {
+                                            borderColor: colors.accentText,
+                                            backgroundColor: isDarkMode 
+                                              ? 'rgba(0, 224, 184, 0.1)' 
+                                              : 'rgba(0, 224, 184, 0.05)'
+                                          }
+                                        }}
+                                      >
+                                        Add Stop
+                                      </Button>
+                                    </Box>
+                                  )}
+                                </>
+                              )}
+                            </Box>
+                          </CardContent>
+                        </Card>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
+
+      {/* Add Stop Dialog */}
+      <Dialog
+        open={stopDialogOpen}
+        onClose={() => {
+          setStopDialogOpen(false);
+          setStopFormData({ name: '', location: '', instruction: '', payment: '' });
+          setSelectedRiderForStop(null);
+          setSelectedOrderIndexForStop(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: colors.paper,
+            color: colors.textPrimary
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          color: colors.accentText, 
+          fontWeight: 700,
+          borderBottom: `1px solid ${colors.border}`
+        }}>
+          {editingStop ? 'Edit Stop' : 'Add Stop'}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          <TextField
+            fullWidth
+            label="Stop Name"
+            value={stopFormData.name}
+            onChange={(e) => setStopFormData({ ...stopFormData, name: e.target.value })}
+            sx={{ mb: 2 }}
+            required
+            InputProps={{
+              sx: {
+                color: colors.textPrimary,
+                '& fieldset': {
+                  borderColor: colors.border,
+                },
+                '&:hover fieldset': {
+                  borderColor: colors.accentText,
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: colors.accentText,
+                },
+              },
+            }}
+            InputLabelProps={{
+              sx: {
+                color: colors.textSecondary,
+                '&.Mui-focused': {
+                  color: colors.accentText,
+                },
+              },
+            }}
+          />
+          <AddressAutocomplete
+            label="Stop Location"
+            value={stopFormData.location}
+            onChange={(e) => {
+              // Update location with what user types or selects
+              setStopFormData({ ...stopFormData, location: e.target.value });
+            }}
+            onPlaceSelect={(place) => {
+              // Don't override the location - onChange already handled it with the selected description
+              // The location is already set via onChange with what the user selected
+              // onPlaceSelect is called after onChange, so we should preserve the user's selection
+            }}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Stop Instruction"
+            value={stopFormData.instruction}
+            onChange={(e) => setStopFormData({ ...stopFormData, instruction: e.target.value })}
+            multiline
+            rows={3}
+            sx={{ mb: 2 }}
+            InputProps={{
+              sx: {
+                color: colors.textPrimary,
+                '& fieldset': {
+                  borderColor: colors.border,
+                },
+                '&:hover fieldset': {
+                  borderColor: colors.accentText,
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: colors.accentText,
+                },
+              },
+            }}
+            InputLabelProps={{
+              sx: {
+                color: colors.textSecondary,
+                '&.Mui-focused': {
+                  color: colors.accentText,
+                },
+              },
+            }}
+          />
+          <TextField
+            fullWidth
+            label="Stop Payment (KES)"
+            type="number"
+            value={stopFormData.payment}
+            onChange={(e) => setStopFormData({ ...stopFormData, payment: e.target.value })}
+            InputProps={{
+              sx: {
+                color: colors.textPrimary,
+                '& fieldset': {
+                  borderColor: colors.border,
+                },
+                '&:hover fieldset': {
+                  borderColor: colors.accentText,
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: colors.accentText,
+                },
+              },
+            }}
+            InputLabelProps={{
+              sx: {
+                color: colors.textSecondary,
+                '&.Mui-focused': {
+                  color: colors.accentText,
+                },
+              },
+            }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ borderTop: `1px solid ${colors.border}`, p: 2 }}>
+          <Button
+            onClick={() => {
+              setStopDialogOpen(false);
+              setStopFormData({ name: '', location: '', instruction: '', payment: '' });
+              setSelectedRiderForStop(null);
+              setSelectedOrderIndexForStop(null);
+              setEditingStop(null);
+            }}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={async () => {
+              if (stopFormData.name && selectedRiderForStop !== null) {
+                try {
+                  let response;
+                  if (editingStop) {
+                    // Update existing stop
+                    response = await api.patch(`/admin/stops/${editingStop.id}`, {
+                      name: stopFormData.name,
+                      location: stopFormData.location,
+                      instruction: stopFormData.instruction || '',
+                      payment: stopFormData.payment || 0,
+                      // insertAfterIndex and sequence are handled by drag/drop or move buttons
+                    });
+                  } else {
+                    // Calculate sequence (count of existing stops at this insertAfterIndex)
+                    const existingStops = stops[selectedRiderForStop] || [];
+                    const stopsAtSameIndex = existingStops.filter(s => s.insertAfterIndex === selectedOrderIndexForStop);
+                    const sequence = stopsAtSameIndex.length;
+                    
+                    // Create new stop
+                    response = await api.post('/admin/stops', {
+                      driverId: selectedRiderForStop,
+                      name: stopFormData.name,
+                      location: stopFormData.location,
+                      instruction: stopFormData.instruction || '',
+                      payment: stopFormData.payment || 0,
+                      insertAfterIndex: selectedOrderIndexForStop,
+                      sequence
+                    });
+                  }
+                  
+                  if (response.data?.stop) {
+                    // Refresh stops from database to ensure correct ordering and position
+                    await fetchRiderRoutes();
+                  }
+                  
+                  setStopDialogOpen(false);
+                  setStopFormData({ name: '', location: '', instruction: '', payment: '' });
+                  setSelectedRiderForStop(null);
+                  setSelectedOrderIndexForStop(null);
+                  setEditingStop(null); // Clear editing state
+                } catch (error) {
+                  console.error('Error saving stop:', error);
+                  setError(error.response?.data?.error || 'Failed to save stop');
+                }
+              }
+            }}
+            variant="contained"
+            disabled={!stopFormData.name}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              },
+              '&:disabled': {
+                backgroundColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {editingStop ? 'Update Stop' : 'Add Stop'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <style>{`
+        @keyframes shimmer {
+          0% { background-position: -200% 0; }
+          100% { background-position: 200% 0; }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.1); }
+        }
+      `}</style>
+      {/* Optimization Progress Dialog */}
+      <Dialog 
+        open={optimizationProgress.open} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            background: isDarkMode 
+              ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)'
+              : 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)',
+            borderRadius: 3,
+            border: `2px solid ${colors.accentText}`,
+            boxShadow: `0 8px 32px rgba(0, 224, 184, 0.3)`
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          color: colors.accentText, 
+          fontWeight: 700,
+          fontSize: '1.5rem',
+          textAlign: 'center',
+          pb: 2,
+          borderBottom: `1px solid ${colors.border}`
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+            <AutoAwesome sx={{ fontSize: '2rem' }} />
+            <Typography variant="h5" sx={{ fontWeight: 700 }}>
+              Optimizing Routes
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 4, pb: 4 }}>
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="body1" sx={{ 
+              color: colors.textPrimary, 
+              mb: 2, 
+              textAlign: 'center',
+              fontWeight: 500
+            }}>
+              {optimizationProgress.currentStep || 'Initializing optimization engine...'}
+            </Typography>
+            
+            {/* Futuristic Progress Bar */}
+            <Box sx={{ 
+              position: 'relative',
+              width: '100%',
+              height: 40,
+              backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)',
+              borderRadius: 20,
+              overflow: 'hidden',
+              border: `2px solid ${colors.accentText}`,
+              boxShadow: `0 0 20px rgba(0, 224, 184, 0.3)`
+            }}>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  height: '100%',
+                  width: `${optimizationProgress.progress}%`,
+                  background: `linear-gradient(90deg, ${colors.accentText} 0%, #00C4A3 100%)`,
+                  borderRadius: 20,
+                  transition: 'width 0.5s ease',
+                  boxShadow: `0 0 20px rgba(0, 224, 184, 0.6)`
+                }}
+              />
+              <Box sx={{
+                position: 'absolute',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                color: isDarkMode ? '#fff' : '#000',
+                fontWeight: 700,
+                fontSize: '0.9rem',
+                textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                zIndex: 1
+              }}>
+                {Math.round(optimizationProgress.progress)}%
+              </Box>
+            </Box>
+            
+            <Typography variant="caption" sx={{ 
+              color: colors.textSecondary, 
+              mt: 1, 
+              display: 'block',
+              textAlign: 'center'
+            }}>
+              Step {optimizationProgress.step} of {optimizationProgress.totalSteps}
+            </Typography>
+          </Box>
+        </DialogContent>
+      </Dialog>
+
+
+
+          </Container>
   );
 };
 

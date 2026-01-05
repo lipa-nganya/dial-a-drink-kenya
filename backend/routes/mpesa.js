@@ -531,15 +531,14 @@ router.post('/stk-push', async (req, res) => {
     const isTestMode = testModeSetting?.value === 'true';
     
     // Determine if we should simulate payment
-    // On Cloud Run, we want real payments unless explicitly in test mode
-    // Check if we're on Cloud Run (GCP environment)
-    const isCloudRun = process.env.K_SERVICE || process.env.GCP_PROJECT || false;
-    const isProduction = process.env.NODE_ENV === 'production' || isCloudRun;
+    // Use environment detection utility
+    const { isProduction } = require('../utils/envDetection');
+    const isProd = isProduction();
     
     // Only simulate if:
     // 1. Test mode is explicitly enabled in database, OR
     // 2. We're NOT in production/cloud AND FORCE_REAL_MPESA is not set to 'true'
-    const shouldSimulatePayment = isTestMode || (!isProduction && process.env.FORCE_REAL_MPESA !== 'true');
+    const shouldSimulatePayment = isTestMode || (!isProd && process.env.FORCE_REAL_MPESA !== 'true');
 
     // Initiate STK Push
     const reference = accountReference || `ORDER-${orderId}`;
@@ -554,13 +553,10 @@ router.post('/stk-push', async (req, res) => {
       orderId,
       testMode: isTestMode,
       simulate: shouldSimulatePayment,
-      isCloudRun: !!isCloudRun,
-      isProduction: isProduction,
-      NODE_ENV: process.env.NODE_ENV,
-      FORCE_REAL_MPESA: process.env.FORCE_REAL_MPESA,
-      MPESA_ENVIRONMENT: process.env.MPESA_ENVIRONMENT,
-      K_SERVICE: process.env.K_SERVICE || 'not set',
-      GCP_PROJECT: process.env.GCP_PROJECT || 'not set'
+      isProduction: isProd,
+      NODE_ENV: process.env.NODE_ENV || 'not set',
+      FORCE_REAL_MPESA: process.env.FORCE_REAL_MPESA || 'not set',
+      MPESA_ENVIRONMENT: process.env.MPESA_ENVIRONMENT || 'not set'
     });
     console.log('═══════════════════════════════════════════════════════');
 
@@ -788,31 +784,62 @@ router.post('/stk-push', async (req, res) => {
         }
 
         if (shouldSimulatePayment) {
-          try {
-            console.log(`🧪 Test mode: auto finalizing payment for Order #${orderId}`);
-            const paymentTransactionRecord = await db.Transaction.findOne({
-              where: {
-                orderId: order.id,
-                transactionType: 'payment',
-                checkoutRequestID: checkoutRequestID
-              },
-              order: [['updatedAt', 'DESC']]
-            });
-
-            if (paymentTransactionRecord) {
-              await finalizeOrderPayment({
-                orderId: order.id,
-                paymentTransaction: paymentTransactionRecord,
-                receiptNumber: `TEST-RECEIPT-${Date.now()}`,
-                req,
-                context: 'Test mode auto-payment'
+          // Use setTimeout to finalize payment after response is sent
+          // This ensures the frontend receives the STK push response first
+          setTimeout(async () => {
+            try {
+              console.log(`🧪 Test mode: auto finalizing payment for Order #${orderId} (delayed)`);
+              // Wait a bit for transaction to be fully committed
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              const paymentTransactionRecord = await db.Transaction.findOne({
+                where: {
+                  orderId: order.id,
+                  transactionType: 'payment',
+                  checkoutRequestID: checkoutRequestID
+                },
+                order: [['updatedAt', 'DESC']]
               });
-            } else {
-              console.warn('⚠️ Test mode: payment transaction not found for auto-finalization');
+
+              if (paymentTransactionRecord) {
+                console.log(`🧪 Test mode: Found transaction #${paymentTransactionRecord.id}, finalizing payment...`);
+                await finalizeOrderPayment({
+                  orderId: order.id,
+                  paymentTransaction: paymentTransactionRecord,
+                  receiptNumber: `TEST-RECEIPT-${Date.now()}`,
+                  req,
+                  context: 'Test mode auto-payment'
+                });
+                console.log(`✅ Test mode: Payment finalized for Order #${orderId}`);
+              } else {
+                console.warn('⚠️ Test mode: payment transaction not found for auto-finalization');
+                // Retry once after a longer delay
+                setTimeout(async () => {
+                  const retryTransaction = await db.Transaction.findOne({
+                    where: {
+                      orderId: order.id,
+                      transactionType: 'payment',
+                      checkoutRequestID: checkoutRequestID
+                    },
+                    order: [['updatedAt', 'DESC']]
+                  });
+                  if (retryTransaction) {
+                    console.log(`🧪 Test mode: Retry - Found transaction #${retryTransaction.id}, finalizing payment...`);
+                    await finalizeOrderPayment({
+                      orderId: order.id,
+                      paymentTransaction: retryTransaction,
+                      receiptNumber: `TEST-RECEIPT-${Date.now()}`,
+                      req,
+                      context: 'Test mode auto-payment (retry)'
+                    });
+                  }
+                }, 2000);
+              }
+            } catch (finalizeError) {
+              console.error('❌ Test mode auto-finalization failed:', finalizeError);
+              console.error('❌ Error stack:', finalizeError.stack);
             }
-          } catch (finalizeError) {
-            console.error('❌ Test mode auto-finalization failed:', finalizeError);
-          }
+          }, 1000); // Wait 1 second after response is sent
         }
       } catch (transactionError) {
         console.error('❌ Error preparing order transactions:', transactionError);
@@ -2037,10 +2064,19 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
     
     // The REAL indicator of payment completion is the receipt number in CallbackMetadata
     // The query API structure: CallbackMetadata contains Item array with Name/Value pairs
+    // M-Pesa can return receipt in different formats, so check all possible locations
     const callbackMetadata = mpesaStatus?.CallbackMetadata;
-    const items = callbackMetadata?.Item || [];
-    const receiptFromMetadata = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
-    const receiptFromResponse = mpesaStatus?.ReceiptNumber;
+    const items = callbackMetadata?.Item || callbackMetadata?.item || [];
+    
+    // Find the receipt item - M-Pesa uses Name/Value (capitalized) in query responses
+    const receiptItem = items.find(item => 
+      item.Name === 'MpesaReceiptNumber' || item.name === 'MpesaReceiptNumber'
+    );
+    // Extract Value or value from the found item
+    const receiptFromMetadata = receiptItem?.Value || receiptItem?.value;
+    
+    // Also check direct response fields (some M-Pesa responses include receipt at top level)
+    const receiptFromResponse = mpesaStatus?.ReceiptNumber || mpesaStatus?.receiptNumber || mpesaStatus?.MpesaReceiptNumber;
     const hasReceiptNumber = receiptFromMetadata || receiptFromResponse;
     
     // Log full metadata structure for debugging
@@ -2141,6 +2177,39 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
     } else if (isSuccessWithoutReceipt) {
       // M-Pesa returned success but did not include receipt metadata yet.
       // This usually means the asynchronous callback has not been delivered.
+      // CRITICAL: In local development, callbacks go to production, so we need to check
+      // if enough time has passed - if ResultCode is 0 and it's been more than 30 seconds,
+      // payment likely completed but callback went to production server
+      
+      // Check if transaction exists and when it was created
+      const transaction = await db.Transaction.findOne({
+        where: { checkoutRequestID, transactionType: 'payment' },
+        include: [{ model: db.Order, as: 'order' }]
+      }).catch(() => null);
+      
+      if (transaction) {
+        const timeSinceCreation = Date.now() - new Date(transaction.createdAt).getTime();
+        const isLocalDev = process.env.NODE_ENV !== 'production' && !process.env.K_SERVICE;
+        
+        // If it's been more than 30 seconds and we're in local dev, payment likely completed
+        // but callback went to production. Allow manual confirmation or check M-Pesa more aggressively
+        if (isLocalDev && timeSinceCreation > 30000 && mpesaStatus?.ResultCode === 0) {
+          console.log(`⚠️  Local dev: ResultCode=0 but no receipt after ${Math.round(timeSinceCreation/1000)}s. Payment likely completed but callback went to production.`);
+          return res.json({
+            success: false,
+            error: false,
+            status: 'pending',
+            awaitingReceipt: true,
+            allowManualConfirm: true, // Signal to frontend that manual confirmation is available
+            mpesaStatus,
+            message: 'Payment appears completed but callback not received (local dev). You can manually confirm if you completed payment.',
+            resultCode: mpesaStatus?.ResultCode,
+            resultDesc: mpesaStatus?.ResultDesc,
+            localDev: true
+          });
+        }
+      }
+      
       return res.json({
         success: false,
         error: false,
@@ -2325,9 +2394,12 @@ router.get('/transaction-status/:orderId', async (req, res) => {
         const mpesaStatus = await mpesaService.checkTransactionStatus(transaction.checkoutRequestID);
         
         const callbackMetadata = mpesaStatus?.CallbackMetadata;
-        const items = callbackMetadata?.Item || [];
-        const receiptFromMetadata = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
-        const receiptFromResponse = mpesaStatus?.ReceiptNumber;
+        const items = callbackMetadata?.Item || callbackMetadata?.item || [];
+        const receiptItem = items.find(item => 
+          item.Name === 'MpesaReceiptNumber' || item.name === 'MpesaReceiptNumber'
+        );
+        const receiptFromMetadata = receiptItem?.Value || receiptItem?.value;
+        const receiptFromResponse = mpesaStatus?.ReceiptNumber || mpesaStatus?.receiptNumber || mpesaStatus?.MpesaReceiptNumber;
         const receiptNumber = receiptFromMetadata || receiptFromResponse;
         const resultCode = mpesaStatus?.ResultCode;
         
@@ -2584,12 +2656,63 @@ router.post('/manual-confirm/:orderId', async (req, res) => {
     }
     
     const effectiveReceiptNumber = receiptNumber || transaction.receiptNumber;
-
+    
+    // In local development, allow confirmation without receipt number if M-Pesa query shows success
+    const isLocalDev = process.env.NODE_ENV !== 'production' && !process.env.K_SERVICE;
+    
     if (!effectiveReceiptNumber) {
-      return res.status(400).json({
-        error: 'Receipt number required',
-        message: 'Safaricom receipt number is required to confirm payment. Please provide the M-Pesa receipt or wait for the official callback.'
-      });
+      if (isLocalDev) {
+        // In local dev, check M-Pesa API to see if payment completed
+        // If ResultCode is 0, payment likely completed but callback went to production
+        try {
+          const mpesaService = require('../services/mpesa');
+          const mpesaStatus = await mpesaService.checkTransactionStatus(transaction.checkoutRequestID);
+          
+          if (mpesaStatus?.ResultCode === 0) {
+            // Payment appears completed - use a placeholder receipt for local dev
+            const placeholderReceipt = `LOCAL-DEV-${Date.now()}`;
+            console.log(`⚠️  Local dev: Allowing manual confirmation without receipt. Using placeholder: ${placeholderReceipt}`);
+            
+            const { receipt, order: updatedOrder } = await finalizeOrderPayment({
+              orderId: order.id,
+              paymentTransaction: transaction,
+              receiptNumber: placeholderReceipt,
+              req,
+              context: 'Manual confirmation (local dev - no receipt)'
+            });
+            
+            return res.json({
+              success: true,
+              message: 'Payment confirmed successfully (local development mode)',
+              orderId: order.id,
+              status: updatedOrder.status,
+              transactionStatus: 'completed',
+              receiptNumber: receipt,
+              localDev: true,
+              note: 'Receipt number not available in local development. Payment confirmed based on M-Pesa API status.'
+            });
+          } else {
+            return res.status(400).json({
+              error: 'Payment not completed',
+              message: `M-Pesa API shows payment is ${mpesaStatus?.ResultDesc || 'still pending'}. Please complete payment on your phone first.`,
+              mpesaStatus: mpesaStatus
+            });
+          }
+        } catch (mpesaError) {
+          console.error('Error checking M-Pesa status for manual confirmation:', mpesaError);
+          return res.status(400).json({
+            error: 'Cannot verify payment',
+            message: 'Unable to verify payment status with M-Pesa. Please provide your M-Pesa receipt number or wait for automatic confirmation.',
+            details: mpesaError.message
+          });
+        }
+      } else {
+        // Production: require receipt number
+        return res.status(400).json({
+          error: 'Receipt number required',
+          message: 'Safaricom receipt number is required to confirm payment. Please provide the M-Pesa receipt or wait for the official callback.'
+        });
+      }
     }
 
     const { receipt, order: updatedOrder } = await finalizeOrderPayment({

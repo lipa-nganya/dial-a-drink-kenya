@@ -587,7 +587,7 @@ const Orders = () => {
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Total Amount</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Payment Status</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Order Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Driver</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Rider</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Date</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#00E0B8' }}>Actions</TableCell>
               </TableRow>
@@ -731,7 +731,7 @@ const Orders = () => {
                             }
                           }}
                         >
-                          Assign Driver
+                          Assign Rider
                         </Button>
                         {nextStatusOptions.length > 0 && (
                           <FormControl size="small" sx={{ minWidth: 150 }}>
@@ -806,7 +806,7 @@ const Orders = () => {
         </TableContainer>
       )}
 
-      {/* Driver Assignment Dialog */}
+      {/* Rider Assignment Dialog */}
       <Dialog 
         open={driverDialogOpen} 
         onClose={handleCloseDriverDialog}
@@ -814,19 +814,19 @@ const Orders = () => {
         fullWidth
       >
         <DialogTitle sx={{ color: '#00E0B8', fontWeight: 700 }}>
-          Assign Driver to Order #{selectedOrder?.id}
+          Assign Rider to Order #{selectedOrder?.id}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
             <FormControl fullWidth>
-              <InputLabel>Select Driver</InputLabel>
+              <InputLabel>Select Rider</InputLabel>
               <Select
                 value={selectedDriverId}
-                label="Select Driver"
+                label="Select Rider"
                 onChange={(e) => setSelectedDriverId(e.target.value)}
               >
                 <MenuItem value="">
-                  <em>No Driver (Unassign)</em>
+                  <em>No Rider (Unassign)</em>
                 </MenuItem>
                 {drivers.map((driver) => (
                   <MenuItem key={driver.id} value={driver.id}>
@@ -868,7 +868,7 @@ const Orders = () => {
               }
             }}
           >
-            Assign Driver
+            Assign Rider
           </Button>
         </DialogActions>
       </Dialog>

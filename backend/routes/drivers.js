@@ -13,6 +13,10 @@ const { checkDriverCreditLimit } = require('../utils/creditLimit');
  * GET /api/drivers/phone/:phoneNumber
  */
 router.get('/phone/:phoneNumber', async (req, res) => {
+  const TIMEOUT_MS = 60000; // 60 seconds
+  const startTime = Date.now();
+  let timeoutId = null;
+  
   try {
     const { phoneNumber } = req.params;
     const cleanedPhone = phoneNumber.replace(/\D/g, '').trim();
@@ -50,51 +54,75 @@ router.get('/phone/:phoneNumber', async (req, res) => {
     console.log(`🔍 Looking up driver with phone: ${phoneNumber} (cleaned: ${cleanedPhone})`);
     console.log(`📋 Trying ${variants.length} variants:`, variants);
     
-    // Try to find driver using all variants in a single query
-    let driver = await db.Driver.findOne({
-      where: {
-        [Op.or]: variants.map(variant => ({
-          phoneNumber: {
-            [Op.iLike]: variant // Case-insensitive matching
-          }
-        }))
-      }
+    // Create a promise that will reject after 60 seconds
+    const timeoutPromise = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        const elapsed = Date.now() - startTime;
+        console.error(`⏱️ Driver lookup timeout after ${elapsed}ms for phone: ${phoneNumber}`);
+        reject(new Error('Driver lookup timed out. Please try again or contact support.'));
+      }, TIMEOUT_MS);
     });
     
-    // If still not found, try exact match with trimmed values
-    if (!driver) {
-      driver = await db.Driver.findOne({
+    // Create the search promise
+    const searchPromise = (async () => {
+      // Try to find driver using all variants in a single query
+      let driver = await db.Driver.findOne({
         where: {
           [Op.or]: variants.map(variant => ({
-            phoneNumber: db.sequelize.where(
-              db.sequelize.fn('TRIM', db.sequelize.col('phoneNumber')),
-              variant
-            )
+            phoneNumber: {
+              [Op.iLike]: variant // Case-insensitive matching
+            }
           }))
         }
       });
-    }
-    
-    // Last resort: try LIKE pattern matching (for any whitespace or formatting issues)
-    if (!driver) {
-      for (const variant of variants) {
+      
+      // If still not found, try exact match with trimmed values
+      if (!driver) {
         driver = await db.Driver.findOne({
           where: {
-            phoneNumber: {
-              [Op.iLike]: `%${variant}%`
-            }
+            [Op.or]: variants.map(variant => ({
+              phoneNumber: db.sequelize.where(
+                db.sequelize.fn('TRIM', db.sequelize.col('phoneNumber')),
+                variant
+              )
+            }))
           }
         });
-        if (driver) {
-          console.log(`✅ Found driver using LIKE pattern with variant: ${variant}`);
-          break;
+      }
+      
+      // Last resort: try LIKE pattern matching (for any whitespace or formatting issues)
+      if (!driver) {
+        for (const variant of variants) {
+          driver = await db.Driver.findOne({
+            where: {
+              phoneNumber: {
+                [Op.iLike]: `%${variant}%`
+              }
+            }
+          });
+          if (driver) {
+            console.log(`✅ Found driver using LIKE pattern with variant: ${variant}`);
+            break;
+          }
         }
       }
+      
+      return driver;
+    })();
+    
+    // Race between search and timeout
+    const driver = await Promise.race([searchPromise, timeoutPromise]);
+    
+    // Clear timeout if search completed successfully
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
     
     if (!driver) {
+      const elapsed = Date.now() - startTime;
       console.error('❌ Driver not found for phone:', phoneNumber);
       console.error('📋 Tried variants:', variants);
+      console.error(`⏱️ Search took ${elapsed}ms`);
       // Log all drivers in database for debugging (first 10)
       const allDrivers = await db.Driver.findAll({
         attributes: ['id', 'name', 'phoneNumber'],
@@ -104,7 +132,8 @@ router.get('/phone/:phoneNumber', async (req, res) => {
       return res.status(404).json({ error: 'Driver not found' });
     }
     
-    console.log(`✅ Found driver #${driver.id} with phone: ${driver.phoneNumber}`);
+    const elapsed = Date.now() - startTime;
+    console.log(`✅ Found driver #${driver.id} with phone: ${driver.phoneNumber} (took ${elapsed}ms)`);
     
     // Check if driver has PIN set (from database)
     const hasPin = driver.pinHash !== null && driver.pinHash !== '';
@@ -118,7 +147,23 @@ router.get('/phone/:phoneNumber', async (req, res) => {
       hasPin: hasPin
     });
   } catch (error) {
+    // Clear timeout if error occurred
+    if (timeoutId) {
+      clearTimeout(timeoutId);
+    }
+    
+    const elapsed = Date.now() - startTime;
     console.error('Error fetching driver by phone:', error);
+    console.error(`⏱️ Error occurred after ${elapsed}ms`);
+    
+    // Check if it's a timeout error
+    if (error.message && error.message.includes('timed out')) {
+      return res.status(408).json({ 
+        error: 'Driver lookup timed out after 60 seconds. Please try again or contact support.',
+        timeout: true
+      });
+    }
+    
     res.status(500).json({ error: error.message });
   }
 });
@@ -215,10 +260,20 @@ router.patch('/phone/:phoneNumber/activity', async (req, res) => {
       return res.status(404).json({ error: 'Driver not found' });
     }
 
-    await driver.update({
+    const { locationLatitude, locationLongitude } = req.body;
+    
+    const updateData = {
       lastActivity: new Date(),
       status: 'active' // Set status to active when they log in
-    });
+    };
+    
+    // Update location if provided
+    if (locationLatitude !== undefined && locationLongitude !== undefined) {
+      updateData.locationLatitude = parseFloat(locationLatitude);
+      updateData.locationLongitude = parseFloat(locationLongitude);
+    }
+
+    await driver.update(updateData);
 
     res.json(driver);
   } catch (error) {
@@ -751,9 +806,19 @@ router.patch('/:id/activity', async (req, res) => {
       return res.status(404).json({ error: 'Driver not found' });
     }
 
-    await driver.update({
+    const { locationLatitude, locationLongitude } = req.body;
+    
+    const updateData = {
       lastActivity: new Date()
-    });
+    };
+    
+    // Update location if provided
+    if (locationLatitude !== undefined && locationLongitude !== undefined) {
+      updateData.locationLatitude = parseFloat(locationLatitude);
+      updateData.locationLongitude = parseFloat(locationLongitude);
+    }
+
+    await driver.update(updateData);
 
     res.json(driver);
   } catch (error) {

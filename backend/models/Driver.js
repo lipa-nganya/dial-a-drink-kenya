@@ -48,6 +48,16 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: 0,
       comment: 'Maximum amount driver can owe the company. If balance exceeds this, driver cannot accept new deliveries.'
+    },
+    locationLatitude: {
+      type: DataTypes.DECIMAL(10, 8),
+      allowNull: true,
+      comment: 'Current latitude of the driver'
+    },
+    locationLongitude: {
+      type: DataTypes.DECIMAL(11, 8),
+      allowNull: true,
+      comment: 'Current longitude of the driver'
     }
   }, {
     tableName: 'drivers',

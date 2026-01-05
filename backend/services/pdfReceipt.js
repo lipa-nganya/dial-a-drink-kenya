@@ -109,19 +109,19 @@ function generateReceiptHTML(order) {
         }
         .header h1 {
           color: #00E0B8;
-          font-size: 28px;
+          font-size: 26px;
           margin-bottom: 10px;
         }
         .header p {
           color: #666;
-          font-size: 14px;
+          font-size: 12px;
         }
         .receipt-info {
           margin-bottom: 25px;
         }
         .receipt-info h2 {
           color: #000;
-          font-size: 20px;
+          font-size: 18px;
           margin-bottom: 15px;
           border-bottom: 1px solid #eee;
           padding-bottom: 10px;
@@ -130,7 +130,7 @@ function generateReceiptHTML(order) {
           display: flex;
           justify-content: space-between;
           margin-bottom: 8px;
-          font-size: 14px;
+          font-size: 12px;
         }
         .info-label {
           font-weight: 600;
@@ -150,12 +150,12 @@ function generateReceiptHTML(order) {
           padding: 12px;
           text-align: left;
           font-weight: 600;
-          font-size: 14px;
+          font-size: 12px;
         }
         .items-table td {
           padding: 8px;
           border-bottom: 1px solid #eee;
-          font-size: 13px;
+          font-size: 11px;
         }
         .items-table th:last-child,
         .items-table td:last-child {
@@ -173,7 +173,7 @@ function generateReceiptHTML(order) {
           display: flex;
           justify-content: flex-end;
           margin-bottom: 8px;
-          font-size: 14px;
+          font-size: 12px;
         }
         .total-label {
           font-weight: 600;
@@ -186,7 +186,7 @@ function generateReceiptHTML(order) {
           text-align: right;
         }
         .grand-total {
-          font-size: 18px;
+          font-size: 16px;
           font-weight: 700;
           color: #000;
           border-top: 2px solid #00E0B8;
@@ -198,14 +198,14 @@ function generateReceiptHTML(order) {
           padding-top: 20px;
           border-top: 1px solid #eee;
           text-align: center;
-          font-size: 12px;
+          font-size: 10px;
           color: #666;
         }
         .status-badge {
           display: inline-block;
           padding: 4px 12px;
           border-radius: 4px;
-          font-size: 12px;
+          font-size: 10px;
           font-weight: 600;
         }
         .status-paid {

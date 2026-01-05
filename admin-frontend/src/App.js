@@ -5,6 +5,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { EasterEggProvider, useEasterEgg } from './contexts/EasterEggContext';
+import { ResupplyCartProvider } from './contexts/ResupplyCartContext';
 import AdminHeader from './components/AdminHeader';
 import AdminLayout from './components/AdminLayout';
 import PrivateRoute from './components/PrivateRoute';
@@ -24,6 +25,10 @@ import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
 import POS from './pages/POS';
 import Payables from './pages/Payables';
+import Copilot from './pages/Copilot';
+import SalesDateDetails from './pages/copilot/SalesDateDetails';
+import RiderDetails from './pages/copilot/RiderDetails';
+import ResupplyCart from './pages/ResupplyCart';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -175,7 +180,8 @@ function AppContent() {
       <CssBaseline />
       <div className="App" style={{ backgroundColor: isDarkMode ? '#0D0D0D' : '#FFFFFF', minHeight: '100vh' }}>
         <AdminProvider>
-          <Router>
+          <ResupplyCartProvider>
+            <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/setup-password" element={<SetupPassword />} />
@@ -269,6 +275,16 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
+              <Route
+                path="/copilot/*"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <Copilot />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
               {isEasterEggActive && (
                 <Route
                   path="/save-the-fishes"
@@ -313,9 +329,40 @@ function AppContent() {
               />
               <Route path="/customers" element={<Navigate to="/admin/customers" replace />} />
               <Route path="/admin/notifications" element={<PrivateRoute><OrderNotifications /></PrivateRoute>} />
+              <Route
+                path="/copilot/reports/date/:date"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <SalesDateDetails />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/copilot/reports/rider/:riderId"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <RiderDetails />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/resupply-cart"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <ResupplyCart />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </Router>
+          </ResupplyCartProvider>
         </AdminProvider>
       </div>
     </MUIThemeProvider>

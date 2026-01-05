@@ -232,7 +232,7 @@ const Drivers = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <LocalShipping sx={{ fontSize: 40, color: '#00E0B8' }} />
           <Typography variant="h4" sx={{ color: '#00E0B8', fontWeight: 700 }}>
-            Drivers Management
+            Riders Management
           </Typography>
         </Box>
         <Button
@@ -247,7 +247,7 @@ const Drivers = () => {
             }
           }}
         >
-          Add Driver
+          Add Rider
         </Button>
       </Box>
 
@@ -261,7 +261,7 @@ const Drivers = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Driver Name</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Rider Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Phone Number</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: '#00E0B8' }}>Last Activity</TableCell>
@@ -274,7 +274,7 @@ const Drivers = () => {
               <TableRow>
                 <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
-                    No drivers found. Click "Add Driver" to create one.
+                    No riders found. Click "Add Rider" to create one.
                   </Typography>
                 </TableCell>
               </TableRow>
@@ -361,10 +361,10 @@ const Drivers = () => {
         </Table>
       </TableContainer>
 
-      {/* Add/Edit Driver Dialog */}
+      {/* Add/Edit Rider Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingDriver ? 'Edit Driver' : 'Add New Driver'}
+          {editingDriver ? 'Edit Rider' : 'Add New Rider'}
         </DialogTitle>
         <DialogContent>
           {error && (
@@ -374,7 +374,7 @@ const Drivers = () => {
           )}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <TextField
-              label="Driver Name"
+              label="Rider Name"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               fullWidth

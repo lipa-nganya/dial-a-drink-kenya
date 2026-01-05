@@ -1,10 +1,16 @@
 #!/bin/bash
 # Deploy Backend to Google Cloud Run
 # This script preserves existing environment variables
+#
+# ⚠️ IMPORTANT: This deploys to the CLOUD/DEV backend service
+# Service Name: deliveryos-backend
+# Expected URL: https://deliveryos-backend-p6bkgryxqa-uc.a.run.app
+# See DEPLOYMENT_GUIDE.md for full details
 
 set -e
 
 echo "🚀 Deploying Backend to Google Cloud Run..."
+echo "📋 Target Service: deliveryos-backend (Cloud/Dev)"
 echo ""
 
 cd "$(dirname "$0")/backend"

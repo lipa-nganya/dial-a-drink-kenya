@@ -241,21 +241,10 @@ router.get('/details/:placeId', async (req, res) => {
         // Ensure geometry exists
         if (!placeResult.geometry || !placeResult.geometry.location) {
           console.error('Google Places API response missing geometry:', placeResult);
-          // If we have saved address with coordinates, use them as fallback
-          if (savedAddress && savedAddress.latitude && savedAddress.longitude) {
-            console.log('Using saved coordinates as fallback (missing geometry in API response)');
-            placeResult.geometry = {
-              location: {
-                lat: parseFloat(savedAddress.latitude),
-                lng: parseFloat(savedAddress.longitude)
-              }
-            };
-          } else {
-            return res.status(500).json({
-              error: 'Invalid response from Google Places API',
-              message: 'Place details missing geometry/coordinates'
-            });
-          }
+          return res.status(500).json({
+            error: 'Invalid response from Google Places API',
+            message: 'Place details missing geometry/coordinates'
+          });
         }
         
         // Check if formatted_address is a Plus Code (e.g., "PP2X+58P, Nairobi, Kenya")
@@ -335,22 +324,17 @@ router.get('/details/:placeId', async (req, res) => {
             }
 
             if (!existingAddress) {
-              // Create new address
-              await db.SavedAddress.create({
+              // Create new address (without latitude/longitude - columns may not exist)
+              const addressData = {
                 address: normalizedAddress,
                 placeId: placeId,
-                formattedAddress: placeResult.formatted_address,
-                latitude: latitude,
-                longitude: longitude
-              });
-              console.log(`✅ Saved new address with coordinates: ${normalizedAddress}`);
+                formattedAddress: placeResult.formatted_address
+              };
+              await db.SavedAddress.create(addressData);
+              console.log(`✅ Saved new address: ${normalizedAddress}`);
             } else {
-              // Update existing address with coordinates if missing, or update placeId if different
+              // Update existing address with placeId if different
               const updates = {};
-              if (!existingAddress.latitude || !existingAddress.longitude) {
-                updates.latitude = latitude;
-                updates.longitude = longitude;
-              }
               if (placeId && existingAddress.placeId !== placeId) {
                 updates.placeId = placeId;
               }
@@ -363,16 +347,12 @@ router.get('/details/:placeId', async (req, res) => {
             // Handle duplicate key errors gracefully
             if (dbError.name === 'SequelizeUniqueConstraintError') {
               console.log(`⚠️ Address already exists (duplicate key): ${normalizedAddress}`);
-              // Try to find and update it
+              // Try to find it (skip coordinate updates - columns may not exist)
               const existingAddress = await db.SavedAddress.findOne({
                 where: { address: normalizedAddress }
               });
-              if (existingAddress && (!existingAddress.latitude || !existingAddress.longitude)) {
-                await existingAddress.update({
-                  latitude: latitude,
-                  longitude: longitude
-                });
-                console.log(`✅ Updated existing address with coordinates: ${normalizedAddress}`);
+              if (existingAddress) {
+                console.log(`✅ Address already exists: ${normalizedAddress}`);
               }
             } else {
               console.error('Error saving address to database:', dbError.message);

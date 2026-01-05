@@ -1,5 +1,7 @@
 // Load environment variables - don't fail if .env doesn't exist
-require('dotenv').config();
+// Priority: .env.local (local overrides) > .env (shared/default)
+require('dotenv').config({ path: '.env.local' }); // Load local overrides first
+require('dotenv').config(); // Then load default .env (won't override existing vars)
 
 // Handle unhandled promise rejections to prevent crashes
 process.on('unhandledRejection', (reason, promise) => {
@@ -19,8 +21,8 @@ process.on('uncaughtException', (error) => {
 const http = require('http');
 const express = require('express');
 
-// Cloud Run sets PORT automatically - use it or default to 8080
-const PORT = process.env.PORT || 8080;
+// Cloud Run sets PORT automatically - use it or default to 5001
+const PORT = process.env.PORT || 5001;
 
 // Create minimal app with health check endpoint
 const minimalApp = express();
@@ -400,9 +402,12 @@ async function syncPendingTransactions() {
         const mpesaStatus = await mpesaService.checkTransactionStatus(transaction.checkoutRequestID);
         
         const callbackMetadata = mpesaStatus?.CallbackMetadata;
-        const items = callbackMetadata?.Item || [];
-        const receiptFromMetadata = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
-        const receiptFromResponse = mpesaStatus?.ReceiptNumber;
+        const items = callbackMetadata?.Item || callbackMetadata?.item || [];
+        const receiptItem = items.find(item => 
+          item.Name === 'MpesaReceiptNumber' || item.name === 'MpesaReceiptNumber'
+        );
+        const receiptFromMetadata = receiptItem?.Value || receiptItem?.value;
+        const receiptFromResponse = mpesaStatus?.ReceiptNumber || mpesaStatus?.receiptNumber || mpesaStatus?.MpesaReceiptNumber;
         const receiptNumber = receiptFromMetadata || receiptFromResponse;
         const resultCode = mpesaStatus?.ResultCode;
         

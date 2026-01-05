@@ -33,7 +33,7 @@ import { shareProduct } from '../utils/generateShareImage';
 const DrinkCard = ({ drink }) => {
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [imageError, setImageError] = useState(false);
 
@@ -202,13 +202,13 @@ const DrinkCard = ({ drink }) => {
         </Box>
         
         {/* Drink Name */}
-        <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: isDarkMode ? '#000000' : colors.textPrimary }}>
+        <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: colors.textPrimary }}>
           {drink.name}
         </Typography>
         
         <Typography
           variant="body2"
-          sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: isDarkMode ? '#000000' : colors.textPrimary }}
+          sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: colors.textPrimary }}
         >
           {drink.description}
         </Typography>
@@ -243,7 +243,7 @@ const DrinkCard = ({ drink }) => {
                       control={
                         <Radio
                           sx={{
-                            color: isDarkMode ? '#000000' : colors.textPrimary,
+                            color: colors.textPrimary,
                             padding: '4px',
                             marginRight: '4px',
                             '&.Mui-checked': { color: colors.accentText }
@@ -254,14 +254,14 @@ const DrinkCard = ({ drink }) => {
                       <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: isDarkMode ? '#000000' : colors.accentText, wordBreak: 'break-word' }}>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
                               {capacity}
                             </Typography>
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
                             {originalPrice && originalPrice > price ? (
                               <>
-                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: isDarkMode ? '#666666' : '#666', fontSize: '0.65rem' }}>
+                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: '#666', fontSize: '0.65rem' }}>
                                   KES {originalPrice.toFixed(2)}
                                 </Typography>
                                 <Typography variant="body2" sx={{ color: '#FF3366', fontWeight: 'bold', fontSize: '0.7rem' }}>
@@ -269,7 +269,7 @@ const DrinkCard = ({ drink }) => {
                                 </Typography>
                               </>
                             ) : (
-                              <Typography variant="body2" sx={{ color: isDarkMode ? '#000000' : colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                              <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
                                 KES {price.toFixed(2)}
                               </Typography>
                             )}
@@ -306,7 +306,7 @@ const DrinkCard = ({ drink }) => {
           <Box sx={{ mb: 1 }}>
             <Typography
               variant="subtitle1"
-              sx={{ fontWeight: 'bold', fontSize: '0.9rem', color: isDarkMode ? '#000000' : colors.accentText }}
+              sx={{ fontWeight: 'bold', fontSize: '0.9rem', color: colors.accentText }}
             >
               KES {(Number(drink.price) || 0).toFixed(2)}
             </Typography>

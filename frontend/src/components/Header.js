@@ -13,14 +13,13 @@ import {
   ListItemText,
   ListItemIcon,
   useMediaQuery,
-  useTheme as useMUITheme
+  useTheme as useMUITheme,
 } from '@mui/material';
-import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login } from '@mui/icons-material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCustomer } from '../contexts/CustomerContext';
-import ThemeSwitcher from './ThemeSwitcher';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -29,7 +28,7 @@ const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const muiTheme = useMUITheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
-  const { isDarkMode, colors } = useTheme();
+  const { colors } = useTheme();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -43,15 +42,15 @@ const Header = () => {
   const drawer = (
     <Box sx={{ 
       width: 220, 
-      backgroundColor: isDarkMode ? '#121212' : colors.paper,
+      backgroundColor: colors.paper,
       height: '100%',
       minHeight: '100vh',
       color: colors.textPrimary,
     }}>
       <Toolbar sx={{ 
         minHeight: '48px !important',
-        backgroundColor: isDarkMode ? '#121212' : colors.paper,
-        borderBottom: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+        backgroundColor: colors.paper,
+        borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
       }}>
         <LocalBar sx={{ mr: 1, fontSize: '1.2rem', color: colors.textPrimary }} />
         <Typography variant="subtitle1" component="div" sx={{ 
@@ -62,16 +61,16 @@ const Header = () => {
         </Typography>
       </Toolbar>
       <List sx={{ 
-        backgroundColor: isDarkMode ? '#121212' : colors.paper,
+        backgroundColor: colors.paper,
         color: colors.textPrimary
       }}>
         <ListItem 
           component="button" 
           onClick={() => handleNavigation('/')}
           sx={{ 
-            backgroundColor: isDarkMode ? '#121212' : 'transparent',
+            backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
           }}
         >
           <ListItemIcon>
@@ -83,9 +82,9 @@ const Header = () => {
           component="button" 
           onClick={() => handleNavigation('/menu')}
           sx={{ 
-            backgroundColor: isDarkMode ? '#121212' : 'transparent',
+            backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
           }}
         >
           <ListItemIcon>
@@ -97,9 +96,9 @@ const Header = () => {
           component="button" 
           onClick={() => handleNavigation('/offers')}
           sx={{ 
-            backgroundColor: isDarkMode ? '#121212' : 'transparent',
+            backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
           }}
         >
           <ListItemIcon>
@@ -111,9 +110,9 @@ const Header = () => {
           component="button" 
           onClick={() => handleNavigation('/cart')}
           sx={{ 
-            backgroundColor: isDarkMode ? '#121212' : 'transparent',
+            backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
           }}
         >
           <ListItemIcon>
@@ -129,9 +128,9 @@ const Header = () => {
             handleNavigation(isLoggedIn ? '/orders' : '/login');
           }}
           sx={{ 
-            backgroundColor: isDarkMode ? '#121212' : 'transparent',
+            backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
           }}
         >
           <ListItemIcon>
@@ -144,9 +143,9 @@ const Header = () => {
             component="button" 
             onClick={() => handleNavigation('/profile')}
             sx={{ 
-              backgroundColor: isDarkMode ? '#121212' : 'transparent',
+              backgroundColor: 'transparent',
               color: colors.textPrimary,
-              '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
             }}
           >
             <ListItemIcon>
@@ -159,9 +158,9 @@ const Header = () => {
             component="button" 
             onClick={() => handleNavigation('/login')}
             sx={{ 
-              backgroundColor: isDarkMode ? '#121212' : 'transparent',
+              backgroundColor: 'transparent',
               color: colors.textPrimary,
-              '&:hover': { backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)' }
+              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
             }}
           >
             <ListItemIcon>
@@ -170,13 +169,69 @@ const Header = () => {
             <ListItemText primary="Login" sx={{ color: colors.textPrimary }} />
           </ListItem>
         )}
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/suggest-drink')}
+          sx={{ 
+            backgroundColor: 'transparent',
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
+          <ListItemIcon>
+            <Lightbulb sx={{ color: colors.textPrimary }} />
+          </ListItemIcon>
+          <ListItemText primary="Suggest a Drink" sx={{ color: colors.textPrimary }} />
+        </ListItem>
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/report-problem')}
+          sx={{ 
+            backgroundColor: 'transparent',
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
+          <ListItemIcon>
+            <ReportProblem sx={{ color: colors.textPrimary }} />
+          </ListItemIcon>
+          <ListItemText primary="Report a Problem" sx={{ color: colors.textPrimary }} />
+        </ListItem>
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/privacy-policy')}
+          sx={{ 
+            backgroundColor: 'transparent',
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
+          <ListItemIcon>
+            <PrivacyTip sx={{ color: colors.textPrimary }} />
+          </ListItemIcon>
+          <ListItemText primary="Privacy Policy" sx={{ color: colors.textPrimary }} />
+        </ListItem>
+        <ListItem 
+          component="button" 
+          onClick={() => handleNavigation('/terms-of-service')}
+          sx={{ 
+            backgroundColor: 'transparent',
+            color: colors.textPrimary,
+            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+          }}
+        >
+          <ListItemIcon>
+            <Description sx={{ color: colors.textPrimary }} />
+          </ListItemIcon>
+          <ListItemText primary="Terms of Service" sx={{ color: colors.textPrimary }} />
+        </ListItem>
       </List>
     </Box>
   );
 
   return (
     <>
-      <AppBar position="sticky" sx={{ backgroundColor: colors.paper, boxShadow: `0 2px 8px ${isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.1)'}` }}>
+      <AppBar position="sticky" sx={{ backgroundColor: colors.paper, boxShadow: `0 2px 8px rgba(0, 0, 0, 0.1)` }}>
         <Toolbar>
           {isMobile && (
             <IconButton
@@ -198,7 +253,7 @@ const Header = () => {
                     cursor: 'pointer',
                     fontWeight: 700,
                     fontSize: isMobile ? '0.9rem' : '1.1rem',
-                    color: isDarkMode ? colors.accentText : colors.textPrimary
+                    color: colors.textPrimary
                   }}
                   onClick={() => navigate('/')}
                 >
@@ -267,13 +322,11 @@ const Header = () => {
               >
                 Cart
               </Button>
-              <ThemeSwitcher />
             </Box>
           )}
           
           {isMobile && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <ThemeSwitcher />
               <IconButton
                 color="inherit"
                 onClick={() => navigate('/cart')}
@@ -301,25 +354,25 @@ const Header = () => {
           '& .MuiDrawer-paper': { 
             boxSizing: 'border-box', 
             width: 250,
-            backgroundColor: isDarkMode ? '#121212' : colors.paper,
-            color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
+            backgroundColor: colors.paper,
+            color: colors.textPrimary,
             backgroundImage: 'none !important',
-            background: isDarkMode ? '#121212' : colors.paper,
+            background: colors.paper,
           },
         }}
         PaperProps={{
           sx: {
-            backgroundColor: isDarkMode ? '#121212' : colors.paper,
-            color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
-            background: isDarkMode ? '#121212' : colors.paper,
+            backgroundColor: colors.paper,
+            color: colors.textPrimary,
+            background: colors.paper,
             backgroundImage: 'none !important',
           },
           style: {
-            backgroundColor: isDarkMode ? '#121212' : colors.paper,
-            color: isDarkMode ? '#F5F5F5' : colors.textPrimary,
-            background: isDarkMode ? '#121212' : colors.paper,
+            backgroundColor: colors.paper,
+            color: colors.textPrimary,
+            background: colors.paper,
           },
-          className: isDarkMode ? 'dark-drawer' : 'light-drawer',
+          className: 'light-drawer',
         }}
       >
         {drawer}

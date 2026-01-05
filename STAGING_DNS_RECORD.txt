@@ -1,0 +1,34 @@
+===========================================
+QUICK REFERENCE: DNS Record for HostAfrica
+===========================================
+
+⚠️ CRITICAL: Get the CNAME target from Netlify first!
+
+Steps:
+1. Add staging.dialadrinkkenya.com in Netlify dashboard
+2. Netlify will show you the exact CNAME target
+3. Use that target (usually ends in .netlify.app)
+4. Add DNS record below using Netlify's target
+
+───────────────────────────────────────────
+Type:        CNAME
+Host/Name:   staging
+Target:      [Get from Netlify - e.g., site-name-123.netlify.app]
+TTL:         3600 (or default)
+───────────────────────────────────────────
+
+IMPORTANT:
+- Host/Name should be just "staging" (NOT "staging.dialadrinkkenya.com")
+- Target should be the Netlify subdomain (NOT dialadrink.thewolfgang.tech)
+- Target should NOT include https:// or http://
+- Do NOT use an IP address
+- Do NOT modify any existing DNS records for dialadrinkkenya.com
+
+After adding this record:
+1. Wait 5-60 minutes for DNS propagation
+2. Wait 5-15 minutes for SSL certificate provisioning
+3. Test: https://staging.dialadrinkkenya.com
+
+See STAGING_DOMAIN_SETUP.md for complete instructions.
+See STAGING_SSL_FIX.md if you get SSL certificate errors.
+
