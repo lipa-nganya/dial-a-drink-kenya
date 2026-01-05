@@ -313,6 +313,24 @@ async function addMissingColumns(db) {
       console.log('✅ stock column already exists in drinks table');
     }
     
+    // Check if deliverySequence column exists in orders table
+    const [deliverySequenceResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'orders' AND column_name = 'deliverySequence'
+    `);
+    
+    if (deliverySequenceResults.length === 0) {
+      console.log('📝 Adding missing deliverySequence column to orders table...');
+      await db.sequelize.query(`
+        ALTER TABLE orders 
+        ADD COLUMN "deliverySequence" INTEGER
+      `);
+      console.log('✅ Added deliverySequence column to orders table');
+    } else {
+      console.log('✅ deliverySequence column already exists in orders table');
+    }
+    
     // Check if 'cash' exists in payment_method_enum
     const [enumResults] = await db.sequelize.query(`
       SELECT unnest(enum_range(NULL::payment_method_enum))::text AS enum_value

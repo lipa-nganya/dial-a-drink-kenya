@@ -74,6 +74,9 @@ import { GoogleMap, LoadScript, Marker, Polyline, InfoWindow, useJsApiLoader } f
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import RouteMapView from '../components/RouteMapView';
 
+// Google Maps libraries - moved outside component to prevent performance warnings
+const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
+
 const Orders = () => {
   const { isDarkMode, colors } = useTheme();
   const [orders, setOrders] = useState([]);
@@ -140,7 +143,7 @@ const Orders = () => {
   const { isLoaded: isMapLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
-    libraries: ['places', 'geometry']
+    libraries: GOOGLE_MAPS_LIBRARIES
   });
 
   useEffect(() => {

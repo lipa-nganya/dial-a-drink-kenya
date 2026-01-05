@@ -852,7 +852,7 @@ router.get('/save-the-fishes', async (req, res) => {
 });
 
 // Get all orders (admin)
-router.get('/orders', async (req, res) => {
+router.get('/orders', verifyAdmin, async (req, res) => {
   try {
     // Build includes array conditionally
     const orderIncludes = [
@@ -881,14 +881,19 @@ router.get('/orders', async (req, res) => {
       }
     ];
     
-    // Include Branch association (branchId column exists and association is set up)
-    if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
-      orderIncludes.push({
-        model: db.Branch,
-        as: 'branch',
-        required: false,
-        attributes: ['id', 'name', 'address']
-      });
+    // Include Branch association only if it exists and is properly set up
+    try {
+      if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
+        orderIncludes.push({
+          model: db.Branch,
+          as: 'branch',
+          required: false,
+          attributes: ['id', 'name', 'address']
+        });
+      }
+    } catch (branchError) {
+      console.warn('Warning: Could not include Branch association:', branchError.message);
+      // Continue without Branch association
     }
     
     const orders = await db.Order.findAll({
@@ -912,8 +917,8 @@ router.get('/orders', async (req, res) => {
     // Return more detailed error in development, generic in production
     const errorMessage = process.env.NODE_ENV === 'production' 
       ? 'Failed to fetch orders' 
-      : error.message || 'Failed to fetch orders';
-    res.status(500).json({ error: errorMessage, details: process.env.NODE_ENV !== 'production' ? error.stack : undefined });
+      : (error.message || 'Failed to fetch orders');
+    res.status(500).json({ error: errorMessage });
   }
 });
 
