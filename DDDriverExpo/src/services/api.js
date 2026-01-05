@@ -79,8 +79,8 @@ const getBaseURL = () => {
   }
   
   if (updateChannel === 'production' || updateChannel === 'development' || updateChannel === 'cloud-dev' || updateChannel === 'preview') {
-    const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
-    console.log(`🌐 [API] ${updateChannel} channel detected - using cloud-dev API URL:`, `${cloudApiUrl}/api`);
+    const cloudApiUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+    console.log(`🌐 [API] ${updateChannel} channel detected - using production API URL:`, `${cloudApiUrl}/api`);
     return `${cloudApiUrl}/api`;
   }
   
@@ -153,9 +153,9 @@ const getBaseURL = () => {
     }
   }
 
-  // Final fallback: Use cloud-dev API URL for production/cloud-dev builds
-  const cloudApiUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app';
-  console.warn('⚠️ [API] No API URL configured, using cloud-dev fallback:', `${cloudApiUrl}/api`);
+  // Final fallback: Use production API URL for production/cloud-dev builds
+  const cloudApiUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+  console.warn('⚠️ [API] No API URL configured, using production fallback:', `${cloudApiUrl}/api`);
   console.error('📱 [API] Debug info:', {
     updateChannel,
     buildProfile,

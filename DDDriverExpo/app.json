@@ -42,7 +42,7 @@
       "favicon": "./assets/favicon.png"
     },
     "extra": {
-      "apiBaseUrl": "https://dialadrink-backend-910510650031.us-central1.run.app",
+      "apiBaseUrl": "https://deliveryos-backend-p6bkgryxqa-uc.a.run.app",
       "eas": {
         "projectId": "d016afe9-031a-42ca-b832-94c00c800600"
       }
