@@ -10,11 +10,16 @@ import {
   StatusBar,
   Platform,
   Dimensions,
+  AppState,
+  Vibration,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
+import io from 'socket.io-client';
 import { useTheme } from '../contexts/ThemeContext';
 import api from '../services/api';
+import { scheduleOrderNotification } from '../services/notifications';
 
 const { height: SCREEN_HEIGHT, width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -30,10 +35,22 @@ const DashboardScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isOnShift, setIsOnShift] = useState(false);
   const scrollViewRef = useRef(null);
+  const socketRef = useRef(null);
+  const appState = useRef(AppState.currentState);
+  const processingOrdersRef = useRef(new Set());
   const { colors, isDarkMode } = useTheme();
 
   useEffect(() => {
     loadDashboardData();
+  }, []);
+
+  // Track app state changes
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', nextAppState => {
+      console.log('📱 Dashboard: App state changed:', appState.current, '->', nextAppState);
+      appState.current = nextAppState;
+    });
+    return () => subscription?.remove();
   }, []);
 
   const loadDashboardData = async () => {
@@ -110,6 +127,156 @@ const DashboardScreen = ({ navigation }) => {
       console.error('Error toggling shift:', error);
     }
   };
+
+  // Handle order assignment (from socket or notification)
+  const handleOrderAssigned = async (order, playSound = true) => {
+    const orderId = order.id;
+    
+    // Prevent duplicate processing
+    if (processingOrdersRef.current.has(orderId)) {
+      console.log('⚠️ Dashboard: Order already being processed, skipping:', orderId);
+      return;
+    }
+    
+    processingOrdersRef.current.add(orderId);
+    console.log('🔴🔴🔴 DASHBOARD: HANDLING ORDER ASSIGNED 🔴🔴🔴');
+    console.log('📦 Order:', orderId);
+    console.log('📦 Driver ID:', driverInfo?.id);
+    
+    // Start vibration immediately
+    try {
+      Vibration.vibrate([500, 100, 500, 100, 500, 100], true);
+      console.log('📳✅ Dashboard: Vibration started');
+    } catch (vibError) {
+      console.error('❌ Dashboard: Vibration error:', vibError);
+    }
+    
+    // Schedule notification to wake screen
+    await scheduleOrderNotification(order);
+    
+    // Navigate to OrderAcceptance screen
+    try {
+      const parentNavigation = navigation.getParent();
+      const phone = await AsyncStorage.getItem('driver_phone');
+      
+      if (parentNavigation) {
+        console.log('✅ Dashboard: Using parent navigator to navigate to OrderAcceptance');
+        parentNavigation.navigate('OrderAcceptance', {
+          order: order,
+          driverId: driverInfo?.id,
+          phoneNumber: phone,
+          playSound: playSound
+        });
+      } else {
+        console.log('⚠️ Dashboard: No parent navigator, trying direct navigation');
+        navigation.navigate('OrderAcceptance', {
+          order: order,
+          driverId: driverInfo?.id,
+          phoneNumber: phone,
+          playSound: playSound
+        });
+      }
+    } catch (navError) {
+      console.error('❌ Dashboard: Navigation error:', navError);
+    }
+    
+    // Remove from processing set after delay
+    setTimeout(() => {
+      processingOrdersRef.current.delete(orderId);
+    }, 60000);
+  };
+
+  // Set up Socket.IO connection when driver info is available
+  useEffect(() => {
+    if (!driverInfo?.id) return;
+    
+    const getSocketUrl = () => {
+      const apiBaseUrl = api.defaults.baseURL;
+      const socketUrl = apiBaseUrl.replace('/api', '').replace('/api/', '');
+      console.log('🔌 Dashboard: Socket URL:', socketUrl);
+      return socketUrl;
+    };
+    
+    const socketUrl = getSocketUrl();
+    console.log('🔌 Dashboard: Connecting to socket:', socketUrl);
+    
+    const socket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000,
+      timeout: 20000
+    });
+    
+    socketRef.current = socket;
+    
+    socket.on('connect', () => {
+      console.log('✅ Dashboard: Socket.IO connected successfully');
+      socket.emit('join-driver', driverInfo.id);
+      console.log(`✅ Dashboard: Joined driver room: driver-${driverInfo.id}`);
+    });
+    
+    socket.on('connect_error', (error) => {
+      console.error('❌ Dashboard: Socket.IO connection error:', error);
+    });
+    
+    socket.on('disconnect', (reason) => {
+      console.log('❌ Dashboard: Socket.IO disconnected:', reason);
+    });
+    
+    socket.on('reconnect', (attemptNumber) => {
+      console.log(`✅ Dashboard: Socket.IO reconnected after ${attemptNumber} attempts`);
+      socket.emit('join-driver', driverInfo.id);
+      console.log(`✅ Dashboard: Rejoined driver room: driver-${driverInfo.id}`);
+    });
+    
+    socket.on('order-assigned', async (data) => {
+      console.log('🔴🔴🔴 DASHBOARD: ORDER ASSIGNED EVENT RECEIVED 🔴🔴🔴');
+      console.log('📦 Full event data:', JSON.stringify(data, null, 2));
+      console.log('📦 Order ID:', data?.order?.id);
+      console.log('📱 App state:', appState.current);
+      
+      if (data && data.order) {
+        // Check if order already accepted
+        const existingOrder = await api.get(`/driver-orders/${driverInfo.id}`).then(res => {
+          return res.data?.find(o => o.id === data.order.id && o.driverAccepted === true);
+        }).catch(() => null);
+        
+        if (existingOrder) {
+          console.log('⚠️ Dashboard: Order already accepted, skipping:', data.order.id);
+          return;
+        }
+        
+        // If app is in background, schedule notification first
+        if (appState.current !== 'active') {
+          console.log('📱 Dashboard: App is in background - scheduling notification');
+          await scheduleOrderNotification(data.order);
+          return;
+        }
+        
+        // If app is in foreground, handle immediately
+        console.log('📱 Dashboard: App is in foreground - handling order assignment immediately');
+        await handleOrderAssigned(data.order, data.playSound !== false);
+      } else {
+        console.error('❌ Dashboard: NO ORDER DATA IN SOCKET EVENT');
+      }
+    });
+
+    // Listen for notification responses (when app comes to foreground from notification)
+    const notificationSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+      const data = response.notification.request.content.data;
+      if (data?.type === 'order-assigned' && data?.order) {
+        console.log('📱 Dashboard: Order-assigned notification tapped');
+        handleOrderAssigned(data.order, true);
+      }
+    });
+
+    return () => {
+      console.log('🧹 Dashboard: Cleaning up socket connection');
+      socket.disconnect();
+      notificationSubscription.remove();
+    };
+  }, [driverInfo?.id, navigation]);
 
   const handleTilePress = (tileType) => {
     switch (tileType) {

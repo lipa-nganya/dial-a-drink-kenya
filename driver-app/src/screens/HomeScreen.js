@@ -262,6 +262,14 @@ const HomeScreen = ({ route, navigation }) => {
           </View>
         )}
 
+        {/* Wallet Button */}
+        <TouchableOpacity 
+          style={styles.walletButton} 
+          onPress={() => navigation.navigate('Wallet')}
+        >
+          <Text style={styles.walletButtonText}>💰 View Wallet</Text>
+        </TouchableOpacity>
+
         <Text style={styles.sectionTitle}>My Orders</Text>
 
         {orders.length === 0 ? (
@@ -456,6 +464,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#B0B0B0',
     marginBottom: 5,
+  },
+  walletButton: {
+    backgroundColor: '#00E0B8',
+    padding: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  walletButtonText: {
+    color: '#0D0D0D',
+    fontSize: 18,
+    fontWeight: 'bold',
   },
   logoutButton: {
     backgroundColor: '#FF3366',
