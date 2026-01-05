@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
+  Vibration,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import io from 'socket.io-client';
@@ -49,9 +51,11 @@ const HomeScreen = ({ route, navigation }) => {
 
       socket.on('connect', () => {
         console.log('✅ Socket connected');
+        console.log('🔌 Socket ID:', socket.id);
         // Join driver room
         socket.emit('join-driver', driverInfo.id);
-        console.log(`✅ Joined driver room: driver-${driverInfo.id}`);
+        console.log(`✅ Emitted join-driver event for driver ID: ${driverInfo.id}`);
+        console.log(`✅ Should be in room: driver-${driverInfo.id}`);
       });
 
       socket.on('disconnect', () => {
@@ -66,6 +70,23 @@ const HomeScreen = ({ route, navigation }) => {
       socket.on('order-assigned', (data) => {
         console.log('📦 New order assigned:', data);
         if (data.order) {
+          // Play sound and vibration
+          const shouldPlaySound = data.playSound !== false; // Default to true if not specified
+          
+          if (shouldPlaySound) {
+            // Vibrate immediately - pattern: vibrate for 500ms, pause 100ms, repeat 3 times
+            Vibration.vibrate([500, 100, 500, 100, 500, 100], false);
+            console.log('📳 Vibration triggered for new order');
+            
+            // For Android, we can also use a longer vibration pattern
+            if (Platform.OS === 'android') {
+              // Additional vibration after a short delay for emphasis
+              setTimeout(() => {
+                Vibration.vibrate([300, 100, 300], false);
+              }, 1500);
+            }
+          }
+          
           setNewOrderAlert(data.order);
           // Reload orders to show the new one
           loadDriverData();

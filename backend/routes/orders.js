@@ -391,6 +391,9 @@ router.post('/', async (req, res) => {
     });
 
     const io = req.app.get('io');
+    if (!io) {
+      console.error('❌ Socket.IO instance not available - cannot send driver notifications');
+    }
     if (io && completeOrder) {
       // For "pay now" orders, don't emit new-order event until payment is confirmed
       // This prevents admin from seeing the order before payment is complete
@@ -408,16 +411,39 @@ router.post('/', async (req, res) => {
       // This triggers sound and vibration alerts in the driver app
       console.log(`🔍 Checking driver notification conditions:`);
       console.log(`  - completeOrder.driverId: ${completeOrder?.driverId}`);
+      console.log(`  - completeOrder.driver: ${completeOrder?.driver ? `${completeOrder.driver.name} (ID: ${completeOrder.driver.id})` : 'null'}`);
       console.log(`  - assignedDriver: ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'null'}`);
-      console.log(`  - assignedDriver.name: ${assignedDriver?.name}`);
-      console.log(`  - Is HOLD Driver: ${assignedDriver?.name === 'HOLD Driver'}`);
+      console.log(`  - completeOrder.driver?.name: ${completeOrder?.driver?.name}`);
+      console.log(`  - Is HOLD Driver: ${completeOrder?.driver?.name === 'HOLD Driver'}`);
       
-      if (completeOrder.driverId && assignedDriver && assignedDriver.name !== 'HOLD Driver') {
-        console.log(`📢 Notifying driver ${assignedDriver.name} (ID: ${assignedDriver.id}) about auto-assigned order #${completeOrder.id}`);
+      // Use completeOrder.driver if available, otherwise fall back to assignedDriver
+      // If neither is available but driverId is set, fetch the driver
+      let driverToNotify = completeOrder.driver || assignedDriver;
+      const driverIdToNotify = completeOrder.driverId;
+      
+      // If driverToNotify is null but driverId exists, fetch it
+      if (!driverToNotify && driverIdToNotify) {
+        console.log(`⚠️ Driver association not loaded, fetching driver ID ${driverIdToNotify}`);
+        try {
+          driverToNotify = await db.Driver.findByPk(driverIdToNotify, {
+            attributes: ['id', 'name', 'phoneNumber', 'pushToken']
+          });
+          if (driverToNotify) {
+            console.log(`✅ Driver fetched: ${driverToNotify.name} (ID: ${driverToNotify.id})`);
+          } else {
+            console.log(`❌ Driver ID ${driverIdToNotify} not found in database`);
+          }
+        } catch (driverFetchError) {
+          console.error(`❌ Error fetching driver ID ${driverIdToNotify}:`, driverFetchError);
+        }
+      }
+      
+      if (driverIdToNotify && driverToNotify && driverToNotify.name !== 'HOLD Driver') {
+        console.log(`📢 Notifying driver ${driverToNotify.name} (ID: ${driverIdToNotify}) about auto-assigned order #${completeOrder.id}`);
         
         // Get the driver's push token (might be updated since assignment)
-        console.log(`🔍 Fetching driver push token for driver ID: ${assignedDriver.id}`);
-        const driverWithToken = await db.Driver.findByPk(assignedDriver.id, {
+        console.log(`🔍 Fetching driver push token for driver ID: ${driverIdToNotify}`);
+        const driverWithToken = await db.Driver.findByPk(driverIdToNotify, {
           attributes: ['id', 'name', 'pushToken']
         });
         console.log(`🔍 Driver fetched:`, {
@@ -428,37 +454,37 @@ router.post('/', async (req, res) => {
         });
         
         // Send socket event (for foreground app)
-        console.log(`📡 Sending socket event to driver room: driver-${completeOrder.driverId}`);
-        io.to(`driver-${completeOrder.driverId}`).emit('order-assigned', {
+        console.log(`📡 Sending socket event to driver room: driver-${driverIdToNotify}`);
+        io.to(`driver-${driverIdToNotify}`).emit('order-assigned', {
           order: completeOrder,
           playSound: true
         });
-        console.log(`✅ Socket event sent`);
+        console.log(`✅ Socket event sent to driver-${driverIdToNotify}`);
         
         // Send push notification (for background/screen-off scenarios)
         // This ensures sound and vibration work even when app is backgrounded
         if (driverWithToken && driverWithToken.pushToken) {
           console.log(`📤 Driver has push token - attempting to send push notification`);
           try {
-            console.log(`📤 Attempting to send push notification to driver ${assignedDriver.name}`);
+            console.log(`📤 Attempting to send push notification to driver ${driverToNotify.name}`);
             console.log(`📤 Push token: ${driverWithToken.pushToken.substring(0, 30)}...`);
             const pushNotifications = require('../services/pushNotifications');
             console.log(`📤 Push notification service loaded, calling sendOrderNotification...`);
             const result = await pushNotifications.sendOrderNotification(driverWithToken.pushToken, completeOrder);
             console.log(`📤 Push notification result:`, JSON.stringify(result, null, 2));
             if (result.success) {
-              console.log(`✅ Push notification sent successfully to driver ${assignedDriver.name}`);
+              console.log(`✅ Push notification sent successfully to driver ${driverToNotify.name}`);
             } else {
               console.error(`❌ Push notification failed:`, result);
             }
           } catch (pushError) {
-            console.error(`❌ Error sending push notification to driver ${assignedDriver.name}:`, pushError);
+            console.error(`❌ Error sending push notification to driver ${driverToNotify.name}:`, pushError);
             console.error(`❌ Error message:`, pushError.message);
             console.error(`❌ Error stack:`, pushError.stack);
             // Don't fail the order creation if push notification fails
           }
         } else {
-          console.log(`⚠️ Driver ${assignedDriver.name} has no push token registered`);
+          console.log(`⚠️ Driver ${driverToNotify.name} has no push token registered`);
           console.log(`⚠️ driverWithToken:`, driverWithToken ? 'exists' : 'null');
           console.log(`⚠️ Driver pushToken:`, driverWithToken?.pushToken || 'null');
           console.log(`⚠️ Only socket notification sent - push notification skipped`);
@@ -466,9 +492,11 @@ router.post('/', async (req, res) => {
       } else {
         console.log(`⚠️ Skipping driver notification - conditions not met:`);
         console.log(`  - completeOrder.driverId: ${completeOrder?.driverId}`);
+        console.log(`  - completeOrder.driver exists: ${!!completeOrder?.driver}`);
         console.log(`  - assignedDriver exists: ${!!assignedDriver}`);
-        console.log(`  - assignedDriver.name: ${assignedDriver?.name}`);
-        console.log(`  - Is HOLD Driver: ${assignedDriver?.name === 'HOLD Driver'}`);
+        console.log(`  - driverToNotify: ${driverToNotify ? `${driverToNotify.name} (ID: ${driverToNotify.id})` : 'null'}`);
+        console.log(`  - driverToNotify?.name: ${driverToNotify?.name}`);
+        console.log(`  - Is HOLD Driver: ${driverToNotify?.name === 'HOLD Driver'}`);
       }
     }
     
