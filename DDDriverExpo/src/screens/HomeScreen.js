@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
+import * as Location from 'expo-location';
 import io from 'socket.io-client';
 import * as Updates from 'expo-updates';
 import api from '../services/api';

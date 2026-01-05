@@ -64,3 +64,7 @@ module.exports = (sequelize, DataTypes) => {
 
 
 
+
+
+
+

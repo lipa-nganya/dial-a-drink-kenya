@@ -605,6 +605,28 @@ const Cart = () => {
                 <Divider />
               </Box>
             ))}
+            
+            {/* ADD ITEMS Button */}
+            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="outlined"
+                size="large"
+                startIcon={<Add />}
+                onClick={() => navigate('/menu')}
+                sx={{
+                  px: 4,
+                  py: 1.5,
+                  borderColor: '#00E0B8',
+                  color: '#00E0B8',
+                  '&:hover': {
+                    borderColor: '#00C4A3',
+                    backgroundColor: 'rgba(0, 224, 184, 0.08)'
+                  }
+                }}
+              >
+                ADD ITEMS
+              </Button>
+            </Box>
           </Paper>
         </Grid>
 
@@ -628,7 +650,7 @@ const Cart = () => {
               {/* Tip Section */}
               <Box sx={{ mb: 2, mt: 2 }}>
                 <Typography variant="body2" gutterBottom sx={{ fontWeight: 500 }}>
-                  Tip Driver (Optional)
+                  Tip Rider (Optional)
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                   {[50, 100, 200, 500].map((amount) => (

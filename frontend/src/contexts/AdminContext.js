@@ -61,6 +61,15 @@ export const AdminProvider = ({ children }) => {
   };
 
   useEffect(() => {
+    // Only initialize admin features if we're on an admin route
+    // Check if current path is an admin route
+    const isAdminRoute = window.location.pathname.startsWith('/admin');
+    
+    if (!isAdminRoute) {
+      // Don't initialize admin features on customer pages
+      return;
+    }
+
     // Initialize socket connection for admin
     const socketUrl = getBackendUrl();
     const newSocket = io(socketUrl);

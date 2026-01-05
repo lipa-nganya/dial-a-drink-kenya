@@ -2297,5 +2297,271 @@ router.get('/top-inventory-items', async (req, res) => {
   }
 });
 
+/**
+ * Settle driver balance (admin initiated with PIN verification)
+ * POST /api/admin/drivers/:driverId/settle-balance
+ */
+router.post('/drivers/:driverId/settle-balance', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const { amount, pin } = req.body;
+
+    if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      return res.status(400).json({ error: 'Valid amount is required' });
+    }
+
+    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
+    }
+
+    const settlementAmount = parseFloat(amount);
+
+    // Find driver
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+
+    // Verify PIN
+    if (!driver.pinHash) {
+      return res.status(400).json({ error: 'Driver PIN not set. Please ask driver to set up their PIN first.' });
+    }
+
+    const isPinValid = await bcrypt.compare(pin, driver.pinHash);
+    if (!isPinValid) {
+      return res.status(401).json({ error: 'Invalid PIN' });
+    }
+
+    // Calculate balance owed
+    const balanceOwed = (driver.driverPayAmount || 0) - (driver.driverPayCredited || 0);
+
+    // Validate amount doesn't exceed balance owed
+    if (settlementAmount > balanceOwed) {
+      return res.status(400).json({ 
+        error: `Settlement amount (KES ${settlementAmount.toFixed(2)}) cannot exceed balance owed (KES ${balanceOwed.toFixed(2)})` 
+      });
+    }
+
+    // Update driver's credited amount
+    const newCreditedAmount = (driver.driverPayCredited || 0) + settlementAmount;
+    await driver.update({
+      driverPayCredited: newCreditedAmount
+    });
+
+    // Create transaction record for the settlement
+    const settlementTransaction = await db.Transaction.create({
+      driverId: driver.id,
+      orderId: null,
+      transactionType: 'cash_settlement',
+      paymentMethod: 'cash',
+      amount: -settlementAmount, // Negative because it's money going from driver to business
+      status: 'completed',
+      paymentStatus: 'paid',
+      notes: `Balance settlement initiated by admin. Amount: KES ${settlementAmount.toFixed(2)}. PIN verified.`,
+      transactionDate: new Date()
+    });
+
+    console.log(`✅ Driver balance settled: ${driver.name} (ID: ${driver.id}) - Amount: KES ${settlementAmount.toFixed(2)}`);
+
+    res.json({
+      success: true,
+      message: `Balance settlement of KES ${settlementAmount.toFixed(2)} processed successfully`,
+      transaction: {
+        id: settlementTransaction.id,
+        amount: settlementAmount,
+        date: settlementTransaction.createdAt
+      },
+      driver: {
+        id: driver.id,
+        name: driver.name,
+        balanceOwed: balanceOwed - settlementAmount,
+        driverPayCredited: newCreditedAmount
+      }
+    });
+  } catch (error) {
+    console.error('Error settling driver balance:', error);
+    res.status(500).json({ error: error.message || 'Failed to settle driver balance' });
+  }
+});
+
+/**
+ * Get driver locations
+ * GET /api/admin/drivers/locations
+ */
+router.get('/drivers/locations', verifyAdmin, async (req, res) => {
+  try {
+    const drivers = await db.Driver.findAll({
+      attributes: ['id', 'name', 'phoneNumber', 'status', 'locationLatitude', 'locationLongitude', 'lastActivity'],
+      where: {
+        locationLatitude: {
+          [Op.ne]: null
+        },
+        locationLongitude: {
+          [Op.ne]: null
+        }
+      }
+    });
+    
+    const locations = drivers.map(driver => ({
+      id: driver.id,
+      name: driver.name,
+      phoneNumber: driver.phoneNumber,
+      status: driver.status,
+      latitude: parseFloat(driver.locationLatitude),
+      longitude: parseFloat(driver.locationLongitude),
+      lastActivity: driver.lastActivity
+    }));
+    
+    res.json({
+      success: true,
+      locations
+    });
+  } catch (error) {
+    console.error('Error fetching driver locations:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch driver locations' });
+  }
+});
+
+/**
+ * Update order delivery sequence
+ * PATCH /api/admin/orders/:id/sequence
+ */
+router.patch('/orders/:id/sequence', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { deliverySequence } = req.body;
+
+    const order = await db.Order.findByPk(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    await order.update({ deliverySequence: deliverySequence !== undefined ? deliverySequence : null });
+
+    res.json({
+      success: true,
+      order: order.toJSON()
+    });
+  } catch (error) {
+    console.error('Error updating order sequence:', error);
+    res.status(500).json({ error: error.message || 'Failed to update order sequence' });
+  }
+});
+
+/**
+ * Create a stop
+ * POST /api/admin/stops
+ */
+router.post('/stops', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId, name, location, instruction, payment, insertAfterIndex, sequence } = req.body;
+
+    if (!driverId || !name || !location) {
+      return res.status(400).json({ error: 'driverId, name, and location are required' });
+    }
+
+    const stop = await db.Stop.create({
+      driverId,
+      name,
+      location,
+      instruction: instruction || null,
+      payment: payment ? parseFloat(payment) : 0,
+      insertAfterIndex: insertAfterIndex !== undefined ? insertAfterIndex : -1,
+      sequence: sequence !== undefined ? sequence : 0
+    });
+
+    res.status(201).json({
+      success: true,
+      stop: stop.toJSON()
+    });
+  } catch (error) {
+    console.error('Error creating stop:', error);
+    res.status(500).json({ error: error.message || 'Failed to create stop' });
+  }
+});
+
+/**
+ * Update a stop
+ * PATCH /api/admin/stops/:id
+ */
+router.patch('/stops/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { driverId, name, location, instruction, payment, insertAfterIndex, sequence } = req.body;
+
+    const stop = await db.Stop.findByPk(id);
+    if (!stop) {
+      return res.status(404).json({ error: 'Stop not found' });
+    }
+
+    const updateData = {};
+    if (driverId !== undefined) updateData.driverId = driverId;
+    if (name !== undefined) updateData.name = name;
+    if (location !== undefined) updateData.location = location;
+    if (instruction !== undefined) updateData.instruction = instruction;
+    if (payment !== undefined) updateData.payment = parseFloat(payment);
+    if (insertAfterIndex !== undefined) updateData.insertAfterIndex = insertAfterIndex;
+    if (sequence !== undefined) updateData.sequence = sequence;
+
+    await stop.update(updateData);
+
+    res.json({
+      success: true,
+      stop: stop.toJSON()
+    });
+  } catch (error) {
+    console.error('Error updating stop:', error);
+    res.status(500).json({ error: error.message || 'Failed to update stop' });
+  }
+});
+
+/**
+ * Delete a stop
+ * DELETE /api/admin/stops/:id
+ */
+router.delete('/stops/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const stop = await db.Stop.findByPk(id);
+    if (!stop) {
+      return res.status(404).json({ error: 'Stop not found' });
+    }
+
+    await stop.destroy();
+
+    res.json({
+      success: true,
+      message: 'Stop deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting stop:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete stop' });
+  }
+});
+
+/**
+ * Get stops for a driver
+ * GET /api/admin/stops/driver/:driverId
+ */
+router.get('/stops/driver/:driverId', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+
+    const stops = await db.Stop.findAll({
+      where: { driverId },
+      order: [['insertAfterIndex', 'ASC'], ['sequence', 'ASC']]
+    });
+
+    res.json({
+      success: true,
+      stops: stops.map(stop => stop.toJSON())
+    });
+  } catch (error) {
+    console.error('Error fetching stops:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch stops' });
+  }
+});
+
 module.exports = router;
 module.exports.verifyAdmin = verifyAdmin;

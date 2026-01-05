@@ -19,12 +19,15 @@ import {
   Store,
   PointOfSale,
   AccountBalance,
-  Map
+  Map,
+  Psychology,
+  ShoppingCart
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useEasterEgg } from '../contexts/EasterEggContext';
+import { useResupplyCart } from '../contexts/ResupplyCartContext';
 import ThemeSwitcher from './ThemeSwitcher';
 
 const AdminHeader = () => {
@@ -33,6 +36,7 @@ const AdminHeader = () => {
   const { pendingOrdersCount, logout, user } = useAdmin();
   const { isDarkMode, colors } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
+  const { cartItems } = useResupplyCart();
 
   const handleLogout = () => {
     logout();
@@ -131,7 +135,7 @@ const AdminHeader = () => {
             startIcon={<LocalShipping />}
             sx={buttonStyle('/drivers')}
           >
-            Drivers
+            Riders
           </Button>
           <Button
             color="inherit"
@@ -149,6 +153,14 @@ const AdminHeader = () => {
           >
             Territories
           </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/copilot')}
+            startIcon={<Psychology />}
+            sx={buttonStyle('/copilot')}
+          >
+            Copilot
+          </Button>
           {isEasterEggActive && (
             <Button
               color="inherit"
@@ -159,6 +171,15 @@ const AdminHeader = () => {
               Save the Fishes
             </Button>
           )}
+          <Button
+            color="inherit"
+            onClick={() => navigate('/resupply-cart')}
+            sx={buttonStyle('/resupply-cart')}
+          >
+            <Badge badgeContent={cartItems.length} color="error" max={99}>
+              <ShoppingCart />
+            </Badge>
+          </Button>
           <Button
             color="inherit"
             onClick={() => navigate('/settings')}

@@ -34,7 +34,7 @@ const ProductPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
   const [product, setProduct] = useState(null);
   const [relatedProducts, setRelatedProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -795,8 +795,8 @@ const ProductPage = () => {
                 width: '100%',
                 height: '100%',
                 p: 3,
-                backgroundColor: isDarkMode ? colors.paper : '#f8f9fa',
-                border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0'}`,
+                backgroundColor: '#f8f9fa',
+                border: `1px solid #e0e0e0`,
                 borderRadius: 2,
                 boxShadow: 2
               }}
@@ -899,8 +899,8 @@ const ProductPage = () => {
                 width: '100%',
                 height: '100%',
                 p: 3,
-                backgroundColor: isDarkMode ? colors.paper : '#f8f9fa',
-                border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0'}`,
+                backgroundColor: '#f8f9fa',
+                border: `1px solid #e0e0e0`,
                 borderRadius: 2,
                 boxShadow: 2
               }}
@@ -955,8 +955,8 @@ const ProductPage = () => {
                 width: '100%',
                 height: '100%',
                 p: 3,
-                backgroundColor: isDarkMode ? colors.paper : '#f8f9fa',
-                border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0'}`,
+                backgroundColor: '#f8f9fa',
+                border: `1px solid #e0e0e0`,
                 borderRadius: 2,
                 boxShadow: 2
               }}
@@ -980,7 +980,7 @@ const ProductPage = () => {
                   onClick={() => navigate('/menu')}
                   sx={{
                     backgroundColor: colors.accentText,
-                    color: isDarkMode ? '#000' : '#fff',
+                    color: '#fff',
                     fontWeight: 600,
                     py: 1.5,
                     '&:hover': {
@@ -1003,7 +1003,7 @@ const ProductPage = () => {
                     py: 1.5,
                     '&:hover': {
                       borderColor: colors.accentText,
-                      backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)'
+                      backgroundColor: 'rgba(0, 0, 0, 0.05)'
                     }
                   }}
                 >
@@ -1023,8 +1023,8 @@ const ProductPage = () => {
                 width: '100%',
                 height: '100%',
                 p: 3,
-                backgroundColor: isDarkMode ? colors.paper : '#f8f9fa',
-                border: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : '#e0e0e0'}`,
+                backgroundColor: '#f8f9fa',
+                border: `1px solid #e0e0e0`,
                 borderRadius: 2,
                 boxShadow: 2
               }}

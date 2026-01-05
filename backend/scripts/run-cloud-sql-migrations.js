@@ -128,6 +128,17 @@ async function runMigrations() {
 
     // Test connection
     console.log('🔌 Testing database connection...');
+    
+    // Disable SSL for Cloud SQL Proxy connections
+    if (databaseUrl.includes('localhost:5432') || databaseUrl.includes('/cloudsql/')) {
+      console.log('   ℹ️  Detected Cloud SQL Proxy connection, disabling SSL...');
+      // Update sequelize config to disable SSL
+      db.sequelize.config.dialectOptions = {
+        ...(db.sequelize.config.dialectOptions || {}),
+        ssl: false
+      };
+    }
+    
     await db.sequelize.authenticate();
     console.log('✅ Database connection established\n');
 

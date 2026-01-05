@@ -740,10 +740,10 @@ const MyOrders = () => {
                 {order.driver && order.status !== 'pending' && (
                   <Box sx={{ mb: 2, p: 1.5, backgroundColor: 'rgba(0, 224, 184, 0.1)', borderRadius: 1 }}>
                     <Typography variant="caption" sx={{ color: '#000000', fontWeight: 600, display: 'block', mb: 0.5 }}>
-                      Delivery Driver
+                      Delivery Rider
                     </Typography>
                     <Typography variant="body2" color="text.primary" sx={{ fontSize: '0.85rem', fontWeight: 500, mb: 1 }}>
-                      {order.driver.name || 'Driver Assigned'}
+                      {order.driver.name || 'Rider Assigned'}
                     </Typography>
                     {order.driver.phoneNumber && (
                       <Button
@@ -761,7 +761,7 @@ const MyOrders = () => {
                           }
                         }}
                       >
-                        Call Driver
+                        Call Rider
                       </Button>
                     )}
                   </Box>

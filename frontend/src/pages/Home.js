@@ -30,7 +30,7 @@ const Home = () => {
   const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
   const [brandFocusLoading, setBrandFocusLoading] = useState(true);
   const navigate = useNavigate();
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
 
   useEffect(() => {
     fetchCategories();
@@ -230,15 +230,15 @@ const Home = () => {
           </Box>
           <Button
             variant="contained"
-            size="large"
+            size="medium"
             sx={{
               backgroundColor: '#00E0B8',
               color: '#0D0D0D',
-              px: { xs: 3, sm: 4 },
-              py: { xs: 1.5, sm: 2 },
-              fontSize: { xs: '0.9rem', sm: '1rem' },
+              px: { xs: 2.5, sm: 3 },
+              py: { xs: 1, sm: 1.25 },
+              fontSize: { xs: '0.8rem', sm: '0.9rem' },
               fontWeight: 600,
-              mb: 4,
+              mb: 2,
               '&:hover': {
                 backgroundColor: '#00C4A3',
                 transform: 'translateY(-2px)',
@@ -273,7 +273,7 @@ const Home = () => {
               variant="outlined"
               size="medium"
               sx={{
-                backgroundColor: isDarkMode ? '#1E1E1E' : '#FFFFFF',
+                backgroundColor: '#FFFFFF',
                 borderRadius: 2,
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2
@@ -342,10 +342,10 @@ const Home = () => {
               top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
               zIndex: 99, // Lower than AppBar (which is typically 1100)
               backgroundColor: colors.background,
-              pt: 2,
-              pb: 2,
-              mb: 3,
-              borderBottom: `1px solid ${isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)'}`
+              pt: 1,
+              pb: 1,
+              mb: 2,
+              borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
             }}
           >
             <Box
@@ -358,7 +358,7 @@ const Home = () => {
                   lg: 'repeat(5, 1fr)',
                   xl: 'repeat(6, 1fr)'
                 },
-                gap: 1.5,
+                gap: 1,
                 width: '100%'
               }}
             >
@@ -374,15 +374,21 @@ const Home = () => {
                     variant={selectedCategory === 0 ? 'contained' : 'outlined'}
                     onClick={() => handleCategoryChange(0)}
                     sx={{
-                      py: 1.5,
-                      fontSize: '0.85rem',
+                      py: 0.75,
+                      fontSize: '0.75rem',
                       fontWeight: selectedCategory === 0 ? 600 : 400,
                       textTransform: 'none',
-                      borderRadius: 2,
-                      minHeight: '48px',
+                      borderRadius: 1.5,
+                      minHeight: '36px',
                       color: '#000000',
                       '&.MuiButton-contained': {
-                        color: '#000000'
+                        color: '#000000',
+                        backgroundColor: 'transparent',
+                        boxShadow: 'none',
+                        border: '2px solid rgba(0, 0, 0, 0.5)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                        }
                       },
                       '&.MuiButton-outlined': {
                         color: '#000000',
@@ -395,17 +401,23 @@ const Home = () => {
                   <Button
                     variant={selectedCategory === -1 ? 'contained' : 'outlined'}
                     onClick={() => handleCategoryChange(-1)}
-                    startIcon={<Star sx={{ fontSize: '0.9rem' }} />}
+                    startIcon={<Star sx={{ fontSize: '0.75rem' }} />}
                     sx={{
-                      py: 1.5,
-                      fontSize: '0.85rem',
+                      py: 0.75,
+                      fontSize: '0.75rem',
                       fontWeight: selectedCategory === -1 ? 600 : 400,
                       textTransform: 'none',
-                      borderRadius: 2,
-                      minHeight: '48px',
+                      borderRadius: 1.5,
+                      minHeight: '36px',
                       color: '#000000',
                       '&.MuiButton-contained': {
-                        color: '#000000'
+                        color: '#000000',
+                        backgroundColor: 'transparent',
+                        boxShadow: 'none',
+                        border: '2px solid rgba(0, 0, 0, 0.5)',
+                        '&:hover': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                        }
                       },
                       '&.MuiButton-outlined': {
                         color: '#000000',
@@ -421,15 +433,15 @@ const Home = () => {
                       variant={selectedCategory === category.id ? 'contained' : 'outlined'}
                       onClick={() => handleCategoryChange(category.id)}
                       sx={{
-                        py: 1.5,
-                        fontSize: '0.85rem',
+                        py: 0.75,
+                        fontSize: '0.75rem',
                         fontWeight: selectedCategory === category.id ? 600 : 400,
                         textTransform: 'none',
-                        borderRadius: 2,
+                        borderRadius: 1.5,
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
-                        minHeight: '48px',
+                        minHeight: '36px',
                         color: '#000000',
                         '&.MuiButton-contained': {
                           color: '#000000'

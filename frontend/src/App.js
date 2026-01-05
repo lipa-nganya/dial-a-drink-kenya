@@ -9,6 +9,7 @@ import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import Header from './components/Header';
 import AdminHeader from './components/AdminHeader';
+import FloatingHelpButton from './components/FloatingHelpButton';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
 import TestOffers from './pages/TestOffers';
@@ -21,6 +22,10 @@ import MyOrders from './pages/MyOrders';
 import CustomerLogin from './pages/CustomerLogin';
 import VerifyEmail from './pages/VerifyEmail';
 import ProductPage from './pages/ProductPage';
+import SuggestDrink from './pages/SuggestDrink';
+import ReportProblem from './pages/ReportProblem';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 import AdminOverview from './pages/admin/AdminOverview';
 import Orders from './pages/admin/Orders';
 import Inventory from './pages/admin/Inventory';
@@ -33,17 +38,9 @@ import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
 import './App.css';
 
-const getMUITheme = (isDarkMode) => {
-  const colors = isDarkMode ? {
-    background: '#0D0D0D',
-    paper: '#121212',
-    textPrimary: '#F5F5F5',
-    textSecondary: '#B0B0B0',
-    accent: '#00E0B8',
-    accentText: '#00E0B8',
-    error: '#FF3366',
-    errorText: '#F5F5F5',
-  } : {
+const getMUITheme = () => {
+  // Always use light mode for customer site
+  const colors = {
     background: '#FFFFFF',
     paper: '#F5F5F5',
     textPrimary: '#000000',
@@ -56,7 +53,7 @@ const getMUITheme = (isDarkMode) => {
 
   return createTheme({
     palette: {
-      mode: isDarkMode ? 'dark' : 'light',
+      mode: 'light',
       primary: {
         main: colors.accent,
       },
@@ -157,7 +154,7 @@ const getMUITheme = (isDarkMode) => {
           root: {
             color: colors.textPrimary,
             '&:hover': {
-              backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+              backgroundColor: 'rgba(0, 0, 0, 0.05)',
             },
           },
         },
@@ -178,16 +175,16 @@ function AppContent() {
   const location = useLocation();
   const isAdminRoute = location.pathname.startsWith('/admin');
   const isAdminLogin = location.pathname === '/admin/login';
-  const { isDarkMode } = useTheme();
   const { snackbarOpen, setSnackbarOpen, snackbarMessage } = useCart();
-  const muiTheme = getMUITheme(isDarkMode);
+  const muiTheme = getMUITheme();
   
   return (
     <MUIThemeProvider theme={muiTheme}>
       <CssBaseline />
-      <div className="App" style={{ backgroundColor: isDarkMode ? '#0D0D0D' : '#FFFFFF', minHeight: '100vh' }}>
+      <div className="App" style={{ backgroundColor: '#FFFFFF', minHeight: '100vh' }}>
         {isAdminRoute && !isAdminLogin && <AdminHeader />}
         {!isAdminRoute && <Header />}
+        {!isAdminRoute && <FloatingHelpButton />}
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
@@ -201,6 +198,10 @@ function AppContent() {
           <Route path="/orders" element={<MyOrders />} />
           <Route path="/login" element={<CustomerLogin />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/suggest-drink" element={<SuggestDrink />} />
+          <Route path="/report-problem" element={<ReportProblem />} />
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+          <Route path="/terms-of-service" element={<TermsOfService />} />
           <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />

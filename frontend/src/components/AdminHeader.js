@@ -122,7 +122,7 @@ const AdminHeader = () => {
             startIcon={<LocalShipping />}
             sx={buttonStyle('/admin/drivers')}
           >
-            Drivers
+            Riders
           </Button>
           <Button
             color="inherit"

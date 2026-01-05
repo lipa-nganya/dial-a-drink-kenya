@@ -1,8 +1,18 @@
 const { Sequelize } = require('sequelize');
 const config = require('../config');
+const { getDatabaseConfigName } = require('../utils/envDetection');
 
-const env = process.env.NODE_ENV || 'development';
+// Use environment detection utility to determine correct config
+const env = getDatabaseConfigName();
 const dbConfig = config[env];
+
+// Log environment detection (helpful for debugging)
+const { isLocal, isProduction } = require('../utils/envDetection');
+console.log(`🔍 Environment detection: NODE_ENV=${process.env.NODE_ENV || 'not set'}, Using config: ${env}, isLocal: ${isLocal()}, isProduction: ${isProduction()}`);
+if (isLocal() && process.env.DATABASE_URL) {
+  console.warn('⚠️  WARNING: DATABASE_URL is set in local environment. This may override local database config.');
+  console.warn('⚠️  For local development, use DB_HOST, DB_PORT, etc. instead of DATABASE_URL.');
+}
 
 let sequelize;
 try {
@@ -104,6 +114,7 @@ const Branch = require('./Branch')(sequelize, Sequelize.DataTypes);
 const Territory = require('./Territory')(sequelize, Sequelize.DataTypes);
 const Supplier = require('./Supplier')(sequelize, Sequelize.DataTypes);
 const SupplierTransaction = require('./SupplierTransaction')(sequelize, Sequelize.DataTypes);
+const Stop = require('./Stop')(sequelize, Sequelize.DataTypes);
 
 // Valkyrie models (conditionally loaded if they exist)
 let ValkyriePartner, ValkyriePartnerUser, ValkyriePartnerDriver, ValkyriePartnerOrder, PartnerGeofence;
@@ -189,6 +200,12 @@ if (Driver) {
   Driver.hasMany(Order, { foreignKey: 'driverId', as: 'orders' });
 }
 
+// Driver-Stop associations
+if (Driver && Stop) {
+  Stop.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasMany(Stop, { foreignKey: 'driverId', as: 'stops' });
+}
+
 // Branch-Order associations
 if (Branch) {
   Order.belongsTo(Branch, { foreignKey: 'branchId', as: 'branch' });
@@ -217,6 +234,7 @@ db.Branch = Branch;
 db.Territory = Territory;
 db.Supplier = Supplier;
 db.SupplierTransaction = SupplierTransaction;
+db.Stop = Stop;
 
 // Supplier associations - only set up if models are loaded successfully
 try {

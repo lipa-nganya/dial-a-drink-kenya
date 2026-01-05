@@ -13,8 +13,10 @@ import { Search, Star } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
+import { useTheme } from '../contexts/ThemeContext';
 
 const Menu = () => {
+  const { colors } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drinks, setDrinks] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -193,10 +195,11 @@ const Menu = () => {
   const paginatedDrinks = filteredDrinks.slice(startIndex, endIndex);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Our Menu
-      </Typography>
+    <Box sx={{ backgroundColor: colors.background, minHeight: '100vh' }}>
+      <Container maxWidth="lg" sx={{ py: 4 }}>
+        <Typography variant="h4" component="h1" gutterBottom>
+          Our Menu
+        </Typography>
 
       {/* Search Bar */}
       <Box sx={{ mb: 2 }}>
@@ -223,12 +226,11 @@ const Menu = () => {
           position: 'sticky',
           top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
           zIndex: 99, // Lower than AppBar (which is typically 1100)
-          backgroundColor: 'background.paper',
+          backgroundColor: colors.background,
           pt: 2,
           pb: 2,
           mb: 3,
-          borderBottom: '1px solid',
-          borderColor: 'divider'
+          borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
         }}
       >
         <Box
@@ -257,7 +259,13 @@ const Menu = () => {
               minHeight: '48px',
               color: '#000000',
               '&.MuiButton-contained': {
-                color: '#000000'
+                color: '#000000',
+                backgroundColor: 'transparent',
+                boxShadow: 'none',
+                border: '2px solid rgba(0, 0, 0, 0.5)',
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                }
               },
               '&.MuiButton-outlined': {
                 color: '#000000',
@@ -280,7 +288,13 @@ const Menu = () => {
               minHeight: '48px',
               color: '#000000',
               '&.MuiButton-contained': {
-                color: '#000000'
+                color: '#000000',
+                backgroundColor: 'transparent',
+                boxShadow: 'none',
+                border: '2px solid rgba(0, 0, 0, 0.5)',
+                '&:hover': {
+                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                }
               },
               '&.MuiButton-outlined': {
                 color: '#000000',
@@ -307,7 +321,13 @@ const Menu = () => {
                 minHeight: '48px',
                 color: '#000000',
                 '&.MuiButton-contained': {
-                  color: '#000000'
+                  color: '#000000',
+                  backgroundColor: 'transparent',
+                  boxShadow: 'none',
+                  border: '2px solid rgba(0, 0, 0, 0.5)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                  }
                 },
                 '&.MuiButton-outlined': {
                   color: '#000000',
@@ -420,7 +440,8 @@ const Menu = () => {
           </>
         )}
       </Box>
-    </Container>
+      </Container>
+    </Box>
   );
 };
 

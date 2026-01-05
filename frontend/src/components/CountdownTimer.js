@@ -86,7 +86,7 @@ const CountdownTimer = () => {
   const time = formatTime(timeRemaining);
 
   return (
-    <Box sx={{ pt: 4, pb: 3 }}>
+    <Box sx={{ pt: 2, pb: 1.5 }}>
       {/* Countdown Title */}
       <Typography 
         variant="h3" 

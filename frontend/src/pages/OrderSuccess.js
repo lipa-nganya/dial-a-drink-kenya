@@ -15,7 +15,7 @@ const OrderSuccess = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { clearCart } = useCart();
-  const { isDarkMode } = useTheme();
+  // Always use light mode
   const { isLoggedIn, login: loginCustomer } = useCustomer();
   const orderId = location.state?.orderId;
   const paymentPending = location.state?.paymentPending || false;
@@ -465,8 +465,8 @@ const OrderSuccess = () => {
           
           {window.location.hostname === 'localhost' && (
             <Alert severity="info" sx={{ mb: 3 }}>
-              <strong>Local Development:</strong> M-Pesa callbacks are configured to reach your local server via ngrok. 
-              If you've completed payment but status hasn't updated after a few moments, you can use the button below to manually confirm.
+              <strong>Local Development:</strong> M-Pesa callbacks are configured to reach the production server, not your local server. 
+              If you've completed payment on your phone, use the button below to manually confirm. Receipt number is optional in local development.
             </Alert>
           )}
           
@@ -476,19 +476,36 @@ const OrderSuccess = () => {
             color="primary"
             size="large"
             onClick={async () => {
-              const receiptNumber = window.prompt('If you have completed payment, enter your M-Pesa receipt number (optional, press Cancel to skip):');
+              // In local dev, receipt is optional
+              const isLocalDev = window.location.hostname === 'localhost';
+              let receiptNumber = '';
+              
+              if (!isLocalDev) {
+                receiptNumber = window.prompt('If you have completed payment, enter your M-Pesa receipt number (required):') || '';
+                if (!receiptNumber) {
+                  alert('Receipt number is required to confirm payment.');
+                  return;
+                }
+              } else {
+                // Local dev: receipt is optional
+                receiptNumber = window.prompt('If you have completed payment, enter your M-Pesa receipt number (optional, press Cancel to skip):') || '';
+              }
+              
               try {
-                const response = await api.post(`/mpesa/manual-confirm/${orderId}`, { receiptNumber: receiptNumber || '' });
+                const response = await api.post(`/mpesa/manual-confirm/${orderId}`, { receiptNumber });
                 if (response.data.success) {
                   setPaymentConfirmed(true);
                   setOrderStatus('confirmed');
                   setCurrentTransactionStatus('completed');
                   clearCart();
                   await autoLoginCustomer(orderId);
+                } else {
+                  alert(response.data.message || 'Manual confirmation failed. Please try again or wait for automatic confirmation.');
                 }
               } catch (error) {
                 console.error('Manual confirmation failed:', error);
-                alert('Manual confirmation failed. Please contact support or wait for automatic confirmation.');
+                const errorMessage = error.response?.data?.message || error.response?.data?.error || 'Manual confirmation failed. Please contact support or wait for automatic confirmation.';
+                alert(errorMessage);
               }
             }}
             sx={{ mt: 2 }}
@@ -577,13 +594,13 @@ const OrderSuccess = () => {
                 }
               }}
               sx={{
-                backgroundColor: isDarkMode ? '#FFFFFF' : '#000000',
-                color: isDarkMode ? '#000000' : '#FFFFFF',
+                backgroundColor: '#000000',
+                color: '#FFFFFF',
                 border: '1px solid',
-                borderColor: isDarkMode ? '#FFFFFF' : '#000000',
+                borderColor: '#000000',
                 '&:hover': {
-                  backgroundColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
-                  borderColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
+                  backgroundColor: '#1A1A1A',
+                  borderColor: '#1A1A1A',
                 }
               }}
             >
@@ -674,13 +691,13 @@ const OrderSuccess = () => {
               }
             }}
             sx={{
-              backgroundColor: isDarkMode ? '#FFFFFF' : '#000000',
-              color: isDarkMode ? '#000000' : '#FFFFFF',
+              backgroundColor: '#000000',
+              color: '#FFFFFF',
               border: '1px solid',
-              borderColor: isDarkMode ? '#FFFFFF' : '#000000',
+              borderColor: '#000000',
               '&:hover': {
-                backgroundColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
-                borderColor: isDarkMode ? '#F5F5F5' : '#1A1A1A',
+                backgroundColor: '#1A1A1A',
+                borderColor: '#1A1A1A',
               }
             }}
           >
@@ -691,13 +708,13 @@ const OrderSuccess = () => {
             variant="outlined"
             onClick={() => navigate('/')}
             sx={{
-              backgroundColor: isDarkMode ? '#000000' : '#FFFFFF',
-              color: isDarkMode ? '#FFFFFF' : '#000000',
+              backgroundColor: '#FFFFFF',
+              color: '#000000',
               border: '1px solid',
-              borderColor: isDarkMode ? '#FFFFFF' : '#000000',
+              borderColor: '#000000',
               '&:hover': {
-                backgroundColor: isDarkMode ? '#1A1A1A' : '#F5F5F5',
-                borderColor: isDarkMode ? '#FFFFFF' : '#000000',
+                backgroundColor: '#F5F5F5',
+                borderColor: '#000000',
               }
             }}
           >

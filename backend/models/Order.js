@@ -99,6 +99,11 @@ module.exports = (sequelize, DataTypes) => {
         model: 'territories',
         key: 'id'
       }
+    },
+    deliverySequence: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Order sequence for delivery route (lower number = earlier in route)'
     }
   }, {
     tableName: 'orders',

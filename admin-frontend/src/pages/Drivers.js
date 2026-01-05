@@ -11,6 +11,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TablePagination,
   IconButton,
   Chip,
   Dialog,
@@ -61,6 +62,8 @@ const Drivers = () => {
   const [showOtps, setShowOtps] = useState({}); // Track which OTPs are visible
   const [loadingOtps, setLoadingOtps] = useState({}); // Track OTP loading state
   const [invitingDriver, setInvitingDriver] = useState(null); // Track which driver is being invited
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   useEffect(() => {
     fetchDrivers();
@@ -172,7 +175,7 @@ const Drivers = () => {
       fetchDrivers();
     } catch (err) {
       console.error('Error deleting driver:', err);
-      setError(err.response?.data?.error || 'Failed to delete driver');
+      setError(err.response?.data?.error || 'Failed to delete rider');
     }
   };
 
@@ -252,7 +255,7 @@ const Drivers = () => {
     return (
       <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
         <CircularProgress />
-        <Typography variant="h6" sx={{ mt: 2 }}>Loading drivers...</Typography>
+        <Typography variant="h6" sx={{ mt: 2 }}>Loading riders...</Typography>
       </Container>
     );
   }
@@ -263,7 +266,7 @@ const Drivers = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <LocalShipping sx={{ fontSize: 40, color: colors.accentText }} />
           <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
-            Drivers Management
+            Riders Management
           </Typography>
         </Box>
         <Button
@@ -278,7 +281,7 @@ const Drivers = () => {
             }
           }}
         >
-          Add Driver
+          Add Rider
         </Button>
       </Box>
 
@@ -292,7 +295,7 @@ const Drivers = () => {
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Driver Name</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Rider Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Phone Number</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Credit Status</TableCell>
@@ -306,12 +309,12 @@ const Drivers = () => {
               <TableRow>
                 <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
-                    No drivers found. Click "Add Driver" to create one.
+                    No riders found. Click "Add Rider" to create one.
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              drivers.map((driver) => {
+              drivers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((driver) => {
                 const creditStatus = driver.creditStatus || {};
                 const balance = creditStatus.balance || 0;
                 const creditLimit = creditStatus.creditLimit || 0;
@@ -419,7 +422,7 @@ const Drivers = () => {
                         )}
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Edit Driver">
+                    <Tooltip title="Edit Rider">
                       <IconButton
                         size="small"
                         onClick={() => handleOpenDialog(driver)}
@@ -428,7 +431,7 @@ const Drivers = () => {
                         <Edit />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Delete Driver">
+                    <Tooltip title="Delete Rider">
                       <IconButton
                         size="small"
                         onClick={() => handleDelete(driver.id)}
@@ -444,12 +447,24 @@ const Drivers = () => {
             )}
           </TableBody>
         </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50, 100]}
+          component="div"
+          count={drivers.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(event, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(event) => {
+            setRowsPerPage(parseInt(event.target.value, 10));
+            setPage(0);
+          }}
+        />
       </TableContainer>
 
-      {/* Add/Edit Driver Dialog */}
+      {/* Add/Edit Rider Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
         <DialogTitle>
-          {editingDriver ? 'Edit Driver' : 'Add New Driver'}
+          {editingDriver ? 'Edit Rider' : 'Add New Rider'}
         </DialogTitle>
         <DialogContent>
           {error && (
@@ -459,7 +474,7 @@ const Drivers = () => {
           )}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
             <TextField
-              label="Driver Name"
+              label="Rider Name"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               fullWidth
