@@ -142,10 +142,58 @@ async function runMigrations() {
     await db.sequelize.authenticate();
     console.log('✅ Database connection established\n');
 
+async function addDriverLocationColumns() {
+  try {
+    console.log('📦 Running migration: add-driver-location-columns');
+    console.log('   Add locationLatitude and locationLongitude to drivers table');
+    
+    // Check if locationLatitude column exists
+    const [locationLatitudeResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'locationLatitude'
+    `);
+    
+    if (locationLatitudeResults.length === 0) {
+      await db.sequelize.query(`
+        ALTER TABLE drivers 
+        ADD COLUMN "locationLatitude" DECIMAL(10, 8)
+      `);
+      console.log('   ✅ locationLatitude column added to drivers table');
+    } else {
+      console.log('   ⏭️  locationLatitude column already exists in drivers table');
+    }
+    
+    // Check if locationLongitude column exists
+    const [locationLongitudeResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'locationLongitude'
+    `);
+    
+    if (locationLongitudeResults.length === 0) {
+      await db.sequelize.query(`
+        ALTER TABLE drivers 
+        ADD COLUMN "locationLongitude" DECIMAL(11, 8)
+      `);
+      console.log('   ✅ locationLongitude column added to drivers table');
+    } else {
+      console.log('   ⏭️  locationLongitude column already exists in drivers table');
+    }
+    
+    console.log('   ✅ Migration add-driver-location-columns completed\n');
+    return true;
+  } catch (error) {
+    console.error('   ❌ Migration add-driver-location-columns failed:', error.message);
+    throw error;
+  }
+}
+
     // Run migrations in order
     const migrations = [
       { name: 'add-brands-table', fn: addBrandsTable },
-      { name: 'add-brand-focus', fn: addBrandFocusColumn }
+      { name: 'add-brand-focus', fn: addBrandFocusColumn },
+      { name: 'add-driver-location-columns', fn: addDriverLocationColumns }
     ];
 
     let successCount = 0;
