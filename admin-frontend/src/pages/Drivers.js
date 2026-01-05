@@ -43,6 +43,8 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import io from 'socket.io-client';
+import { getBackendUrl } from '../utils/backendUrl';
 
 const Drivers = () => {
   const { isDarkMode, colors } = useTheme();
@@ -67,6 +69,32 @@ const Drivers = () => {
 
   useEffect(() => {
     fetchDrivers();
+    
+    // Set up Socket.IO for real-time driver status updates
+    const socketUrl = getBackendUrl();
+    const socket = io(socketUrl);
+    socket.emit('join-admin');
+    
+    // Listen for driver shift events
+    socket.on('driver-shift-started', (data) => {
+      console.log('Driver started shift:', data);
+      fetchDrivers(); // Refresh drivers list
+    });
+    
+    socket.on('driver-shift-ended', (data) => {
+      console.log('Driver ended shift:', data);
+      fetchDrivers(); // Refresh drivers list
+    });
+    
+    // Listen for general driver status updates
+    socket.on('driver-status-updated', (data) => {
+      console.log('Driver status updated:', data);
+      fetchDrivers(); // Refresh drivers list
+    });
+    
+    return () => {
+      socket.close();
+    };
   }, []);
 
   const fetchDriverOtp = async (driverId, phoneNumber) => {
@@ -200,10 +228,10 @@ const Drivers = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'active': return 'success';
+      case 'active': return 'success'; // On Shift
       case 'inactive': return 'default';
       case 'on_delivery': return 'warning';
-      case 'offline': return 'error';
+      case 'offline': return 'error'; // Off Shift
       default: return 'default';
     }
   };
@@ -220,10 +248,10 @@ const Drivers = () => {
 
   const getStatusLabel = (status) => {
     switch (status) {
-      case 'active': return 'Active';
+      case 'active': return 'On Shift';
       case 'inactive': return 'Inactive';
       case 'on_delivery': return 'On Delivery';
-      case 'offline': return 'Offline';
+      case 'offline': return 'Off Shift';
       default: return status;
     }
   };
