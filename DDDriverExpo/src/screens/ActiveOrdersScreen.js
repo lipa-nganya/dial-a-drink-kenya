@@ -206,8 +206,8 @@ const ActiveOrdersScreen = ({ route, navigation }) => {
     await scheduleOrderNotification(order);
     
     // Navigate to OrderAcceptance screen
+    // Use replace to ensure the screen appears immediately and can't be dismissed
     try {
-      const parentNavigation = navigation.getParent();
       const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
       
       // Clear HomeScreen vibration interval before navigating (OrderAcceptanceScreen will handle its own)
@@ -215,31 +215,70 @@ const ActiveOrdersScreen = ({ route, navigation }) => {
       if (socketRef.current?.vibInterval) {
         clearInterval(socketRef.current.vibInterval);
         socketRef.current.vibInterval = null;
-        console.log('✅ Cleared HomeScreen vibration interval before navigation');
+        console.log('✅ Cleared ActiveOrdersScreen vibration interval before navigation');
       }
       
-      if (parentNavigation) {
-        console.log('✅ Using parent navigator to navigate to OrderAcceptance');
-        parentNavigation.navigate('OrderAcceptance', {
-          order: order,
-          driverId: driverInfo?.id,
-          phoneNumber: phone,
-          playSound: playSound
-        });
-      } else {
-        console.log('⚠️ No parent navigator, trying direct navigation');
-        navigation.navigate('OrderAcceptance', {
-          order: order,
-          driverId: driverInfo?.id,
-          phoneNumber: phone,
-          playSound: playSound
-        });
+      // Get the root navigator (Stack Navigator) to navigate to OrderAcceptance
+      // ActiveOrdersScreen is inside Tab Navigator, which is inside Stack Navigator
+      let rootNavigator = navigation;
+      let attempts = 0;
+      while (rootNavigator && attempts < 5) {
+        const parent = rootNavigator.getParent();
+        if (parent) {
+          rootNavigator = parent;
+        } else {
+          break;
+        }
+        attempts++;
       }
+      
+      console.log('🚀 Navigating to OrderAcceptance screen...');
+      console.log('   Order ID:', order.id);
+      console.log('   Driver ID:', driverInfo?.id);
+      console.log('   Play Sound:', playSound);
+      console.log('   Using root navigator:', !!rootNavigator);
+      
+      // Use replace to ensure immediate display and prevent back navigation
+      const navToUse = rootNavigator || navigation;
+      navToUse.replace('OrderAcceptance', {
+        order: order,
+        driverId: driverInfo?.id,
+        phoneNumber: phone,
+        playSound: playSound
+      });
+      
+      console.log('✅ Replace navigation sent to OrderAcceptance screen');
     } catch (navError) {
       console.error('❌ Navigation error:', navError);
-      setSnackbarMessage(`Order #${order.id} has been assigned to you. Please check your orders.`);
-      setSnackbarType('info');
-      setSnackbarVisible(true);
+      console.error('❌ Navigation error details:', {
+        message: navError.message,
+        stack: navError.stack,
+        navigation: navigation,
+        hasParent: !!navigation.getParent()
+      });
+      
+      // Fallback: Try using CommonActions
+      try {
+        const { CommonActions } = require('@react-navigation/native');
+        const phone = phoneNumber || await AsyncStorage.getItem('driver_phone');
+        navigation.dispatch(
+          CommonActions.replace({
+            name: 'OrderAcceptance',
+            params: {
+              order: order,
+              driverId: driverInfo?.id,
+              phoneNumber: phone,
+              playSound: playSound
+            }
+          })
+        );
+        console.log('✅ Used CommonActions fallback replace');
+      } catch (fallbackError) {
+        console.error('❌ Fallback navigation also failed:', fallbackError);
+        setSnackbarMessage(`Order #${order.id} has been assigned to you. Please check your orders.`);
+        setSnackbarType('info');
+        setSnackbarVisible(true);
+      }
     }
     
     // Remove from processing set after a delay to allow re-processing if needed (e.g., if order is reassigned)
