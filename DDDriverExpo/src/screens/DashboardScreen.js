@@ -155,29 +155,66 @@ const DashboardScreen = ({ navigation }) => {
     await scheduleOrderNotification(order);
     
     // Navigate to OrderAcceptance screen
+    // DashboardScreen is inside Tab Navigator, which is inside Stack Navigator
+    // We need to navigate to the Stack Navigator level to reach OrderAcceptance
     try {
-      const parentNavigation = navigation.getParent();
       const phone = await AsyncStorage.getItem('driver_phone');
       
-      if (parentNavigation) {
-        console.log('✅ Dashboard: Using parent navigator to navigate to OrderAcceptance');
-        parentNavigation.navigate('OrderAcceptance', {
-          order: order,
-          driverId: driverInfo?.id,
-          phoneNumber: phone,
-          playSound: playSound
-        });
-      } else {
-        console.log('⚠️ Dashboard: No parent navigator, trying direct navigation');
-        navigation.navigate('OrderAcceptance', {
-          order: order,
-          driverId: driverInfo?.id,
-          phoneNumber: phone,
-          playSound: playSound
-        });
+      // Try to get the root navigator (Stack Navigator)
+      let rootNavigator = navigation;
+      let attempts = 0;
+      while (rootNavigator && attempts < 5) {
+        const parent = rootNavigator.getParent();
+        if (parent) {
+          rootNavigator = parent;
+        } else {
+          break;
+        }
+        attempts++;
       }
+      
+      console.log('✅ Dashboard: Navigating to OrderAcceptance screen');
+      console.log('   Order ID:', order.id);
+      console.log('   Driver ID:', driverInfo?.id);
+      console.log('   Play Sound:', playSound);
+      
+      // Use root navigator or fallback to navigation
+      // Use replace instead of navigate to ensure OrderAcceptanceScreen appears immediately
+      const navToUse = rootNavigator || navigation;
+      navToUse.replace('OrderAcceptance', {
+        order: order,
+        driverId: driverInfo?.id,
+        phoneNumber: phone,
+        playSound: playSound
+      });
+      
+      console.log('✅ Dashboard: Replace navigation sent to OrderAcceptance (will appear immediately)');
     } catch (navError) {
       console.error('❌ Dashboard: Navigation error:', navError);
+      console.error('❌ Navigation error details:', {
+        message: navError.message,
+        stack: navError.stack
+      });
+      
+      // Fallback: Try using CommonActions to replace
+      try {
+        const { CommonActions } = require('@react-navigation/native');
+        const phone = await AsyncStorage.getItem('driver_phone');
+        navigation.dispatch(
+          CommonActions.replace({
+            name: 'OrderAcceptance',
+            params: {
+              order: order,
+              driverId: driverInfo?.id,
+              phoneNumber: phone,
+              playSound: playSound
+            }
+          })
+        );
+        console.log('✅ Dashboard: Used CommonActions fallback replace');
+      } catch (fallbackError) {
+        console.error('❌ Dashboard: Fallback navigation also failed:', fallbackError);
+      }
     }
     
     // Remove from processing set after delay
