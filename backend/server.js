@@ -331,6 +331,42 @@ async function addMissingColumns(db) {
       console.log('✅ deliverySequence column already exists in orders table');
     }
     
+    // Check if locationLatitude column exists in drivers table
+    const [locationLatitudeResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'locationLatitude'
+    `);
+    
+    if (locationLatitudeResults.length === 0) {
+      console.log('📝 Adding missing locationLatitude column to drivers table...');
+      await db.sequelize.query(`
+        ALTER TABLE drivers 
+        ADD COLUMN "locationLatitude" DECIMAL(10, 8)
+      `);
+      console.log('✅ Added locationLatitude column to drivers table');
+    } else {
+      console.log('✅ locationLatitude column already exists in drivers table');
+    }
+    
+    // Check if locationLongitude column exists in drivers table
+    const [locationLongitudeResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drivers' AND column_name = 'locationLongitude'
+    `);
+    
+    if (locationLongitudeResults.length === 0) {
+      console.log('📝 Adding missing locationLongitude column to drivers table...');
+      await db.sequelize.query(`
+        ALTER TABLE drivers 
+        ADD COLUMN "locationLongitude" DECIMAL(11, 8)
+      `);
+      console.log('✅ Added locationLongitude column to drivers table');
+    } else {
+      console.log('✅ locationLongitude column already exists in drivers table');
+    }
+    
     // Check if 'cash' exists in payment_method_enum
     const [enumResults] = await db.sequelize.query(`
       SELECT unnest(enum_range(NULL::payment_method_enum))::text AS enum_value
