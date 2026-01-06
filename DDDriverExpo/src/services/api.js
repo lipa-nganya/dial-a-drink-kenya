@@ -69,12 +69,12 @@ const getBaseURL = () => {
   
   // Priority 1: Check update channel FIRST (for OTA updates via QR code)
   // This ensures channel-based routing takes precedence over environment variables
-  if (updateChannel === 'local-dev') {
-    // For local-dev channel, use ngrok URL (from env if set, otherwise hardcoded)
+  if (updateChannel === 'local' || updateChannel === 'local-dev') {
+    // For local/local-dev channel, use ngrok URL (from env if set, otherwise hardcoded)
     const ngrokUrl = envBase && (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1'))
       ? envBase
       : 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] local-dev channel detected - using ngrok URL:', `${ngrokUrl}/api`);
+    console.log('🌐 [API] local channel detected - using ngrok URL:', `${ngrokUrl}/api`);
     return `${ngrokUrl}/api`;
   }
   
