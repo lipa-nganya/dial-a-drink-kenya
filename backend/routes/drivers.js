@@ -7,6 +7,65 @@ const { verifyAdmin } = require('./admin');
 const { Expo } = require('expo-server-sdk');
 const { checkDriverCreditLimit } = require('../utils/creditLimit');
 
+/**
+ * Calculate cash at hand for a driver from transactions
+ * Cash at hand = Cash collected from pay_on_delivery orders - Cash settlements (remittances)
+ * Note: cash_settlement transactions can be:
+ *   - Positive: Cash received/recorded (should not affect cash at hand calculation)
+ *   - Negative: Cash remitted to company (decreases cash at hand)
+ * @param {number} driverId - Driver ID
+ * @returns {Promise<number>} - Calculated cash at hand
+ */
+async function calculateCashAtHand(driverId) {
+  try {
+    // Get all cash collected from pay_on_delivery orders that are paid
+    const cashOrders = await db.Order.findAll({
+      where: {
+        driverId: driverId,
+        paymentType: 'pay_on_delivery',
+        paymentStatus: 'paid',
+        status: {
+          [Op.in]: ['delivered', 'completed']
+        }
+      },
+      attributes: ['id', 'totalAmount']
+    });
+
+    // Sum cash collected from orders
+    const cashCollected = cashOrders.reduce((sum, order) => {
+      return sum + (parseFloat(order.totalAmount) || 0);
+    }, 0);
+
+    // Get all cash settlement transactions where driver remits cash to company
+    // These are negative amounts (cash going from driver to business)
+    const cashSettlements = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        status: 'completed',
+        amount: {
+          [Op.lt]: 0 // Only negative amounts (cash remitted)
+        }
+      },
+      attributes: ['amount']
+    });
+
+    // Sum cash remitted (amounts are negative, so we add them to subtract from cash at hand)
+    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => {
+      return sum + (parseFloat(tx.amount) || 0);
+    }, 0));
+
+    // Cash at hand = Cash collected - Cash remitted
+    const cashAtHand = cashCollected - cashRemitted;
+
+    return Math.max(0, cashAtHand); // Ensure non-negative
+  } catch (error) {
+    console.error(`Error calculating cash at hand for driver ${driverId}:`, error);
+    // On error, return 0
+    return 0;
+  }
+}
+
 // Public routes (for driver app) - no authentication required
 /**
  * Get driver by phone number (for driver app)
@@ -207,32 +266,51 @@ router.get('/debug/list', async (req, res) => {
  */
 router.put('/:id/location', async (req, res) => {
   try {
+    console.log('📍📍📍 LOCATION UPDATE REQUEST RECEIVED 📍📍📍');
+    console.log('📍 Request params:', req.params);
+    console.log('📍 Request body:', req.body);
+    console.log('📍 Request headers:', req.headers);
+    
     const { id } = req.params;
     const { latitude, longitude } = req.body;
 
+    console.log(`📍 Processing location update for driver ID: ${id}`);
+    console.log(`📍 Latitude: ${latitude}, Longitude: ${longitude}`);
+
     if (!latitude || !longitude) {
+      console.log('❌ Missing latitude or longitude');
       return res.status(400).json({ error: 'Latitude and longitude are required' });
     }
 
     const lat = parseFloat(latitude);
     const lng = parseFloat(longitude);
 
+    console.log(`📍 Parsed values - Lat: ${lat}, Lng: ${lng}`);
+
     if (isNaN(lat) || isNaN(lng)) {
+      console.log('❌ Invalid latitude or longitude values (NaN)');
       return res.status(400).json({ error: 'Invalid latitude or longitude values' });
     }
 
     if (lat < -90 || lat > 90) {
+      console.log(`❌ Latitude out of range: ${lat}`);
       return res.status(400).json({ error: 'Latitude must be between -90 and 90' });
     }
 
     if (lng < -180 || lng > 180) {
+      console.log(`❌ Longitude out of range: ${lng}`);
       return res.status(400).json({ error: 'Longitude must be between -180 and 180' });
     }
 
+    console.log(`📍 Looking up driver with ID: ${id}`);
     const driver = await db.Driver.findByPk(id);
     if (!driver) {
+      console.log(`❌ Driver not found with ID: ${id}`);
       return res.status(404).json({ error: 'Driver not found' });
     }
+
+    console.log(`✅ Driver found: ${driver.name} (ID: ${driver.id})`);
+    console.log(`📍 Updating location from (${driver.locationLatitude}, ${driver.locationLongitude}) to (${lat}, ${lng})`);
 
     await driver.update({
       locationLatitude: lat,
@@ -240,7 +318,7 @@ router.put('/:id/location', async (req, res) => {
       lastActivity: new Date()
     });
 
-    console.log(`✅ Updated location for driver ${driver.name} (ID: ${id}): ${lat}, ${lng}`);
+    console.log(`✅✅✅ Updated location for driver ${driver.name} (ID: ${id}): ${lat}, ${lng}`);
 
     res.json({
       success: true,
@@ -253,7 +331,8 @@ router.put('/:id/location', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error updating driver location:', error);
+    console.error('❌❌❌ Error updating driver location:', error);
+    console.error('❌ Error stack:', error.stack);
     res.status(500).json({ error: error.message });
   }
 });
@@ -668,7 +747,7 @@ router.get('/', async (req, res) => {
       }
     }
     
-    // Add credit limit status to each driver
+    // Add credit limit status and calculated cash at hand to each driver
     const driversWithCreditStatus = await Promise.all(drivers.map(async (driver) => {
       const driverData = driver.toJSON();
       const creditCheck = await checkDriverCreditLimit(driver.id);
@@ -679,6 +758,11 @@ router.get('/', async (req, res) => {
         debt: creditCheck.debt,
         canAcceptOrders: creditCheck.canAcceptOrders
       };
+      
+      // Calculate cash at hand from transactions (overrides stored value)
+      const calculatedCashAtHand = await calculateCashAtHand(driver.id);
+      driverData.cashAtHand = calculatedCashAtHand;
+      
       return driverData;
     }));
     

@@ -62,21 +62,33 @@ const LocationGate = ({ driverId, onLocationSet }) => {
 
       // Update driver location on backend
       try {
+        console.log(`📍📍📍 Sending location update to backend for driver ${driverId}`);
+        console.log(`📍 Location: ${latitude}, ${longitude}`);
+        console.log(`📍 API base URL: ${api.defaults.baseURL}`);
+        
         const response = await api.put(`/drivers/${driverId}/location`, {
           latitude,
           longitude
         });
 
-        if (response.data.success) {
-          console.log('✅ Driver location updated successfully');
+        console.log('📍 Location update response:', response.data);
+        console.log('📍 Response status:', response.status);
+
+        if (response.data && response.data.success) {
+          console.log('✅✅✅ Driver location updated successfully');
           await AsyncStorage.setItem('driver_location_set', 'true');
           onLocationSet();
         } else {
-          throw new Error('Failed to update location on server');
+          console.error('❌ Location update failed - response.data:', response.data);
+          throw new Error(response.data?.error || 'Failed to update location on server');
         }
       } catch (updateError) {
-        console.error('Error updating location:', updateError);
-        setError('Failed to update location. Please try again.');
+        console.error('❌❌❌ Error updating location:', updateError);
+        console.error('❌ Error response:', updateError.response?.data);
+        console.error('❌ Error status:', updateError.response?.status);
+        console.error('❌ Error message:', updateError.message);
+        const errorMessage = updateError.response?.data?.error || updateError.message || 'Failed to update location. Please try again.';
+        setError(errorMessage);
         setLoading(false);
       }
     } catch (err) {
