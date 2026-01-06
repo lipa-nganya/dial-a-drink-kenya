@@ -177,9 +177,20 @@ async function loadFullApplication() {
 
       socket.on('register-driver', (driverId) => {
         // Register driver socket for direct emission (no rooms)
-        driverSocketMap.set(parseInt(driverId), socket.id);
-        console.log(`✅✅✅ Driver ${driverId} registered with socket ${socket.id}`);
+        const driverIdInt = parseInt(driverId);
+        driverSocketMap.set(driverIdInt, socket.id);
+        console.log(`✅✅✅✅✅ Driver ${driverIdInt} registered with socket ${socket.id}`);
         console.log(`✅✅✅ Total registered drivers: ${driverSocketMap.size}`);
+        console.log(`✅✅✅ All registered drivers:`, Array.from(driverSocketMap.entries()).map(([id, sockId]) => `Driver ${id} -> ${sockId}`));
+      });
+      
+      // Also handle old 'join-driver' event for backward compatibility (but log it)
+      socket.on('join-driver', (driverId) => {
+        console.log(`⚠️⚠️⚠️ OLD 'join-driver' event received for driver ${driverId} - app may need OTA update`);
+        console.log(`⚠️ Converting to 'register-driver' for backward compatibility`);
+        const driverIdInt = parseInt(driverId);
+        driverSocketMap.set(driverIdInt, socket.id);
+        console.log(`✅✅✅ Driver ${driverIdInt} registered via legacy join-driver with socket ${socket.id}`);
       });
 
       socket.on('join-order', (orderId) => {
