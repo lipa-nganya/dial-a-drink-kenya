@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { StatusBar, Platform } from 'react-native';
+import { StatusBar, Platform, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -302,6 +302,7 @@ const App = () => {
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [showPushOverlay, setShowPushOverlay] = useState(false);
+  const [driverName, setDriverName] = useState('Driver');
 
   // Check for OTA updates
   useEffect(() => {
@@ -409,12 +410,37 @@ const App = () => {
   useEffect(() => {
     console.log('🔔 Setting up global push notification listener for overlay');
     
+    // Load driver name when setting up listeners
+    const loadDriverNameForOverlay = async () => {
+      try {
+        const driverPhone = await AsyncStorage.getItem('driver_phone');
+        const isLoggedIn = await AsyncStorage.getItem('driver_logged_in');
+        if (driverPhone && isLoggedIn === 'true') {
+          const driverResponse = await api.get(`/drivers/phone/${driverPhone}`);
+          if (driverResponse.data?.name) {
+            setDriverName(driverResponse.data.name);
+            console.log('✅ Driver name loaded in notification listener:', driverResponse.data.name);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error loading driver name in notification listener:', error);
+      }
+    };
+    
+    // Load driver name immediately
+    loadDriverNameForOverlay();
+    
     // Listen for notification events from the handler
     const handleNotificationEvent = (notification) => {
       console.log('📱 Notification event received:', notification);
+      console.log('📱 Notification data:', notification?.request?.content?.data);
+      console.log('📱 Current driverName:', driverName);
       console.log('📱 Showing overlay from event...');
-      setShowPushOverlay(true);
-      console.log('📱 Overlay state set to true from event');
+      // Force overlay to show - use setTimeout to ensure state update happens
+      setTimeout(() => {
+        setShowPushOverlay(true);
+        console.log('📱 Overlay state set to true from event (after timeout), driverName:', driverName);
+      }, 100);
     };
     
     notificationEvents.on('notification-received', handleNotificationEvent);
@@ -424,23 +450,65 @@ const App = () => {
       console.log('📱 Push notification received globally (received):', notification);
       console.log('📱 Notification data:', notification.request?.content?.data);
       console.log('📱 Showing overlay...');
-      // Show overlay for any push notification
-      setShowPushOverlay(true);
-      console.log('📱 Overlay state set to true, showPushOverlay:', true);
+      // Show overlay for any push notification - use setTimeout to ensure state update
+      setTimeout(() => {
+        setShowPushOverlay(true);
+        console.log('📱 Overlay state set to true, showPushOverlay:', true);
+      }, 100);
     });
 
     // Also listen for notification responses (when user taps notification)
     const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
       console.log('📱 Push notification tapped globally (response):', response);
+      console.log('📱 Notification data:', response.notification?.request?.content?.data);
       console.log('📱 Showing overlay from response...');
-      setShowPushOverlay(true);
-      console.log('📱 Overlay state set to true from response');
+      // Use setTimeout to ensure state update happens after navigation
+      setTimeout(() => {
+        setShowPushOverlay(true);
+        console.log('📱 Overlay state set to true from response (after timeout)');
+      }, 200);
     });
+
+    // Handle app state changes - check for notifications when app comes to foreground
+    const handleAppStateChange = async (nextAppState) => {
+      console.log('📱 App state changed to:', nextAppState);
+      if (nextAppState === 'active') {
+        console.log('📱 App came to foreground, checking for last notification...');
+        try {
+          // Get the last notification response (if user tapped notification while app was in background)
+          const lastNotificationResponse = await Notifications.getLastNotificationResponseAsync();
+          if (lastNotificationResponse) {
+            console.log('📱 Found last notification response:', lastNotificationResponse);
+            console.log('📱 Notification data:', lastNotificationResponse.notification?.request?.content?.data);
+            console.log('📱 Showing overlay from last notification...');
+            // Use setTimeout to ensure state update happens after app comes to foreground
+            setTimeout(() => {
+              setShowPushOverlay(true);
+              console.log('📱 Overlay state set to true from last notification (after timeout)');
+            }, 300);
+          } else {
+            console.log('📱 No last notification response found');
+          }
+        } catch (error) {
+          console.error('❌ Error getting last notification response:', error);
+        }
+      }
+    };
+
+    const appStateSubscription = AppState.addEventListener('change', handleAppStateChange);
+
+    // Check immediately if app is already active and there's a pending notification
+    (async () => {
+      if (AppState.currentState === 'active') {
+        await handleAppStateChange('active');
+      }
+    })();
 
     return () => {
       notificationEvents.off('notification-received', handleNotificationEvent);
       receivedSubscription.remove();
       responseSubscription.remove();
+      appStateSubscription.remove();
     };
   }, []);
 
@@ -448,6 +516,49 @@ const App = () => {
     // Start with update check, then auth check
     checkForUpdates();
   }, []);
+
+  // Load driver name when app becomes active (if not already loaded)
+  useEffect(() => {
+    const loadDriverName = async () => {
+      try {
+        const driverPhone = await AsyncStorage.getItem('driver_phone');
+        const isLoggedIn = await AsyncStorage.getItem('driver_logged_in');
+        
+        console.log('📱 Checking driver name - driverPhone:', driverPhone, 'isLoggedIn:', isLoggedIn, 'current driverName:', driverName);
+        
+        if (driverPhone && isLoggedIn === 'true') {
+          // Always try to load driver name if we have phone and login status
+          console.log('📱 Loading driver name for overlay...');
+          const driverResponse = await api.get(`/drivers/phone/${driverPhone}`);
+          if (driverResponse.data?.name) {
+            const newDriverName = driverResponse.data.name;
+            console.log('✅ Driver name loaded for overlay:', newDriverName);
+            setDriverName(newDriverName);
+          } else {
+            console.log('⚠️ Driver name not found in response');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error loading driver name:', error);
+      }
+    };
+
+    // Load driver name when app becomes active
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        loadDriverName();
+      }
+    });
+
+    // Also load immediately if app is already active
+    if (AppState.currentState === 'active') {
+      loadDriverName();
+    }
+
+    return () => {
+      subscription.remove();
+    };
+  }, []); // Remove driverName from dependencies to avoid infinite loop
 
   const checkAuthStatus = async () => {
     try {
@@ -465,6 +576,11 @@ const App = () => {
           
           if (driverResponse.data && driverResponse.data.hasPin) {
             console.log('✅ PIN exists in database for this phone, going to Home');
+            // Load driver name for overlay
+            if (driverResponse.data.name) {
+              setDriverName(driverResponse.data.name);
+              console.log('✅ Driver name loaded:', driverResponse.data.name);
+            }
             setInitialRoute('Home');
             setIsLoading(false);
             return;
@@ -497,7 +613,7 @@ const App = () => {
     return null;
   }
 
-  console.log('🎨 App render - showPushOverlay:', showPushOverlay);
+  console.log('🎨 App render - showPushOverlay:', showPushOverlay, 'driverName:', driverName);
 
   return (
     <ThemeProvider>
@@ -507,10 +623,12 @@ const App = () => {
         translucent={false}
       />
       <AppNavigator initialRoute={initialRoute} />
+      {/* Render overlay outside NavigationContainer for production builds */}
       <PushNotificationOverlay 
         visible={showPushOverlay} 
+        driverName={driverName}
         onClose={() => {
-          console.log('🟢 Overlay onClose called');
+          console.log('🟢 Overlay onClose called, current driverName:', driverName);
           setShowPushOverlay(false);
         }} 
       />

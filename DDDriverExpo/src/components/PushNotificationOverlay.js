@@ -12,20 +12,25 @@ import {
 
 const { width, height } = Dimensions.get('window');
 
-const PushNotificationOverlay = ({ visible, onClose }) => {
+const PushNotificationOverlay = ({ visible, onClose, driverName = 'Driver' }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    console.log('🟢 PushNotificationOverlay: useEffect triggered, visible:', visible, 'driverName:', driverName);
     if (visible) {
+      console.log('🟢 PushNotificationOverlay: Starting animation, driverName:', driverName);
       // Animate in
       Animated.timing(fadeAnim, {
         toValue: 1,
         duration: 300,
         useNativeDriver: true,
-      }).start();
+      }).start(() => {
+        console.log('🟢 PushNotificationOverlay: Animation completed');
+      });
 
       // Auto close after 3 seconds
       const timer = setTimeout(() => {
+        console.log('🟢 PushNotificationOverlay: Auto-closing after 3 seconds');
         handleClose();
       }, 3000);
 
@@ -34,7 +39,7 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
       // Reset animation when hidden
       fadeAnim.setValue(0);
     }
-  }, [visible]);
+  }, [visible, driverName]);
 
   const handleClose = () => {
     console.log('🟢 PushNotificationOverlay: Closing overlay');
@@ -50,16 +55,20 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
 
   useEffect(() => {
     if (visible) {
-      console.log('🟢 PushNotificationOverlay: visible=true, showing overlay');
+      console.log('🟢 PushNotificationOverlay: visible=true, showing overlay, driverName:', driverName);
     } else {
       console.log('🔴 PushNotificationOverlay: visible=false, hiding overlay');
     }
-  }, [visible]);
+  }, [visible, driverName]);
 
-  if (!visible) {
-    return null;
-  }
+  console.log('🟢 PushNotificationOverlay: Render check - visible:', visible, 'driverName:', driverName);
 
+  // Always render Modal (even when not visible) to ensure it works in production builds
+  // Modal's visible prop will handle the actual visibility
+  console.log('🟢 PushNotificationOverlay: Rendering Modal with visible:', visible, 'driverName:', driverName);
+
+  // Always render Modal, but control visibility
+  // This ensures Modal works in production builds (not just Expo Go)
   return (
     <Modal
       visible={visible}
@@ -76,10 +85,12 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
           styles.overlay,
           {
             opacity: fadeAnim,
+            zIndex: 999999,
+            elevation: 999999, // Android elevation
           },
         ]}
       >
-        <Text style={styles.greetingText}>Hi Maria</Text>
+        <Text style={styles.greetingText}>Hi {driverName}</Text>
       </Animated.View>
     </Modal>
   );
@@ -97,6 +108,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     zIndex: 99999,
+    elevation: 99999, // Android elevation - ensure it's on top
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
@@ -105,6 +117,7 @@ const styles = StyleSheet.create({
       },
       android: {
         paddingTop: 0,
+        elevation: 99999, // Ensure highest elevation on Android
       },
     }),
   },
