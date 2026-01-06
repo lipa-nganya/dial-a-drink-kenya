@@ -407,16 +407,28 @@ const App = () => {
   // Set up global push notification listener to show overlay
   useEffect(() => {
     console.log('🔔 Setting up global push notification listener for overlay');
-    const subscription = Notifications.addNotificationReceivedListener(notification => {
-      console.log('📱 Push notification received globally:', notification);
+    
+    // Listen for notifications received (when app is in foreground)
+    const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
+      console.log('📱 Push notification received globally (received):', notification);
+      console.log('📱 Notification data:', notification.request?.content?.data);
       console.log('📱 Showing overlay...');
       // Show overlay for any push notification
       setShowPushOverlay(true);
-      console.log('📱 Overlay state set to true');
+      console.log('📱 Overlay state set to true, showPushOverlay:', true);
+    });
+
+    // Also listen for notification responses (when user taps notification)
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(response => {
+      console.log('📱 Push notification tapped globally (response):', response);
+      console.log('📱 Showing overlay from response...');
+      setShowPushOverlay(true);
+      console.log('📱 Overlay state set to true from response');
     });
 
     return () => {
-      subscription.remove();
+      receivedSubscription.remove();
+      responseSubscription.remove();
     };
   }, []);
 
@@ -473,6 +485,8 @@ const App = () => {
     return null;
   }
 
+  console.log('🎨 App render - showPushOverlay:', showPushOverlay);
+
   return (
     <ThemeProvider>
       <StatusBar 
@@ -483,7 +497,10 @@ const App = () => {
       <AppNavigator initialRoute={initialRoute} />
       <PushNotificationOverlay 
         visible={showPushOverlay} 
-        onClose={() => setShowPushOverlay(false)} 
+        onClose={() => {
+          console.log('🟢 Overlay onClose called');
+          setShowPushOverlay(false);
+        }} 
       />
     </ThemeProvider>
   );
