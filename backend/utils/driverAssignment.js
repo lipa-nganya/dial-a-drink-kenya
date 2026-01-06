@@ -22,29 +22,30 @@ const findNearestActiveDriverToBranch = async (branchId) => {
     }
     console.log(`📍 [DriverAssignment] Branch found: ${branch.name} at ${branch.address}`);
 
+    // FOR LOCAL TESTING: Always assign to Mar-Loc (ID: 6)
+    if (process.env.NODE_ENV !== 'production' || process.env.FORCE_MAR_LOC === 'true') {
+      const marLoc = await db.Driver.findByPk(6);
+      if (marLoc && marLoc.status === 'active') {
+        console.log(`[DriverAssignment] LOCAL TESTING: Assigning to Mar-Loc (ID: 6)`);
+        return marLoc;
+      }
+    }
+
     // Get ONLY drivers who are on shift (status = 'active')
-    // Drivers must be on shift to receive orders
-    // Note: Location check removed - drivers can receive orders without location
     const availableDrivers = await db.Driver.findAll({
       where: {
         status: 'active'
       }
     });
 
-    console.log(`👥 [DriverAssignment] Found ${availableDrivers.length} available driver(s):`, 
-      availableDrivers.map(d => `${d.name} (ID: ${d.id}, status: ${d.status})`).join(', '));
-
     // Filter out drivers who have exceeded their credit limit
     const eligibleDrivers = await filterDriversByCreditLimit(availableDrivers);
-    console.log(`💳 [DriverAssignment] After credit limit check: ${eligibleDrivers.length} eligible driver(s) (${availableDrivers.length - eligibleDrivers.length} excluded due to credit limit)`);
 
     if (!eligibleDrivers || eligibleDrivers.length === 0) {
-      console.log('⚠️  [DriverAssignment] No eligible drivers found (all exceeded credit limit). Defaulting to HOLD driver.');
       const holdDriver = await getOrCreateHoldDriver();
       return holdDriver;
     }
     
-    // All drivers are already 'active' and have location, so use all eligible drivers
     const driversToUse = eligibleDrivers;
 
     // If only one available driver, assign to them
@@ -175,8 +176,16 @@ const findNearestActiveDriverToBranch = async (branchId) => {
  */
 const findNearestActiveDriverToAddress = async (branchAddress) => {
   try {
+    // FOR LOCAL TESTING: Always assign to Mar-Loc (ID: 6)
+    if (process.env.NODE_ENV !== 'production' || process.env.FORCE_MAR_LOC === 'true') {
+      const marLoc = await db.Driver.findByPk(6);
+      if (marLoc && marLoc.status === 'active') {
+        console.log(`[DriverAssignment] LOCAL TESTING: Assigning to Mar-Loc (ID: 6)`);
+        return marLoc;
+      }
+    }
+
     // Get ONLY drivers who are on shift (status = 'active')
-    // Note: Location check removed - drivers can receive orders without location
     const availableDrivers = await db.Driver.findAll({
       where: {
         status: 'active'
@@ -185,15 +194,12 @@ const findNearestActiveDriverToAddress = async (branchAddress) => {
 
     // Filter out drivers who have exceeded their credit limit
     const eligibleDrivers = await filterDriversByCreditLimit(availableDrivers);
-    console.log(`💳 [DriverAssignment] After credit limit check: ${eligibleDrivers.length} eligible driver(s) (${availableDrivers.length - eligibleDrivers.length} excluded due to credit limit)`);
 
     if (!eligibleDrivers || eligibleDrivers.length === 0) {
-      console.log('⚠️  No eligible drivers found (all exceeded credit limit). Defaulting to HOLD driver.');
       const holdDriver = await getOrCreateHoldDriver();
       return holdDriver;
     }
 
-    // All drivers are already 'active' and have location, so use all eligible drivers
     const driversToUse = eligibleDrivers;
 
     // If only one available driver, assign to them
