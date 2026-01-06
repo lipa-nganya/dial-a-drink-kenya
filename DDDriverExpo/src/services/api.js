@@ -32,149 +32,52 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
-  // CRITICAL: Check update channel FIRST (for OTA updates via QR code)
-  // This MUST be checked before EXPO_PUBLIC_API_BASE_URL to ensure channel takes precedence
-  // local-dev channel → localhost/ngrok
-  // production/development/cloud-dev channels → cloud-dev API
+  const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
+  const appName = Constants.expoConfig?.name || '';
+  const isLocalBuild = bundleId?.includes('.local') || appName?.includes('Local');
+  
+  // ABSOLUTE PRIORITY: If bundle ID contains .local or app name contains "Local", ALWAYS use local backend
+  if (isLocalBuild) {
+    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] Local build detected - using local backend:', `${ngrokUrl}/api`);
+    return `${ngrokUrl}/api`;
+  }
+  
+  // Check update channel
   let updateChannel = null;
   try {
     if (Updates && Updates.channel) {
       updateChannel = Updates.channel;
     }
   } catch (e) {
-    // Updates module not available (development mode)
+    // Updates module not available
   }
   
-  // CRITICAL: Check build profile/environment SECOND
-  // This ensures production and cloud-dev builds use the correct API URL
-  const buildProfile = Constants.expoConfig?.extra?.environment || process.env.EXPO_PUBLIC_ENV || process.env.EXPO_PUBLIC_BUILD_PROFILE;
-  const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
-  const appName = Constants.expoConfig?.name || '';
-  const isLocalDevBuild = bundleId?.includes('.local') || appName?.includes('Local');
-  const isExpoGo = Constants.executionEnvironment === 'storeClient'; // Running in Expo Go
-  
-  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
-  
-  console.log('🔍 [API] Environment Detection:', {
-    updateChannel,
-    buildProfile,
-    bundleId,
-    appName,
-    isLocalDevBuild,
-    isExpoGo,
-    __DEV__,
-    envBase,
-    expoConfig: Constants.expoConfig?.extra
-  });
-  
-  // Priority 1: Check update channel FIRST (for OTA updates via QR code)
-  // This ensures channel-based routing takes precedence over environment variables
   if (updateChannel === 'local' || updateChannel === 'local-dev') {
-    // For local/local-dev channel, use ngrok URL (from env if set, otherwise hardcoded)
-    const ngrokUrl = envBase && (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1'))
-      ? envBase
-      : 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] local channel detected - using ngrok URL:', `${ngrokUrl}/api`);
+    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] Local channel detected - using local backend:', `${ngrokUrl}/api`);
     return `${ngrokUrl}/api`;
   }
   
-  // Check build profile for local-dev (even if channel not set)
-  if (buildProfile === 'local-dev' || buildProfile === 'local') {
-    const ngrokUrl = envBase && (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1'))
-      ? envBase
-      : 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] local-dev build profile detected - using ngrok URL:', `${ngrokUrl}/api`);
-    return `${ngrokUrl}/api`;
-  }
-  
-  if (updateChannel === 'production' || updateChannel === 'development' || updateChannel === 'cloud-dev' || updateChannel === 'preview') {
-    const cloudApiUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
-    console.log(`🌐 [API] ${updateChannel} channel detected - using production API URL:`, `${cloudApiUrl}/api`);
-    return `${cloudApiUrl}/api`;
-  }
-  
-  // Priority 2: Check environment variable (set by OTA updates or build config)
-  // Only use this if channel is not set or doesn't match expected channels
+  // Check environment variable
+  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
   if (envBase) {
-    // Check if it's a local/ngrok URL or cloud URL
     if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
-      console.log('🌐 [API] Using LOCAL API URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
-      return `${envBase}/api`;
-    } else {
-      console.log('🌐 [API] Using CLOUD API URL from EXPO_PUBLIC_API_BASE_URL:', `${envBase}/api`);
+      console.log('🌐 [API] Using local backend from env:', `${envBase}/api`);
       return `${envBase}/api`;
     }
   }
   
-  // Priority 3: Check if explicitly in local-dev mode (from build profile or bundle ID)
-  // ONLY use localhost/ngrok if explicitly configured as local-dev
-  if (buildProfile === 'local-dev' || buildProfile === 'local' || isLocalDevBuild) {
-    // Try to get ngrok URL from environment variable first (for physical devices)
-    const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
-    if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {
-      console.log('🌐 [API] Local-dev mode - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
-      return `${ngrokEnvUrl}/api`;
-    }
-    
-    // Fallback to hardcoded ngrok URL for local development
-    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Local-dev mode detected - using ngrok URL:', `${ngrokUrl}/api`);
-    return `${ngrokUrl}/api`;
-  }
-  
-  // Priority 2: Check if running in Expo Go (development client)
-  // Only use localhost if explicitly in Expo Go AND no build profile is set
-  if (isExpoGo && !buildProfile) {
-    const ngrokEnvUrl = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
-    if (ngrokEnvUrl && (ngrokEnvUrl.includes('ngrok') || ngrokEnvUrl.includes('localhost'))) {
-      console.log('🌐 [API] Expo Go mode - using ngrok URL from env:', `${ngrokEnvUrl}/api`);
-      return `${ngrokEnvUrl}/api`;
-    }
-    
-    // Fallback for Expo Go
-    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Expo Go mode - using ngrok URL:', `${ngrokUrl}/api`);
-    return `${ngrokUrl}/api`;
-  }
-
-  // Priority 3: Environment variable already checked above (Priority 0)
-  // This is set in eas.json for builds and in OTA updates
-
-  // Priority 4: App config extra.apiBaseUrl (set in app.config.js based on build profile)
-  // This is the PRIMARY source for production and cloud-dev builds
+  // Check app config
   const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
   if (configBase) {
-    console.log('🌐 [API] Using URL from app config extra.apiBaseUrl:', `${configBase}/api`);
-    console.log('📱 [API] Build profile:', Constants.expoConfig?.extra?.environment || 'unknown');
+    console.log('🌐 [API] Using backend from app config:', `${configBase}/api`);
     return `${configBase}/api`;
   }
-
-  // Fallback for development (emulator only) - ONLY if __DEV__ is true AND no build profile
-  if (__DEV__ && !buildProfile) {
-    if (Platform.OS === 'android') {
-      console.warn('⚠️ [API] Using emulator fallback URL (10.0.2.2). For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
-      return 'http://10.0.2.2:5001/api';
-    }
-    
-    if (Platform.OS === 'ios') {
-      console.warn('⚠️ [API] Using localhost fallback. For physical device, set EXPO_PUBLIC_API_BASE_URL or use ngrok.');
-      return 'http://localhost:5001/api';
-    }
-  }
-
-  // Final fallback: Use production API URL for production/cloud-dev builds
+  
+  // Default to cloud backend
   const cloudApiUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
-  console.warn('⚠️ [API] No API URL configured, using production fallback:', `${cloudApiUrl}/api`);
-  console.error('📱 [API] Debug info:', {
-    updateChannel,
-    buildProfile,
-    isLocalDevBuild,
-    isExpoGo,
-    __DEV__,
-    envBase,
-    configBase,
-    expoConfig: Constants.expoConfig?.extra
-  });
+  console.log('🌐 [API] Using cloud backend:', `${cloudApiUrl}/api`);
   return `${cloudApiUrl}/api`;
 };
 
