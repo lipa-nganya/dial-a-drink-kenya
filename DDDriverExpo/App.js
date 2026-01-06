@@ -406,10 +406,13 @@ const App = () => {
 
   // Set up global push notification listener to show overlay
   useEffect(() => {
+    console.log('🔔 Setting up global push notification listener for overlay');
     const subscription = Notifications.addNotificationReceivedListener(notification => {
       console.log('📱 Push notification received globally:', notification);
+      console.log('📱 Showing overlay...');
       // Show overlay for any push notification
       setShowPushOverlay(true);
+      console.log('📱 Overlay state set to true');
     });
 
     return () => {
