@@ -747,7 +747,7 @@ router.get('/', async (req, res) => {
       }
     }
     
-    // Add credit limit status and calculated cash at hand to each driver
+    // Add credit limit status and cash at hand to each driver
     const driversWithCreditStatus = await Promise.all(drivers.map(async (driver) => {
       const driverData = driver.toJSON();
       const creditCheck = await checkDriverCreditLimit(driver.id);
@@ -759,9 +759,10 @@ router.get('/', async (req, res) => {
         canAcceptOrders: creditCheck.canAcceptOrders
       };
       
-      // Calculate cash at hand from transactions (overrides stored value)
-      const calculatedCashAtHand = await calculateCashAtHand(driver.id);
-      driverData.cashAtHand = calculatedCashAtHand;
+      // Use stored cashAtHand value from database as the source of truth
+      // The cashAtHand field is manually maintained by admins and should be displayed as-is
+      const storedCashAtHand = parseFloat(driverData.cashAtHand || 0);
+      driverData.cashAtHand = storedCashAtHand;
       
       return driverData;
     }));

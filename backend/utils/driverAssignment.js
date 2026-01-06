@@ -24,15 +24,10 @@ const findNearestActiveDriverToBranch = async (branchId) => {
 
     // Get ONLY drivers who are on shift (status = 'active')
     // Drivers must be on shift to receive orders
+    // Note: Location check removed - drivers can receive orders without location
     const availableDrivers = await db.Driver.findAll({
       where: {
-        status: 'active',
-        locationLatitude: {
-          [Op.not]: null
-        },
-        locationLongitude: {
-          [Op.not]: null
-        }
+        status: 'active'
       }
     });
 
@@ -179,16 +174,11 @@ const findNearestActiveDriverToBranch = async (branchId) => {
  */
 const findNearestActiveDriverToAddress = async (branchAddress) => {
   try {
-    // Get ONLY drivers who are on shift (status = 'active') with valid location
+    // Get ONLY drivers who are on shift (status = 'active')
+    // Note: Location check removed - drivers can receive orders without location
     const availableDrivers = await db.Driver.findAll({
       where: {
-        status: 'active',
-        locationLatitude: {
-          [Op.not]: null
-        },
-        locationLongitude: {
-          [Op.not]: null
-        }
+        status: 'active'
       }
     });
 
