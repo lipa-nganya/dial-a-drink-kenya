@@ -453,25 +453,20 @@ router.post('/', async (req, res) => {
           pushTokenPreview: driverWithToken?.pushToken ? driverWithToken.pushToken.substring(0, 30) + '...' : 'null'
         });
         
-        // Send socket event (for foreground app)
-        const driverRoom = `driver-${driverIdToNotify}`;
-        console.log(`📡 Sending socket event to driver room: ${driverRoom}`);
+        // Send socket event directly to driver (no rooms)
+        const driverSocketMap = req.app.get('driverSocketMap');
+        const driverSocketId = driverSocketMap ? driverSocketMap.get(parseInt(driverIdToNotify)) : null;
         
-        // Check how many clients are in the room
-        const room = io.sockets.adapter.rooms.get(driverRoom);
-        const roomSize = room ? room.size : 0;
-        console.log(`📊 Room ${driverRoom} has ${roomSize} client(s)`);
-        
-        if (roomSize === 0) {
-          console.log(`⚠️⚠️⚠️ WARNING: No clients in room ${driverRoom}! Driver app may not be connected.`);
-          console.log(`⚠️⚠️⚠️ All connected rooms:`, Array.from(io.sockets.adapter.rooms.keys()));
+        if (driverSocketId) {
+          console.log(`📡 Sending socket event directly to driver ${driverIdToNotify} (socket: ${driverSocketId})`);
+          io.to(driverSocketId).emit('order-assigned', {
+            order: completeOrder,
+            playSound: true
+          });
+          console.log(`✅ Socket event sent directly to driver ${driverIdToNotify}`);
+        } else {
+          console.log(`⚠️⚠️⚠️ WARNING: Driver ${driverIdToNotify} not registered with socket! App may not be connected.`);
         }
-        
-        io.to(driverRoom).emit('order-assigned', {
-          order: completeOrder,
-          playSound: true
-        });
-        console.log(`✅ Socket event sent to ${driverRoom} (${roomSize} client(s) in room)`);
         
         // Send push notification (for background/screen-off scenarios)
         // This ensures sound and vibration work even when app is backgrounded

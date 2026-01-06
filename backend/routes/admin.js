@@ -1473,28 +1473,23 @@ router.patch('/orders/:id/driver', async (req, res) => {
         }
       }
 
-      // If driver was assigned, notify the driver
+      // If driver was assigned, notify the driver directly (no rooms)
       if (driverId) {
         const driver = await db.Driver.findByPk(driverId);
         if (driver) {
-          const driverRoom = `driver-${driverId}`;
-          console.log(`📡 [MANUAL ASSIGN] Sending socket event to driver room: ${driverRoom} for order #${order.id}`);
+          const driverSocketMap = req.app.get('driverSocketMap');
+          const driverSocketId = driverSocketMap ? driverSocketMap.get(parseInt(driverId)) : null;
           
-          // Check how many clients are in the room
-          const room = io.sockets.adapter.rooms.get(driverRoom);
-          const roomSize = room ? room.size : 0;
-          console.log(`📊 [MANUAL ASSIGN] Room ${driverRoom} has ${roomSize} client(s)`);
-          
-          if (roomSize === 0) {
-            console.log(`⚠️⚠️⚠️ [MANUAL ASSIGN] WARNING: No clients in room ${driverRoom}! Driver app may not be connected.`);
-            console.log(`⚠️⚠️⚠️ [MANUAL ASSIGN] All connected rooms:`, Array.from(io.sockets.adapter.rooms.keys()));
+          if (driverSocketId) {
+            console.log(`📡 [MANUAL ASSIGN] Sending socket event directly to driver ${driverId} (socket: ${driverSocketId}) for order #${order.id}`);
+            io.to(driverSocketId).emit('order-assigned', {
+              order: orderData,
+              playSound: true
+            });
+            console.log(`✅ [MANUAL ASSIGN] Socket event sent directly to driver ${driverId} for order #${order.id}`);
+          } else {
+            console.log(`⚠️⚠️⚠️ [MANUAL ASSIGN] WARNING: Driver ${driverId} not registered with socket! App may not be connected.`);
           }
-          
-          io.to(driverRoom).emit('order-assigned', {
-            order: orderData,
-            playSound: true
-          });
-          console.log(`✅ [MANUAL ASSIGN] Socket event sent to ${driverRoom} (${roomSize} client(s) in room) for order #${order.id}`);
         } else {
           console.log(`❌ [MANUAL ASSIGN] Driver ID ${driverId} not found in database`);
         }

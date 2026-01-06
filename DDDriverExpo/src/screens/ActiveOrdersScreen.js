@@ -324,10 +324,10 @@ const ActiveOrdersScreen = ({ route, navigation }) => {
       console.log('✅✅✅ Socket URL:', socketUrl);
       console.log('✅✅✅ Driver ID:', driverInfo.id);
       
-      // Join driver room
-      console.log(`📡 Emitting join-driver event for driver-${driverInfo.id}`);
-      socket.emit('join-driver', driverInfo.id);
-      console.log(`✅✅✅ Emitted join-driver for driver-${driverInfo.id}`);
+      // Register driver with socket (no rooms)
+      console.log(`📡 Registering driver ${driverInfo.id} with socket ${socket.id}`);
+      socket.emit('register-driver', driverInfo.id);
+      console.log(`✅✅✅ Registered driver ${driverInfo.id} with socket`);
       
       // Verify connection after a short delay
       setTimeout(() => {
@@ -351,9 +351,9 @@ const ActiveOrdersScreen = ({ route, navigation }) => {
     
     socket.on('reconnect', (attemptNumber) => {
       console.log(`✅ Socket.IO reconnected after ${attemptNumber} attempts`);
-      // Rejoin driver room after reconnection
-      socket.emit('join-driver', driverInfo.id);
-      console.log(`✅ Rejoined driver room: driver-${driverInfo.id}`);
+      // Re-register driver after reconnection
+      socket.emit('register-driver', driverInfo.id);
+      console.log(`✅ Re-registered driver ${driverInfo.id} after reconnection`);
     });
     
     socket.on('order-assigned', async (data) => {

@@ -202,6 +202,63 @@ router.get('/debug/list', async (req, res) => {
 });
 
 /**
+ * Update driver location (for driver app)
+ * PUT /api/drivers/:id/location
+ */
+router.put('/:id/location', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude } = req.body;
+
+    if (!latitude || !longitude) {
+      return res.status(400).json({ error: 'Latitude and longitude are required' });
+    }
+
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+
+    if (isNaN(lat) || isNaN(lng)) {
+      return res.status(400).json({ error: 'Invalid latitude or longitude values' });
+    }
+
+    if (lat < -90 || lat > 90) {
+      return res.status(400).json({ error: 'Latitude must be between -90 and 90' });
+    }
+
+    if (lng < -180 || lng > 180) {
+      return res.status(400).json({ error: 'Longitude must be between -180 and 180' });
+    }
+
+    const driver = await db.Driver.findByPk(id);
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+
+    await driver.update({
+      locationLatitude: lat,
+      locationLongitude: lng,
+      lastActivity: new Date()
+    });
+
+    console.log(`✅ Updated location for driver ${driver.name} (ID: ${id}): ${lat}, ${lng}`);
+
+    res.json({
+      success: true,
+      message: 'Location updated successfully',
+      driver: {
+        id: driver.id,
+        name: driver.name,
+        locationLatitude: driver.locationLatitude,
+        locationLongitude: driver.locationLongitude
+      }
+    });
+  } catch (error) {
+    console.error('Error updating driver location:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * Update driver activity by phone number (for driver app)
  * PATCH /api/drivers/phone/:phoneNumber/activity
  */

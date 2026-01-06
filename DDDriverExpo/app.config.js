@@ -48,7 +48,7 @@ module.exports = ({ config }) => {
     expo: {
       name: `DD Driver${appNameSuffix}`,
       slug: 'dddriver',
-      version: '1.0.36',
+      version: '1.0.37',
       orientation: 'portrait',
       icon: './assets/icon.png',
       userInterfaceStyle: 'dark',
