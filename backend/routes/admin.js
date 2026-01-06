@@ -2647,5 +2647,45 @@ router.get('/stops/driver/:driverId', verifyAdmin, async (req, res) => {
   }
 });
 
+/**
+ * Alert admin about driver missing location
+ * POST /api/admin/driver-location-alert
+ */
+router.post('/driver-location-alert', async (req, res) => {
+  try {
+    const { driverId, message } = req.body;
+
+    if (!driverId) {
+      return res.status(400).json({ error: 'Driver ID is required' });
+    }
+
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+
+    const io = req.app.get('io');
+    if (io) {
+      // Emit alert to admin room
+      io.to('admin').emit('driver-location-alert', {
+        driverId: driverId,
+        driverName: driver.name,
+        driverPhone: driver.phoneNumber,
+        message: message || `Driver ${driver.name} (ID: ${driverId}) does not have location set. Please ensure location services are enabled.`,
+        timestamp: new Date()
+      });
+      console.log(`📢 Alerted admin about missing location for driver ${driver.name} (ID: ${driverId})`);
+    }
+
+    res.json({
+      success: true,
+      message: 'Admin alerted successfully'
+    });
+  } catch (error) {
+    console.error('Error alerting admin about driver location:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 module.exports = router;
 module.exports.verifyAdmin = verifyAdmin;

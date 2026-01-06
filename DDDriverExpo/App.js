@@ -9,7 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import api from './src/services/api';
-import LocationGate from './src/components/LocationGate';
+import * as Location from 'expo-location';
 import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
@@ -100,45 +100,105 @@ const MainTabs = () => {
   );
 };
 
-// MainTabs with location gate - enforces location permission on app install
+// MainTabs with background location check - non-blocking
 const MainTabsWithLocationGate = ({ route }) => {
-  const [locationSet, setLocationSet] = useState(false);
-  const [driverId, setDriverId] = useState(null);
-  const [loading, setLoading] = useState(true);
-
   useEffect(() => {
-    loadDriverId();
+    checkLocationInBackground();
   }, []);
 
-  const loadDriverId = async () => {
+  const checkLocationInBackground = async () => {
     try {
       const phone = route?.params?.phoneNumber || await AsyncStorage.getItem('driver_phone');
-      if (phone) {
-        const driverResponse = await api.get(`/drivers/phone/${phone}`);
-        if (driverResponse.data?.id) {
-          setDriverId(driverResponse.data.id);
+      if (!phone) {
+        console.log('⚠️ No phone number found for location check');
+        return;
+      }
+
+      const driverResponse = await api.get(`/drivers/phone/${phone}`);
+      if (!driverResponse.data?.id) {
+        console.log('⚠️ Driver not found for location check');
+        return;
+      }
+
+      const driverId = driverResponse.data.id;
+
+      // Check if location was already set
+      const locationSet = await AsyncStorage.getItem('driver_location_set');
+      if (locationSet === 'true') {
+        // Verify location is still valid
+        try {
+          if (driverResponse.data?.locationLatitude && driverResponse.data?.locationLongitude) {
+            console.log('✅ Location already set, skipping background check');
+            return;
+          }
+        } catch (e) {
+          console.log('Could not verify location, will try to update');
         }
       }
+
+      // Request location permission (non-blocking, don't wait)
+      Location.getForegroundPermissionsAsync().then(async ({ status }) => {
+        if (status !== 'granted') {
+          // Try to request, but don't block if denied
+          const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+          if (newStatus !== 'granted') {
+            console.log('⚠️ Location permission not granted - will alert admin');
+            alertAdminMissingLocation(driverId);
+            return;
+          }
+        }
+
+        // Get location with timeout (non-blocking)
+        try {
+          const location = await Promise.race([
+            Location.getCurrentPositionAsync({
+              accuracy: Location.Accuracy.Balanced,
+              timeout: 5000, // Shorter timeout
+              maximumAge: 60000
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Location timeout')), 5000)
+            )
+          ]);
+
+          const { latitude, longitude } = location.coords;
+          console.log(`📍 Background location obtained: ${latitude}, ${longitude}`);
+
+          // Update location on backend
+          await api.put(`/drivers/${driverId}/location`, {
+            latitude,
+            longitude
+          });
+
+          console.log('✅ Background location update successful');
+          await AsyncStorage.setItem('driver_location_set', 'true');
+        } catch (locationError) {
+          console.error('⚠️ Background location check failed:', locationError);
+          alertAdminMissingLocation(driverId);
+        }
+      }).catch(error => {
+        console.error('Error requesting location permission:', error);
+        alertAdminMissingLocation(driverId);
+      });
     } catch (error) {
-      console.error('Error loading driver ID:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error in background location check:', error);
     }
   };
 
-  if (loading || !driverId) {
-    return null; // Wait for driver ID
-  }
+  const alertAdminMissingLocation = async (driverId) => {
+    try {
+      // Send alert to admin via API
+      await api.post('/admin/driver-location-alert', {
+        driverId: driverId,
+        message: `Driver ${driverId} does not have location set. Please ensure location services are enabled.`
+      });
+      console.log('📢 Alerted admin about missing location');
+    } catch (error) {
+      console.error('Error alerting admin:', error);
+    }
+  };
 
-  if (!locationSet) {
-    return (
-      <LocationGate
-        driverId={driverId}
-        onLocationSet={() => setLocationSet(true)}
-      />
-    );
-  }
-
+  // Always show MainTabs - location check happens in background
   return <MainTabs />;
 };
 

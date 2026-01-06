@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container,
   Typography,
@@ -39,7 +39,8 @@ import {
   Visibility,
   VisibilityOff,
   VpnKey,
-  WhatsApp
+  WhatsApp,
+  Search
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -66,6 +67,7 @@ const Drivers = () => {
   const [invitingDriver, setInvitingDriver] = useState(null); // Track which driver is being invited
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchDrivers();
@@ -193,6 +195,18 @@ const Drivers = () => {
     }
   };
 
+  const handleStatusChange = async (driverId, newStatus) => {
+    try {
+      setError('');
+      await api.put(`/drivers/${driverId}`, { status: newStatus });
+      console.log(`✅ Driver ${driverId} status updated to ${newStatus}`);
+      fetchDrivers(); // Refresh to show updated status
+    } catch (err) {
+      console.error('Error updating driver status:', err);
+      setError(err.response?.data?.error || 'Failed to update driver status');
+    }
+  };
+
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this driver?')) {
       return;
@@ -279,6 +293,25 @@ const Drivers = () => {
     });
   };
 
+  // Filter drivers based on search query
+  const filteredDrivers = useMemo(() => {
+    if (!searchQuery.trim()) return drivers;
+    const query = searchQuery.toLowerCase().trim();
+    return drivers.filter((driver) => {
+      const name = (driver.name || '').toLowerCase();
+      const phone = (driver.phoneNumber || '').toLowerCase();
+      return name.includes(query) || phone.includes(query);
+    });
+  }, [drivers, searchQuery]);
+
+  // Reset page to 0 when search query changes and results are fewer than current page
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(filteredDrivers.length / rowsPerPage) - 1);
+    if (page > maxPage) {
+      setPage(0);
+    }
+  }, [filteredDrivers.length, rowsPerPage, page]);
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
@@ -319,6 +352,45 @@ const Drivers = () => {
         </Alert>
       )}
 
+      {/* Search Bar */}
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          placeholder="Search riders by name or phone number..."
+          value={searchQuery}
+          onChange={(e) => {
+            setSearchQuery(e.target.value);
+            setPage(0); // Reset to first page when search changes
+          }}
+          InputProps={{
+            startAdornment: (
+              <Search sx={{ color: colors.textSecondary, mr: 1 }} />
+            )
+          }}
+          sx={{
+            '& .MuiOutlinedInput-root': {
+              backgroundColor: colors.paper,
+              '& fieldset': {
+                borderColor: colors.border,
+              },
+              '&:hover fieldset': {
+                borderColor: colors.accentText,
+              },
+              '&.Mui-focused fieldset': {
+                borderColor: colors.accentText,
+              },
+            },
+            '& .MuiInputBase-input': {
+              color: colors.textPrimary,
+            },
+            '& .MuiInputBase-input::placeholder': {
+              color: colors.textSecondary,
+              opacity: 1,
+            },
+          }}
+        />
+      </Box>
+
       <TableContainer component={Paper}>
         <Table>
           <TableHead>
@@ -333,16 +405,18 @@ const Drivers = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {drivers.length === 0 ? (
+            {filteredDrivers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
-                    No riders found. Click "Add Rider" to create one.
+                    {searchQuery.trim() 
+                      ? `No riders found matching "${searchQuery}".` 
+                      : 'No riders found. Click "Add Rider" to create one.'}
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              drivers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((driver) => {
+              filteredDrivers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((driver) => {
                 const creditStatus = driver.creditStatus || {};
                 const balance = creditStatus.balance || 0;
                 const creditLimit = creditStatus.creditLimit || 0;
@@ -360,13 +434,50 @@ const Drivers = () => {
                     </Box>
                   </TableCell>
                   <TableCell>
-                    <Chip
-                      icon={getStatusIcon(driver.status)}
-                      label={getStatusLabel(driver.status)}
-                      color={getStatusColor(driver.status)}
-                      size="small"
-                      sx={{ fontWeight: 'bold' }}
-                    />
+                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                      <Select
+                        value={driver.status}
+                        onChange={(e) => handleStatusChange(driver.id, e.target.value)}
+                        sx={{
+                          '& .MuiSelect-select': {
+                            py: 0.5,
+                            px: 1,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                            fontWeight: 'bold',
+                            color: driver.status === 'active' ? '#2e7d32' :
+                                   driver.status === 'on_delivery' ? '#ed6c02' :
+                                   driver.status === 'offline' ? '#d32f2f' : 'inherit'
+                          }
+                        }}
+                      >
+                        <MenuItem value="offline">
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Cancel fontSize="small" />
+                            <span>Off Shift</span>
+                          </Box>
+                        </MenuItem>
+                        <MenuItem value="active">
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <CheckCircle fontSize="small" />
+                            <span>On Shift</span>
+                          </Box>
+                        </MenuItem>
+                        <MenuItem value="on_delivery">
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <LocalShipping fontSize="small" />
+                            <span>On Delivery</span>
+                          </Box>
+                        </MenuItem>
+                        <MenuItem value="inactive">
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <RemoveCircle fontSize="small" />
+                            <span>Inactive</span>
+                          </Box>
+                        </MenuItem>
+                      </Select>
+                    </FormControl>
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
@@ -478,7 +589,7 @@ const Drivers = () => {
         <TablePagination
           rowsPerPageOptions={[10, 25, 50, 100]}
           component="div"
-          count={drivers.length}
+          count={filteredDrivers.length}
           rowsPerPage={rowsPerPage}
           page={page}
           onPageChange={(event, newPage) => setPage(newPage)}
