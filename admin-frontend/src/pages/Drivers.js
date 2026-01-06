@@ -40,7 +40,8 @@ import {
   VisibilityOff,
   VpnKey,
   WhatsApp,
-  Search
+  Search,
+  Notifications
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -65,6 +66,8 @@ const Drivers = () => {
   const [showOtps, setShowOtps] = useState({}); // Track which OTPs are visible
   const [loadingOtps, setLoadingOtps] = useState({}); // Track OTP loading state
   const [invitingDriver, setInvitingDriver] = useState(null); // Track which driver is being invited
+  const [testingPush, setTestingPush] = useState(null); // Track which driver is being tested for push
+  const [pushTestResult, setPushTestResult] = useState(null); // Store push test result
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
@@ -237,6 +240,48 @@ const Drivers = () => {
       setError(err.response?.data?.error || 'Failed to send WhatsApp invitation');
     } finally {
       setInvitingDriver(null);
+    }
+  };
+
+  const handleTestPush = async (driver) => {
+    try {
+      setTestingPush(driver.id);
+      setPushTestResult(null);
+      setError('');
+      
+      if (!driver.pushToken) {
+        setPushTestResult({
+          success: false,
+          message: 'Driver has no push token registered. Make sure the app is open and logged in.'
+        });
+        return;
+      }
+      
+      const response = await api.post(`/drivers/test-push/${driver.id}`);
+      
+      if (response.data.success) {
+        setPushTestResult({
+          success: true,
+          message: `Test push notification sent successfully to ${driver.name}! Check their device.`
+        });
+        // Clear the result after 5 seconds
+        setTimeout(() => setPushTestResult(null), 5000);
+      } else {
+        setPushTestResult({
+          success: false,
+          message: response.data.error || 'Failed to send push notification'
+        });
+      }
+    } catch (err) {
+      console.error('Error testing push notification:', err);
+      const errorMessage = err.response?.data?.error || 'Failed to send test push notification';
+      setPushTestResult({
+        success: false,
+        message: errorMessage
+      });
+      setError(errorMessage);
+    } finally {
+      setTestingPush(null);
     }
   };
 
@@ -544,41 +589,62 @@ const Drivers = () => {
                     </Box>
                   </TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Invite via WhatsApp">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleInviteDriver(driver)}
-                        disabled={invitingDriver === driver.id}
-                        sx={{ 
-                          color: '#25D366',
-                          '&:hover': { backgroundColor: 'rgba(37, 211, 102, 0.1)' }
-                        }}
-                      >
-                        {invitingDriver === driver.id ? (
-                          <CircularProgress size={20} />
-                        ) : (
-                          <WhatsApp />
-                        )}
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Edit Rider">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenDialog(driver)}
-                        sx={{ color: colors.accentText }}
-                      >
-                        <Edit />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete Rider">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(driver.id)}
-                        sx={{ color: '#FF3366' }}
-                      >
-                        <Delete />
-                      </IconButton>
-                    </Tooltip>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Tooltip title={driver.pushToken ? "Test Push Notification" : "No push token - driver app not connected"}>
+                        <span>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleTestPush(driver)}
+                            disabled={testingPush === driver.id || !driver.pushToken}
+                            sx={{ 
+                              color: driver.pushToken ? colors.accentText : 'text.disabled',
+                              '&:hover': { backgroundColor: driver.pushToken ? 'rgba(0, 224, 184, 0.1)' : 'transparent' }
+                            }}
+                          >
+                            {testingPush === driver.id ? (
+                              <CircularProgress size={20} />
+                            ) : (
+                              <Notifications />
+                            )}
+                          </IconButton>
+                        </span>
+                      </Tooltip>
+                      <Tooltip title="Invite via WhatsApp">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleInviteDriver(driver)}
+                          disabled={invitingDriver === driver.id}
+                          sx={{ 
+                            color: '#25D366',
+                            '&:hover': { backgroundColor: 'rgba(37, 211, 102, 0.1)' }
+                          }}
+                        >
+                          {invitingDriver === driver.id ? (
+                            <CircularProgress size={20} />
+                          ) : (
+                            <WhatsApp />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Edit Rider">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenDialog(driver)}
+                          sx={{ color: colors.accentText }}
+                        >
+                          <Edit />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Delete Rider">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDelete(driver.id)}
+                          sx={{ color: '#FF3366' }}
+                        >
+                          <Delete />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </TableCell>
                 </TableRow>
                 );
