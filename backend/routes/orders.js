@@ -417,6 +417,9 @@ router.post('/', async (req, res) => {
             order: completeOrder,
             playSound: true
           });
+          console.log(`Socket event sent to driver ${completeOrder.driverId} (socket: ${driverSocketId}) for order #${completeOrder.id}`);
+        } else {
+          console.log(`Driver ${completeOrder.driverId} not registered - socket event not sent for order #${completeOrder.id}`);
         }
       }
     }
