@@ -32,100 +32,77 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
+  const localBackendUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+  const cloudBackendUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+  
   try {
+    // METHOD 1: Check explicit environment variable set by OTA update
+    // This is the most reliable - set EXPO_PUBLIC_USE_LOCAL_BACKEND=true when publishing to local branch
+    const useLocalBackend = process.env.EXPO_PUBLIC_USE_LOCAL_BACKEND === 'true' || 
+                            process.env.EXPO_PUBLIC_ENV === 'local' ||
+                            process.env.EXPO_PUBLIC_BUILD_PROFILE === 'local-dev';
+    
+    if (useLocalBackend) {
+      console.log('🌐 [API] METHOD 1: Environment variable indicates LOCAL backend');
+      return `${localBackendUrl}/api`;
+    }
+    
+    // METHOD 2: Check bundle ID - if it contains .local, ALWAYS use local
     const bundleId = Constants?.expoConfig?.ios?.bundleIdentifier || Constants?.expoConfig?.android?.package || '';
     const appName = Constants?.expoConfig?.name || '';
-    const isLocalBuild = bundleId?.includes('.local') || appName?.includes('Local');
     
-    const localBackendUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    const cloudBackendUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+    if (bundleId?.includes('.local') || appName?.includes('Local')) {
+      console.log('🌐 [API] METHOD 2: Bundle ID/App Name indicates LOCAL build (bundleId:', bundleId, 'appName:', appName, ')');
+      return `${localBackendUrl}/api`;
+    }
     
-    // PRIORITY 1: Check update channel FIRST (this is set by OTA updates and takes precedence)
-    // This is the most reliable way to determine which backend to use for OTA updates
+    // METHOD 3: Check update channel/branch
     let updateChannel = null;
     let updateBranch = null;
     try {
       if (Updates) {
-        try {
-          updateChannel = Updates.channel || null;
-        } catch (e) {
-          console.log('⚠️ [API] Could not read Updates.channel:', e.message);
-        }
-        try {
-          updateBranch = Updates.branch || null;
-        } catch (e) {
-          console.log('⚠️ [API] Could not read Updates.branch:', e.message);
-        }
-        console.log('🔍 [API] Update info:', {
-          channel: updateChannel,
-          branch: updateBranch
-        });
+        updateChannel = Updates.channel || null;
+        updateBranch = Updates.branch || null;
       }
     } catch (e) {
-      console.log('⚠️ [API] Updates module not available:', e.message);
+      // Updates not available
     }
     
-    // Check if channel or branch indicates local
-    const isLocalChannel = updateChannel === 'local' || updateChannel === 'local-dev';
-    const isLocalBranch = updateBranch === 'local';
-    
-    if (isLocalChannel || isLocalBranch) {
-      console.log('🌐 [API] PRIORITY 1: Local detected (channel:', updateChannel, 'branch:', updateBranch, ') - FORCING local backend:', `${localBackendUrl}/api`);
+    if (updateChannel === 'local' || updateChannel === 'local-dev' || updateBranch === 'local') {
+      console.log('🌐 [API] METHOD 3: Update channel/branch indicates LOCAL (channel:', updateChannel, 'branch:', updateBranch, ')');
       return `${localBackendUrl}/api`;
     }
     
-    // PRIORITY 2: If bundle ID contains .local or app name contains "Local", ALWAYS use local backend
-    // This check is for native builds with local bundle ID
-    if (isLocalBuild) {
-      console.log('🌐 [API] PRIORITY 2: Local build detected (bundleId:', bundleId, 'appName:', appName, ') - FORCING local backend:', `${localBackendUrl}/api`);
-      return `${localBackendUrl}/api`;
-    }
-    
-    // PRIORITY 3: Check environment variable (from OTA update)
+    // METHOD 4: Check environment variable for API URL
     const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
     if (envBase) {
       if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
-        console.log('🌐 [API] PRIORITY 3: Using local backend from env:', `${envBase}/api`);
+        console.log('🌐 [API] METHOD 4: Environment variable has LOCAL URL:', envBase);
         return `${envBase}/api`;
       }
-      // If env has cloud URL but channel/branch is local, override it
-      if ((isLocalChannel || isLocalBranch) && envBase.includes('run.app')) {
-        console.log('🌐 [API] PRIORITY 3: Local channel/branch but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
-        return `${localBackendUrl}/api`;
+      if (envBase.includes('run.app')) {
+        console.log('🌐 [API] METHOD 4: Environment variable has CLOUD URL:', envBase);
+        return `${envBase}/api`;
       }
     }
     
-    // PRIORITY 4: Check app config (from build time) - but ONLY if channel is not local
+    // METHOD 5: Check app config
     const configBase = normalizeBaseUrl(Constants?.expoConfig?.extra?.apiBaseUrl);
     if (configBase) {
-      // If channel/branch is local but app config has cloud URL, override it
-      if ((isLocalChannel || isLocalBranch) && configBase.includes('run.app')) {
-        console.log('🌐 [API] PRIORITY 4: Local channel/branch but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
-        return `${localBackendUrl}/api`;
-      }
-      // If bundle is local but app config has cloud URL, override it
-      if (isLocalBuild && configBase.includes('run.app')) {
-        console.log('🌐 [API] PRIORITY 4: Local build but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
-        return `${localBackendUrl}/api`;
-      }
-      console.log('🌐 [API] PRIORITY 4: Using backend from app config:', `${configBase}/api`);
+      console.log('🌐 [API] METHOD 5: Using app config URL:', configBase);
       return `${configBase}/api`;
     }
     
-    // Default: If channel/branch is local or build is local, use local backend
-    if (isLocalChannel || isLocalBranch || isLocalBuild) {
-      console.log('🌐 [API] Default: Local detected (channel:', updateChannel, 'branch:', updateBranch, 'isLocalBuild:', isLocalBuild, ') - using local backend:', `${localBackendUrl}/api`);
-      return `${localBackendUrl}/api`;
-    }
+    // DEFAULT: For local testing, default to LOCAL backend if we can't determine
+    // This is safer for local development
+    console.log('🌐 [API] DEFAULT: Could not determine backend, defaulting to LOCAL for safety');
+    return `${localBackendUrl}/api`;
     
-    console.log('🌐 [API] Default: Using cloud backend:', `${cloudBackendUrl}/api`);
-    return `${cloudBackendUrl}/api`;
   } catch (error) {
     console.error('❌ [API] Error determining base URL:', error);
-    // Fallback to local backend if error occurs (safer for local development)
-    const fallbackUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Using fallback local backend due to error:', `${fallbackUrl}/api`);
-    return `${fallbackUrl}/api`;
+    // Always fallback to local for safety
+    console.log('🌐 [API] ERROR FALLBACK: Using LOCAL backend');
+    return `${localBackendUrl}/api`;
   }
 };
 
