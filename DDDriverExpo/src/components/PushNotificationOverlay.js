@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   Animated,
   Dimensions,
   Platform,
@@ -63,52 +62,61 @@ const PushNotificationOverlay = ({ visible, onClose, driverName = 'Driver' }) =>
 
   console.log('🟢 PushNotificationOverlay: Render check - visible:', visible, 'driverName:', driverName);
 
-  // Always render Modal (even when not visible) to ensure it works in production builds
-  // Modal's visible prop will handle the actual visibility
-  console.log('🟢 PushNotificationOverlay: Rendering Modal with visible:', visible, 'driverName:', driverName);
+  // Use View with absolute positioning instead of Modal for production builds
+  // Modal outside NavigationContainer doesn't work reliably in production builds
+  // Always render the container but control visibility with opacity and pointerEvents
+  console.log('🟢 PushNotificationOverlay: Rendering overlay with View (production build compatible), visible:', visible, 'driverName:', driverName);
 
-  // Always render Modal, but control visibility
-  // This ensures Modal works in production builds (not just Expo Go)
   return (
-    <Modal
-      visible={visible}
-      transparent={false}
-      animationType="none"
-      onRequestClose={handleClose}
-      statusBarTranslucent={false}
-      presentationStyle="fullScreen"
-      hardwareAccelerated={true}
+    <View
+      style={[
+        styles.modalContainer,
+        {
+          opacity: visible ? 1 : 0,
+          pointerEvents: visible ? 'auto' : 'none', // Block touches when visible, allow pass-through when hidden
+        }
+      ]}
     >
-      <StatusBar hidden={true} />
+      {visible && <StatusBar hidden={true} />}
       <Animated.View
         style={[
           styles.overlay,
           {
             opacity: fadeAnim,
-            zIndex: 999999,
-            elevation: 999999, // Android elevation
           },
         ]}
       >
         <Text style={styles.greetingText}>Hi {driverName}</Text>
       </Animated.View>
-    </Modal>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: '#90EE90', // Light green
-    width: width,
-    height: height,
+  modalContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     bottom: 0,
-    zIndex: 99999,
-    elevation: 99999, // Android elevation - ensure it's on top
+    width: width,
+    height: height,
+    zIndex: 999999,
+    elevation: 999999, // Android elevation - ensure it's on top of everything
+    ...Platform.select({
+      ios: {
+        zIndex: 999999,
+      },
+      android: {
+        elevation: 999999,
+      },
+    }),
+  },
+  overlay: {
+    flex: 1,
+    backgroundColor: '#90EE90', // Light green
+    width: width,
+    height: height,
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
@@ -117,7 +125,6 @@ const styles = StyleSheet.create({
       },
       android: {
         paddingTop: 0,
-        elevation: 99999, // Ensure highest elevation on Android
       },
     }),
   },
