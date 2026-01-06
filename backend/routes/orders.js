@@ -454,12 +454,24 @@ router.post('/', async (req, res) => {
         });
         
         // Send socket event (for foreground app)
-        console.log(`📡 Sending socket event to driver room: driver-${driverIdToNotify}`);
-        io.to(`driver-${driverIdToNotify}`).emit('order-assigned', {
+        const driverRoom = `driver-${driverIdToNotify}`;
+        console.log(`📡 Sending socket event to driver room: ${driverRoom}`);
+        
+        // Check how many clients are in the room
+        const room = io.sockets.adapter.rooms.get(driverRoom);
+        const roomSize = room ? room.size : 0;
+        console.log(`📊 Room ${driverRoom} has ${roomSize} client(s)`);
+        
+        if (roomSize === 0) {
+          console.log(`⚠️⚠️⚠️ WARNING: No clients in room ${driverRoom}! Driver app may not be connected.`);
+          console.log(`⚠️⚠️⚠️ All connected rooms:`, Array.from(io.sockets.adapter.rooms.keys()));
+        }
+        
+        io.to(driverRoom).emit('order-assigned', {
           order: completeOrder,
           playSound: true
         });
-        console.log(`✅ Socket event sent to driver-${driverIdToNotify}`);
+        console.log(`✅ Socket event sent to ${driverRoom} (${roomSize} client(s) in room)`);
         
         // Send push notification (for background/screen-off scenarios)
         // This ensures sound and vibration work even when app is backgrounded
