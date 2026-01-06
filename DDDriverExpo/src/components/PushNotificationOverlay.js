@@ -7,30 +7,22 @@ import {
   Animated,
   Dimensions,
   Platform,
+  StatusBar,
 } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
 const PushNotificationOverlay = ({ visible, onClose }) => {
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     if (visible) {
       // Animate in
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleAnim, {
-          toValue: 1,
-          tension: 50,
-          friction: 7,
-          useNativeDriver: true,
-        }),
-      ]).start();
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }).start();
 
       // Auto close after 3 seconds
       const timer = setTimeout(() => {
@@ -39,26 +31,18 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
 
       return () => clearTimeout(timer);
     } else {
-      // Reset animations when hidden
+      // Reset animation when hidden
       fadeAnim.setValue(0);
-      scaleAnim.setValue(0.8);
     }
   }, [visible]);
 
   const handleClose = () => {
     // Animate out
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 0.8,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: true,
+    }).start(() => {
       onClose();
     });
   };
@@ -68,11 +52,14 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
   return (
     <Modal
       visible={visible}
-      transparent={true}
+      transparent={false}
       animationType="none"
       onRequestClose={handleClose}
-      statusBarTranslucent={true}
+      statusBarTranslucent={false}
+      presentationStyle="fullScreen"
+      hardwareAccelerated={true}
     >
+      <StatusBar hidden={true} />
       <Animated.View
         style={[
           styles.overlay,
@@ -81,16 +68,7 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
           },
         ]}
       >
-        <Animated.View
-          style={[
-            styles.content,
-            {
-              transform: [{ scale: scaleAnim }],
-            },
-          ]}
-        >
-          <Text style={styles.greetingText}>Hi Maria</Text>
-        </Animated.View>
+        <Text style={styles.greetingText}>Hi Maria</Text>
       </Animated.View>
     </Modal>
   );
@@ -99,40 +77,35 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: '#90EE90', // Light green
     width: width,
     height: height,
     position: 'absolute',
     top: 0,
     left: 0,
-    zIndex: 10000,
-  },
-  content: {
-    backgroundColor: '#00E0B8',
-    paddingHorizontal: 60,
-    paddingVertical: 40,
-    borderRadius: 20,
-    alignItems: 'center',
+    right: 0,
+    bottom: 0,
+    zIndex: 99999,
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        paddingTop: 0,
+      },
+      android: {
+        paddingTop: 0,
+      },
+    }),
   },
   greetingText: {
-    fontSize: 48,
+    fontSize: 64,
     fontWeight: '900',
     color: '#FFFFFF',
     textAlign: 'center',
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 2, height: 2 },
     textShadowRadius: 4,
-    letterSpacing: 2,
+    letterSpacing: 3,
   },
 });
 
