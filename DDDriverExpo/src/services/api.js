@@ -46,13 +46,19 @@ const getBaseURL = () => {
     let updateBranch = null;
     try {
       if (Updates) {
-        updateChannel = Updates.channel || null;
-        updateBranch = Updates.branch || null;
+        try {
+          updateChannel = Updates.channel || null;
+        } catch (e) {
+          console.log('⚠️ [API] Could not read Updates.channel:', e.message);
+        }
+        try {
+          updateBranch = Updates.branch || null;
+        } catch (e) {
+          console.log('⚠️ [API] Could not read Updates.branch:', e.message);
+        }
         console.log('🔍 [API] Update info:', {
           channel: updateChannel,
-          branch: updateBranch,
-          updateId: Updates.updateId,
-          isEmbeddedLaunch: Updates.isEmbeddedLaunch
+          branch: updateBranch
         });
       }
     } catch (e) {
