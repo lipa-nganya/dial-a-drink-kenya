@@ -52,8 +52,10 @@ fi
 if [ "$CHANNEL" == "local" ] || [ "$CHANNEL" == "local-dev" ]; then
   export EXPO_PUBLIC_ENV="local"
   export EXPO_PUBLIC_BUILD_PROFILE="local-dev"
+  export EXPO_PUBLIC_USE_LOCAL_BACKEND="true"
   export EXPO_PUBLIC_API_BASE_URL="https://homiest-psychopharmacologic-anaya.ngrok-free.dev"
   echo "🔧 Environment: LOCAL DEV"
+  echo "   EXPO_PUBLIC_USE_LOCAL_BACKEND=true"
   echo "   API URL: $EXPO_PUBLIC_API_BASE_URL"
 elif [ "$CHANNEL" == "production" ] || [ "$CHANNEL" == "development" ] || [ "$CHANNEL" == "cloud-dev" ] || [ "$CHANNEL" == "preview" ]; then
   export EXPO_PUBLIC_ENV="cloud"
