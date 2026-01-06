@@ -17,6 +17,7 @@
       "env": {
         "EXPO_PUBLIC_ENV": "local",
         "EXPO_PUBLIC_BUILD_PROFILE": "local-dev",
+        "EXPO_PUBLIC_USE_LOCAL_BACKEND": "true",
         "EXPO_PUBLIC_API_BASE_URL": "https://homiest-psychopharmacologic-anaya.ngrok-free.dev"
       }
     },
