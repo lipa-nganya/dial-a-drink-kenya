@@ -1,12 +1,17 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import api from './api';
+import { notificationEvents } from '../utils/notificationEvents';
 
 // Configure how notifications are handled when app is in foreground
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     console.log('📱 Notification handler called:', notification);
     console.log('📱 Notification data:', notification.request.content.data);
+    
+    // Emit event to trigger overlay
+    console.log('📱 Emitting notification event to trigger overlay');
+    notificationEvents.emit('notification-received', notification);
     
     return {
       shouldShowAlert: true,
