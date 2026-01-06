@@ -391,6 +391,15 @@ const Drivers = () => {
         </Button>
       </Box>
 
+      {pushTestResult && (
+        <Alert 
+          severity={pushTestResult.success ? 'success' : 'error'} 
+          sx={{ mb: 3 }}
+          onClose={() => setPushTestResult(null)}
+        >
+          {pushTestResult.message}
+        </Alert>
+      )}
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
           {error}
