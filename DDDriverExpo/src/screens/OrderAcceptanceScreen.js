@@ -314,7 +314,7 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
       presentationStyle="fullScreen" // iOS: ensure full screen
       hardwareAccelerated={true} // Android: hardware acceleration
     >
-             <StatusBar barStyle="dark-content" backgroundColor="#00FF88" translucent={false} />
+             <StatusBar barStyle="dark-content" backgroundColor="#90EE90" translucent={false} />
       <View style={styles.blueOverlay}>
         <View style={styles.contentContainer}>
           <Text style={styles.alertTitle}>NEW ORDER ASSIGNED</Text>
@@ -356,7 +356,7 @@ const OrderAcceptanceScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   blueOverlay: {
     flex: 1,
-    backgroundColor: '#00FF88', // Luminous bright green
+    backgroundColor: '#90EE90', // Light green
     width: '100%',
     height: '100%',
     position: 'absolute',

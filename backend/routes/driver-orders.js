@@ -133,10 +133,24 @@ router.post('/:orderId/respond', async (req, res) => {
           balance: creditCheck.balance
         });
       }
+      
+      // If accepted, update order status to 'confirmed' (in progress)
+      await order.update({ 
+        driverAccepted: accepted,
+        status: 'confirmed' // Move to in progress
+      });
+      console.log(`✅ Order #${order.id} accepted by driver ${driverId} - status updated to 'confirmed'`);
+    } else {
+      // If rejected, assign order to HOLD driver
+      const { getOrCreateHoldDriver } = require('../utils/holdDriver');
+      const { driver: holdDriver } = await getOrCreateHoldDriver();
+      
+      await order.update({ 
+        driverAccepted: accepted,
+        driverId: holdDriver.id // Assign to HOLD driver
+      });
+      console.log(`⚠️ Order #${order.id} rejected by driver ${driverId} - reassigned to HOLD Driver (ID: ${holdDriver.id})`);
     }
-
-    // Update driver acceptance status
-    await order.update({ driverAccepted: accepted });
 
     // Reload order with all associations
     const updatedOrder = await db.Order.findByPk(order.id, {
