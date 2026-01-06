@@ -22,6 +22,8 @@ import OrderAcceptanceScreen from './src/screens/OrderAcceptanceScreen';
 import OrderDetailScreen from './src/screens/OrderDetailScreen';
 import WalletScreen from './src/screens/WalletScreen';
 import { registerForPushNotifications, configureNotificationChannel } from './src/services/notifications';
+import * as Notifications from 'expo-notifications';
+import PushNotificationOverlay from './src/components/PushNotificationOverlay';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -298,6 +300,7 @@ const App = () => {
   const [initialRoute, setInitialRoute] = useState('PhoneNumber');
   const [isUpdateAvailable, setIsUpdateAvailable] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [showPushOverlay, setShowPushOverlay] = useState(false);
 
   // Check for OTA updates
   useEffect(() => {
@@ -401,6 +404,19 @@ const App = () => {
     }
   }, []);
 
+  // Set up global push notification listener to show overlay
+  useEffect(() => {
+    const subscription = Notifications.addNotificationReceivedListener(notification => {
+      console.log('📱 Push notification received globally:', notification);
+      // Show overlay for any push notification
+      setShowPushOverlay(true);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   useEffect(() => {
     // Start with update check, then auth check
     checkForUpdates();
@@ -462,6 +478,10 @@ const App = () => {
         translucent={false}
       />
       <AppNavigator initialRoute={initialRoute} />
+      <PushNotificationOverlay 
+        visible={showPushOverlay} 
+        onClose={() => setShowPushOverlay(false)} 
+      />
     </ThemeProvider>
   );
 };
