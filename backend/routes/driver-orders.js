@@ -171,9 +171,10 @@ router.post('/:orderId/respond', async (req, res) => {
       ]
     });
 
-    // Emit Socket.IO event to notify admin
+    // Emit Socket.IO events
     const io = req.app.get('io');
     if (io) {
+      // Notify admin about driver response
       io.to('admin').emit('driver-order-response', {
         orderId: order.id,
         driverId: driverId,
@@ -181,6 +182,28 @@ router.post('/:orderId/respond', async (req, res) => {
         order: updatedOrder,
         message: `Driver ${accepted ? 'accepted' : 'rejected'} order #${order.id}`
       });
+      
+      // Emit order-status-updated event for real-time updates
+      io.to(`order-${order.id}`).emit('order-status-updated', {
+        orderId: order.id,
+        status: updatedOrder.status,
+        oldStatus: order.status,
+        paymentStatus: updatedOrder.paymentStatus,
+        order: updatedOrder
+      });
+      
+      // Also emit to driver room if order still has a driver
+      if (updatedOrder.driverId) {
+        io.to(`driver-${updatedOrder.driverId}`).emit('order-status-updated', {
+          orderId: order.id,
+          status: updatedOrder.status,
+          oldStatus: order.status,
+          paymentStatus: updatedOrder.paymentStatus,
+          order: updatedOrder
+        });
+      }
+      
+      console.log(`📡 Emitted order-status-updated for Order #${order.id}: ${order.status} → ${updatedOrder.status}`);
     }
 
     res.json({
