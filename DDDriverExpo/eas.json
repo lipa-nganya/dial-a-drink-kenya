@@ -13,7 +13,7 @@
       "android": {
         "buildType": "apk"
       },
-      "channel": "local-dev",
+      "channel": "local",
       "env": {
         "EXPO_PUBLIC_ENV": "local",
         "EXPO_PUBLIC_BUILD_PROFILE": "local-dev",
