@@ -78,6 +78,15 @@ const getBaseURL = () => {
     return `${ngrokUrl}/api`;
   }
   
+  // Check build profile for local-dev (even if channel not set)
+  if (buildProfile === 'local-dev' || buildProfile === 'local') {
+    const ngrokUrl = envBase && (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1'))
+      ? envBase
+      : 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] local-dev build profile detected - using ngrok URL:', `${ngrokUrl}/api`);
+    return `${ngrokUrl}/api`;
+  }
+  
   if (updateChannel === 'production' || updateChannel === 'development' || updateChannel === 'cloud-dev' || updateChannel === 'preview') {
     const cloudApiUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
     console.log(`🌐 [API] ${updateChannel} channel detected - using production API URL:`, `${cloudApiUrl}/api`);
