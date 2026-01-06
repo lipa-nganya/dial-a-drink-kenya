@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
+import * as Updates from 'expo-updates';
 import api from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import ThemeSwitcher from '../components/ThemeSwitcher';
@@ -19,12 +21,96 @@ const ProfileScreen = ({ route, navigation }) => {
   const { phoneNumber } = route.params || {};
   const [driverInfo, setDriverInfo] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [appInfo, setAppInfo] = useState({ version: 'N/A', branch: 'N/A', channel: 'N/A' });
   const { colors, isDarkMode } = useTheme();
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadDriverData();
+    loadAppInfo();
   }, []);
+
+  const loadAppInfo = () => {
+    try {
+      // Get app version from Constants
+      const version = Constants?.expoConfig?.version || Constants?.manifest?.version || 'N/A';
+      
+      // Determine branch/channel - check multiple sources
+      let branch = 'N/A';
+      let channel = 'N/A';
+      
+      // Method 1: Check build profile from environment variable (set at build time)
+      const buildProfile = process.env.EXPO_PUBLIC_BUILD_PROFILE || process.env.EAS_BUILD_PROFILE;
+      if (buildProfile) {
+        // Map build profile to branch name
+        if (buildProfile === 'local-dev') {
+          branch = 'local';
+        } else if (buildProfile === 'cloud-dev') {
+          branch = 'cloud-dev';
+        } else {
+          branch = buildProfile;
+        }
+        console.log('📱 Branch from build profile:', branch);
+      }
+      
+      // Method 2: Check bundle ID for local builds
+      if (branch === 'N/A') {
+        const bundleId = Constants?.expoConfig?.ios?.bundleIdentifier || Constants?.expoConfig?.android?.package || '';
+        const appName = Constants?.expoConfig?.name || '';
+        if (bundleId?.includes('.local') || appName?.includes('Local')) {
+          branch = 'local';
+          console.log('📱 Branch from bundle ID/app name:', branch);
+        }
+      }
+      
+      // Method 3: Check Updates module for branch/channel
+      try {
+        if (Updates && Updates.isEnabled) {
+          const updateBranch = Updates.branch;
+          const updateChannel = Updates.channel;
+          
+          if (updateBranch && updateBranch !== 'N/A') {
+            branch = updateBranch;
+            console.log('📱 Branch from Updates.branch:', branch);
+          }
+          
+          if (updateChannel && updateChannel !== 'N/A') {
+            channel = updateChannel;
+            console.log('📱 Channel from Updates.channel:', channel);
+          }
+          
+          // If we have channel but no branch, use channel as branch
+          if (branch === 'N/A' && channel !== 'N/A') {
+            branch = channel;
+            console.log('📱 Using channel as branch:', branch);
+          }
+        } else {
+          console.log('📱 Updates not enabled (development mode)');
+        }
+      } catch (e) {
+        console.log('📱 Updates not available:', e.message);
+      }
+      
+      // Method 4: Check environment variable for explicit indication
+      if (branch === 'N/A') {
+        if (process.env.EXPO_PUBLIC_USE_LOCAL_BACKEND === 'true' || process.env.EXPO_PUBLIC_ENV === 'local') {
+          branch = 'local';
+          console.log('📱 Branch from environment variable:', branch);
+        }
+      }
+      
+      // Final fallback: if still N/A, show "Development" for dev mode
+      if (branch === 'N/A' && __DEV__) {
+        branch = 'Development';
+        console.log('📱 Branch set to Development (dev mode)');
+      }
+      
+      setAppInfo({ version, branch, channel });
+      console.log('📱 App Info loaded:', { version, branch, channel, buildProfile, __DEV__ });
+    } catch (error) {
+      console.error('Error loading app info:', error);
+    }
+  };
 
   const loadDriverData = async () => {
     try {
@@ -142,6 +228,24 @@ const ProfileScreen = ({ route, navigation }) => {
               </Text>
             </View>
           )}
+
+          {/* App Info Section */}
+          <View style={[styles.infoCard, { backgroundColor: safeColors.paper }]}>
+            <Text style={[styles.sectionTitle, { color: safeColors.textPrimary }]}>App Info</Text>
+            
+            <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Version:</Text>
+            <Text style={[styles.infoValue, { color: safeColors.textPrimary }]}>{appInfo.version}</Text>
+            
+            <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Branch:</Text>
+            <Text style={[styles.infoValue, { color: safeColors.accentText }]}>{appInfo.branch}</Text>
+            
+            {appInfo.channel !== 'N/A' && appInfo.channel !== appInfo.branch && (
+              <>
+                <Text style={[styles.infoLabel, { color: safeColors.textSecondary }]}>Channel:</Text>
+                <Text style={[styles.infoValue, { color: safeColors.textPrimary }]}>{appInfo.channel}</Text>
+              </>
+            )}
+          </View>
         </View>
       </ScrollView>
       
@@ -151,7 +255,7 @@ const ProfileScreen = ({ route, navigation }) => {
           styles.logoutButton, 
           { 
             backgroundColor: safeColors.error || '#FF3366',
-            bottom: 60 + Math.max(insets.bottom, 10) + 10, // Tab height + safe area + margin
+            bottom: 60 + Math.max(insets.bottom, 10) + 30, // Tab height + safe area + more margin (moved lower)
           }
         ]} 
         onPress={handleLogout}
@@ -198,6 +302,12 @@ const styles = StyleSheet.create({
   infoValue: {
     fontSize: 18,
     fontWeight: '600',
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    marginTop: 5,
   },
   logoutButton: {
     position: 'absolute',
