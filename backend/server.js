@@ -157,11 +157,11 @@ async function loadFullApplication() {
     // Setup Socket.IO handlers
     io.on('connection', (socket) => {
       console.log('✅✅✅ Client connected:', socket.id);
-      console.log('✅✅✅ Socket transport:', socket.transport.name);
+      console.log('✅✅✅ Socket transport:', socket.transport?.name || 'unknown');
       console.log('✅✅✅ Socket handshake:', {
-        address: socket.handshake.address,
-        headers: socket.handshake.headers,
-        query: socket.handshake.query
+        address: socket.handshake?.address || 'unknown',
+        headers: socket.handshake?.headers || {},
+        query: socket.handshake?.query || {}
       });
       
       socket.on('join-admin', () => {
