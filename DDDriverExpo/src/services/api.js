@@ -129,15 +129,8 @@ const getBaseURL = () => {
   }
 };
 
-// Create axios instance with lazy baseURL initialization
-// This ensures Constants and Updates are available when getBaseURL() is called
-let baseURL = null;
-const getBaseURLLazy = () => {
-  if (!baseURL) {
-    baseURL = getBaseURL();
-  }
-  return baseURL;
-};
+// Note: baseURL is now calculated on every request to ensure we always get the latest value
+// This prevents issues where channel/branch detection might change or be delayed
 
 const api = axios.create({
   baseURL: '', // Will be set dynamically on first request
@@ -151,10 +144,20 @@ const api = axios.create({
 // Request interceptor: Set baseURL dynamically and add auth tokens if needed
 api.interceptors.request.use(
   (config) => {
-    // Set baseURL on first request (lazy initialization)
-    if (!config.baseURL || config.baseURL === '') {
-      config.baseURL = getBaseURLLazy();
-    }
+    // Always recalculate baseURL to ensure we get the latest value
+    // This prevents caching issues if channel/branch changes
+    const currentBaseURL = getBaseURL();
+    config.baseURL = currentBaseURL;
+    
+    // Log the actual URL being used for debugging
+    const fullUrl = `${config.baseURL}${config.url}`;
+    console.log('🌐 [API] Request:', {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      baseURL: config.baseURL,
+      fullUrl: fullUrl
+    });
+    
     // Add any auth tokens here if needed
     return config;
   },
