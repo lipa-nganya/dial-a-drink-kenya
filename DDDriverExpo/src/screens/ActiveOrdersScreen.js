@@ -319,11 +319,24 @@ const ActiveOrdersScreen = ({ route, navigation }) => {
     socketRef.current = socket;
     
     socket.on('connect', () => {
-      console.log('✅ Socket.IO connected successfully');
-      console.log('✅ Socket ID:', socket.id);
+      console.log('✅✅✅ Socket.IO connected successfully');
+      console.log('✅✅✅ Socket ID:', socket.id);
+      console.log('✅✅✅ Socket URL:', socketUrl);
+      console.log('✅✅✅ Driver ID:', driverInfo.id);
+      
       // Join driver room
+      console.log(`📡 Emitting join-driver event for driver-${driverInfo.id}`);
       socket.emit('join-driver', driverInfo.id);
-      console.log(`✅ Joined driver room: driver-${driverInfo.id}`);
+      console.log(`✅✅✅ Emitted join-driver for driver-${driverInfo.id}`);
+      
+      // Verify connection after a short delay
+      setTimeout(() => {
+        if (socket.connected) {
+          console.log('✅✅✅ Socket connection verified - still connected');
+        } else {
+          console.error('❌❌❌ Socket connection lost immediately after connect');
+        }
+      }, 1000);
     });
     
     socket.on('connect_error', (error) => {
