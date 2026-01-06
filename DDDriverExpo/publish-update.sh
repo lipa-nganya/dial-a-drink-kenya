@@ -19,6 +19,7 @@ if [ -z "$CHANNEL" ] || [ -z "$MESSAGE" ]; then
   echo "Example: ./publish-update.sh production \"Fixed bug\""
   echo ""
   echo "Available channels:"
+  echo "  - local: Uses localhost/ngrok API URL"
   echo "  - local-dev: Uses localhost/ngrok API URL"
   echo "  - production: Uses cloud-dev API URL"
   echo "  - development: Uses cloud-dev API URL"
@@ -48,7 +49,7 @@ fi
 # Set environment variables based on channel
 # CRITICAL: These environment variables are embedded in the OTA update
 # and will be used by the app when it loads the update
-if [ "$CHANNEL" == "local-dev" ]; then
+if [ "$CHANNEL" == "local" ] || [ "$CHANNEL" == "local-dev" ]; then
   export EXPO_PUBLIC_ENV="local"
   export EXPO_PUBLIC_BUILD_PROFILE="local-dev"
   export EXPO_PUBLIC_API_BASE_URL="https://homiest-psychopharmacologic-anaya.ngrok-free.dev"
