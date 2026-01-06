@@ -121,6 +121,9 @@ router.post('/:orderId/respond', async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to respond to this order' });
     }
 
+    const oldStatus = order.status;
+    const oldDriverId = order.driverId;
+    
     // Check credit limit if driver is trying to accept the order
     if (accepted === true) {
       const creditCheck = await checkDriverCreditLimit(parseInt(driverId));
@@ -139,7 +142,7 @@ router.post('/:orderId/respond', async (req, res) => {
         driverAccepted: accepted,
         status: 'confirmed' // Move to in progress
       });
-      console.log(`✅ Order #${order.id} accepted by driver ${driverId} - status updated to 'confirmed'`);
+      console.log(`✅ Order #${order.id} accepted by driver ${driverId} - status updated from '${oldStatus}' to 'confirmed'`);
     } else {
       // If rejected, assign order to HOLD driver
       const { getOrCreateHoldDriver } = require('../utils/holdDriver');
@@ -152,7 +155,7 @@ router.post('/:orderId/respond', async (req, res) => {
       console.log(`⚠️ Order #${order.id} rejected by driver ${driverId} - reassigned to HOLD Driver (ID: ${holdDriver.id})`);
     }
 
-    // Reload order with all associations
+    // Reload order with all associations to get updated data
     const updatedOrder = await db.Order.findByPk(order.id, {
       include: [
         {
@@ -187,23 +190,40 @@ router.post('/:orderId/respond', async (req, res) => {
       io.to(`order-${order.id}`).emit('order-status-updated', {
         orderId: order.id,
         status: updatedOrder.status,
-        oldStatus: order.status,
+        oldStatus: oldStatus,
         paymentStatus: updatedOrder.paymentStatus,
         order: updatedOrder
       });
       
-      // Also emit to driver room if order still has a driver
+      // Emit to admin room
+      io.to('admin').emit('order-status-updated', {
+        orderId: order.id,
+        status: updatedOrder.status,
+        oldStatus: oldStatus,
+        paymentStatus: updatedOrder.paymentStatus,
+        order: updatedOrder
+      });
+      
+      // Also emit to driver room if order still has a driver (for accepted orders)
+      // Also emit to old driver room if driver was changed (for rejected orders)
       if (updatedOrder.driverId) {
         io.to(`driver-${updatedOrder.driverId}`).emit('order-status-updated', {
           orderId: order.id,
           status: updatedOrder.status,
-          oldStatus: order.status,
+          oldStatus: oldStatus,
           paymentStatus: updatedOrder.paymentStatus,
           order: updatedOrder
         });
       }
       
-      console.log(`📡 Emitted order-status-updated for Order #${order.id}: ${order.status} → ${updatedOrder.status}`);
+      // If driver was changed (rejected), also notify old driver
+      if (oldDriverId && oldDriverId !== updatedOrder.driverId) {
+        io.to(`driver-${oldDriverId}`).emit('driver-removed', {
+          orderId: order.id
+        });
+      }
+      
+      console.log(`📡 Emitted order-status-updated for Order #${order.id}: ${oldStatus} → ${updatedOrder.status}`);
     }
 
     res.json({
