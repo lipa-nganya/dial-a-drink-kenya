@@ -466,6 +466,13 @@ router.post('/', async (req, res) => {
           console.log(`✅ Socket event sent directly to driver ${driverIdToNotify}`);
         } else {
           console.log(`⚠️⚠️⚠️ WARNING: Driver ${driverIdToNotify} not registered with socket! App may not be connected.`);
+          console.log(`📡 Attempting fallback: emitting to driver room driver-${driverIdToNotify}`);
+          // Fallback: emit to driver room in case app is using room-based connection
+          io.to(`driver-${driverIdToNotify}`).emit('order-assigned', {
+            order: completeOrder,
+            playSound: true
+          });
+          console.log(`✅ Fallback socket event sent to driver room driver-${driverIdToNotify}`);
         }
         
         // Send push notification (for background/screen-off scenarios)
