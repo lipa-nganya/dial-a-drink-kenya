@@ -43,17 +43,28 @@ const getBaseURL = () => {
     // PRIORITY 1: Check update channel FIRST (this is set by OTA updates and takes precedence)
     // This is the most reliable way to determine which backend to use for OTA updates
     let updateChannel = null;
+    let updateBranch = null;
     try {
-      if (Updates && Updates.channel) {
-        updateChannel = Updates.channel;
-        console.log('🔍 [API] Detected update channel:', updateChannel);
+      if (Updates) {
+        updateChannel = Updates.channel || null;
+        updateBranch = Updates.branch || null;
+        console.log('🔍 [API] Update info:', {
+          channel: updateChannel,
+          branch: updateBranch,
+          updateId: Updates.updateId,
+          isEmbeddedLaunch: Updates.isEmbeddedLaunch
+        });
       }
     } catch (e) {
       console.log('⚠️ [API] Updates module not available:', e.message);
     }
     
-    if (updateChannel === 'local' || updateChannel === 'local-dev') {
-      console.log('🌐 [API] PRIORITY 1: Local channel detected (', updateChannel, ') - FORCING local backend:', `${localBackendUrl}/api`);
+    // Check if channel or branch indicates local
+    const isLocalChannel = updateChannel === 'local' || updateChannel === 'local-dev';
+    const isLocalBranch = updateBranch === 'local';
+    
+    if (isLocalChannel || isLocalBranch) {
+      console.log('🌐 [API] PRIORITY 1: Local detected (channel:', updateChannel, 'branch:', updateBranch, ') - FORCING local backend:', `${localBackendUrl}/api`);
       return `${localBackendUrl}/api`;
     }
     
@@ -71,9 +82,9 @@ const getBaseURL = () => {
         console.log('🌐 [API] PRIORITY 3: Using local backend from env:', `${envBase}/api`);
         return `${envBase}/api`;
       }
-      // If env has cloud URL but channel is local, override it
-      if ((updateChannel === 'local' || updateChannel === 'local-dev') && envBase.includes('run.app')) {
-        console.log('🌐 [API] PRIORITY 3: Local channel but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+      // If env has cloud URL but channel/branch is local, override it
+      if ((isLocalChannel || isLocalBranch) && envBase.includes('run.app')) {
+        console.log('🌐 [API] PRIORITY 3: Local channel/branch but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
         return `${localBackendUrl}/api`;
       }
     }
@@ -81,9 +92,9 @@ const getBaseURL = () => {
     // PRIORITY 4: Check app config (from build time) - but ONLY if channel is not local
     const configBase = normalizeBaseUrl(Constants?.expoConfig?.extra?.apiBaseUrl);
     if (configBase) {
-      // If channel is local but app config has cloud URL, override it
-      if ((updateChannel === 'local' || updateChannel === 'local-dev') && configBase.includes('run.app')) {
-        console.log('🌐 [API] PRIORITY 4: Local channel but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+      // If channel/branch is local but app config has cloud URL, override it
+      if ((isLocalChannel || isLocalBranch) && configBase.includes('run.app')) {
+        console.log('🌐 [API] PRIORITY 4: Local channel/branch but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
         return `${localBackendUrl}/api`;
       }
       // If bundle is local but app config has cloud URL, override it
@@ -95,9 +106,9 @@ const getBaseURL = () => {
       return `${configBase}/api`;
     }
     
-    // Default: If channel is local or build is local, use local backend
-    if (updateChannel === 'local' || updateChannel === 'local-dev' || isLocalBuild) {
-      console.log('🌐 [API] Default: Local detected (channel:', updateChannel, 'isLocalBuild:', isLocalBuild, ') - using local backend:', `${localBackendUrl}/api`);
+    // Default: If channel/branch is local or build is local, use local backend
+    if (isLocalChannel || isLocalBranch || isLocalBuild) {
+      console.log('🌐 [API] Default: Local detected (channel:', updateChannel, 'branch:', updateBranch, 'isLocalBuild:', isLocalBuild, ') - using local backend:', `${localBackendUrl}/api`);
       return `${localBackendUrl}/api`;
     }
     
