@@ -55,6 +55,7 @@ const getBaseURL = () => {
       }
     } catch (e) {
       // Updates module not available
+      console.log('⚠️ [API] Updates module not available:', e.message);
     }
     
     if (updateChannel === 'local' || updateChannel === 'local-dev') {
@@ -105,8 +106,18 @@ const getBaseURL = () => {
   }
 };
 
+// Create axios instance with lazy baseURL initialization
+// This ensures Constants and Updates are available when getBaseURL() is called
+let baseURL = null;
+const getBaseURLLazy = () => {
+  if (!baseURL) {
+    baseURL = getBaseURL();
+  }
+  return baseURL;
+};
+
 const api = axios.create({
-  baseURL: getBaseURL(),
+  baseURL: '', // Will be set dynamically on first request
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
@@ -114,9 +125,13 @@ const api = axios.create({
   },
 });
 
-// Request interceptor for adding auth tokens if needed
+// Request interceptor: Set baseURL dynamically and add auth tokens if needed
 api.interceptors.request.use(
   (config) => {
+    // Set baseURL on first request (lazy initialization)
+    if (!config.baseURL || config.baseURL === '') {
+      config.baseURL = getBaseURLLazy();
+    }
     // Add any auth tokens here if needed
     return config;
   },
