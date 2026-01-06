@@ -40,62 +40,68 @@ const getBaseURL = () => {
     const localBackendUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
     const cloudBackendUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
     
-    // ABSOLUTE PRIORITY: If bundle ID contains .local or app name contains "Local", ALWAYS use local backend
-    // This check MUST happen first and cannot be overridden
-    if (isLocalBuild) {
-      console.log('🌐 [API] Local build detected (bundleId:', bundleId, 'appName:', appName, ') - FORCING local backend:', `${localBackendUrl}/api`);
-      return `${localBackendUrl}/api`;
-    }
-    
-    // Check update channel
+    // PRIORITY 1: Check update channel FIRST (this is set by OTA updates and takes precedence)
+    // This is the most reliable way to determine which backend to use for OTA updates
     let updateChannel = null;
     try {
       if (Updates && Updates.channel) {
         updateChannel = Updates.channel;
+        console.log('🔍 [API] Detected update channel:', updateChannel);
       }
     } catch (e) {
-      // Updates module not available
       console.log('⚠️ [API] Updates module not available:', e.message);
     }
     
     if (updateChannel === 'local' || updateChannel === 'local-dev') {
-      console.log('🌐 [API] Local channel detected (', updateChannel, ') - using local backend:', `${localBackendUrl}/api`);
+      console.log('🌐 [API] PRIORITY 1: Local channel detected (', updateChannel, ') - FORCING local backend:', `${localBackendUrl}/api`);
       return `${localBackendUrl}/api`;
     }
     
-    // Check environment variable (from OTA update)
+    // PRIORITY 2: If bundle ID contains .local or app name contains "Local", ALWAYS use local backend
+    // This check is for native builds with local bundle ID
+    if (isLocalBuild) {
+      console.log('🌐 [API] PRIORITY 2: Local build detected (bundleId:', bundleId, 'appName:', appName, ') - FORCING local backend:', `${localBackendUrl}/api`);
+      return `${localBackendUrl}/api`;
+    }
+    
+    // PRIORITY 3: Check environment variable (from OTA update)
     const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
     if (envBase) {
       if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
-        console.log('🌐 [API] Using local backend from env:', `${envBase}/api`);
+        console.log('🌐 [API] PRIORITY 3: Using local backend from env:', `${envBase}/api`);
         return `${envBase}/api`;
       }
-      // If env has cloud URL but bundle is local, override it
-      if (isLocalBuild && envBase.includes('run.app')) {
-        console.log('🌐 [API] Local build detected but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+      // If env has cloud URL but channel is local, override it
+      if ((updateChannel === 'local' || updateChannel === 'local-dev') && envBase.includes('run.app')) {
+        console.log('🌐 [API] PRIORITY 3: Local channel but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
         return `${localBackendUrl}/api`;
       }
     }
     
-    // Check app config (from build time)
+    // PRIORITY 4: Check app config (from build time) - but ONLY if channel is not local
     const configBase = normalizeBaseUrl(Constants?.expoConfig?.extra?.apiBaseUrl);
     if (configBase) {
-      // If app config has cloud URL but bundle is local, override it
-      if (isLocalBuild && configBase.includes('run.app')) {
-        console.log('🌐 [API] Local build detected but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+      // If channel is local but app config has cloud URL, override it
+      if ((updateChannel === 'local' || updateChannel === 'local-dev') && configBase.includes('run.app')) {
+        console.log('🌐 [API] PRIORITY 4: Local channel but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
         return `${localBackendUrl}/api`;
       }
-      console.log('🌐 [API] Using backend from app config:', `${configBase}/api`);
+      // If bundle is local but app config has cloud URL, override it
+      if (isLocalBuild && configBase.includes('run.app')) {
+        console.log('🌐 [API] PRIORITY 4: Local build but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+        return `${localBackendUrl}/api`;
+      }
+      console.log('🌐 [API] PRIORITY 4: Using backend from app config:', `${configBase}/api`);
       return `${configBase}/api`;
     }
     
-    // Default to cloud backend ONLY if not a local build
-    if (isLocalBuild) {
-      console.log('🌐 [API] Local build detected but no URL found - using local backend default:', `${localBackendUrl}/api`);
+    // Default: If channel is local or build is local, use local backend
+    if (updateChannel === 'local' || updateChannel === 'local-dev' || isLocalBuild) {
+      console.log('🌐 [API] Default: Local detected (channel:', updateChannel, 'isLocalBuild:', isLocalBuild, ') - using local backend:', `${localBackendUrl}/api`);
       return `${localBackendUrl}/api`;
     }
     
-    console.log('🌐 [API] Using cloud backend default:', `${cloudBackendUrl}/api`);
+    console.log('🌐 [API] Default: Using cloud backend:', `${cloudBackendUrl}/api`);
     return `${cloudBackendUrl}/api`;
   } catch (error) {
     console.error('❌ [API] Error determining base URL:', error);
