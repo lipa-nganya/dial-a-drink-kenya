@@ -154,7 +154,13 @@ async function loadFullApplication() {
     
     app.set('io', io);
     
+    // Map to track driver ID -> socket ID (for direct emission without rooms)
+    const driverSocketMap = new Map(); // driverId -> socketId
+
     // Setup Socket.IO handlers
+    // Store driver socket map in app for access from routes
+    app.set('driverSocketMap', driverSocketMap);
+    
     io.on('connection', (socket) => {
       console.log('✅✅✅ Client connected:', socket.id);
       console.log('✅✅✅ Socket transport:', socket.transport?.name || 'unknown');
@@ -169,15 +175,11 @@ async function loadFullApplication() {
         console.log(`Client ${socket.id} joined admin room`);
       });
 
-      socket.on('join-driver', (driverId) => {
-        const roomName = `driver-${driverId}`;
-        socket.join(roomName);
-        console.log(`✅✅✅ Client ${socket.id} joined driver room: ${roomName}`);
-        console.log(`✅✅✅ Driver ID: ${driverId}, Room: ${roomName}`);
-        
-        // Verify room membership
-        const rooms = Array.from(socket.rooms);
-        console.log(`✅✅✅ Socket ${socket.id} is now in rooms:`, rooms);
+      socket.on('register-driver', (driverId) => {
+        // Register driver socket for direct emission (no rooms)
+        driverSocketMap.set(parseInt(driverId), socket.id);
+        console.log(`✅✅✅ Driver ${driverId} registered with socket ${socket.id}`);
+        console.log(`✅✅✅ Total registered drivers: ${driverSocketMap.size}`);
       });
 
       socket.on('join-order', (orderId) => {
@@ -188,6 +190,14 @@ async function loadFullApplication() {
       
       socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);
+        // Remove driver from map if they disconnect
+        for (const [driverId, socketId] of driverSocketMap.entries()) {
+          if (socketId === socket.id) {
+            driverSocketMap.delete(driverId);
+            console.log(`✅✅✅ Driver ${driverId} unregistered (disconnected)`);
+            break;
+          }
+        }
       });
     });
     

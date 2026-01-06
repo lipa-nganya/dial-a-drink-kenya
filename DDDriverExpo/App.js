@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar, Platform } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -9,8 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import api from './src/services/api';
-// LocationGate removed - causing performance issues
-// import LocationGate from './src/components/LocationGate';
+import LocationGate from './src/components/LocationGate';
 import PhoneNumberScreen from './src/screens/PhoneNumberScreen';
 import OtpVerificationScreen from './src/screens/OtpVerificationScreen';
 import PinSetupScreen from './src/screens/PinSetupScreen';
@@ -101,9 +100,45 @@ const MainTabs = () => {
   );
 };
 
-// MainTabs - location gate removed due to performance issues
-// Location will be requested when needed (e.g., when accepting orders)
-const MainTabsWithLocationGate = () => {
+// MainTabs with location gate - enforces location permission on app install
+const MainTabsWithLocationGate = ({ route }) => {
+  const [locationSet, setLocationSet] = useState(false);
+  const [driverId, setDriverId] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadDriverId();
+  }, []);
+
+  const loadDriverId = async () => {
+    try {
+      const phone = route?.params?.phoneNumber || await AsyncStorage.getItem('driver_phone');
+      if (phone) {
+        const driverResponse = await api.get(`/drivers/phone/${phone}`);
+        if (driverResponse.data?.id) {
+          setDriverId(driverResponse.data.id);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading driver ID:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading || !driverId) {
+    return null; // Wait for driver ID
+  }
+
+  if (!locationSet) {
+    return (
+      <LocationGate
+        driverId={driverId}
+        onLocationSet={() => setLocationSet(true)}
+      />
+    );
+  }
+
   return <MainTabs />;
 };
 

@@ -22,12 +22,16 @@ const findNearestActiveDriverToBranch = async (branchId) => {
     }
     console.log(`📍 [DriverAssignment] Branch found: ${branch.name} at ${branch.address}`);
 
-    // Get all available drivers (exclude only 'offline' and 'inactive')
-    // Drivers with 'active' or 'on_delivery' status can accept new orders
+    // Get ONLY drivers who are on shift (status = 'active')
+    // Drivers must be on shift to receive orders
     const availableDrivers = await db.Driver.findAll({
       where: {
-        status: {
-          [Op.notIn]: ['offline', 'inactive']
+        status: 'active',
+        locationLatitude: {
+          [Op.not]: null
+        },
+        locationLongitude: {
+          [Op.not]: null
         }
       }
     });
@@ -45,9 +49,8 @@ const findNearestActiveDriverToBranch = async (branchId) => {
       return holdDriver;
     }
     
-    // Prefer active drivers over on_delivery drivers
-    const activeDrivers = eligibleDrivers.filter(d => d.status === 'active');
-    const driversToUse = activeDrivers.length > 0 ? activeDrivers : eligibleDrivers;
+    // All drivers are already 'active' and have location, so use all eligible drivers
+    const driversToUse = eligibleDrivers;
 
     // If only one available driver, assign to them
     if (driversToUse.length === 1) {
@@ -55,16 +58,69 @@ const findNearestActiveDriverToBranch = async (branchId) => {
       return driversToUse[0];
     }
 
-    // If no Google Maps API key, return first available driver as fallback
-    if (!GOOGLE_MAPS_API_KEY) {
-      console.log('⚠️  [DriverAssignment] Google Maps API key not configured. Assigning first available driver as fallback.');
+    // Get branch location (latitude/longitude)
+    // If branch doesn't have lat/long, we'll need to geocode the address
+    let branchLat = branch.latitude || null;
+    let branchLng = branch.longitude || null;
+
+    // If branch doesn't have coordinates, try to geocode the address
+    if ((!branchLat || !branchLng) && branch.address && GOOGLE_MAPS_API_KEY) {
+      try {
+        const axios = require('axios');
+        const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(branch.address)}&key=${GOOGLE_MAPS_API_KEY}`;
+        const geocodeResponse = await axios.get(geocodeUrl);
+        if (geocodeResponse.data.results && geocodeResponse.data.results.length > 0) {
+          const location = geocodeResponse.data.results[0].geometry.location;
+          branchLat = location.lat;
+          branchLng = location.lng;
+          console.log(`📍 [DriverAssignment] Geocoded branch address: ${branchLat}, ${branchLng}`);
+        }
+      } catch (geocodeError) {
+        console.error('❌ [DriverAssignment] Error geocoding branch address:', geocodeError.message);
+      }
+    }
+
+    // If we still don't have branch coordinates, fallback to first driver
+    if (!branchLat || !branchLng) {
+      console.log('⚠️  [DriverAssignment] Branch coordinates not available. Assigning first available driver as fallback.');
       return driversToUse[0];
     }
 
-    // For now, since drivers don't have location fields, we'll use a simple approach:
-    // Prefer active drivers, but assign to on_delivery drivers if no active drivers available
-    // TODO: If drivers get location tracking, use Distance Matrix API to find nearest driver
-    console.log(`✅ [DriverAssignment] Assigning to first available driver: ${driversToUse[0].name} (ID: ${driversToUse[0].id}, status: ${driversToUse[0].status})`);
+    // Calculate distance from branch to each driver and find nearest
+    let nearestDriver = null;
+    let shortestDistance = Infinity;
+
+    for (const driver of driversToUse) {
+      const driverLat = parseFloat(driver.locationLatitude);
+      const driverLng = parseFloat(driver.locationLongitude);
+
+      if (!driverLat || !driverLng) {
+        continue; // Skip drivers without valid location
+      }
+
+      // Calculate distance using Haversine formula
+      const R = 6371; // Earth's radius in kilometers
+      const dLat = (branchLat - driverLat) * Math.PI / 180;
+      const dLng = (branchLng - driverLng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(driverLat * Math.PI / 180) * Math.cos(branchLat * Math.PI / 180) *
+                Math.sin(dLng / 2) * Math.sin(dLng / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c; // Distance in kilometers
+
+      if (distance < shortestDistance) {
+        shortestDistance = distance;
+        nearestDriver = driver;
+      }
+    }
+
+    if (nearestDriver) {
+      console.log(`✅ [DriverAssignment] Found nearest driver: ${nearestDriver.name} (ID: ${nearestDriver.id}) at ${shortestDistance.toFixed(2)} km from branch`);
+      return nearestDriver;
+    }
+
+    // Fallback to first driver if no distance calculation worked
+    console.log('⚠️  [DriverAssignment] Could not calculate distances. Assigning first available driver as fallback.');
     return driversToUse[0];
 
     // Future implementation with driver location:
@@ -123,11 +179,15 @@ const findNearestActiveDriverToBranch = async (branchId) => {
  */
 const findNearestActiveDriverToAddress = async (branchAddress) => {
   try {
-    // Get all available drivers (exclude only 'offline' and 'inactive')
+    // Get ONLY drivers who are on shift (status = 'active') with valid location
     const availableDrivers = await db.Driver.findAll({
       where: {
-        status: {
-          [Op.notIn]: ['offline', 'inactive']
+        status: 'active',
+        locationLatitude: {
+          [Op.not]: null
+        },
+        locationLongitude: {
+          [Op.not]: null
         }
       }
     });
@@ -142,12 +202,17 @@ const findNearestActiveDriverToAddress = async (branchAddress) => {
       return holdDriver;
     }
 
-    // Prefer active drivers over on_delivery drivers
-    const activeDrivers = eligibleDrivers.filter(d => d.status === 'active');
-    const driversToUse = activeDrivers.length > 0 ? activeDrivers : eligibleDrivers;
+    // All drivers are already 'active' and have location, so use all eligible drivers
+    const driversToUse = eligibleDrivers;
 
+    // If only one available driver, assign to them
+    if (driversToUse.length === 1) {
+      return driversToUse[0];
+    }
+
+    // For address-based assignment, we'd need to geocode the address first
     // For now, return first available driver
-    // TODO: Implement location-based assignment when drivers have location tracking
+    // TODO: Implement location-based assignment using geocoded address
     return driversToUse[0];
 
   } catch (error) {

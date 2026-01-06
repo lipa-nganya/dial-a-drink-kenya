@@ -1,183 +1,145 @@
-import React, { useState, useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  Linking,
-  Platform,
-  AppState,
-  ActivityIndicator
-} from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Alert, Platform } from 'react-native';
 import * as Location from 'expo-location';
-import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../contexts/ThemeContext';
+import api from '../services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const LocationGate = ({ children }) => {
-  const [locationEnabled, setLocationEnabled] = useState(null);
-  const [checking, setChecking] = useState(true);
-  const checkingRef = useRef(false);
-  const lastCheckRef = useRef(0);
-  const { colors, isDarkMode } = useTheme();
-
-  const safeColors = colors || {
-    background: '#0D0D0D',
-    paper: '#121212',
-    textPrimary: '#F5F5F5',
-    textSecondary: '#B0B0B0',
-    accent: '#00E0B8',
-    accentText: '#00E0B8',
-    border: '#333',
-    error: '#FF3366',
-  };
-
-  const checkLocationStatus = async () => {
-    // Prevent concurrent checks and throttle checks (max once per 2 seconds)
-    const now = Date.now();
-    if (checkingRef.current || (now - lastCheckRef.current < 2000)) {
-      return;
-    }
-
-    checkingRef.current = true;
-    lastCheckRef.current = now;
-
-    try {
-      // Don't set checking state immediately - let it be async
-      // Only set checking if we don't have a result yet
-      if (locationEnabled === null) {
-        setChecking(true);
-      }
-      
-      // Request permissions first (non-blocking)
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== 'granted') {
-        console.log('❌ Location permission denied');
-        setLocationEnabled(false);
-        setChecking(false);
-        checkingRef.current = false;
-        return;
-      }
-
-      // Check if location services are enabled (non-blocking)
-      const servicesEnabled = await Location.hasServicesEnabledAsync();
-      
-      if (!servicesEnabled) {
-        console.log('❌ Location services are disabled');
-        setLocationEnabled(false);
-        setChecking(false);
-        checkingRef.current = false;
-        return;
-      }
-
-      console.log('✅ Location permission granted and services enabled');
-      setLocationEnabled(true);
-      setChecking(false);
-    } catch (error) {
-      console.error('❌ Error checking location status:', error);
-      setLocationEnabled(false);
-      setChecking(false);
-    } finally {
-      checkingRef.current = false;
-    }
-  };
+const LocationGate = ({ driverId, onLocationSet }) => {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [requestingPermission, setRequestingPermission] = useState(false);
 
   useEffect(() => {
-    // Initial check on mount (non-blocking)
-    checkLocationStatus();
+    checkAndRequestLocation();
+  }, [driverId]);
 
-    // Monitor app state changes (when user returns to app) - throttled
-    let timeoutId;
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        // Clear any pending timeout
-        if (timeoutId) {
-          clearTimeout(timeoutId);
+  const checkAndRequestLocation = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Check if location was already set
+      const locationSet = await AsyncStorage.getItem('driver_location_set');
+      if (locationSet === 'true') {
+        // Verify location is still valid by checking driver data
+        try {
+          const driverResponse = await api.get(`/drivers/phone/${await AsyncStorage.getItem('driver_phone')}`);
+          if (driverResponse.data?.locationLatitude && driverResponse.data?.locationLongitude) {
+            console.log('✅ Location already set, skipping gate');
+            onLocationSet();
+            return;
+          }
+        } catch (e) {
+          console.log('Could not verify location, will request again');
         }
-        // Re-check location when app becomes active (with delay to avoid rapid checks)
-        timeoutId = setTimeout(() => {
-          checkLocationStatus();
-        }, 2000); // Increased delay to 2 seconds
       }
-    });
 
-    return () => {
-      subscription?.remove();
-      if (timeoutId) {
-        clearTimeout(timeoutId);
+      // Request location permissions
+      let { status } = await Location.getForegroundPermissionsAsync();
+      
+      if (status !== 'granted') {
+        setRequestingPermission(true);
+        const { status: newStatus } = await Location.requestForegroundPermissionsAsync();
+        
+        if (newStatus !== 'granted') {
+          setError('Location permission is required to use this app. Please enable location access in your device settings.');
+          setLoading(false);
+          return;
+        }
+        setRequestingPermission(false);
       }
-    };
-  }, []);
 
-  const openLocationSettings = async () => {
-    if (Platform.OS === 'ios') {
-      // On iOS, open app settings
-      const url = 'app-settings:';
-      const canOpen = await Linking.canOpenURL(url);
-      if (canOpen) {
-        Linking.openURL(url);
-      } else {
-        // Fallback: try to open general settings
-        Linking.openURL('App-Prefs:root=Privacy&path=LOCATION');
+      // Get current location
+      console.log('📍 Getting current location...');
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+        timeout: 10000,
+        maximumAge: 60000
+      });
+
+      const { latitude, longitude } = location.coords;
+      console.log(`📍 Location obtained: ${latitude}, ${longitude}`);
+
+      // Update driver location on backend
+      try {
+        const response = await api.put(`/drivers/${driverId}/location`, {
+          latitude,
+          longitude
+        });
+
+        if (response.data.success) {
+          console.log('✅ Driver location updated successfully');
+          await AsyncStorage.setItem('driver_location_set', 'true');
+          onLocationSet();
+        } else {
+          throw new Error('Failed to update location on server');
+        }
+      } catch (updateError) {
+        console.error('Error updating location:', updateError);
+        setError('Failed to update location. Please try again.');
+        setLoading(false);
       }
-    } else {
-      // On Android, open app settings
-      Linking.openSettings();
+    } catch (err) {
+      console.error('Location error:', err);
+      setError(err.message || 'Failed to get location. Please ensure location services are enabled.');
+      setLoading(false);
     }
   };
 
-  if (checking) {
+  const handleRetry = () => {
+    checkAndRequestLocation();
+  };
+
+  const handleOpenSettings = () => {
+    Alert.alert(
+      'Location Permission Required',
+      'Please enable location access in your device settings to use this app.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => {
+          if (Platform.OS === 'ios') {
+            Location.requestForegroundPermissionsAsync();
+          } else {
+            // Android - user needs to go to settings manually
+            Alert.alert('Go to Settings', 'Please go to Settings > Apps > Dial a Drink Kenya Driver > Permissions > Location and enable it.');
+          }
+        }}
+      ]
+    );
+  };
+
+  if (loading) {
     return (
-      <View style={[styles.container, { backgroundColor: safeColors.background }]}>
-        <View style={[styles.card, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}>
-          <ActivityIndicator size="large" color={safeColors.accent} />
-          <Text style={[styles.checkingText, { color: safeColors.textSecondary, marginTop: 20 }]}>
-            Checking location permissions...
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#00E0B8" />
+        <Text style={styles.message}>
+          {requestingPermission ? 'Requesting location permission...' : 'Getting your location...'}
+        </Text>
+        <Text style={styles.subMessage}>
+          Location is required to receive orders
+        </Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorTitle}>Location Required</Text>
+        <Text style={styles.errorMessage}>{error}</Text>
+        <View style={styles.buttonContainer}>
+          <Text style={styles.retryButton} onPress={handleRetry}>
+            Retry
+          </Text>
+          <Text style={styles.settingsButton} onPress={handleOpenSettings}>
+            Open Settings
           </Text>
         </View>
       </View>
     );
   }
 
-  if (!locationEnabled) {
-    return (
-      <View style={[styles.container, { backgroundColor: safeColors.background }]}>
-        <View style={[styles.card, { backgroundColor: safeColors.paper, borderColor: safeColors.border }]}>
-          <Ionicons name="location-outline" size={80} color={safeColors.error} />
-          <Text style={[styles.title, { color: safeColors.textPrimary, marginTop: 20 }]}>
-            Location Required
-          </Text>
-          <Text style={[styles.message, { color: safeColors.textSecondary, marginTop: 16 }]}>
-            This app requires location services to be enabled to function properly.
-          </Text>
-          <Text style={[styles.message, { color: safeColors.textSecondary, marginTop: 12 }]}>
-            Please enable location services in your device settings.
-          </Text>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: safeColors.accent, marginTop: 32 }]}
-            onPress={openLocationSettings}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.buttonText, { color: '#0D0D0D' }]}>
-              Open Settings
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.button, { backgroundColor: 'transparent', borderWidth: 1, borderColor: safeColors.border, marginTop: 12 }]}
-            onPress={checkLocationStatus}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.buttonText, { color: safeColors.accentText }]}>
-              Check Again
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    );
-  }
-
-  // Location is enabled, render children
-  return children;
+  return null;
 };
 
 const styles = StyleSheet.create({
@@ -185,47 +147,57 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-  },
-  card: {
-    borderRadius: 16,
-    padding: 32,
-    alignItems: 'center',
-    maxWidth: 400,
-    width: '100%',
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    backgroundColor: '#0D0D0D',
+    padding: 20
   },
   message: {
-    fontSize: 16,
-    textAlign: 'center',
-    lineHeight: 24,
+    color: '#F5F5F5',
+    fontSize: 18,
+    marginTop: 20,
+    textAlign: 'center'
   },
-  checkingText: {
-    fontSize: 16,
-    textAlign: 'center',
+  subMessage: {
+    color: '#B0B0B0',
+    fontSize: 14,
+    marginTop: 10,
+    textAlign: 'center'
   },
-  button: {
-    paddingVertical: 14,
-    paddingHorizontal: 32,
+  errorTitle: {
+    color: '#FF6B6B',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center'
+  },
+  errorMessage: {
+    color: '#F5F5F5',
+    fontSize: 16,
+    marginBottom: 30,
+    textAlign: 'center',
+    lineHeight: 24
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    gap: 15
+  },
+  retryButton: {
+    backgroundColor: '#00E0B8',
+    color: '#000',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
     borderRadius: 8,
-    width: '100%',
-    alignItems: 'center',
-  },
-  buttonText: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: 'bold'
   },
+  settingsButton: {
+    backgroundColor: '#333',
+    color: '#F5F5F5',
+    paddingHorizontal: 30,
+    paddingVertical: 15,
+    borderRadius: 8,
+    fontSize: 16,
+    fontWeight: 'bold'
+  }
 });
 
 export default LocationGate;
-
