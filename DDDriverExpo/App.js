@@ -24,6 +24,7 @@ import WalletScreen from './src/screens/WalletScreen';
 import { registerForPushNotifications, configureNotificationChannel } from './src/services/notifications';
 import * as Notifications from 'expo-notifications';
 import PushNotificationOverlay from './src/components/PushNotificationOverlay';
+import { notificationEvents } from './src/utils/notificationEvents';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -408,7 +409,17 @@ const App = () => {
   useEffect(() => {
     console.log('🔔 Setting up global push notification listener for overlay');
     
-    // Listen for notifications received (when app is in foreground)
+    // Listen for notification events from the handler
+    const handleNotificationEvent = (notification) => {
+      console.log('📱 Notification event received:', notification);
+      console.log('📱 Showing overlay from event...');
+      setShowPushOverlay(true);
+      console.log('📱 Overlay state set to true from event');
+    };
+    
+    notificationEvents.on('notification-received', handleNotificationEvent);
+    
+    // Also listen for notifications received (when app is in foreground)
     const receivedSubscription = Notifications.addNotificationReceivedListener(notification => {
       console.log('📱 Push notification received globally (received):', notification);
       console.log('📱 Notification data:', notification.request?.content?.data);
@@ -427,6 +438,7 @@ const App = () => {
     });
 
     return () => {
+      notificationEvents.off('notification-received', handleNotificationEvent);
       receivedSubscription.remove();
       responseSubscription.remove();
     };
