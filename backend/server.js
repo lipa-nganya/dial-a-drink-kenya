@@ -156,7 +156,13 @@ async function loadFullApplication() {
     
     // Setup Socket.IO handlers
     io.on('connection', (socket) => {
-      console.log('Client connected:', socket.id);
+      console.log('✅✅✅ Client connected:', socket.id);
+      console.log('✅✅✅ Socket transport:', socket.transport.name);
+      console.log('✅✅✅ Socket handshake:', {
+        address: socket.handshake.address,
+        headers: socket.handshake.headers,
+        query: socket.handshake.query
+      });
       
       socket.on('join-admin', () => {
         socket.join('admin');
@@ -166,7 +172,12 @@ async function loadFullApplication() {
       socket.on('join-driver', (driverId) => {
         const roomName = `driver-${driverId}`;
         socket.join(roomName);
-        console.log(`Client ${socket.id} joined driver room: ${roomName}`);
+        console.log(`✅✅✅ Client ${socket.id} joined driver room: ${roomName}`);
+        console.log(`✅✅✅ Driver ID: ${driverId}, Room: ${roomName}`);
+        
+        // Verify room membership
+        const rooms = Array.from(socket.rooms);
+        console.log(`✅✅✅ Socket ${socket.id} is now in rooms:`, rooms);
       });
 
       socket.on('join-order', (orderId) => {
