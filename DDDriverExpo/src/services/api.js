@@ -32,69 +32,77 @@ const normalizeBaseUrl = (value) => {
 };
 
 const getBaseURL = () => {
-  const bundleId = Constants.expoConfig?.ios?.bundleIdentifier || Constants.expoConfig?.android?.package;
-  const appName = Constants.expoConfig?.name || '';
-  const isLocalBuild = bundleId?.includes('.local') || appName?.includes('Local');
-  
-  const localBackendUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-  const cloudBackendUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
-  
-  // ABSOLUTE PRIORITY: If bundle ID contains .local or app name contains "Local", ALWAYS use local backend
-  // This check MUST happen first and cannot be overridden
-  if (isLocalBuild) {
-    console.log('🌐 [API] Local build detected (bundleId:', bundleId, 'appName:', appName, ') - FORCING local backend:', `${localBackendUrl}/api`);
-    return `${localBackendUrl}/api`;
-  }
-  
-  // Check update channel
-  let updateChannel = null;
   try {
-    if (Updates && Updates.channel) {
-      updateChannel = Updates.channel;
-    }
-  } catch (e) {
-    // Updates module not available
-  }
-  
-  if (updateChannel === 'local' || updateChannel === 'local-dev') {
-    console.log('🌐 [API] Local channel detected (', updateChannel, ') - using local backend:', `${localBackendUrl}/api`);
-    return `${localBackendUrl}/api`;
-  }
-  
-  // Check environment variable (from OTA update)
-  const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
-  if (envBase) {
-    if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
-      console.log('🌐 [API] Using local backend from env:', `${envBase}/api`);
-      return `${envBase}/api`;
-    }
-    // If env has cloud URL but bundle is local, override it
-    if (isLocalBuild && envBase.includes('run.app')) {
-      console.log('🌐 [API] Local build detected but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+    const bundleId = Constants?.expoConfig?.ios?.bundleIdentifier || Constants?.expoConfig?.android?.package || '';
+    const appName = Constants?.expoConfig?.name || '';
+    const isLocalBuild = bundleId?.includes('.local') || appName?.includes('Local');
+    
+    const localBackendUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    const cloudBackendUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+    
+    // ABSOLUTE PRIORITY: If bundle ID contains .local or app name contains "Local", ALWAYS use local backend
+    // This check MUST happen first and cannot be overridden
+    if (isLocalBuild) {
+      console.log('🌐 [API] Local build detected (bundleId:', bundleId, 'appName:', appName, ') - FORCING local backend:', `${localBackendUrl}/api`);
       return `${localBackendUrl}/api`;
     }
-  }
-  
-  // Check app config (from build time)
-  const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
-  if (configBase) {
-    // If app config has cloud URL but bundle is local, override it
-    if (isLocalBuild && configBase.includes('run.app')) {
-      console.log('🌐 [API] Local build detected but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+    
+    // Check update channel
+    let updateChannel = null;
+    try {
+      if (Updates && Updates.channel) {
+        updateChannel = Updates.channel;
+      }
+    } catch (e) {
+      // Updates module not available
+    }
+    
+    if (updateChannel === 'local' || updateChannel === 'local-dev') {
+      console.log('🌐 [API] Local channel detected (', updateChannel, ') - using local backend:', `${localBackendUrl}/api`);
       return `${localBackendUrl}/api`;
     }
-    console.log('🌐 [API] Using backend from app config:', `${configBase}/api`);
-    return `${configBase}/api`;
+    
+    // Check environment variable (from OTA update)
+    const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
+    if (envBase) {
+      if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
+        console.log('🌐 [API] Using local backend from env:', `${envBase}/api`);
+        return `${envBase}/api`;
+      }
+      // If env has cloud URL but bundle is local, override it
+      if (isLocalBuild && envBase.includes('run.app')) {
+        console.log('🌐 [API] Local build detected but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+        return `${localBackendUrl}/api`;
+      }
+    }
+    
+    // Check app config (from build time)
+    const configBase = normalizeBaseUrl(Constants?.expoConfig?.extra?.apiBaseUrl);
+    if (configBase) {
+      // If app config has cloud URL but bundle is local, override it
+      if (isLocalBuild && configBase.includes('run.app')) {
+        console.log('🌐 [API] Local build detected but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+        return `${localBackendUrl}/api`;
+      }
+      console.log('🌐 [API] Using backend from app config:', `${configBase}/api`);
+      return `${configBase}/api`;
+    }
+    
+    // Default to cloud backend ONLY if not a local build
+    if (isLocalBuild) {
+      console.log('🌐 [API] Local build detected but no URL found - using local backend default:', `${localBackendUrl}/api`);
+      return `${localBackendUrl}/api`;
+    }
+    
+    console.log('🌐 [API] Using cloud backend default:', `${cloudBackendUrl}/api`);
+    return `${cloudBackendUrl}/api`;
+  } catch (error) {
+    console.error('❌ [API] Error determining base URL:', error);
+    // Fallback to local backend if error occurs (safer for local development)
+    const fallbackUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+    console.log('🌐 [API] Using fallback local backend due to error:', `${fallbackUrl}/api`);
+    return `${fallbackUrl}/api`;
   }
-  
-  // Default to cloud backend ONLY if not a local build
-  if (isLocalBuild) {
-    console.log('🌐 [API] Local build detected but no URL found - using local backend default:', `${localBackendUrl}/api`);
-    return `${localBackendUrl}/api`;
-  }
-  
-  console.log('🌐 [API] Using cloud backend default:', `${cloudBackendUrl}/api`);
-  return `${cloudBackendUrl}/api`;
 };
 
 const api = axios.create({
