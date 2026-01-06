@@ -37,6 +37,7 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
   }, [visible]);
 
   const handleClose = () => {
+    console.log('🟢 PushNotificationOverlay: Closing overlay');
     // Animate out
     Animated.timing(fadeAnim, {
       toValue: 0,
@@ -47,7 +48,17 @@ const PushNotificationOverlay = ({ visible, onClose }) => {
     });
   };
 
-  if (!visible) return null;
+  useEffect(() => {
+    if (visible) {
+      console.log('🟢 PushNotificationOverlay: visible=true, showing overlay');
+    } else {
+      console.log('🔴 PushNotificationOverlay: visible=false, hiding overlay');
+    }
+  }, [visible]);
+
+  if (!visible) {
+    return null;
+  }
 
   return (
     <Modal
