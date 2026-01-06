@@ -36,11 +36,14 @@ const getBaseURL = () => {
   const appName = Constants.expoConfig?.name || '';
   const isLocalBuild = bundleId?.includes('.local') || appName?.includes('Local');
   
+  const localBackendUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
+  const cloudBackendUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+  
   // ABSOLUTE PRIORITY: If bundle ID contains .local or app name contains "Local", ALWAYS use local backend
+  // This check MUST happen first and cannot be overridden
   if (isLocalBuild) {
-    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Local build detected - using local backend:', `${ngrokUrl}/api`);
-    return `${ngrokUrl}/api`;
+    console.log('🌐 [API] Local build detected (bundleId:', bundleId, 'appName:', appName, ') - FORCING local backend:', `${localBackendUrl}/api`);
+    return `${localBackendUrl}/api`;
   }
   
   // Check update channel
@@ -54,31 +57,44 @@ const getBaseURL = () => {
   }
   
   if (updateChannel === 'local' || updateChannel === 'local-dev') {
-    const ngrokUrl = 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev';
-    console.log('🌐 [API] Local channel detected - using local backend:', `${ngrokUrl}/api`);
-    return `${ngrokUrl}/api`;
+    console.log('🌐 [API] Local channel detected (', updateChannel, ') - using local backend:', `${localBackendUrl}/api`);
+    return `${localBackendUrl}/api`;
   }
   
-  // Check environment variable
+  // Check environment variable (from OTA update)
   const envBase = normalizeBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL);
   if (envBase) {
     if (envBase.includes('ngrok') || envBase.includes('localhost') || envBase.includes('127.0.0.1')) {
       console.log('🌐 [API] Using local backend from env:', `${envBase}/api`);
       return `${envBase}/api`;
     }
+    // If env has cloud URL but bundle is local, override it
+    if (isLocalBuild && envBase.includes('run.app')) {
+      console.log('🌐 [API] Local build detected but env has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+      return `${localBackendUrl}/api`;
+    }
   }
   
-  // Check app config
+  // Check app config (from build time)
   const configBase = normalizeBaseUrl(Constants.expoConfig?.extra?.apiBaseUrl);
   if (configBase) {
+    // If app config has cloud URL but bundle is local, override it
+    if (isLocalBuild && configBase.includes('run.app')) {
+      console.log('🌐 [API] Local build detected but app config has cloud URL - OVERRIDING to local backend:', `${localBackendUrl}/api`);
+      return `${localBackendUrl}/api`;
+    }
     console.log('🌐 [API] Using backend from app config:', `${configBase}/api`);
     return `${configBase}/api`;
   }
   
-  // Default to cloud backend
-  const cloudApiUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
-  console.log('🌐 [API] Using cloud backend:', `${cloudApiUrl}/api`);
-  return `${cloudApiUrl}/api`;
+  // Default to cloud backend ONLY if not a local build
+  if (isLocalBuild) {
+    console.log('🌐 [API] Local build detected but no URL found - using local backend default:', `${localBackendUrl}/api`);
+    return `${localBackendUrl}/api`;
+  }
+  
+  console.log('🌐 [API] Using cloud backend default:', `${cloudBackendUrl}/api`);
+  return `${cloudBackendUrl}/api`;
 };
 
 const api = axios.create({
