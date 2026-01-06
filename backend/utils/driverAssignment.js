@@ -89,8 +89,8 @@ const findNearestActiveDriverToBranch = async (branchId) => {
       const driverLat = parseFloat(driver.locationLatitude);
       const driverLng = parseFloat(driver.locationLongitude);
 
-      if (!driverLat || !driverLng) {
-        continue; // Skip drivers without valid location
+      if (!driverLat || !driverLng || isNaN(driverLat) || isNaN(driverLng)) {
+        continue; // Skip drivers without valid location for distance calculation
       }
 
       // Calculate distance using Haversine formula
@@ -114,8 +114,9 @@ const findNearestActiveDriverToBranch = async (branchId) => {
       return nearestDriver;
     }
 
-    // Fallback to first driver if no distance calculation worked
-    console.log('⚠️  [DriverAssignment] Could not calculate distances. Assigning first available driver as fallback.');
+    // If no drivers have location, or branch coordinates unavailable, use first available driver
+    // Note: Location is no longer required for assignment - all active drivers are eligible
+    console.log('⚠️  [DriverAssignment] Could not calculate distances (no drivers with location or branch coordinates unavailable). Assigning first available driver.');
     return driversToUse[0];
 
     // Future implementation with driver location:
