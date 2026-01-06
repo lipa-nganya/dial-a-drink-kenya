@@ -69,7 +69,15 @@ fi
 echo ""
 echo "📤 Publishing update..."
 
+# Publish to the specified channel
 eas update --channel "$CHANNEL" --message "$MESSAGE"
+
+# If publishing to local channel, also publish to local branch to ensure local builds get the update
+if [ "$CHANNEL" == "local" ] || [ "$CHANNEL" == "local-dev" ]; then
+  echo ""
+  echo "📤 Also publishing to 'local' branch for local builds..."
+  eas update --branch local --message "$MESSAGE"
+fi
 
 echo ""
 echo "✅ Update published successfully!"

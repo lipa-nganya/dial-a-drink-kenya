@@ -8,6 +8,7 @@ const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 const { findClosestBranch } = require('../utils/branchAssignment');
 const { findNearestActiveDriverToBranch } = require('../utils/driverAssignment');
 const { generateReceiptPDF } = require('../services/pdfReceipt');
+const pushNotifications = require('../services/pushNotifications');
 
 // Helper function to calculate delivery fee
 const calculateDeliveryFee = async (items) => {
@@ -412,14 +413,34 @@ router.post('/', async (req, res) => {
         const driverSocketMap = req.app.get('driverSocketMap');
         const driverSocketId = driverSocketMap ? driverSocketMap.get(parseInt(completeOrder.driverId)) : null;
         
+        // Send socket event
         if (driverSocketId) {
           io.to(driverSocketId).emit('order-assigned', {
             order: completeOrder,
             playSound: true
           });
-          console.log(`Socket event sent to driver ${completeOrder.driverId} (socket: ${driverSocketId}) for order #${completeOrder.id}`);
+          console.log(`✅ Socket event sent to driver ${completeOrder.driverId} (socket: ${driverSocketId}) for order #${completeOrder.id}`);
         } else {
-          console.log(`Driver ${completeOrder.driverId} not registered - socket event not sent for order #${completeOrder.id}`);
+          console.log(`⚠️ Driver ${completeOrder.driverId} not registered - socket event not sent for order #${completeOrder.id}`);
+        }
+        
+        // Send push notification
+        if (completeOrder.driver.pushToken) {
+          try {
+            const pushResult = await pushNotifications.sendOrderNotification(
+              completeOrder.driver.pushToken,
+              completeOrder
+            );
+            if (pushResult.success) {
+              console.log(`✅ Push notification sent to driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) for order #${completeOrder.id}`);
+            } else {
+              console.log(`⚠️ Push notification failed for driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) for order #${completeOrder.id}:`, pushResult.message || pushResult.error);
+            }
+          } catch (pushError) {
+            console.error(`❌ Error sending push notification to driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}):`, pushError);
+          }
+        } else {
+          console.log(`⚠️ Driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) has no push token - push notification not sent for order #${completeOrder.id}`);
         }
       }
     }
