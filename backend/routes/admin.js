@@ -5,6 +5,8 @@ const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+const mpesaService = require('../services/mpesa');
+const pushNotifications = require('../services/pushNotifications');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const {
@@ -35,14 +37,22 @@ const verifyAdmin = (req, res, next) => {
   }
 };
 
-const buildAdminUserResponse = (adminInstance) => ({
-  id: adminInstance.id,
-  username: adminInstance.username,
-  email: adminInstance.email,
-  role: adminInstance.role || 'admin',
-  createdAt: adminInstance.createdAt,
-  updatedAt: adminInstance.updatedAt
-});
+const buildAdminUserResponse = (adminInstance) => {
+  if (!adminInstance) {
+    return null;
+  }
+  const data = adminInstance.toJSON ? adminInstance.toJSON() : adminInstance;
+  return {
+    id: data.id,
+    username: data.username,
+    email: data.email,
+    role: data.role || 'admin',
+    name: data.name || null,
+    mobileNumber: data.mobileNumber || null,
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null
+  };
+};
 
 const toNumber = (value) => {
   if (value === null || value === undefined || value === '') {
@@ -260,6 +270,12 @@ router.post('/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
+    console.log('🔐 Admin login attempt:', { 
+      hasUsername: !!username, 
+      hasPassword: !!password,
+      usernameLength: username?.length 
+    });
+
     if (!username || !password) {
       return res.status(400).json({
         success: false,
@@ -269,25 +285,51 @@ router.post('/auth/login', async (req, res) => {
 
     const trimmedUsername = username.trim();
 
-    const adminUser = await db.Admin.findOne({
-      where: {
-        [Op.or]: [
-          { username: trimmedUsername },
-          { email: trimmedUsername }
-        ]
-      }
-    });
+    // Use Sequelize ORM instead of raw SQL for better compatibility
+    let adminUser;
+    try {
+      adminUser = await db.Admin.findOne({
+        where: {
+          [Op.or]: [
+            { username: trimmedUsername },
+            { email: trimmedUsername }
+          ]
+        },
+        attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
+      });
+      console.log('✅ Admin user query completed:', { 
+        found: !!adminUser, 
+        hasId: !!adminUser?.id 
+      });
+    } catch (dbError) {
+      console.error('❌ Database query error:', dbError);
+      console.error('Database error details:', {
+        message: dbError.message,
+        name: dbError.name,
+        stack: dbError.stack
+      });
+      throw dbError;
+    }
 
     if (!adminUser || !adminUser.password) {
+      console.log('⚠️ Admin user not found or no password');
       return res.status(401).json({
         success: false,
         error: 'Invalid username or password'
       });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, adminUser.password);
+    let isPasswordValid;
+    try {
+      isPasswordValid = await bcrypt.compare(password, adminUser.password);
+      console.log('🔑 Password comparison result:', isPasswordValid);
+    } catch (bcryptError) {
+      console.error('❌ Bcrypt error:', bcryptError);
+      throw bcryptError;
+    }
 
     if (!isPasswordValid) {
+      console.log('⚠️ Invalid password');
       return res.status(401).json({
         success: false,
         error: 'Invalid username or password'
@@ -300,22 +342,44 @@ router.post('/auth/login', async (req, res) => {
       role: adminUser.role || 'admin'
     };
 
-    const token = jwt.sign(tokenPayload, JWT_SECRET, {
-      expiresIn: ADMIN_TOKEN_TTL
-    });
+    let token;
+    try {
+      token = jwt.sign(tokenPayload, JWT_SECRET, {
+        expiresIn: ADMIN_TOKEN_TTL
+      });
+      console.log('✅ JWT token generated successfully');
+    } catch (jwtError) {
+      console.error('❌ JWT signing error:', jwtError);
+      throw jwtError;
+    }
+
+    const userResponse = buildAdminUserResponse(adminUser);
+    console.log('✅ Login successful for admin:', adminUser.username);
 
     return res.json({
       success: true,
       message: 'Login successful',
       token,
-      user: buildAdminUserResponse(adminUser)
+      user: userResponse
     });
   } catch (error) {
-    console.error('Admin login error:', error);
-    return res.status(500).json({
+    console.error('❌ Admin login error:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Return more detailed error in development
+    const errorResponse = {
       success: false,
       error: 'Failed to log in. Please try again.'
-    });
+    };
+    
+    if (process.env.NODE_ENV === 'development') {
+      errorResponse.details = error.message;
+      errorResponse.stack = error.stack;
+    }
+    
+    return res.status(500).json(errorResponse);
   }
 });
 
@@ -481,7 +545,7 @@ router.get('/transactions', async (req, res) => {
         model: db.Branch,
         as: 'branch',
         required: false,
-        attributes: ['id', 'name', 'address']
+        attributes: ['id', 'name', 'address', 'latitude', 'longitude']
       });
     }
     
@@ -553,6 +617,7 @@ router.get('/merchant-wallet', async (req, res) => {
 router.get('/drinks', async (req, res) => {
   try {
     const drinks = await db.Drink.findAll({
+      // Include all attributes by default (purchasePrice is included)
       include: [{
         model: db.Category,
         as: 'category'
@@ -591,7 +656,8 @@ router.post('/drinks', async (req, res) => {
       limitedTimeOffer,
       capacity,
       capacityPricing,
-      abv
+      abv,
+      purchasePrice
     } = req.body;
 
     const normalizedName = typeof name === 'string' ? name.trim() : '';
@@ -622,9 +688,33 @@ router.post('/drinks', async (req, res) => {
       parsedBrandId = parsed;
     }
 
+    // Handle purchasePrice calculation
+    let finalPrice = price;
+    let finalPurchasePrice = purchasePrice !== undefined && purchasePrice !== null 
+      ? parseFloat(purchasePrice) 
+      : null;
+    
+    // If purchasePrice is explicitly provided, use it
+    if (purchasePrice !== undefined && purchasePrice !== null && !isNaN(parseFloat(purchasePrice))) {
+      const parsedPurchasePrice = parseFloat(purchasePrice);
+      if (parsedPurchasePrice > 0) {
+        finalPurchasePrice = parsedPurchasePrice;
+        // If purchasePrice is provided and price is not, auto-calculate price as 70% of purchasePrice
+        if (price === undefined || price === null) {
+          finalPrice = (parsedPurchasePrice * 0.7).toFixed(2);
+        }
+      }
+    } else if (originalPrice !== undefined && originalPrice !== null && !isNaN(parseFloat(originalPrice))) {
+      // If purchasePrice is not provided but originalPrice is, calculate purchasePrice as 70% of originalPrice
+      const parsedOriginalPrice = parseFloat(originalPrice);
+      if (parsedOriginalPrice > 0) {
+        finalPurchasePrice = Math.round(parsedOriginalPrice * 0.7 * 100) / 100;
+      }
+    }
+
     const normalizedPricing = normalizeCapacityPricing(capacityPricing);
     const capacities = deriveCapacities(capacity, normalizedPricing);
-    const summary = summarisePricing(normalizedPricing, price, originalPrice);
+    const summary = summarisePricing(normalizedPricing, finalPrice, originalPrice);
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : false;
 
     const newDrink = await db.Drink.create({
@@ -648,7 +738,8 @@ router.post('/drinks', async (req, res) => {
       isOnOffer: summary.isOnOffer,
       capacity: capacities,
       capacityPricing: normalizedPricing,
-      abv: toNumber(abv)
+      abv: toNumber(abv),
+      purchasePrice: finalPurchasePrice
     });
 
     const drinkWithRelations = await db.Drink.findByPk(newDrink.id, {
@@ -691,7 +782,8 @@ router.put('/drinks/:id', async (req, res) => {
       limitedTimeOffer,
       capacity,
       capacityPricing,
-      abv
+      abv,
+      purchasePrice
     } = req.body;
 
     const normalizedName = typeof name === 'string' ? name.trim() : '';
@@ -722,9 +814,39 @@ router.put('/drinks/:id', async (req, res) => {
       parsedBrandId = parsed;
     }
 
+    // Handle purchasePrice calculation
+    let finalPrice = price;
+    let finalPurchasePrice = purchasePrice !== undefined && purchasePrice !== null 
+      ? parseFloat(purchasePrice) 
+      : drink.purchasePrice;
+    
+    // If purchasePrice is explicitly provided, use it
+    if (purchasePrice !== undefined && purchasePrice !== null && !isNaN(parseFloat(purchasePrice))) {
+      const parsedPurchasePrice = parseFloat(purchasePrice);
+      if (parsedPurchasePrice > 0) {
+        finalPurchasePrice = parsedPurchasePrice;
+        // If purchasePrice is provided and price is not, auto-calculate price as 70% of purchasePrice
+        if (price === undefined || price === null) {
+          finalPrice = (parsedPurchasePrice * 0.7).toFixed(2);
+        }
+      }
+    } else if (originalPrice !== undefined && originalPrice !== null && !isNaN(parseFloat(originalPrice))) {
+      // If purchasePrice is not provided but originalPrice is, calculate purchasePrice as 70% of originalPrice
+      const parsedOriginalPrice = parseFloat(originalPrice);
+      if (parsedOriginalPrice > 0) {
+        finalPurchasePrice = Math.round(parsedOriginalPrice * 0.7 * 100) / 100;
+      }
+    } else if (drink.originalPrice && !finalPurchasePrice) {
+      // If neither purchasePrice nor originalPrice is provided, but drink has originalPrice, calculate from it
+      const parsedOriginalPrice = parseFloat(drink.originalPrice);
+      if (parsedOriginalPrice > 0) {
+        finalPurchasePrice = Math.round(parsedOriginalPrice * 0.7 * 100) / 100;
+      }
+    }
+
     const normalizedPricing = normalizeCapacityPricing(capacityPricing);
     const capacities = deriveCapacities(capacity, normalizedPricing);
-    const summary = summarisePricing(normalizedPricing, price, originalPrice);
+    const summary = summarisePricing(normalizedPricing, finalPrice, originalPrice);
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : drink.limitedTimeOffer;
 
     // Handle stock update
@@ -770,7 +892,10 @@ router.put('/drinks/:id', async (req, res) => {
       capacity: capacities,
       capacityPricing: normalizedPricing,
       abv: toNumber(abv),
-      stock: stockValue
+      stock: stockValue,
+      purchasePrice: finalPurchasePrice !== undefined && finalPurchasePrice !== null 
+        ? finalPurchasePrice 
+        : drink.purchasePrice
       // isAvailable is set above based on stock if stock is being updated
       // brandId is set above
     });
@@ -811,6 +936,78 @@ router.patch('/drinks/:id/availability', async (req, res) => {
   } catch (error) {
     console.error('Error updating drink availability:', error);
     res.status(500).json({ error: 'Failed to update drink availability' });
+  }
+});
+
+// Bulk populate purchase prices for all inventory items
+// Purchase price = 70% of selling price (price field)
+router.post('/drinks/populate-purchase-prices', async (req, res) => {
+  try {
+    // Get all drinks with prices
+    const drinks = await db.Drink.findAll({
+      where: {
+        price: {
+          [db.Sequelize.Op.gt]: 0
+        }
+      },
+      attributes: ['id', 'name', 'price', 'purchasePrice']
+    });
+
+    if (drinks.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No drinks found to update',
+        updated: 0,
+        skipped: 0,
+        total: 0
+      });
+    }
+
+    let updated = 0;
+    let skipped = 0;
+    const errors = [];
+
+    // Update each drink's purchase price
+    for (const drink of drinks) {
+      try {
+        const sellingPrice = parseFloat(drink.price);
+        if (sellingPrice <= 0) {
+          skipped++;
+          continue;
+        }
+
+        // Calculate purchase price as 70% of selling price
+        const purchasePrice = Math.round(sellingPrice * 0.7 * 100) / 100;
+
+        // Only update if purchase price is different (to avoid unnecessary updates)
+        const currentPurchasePrice = drink.purchasePrice ? parseFloat(drink.purchasePrice) : null;
+        if (currentPurchasePrice === null || Math.abs(currentPurchasePrice - purchasePrice) > 0.01) {
+          await drink.update({ purchasePrice });
+          updated++;
+        } else {
+          skipped++;
+        }
+      } catch (error) {
+        errors.push({
+          drinkId: drink.id,
+          drinkName: drink.name,
+          error: error.message
+        });
+        skipped++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Purchase prices populated successfully. Updated: ${updated}, Skipped: ${skipped}`,
+      updated,
+      skipped,
+      total: drinks.length,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (error) {
+    console.error('Error populating purchase prices:', error);
+    res.status(500).json({ error: 'Failed to populate purchase prices' });
   }
 });
 
@@ -865,6 +1062,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
             model: db.Drink,
             as: 'drink',
             required: false
+            // Include all attributes by default (purchasePrice should be included)
           }
         ]
       },
@@ -881,6 +1079,16 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       }
     ];
     
+    // Include Admin association if it exists (for POS orders)
+    if (db.Admin && db.Order && db.Order.associations && db.Order.associations.servicedByAdmin) {
+      orderIncludes.push({
+        model: db.Admin,
+        as: 'servicedByAdmin',
+        required: false,
+        attributes: ['id', 'username', 'name']
+      });
+    }
+    
     // Include Branch association only if it exists and is properly set up
     try {
       if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
@@ -888,7 +1096,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
           model: db.Branch,
           as: 'branch',
           required: false,
-          attributes: ['id', 'name', 'address']
+          attributes: ['id', 'name', 'address', 'latitude', 'longitude']
         });
       }
     } catch (branchError) {
@@ -1064,6 +1272,155 @@ router.patch('/orders/:id/status', async (req, res) => {
   }
 });
 
+/**
+ * Approve or reject driver cancellation request
+ * PATCH /api/admin/orders/:id/cancellation-request
+ */
+router.patch('/orders/:id/cancellation-request', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { approved } = req.body;
+    const adminId = req.admin.id;
+
+    if (typeof approved !== 'boolean') {
+      return res.status(400).json({ error: 'approved must be a boolean' });
+    }
+
+    const order = await db.Order.findByPk(id);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    if (!order.cancellationRequested) {
+      return res.status(400).json({ error: 'No cancellation request found for this order' });
+    }
+
+    if (order.cancellationApproved !== null) {
+      return res.status(400).json({ error: 'Cancellation request already processed' });
+    }
+
+    const now = new Date();
+
+    if (approved) {
+      // Approve cancellation - mark order as cancelled
+      await order.update({
+        cancellationApproved: true,
+        cancellationApprovedAt: now,
+        cancellationApprovedBy: adminId,
+        status: 'cancelled',
+        paymentStatus: 'cancelled'
+      });
+
+      // Add note
+      const approvalNote = `[${now.toISOString()}] Cancellation approved by admin. Reason: ${order.cancellationReason || 'N/A'}`;
+      order.notes = order.notes ? `${order.notes}\n${approvalNote}` : approvalNote;
+      await order.save();
+
+      console.log(`✅ Order #${order.id} cancellation approved by admin ${adminId}`);
+
+      // Send push notification to driver
+      if (order.driverId) {
+        try {
+          const driver = await db.Driver.findByPk(order.driverId);
+          if (driver && driver.pushToken) {
+            const message = {
+              sound: 'default',
+              title: '✅ Cancellation Approved',
+              body: `Your cancellation request for Order #${order.id} has been approved. You can now accept new orders.`,
+              data: {
+                type: 'cancellation-approved',
+                orderId: String(order.id),
+                message: `Your cancellation request for Order #${order.id} has been approved. You can now accept new orders.`
+              },
+              priority: 'high',
+              badge: 1,
+              channelId: 'notifications',
+            };
+            
+            const pushResult = await pushNotifications.sendFCMNotification(driver.pushToken, message);
+            if (pushResult.success) {
+              console.log(`✅ Push notification sent to driver ${driver.name} (ID: ${order.driverId}) for cancellation approval`);
+            } else {
+              console.error(`⚠️ Failed to send push notification to driver ${driver.name}:`, pushResult.error);
+            }
+          } else {
+            console.log(`⚠️ Driver ${order.driverId} has no push token - notification not sent`);
+          }
+        } catch (pushError) {
+          console.error(`❌ Error sending push notification for cancellation approval:`, pushError);
+        }
+
+        // Update driver status if they have no more active orders
+        try {
+          const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+          await updateDriverStatusIfNoActiveOrders(order.driverId);
+        } catch (driverStatusError) {
+          console.error(`❌ Error updating driver status for cancelled Order #${order.id}:`, driverStatusError);
+        }
+      }
+    } else {
+      // Reject cancellation - keep order active
+      await order.update({
+        cancellationApproved: false,
+        cancellationApprovedAt: now,
+        cancellationApprovedBy: adminId,
+        cancellationRequested: false // Reset cancellation request
+      });
+
+      // Add note
+      const rejectionNote = `[${now.toISOString()}] Cancellation request rejected by admin. Order remains active.`;
+      order.notes = order.notes ? `${order.notes}\n${rejectionNote}` : rejectionNote;
+      await order.save();
+
+      console.log(`❌ Order #${order.id} cancellation rejected by admin ${adminId}`);
+    }
+
+    // Reload order
+    await order.reload({
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{ model: db.Drink, as: 'drink' }]
+        },
+        {
+          model: db.Driver,
+          as: 'driver'
+        }
+      ]
+    });
+
+    let orderData = order.toJSON();
+    if (orderData.items) {
+      orderData.orderItems = orderData.items;
+    }
+
+    // Emit socket event
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('order-cancellation-processed', {
+        orderId: order.id,
+        approved: approved,
+        order: orderData
+      });
+
+      if (order.driverId) {
+        io.to(`driver-${order.driverId}`).emit('order-cancellation-processed', {
+          orderId: order.id,
+          approved: approved,
+          order: orderData
+        });
+      }
+    }
+
+    res.json(orderData);
+  } catch (error) {
+    console.error('Error processing cancellation request:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update payment status (admin)
 router.patch('/orders/:id/payment-status', async (req, res) => {
   try {
@@ -1192,6 +1549,177 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
   }
 });
 
+// Prompt customer for payment (admin)
+router.post('/orders/:id/prompt-payment', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const order = await db.Order.findByPk(id);
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if order is pay on delivery
+    if (order.paymentType !== 'pay_on_delivery') {
+      return res.status(400).json({ error: 'Order is not pay on delivery' });
+    }
+
+    // Check if already paid
+    if (order.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
+    }
+
+    // Format phone number
+    const customerPhone = order.customerPhone;
+    const cleanedPhone = customerPhone.replace(/\D/g, '');
+    let formattedPhone = cleanedPhone;
+    
+    if (cleanedPhone.startsWith('0')) {
+      formattedPhone = '254' + cleanedPhone.substring(1);
+    } else if (!cleanedPhone.startsWith('254')) {
+      formattedPhone = '254' + cleanedPhone;
+    }
+
+    // Initiate STK push
+    const amount = parseFloat(order.totalAmount);
+    const stkResult = await mpesaService.initiateSTKPush(
+      formattedPhone,
+      amount,
+      order.id,
+      `Payment for order #${order.id}`
+    );
+
+    // Check if STK push was initiated successfully
+    if (stkResult.success || stkResult.checkoutRequestID || stkResult.CheckoutRequestID) {
+      const checkoutRequestID = stkResult.checkoutRequestID || stkResult.CheckoutRequestID;
+      const merchantRequestID = stkResult.merchantRequestID || stkResult.MerchantRequestID;
+      
+      // Store checkout request ID in order notes
+      const checkoutNote = `M-Pesa CheckoutRequestID: ${checkoutRequestID} (Admin-initiated)`;
+      await order.update({
+        paymentMethod: 'mobile_money',
+        notes: order.notes ? 
+          `${order.notes}\n${checkoutNote}` : 
+          checkoutNote
+      });
+      
+      // Create transaction records for STK push initiation
+      try {
+        const {
+          itemsTotal,
+          deliveryFee,
+          tipAmount
+        } = await getOrderFinancialBreakdown(order.id);
+
+        const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
+          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+        ]);
+
+        const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
+        const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
+        const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
+          ? Math.min(deliveryFee, configuredDriverPayAmount)
+          : 0;
+        const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
+
+        const baseTransactionPayload = {
+          orderId: order.id,
+          paymentMethod: 'mobile_money',
+          paymentProvider: 'mpesa',
+          status: 'pending',
+          paymentStatus: 'pending',
+          checkoutRequestID: checkoutRequestID,
+          merchantRequestID: merchantRequestID,
+          phoneNumber: formattedPhone
+        };
+
+        const paymentNote = `STK Push initiated by admin. Customer pays KES ${amount.toFixed(2)}. Item portion: KES ${itemsTotal.toFixed(2)}.${tipAmount > 0 ? ` Tip (KES ${tipAmount.toFixed(2)}) will be recorded separately.` : ''}`;
+
+        let paymentTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'payment',
+            status: { [Op.ne]: 'completed' }
+          },
+          order: [['createdAt', 'DESC']]
+        });
+
+        if (paymentTransaction) {
+          await paymentTransaction.update({
+            ...baseTransactionPayload,
+            amount: itemsTotal,
+            notes: paymentNote
+          });
+          console.log(`✅ Payment transaction updated for admin-initiated payment on Order #${order.id} (transaction #${paymentTransaction.id})`);
+        } else {
+          paymentTransaction = await db.Transaction.create({
+            ...baseTransactionPayload,
+            transactionType: 'payment',
+            amount: itemsTotal,
+            notes: paymentNote
+          });
+          console.log(`✅ Payment transaction created for admin-initiated payment on Order #${order.id} (transaction #${paymentTransaction.id})`);
+        }
+
+        const deliveryNote = driverPayAmount > 0
+          ? `Delivery fee portion for Order #${id}. Merchant share: KES ${merchantDeliveryAmount.toFixed(2)}. Driver payout KES ${driverPayAmount.toFixed(2)} pending.`
+          : `Delivery fee portion for Order #${id}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
+
+        let deliveryTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: order.id,
+            transactionType: 'delivery_pay',
+            status: { [Op.ne]: 'completed' }
+          },
+          order: [['createdAt', 'DESC']]
+        });
+
+        if (deliveryTransaction) {
+          await deliveryTransaction.update({
+            ...baseTransactionPayload,
+            transactionType: 'delivery_pay',
+            amount: merchantDeliveryAmount,
+            notes: deliveryNote
+          });
+          console.log(`✅ Delivery fee transaction updated for Order #${id} (transaction #${deliveryTransaction.id})`);
+        } else {
+          deliveryTransaction = await db.Transaction.create({
+            ...baseTransactionPayload,
+            transactionType: 'delivery_pay',
+            amount: merchantDeliveryAmount,
+            notes: deliveryNote
+          });
+          console.log(`✅ Delivery fee transaction created for Order #${id} (transaction #${deliveryTransaction.id})`);
+        }
+      } catch (transactionError) {
+        console.error('❌ Error preparing admin-initiated transactions:', transactionError);
+        // Don't fail the STK push if transaction creation fails - log it but continue
+        console.log('⚠️  Continuing with STK push despite transaction preparation error');
+      }
+      
+      console.log(`✅ STK Push initiated by admin for Order #${id}. CheckoutRequestID: ${checkoutRequestID}`);
+      
+      res.json({
+        success: true,
+        message: 'Payment request sent to customer. Waiting for payment confirmation...',
+        checkoutRequestID: checkoutRequestID,
+        merchantRequestID: merchantRequestID,
+        status: 'pending'
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: stkResult.error || 'Failed to initiate payment request'
+      });
+    }
+  } catch (error) {
+    console.error('Error prompting payment:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Update order branch (admin)
 router.patch('/orders/:id/branch', async (req, res) => {
   try {
@@ -1230,7 +1758,10 @@ router.patch('/orders/:id/branch', async (req, res) => {
       const nearestDriver = await findNearestActiveDriverToBranch(newBranchId);
       
       if (nearestDriver && nearestDriver.id !== oldDriverId) {
-        await order.update({ driverId: nearestDriver.id });
+        await order.update({ 
+          driverId: nearestDriver.id,
+          driverAccepted: null // Reset to null so it appears as pending for new driver
+        });
         driverWasReassigned = true;
         console.log(`✅ Reassigned driver to ${nearestDriver.name} (ID: ${nearestDriver.id}) for order ${order.id}`);
       } else {
@@ -1281,13 +1812,33 @@ router.patch('/orders/:id/branch', async (req, res) => {
           order: orderData
         });
         
-        // If driver was auto-reassigned, also emit order-assigned event
+        // If driver was auto-reassigned, also emit order-assigned event and send push notification
         if (driverWasReassigned && order.driver && order.driver.name !== 'HOLD Driver') {
           io.to(`driver-${order.driverId}`).emit('order-assigned', {
             order: orderData,
             playSound: true
           });
           console.log(`📢 Notified driver ${order.driver.name} (ID: ${order.driverId}) about auto-reassigned order #${order.id}`);
+          
+          // Send push notification to trigger OrderAcceptanceActivity
+          if (order.driver.pushToken) {
+            console.log(`📤 [BRANCH REASSIGN] Attempting to send push notification for order #${order.id} to driver ${order.driver.name} (ID: ${order.driverId})`);
+            try {
+              const pushResult = await pushNotifications.sendOrderNotification(
+                order.driver.pushToken,
+                order
+              );
+              if (pushResult.success) {
+                console.log(`✅ [BRANCH REASSIGN] Push notification sent successfully to driver ${order.driver.name} (ID: ${order.driverId}) for order #${order.id}`);
+              } else {
+                console.error(`⚠️ [BRANCH REASSIGN] Push notification failed for driver ${order.driver.name} (ID: ${order.driverId}) for order #${order.id}`);
+              }
+            } catch (pushError) {
+              console.error(`❌ [BRANCH REASSIGN] Error sending push notification to driver ${order.driver.name} (ID: ${order.driverId}):`, pushError);
+            }
+          } else {
+            console.log(`⚠️ [BRANCH REASSIGN] Driver ${order.driver.name} (ID: ${order.driverId}) has NO push token registered - push notification NOT sent for order #${order.id}`);
+          }
         }
       }
       
@@ -1296,6 +1847,29 @@ router.patch('/orders/:id/branch', async (req, res) => {
         io.to(`driver-${oldDriverId}`).emit('driver-removed', {
           orderId: order.id
         });
+        
+        // Send push notification to the previous driver
+        try {
+          const oldDriver = await db.Driver.findByPk(oldDriverId);
+          if (oldDriver && oldDriver.pushToken) {
+            console.log(`📤 Sending order reassignment notification to previous driver ${oldDriver.name} (ID: ${oldDriverId}) for order #${order.id} (branch change)`);
+            const pushResult = await pushNotifications.sendOrderReassignmentNotification(
+              oldDriver.pushToken,
+              order
+            );
+            if (pushResult.success) {
+              console.log(`✅ Order reassignment notification sent successfully to driver ${oldDriver.name} (ID: ${oldDriverId}) for order #${order.id}`);
+            } else {
+              console.error(`⚠️ Order reassignment notification failed for driver ${oldDriver.name} (ID: ${oldDriverId}) for order #${order.id}`);
+              console.error(`⚠️ Failure details:`, pushResult);
+            }
+          } else {
+            console.log(`⚠️ Previous driver ${oldDriverId} has no push token - reassignment notification not sent for order #${order.id}`);
+          }
+        } catch (pushError) {
+          console.error(`❌ Error sending order reassignment notification to driver ${oldDriverId} for order #${order.id}:`, pushError);
+          // Don't fail the request if push notification fails
+        }
       }
     }
 
@@ -1322,9 +1896,17 @@ router.patch('/orders/:id/driver', async (req, res) => {
     }
 
     const oldDriverId = order.driverId;
+    const newDriverId = driverId ? parseInt(driverId) : null;
+    console.log(`🔄 [DRIVER ASSIGNMENT] Order #${order.id}: oldDriverId=${oldDriverId}, newDriverId=${newDriverId || 'null'}`);
 
     // Update driver assignment
-    await order.update({ driverId: driverId || null });
+    // If assigning a driver (new or reassigning), reset driverAccepted to null so it appears as pending
+    const updateData = { driverId: newDriverId };
+    if (newDriverId) {
+      // Always reset driverAccepted when assigning/reassigning a driver
+      updateData.driverAccepted = null;
+    }
+    await order.update(updateData);
 
     // Reload order to get updated data
     await order.reload({
@@ -1473,33 +2055,135 @@ router.patch('/orders/:id/driver', async (req, res) => {
         }
       }
 
-      // If driver was assigned, notify the driver directly (no rooms)
-      if (driverId) {
-        const driver = await db.Driver.findByPk(driverId);
-        if (driver) {
-          const driverSocketMap = req.app.get('driverSocketMap');
-          const driverSocketId = driverSocketMap ? driverSocketMap.get(parseInt(driverId)) : null;
+      // If driver was assigned (new assignment OR reassignment), ALWAYS notify the driver
+      // This includes both first-time assignments and reassignments from another driver
+      if (newDriverId) {
+        const isReassignment = oldDriverId && oldDriverId !== newDriverId;
+        console.log(`📤 [DRIVER ASSIGNMENT] ${isReassignment ? 'REASSIGNMENT' : 'NEW ASSIGNMENT'}: Driver ${newDriverId} for order #${order.id} (oldDriverId: ${oldDriverId || 'none'})`);
+        
+        const driver = await db.Driver.findByPk(newDriverId);
+        if (!driver) {
+          console.error(`❌ [MANUAL ASSIGN] Driver ID ${newDriverId} not found in database`);
+        } else if (!driver.pushToken) {
+          console.error(`❌ [MANUAL ASSIGN] Driver ${driver.name} (ID: ${newDriverId}) has NO push token registered - push notification NOT sent for order #${order.id}`);
+        } else {
+          console.log(`📤 [DRIVER ASSIGNMENT] Driver found: ${driver.name} (ID: ${newDriverId}), pushToken: exists`);
           
+          // Send socket event if driver is connected
+          const driverSocketMap = req.app.get('driverSocketMap');
+          const driverSocketId = driverSocketMap ? driverSocketMap.get(parseInt(newDriverId)) : null;
+          
+          // Emit to driver room (works even if socket ID changes on reconnect)
+          io.to(`driver-${newDriverId}`).emit('order-assigned', {
+            order: orderData,
+            playSound: true
+          });
+          console.log(`✅ [MANUAL ASSIGN] Socket event sent to driver-${newDriverId} room for order #${order.id}`);
+          
+          // Also emit to specific socket ID if available (for immediate delivery)
           if (driverSocketId) {
-            console.log(`📡 [MANUAL ASSIGN] Sending socket event directly to driver ${driverId} (socket: ${driverSocketId}) for order #${order.id}`);
+            console.log(`📡 [MANUAL ASSIGN] Also sending socket event directly to driver ${newDriverId} (socket: ${driverSocketId}) for order #${order.id}`);
             io.to(driverSocketId).emit('order-assigned', {
               order: orderData,
               playSound: true
             });
-            console.log(`✅ [MANUAL ASSIGN] Socket event sent directly to driver ${driverId} for order #${order.id}`);
           } else {
-            console.log(`⚠️⚠️⚠️ [MANUAL ASSIGN] WARNING: Driver ${driverId} not registered with socket! App may not be connected.`);
+            console.log(`⚠️⚠️⚠️ [MANUAL ASSIGN] WARNING: Driver ${newDriverId} not registered with socket! App may not be connected. Push notification will still be sent.`);
           }
-        } else {
-          console.log(`❌ [MANUAL ASSIGN] Driver ID ${driverId} not found in database`);
+          
+          // ALWAYS send push notification when a driver is assigned (new or reassigned)
+          // This is critical - driver must receive notification even if socket is not connected
+          console.log(`📤 [MANUAL ASSIGN] Sending push notification for order #${order.id} to driver ${driver.name} (ID: ${newDriverId})`);
+          console.log(`📤 [MANUAL ASSIGN] Order data: id=${orderData.id}, customerName=${orderData.customerName}, deliveryAddress=${orderData.deliveryAddress}, totalAmount=${orderData.totalAmount}`);
+          
+          // Use orderData (JSON) instead of order (Sequelize model) for push notification
+          // Ensure we have all required fields
+          const orderForNotification = {
+            id: orderData.id || order.id,
+            customerName: orderData.customerName || order.customerName || 'Customer',
+            deliveryAddress: orderData.deliveryAddress || order.deliveryAddress || 'Address not provided',
+            totalAmount: parseFloat(orderData.totalAmount || order.totalAmount || 0)
+          };
+          
+          console.log(`📤 [MANUAL ASSIGN] Order for notification:`, JSON.stringify(orderForNotification));
+          
+          // CRITICAL: Send push notification synchronously with timeout to ensure it's sent
+          // This is essential for reassignments - driver MUST receive notification
+          try {
+            const pushResult = await Promise.race([
+              pushNotifications.sendOrderNotification(driver.pushToken, orderForNotification),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Push notification timeout')), 10000))
+            ]);
+            
+            if (pushResult.success) {
+              console.log(`✅✅✅ [MANUAL ASSIGN] Push notification SENT SUCCESSFULLY to driver ${driver.name} (ID: ${newDriverId}) for order #${order.id}`);
+              console.log(`✅ [MANUAL ASSIGN] Push receipt:`, pushResult.receipt || pushResult.messageId);
+            } else {
+              console.error(`❌❌❌ [MANUAL ASSIGN] CRITICAL: Push notification FAILED for driver ${driver.name} (ID: ${newDriverId}) for order #${order.id}`);
+              console.error(`❌ [MANUAL ASSIGN] Failure details:`, JSON.stringify(pushResult, null, 2));
+              if (pushResult.receipt) {
+                console.error(`❌ [MANUAL ASSIGN] Push receipt (failure):`, pushResult.receipt);
+              }
+            }
+          } catch (pushError) {
+            if (pushError.message === 'Push notification timeout') {
+              console.error(`❌❌❌ [MANUAL ASSIGN] CRITICAL: Push notification TIMEOUT for driver ${driver.name} (ID: ${newDriverId}) for order #${order.id} - notification may not have been sent`);
+            } else {
+              console.error(`❌❌❌ [MANUAL ASSIGN] CRITICAL ERROR sending push notification to driver ${driver.name} (ID: ${newDriverId}):`, pushError);
+              console.error(`❌ [MANUAL ASSIGN] Error stack:`, pushError.stack);
+            }
+          }
         }
+      } else {
+        console.log(`📤 [DRIVER ASSIGNMENT] No driver assigned (driverId is null) for order #${order.id}`);
       }
 
       // If driver was removed, notify the old driver
-      if (oldDriverId && oldDriverId !== driverId) {
+      // Check if oldDriverId exists and is different from new driverId (including when new is null)
+      const driverWasRemoved = oldDriverId && (oldDriverId !== newDriverId);
+      console.log(`🔍 [DRIVER ASSIGNMENT] Checking if driver was removed: oldDriverId=${oldDriverId}, newDriverId=${newDriverId || 'null'}, driverWasRemoved=${driverWasRemoved}`);
+      
+      if (driverWasRemoved) {
+        console.log(`📤 [DRIVER REMOVAL] Sending notification to old driver ${oldDriverId} for order #${order.id}`);
         io.to(`driver-${oldDriverId}`).emit('driver-removed', {
           orderId: order.id
         });
+        
+        // Send push notification to the previous driver
+        try {
+          const oldDriver = await db.Driver.findByPk(oldDriverId);
+          if (oldDriver) {
+            console.log(`📤 [DRIVER REMOVAL] Old driver found: ${oldDriver.name} (ID: ${oldDriverId}), pushToken: ${oldDriver.pushToken ? 'exists' : 'missing'}`);
+            if (oldDriver.pushToken) {
+              console.log(`📤 [DRIVER REMOVAL] Sending order reassignment notification to previous driver ${oldDriver.name} (ID: ${oldDriverId}) for order #${order.id}`);
+              // Use orderData (JSON) instead of order (Sequelize model) for push notification
+              const orderForNotification = {
+                id: orderData.id || order.id,
+                customerName: orderData.customerName || order.customerName || 'Customer',
+                deliveryAddress: orderData.deliveryAddress || order.deliveryAddress || 'Address not provided',
+                totalAmount: parseFloat(orderData.totalAmount || order.totalAmount || 0)
+              };
+              const pushResult = await pushNotifications.sendOrderReassignmentNotification(
+                oldDriver.pushToken,
+                orderForNotification
+              );
+              if (pushResult.success) {
+                console.log(`✅ [DRIVER REMOVAL] Order reassignment notification sent successfully to driver ${oldDriver.name} (ID: ${oldDriverId}) for order #${order.id}`);
+              } else {
+                console.error(`⚠️ [DRIVER REMOVAL] Order reassignment notification failed for driver ${oldDriver.name} (ID: ${oldDriverId}) for order #${order.id}`);
+                console.error(`⚠️ [DRIVER REMOVAL] Failure details:`, pushResult);
+              }
+            } else {
+              console.log(`⚠️ [DRIVER REMOVAL] Previous driver ${oldDriverId} has no push token - reassignment notification not sent for order #${order.id}`);
+            }
+          } else {
+            console.error(`❌ [DRIVER REMOVAL] Old driver ${oldDriverId} not found in database`);
+          }
+        } catch (pushError) {
+          console.error(`❌ [DRIVER REMOVAL] Error sending order reassignment notification to driver ${oldDriverId} for order #${order.id}:`, pushError);
+          console.error(`❌ [DRIVER REMOVAL] Error stack:`, pushError.stack);
+          // Don't fail the request if push notification fails
+        }
       }
     }
 
@@ -1737,11 +2421,95 @@ router.get('/me', async (req, res) => {
   }
 });
 
+// Get WhatsApp invite link for a shop agent (must be before /users route)
+router.get('/users/:id/whatsapp-link', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const user = await db.Admin.findByPk(id, {
+      attributes: ['id', 'role', 'name', 'mobileNumber', 'inviteToken', 'inviteTokenExpiry', 'hasSetPin']
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role !== 'shop_agent') {
+      return res.status(400).json({ error: 'WhatsApp link is only available for shop agents' });
+    }
+
+    if (!user.mobileNumber) {
+      return res.status(400).json({ error: 'Shop agent mobile number is required' });
+    }
+
+    const whatsappService = require('../services/whatsapp');
+    
+    // Get shop agent app URL - prefer environment variable, then try to get ngrok URL, fallback to localhost
+    let shopAgentAppUrl = process.env.SHOP_AGENT_APP_URL;
+    
+    if (!shopAgentAppUrl || shopAgentAppUrl.includes('localhost')) {
+      // Try to get ngrok URL for port 3002
+      try {
+        const axios = require('axios');
+        const ngrokResponse = await axios.get('http://localhost:4040/api/tunnels', { timeout: 2000 });
+        const tunnels = ngrokResponse.data?.tunnels || [];
+        const shopAgentTunnel = tunnels.find(t => 
+          t.config?.addr?.includes(':3002') || t.config?.addr?.includes('localhost:3002')
+        );
+        if (shopAgentTunnel?.public_url) {
+          shopAgentAppUrl = shopAgentTunnel.public_url;
+          console.log(`✅ Using ngrok URL for shop agent app: ${shopAgentAppUrl}`);
+        }
+      } catch (ngrokError) {
+        console.log('⚠️ Could not fetch ngrok URL, using default');
+      }
+    }
+    
+    // Don't use localhost - mobile devices can't access it
+    // If no public URL is available, return an error
+    if (!shopAgentAppUrl || shopAgentAppUrl.includes('localhost')) {
+      return res.status(400).json({ 
+        error: 'Shop agent app URL is not configured for mobile access',
+        instructions: 'Please set SHOP_AGENT_APP_URL environment variable to a public URL (e.g., ngrok URL for port 3002). Localhost URLs will not work on mobile devices.',
+        help: 'To fix this:\n1. Start ngrok: ngrok http 3002\n2. Set environment variable: SHOP_AGENT_APP_URL=https://your-ngrok-url.ngrok-free.dev\n3. Or use the ngrok API (already configured to auto-detect)'
+      });
+    }
+    
+    // Always direct to phone number entry page
+    // Ensure URL starts with http:// or https:// for mobile WhatsApp to detect it
+    let setupPinUrl = `${shopAgentAppUrl}/`;
+    if (!setupPinUrl.startsWith('http://') && !setupPinUrl.startsWith('https://')) {
+      setupPinUrl = `https://${setupPinUrl}`;
+    }
+    
+    // Format message with URL on its own line, ensuring it's properly formatted
+    // Mobile WhatsApp requires URLs to be on their own line and start with http:// or https://
+    const message = `Hi ${user.name || 'there'}! 👋\n\nYou have been invited to the Dial A Drink Shop Agent App.\n\nClick or copy this link to get started:\n\n${setupPinUrl}\n\nWelcome aboard! 🎉`;
+    
+    const whatsappResult = whatsappService.sendCustomMessage(user.mobileNumber, message);
+    
+    if (whatsappResult.success) {
+      return res.json({
+        success: true,
+        whatsappLink: whatsappResult.whatsappLink,
+        message: message
+      });
+    } else {
+      return res.status(500).json({
+        error: whatsappResult.error || 'Failed to generate WhatsApp link'
+      });
+    }
+  } catch (error) {
+    console.error('Error generating WhatsApp link:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get all admin users
 router.get('/users', async (req, res) => {
   try {
     const users = await db.Admin.findAll({
-      attributes: ['id', 'username', 'email', 'role', 'createdAt'],
+      attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'hasSetPin'],
       order: [['createdAt', 'DESC']]
     });
     res.json(users);
@@ -1754,9 +2522,129 @@ router.get('/users', async (req, res) => {
 // Create new admin user (invite)
 router.post('/users', async (req, res) => {
   try {
-    const { username, email, role } = req.body;
+    const { username, email, role, name, mobileNumber } = req.body;
 
-    if (!username || !email) {
+    console.log('Creating user with data:', { role, username, email, name, mobileNumber });
+
+    // For shop agents, name and mobileNumber are required instead of username/email
+    // Normalize role to handle any case variations
+    const normalizedRole = role ? role.trim().toLowerCase() : '';
+    if (normalizedRole === 'shop_agent') {
+      if (!name || !mobileNumber) {
+        return res.status(400).json({ error: 'Name and mobile number are required for shop agents' });
+      }
+
+      // Generate username from mobile number (remove non-digits, use as username)
+      const cleanMobile = mobileNumber.replace(/\D/g, '');
+      const generatedUsername = `shop_agent_${cleanMobile}`;
+      const generatedEmail = `${cleanMobile}@shopagent.local`;
+
+      // Check if user already exists
+      const existingUser = await db.Admin.findOne({
+        where: {
+          [Op.or]: [
+            { username: generatedUsername },
+            { email: generatedEmail },
+            { mobileNumber: mobileNumber.trim() }
+          ]
+        }
+      });
+
+      if (existingUser) {
+        return res.status(400).json({ error: 'Shop agent with this mobile number already exists' });
+      }
+
+      // Generate invite token for PIN setup
+      const crypto = require('crypto');
+      const inviteToken = crypto.randomBytes(32).toString('hex');
+      const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Create shop agent
+      const user = await db.Admin.create({
+        username: generatedUsername,
+        email: generatedEmail,
+        role: 'shop_agent',
+        password: null, // Shop agents don't need password/login
+        name: name.trim(),
+        mobileNumber: mobileNumber.trim(),
+        inviteToken,
+        inviteTokenExpiry,
+        hasSetPin: false
+      });
+
+      // Generate WhatsApp invitation link
+      let whatsappLink = null;
+      try {
+        const whatsappService = require('../services/whatsapp');
+        
+        // Get shop agent app URL - prefer environment variable, then try to get ngrok URL, fallback to localhost
+        let shopAgentAppUrl = process.env.SHOP_AGENT_APP_URL;
+        
+        if (!shopAgentAppUrl || shopAgentAppUrl.includes('localhost')) {
+          // Try to get ngrok URL for port 3002
+          try {
+            const axios = require('axios');
+            const ngrokResponse = await axios.get('http://localhost:4040/api/tunnels', { timeout: 2000 });
+            const tunnels = ngrokResponse.data?.tunnels || [];
+            const shopAgentTunnel = tunnels.find(t => 
+              t.config?.addr?.includes(':3002') || t.config?.addr?.includes('localhost:3002')
+            );
+            if (shopAgentTunnel?.public_url) {
+              shopAgentAppUrl = shopAgentTunnel.public_url;
+              console.log(`✅ Using ngrok URL for shop agent app: ${shopAgentAppUrl}`);
+            }
+          } catch (ngrokError) {
+            console.log('⚠️ Could not fetch ngrok URL, using default');
+          }
+        }
+        
+        // Check if we have a valid public URL (not localhost)
+        if (!shopAgentAppUrl || shopAgentAppUrl.includes('localhost')) {
+          console.warn('⚠️ Shop agent app URL is set to localhost - WhatsApp link will not work on mobile devices.');
+          console.warn('⚠️ Please set SHOP_AGENT_APP_URL environment variable or configure ngrok for port 3002.');
+          // Don't fail user creation, but log the warning
+        } else {
+          // Always direct to phone number entry page
+          // Ensure URL starts with http:// or https:// for mobile WhatsApp to detect it
+          let setupPinUrl = `${shopAgentAppUrl}/`;
+          if (!setupPinUrl.startsWith('http://') && !setupPinUrl.startsWith('https://')) {
+            setupPinUrl = `https://${setupPinUrl}`;
+          }
+          
+          // Format message with URL on its own line for mobile WhatsApp detection
+          const message = `Hi ${name.trim()}! 👋\n\nYou have been invited to the Dial A Drink Shop Agent App.\n\nClick or copy this link to get started:\n\n${setupPinUrl}\n\nWelcome aboard! 🎉`;
+          
+          const whatsappResult = whatsappService.sendCustomMessage(mobileNumber.trim(), message);
+          
+          if (whatsappResult.success) {
+            whatsappLink = whatsappResult.whatsappLink;
+            console.log(`✅ WhatsApp invitation link generated for shop agent ${name} (${mobileNumber})`);
+            console.log(`📱 WhatsApp link: ${whatsappLink}`);
+          } else {
+            console.error(`❌ Failed to generate WhatsApp invitation: ${whatsappResult.error}`);
+          }
+        }
+      } catch (whatsappError) {
+        console.error('❌ Error generating WhatsApp invitation:', whatsappError);
+        // Don't fail user creation if WhatsApp fails
+      }
+
+      return res.status(201).json({
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+        name: user.name,
+        mobileNumber: user.mobileNumber,
+        createdAt: user.createdAt,
+        whatsappLink: whatsappLink // Include WhatsApp link in response
+      });
+    }
+
+    // For admin and manager roles, username and email are required
+    // Skip this validation for shop_agent (already handled above)
+    const normalizedRoleForValidation = role ? role.trim().toLowerCase() : '';
+    if (normalizedRoleForValidation !== 'shop_agent' && (!username || !email)) {
       return res.status(400).json({ error: 'Username and email are required' });
     }
 
@@ -1812,6 +2700,284 @@ router.post('/users', async (req, res) => {
 });
 
 // Get order notifications (admin)
+/**
+ * Get shift report - Calculate driver shift durations per day
+ * GET /api/admin/shift-report
+ * IMPORTANT: This route must be defined BEFORE any parameterized routes like /:id
+ */
+router.get('/shift-report', verifyAdmin, async (req, res) => {
+  try {
+    console.log('📊 Shift report request received:', req.query);
+    const { startDate, endDate } = req.query;
+    
+    // Parse date range
+    let start, end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      if (isNaN(start.getTime())) {
+        throw new Error('Invalid startDate format');
+      }
+      start.setHours(0, 0, 0, 0);
+      end = new Date(endDate);
+      if (isNaN(end.getTime())) {
+        throw new Error('Invalid endDate format');
+      }
+      // Include current day - set to current time if it's today, otherwise end of day
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const endDateOnly = new Date(end);
+      endDateOnly.setHours(0, 0, 0, 0);
+      
+      if (endDateOnly.getTime() === today.getTime()) {
+        // Current day - use current time
+        end = new Date();
+      } else {
+        // Past day - use end of day
+        end.setHours(23, 59, 59, 999);
+      }
+    } else {
+      // Default to last 30 days, including current day
+      end = new Date(); // Current time for today
+      start = new Date(end);
+      start.setDate(start.getDate() - 30);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    console.log('📊 Date range:', { start: start.toISOString(), end: end.toISOString() });
+
+    // Get all drivers
+    const drivers = await db.Driver.findAll({
+      order: [['name', 'ASC']]
+    });
+
+    console.log(`📊 Found ${drivers.length} drivers`);
+
+    const now = new Date();
+    const shiftReport = [];
+
+    // For each driver, calculate shift time per day (with hourly tracking)
+    for (const driver of drivers) {
+      const driverShifts = [];
+      
+      // Group by day, but track hourly activity
+      const currentDate = new Date(start);
+      while (currentDate <= end) {
+        const dayStart = new Date(currentDate);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(currentDate);
+        dayEnd.setHours(23, 59, 59, 999);
+        
+        // Check if this is the current day
+        const isCurrentDay = currentDate.toDateString() === now.toDateString();
+        const effectiveDayEnd = isCurrentDay ? now : dayEnd;
+        
+        // Calculate shift time for this day with hourly breakdown
+        const lastActivity = driver.lastActivity ? new Date(driver.lastActivity) : new Date(driver.updatedAt);
+        const updatedAt = new Date(driver.updatedAt);
+        
+        let dayShiftDurationMs = 0;
+        const hourlyShifts = {}; // Track shifts by hour for THIS day only
+        
+        // Check if driver was active during this day
+        if (driver.status === 'active' || driver.status === 'on_delivery') {
+          // Driver is currently active
+          if (lastActivity >= dayStart && lastActivity <= effectiveDayEnd) {
+            // Shift started today, calculate time until now
+            dayShiftDurationMs = Math.max(0, effectiveDayEnd - lastActivity);
+            
+            // Track hourly: break down the shift by hour
+            let currentHour = new Date(lastActivity);
+            currentHour.setMinutes(0, 0, 0);
+            
+            while (currentHour < effectiveDayEnd) {
+              const hourStart = new Date(Math.max(currentHour, lastActivity));
+              const hourEnd = new Date(Math.min(
+                new Date(currentHour.getTime() + 60 * 60 * 1000), // Next hour
+                effectiveDayEnd
+              ));
+              
+              const hourKey = currentHour.toISOString().slice(0, 13); // "2025-01-13T10"
+              if (!hourlyShifts[hourKey]) {
+                hourlyShifts[hourKey] = { start: hourStart, end: hourEnd, durationMs: 0 };
+              }
+              
+              hourlyShifts[hourKey].durationMs += (hourEnd - hourStart);
+              hourlyShifts[hourKey].end = hourEnd; // Update end time
+              
+              // Move to next hour
+              currentHour = new Date(currentHour.getTime() + 60 * 60 * 1000);
+            }
+          } else if (lastActivity < dayStart && effectiveDayEnd >= dayStart) {
+            // Shift started before this day but is still active today
+            // Count from start of day until now
+            dayShiftDurationMs = effectiveDayEnd - dayStart;
+            
+            // Track hourly for the full day
+            let currentHour = new Date(dayStart);
+            while (currentHour < effectiveDayEnd) {
+              const hourStart = currentHour;
+              const hourEnd = new Date(Math.min(
+                new Date(currentHour.getTime() + 60 * 60 * 1000),
+                effectiveDayEnd
+              ));
+              
+              const hourKey = currentHour.toISOString().slice(0, 13);
+              if (!hourlyShifts[hourKey]) {
+                hourlyShifts[hourKey] = { start: hourStart, end: hourEnd, durationMs: 0 };
+              }
+              
+              hourlyShifts[hourKey].durationMs += (hourEnd - hourStart);
+              hourlyShifts[hourKey].end = hourEnd;
+              
+              currentHour = new Date(currentHour.getTime() + 60 * 60 * 1000);
+            }
+          } else if (lastActivity < dayStart && now > dayEnd) {
+            // Shift started before this day and ended after this day, count full day
+            dayShiftDurationMs = dayEnd - dayStart;
+            
+            // Track hourly for the full day
+            let currentHour = new Date(dayStart);
+            while (currentHour <= dayEnd) {
+              const hourStart = currentHour;
+              const hourEnd = new Date(Math.min(
+                new Date(currentHour.getTime() + 60 * 60 * 1000),
+                dayEnd
+              ));
+              
+              const hourKey = currentHour.toISOString().slice(0, 13);
+              if (!hourlyShifts[hourKey]) {
+                hourlyShifts[hourKey] = { start: hourStart, end: hourEnd, durationMs: 0 };
+              }
+              
+              hourlyShifts[hourKey].durationMs += (hourEnd - hourStart);
+              hourlyShifts[hourKey].end = hourEnd;
+              
+              currentHour = new Date(currentHour.getTime() + 60 * 60 * 1000);
+            }
+          }
+        } else {
+          // Driver is not currently active
+          // For historical days, estimate based on when driver was last active
+          if (lastActivity >= dayStart && lastActivity <= dayEnd) {
+            // Driver was active at some point today
+            const shiftStart = updatedAt >= dayStart && updatedAt <= dayEnd && updatedAt < lastActivity
+              ? updatedAt
+              : dayStart;
+            
+            dayShiftDurationMs = Math.max(0, lastActivity - shiftStart);
+            dayShiftDurationMs = Math.min(dayShiftDurationMs, 12 * 60 * 60 * 1000);
+            
+            // Track hourly for estimated shift
+            let currentHour = new Date(shiftStart);
+            currentHour.setMinutes(0, 0, 0);
+            
+            while (currentHour < lastActivity) {
+              const hourStart = new Date(Math.max(currentHour, shiftStart));
+              const hourEnd = new Date(Math.min(
+                new Date(currentHour.getTime() + 60 * 60 * 1000),
+                lastActivity
+              ));
+              
+              const hourKey = currentHour.toISOString().slice(0, 13);
+              if (!hourlyShifts[hourKey]) {
+                hourlyShifts[hourKey] = { start: hourStart, end: hourEnd, durationMs: 0 };
+              }
+              
+              hourlyShifts[hourKey].durationMs += (hourEnd - hourStart);
+              hourlyShifts[hourKey].end = hourEnd;
+              
+              currentHour = new Date(currentHour.getTime() + 60 * 60 * 1000);
+            }
+          } else if (updatedAt >= dayStart && updatedAt <= dayEnd && driver.status === 'offline') {
+            // Driver went offline on this day
+            const shiftEnd = updatedAt;
+            dayShiftDurationMs = Math.max(0, shiftEnd - dayStart);
+            dayShiftDurationMs = Math.min(dayShiftDurationMs, 12 * 60 * 60 * 1000);
+            
+            // Track hourly
+            let currentHour = new Date(dayStart);
+            while (currentHour < shiftEnd) {
+              const hourStart = currentHour;
+              const hourEnd = new Date(Math.min(
+                new Date(currentHour.getTime() + 60 * 60 * 1000),
+                shiftEnd
+              ));
+              
+              const hourKey = currentHour.toISOString().slice(0, 13);
+              if (!hourlyShifts[hourKey]) {
+                hourlyShifts[hourKey] = { start: hourStart, end: hourEnd, durationMs: 0 };
+              }
+              
+              hourlyShifts[hourKey].durationMs += (hourEnd - hourStart);
+              hourlyShifts[hourKey].end = hourEnd;
+              
+              currentHour = new Date(currentHour.getTime() + 60 * 60 * 1000);
+            }
+          }
+        }
+        
+        if (dayShiftDurationMs > 0) {
+          // Format date as YYYY-MM-DD in local timezone to avoid timezone issues
+          const year = dayStart.getFullYear();
+          const month = String(dayStart.getMonth() + 1).padStart(2, '0');
+          const day = String(dayStart.getDate()).padStart(2, '0');
+          const dateString = `${year}-${month}-${day}`;
+          
+          driverShifts.push({
+            date: dateString,
+            dateISO: dayStart.toISOString(), // Keep ISO for reference
+            shiftDurationMs: dayShiftDurationMs,
+            hourlyBreakdown: Object.keys(hourlyShifts)
+              .filter(key => {
+                const hourDate = new Date(key);
+                return hourDate >= dayStart && hourDate <= dayEnd;
+              })
+              .map(key => ({
+                hour: key,
+                durationMs: hourlyShifts[key].durationMs,
+                start: hourlyShifts[key].start.toISOString(),
+                end: hourlyShifts[key].end.toISOString()
+              }))
+              .sort((a, b) => a.hour.localeCompare(b.hour))
+          });
+        }
+        
+        // Move to next day
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Calculate total shift time for this driver
+      const totalShiftMs = driverShifts.reduce((sum, shift) => sum + shift.shiftDurationMs, 0);
+      
+      if (driverShifts.length > 0 || totalShiftMs > 0) {
+        shiftReport.push({
+          driverId: driver.id,
+          driverName: driver.name,
+          phoneNumber: driver.phoneNumber,
+          shifts: driverShifts,
+          totalShiftMs: totalShiftMs
+        });
+      }
+    }
+
+    console.log(`📊 Generated shift report with ${shiftReport.length} drivers`);
+    
+    res.json({
+      success: true,
+      data: shiftReport,
+      startDate: start.toISOString(),
+      endDate: end.toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error generating shift report:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to generate shift report' 
+    });
+  }
+});
+
 router.get('/order-notifications', async (req, res) => {
   try {
     const notifications = await db.OrderNotification.findAll({
@@ -2118,6 +3284,113 @@ router.get('/customers', async (req, res) => {
   }
 });
 
+// Get customer's most recent order delivery address
+router.get('/customers/:id/latest-address', async (req, res) => {
+  try {
+    const customer = await db.Customer.findByPk(req.params.id);
+    if (!customer) {
+      return res.status(404).json({ error: 'Customer not found' });
+    }
+
+    // Find most recent order for this customer
+    const phone = customer.phone || customer.username;
+    const email = customer.email;
+    
+    const whereClause = {
+      [Op.or]: []
+    };
+
+    if (phone) {
+      whereClause[Op.or].push({
+        customerPhone: { [Op.like]: `%${phone}%` }
+      });
+    }
+
+    if (email) {
+      whereClause[Op.or].push({
+        customerEmail: email
+      });
+    }
+
+    if (whereClause[Op.or].length === 0) {
+      return res.json({ deliveryAddress: null });
+    }
+
+    const mostRecentOrder = await db.Order.findOne({
+      where: whereClause,
+      order: [['createdAt', 'DESC']],
+      attributes: ['deliveryAddress']
+    });
+
+    if (mostRecentOrder && mostRecentOrder.deliveryAddress) {
+      return res.json({ deliveryAddress: mostRecentOrder.deliveryAddress });
+    }
+
+    res.json({ deliveryAddress: null });
+  } catch (error) {
+    console.error('Error fetching customer latest address:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create customer
+router.post('/customers', async (req, res) => {
+  try {
+    const { phone, customerName, email } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    // Check if customer already exists
+    const existingCustomer = await db.Customer.findOne({
+      where: {
+        [Op.or]: [
+          { phone: phone },
+          { username: phone }
+        ]
+      }
+    });
+
+    if (existingCustomer) {
+      return res.json({
+        success: true,
+        customer: {
+          id: existingCustomer.id,
+          name: existingCustomer.customerName || existingCustomer.username || 'Customer',
+          username: existingCustomer.username,
+          email: existingCustomer.email,
+          phone: existingCustomer.phone,
+          customerName: existingCustomer.customerName
+        }
+      });
+    }
+
+    // Create new customer
+    const newCustomer = await db.Customer.create({
+      phone: phone,
+      username: phone,
+      customerName: customerName || 'Online Customer',
+      email: email || null
+    });
+
+    res.json({
+      success: true,
+      customer: {
+        id: newCustomer.id,
+        name: newCustomer.customerName || newCustomer.username || 'Customer',
+        username: newCustomer.username,
+        email: newCustomer.email,
+        phone: newCustomer.phone,
+        customerName: newCustomer.customerName
+      }
+    });
+  } catch (error) {
+    console.error('Error creating customer:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get customer details
 router.get('/customers/:id', async (req, res) => {
   try {
@@ -2281,7 +3554,566 @@ router.get('/latest-orders', async (req, res) => {
   }
 });
 
-// Get top inventory items by total quantity sold (admin dashboard)
+// Get inventory analytics (stock valuation, out of stock, slow-moving)
+router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
+  try {
+    // Get all drinks with their stock and purchase price
+    const allDrinks = await db.Drink.findAll({
+      attributes: ['id', 'name', 'stock', 'purchasePrice', 'isAvailable', 'price', 'originalPrice'],
+      include: [{
+        model: db.Category,
+        as: 'category',
+        attributes: ['id', 'name']
+      }],
+      order: [['name', 'ASC']]
+    });
+
+    // Calculate stock valuation (sum of stock * purchasePrice)
+    let totalStockValuation = 0;
+    const drinksWithValuation = allDrinks.map(drink => {
+      const stock = parseInt(drink.stock) || 0;
+      const purchasePrice = parseFloat(drink.purchasePrice) || 0;
+      const valuation = stock * purchasePrice;
+      totalStockValuation += valuation;
+      
+      return {
+        id: drink.id,
+        name: drink.name,
+        stock: stock,
+        purchasePrice: purchasePrice,
+        valuation: valuation,
+        category: drink.category
+      };
+    });
+
+    // Get out of stock items (stock = 0 or isAvailable = false)
+    const outOfStockItems = allDrinks.filter(drink => {
+      const stock = parseInt(drink.stock) || 0;
+      return stock === 0 || drink.isAvailable === false;
+    }).map(drink => ({
+      id: drink.id,
+      name: drink.name,
+      stock: parseInt(drink.stock) || 0,
+      purchasePrice: parseFloat(drink.purchasePrice) || 0,
+      price: parseFloat(drink.price) || 0,
+      originalPrice: parseFloat(drink.originalPrice) || 0,
+      category: drink.category ? {
+        id: drink.category.id,
+        name: drink.category.name
+      } : null
+    }));
+
+    // Get slow-moving stock (no sales in completed orders in the last 3 months)
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+    // Get all drinks that have been sold in completed orders in the last 3 months
+    const recentlySoldDrinks = await db.OrderItem.findAll({
+      attributes: [
+        'drinkId',
+        [db.sequelize.fn('MAX', db.sequelize.col('Order.updatedAt')), 'lastSoldDate']
+      ],
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: [],
+        where: {
+          status: 'completed',
+          updatedAt: {
+            [Op.gte]: threeMonthsAgo
+          }
+        },
+        required: true
+      }],
+      group: ['OrderItem.drinkId'],
+      raw: true
+    });
+
+    // Get last sale date for ALL drinks (even if older than 3 months)
+    const allLastSales = await db.OrderItem.findAll({
+      attributes: [
+        'drinkId',
+        [db.sequelize.fn('MAX', db.sequelize.col('Order.updatedAt')), 'lastSoldDate']
+      ],
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: [],
+        where: {
+          status: 'completed'
+        },
+        required: true
+      }],
+      group: ['OrderItem.drinkId'],
+      raw: true
+    });
+
+    const recentlySoldDrinkIds = new Set(recentlySoldDrinks.map(item => item.drinkId));
+    const lastSaleMap = new Map();
+    allLastSales.forEach(item => {
+      lastSaleMap.set(item.drinkId, item.lastSoldDate);
+    });
+
+    // Find drinks that are NOT in the recently sold list (no sales in last 3 months)
+    const slowMovingItems = allDrinks
+      .filter(drink => !recentlySoldDrinkIds.has(drink.id))
+      .map(drink => ({
+        id: drink.id,
+        name: drink.name,
+        stock: parseInt(drink.stock) || 0,
+        purchasePrice: parseFloat(drink.purchasePrice) || 0,
+        price: parseFloat(drink.price) || 0,
+        originalPrice: parseFloat(drink.originalPrice) || 0,
+        lastSoldDate: lastSaleMap.get(drink.id) || null,
+        category: drink.category ? {
+          id: drink.category.id,
+          name: drink.category.name
+        } : null
+      }));
+
+    res.json({
+      success: true,
+      stockValuation: {
+        total: totalStockValuation,
+        currency: 'KES',
+        itemCount: allDrinks.length
+      },
+      outOfStock: {
+        items: outOfStockItems,
+        count: outOfStockItems.length
+      },
+      slowMoving: {
+        items: slowMovingItems,
+        count: slowMovingItems.length,
+        thresholdMonths: 3
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching inventory analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch inventory analytics'
+    });
+  }
+});
+
+/**
+ * Get all inventory checks
+ * GET /api/admin/inventory-checks
+ */
+router.get('/inventory-checks', verifyAdmin, async (req, res) => {
+  try {
+    const { status, flagged } = req.query;
+
+    const whereClause = {};
+    if (status) {
+      whereClause.status = status;
+    }
+    if (flagged !== undefined) {
+      whereClause.isFlagged = flagged === 'true';
+    }
+
+    const inventoryChecks = await db.InventoryCheck.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: db.Admin,
+          as: 'shopAgent',
+          attributes: ['id', 'name', 'mobileNumber']
+        },
+        {
+          model: db.Drink,
+          as: 'drink',
+          attributes: ['id', 'name', 'barcode', 'stock'],
+          include: [{
+            model: db.Category,
+            as: 'category',
+            attributes: ['id', 'name']
+          }]
+        },
+        {
+          model: db.Admin,
+          as: 'approver',
+          attributes: ['id', 'name', 'username'],
+          required: false
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      checks: inventoryChecks.map(check => ({
+        id: check.id,
+        shopAgent: check.shopAgent ? {
+          id: check.shopAgent.id,
+          name: check.shopAgent.name,
+          mobileNumber: check.shopAgent.mobileNumber
+        } : null,
+        drink: check.drink ? {
+          id: check.drink.id,
+          name: check.drink.name,
+          barcode: check.drink.barcode,
+          currentStock: check.drink.stock || 0,
+          category: check.drink.category ? {
+            id: check.drink.category.id,
+            name: check.drink.category.name
+          } : null
+        } : null,
+        agentCount: check.agentCount,
+        databaseCount: check.databaseCount,
+        status: check.status,
+        isFlagged: check.isFlagged,
+        approvedBy: check.approver ? {
+          id: check.approver.id,
+          name: check.approver.name || check.approver.username
+        } : null,
+        approvedAt: check.approvedAt,
+        notes: check.notes,
+        createdAt: check.createdAt,
+        updatedAt: check.updatedAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching inventory checks:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch inventory checks'
+    });
+  }
+});
+
+/**
+ * Approve inventory check
+ * POST /api/admin/inventory-checks/:checkId/approve
+ */
+router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) => {
+  try {
+    const { checkId } = req.params;
+    const { updateStock, notes } = req.body;
+    const adminId = req.admin.id;
+
+    const inventoryCheck = await db.InventoryCheck.findByPk(checkId, {
+      include: [
+        {
+          model: db.Drink,
+          as: 'drink'
+        },
+        {
+          model: db.Admin,
+          as: 'shopAgent',
+          attributes: ['id', 'name', 'mobileNumber']
+        }
+      ]
+    });
+
+    if (!inventoryCheck) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inventory check not found'
+      });
+    }
+
+    // Update inventory check status
+    await inventoryCheck.update({
+      status: 'approved',
+      approvedBy: adminId,
+      approvedAt: new Date(),
+      notes: notes || inventoryCheck.notes
+    });
+
+    // If updateStock is true, update the drink stock to match agent count
+    if (updateStock === true && inventoryCheck.drink) {
+      await inventoryCheck.drink.update({
+        stock: inventoryCheck.agentCount
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Inventory check approved',
+      check: {
+        id: inventoryCheck.id,
+        status: inventoryCheck.status,
+        approvedBy: adminId,
+        stockUpdated: updateStock === true
+      }
+    });
+  } catch (error) {
+    console.error('Error approving inventory check:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to approve inventory check'
+    });
+  }
+});
+
+/**
+ * Request recount for inventory check
+ * POST /api/admin/inventory-checks/:checkId/request-recount
+ */
+router.post('/inventory-checks/:checkId/request-recount', verifyAdmin, async (req, res) => {
+  try {
+    const { checkId } = req.params;
+    const { notes } = req.body;
+
+    const inventoryCheck = await db.InventoryCheck.findByPk(checkId, {
+      include: [
+        {
+          model: db.Drink,
+          as: 'drink'
+        },
+        {
+          model: db.Admin,
+          as: 'shopAgent',
+          attributes: ['id', 'name', 'mobileNumber']
+        }
+      ]
+    });
+
+    if (!inventoryCheck) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inventory check not found'
+      });
+    }
+
+    // Update status to recount_requested
+    await inventoryCheck.update({
+      status: 'recount_requested',
+      notes: notes || inventoryCheck.notes
+    });
+
+    // Create notification for shop agent
+    try {
+      await db.Notification.create({
+        sentBy: req.admin.id,
+        recipientType: 'shop_agent',
+        recipientId: inventoryCheck.shopAgentId,
+        type: 'inventory_recount',
+        title: 'Inventory Recount Requested',
+        message: `A recount has been requested for ${inventoryCheck.drink?.name || 'an item'}. Please submit a new inventory check.`,
+        data: {
+          checkId: inventoryCheck.id,
+          drinkId: inventoryCheck.drinkId,
+          drinkName: inventoryCheck.drink?.name
+        }
+      });
+    } catch (notifError) {
+      console.error('Error creating notification:', notifError);
+      // Don't fail the request if notification fails
+    }
+
+    res.json({
+      success: true,
+      message: 'Recount requested. Shop agent has been notified.',
+      check: {
+        id: inventoryCheck.id,
+        status: inventoryCheck.status
+      }
+    });
+  } catch (error) {
+    console.error('Error requesting recount:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to request recount'
+    });
+  }
+});
+
+// Get sales analytics (online sales, admin sales, admin cash at hand)
+router.get('/sales-analytics', verifyAdmin, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    // Set date range (default to last 30 days)
+    let start, end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(endDate);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      end = new Date();
+      end.setHours(23, 59, 59, 999);
+      start = new Date(end);
+      start.setDate(start.getDate() - 30);
+      start.setHours(0, 0, 0, 0);
+    }
+
+    // Get online sales (customer orders - adminOrder = false)
+    const onlineOrders = await db.Order.findAll({
+      where: {
+        adminOrder: false,
+        status: {
+          [Op.in]: ['completed', 'delivered']
+        },
+        createdAt: {
+          [Op.between]: [start, end]
+        }
+      },
+      attributes: ['id', 'totalAmount', 'createdAt', 'paymentStatus', 'paymentMethod'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const onlineSalesTotal = onlineOrders.reduce((sum, order) => {
+      return sum + (parseFloat(order.totalAmount) || 0);
+    }, 0);
+
+    // Get admin sales (adminOrder = true) grouped by admin
+    const adminOrders = await db.Order.findAll({
+      where: {
+        adminOrder: true,
+        status: {
+          [Op.in]: ['completed', 'delivered']
+        },
+        createdAt: {
+          [Op.between]: [start, end]
+        }
+      },
+      include: [{
+        model: db.Admin,
+        as: 'servicedByAdmin',
+        attributes: ['id', 'name', 'username', 'email'],
+        required: false
+      }],
+      attributes: ['id', 'totalAmount', 'createdAt', 'paymentStatus', 'paymentMethod', 'adminId'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    // Group admin sales by admin
+    const adminSalesByAdmin = {};
+    adminOrders.forEach(order => {
+      const adminId = order.adminId || 'unassigned';
+      const adminName = order.servicedByAdmin 
+        ? (order.servicedByAdmin.name || order.servicedByAdmin.username || `Admin #${adminId}`)
+        : 'Unassigned';
+      
+      if (!adminSalesByAdmin[adminId]) {
+        adminSalesByAdmin[adminId] = {
+          adminId: adminId,
+          adminName: adminName,
+          orders: [],
+          totalSales: 0,
+          orderCount: 0
+        };
+      }
+      
+      adminSalesByAdmin[adminId].orders.push({
+        id: order.id,
+        totalAmount: parseFloat(order.totalAmount) || 0,
+        createdAt: order.createdAt,
+        paymentStatus: order.paymentStatus,
+        paymentMethod: order.paymentMethod
+      });
+      
+      adminSalesByAdmin[adminId].totalSales += parseFloat(order.totalAmount) || 0;
+      adminSalesByAdmin[adminId].orderCount += 1;
+    });
+
+    const adminSalesList = Object.values(adminSalesByAdmin).sort((a, b) => b.totalSales - a.totalSales);
+    const totalAdminSales = adminSalesList.reduce((sum, admin) => sum + admin.totalSales, 0);
+
+    // Get admin cash at hand (from AdminWallet)
+    let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+    if (!adminWallet) {
+      adminWallet = await db.AdminWallet.create({
+        id: 1,
+        balance: 0,
+        totalRevenue: 0,
+        totalOrders: 0
+      });
+    }
+
+    // Calculate cash at hand from cash transactions
+    // Cash at hand = Cash received from cash orders - Cash settlements
+    const cashOrders = await db.Order.findAll({
+      where: {
+        adminOrder: true,
+        paymentMethod: 'cash',
+        paymentStatus: 'paid',
+        status: {
+          [Op.in]: ['completed', 'delivered']
+        }
+      },
+      attributes: ['id', 'totalAmount', 'createdAt']
+    });
+
+    const cashReceived = cashOrders.reduce((sum, order) => {
+      return sum + (parseFloat(order.totalAmount) || 0);
+    }, 0);
+
+    // Get cash settlements (cash remitted/submitted)
+    const cashSettlements = await db.Transaction.findAll({
+      where: {
+        transactionType: 'cash_settlement',
+        status: 'completed',
+        amount: {
+          [Op.lt]: 0 // Negative amounts (cash remitted)
+        }
+      },
+      attributes: ['id', 'amount', 'createdAt', 'notes']
+    });
+
+    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => {
+      return sum + (parseFloat(tx.amount) || 0);
+    }, 0));
+
+    // Also check admin cash submissions
+    const adminCashSubmissions = await db.CashSubmission.findAll({
+      where: {
+        driverId: null, // Admin submissions (driverId is null for admin)
+        status: 'approved'
+      },
+      attributes: ['id', 'amount', 'createdAt']
+    });
+
+    const adminCashSubmitted = adminCashSubmissions.reduce((sum, submission) => {
+      return sum + (parseFloat(submission.amount) || 0);
+    }, 0);
+
+    const calculatedCashAtHand = Math.max(0, cashReceived - cashRemitted - adminCashSubmitted);
+
+    res.json({
+      success: true,
+      dateRange: {
+        start: start.toISOString(),
+        end: end.toISOString()
+      },
+      onlineSales: {
+        total: onlineSalesTotal,
+        orderCount: onlineOrders.length,
+        orders: onlineOrders.map(order => ({
+          id: order.id,
+          totalAmount: parseFloat(order.totalAmount) || 0,
+          createdAt: order.createdAt,
+          paymentStatus: order.paymentStatus,
+          paymentMethod: order.paymentMethod
+        }))
+      },
+      adminSales: {
+        total: totalAdminSales,
+        totalOrderCount: adminOrders.length,
+        byAdmin: adminSalesList
+      },
+      adminCashAtHand: {
+        walletBalance: parseFloat(adminWallet.balance) || 0,
+        calculatedCashAtHand: calculatedCashAtHand,
+        cashReceived: cashReceived,
+        cashRemitted: cashRemitted,
+        cashSubmitted: adminCashSubmitted,
+        currency: 'KES'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching sales analytics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch sales analytics'
+    });
+  }
+});
+
 router.get('/top-inventory-items', async (req, res) => {
   try {
     const totalOrders = await db.Order.count();
