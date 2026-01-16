@@ -279,25 +279,39 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    const trimmedUsername = username.trim().toLowerCase();
+    const trimmedUsername = username.trim();
 
-    // Find admin user using Sequelize
-    const adminUser = await db.Admin.findOne({
+    // Find admin user - try exact match first (simpler and faster)
+    let adminUser = await db.Admin.findOne({
       where: {
         [Op.or]: [
-          db.sequelize.where(
-            db.sequelize.fn('LOWER', db.sequelize.col('username')),
-            trimmedUsername
-          ),
-          db.sequelize.where(
-            db.sequelize.fn('LOWER', db.sequelize.col('email')),
-            trimmedUsername
-          )
+          { username: trimmedUsername },
+          { email: trimmedUsername }
         ]
       },
-      attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt'],
-      raw: false // Return Sequelize instance, not plain object
+      attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
     });
+
+    // If not found, try case-insensitive search
+    if (!adminUser) {
+      const lowerUsername = trimmedUsername.toLowerCase();
+      // Use raw query for case-insensitive search as fallback
+      const [results] = await db.sequelize.query(
+        `SELECT id, username, email, password, role, name, "mobileNumber", "createdAt", "updatedAt" 
+         FROM admins 
+         WHERE LOWER(username) = :username OR LOWER(email) = :email 
+         LIMIT 1`,
+        {
+          replacements: { username: lowerUsername, email: lowerUsername },
+          type: db.sequelize.QueryTypes.SELECT
+        }
+      );
+      if (results && results.length > 0) {
+        adminUser = await db.Admin.findByPk(results[0].id, {
+          attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
+        });
+      }
+    }
 
     if (!adminUser) {
       return res.status(401).json({
