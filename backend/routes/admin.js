@@ -266,16 +266,12 @@ const findLatestOtpForPhone = async (phone) => {
   });
 };
 
+// Admin login route - MUST be before router.use(verifyAdmin)
 router.post('/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
 
-    console.log('🔐 Admin login attempt:', { 
-      hasUsername: !!username, 
-      hasPassword: !!password,
-      usernameLength: username?.length 
-    });
-
+    // Basic validation
     if (!username || !password) {
       return res.status(400).json({
         success: false,
@@ -283,103 +279,84 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    const trimmedUsername = username.trim();
+    const trimmedUsername = username.trim().toLowerCase();
 
-    // Use Sequelize ORM instead of raw SQL for better compatibility
-    let adminUser;
-    try {
-      adminUser = await db.Admin.findOne({
-        where: {
-          [Op.or]: [
-            { username: trimmedUsername },
-            { email: trimmedUsername }
-          ]
-        },
-        attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
-      });
-      console.log('✅ Admin user query completed:', { 
-        found: !!adminUser, 
-        hasId: !!adminUser?.id 
-      });
-    } catch (dbError) {
-      console.error('❌ Database query error:', dbError);
-      console.error('Database error details:', {
-        message: dbError.message,
-        name: dbError.name,
-        stack: dbError.stack
-      });
-      throw dbError;
-    }
+    // Find admin user using Sequelize
+    const adminUser = await db.Admin.findOne({
+      where: {
+        [Op.or]: [
+          db.sequelize.where(
+            db.sequelize.fn('LOWER', db.sequelize.col('username')),
+            trimmedUsername
+          ),
+          db.sequelize.where(
+            db.sequelize.fn('LOWER', db.sequelize.col('email')),
+            trimmedUsername
+          )
+        ]
+      },
+      attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt'],
+      raw: false // Return Sequelize instance, not plain object
+    });
 
-    if (!adminUser || !adminUser.password) {
-      console.log('⚠️ Admin user not found or no password');
+    if (!adminUser) {
       return res.status(401).json({
         success: false,
         error: 'Invalid username or password'
       });
     }
 
-    let isPasswordValid;
-    try {
-      isPasswordValid = await bcrypt.compare(password, adminUser.password);
-      console.log('🔑 Password comparison result:', isPasswordValid);
-    } catch (bcryptError) {
-      console.error('❌ Bcrypt error:', bcryptError);
-      throw bcryptError;
+    // Check if password exists
+    if (!adminUser.password) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid username or password'
+      });
     }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, adminUser.password);
 
     if (!isPasswordValid) {
-      console.log('⚠️ Invalid password');
       return res.status(401).json({
         success: false,
         error: 'Invalid username or password'
       });
     }
 
+    // Generate JWT token
     const tokenPayload = {
       id: adminUser.id,
       username: adminUser.username,
       role: adminUser.role || 'admin'
     };
 
-    let token;
-    try {
-      token = jwt.sign(tokenPayload, JWT_SECRET, {
-        expiresIn: ADMIN_TOKEN_TTL
-      });
-      console.log('✅ JWT token generated successfully');
-    } catch (jwtError) {
-      console.error('❌ JWT signing error:', jwtError);
-      throw jwtError;
-    }
+    const token = jwt.sign(tokenPayload, JWT_SECRET, {
+      expiresIn: ADMIN_TOKEN_TTL
+    });
 
-    const userResponse = buildAdminUserResponse(adminUser);
-    console.log('✅ Login successful for admin:', adminUser.username);
-
+    // Return success response
     return res.json({
       success: true,
       message: 'Login successful',
       token,
-      user: userResponse
+      user: buildAdminUserResponse(adminUser)
     });
   } catch (error) {
-    console.error('❌ Admin login error:', error);
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
+    console.error('Admin login error:', error);
+    console.error('Error details:', {
+      name: error.name,
+      message: error.message,
+      stack: error.stack
+    });
     
-    // Return more detailed error in development
-    const errorResponse = {
+    return res.status(500).json({
       success: false,
-      error: 'Failed to log in. Please try again.'
-    };
-    
-    if (process.env.NODE_ENV === 'development') {
-      errorResponse.details = error.message;
-      errorResponse.stack = error.stack;
-    }
-    
-    return res.status(500).json(errorResponse);
+      error: 'Failed to log in. Please try again.',
+      ...(process.env.NODE_ENV === 'development' && {
+        details: error.message
+      })
+    });
   }
 });
 
