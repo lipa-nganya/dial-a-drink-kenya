@@ -7,7 +7,9 @@ import {
   InputAdornment,
   Button,
   Chip,
-  Pagination
+  Pagination,
+  Fab,
+  Tooltip
 } from '@mui/material';
 import { Search, Star, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
@@ -320,60 +322,6 @@ const Menu = () => {
           borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
         }}
       >
-        {/* Mobile Toggle Button - Only show on mobile */}
-        <Box
-          sx={{
-            display: { xs: 'flex', sm: 'none' },
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            mb: categoriesExpanded ? 1 : 0,
-            transition: 'margin 0.3s ease-in-out'
-          }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-            Categories
-          </Typography>
-          <Button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              const scrollPosition = window.scrollY || window.pageYOffset;
-              const newExpandedState = !categoriesExpanded;
-              
-              // Clear any pending scroll timeout before toggling
-              if (scrollTimeoutRef.current) {
-                clearTimeout(scrollTimeoutRef.current);
-                scrollTimeoutRef.current = null;
-              }
-              
-              // Update refs and state
-              if (newExpandedState) {
-                // Expanding: mark as manually expanded if scrolled, so it won't auto-collapse
-                if (scrollPosition > 50) {
-                  manuallyExpandedRef.current = true;
-                } else {
-                  // At top, reset manual expand flag
-                  manuallyExpandedRef.current = false;
-                  isScrolledRef.current = false;
-                }
-                setCategoriesExpanded(true);
-              } else {
-                // Collapsing: user wants to hide, clear manual expand flag
-                manuallyExpandedRef.current = false;
-                manualExpandTimeRef.current = 0;
-                setCategoriesExpanded(false);
-              }
-            }}
-            sx={{
-              minWidth: 'auto',
-              px: 1,
-              py: 0.5,
-              color: colors.textPrimary
-            }}
-          >
-            {categoriesExpanded ? <ExpandLess /> : <ExpandMore />}
-          </Button>
-        </Box>
 
         <Box
           sx={{
@@ -614,6 +562,61 @@ const Menu = () => {
         )}
       </Box>
       </Container>
+
+      {/* Floating Categories Toggle Button - Mobile Only */}
+      <Tooltip title={categoriesExpanded ? "Hide Categories" : "Show Categories"} placement="left">
+        <Fab
+          color="primary"
+          aria-label="toggle categories"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const scrollPosition = window.scrollY || window.pageYOffset;
+            const newExpandedState = !categoriesExpanded;
+            
+            // Clear any pending scroll timeout before toggling
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current);
+              scrollTimeoutRef.current = null;
+            }
+            
+            // Update refs and state
+            if (newExpandedState) {
+              // Expanding: mark as manually expanded if scrolled, so it won't auto-collapse
+              if (scrollPosition > 50) {
+                manuallyExpandedRef.current = true;
+              } else {
+                // At top, reset manual expand flag
+                manuallyExpandedRef.current = false;
+                isScrolledRef.current = false;
+              }
+              setCategoriesExpanded(true);
+            } else {
+              // Collapsing: user wants to hide, clear manual expand flag
+              manuallyExpandedRef.current = false;
+              manualExpandTimeRef.current = 0;
+              setCategoriesExpanded(false);
+            }
+          }}
+          sx={{
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            display: { xs: 'flex', sm: 'none' }, // Only show on mobile
+            backgroundColor: colors.accent || colors.primary,
+            color: colors.accentText || '#ffffff',
+            zIndex: 1000,
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+            '&:hover': {
+              backgroundColor: colors.accent || colors.primary,
+              opacity: 0.9,
+              boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
+            },
+          }}
+        >
+          {categoriesExpanded ? <ExpandLess /> : <ExpandMore />}
+        </Fab>
+      </Tooltip>
     </Box>
   );
 };
