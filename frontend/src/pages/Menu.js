@@ -48,6 +48,23 @@ const Menu = () => {
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
+          // Check if manually expanded FIRST, before any other logic
+          const timeSinceManualExpand = manualExpandTimeRef.current > 0 
+            ? Date.now() - manualExpandTimeRef.current 
+            : Infinity;
+          const MIN_TIME_AFTER_MANUAL_EXPAND = 2000; // 2 second grace period
+          
+          // CRITICAL: If manually expanded and within grace period, completely ignore this scroll event
+          if (manuallyExpandedRef.current && timeSinceManualExpand < MIN_TIME_AFTER_MANUAL_EXPAND) {
+            // Clear any pending collapse timeouts
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current);
+              scrollTimeoutRef.current = null;
+            }
+            ticking = false;
+            return; // Exit immediately - don't process anything
+          }
+          
           const scrollPosition = window.scrollY || window.pageYOffset;
           const isMobile = window.innerWidth < 600;
           
@@ -61,38 +78,32 @@ const Menu = () => {
           
           // Only apply on mobile
           if (isMobile) {
-            const timeSinceManualExpand = Date.now() - manualExpandTimeRef.current;
-            const MIN_TIME_AFTER_MANUAL_EXPAND = 1000; // 1 second grace period after manual expand
-            
-            // If manually expanded and within grace period, don't collapse at all
-            if (manuallyExpandedRef.current && timeSinceManualExpand < MIN_TIME_AFTER_MANUAL_EXPAND) {
-              // Clear any pending collapse timeouts
-              if (scrollTimeoutRef.current) {
-                clearTimeout(scrollTimeoutRef.current);
-                scrollTimeoutRef.current = null;
-              }
-              ticking = false;
-              return;
-            }
-            
-            // If manually expanded but grace period passed, allow collapse on continued scrolling
+            // If manually expanded but grace period passed, only collapse on active downward scrolling
             if (manuallyExpandedRef.current && timeSinceManualExpand >= MIN_TIME_AFTER_MANUAL_EXPAND) {
-              // Only collapse if user scrolls down significantly after manual expand
+              // Only collapse if user actively scrolls DOWN significantly
               if (scrollDirection === 'down' && scrollPosition > 100) {
-                // Clear any pending timeout and set new one
+                // Clear any pending timeout
                 if (scrollTimeoutRef.current) {
                   clearTimeout(scrollTimeoutRef.current);
                 }
+                // Only collapse after user stops scrolling down
                 scrollTimeoutRef.current = setTimeout(() => {
-                  // Only collapse if still scrolled down and still manually expanded
-                  if (window.scrollY > 50 && manuallyExpandedRef.current) {
-                    setCategoriesExpanded(false);
-                    isScrolledRef.current = true;
-                    manuallyExpandedRef.current = false;
-                    manualExpandTimeRef.current = 0;
+                  // Double-check conditions before collapsing
+                  const currentScrollY = window.scrollY || window.pageYOffset;
+                  if (currentScrollY > 50 && manuallyExpandedRef.current) {
+                    setCategoriesExpanded(prev => {
+                      if (prev) {
+                        isScrolledRef.current = true;
+                        manuallyExpandedRef.current = false;
+                        manualExpandTimeRef.current = 0;
+                        return false;
+                      }
+                      return prev;
+                    });
                   }
-                }, 500); // Wait 500ms after scroll stops before collapsing
+                }, 1000); // Wait 1 second after scroll stops before collapsing
               }
+              // If scrolling up or not scrolling much, keep categories visible
               ticking = false;
               return;
             }
