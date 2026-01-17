@@ -30,6 +30,7 @@ const Menu = () => {
   const [categoriesExpanded, setCategoriesExpanded] = useState(true);
   const isScrolledRef = useRef(false);
   const manuallyExpandedRef = useRef(false);
+  const manualExpandTimeRef = useRef(0);
   const scrollTimeoutRef = useRef(null);
   
   const itemsPerPage = 16; // 4 rows × 4 columns
@@ -60,8 +61,22 @@ const Menu = () => {
           
           // Only apply on mobile
           if (isMobile) {
-            // If manually expanded, don't auto-collapse - wait for continued scrolling
-            if (manuallyExpandedRef.current) {
+            const timeSinceManualExpand = Date.now() - manualExpandTimeRef.current;
+            const MIN_TIME_AFTER_MANUAL_EXPAND = 1000; // 1 second grace period after manual expand
+            
+            // If manually expanded and within grace period, don't collapse at all
+            if (manuallyExpandedRef.current && timeSinceManualExpand < MIN_TIME_AFTER_MANUAL_EXPAND) {
+              // Clear any pending collapse timeouts
+              if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+                scrollTimeoutRef.current = null;
+              }
+              ticking = false;
+              return;
+            }
+            
+            // If manually expanded but grace period passed, allow collapse on continued scrolling
+            if (manuallyExpandedRef.current && timeSinceManualExpand >= MIN_TIME_AFTER_MANUAL_EXPAND) {
               // Only collapse if user scrolls down significantly after manual expand
               if (scrollDirection === 'down' && scrollPosition > 100) {
                 // Clear any pending timeout and set new one
@@ -74,10 +89,10 @@ const Menu = () => {
                     setCategoriesExpanded(false);
                     isScrolledRef.current = true;
                     manuallyExpandedRef.current = false;
+                    manualExpandTimeRef.current = 0;
                   }
                 }, 500); // Wait 500ms after scroll stops before collapsing
               }
-              // Don't do anything else if manually expanded
               ticking = false;
               return;
             }
@@ -104,6 +119,7 @@ const Menu = () => {
                 if (!prev && isScrolledRef.current) {
                   isScrolledRef.current = false;
                   manuallyExpandedRef.current = false;
+                  manualExpandTimeRef.current = 0;
                   return true;
                 }
                 return prev;
@@ -123,6 +139,7 @@ const Menu = () => {
         setCategoriesExpanded(true);
         isScrolledRef.current = false;
         manuallyExpandedRef.current = false;
+        manualExpandTimeRef.current = 0;
       }
     };
     
@@ -363,22 +380,17 @@ const Menu = () => {
                 scrollTimeoutRef.current = null;
               }
               
-              setCategoriesExpanded(newExpandedState);
-              
-              // If user is expanding manually while scrolled, mark as manually expanded
+              // Set refs BEFORE state update to prevent scroll handler from interfering
               if (newExpandedState && scrollPosition > 50) {
                 manuallyExpandedRef.current = true;
+                manualExpandTimeRef.current = Date.now(); // Record time of manual expand
               } else if (!newExpandedState) {
                 manuallyExpandedRef.current = false;
+                manualExpandTimeRef.current = 0;
               }
               
-              // Small delay to ensure state is updated before scroll handler runs
-              setTimeout(() => {
-                // Force scroll handler to recognize manual expansion
-                if (newExpandedState) {
-                  manuallyExpandedRef.current = true;
-                }
-              }, 0);
+              // Update state
+              setCategoriesExpanded(newExpandedState);
             }}
             sx={{
               minWidth: 'auto',
