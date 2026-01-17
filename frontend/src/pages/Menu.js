@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -9,7 +9,7 @@ import {
   Chip,
   Pagination
 } from '@mui/material';
-import { Search, Star } from '@mui/icons-material';
+import { Search, Star, ExpandMore, ExpandLess } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
@@ -27,12 +27,88 @@ const Menu = () => {
   const [selectedSubcategory, setSelectedSubcategory] = useState(0);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(true);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [manuallyExpanded, setManuallyExpanded] = useState(false);
+  const scrollTimeoutRef = useRef(null);
   
   const itemsPerPage = 16; // 4 rows × 4 columns
 
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Handle scroll detection for mobile category collapse
+  useEffect(() => {
+    let ticking = false;
+    let lastScrollY = 0;
+    
+    const handleScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollPosition = window.scrollY || window.pageYOffset;
+          const isMobile = window.innerWidth < 600;
+          
+          // Only apply on mobile
+          if (isMobile) {
+            // Clear any pending collapse timeout
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current);
+            }
+            
+            // If user manually expanded, wait for scrolling to continue before collapsing
+            if (manuallyExpanded && scrollPosition > 50) {
+              // Set a timeout to collapse after scrolling stops/resumes
+              scrollTimeoutRef.current = setTimeout(() => {
+                if (window.scrollY > 50) {
+                  setCategoriesExpanded(false);
+                  setIsScrolled(true);
+                  setManuallyExpanded(false);
+                }
+              }, 300); // Wait 300ms after scroll to collapse
+            }
+            // Auto-collapse when scrolling down past 50px (if not manually expanded)
+            else if (scrollPosition > 50 && categoriesExpanded && !manuallyExpanded) {
+              setCategoriesExpanded(false);
+              setIsScrolled(true);
+            } 
+            // Expand when scrolling back to top
+            else if (scrollPosition <= 50) {
+              if (!categoriesExpanded && isScrolled) {
+                setCategoriesExpanded(true);
+                setIsScrolled(false);
+                setManuallyExpanded(false); // Reset manual flag at top
+              }
+            }
+          }
+          
+          lastScrollY = scrollPosition;
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    // Also handle resize to reset on desktop
+    const handleResize = () => {
+      if (window.innerWidth >= 600) {
+        setCategoriesExpanded(true);
+        setIsScrolled(false);
+        setManuallyExpanded(false);
+      }
+    };
+    
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleResize);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, [categoriesExpanded, isScrolled, manuallyExpanded]);
 
   useEffect(() => {
     // Read category and subcategory from URL query parameters
@@ -233,6 +309,41 @@ const Menu = () => {
           borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
         }}
       >
+        {/* Mobile Toggle Button - Only show on mobile */}
+        <Box
+          sx={{
+            display: { xs: 'flex', sm: 'none' },
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            mb: categoriesExpanded ? 1 : 0,
+            transition: 'margin 0.3s ease-in-out'
+          }}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+            Categories
+          </Typography>
+          <Button
+            onClick={() => {
+              const newExpandedState = !categoriesExpanded;
+              setCategoriesExpanded(newExpandedState);
+              // If user is expanding manually while scrolled, mark as manually expanded
+              if (newExpandedState && (window.scrollY || window.pageYOffset) > 50) {
+                setManuallyExpanded(true);
+              } else {
+                setManuallyExpanded(false);
+              }
+            }}
+            sx={{
+              minWidth: 'auto',
+              px: 1,
+              py: 0.5,
+              color: colors.textPrimary
+            }}
+          >
+            {categoriesExpanded ? <ExpandLess /> : <ExpandMore />}
+          </Button>
+        </Box>
+
         <Box
           sx={{
             display: 'grid',
@@ -244,7 +355,27 @@ const Menu = () => {
               xl: 'repeat(6, 1fr)'
             },
             gap: 1,
-            width: '100%'
+            width: '100%',
+            maxHeight: { 
+              xs: categoriesExpanded ? '1000px' : '0px', 
+              sm: 'none' 
+            },
+            overflow: { 
+              xs: 'hidden', 
+              sm: 'visible' 
+            },
+            opacity: { 
+              xs: categoriesExpanded ? 1 : 0, 
+              sm: 1 
+            },
+            transition: { 
+              xs: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.3s ease-in-out',
+              sm: 'none'
+            },
+            transform: { 
+              xs: categoriesExpanded ? 'translateY(0)' : 'translateY(-10px)', 
+              sm: 'translateY(0)' 
+            }
           }}
         >
           <Button
@@ -342,7 +473,18 @@ const Menu = () => {
 
         {/* Subcategory Chips - Show when a category is selected */}
         {selectedCategory > 0 && subcategories.length > 0 && (
-          <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Box sx={{ 
+            mt: 2, 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: 1,
+            maxHeight: { xs: categoriesExpanded ? '200px' : '0px', sm: 'none' },
+            overflow: { xs: 'hidden', sm: 'visible' },
+            opacity: { xs: categoriesExpanded ? 1 : 0, sm: 1 },
+            transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
+            transform: { xs: categoriesExpanded ? 'translateY(0)' : 'translateY(-10px)', sm: 'translateY(0)' },
+            transitionProperty: { xs: 'max-height, opacity, transform', sm: 'none' }
+          }}>
             <Chip
               label="All"
               onClick={() => handleSubcategoryChange(0)}

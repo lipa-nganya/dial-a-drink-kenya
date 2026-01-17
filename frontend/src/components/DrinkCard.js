@@ -124,7 +124,7 @@ const DrinkCard = ({ drink }) => {
       sx={{
         width: '100%',
         height: '100%',
-        minHeight: '380px',
+        minHeight: { xs: '350px', sm: '450px', md: '500px' },
         display: 'flex',
         flexDirection: 'column',
         backgroundColor: '#fff',
@@ -139,10 +139,15 @@ const DrinkCard = ({ drink }) => {
       {getImageUrl(drink.image) && !imageError ? (
         <CardMedia
           component="img"
-          height="120"
+          height="240"
           image={getImageUrl(drink.image)}
           alt={drink.name}
-          sx={{ objectFit: 'contain', p: 1, backgroundColor: '#fff' }}
+          sx={{ 
+            objectFit: 'contain', 
+            p: { xs: 1, sm: 1.5, md: 2 }, 
+            backgroundColor: '#fff',
+            height: { xs: 140, sm: 180, md: 240 }
+          }}
           onError={() => {
             setImageError(true);
           }}
@@ -150,7 +155,7 @@ const DrinkCard = ({ drink }) => {
       ) : (
         <Box
           sx={{
-            height: 120,
+            height: { xs: 140, sm: 180, md: 240 },
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -158,10 +163,19 @@ const DrinkCard = ({ drink }) => {
             color: '#666'
           }}
         >
-          <LocalBar sx={{ fontSize: 40 }} />
+          <LocalBar sx={{ fontSize: { xs: 40, sm: 50, md: 60 } }} />
         </Box>
       )}
-      <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#fff', pb: availableCapacities.length >= 2 ? 1 : 0 }}>
+      <CardContent sx={{ 
+        flexGrow: 1, 
+        overflow: 'visible', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        backgroundColor: '#fff', 
+        pb: availableCapacities.length >= 2 ? 1 : 0,
+        px: { xs: 1, sm: 1.5, md: 2 },
+        pt: { xs: 1, sm: 1.5, md: 2 }
+      }}>
         {/* Status Label Above Name */}
         <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
           {!drink.isAvailable && (
@@ -208,7 +222,12 @@ const DrinkCard = ({ drink }) => {
         
         <Typography
           variant="body2"
-          sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: colors.textPrimary }}
+          sx={{ 
+            mb: { xs: 0.5, sm: 1 }, 
+            minHeight: { xs: '20px', sm: '30px' }, 
+            fontSize: { xs: '0.7rem', sm: '0.75rem' }, 
+            color: colors.textPrimary 
+          }}
         >
           {drink.description}
         </Typography>
@@ -370,7 +389,7 @@ const DrinkCard = ({ drink }) => {
                )}
              </CardContent>
 
-             <CardActions sx={{ p: 0, px: 1, pb: 1, pt: 0, display: 'flex', gap: 0.5 }}>
+             <CardActions sx={{ p: 0, px: { xs: 0.5, sm: 1 }, pb: { xs: 0.5, sm: 1 }, pt: 0, display: 'flex', gap: 0.5 }}>
         <Tooltip title="Share on social media">
           <IconButton
             size="small"
