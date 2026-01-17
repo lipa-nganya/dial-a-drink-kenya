@@ -41,6 +41,8 @@ const Menu = () => {
   // Handle scroll detection for mobile category collapse
   useEffect(() => {
     let ticking = false;
+    let scrollDirection = 'down'; // Track scroll direction
+    let lastScrollY = 0;
     
     const handleScroll = () => {
       if (!ticking) {
@@ -48,27 +50,46 @@ const Menu = () => {
           const scrollPosition = window.scrollY || window.pageYOffset;
           const isMobile = window.innerWidth < 600;
           
+          // Determine scroll direction
+          if (scrollPosition > lastScrollY) {
+            scrollDirection = 'down';
+          } else if (scrollPosition < lastScrollY) {
+            scrollDirection = 'up';
+          }
+          lastScrollY = scrollPosition;
+          
           // Only apply on mobile
           if (isMobile) {
-            // Clear any pending collapse timeout
+            // If manually expanded, don't auto-collapse - wait for continued scrolling
+            if (manuallyExpandedRef.current) {
+              // Only collapse if user scrolls down significantly after manual expand
+              if (scrollDirection === 'down' && scrollPosition > 100) {
+                // Clear any pending timeout and set new one
+                if (scrollTimeoutRef.current) {
+                  clearTimeout(scrollTimeoutRef.current);
+                }
+                scrollTimeoutRef.current = setTimeout(() => {
+                  // Only collapse if still scrolled down and still manually expanded
+                  if (window.scrollY > 50 && manuallyExpandedRef.current) {
+                    setCategoriesExpanded(false);
+                    isScrolledRef.current = true;
+                    manuallyExpandedRef.current = false;
+                  }
+                }, 500); // Wait 500ms after scroll stops before collapsing
+              }
+              // Don't do anything else if manually expanded
+              ticking = false;
+              return;
+            }
+            
+            // Clear any pending collapse timeout if not manually expanded
             if (scrollTimeoutRef.current) {
               clearTimeout(scrollTimeoutRef.current);
               scrollTimeoutRef.current = null;
             }
             
-            // If user manually expanded, wait for scrolling to continue before collapsing
-            if (manuallyExpandedRef.current && scrollPosition > 50) {
-              // Set a timeout to collapse after scrolling stops/resumes
-              scrollTimeoutRef.current = setTimeout(() => {
-                if (window.scrollY > 50 && manuallyExpandedRef.current) {
-                  setCategoriesExpanded(false);
-                  isScrolledRef.current = true;
-                  manuallyExpandedRef.current = false;
-                }
-              }, 300); // Wait 300ms after scroll to collapse
-            }
             // Auto-collapse when scrolling down past 50px (if not manually expanded)
-            else if (scrollPosition > 50 && !manuallyExpandedRef.current) {
+            if (scrollPosition > 50 && !manuallyExpandedRef.current) {
               setCategoriesExpanded(prev => {
                 if (prev) {
                   isScrolledRef.current = true;
@@ -330,21 +351,34 @@ const Menu = () => {
             Categories
           </Typography>
           <Button
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               const scrollPosition = window.scrollY || window.pageYOffset;
               const newExpandedState = !categoriesExpanded;
+              
+              // Clear any pending scroll timeout before toggling
+              if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+                scrollTimeoutRef.current = null;
+              }
+              
               setCategoriesExpanded(newExpandedState);
+              
               // If user is expanding manually while scrolled, mark as manually expanded
               if (newExpandedState && scrollPosition > 50) {
                 manuallyExpandedRef.current = true;
-                // Clear any pending timeout
-                if (scrollTimeoutRef.current) {
-                  clearTimeout(scrollTimeoutRef.current);
-                  scrollTimeoutRef.current = null;
-                }
               } else if (!newExpandedState) {
                 manuallyExpandedRef.current = false;
               }
+              
+              // Small delay to ensure state is updated before scroll handler runs
+              setTimeout(() => {
+                // Force scroll handler to recognize manual expansion
+                if (newExpandedState) {
+                  manuallyExpandedRef.current = true;
+                }
+              }, 0);
             }}
             sx={{
               minWidth: 'auto',
