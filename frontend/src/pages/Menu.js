@@ -42,70 +42,27 @@ const Menu = () => {
   // Handle scroll detection for mobile category collapse
   useEffect(() => {
     let ticking = false;
-    let scrollDirection = 'down'; // Track scroll direction
     let lastScrollY = 0;
     
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
-          // Check if manually expanded FIRST, before any other logic
-          const timeSinceManualExpand = manualExpandTimeRef.current > 0 
-            ? Date.now() - manualExpandTimeRef.current 
-            : Infinity;
-          const MIN_TIME_AFTER_MANUAL_EXPAND = 2000; // 2 second grace period
-          
-          // CRITICAL: If manually expanded and within grace period, completely ignore this scroll event
-          if (manuallyExpandedRef.current && timeSinceManualExpand < MIN_TIME_AFTER_MANUAL_EXPAND) {
-            // Clear any pending collapse timeouts
-            if (scrollTimeoutRef.current) {
-              clearTimeout(scrollTimeoutRef.current);
-              scrollTimeoutRef.current = null;
-            }
-            ticking = false;
-            return; // Exit immediately - don't process anything
-          }
-          
           const scrollPosition = window.scrollY || window.pageYOffset;
           const isMobile = window.innerWidth < 600;
           
-          // Determine scroll direction
-          if (scrollPosition > lastScrollY) {
-            scrollDirection = 'down';
-          } else if (scrollPosition < lastScrollY) {
-            scrollDirection = 'up';
-          }
           lastScrollY = scrollPosition;
           
           // Only apply on mobile
           if (isMobile) {
-            // If manually expanded but grace period passed, only collapse on active downward scrolling
-            if (manuallyExpandedRef.current && timeSinceManualExpand >= MIN_TIME_AFTER_MANUAL_EXPAND) {
-              // Only collapse if user actively scrolls DOWN significantly
-              if (scrollDirection === 'down' && scrollPosition > 100) {
-                // Clear any pending timeout
-                if (scrollTimeoutRef.current) {
-                  clearTimeout(scrollTimeoutRef.current);
-                }
-                // Only collapse after user stops scrolling down
-                scrollTimeoutRef.current = setTimeout(() => {
-                  // Double-check conditions before collapsing
-                  const currentScrollY = window.scrollY || window.pageYOffset;
-                  if (currentScrollY > 50 && manuallyExpandedRef.current) {
-                    setCategoriesExpanded(prev => {
-                      if (prev) {
-                        isScrolledRef.current = true;
-                        manuallyExpandedRef.current = false;
-                        manualExpandTimeRef.current = 0;
-                        return false;
-                      }
-                      return prev;
-                    });
-                  }
-                }, 1000); // Wait 1 second after scroll stops before collapsing
+            // If manually expanded, completely ignore scroll events - keep categories visible
+            if (manuallyExpandedRef.current) {
+              // Clear any pending collapse timeouts
+              if (scrollTimeoutRef.current) {
+                clearTimeout(scrollTimeoutRef.current);
+                scrollTimeoutRef.current = null;
               }
-              // If scrolling up or not scrolling much, keep categories visible
               ticking = false;
-              return;
+              return; // Exit immediately - don't process scroll, keep categories visible
             }
             
             // Clear any pending collapse timeout if not manually expanded
@@ -114,7 +71,7 @@ const Menu = () => {
               scrollTimeoutRef.current = null;
             }
             
-            // Auto-collapse when scrolling down past 50px (if not manually expanded)
+            // Auto-collapse when scrolling down past 50px (only if NOT manually expanded)
             if (scrollPosition > 50 && !manuallyExpandedRef.current) {
               setCategoriesExpanded(prev => {
                 if (prev) {
@@ -124,13 +81,11 @@ const Menu = () => {
                 return prev;
               });
             } 
-            // Expand when scrolling back to top
-            else if (scrollPosition <= 50) {
+            // Expand when scrolling back to top (only if NOT manually expanded)
+            else if (scrollPosition <= 50 && !manuallyExpandedRef.current) {
               setCategoriesExpanded(prev => {
                 if (!prev && isScrolledRef.current) {
                   isScrolledRef.current = false;
-                  manuallyExpandedRef.current = false;
-                  manualExpandTimeRef.current = 0;
                   return true;
                 }
                 return prev;
@@ -391,17 +346,23 @@ const Menu = () => {
                 scrollTimeoutRef.current = null;
               }
               
-              // Set refs BEFORE state update to prevent scroll handler from interfering
-              if (newExpandedState && scrollPosition > 50) {
-                manuallyExpandedRef.current = true;
-                manualExpandTimeRef.current = Date.now(); // Record time of manual expand
-              } else if (!newExpandedState) {
+              // Update refs and state
+              if (newExpandedState) {
+                // Expanding: mark as manually expanded if scrolled, so it won't auto-collapse
+                if (scrollPosition > 50) {
+                  manuallyExpandedRef.current = true;
+                } else {
+                  // At top, reset manual expand flag
+                  manuallyExpandedRef.current = false;
+                  isScrolledRef.current = false;
+                }
+                setCategoriesExpanded(true);
+              } else {
+                // Collapsing: user wants to hide, clear manual expand flag
                 manuallyExpandedRef.current = false;
                 manualExpandTimeRef.current = 0;
+                setCategoriesExpanded(false);
               }
-              
-              // Update state
-              setCategoriesExpanded(newExpandedState);
             }}
             sx={{
               minWidth: 'auto',
