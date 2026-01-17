@@ -28,8 +28,8 @@ const Menu = () => {
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [categoriesExpanded, setCategoriesExpanded] = useState(true);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [manuallyExpanded, setManuallyExpanded] = useState(false);
+  const isScrolledRef = useRef(false);
+  const manuallyExpandedRef = useRef(false);
   const scrollTimeoutRef = useRef(null);
   
   const itemsPerPage = 16; // 4 rows × 4 columns
@@ -41,7 +41,6 @@ const Menu = () => {
   // Handle scroll detection for mobile category collapse
   useEffect(() => {
     let ticking = false;
-    let lastScrollY = 0;
     
     const handleScroll = () => {
       if (!ticking) {
@@ -54,35 +53,43 @@ const Menu = () => {
             // Clear any pending collapse timeout
             if (scrollTimeoutRef.current) {
               clearTimeout(scrollTimeoutRef.current);
+              scrollTimeoutRef.current = null;
             }
             
             // If user manually expanded, wait for scrolling to continue before collapsing
-            if (manuallyExpanded && scrollPosition > 50) {
+            if (manuallyExpandedRef.current && scrollPosition > 50) {
               // Set a timeout to collapse after scrolling stops/resumes
               scrollTimeoutRef.current = setTimeout(() => {
-                if (window.scrollY > 50) {
+                if (window.scrollY > 50 && manuallyExpandedRef.current) {
                   setCategoriesExpanded(false);
-                  setIsScrolled(true);
-                  setManuallyExpanded(false);
+                  isScrolledRef.current = true;
+                  manuallyExpandedRef.current = false;
                 }
               }, 300); // Wait 300ms after scroll to collapse
             }
             // Auto-collapse when scrolling down past 50px (if not manually expanded)
-            else if (scrollPosition > 50 && categoriesExpanded && !manuallyExpanded) {
-              setCategoriesExpanded(false);
-              setIsScrolled(true);
+            else if (scrollPosition > 50 && !manuallyExpandedRef.current) {
+              setCategoriesExpanded(prev => {
+                if (prev) {
+                  isScrolledRef.current = true;
+                  return false;
+                }
+                return prev;
+              });
             } 
             // Expand when scrolling back to top
             else if (scrollPosition <= 50) {
-              if (!categoriesExpanded && isScrolled) {
-                setCategoriesExpanded(true);
-                setIsScrolled(false);
-                setManuallyExpanded(false); // Reset manual flag at top
-              }
+              setCategoriesExpanded(prev => {
+                if (!prev && isScrolledRef.current) {
+                  isScrolledRef.current = false;
+                  manuallyExpandedRef.current = false;
+                  return true;
+                }
+                return prev;
+              });
             }
           }
           
-          lastScrollY = scrollPosition;
           ticking = false;
         });
         ticking = true;
@@ -93,8 +100,8 @@ const Menu = () => {
     const handleResize = () => {
       if (window.innerWidth >= 600) {
         setCategoriesExpanded(true);
-        setIsScrolled(false);
-        setManuallyExpanded(false);
+        isScrolledRef.current = false;
+        manuallyExpandedRef.current = false;
       }
     };
     
@@ -108,7 +115,7 @@ const Menu = () => {
         clearTimeout(scrollTimeoutRef.current);
       }
     };
-  }, [categoriesExpanded, isScrolled, manuallyExpanded]);
+  }, []); // Empty deps - use refs for state
 
   useEffect(() => {
     // Read category and subcategory from URL query parameters
@@ -324,13 +331,19 @@ const Menu = () => {
           </Typography>
           <Button
             onClick={() => {
+              const scrollPosition = window.scrollY || window.pageYOffset;
               const newExpandedState = !categoriesExpanded;
               setCategoriesExpanded(newExpandedState);
               // If user is expanding manually while scrolled, mark as manually expanded
-              if (newExpandedState && (window.scrollY || window.pageYOffset) > 50) {
-                setManuallyExpanded(true);
-              } else {
-                setManuallyExpanded(false);
+              if (newExpandedState && scrollPosition > 50) {
+                manuallyExpandedRef.current = true;
+                // Clear any pending timeout
+                if (scrollTimeoutRef.current) {
+                  clearTimeout(scrollTimeoutRef.current);
+                  scrollTimeoutRef.current = null;
+                }
+              } else if (!newExpandedState) {
+                manuallyExpandedRef.current = false;
               }
             }}
             sx={{
