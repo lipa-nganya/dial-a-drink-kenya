@@ -1,23 +1,26 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const db = require('../models');
 const { ensureCustomerFromOrder } = require('../utils/customerSync');
 const smsService = require('../services/sms');
 const whatsappService = require('../services/whatsapp');
-const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 const { findClosestBranch } = require('../utils/branchAssignment');
-const { findNearestActiveDriverToBranch } = require('../utils/driverAssignment');
 const { generateReceiptPDF } = require('../services/pdfReceipt');
 const pushNotifications = require('../services/pushNotifications');
+const { sendSuccess, sendError } = require('../utils/apiResponse');
 
 // Helper function to calculate delivery fee
-const calculateDeliveryFee = async (items) => {
+const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress = null, branchId = null) => {
   try {
     // Get delivery settings
-    const [testModeSetting, withAlcoholSetting, withoutAlcoholSetting] = await Promise.all([
+    const [testModeSetting, feeModeSetting, withAlcoholSetting, withoutAlcoholSetting, perKmWithAlcoholSetting, perKmWithoutAlcoholSetting] = await Promise.all([
       db.Settings.findOne({ where: { key: 'deliveryTestMode' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'deliveryFeeMode' } }).catch(() => null),
       db.Settings.findOne({ where: { key: 'deliveryFeeWithAlcohol' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'deliveryFeeWithoutAlcohol' } }).catch(() => null)
+      db.Settings.findOne({ where: { key: 'deliveryFeeWithoutAlcohol' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'deliveryFeePerKmWithAlcohol' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'deliveryFeePerKmWithoutAlcohol' } }).catch(() => null)
     ]);
 
     const isTestMode = testModeSetting?.value === 'true';
@@ -26,10 +29,11 @@ const calculateDeliveryFee = async (items) => {
       return 0;
     }
 
-    const deliveryFeeWithAlcohol = parseFloat(withAlcoholSetting?.value || '50');
-    const deliveryFeeWithoutAlcohol = parseFloat(withoutAlcoholSetting?.value || '30');
+    const feeMode = feeModeSetting?.value || 'fixed';
+    const isPerKmMode = feeMode === 'perKm';
 
     // Check if all items are from Soft Drinks category
+    let allSoftDrinks = false;
     if (items && items.length > 0) {
       const drinkIds = items.map(item => item.drinkId);
       const drinks = await db.Drink.findAll({
@@ -40,16 +44,51 @@ const calculateDeliveryFee = async (items) => {
         }]
       });
 
-      const allSoftDrinks = drinks.every(drink => 
+      allSoftDrinks = drinks.every(drink => 
         drink.category && drink.category.name === 'Soft Drinks'
       );
+    }
+
+    if (isPerKmMode) {
+      // Per KM mode: calculate fee based on distance
+      const perKmWithAlcohol = parseFloat(perKmWithAlcoholSetting?.value || '20');
+      const perKmWithoutAlcohol = parseFloat(perKmWithoutAlcoholSetting?.value || '15');
+      
+      const perKmRate = allSoftDrinks ? perKmWithoutAlcohol : perKmWithAlcohol;
+      
+      // Calculate distance from branch to delivery address
+      let distanceKm = 0;
+      if (deliveryAddress && branchId) {
+        try {
+          const branch = await db.Branch.findByPk(branchId);
+          if (branch && branch.address) {
+            // Use Haversine formula for distance calculation
+            // Note: This is a simplified calculation. For production, consider using Google Maps API
+            // For now, we'll use a simple fallback or require coordinates
+            // TODO: Implement proper distance calculation using Google Maps API
+            distanceKm = 5; // Default to 5km if distance can't be calculated
+          }
+        } catch (distanceError) {
+          console.error('Error calculating distance:', distanceError);
+          distanceKm = 5; // Default fallback
+        }
+      } else {
+        distanceKm = 5; // Default fallback if no address or branch
+      }
+      
+      const fee = distanceKm * perKmRate;
+      return Number(fee.toFixed(2));
+    } else {
+      // Fixed mode: use fixed amounts
+      const deliveryFeeWithAlcohol = parseFloat(withAlcoholSetting?.value || '50');
+      const deliveryFeeWithoutAlcohol = parseFloat(withoutAlcoholSetting?.value || '30');
 
       if (allSoftDrinks) {
         return deliveryFeeWithoutAlcohol;
       }
-    }
 
-    return deliveryFeeWithAlcohol;
+      return deliveryFeeWithAlcohol;
+    }
   } catch (error) {
     console.error('Error calculating delivery fee:', error);
     // Default to standard delivery fee on error
@@ -60,6 +99,10 @@ const calculateDeliveryFee = async (items) => {
 // Create new order
 router.post('/', async (req, res) => {
   try {
+    console.log('🔍 RAW REQUEST BODY:', JSON.stringify(req.body, null, 2));
+    console.log('🔍 RAW paymentMethod:', req.body.paymentMethod);
+    console.log('🔍 RAW paymentType:', req.body.paymentType);
+    
     const { 
       customerName, 
       customerPhone, 
@@ -75,8 +118,14 @@ router.post('/', async (req, res) => {
       status,
       driverId,
       transactionCode,
-      paymentStatus
+      paymentStatus,
+      isStop,
+      stopDeductionAmount
     } = req.body;
+    
+    console.log('🔍 DESTRUCTURED paymentMethod:', paymentMethod);
+    console.log('🔍 DESTRUCTURED paymentType:', paymentType);
+    
     console.log('🛒 Incoming order payload:', JSON.stringify({
       customerName,
       customerPhone,
@@ -130,9 +179,43 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Invalid payment type' });
     }
 
-    if (paymentType === 'pay_now' && (!paymentMethod || !['card', 'mobile_money'].includes(paymentMethod))) {
-      return res.status(400).json({ error: 'Payment method required when paying now' });
+    // Determine allowed payment methods based on order source
+    // For admin orders (especially walk-in), allow cash in addition to card and mobile_money
+    // For customer orders, only allow card and mobile_money
+    const allowedPaymentMethods = adminOrder 
+      ? ['card', 'mobile_money', 'cash'] 
+      : ['card', 'mobile_money'];
+    
+    console.log('💳 Payment validation check:', {
+      paymentType,
+      paymentMethod,
+      adminOrder,
+      allowedPaymentMethods,
+      isPayNow: paymentType === 'pay_now',
+      hasPaymentMethod: !!paymentMethod
+    });
+
+    if (paymentType === 'pay_now') {
+      // Normalize paymentMethod - trim whitespace and convert to string
+      const normalizedPaymentMethod = paymentMethod ? String(paymentMethod).trim() : null;
+      
+      if (!normalizedPaymentMethod || normalizedPaymentMethod === '') {
+        console.error('❌ Payment validation failed: paymentMethod is missing, null, or empty string');
+        return res.status(400).json({ error: 'Payment method required when paying now' });
+      }
+      
+      if (!allowedPaymentMethods.includes(normalizedPaymentMethod)) {
+        console.error('❌ Payment validation failed:', {
+          paymentMethod: normalizedPaymentMethod,
+          allowedMethods: allowedPaymentMethods,
+          adminOrder: adminOrder
+        });
+        return res.status(400).json({ error: 'Payment method required when paying now' });
+      }
     }
+    
+    // Use normalized paymentMethod for the rest of the code
+    const finalPaymentMethod = (paymentType === 'pay_now' && paymentMethod) ? String(paymentMethod).trim() : paymentMethod;
 
     let tip = parseFloat(tipAmount) || 0;
     if (tip < 0) {
@@ -156,11 +239,33 @@ router.post('/', async (req, res) => {
     const transaction = await db.sequelize.transaction();
 
     try {
+      // Check if purchasePrice column exists in database (once, not per item)
+      let hasPurchasePrice = false;
+      try {
+        const [columns] = await db.sequelize.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'drinks' AND column_name = 'purchasePrice'",
+          { transaction }
+        );
+        hasPurchasePrice = columns.length > 0;
+      } catch (schemaError) {
+        // If schema query fails, assume purchasePrice doesn't exist
+        console.warn('⚠️ Could not check for purchasePrice column, excluding it:', schemaError.message);
+      }
+      
+      // Build attributes list - exclude purchasePrice if it doesn't exist
+      const drinkAttributes = ['id', 'name', 'price', 'image', 'isAvailable', 'categoryId', 'subCategoryId', 'brandId', 'originalPrice', 'capacity', 'capacityPricing', 'stock', 'isOnOffer', 'limitedTimeOffer'];
+      if (hasPurchasePrice) {
+        drinkAttributes.push('purchasePrice');
+      }
+      
       let totalAmount = 0;
       const orderItems = [];
 
       for (const item of normalizedItems) {
-        const drink = await db.Drink.findByPk(item.drinkId, { transaction });
+        const drink = await db.Drink.findByPk(item.drinkId, { 
+          transaction,
+          attributes: drinkAttributes
+        });
         if (!drink) {
           await transaction.rollback();
           return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
@@ -189,33 +294,7 @@ router.post('/', async (req, res) => {
         });
       }
 
-      const deliveryFee = await calculateDeliveryFee(normalizedItems);
-      const finalTotal = totalAmount + deliveryFee + tip;
-
-      // For admin orders, use provided status and paymentStatus, otherwise use defaults
-      let finalPaymentStatus = paymentStatus;
-      let finalOrderStatus = status;
-      
-      if (!adminOrder) {
-        // Regular customer order logic
-        finalPaymentStatus = paymentType === 'pay_now' ? 'pending' : 'unpaid';
-        finalOrderStatus = 'pending';
-
-        if (paymentType === 'pay_now' && paymentMethod === 'card') {
-          finalOrderStatus = 'confirmed';
-          finalPaymentStatus = 'paid';
-        }
-      } else {
-        // Admin order - validate provided statuses
-        if (!finalPaymentStatus || !['pending', 'paid', 'unpaid'].includes(finalPaymentStatus)) {
-          finalPaymentStatus = 'unpaid';
-        }
-        if (!finalOrderStatus || !['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'].includes(finalOrderStatus)) {
-          finalOrderStatus = 'pending';
-        }
-      }
-
-      // Find closest branch to delivery address
+      // Find closest branch to delivery address (needed for perKm fee calculation)
       // CRITICAL: Always assign a branch if one exists - this ensures orders are never created without a branch
       let closestBranch = null;
       let branchId = null;
@@ -272,41 +351,36 @@ router.post('/', async (req, res) => {
         console.warn('⚠️  WARNING: Order will be created WITHOUT a branch assignment. This should not happen if branches exist.');
       }
 
-      // For admin orders, use provided driverId if available, otherwise find driver
+      // Calculate delivery fee (after branch assignment, as it's needed for perKm mode)
+      const deliveryFee = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
+      const finalTotal = totalAmount + deliveryFee + tip;
+
+      // Only assign driver if explicitly provided (for admin orders)
+      // Automatic driver assignment has been removed - drivers must be manually assigned
       if (adminOrder && driverId) {
         assignedDriver = await db.Driver.findByPk(driverId, { transaction });
         if (assignedDriver) {
           console.log(`✅ Admin order: Using provided driver ${assignedDriver.name} (ID: ${assignedDriver.id})`);
         } else {
-          console.log(`⚠️  Admin order: Provided driver ID ${driverId} not found, will find nearest driver`);
+          console.log(`⚠️  Admin order: Provided driver ID ${driverId} not found. Order will be created without driver assignment.`);
         }
+      } else {
+        console.log(`ℹ️  No driver assignment - order will be created without a driver. Driver must be manually assigned later.`);
       }
 
-      // If no driver assigned yet (either not admin order or admin didn't provide driver), find nearest
-      if (!assignedDriver) {
-        // Find nearest active driver to the assigned branch
-        if (branchId) {
-          console.log(`🔍 Looking for active driver near branch ${branchId}...`);
-          assignedDriver = await findNearestActiveDriverToBranch(branchId);
-          console.log(`🔍 Driver assignment result: ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
-        } else {
-          console.log('⚠️  No branch assigned, looking for any active driver...');
-          // If no branch, still try to find an active driver
-          const { findNearestActiveDriverToAddress } = require('../utils/driverAssignment');
-          assignedDriver = await findNearestActiveDriverToAddress(deliveryAddress);
-          console.log(`🔍 Driver assignment result (no branch): ${assignedDriver ? `${assignedDriver.name} (ID: ${assignedDriver.id})` : 'None found'}`);
-        }
+      // Determine final payment status and order status
+      // For admin orders, allow setting paymentStatus to 'paid' if provided
+      const finalPaymentStatus = (adminOrder && paymentStatus && ['pending', 'paid', 'unpaid'].includes(paymentStatus)) 
+        ? paymentStatus 
+        : 'pending';
+      
+      // For admin orders, allow setting status if provided, otherwise default to 'pending'
+      const finalOrderStatus = (adminOrder && status && ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'].includes(status))
+        ? status
+        : 'pending';
 
-        // If no active driver found, fall back to HOLD driver
-        // This ensures there's always a driverId/walletId available when payment happens
-        if (!assignedDriver) {
-          const { driver: holdDriver } = await getOrCreateHoldDriver();
-          assignedDriver = holdDriver;
-          console.log('⚠️  No active driver found. Using HOLD driver as fallback.');
-        } else {
-          console.log(`✅ Assigned order to active driver: ${assignedDriver.name} (ID: ${assignedDriver.id})`);
-        }
-      }
+      // Generate secure tracking token for customer SMS link
+      const trackingToken = crypto.randomBytes(32).toString('hex');
 
       const order = await db.Order.create({
         customerName,
@@ -320,10 +394,14 @@ router.post('/', async (req, res) => {
         paymentMethod: paymentType === 'pay_now' || (adminOrder && finalPaymentStatus === 'paid') ? paymentMethod : null,
         paymentStatus: finalPaymentStatus,
         status: finalOrderStatus,
-        driverId: assignedDriver.id, // Assign nearest active driver or HOLD driver
+        driverId: assignedDriver ? assignedDriver.id : null, // Only assign driver if explicitly provided
+        driverAccepted: null, // Explicitly set to null so order appears as pending
         branchId: branchId, // Assign closest branch
         adminOrder: adminOrder || false,
-        territoryId: territoryId ? parseInt(territoryId) : null
+        territoryId: territoryId ? parseInt(territoryId) : null,
+        isStop: isStop || false,
+        stopDeductionAmount: isStop && stopDeductionAmount ? parseFloat(stopDeductionAmount) : null,
+        trackingToken: trackingToken
       }, { transaction });
 
       createdOrderId = order.id;
@@ -413,34 +491,48 @@ router.post('/', async (req, res) => {
         const driverSocketMap = req.app.get('driverSocketMap');
         const driverSocketId = driverSocketMap ? driverSocketMap.get(parseInt(completeOrder.driverId)) : null;
         
-        // Send socket event
+        // Emit to driver room (works even if socket ID changes on reconnect)
+        io.to(`driver-${completeOrder.driverId}`).emit('order-assigned', {
+          order: completeOrder,
+          playSound: true
+        });
+        console.log(`✅ Socket event sent to driver-${completeOrder.driverId} room for order #${completeOrder.id}`);
+        
+        // Also emit to specific socket ID if available (for immediate delivery)
         if (driverSocketId) {
           io.to(driverSocketId).emit('order-assigned', {
             order: completeOrder,
             playSound: true
           });
-          console.log(`✅ Socket event sent to driver ${completeOrder.driverId} (socket: ${driverSocketId}) for order #${completeOrder.id}`);
-        } else {
-          console.log(`⚠️ Driver ${completeOrder.driverId} not registered - socket event not sent for order #${completeOrder.id}`);
+          console.log(`✅ Also sent socket event to driver ${completeOrder.driverId} (socket: ${driverSocketId}) for order #${completeOrder.id}`);
         }
         
         // Send push notification
         if (completeOrder.driver.pushToken) {
+          console.log(`📤 Attempting to send push notification for order #${completeOrder.id} to driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId})`);
+          console.log(`📤 Push token: ${completeOrder.driver.pushToken.substring(0, 30)}...`);
           try {
             const pushResult = await pushNotifications.sendOrderNotification(
               completeOrder.driver.pushToken,
               completeOrder
             );
             if (pushResult.success) {
-              console.log(`✅ Push notification sent to driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) for order #${completeOrder.id}`);
+              console.log(`✅ Push notification sent successfully to driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) for order #${completeOrder.id}`);
+              console.log(`✅ Push receipt:`, pushResult.receipt);
             } else {
-              console.log(`⚠️ Push notification failed for driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) for order #${completeOrder.id}:`, pushResult.message || pushResult.error);
+              console.error(`⚠️ Push notification failed for driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) for order #${completeOrder.id}`);
+              console.error(`⚠️ Failure details:`, pushResult);
+              if (pushResult.receipt) {
+                console.error(`⚠️ Push receipt (failure):`, pushResult.receipt);
+              }
             }
           } catch (pushError) {
             console.error(`❌ Error sending push notification to driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}):`, pushError);
+            console.error(`❌ Error stack:`, pushError.stack);
           }
         } else {
-          console.log(`⚠️ Driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) has no push token - push notification not sent for order #${completeOrder.id}`);
+          console.error(`❌ Driver ${completeOrder.driver.name} (ID: ${completeOrder.driverId}) has NO push token registered - push notification NOT sent for order #${completeOrder.id}`);
+          console.error(`❌ This driver needs to open the app and grant notification permissions to receive order assignments.`);
         }
       }
     }
@@ -486,6 +578,31 @@ router.post('/', async (req, res) => {
           });
         } else {
           console.log('📱 No active notification recipients found');
+        }
+      }
+
+      // Send SMS confirmation to customer with tracking link
+      // Only send for customer orders (not admin orders)
+      if (!adminOrder && completeOrder.trackingToken && completeOrder.customerPhone) {
+        try {
+          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+          const trackingUrl = `${frontendUrl}/order-tracking?token=${completeOrder.trackingToken}`;
+          
+          const customerSmsMessage = `Order Confirmed! Order #${completeOrder.id}\n` +
+            `Total: KES ${parseFloat(completeOrder.totalAmount).toFixed(2)}\n` +
+            `Track your order: ${trackingUrl}`;
+          
+          console.log(`📱 Sending order confirmation SMS to customer ${completeOrder.customerPhone} for order #${completeOrder.id}`);
+          const smsResult = await smsService.sendSMS(completeOrder.customerPhone, customerSmsMessage);
+          
+          if (smsResult.success) {
+            console.log(`✅ Order confirmation SMS sent successfully to customer ${completeOrder.customerPhone} for order #${completeOrder.id}`);
+          } else {
+            console.error(`❌ Failed to send order confirmation SMS to customer ${completeOrder.customerPhone} for order #${completeOrder.id}:`, smsResult.error);
+          }
+        } catch (smsError) {
+          console.error(`❌ Error sending order confirmation SMS to customer for order #${completeOrder.id}:`, smsError);
+          // Don't fail order creation if SMS fails
         }
       }
 
@@ -610,17 +727,97 @@ router.post('/find', async (req, res) => {
   }
 });
 
+// Get order by tracking token (must be before /:id route)
+router.get('/track/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({ error: 'Tracking token is required' });
+    }
+
+    // Get actual columns that exist in the database for Order
+    const [existingOrderColumns] = await db.sequelize.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
+    );
+    const orderColumnNames = new Set(existingOrderColumns.map(col => col.column_name.toLowerCase()));
+    
+    // Map model attributes to database column names and filter to only existing columns
+    const validOrderAttributes = [];
+    for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
+      const dbColumnName = attrDef.field || attrName;
+      // Check if the database column exists (case-insensitive)
+      if (orderColumnNames.has(dbColumnName.toLowerCase())) {
+        validOrderAttributes.push(attrName);
+      }
+    }
+
+    const order = await db.Order.findOne({
+      where: { trackingToken: token },
+      attributes: validOrderAttributes,
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
+        include: [{
+          model: db.Drink,
+          as: 'drink',
+          attributes: [
+            'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+            'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+            'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+          ],
+          required: false
+        }]
+      }]
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    res.json(order);
+  } catch (error) {
+    console.error('Error fetching order by tracking token:', error);
+    res.status(500).json({ error: 'Failed to fetch order' });
+  }
+});
+
 // Generate PDF receipt for an order (must be before /:id route)
 router.get('/:id/receipt', async (req, res) => {
   try {
+    // Get actual columns that exist in the database for Order
+    const [existingOrderColumns] = await db.sequelize.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
+    );
+    const orderColumnNames = new Set(existingOrderColumns.map(col => col.column_name.toLowerCase()));
+    
+    // Map model attributes to database column names and filter to only existing columns
+    const validOrderAttributes = [];
+    for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
+      const dbColumnName = attrDef.field || attrName;
+      // Check if the database column exists (case-insensitive)
+      if (orderColumnNames.has(dbColumnName.toLowerCase())) {
+        validOrderAttributes.push(attrName);
+      }
+    }
+    
     const order = await db.Order.findByPk(req.params.id, {
+      attributes: validOrderAttributes,
       include: [
         {
           model: db.OrderItem,
           as: 'items',
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
           include: [{
             model: db.Drink,
-            as: 'drink'
+            as: 'drink',
+            attributes: [
+              'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+              'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+            ],
+            required: false
           }]
         },
         {
@@ -629,7 +826,8 @@ router.get('/:id/receipt', async (req, res) => {
           where: {
             transactionType: 'payment'
           },
-          required: false
+          required: false,
+          attributes: ['id', 'orderId', 'transactionType', 'amount', 'paymentStatus', 'receiptNumber', 'transactionDate', 'createdAt', 'updatedAt']
         }
       ]
     });
@@ -678,24 +876,83 @@ router.get('/:id/receipt', async (req, res) => {
 // Get order by ID
 router.get('/:id', async (req, res) => {
   try {
-    const order = await db.Order.findByPk(req.params.id, {
+    // Get actual columns that exist in the database for Order
+    const [existingOrderColumns] = await db.sequelize.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
+    );
+    const orderColumnNames = new Set(existingOrderColumns.map(col => col.column_name.toLowerCase()));
+    
+    // Map model attributes to database column names and filter to only existing columns
+    const validOrderAttributes = [];
+    for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
+      const dbColumnName = attrDef.field || attrName;
+      // Check if the database column exists (case-insensitive)
+      if (orderColumnNames.has(dbColumnName.toLowerCase())) {
+        validOrderAttributes.push(attrName);
+      }
+    }
+    
+    const includes = [{
+      model: db.OrderItem,
+      as: 'items',
+      attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
       include: [{
-        model: db.OrderItem,
-        as: 'items',
-        include: [{
-          model: db.Drink,
-          as: 'drink'
-        }]
+        model: db.Drink,
+        as: 'drink',
+        attributes: [
+          'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+          'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+          'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+        ],
+        required: false
       }]
+    }];
+    
+    // Branch association removed - no longer relevant/displayed
+    
+    const order = await db.Order.findByPk(req.params.id, {
+      attributes: validOrderAttributes,
+      include: includes
     });
     
     if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
+      return sendError(res, 'Order not found', 404);
     }
     
-    res.json(order);
+    // Map items to orderItems for compatibility
+    const orderData = order.toJSON();
+    if (orderData.items) {
+      orderData.orderItems = orderData.items;
+    }
+    
+    // For completed orders, include payment transaction data (transactionCode and transactionDate)
+    if (orderData.status === 'completed' && orderData.paymentStatus === 'paid') {
+      try {
+        const paymentTransaction = await db.Transaction.findOne({
+          where: {
+            orderId: orderData.id,
+            transactionType: 'payment',
+            paymentStatus: 'paid'
+          },
+          order: [['createdAt', 'DESC']],
+          attributes: ['receiptNumber', 'transactionDate']
+        });
+        
+        if (paymentTransaction) {
+          const txData = paymentTransaction.toJSON();
+          orderData.transactionCode = txData.receiptNumber;
+          orderData.transactionDate = txData.transactionDate;
+        }
+      } catch (txError) {
+        // If transaction lookup fails, continue without transaction data
+        console.warn(`Could not fetch transaction for order ${orderData.id}:`, txError.message);
+      }
+    }
+    
+    sendSuccess(res, orderData);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('Error fetching order:', error);
+    sendError(res, error.message, 500);
   }
 });
 
@@ -703,7 +960,7 @@ router.get('/:id', async (req, res) => {
 router.patch('/:id/status', async (req, res) => {
   try {
     const { status, reason } = req.body;
-    const validStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'cancelled'];
+    const validStatuses = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'cancelled'];
     
     if (!validStatuses.includes(status)) {
       return res.status(400).json({ error: 'Invalid status' });
@@ -769,15 +1026,40 @@ router.post('/find-all', async (req, res) => {
       };
     }
 
+    // Get actual columns that exist in the database
+    const [existingColumns] = await db.sequelize.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
+    );
+    const columnNames = new Set(existingColumns.map(col => col.column_name.toLowerCase()));
+    
+    // Map model attributes to database column names and filter to only existing columns
+    const validAttributes = [];
+    for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
+      const dbColumnName = attrDef.field || attrName;
+      // Check if the database column exists (case-insensitive)
+      if (columnNames.has(dbColumnName.toLowerCase())) {
+        validAttributes.push(attrName);
+      }
+    }
+    
+    // Get all orders - only select columns that exist in database
     const orders = await db.Order.findAll({
       where: whereClause,
+      attributes: validAttributes,
       include: [
         {
           model: db.OrderItem,
           as: 'items',
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
           include: [{
             model: db.Drink,
-            as: 'drink'
+            as: 'drink',
+            attributes: [
+              'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+              'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+            ],
+            required: false
           }]
         },
         {
@@ -796,9 +1078,16 @@ router.post('/find-all', async (req, res) => {
     });
   } catch (error) {
     console.error('Error finding orders:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
     res.status(500).json({ 
       success: false,
-      error: 'Failed to find orders' 
+      error: 'Failed to find orders',
+      message: error.message || 'Unknown error occurred'
     });
   }
 });
@@ -851,7 +1140,7 @@ router.get('/:id/cost', async (req, res) => {
     }
     
     // Determine status updates that occurred
-    const statusFlow = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'];
+    const statusFlow = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed'];
     const currentStatusIndex = statusFlow.indexOf(order.status);
     const statusUpdates = statusFlow.slice(1, currentStatusIndex + 1);
     
