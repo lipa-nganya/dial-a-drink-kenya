@@ -98,138 +98,320 @@
                 </LinearLayout>
 
                 <!-- Stats Section -->
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/statsCard"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_margin="16dp"
-                    app:cardBackgroundColor="@color/paper_dark"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="4dp">
+                    android:orientation="vertical"
+                    android:padding="16dp">
 
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Quick Stats"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="20sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Orders Completed Row -->
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:padding="16dp">
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="12dp">
 
-                        <TextView
-                            android:layout_width="match_parent"
+                        <!-- Today Orders Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:text="Quick Stats"
-                            android:textColor="@color/text_primary_dark"
-                            android:textSize="18sp"
-                            android:textStyle="bold"
-                            android:layout_marginBottom="12dp" />
-
-                        <!-- Orders Completed -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="8dp">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Orders Completed:"
-                                android:textColor="@color/text_secondary_dark"
-                                android:textSize="14sp" />
+                            android:layout_weight="1"
+                            android:layout_marginEnd="8dp"
+                            app:cardBackgroundColor="@color/paper_dark"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="4dp">
 
                             <LinearLayout
-                                android:layout_width="wrap_content"
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:orientation="horizontal">
+                                android:orientation="vertical"
+                                android:padding="16dp"
+                                android:gravity="center">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Today"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="12sp"
+                                    android:layout_marginBottom="4dp" />
 
                                 <TextView
                                     android:id="@+id/ordersTodayText"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Today: 0"
+                                    android:text="0"
                                     android:textColor="@color/accent"
-                                    android:textSize="14sp"
+                                    android:textSize="24sp"
                                     android:textStyle="bold"
-                                    android:layout_marginEnd="12dp" />
+                                    android:layout_marginBottom="4dp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Orders"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Week Orders Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            android:layout_marginEnd="8dp"
+                            app:cardBackgroundColor="@color/paper_dark"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="4dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="16dp"
+                                android:gravity="center">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="This Week"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="12sp"
+                                    android:layout_marginBottom="4dp" />
 
                                 <TextView
                                     android:id="@+id/ordersWeekText"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Week: 0"
+                                    android:text="0"
                                     android:textColor="@color/accent"
-                                    android:textSize="14sp"
+                                    android:textSize="24sp"
                                     android:textStyle="bold"
-                                    android:layout_marginEnd="12dp" />
+                                    android:layout_marginBottom="4dp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Orders"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Month Orders Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            app:cardBackgroundColor="@color/paper_dark"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="4dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="16dp"
+                                android:gravity="center">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="This Month"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="12sp"
+                                    android:layout_marginBottom="4dp" />
 
                                 <TextView
                                     android:id="@+id/ordersMonthText"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Month: 0"
+                                    android:text="0"
                                     android:textColor="@color/accent"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
+                                    android:textSize="24sp"
+                                    android:textStyle="bold"
+                                    android:layout_marginBottom="4dp" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Orders"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="11sp" />
 
                             </LinearLayout>
 
-                        </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
 
-                        <!-- Money Earned -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
+                    </LinearLayout>
+
+                    <!-- Money Earned Row -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <!-- Today Earnings Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal">
-
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_height="wrap_content"
-                                android:layout_weight="1"
-                                android:text="Money Earned:"
-                                android:textColor="@color/text_secondary_dark"
-                                android:textSize="14sp" />
+                            android:layout_weight="1"
+                            android:layout_marginEnd="8dp"
+                            app:cardBackgroundColor="@color/paper_dark"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="4dp">
 
                             <LinearLayout
-                                android:layout_width="wrap_content"
+                                android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:orientation="horizontal">
+                                android:orientation="vertical"
+                                android:padding="16dp"
+                                android:gravity="center">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Today"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="12sp"
+                                    android:layout_marginBottom="4dp" />
 
                                 <TextView
                                     android:id="@+id/earningsTodayText"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Today: KES 0"
+                                    android:text="KES 0"
                                     android:textColor="@color/accent"
-                                    android:textSize="14sp"
+                                    android:textSize="20sp"
                                     android:textStyle="bold"
-                                    android:layout_marginEnd="12dp" />
+                                    android:layout_marginBottom="4dp"
+                                    android:gravity="center" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Earned"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Week Earnings Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            android:layout_marginEnd="8dp"
+                            app:cardBackgroundColor="@color/paper_dark"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="4dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="16dp"
+                                android:gravity="center">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="This Week"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="12sp"
+                                    android:layout_marginBottom="4dp" />
 
                                 <TextView
                                     android:id="@+id/earningsWeekText"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Week: KES 0"
+                                    android:text="KES 0"
                                     android:textColor="@color/accent"
-                                    android:textSize="14sp"
+                                    android:textSize="20sp"
                                     android:textStyle="bold"
-                                    android:layout_marginEnd="12dp" />
+                                    android:layout_marginBottom="4dp"
+                                    android:gravity="center" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Earned"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="11sp" />
+
+                            </LinearLayout>
+
+                        </com.google.android.material.card.MaterialCardView>
+
+                        <!-- Month Earnings Card -->
+                        <com.google.android.material.card.MaterialCardView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="8dp"
+                            app:cardBackgroundColor="@color/paper_dark"
+                            app:cardCornerRadius="12dp"
+                            app:cardElevation="4dp">
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical"
+                                android:padding="16dp"
+                                android:gravity="center">
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="This Month"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="12sp"
+                                    android:layout_marginBottom="4dp" />
 
                                 <TextView
                                     android:id="@+id/earningsMonthText"
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
-                                    android:text="Month: KES 0"
+                                    android:text="KES 0"
                                     android:textColor="@color/accent"
-                                    android:textSize="14sp"
-                                    android:textStyle="bold" />
+                                    android:textSize="20sp"
+                                    android:textStyle="bold"
+                                    android:layout_marginBottom="4dp"
+                                    android:gravity="center" />
+
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Earned"
+                                    android:textColor="@color/text_secondary_dark"
+                                    android:textSize="11sp" />
 
                             </LinearLayout>
 
-                        </LinearLayout>
+                        </com.google.android.material.card.MaterialCardView>
 
                     </LinearLayout>
 
-                </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
 
                 <LinearLayout
                     android:id="@+id/ordersContainer"

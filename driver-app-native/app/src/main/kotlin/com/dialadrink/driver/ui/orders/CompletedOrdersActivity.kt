@@ -412,13 +412,13 @@ class CompletedOrdersActivity : AppCompatActivity() {
             }
         }
 
-        // Update UI
-        binding.ordersTodayText.text = "Today: $ordersToday"
-        binding.ordersWeekText.text = "Week: $ordersWeek"
-        binding.ordersMonthText.text = "Month: $ordersMonth"
-        binding.earningsTodayText.text = "Today: KES ${String.format("%.2f", earningsToday)}"
-        binding.earningsWeekText.text = "Week: KES ${String.format("%.2f", earningsWeek)}"
-        binding.earningsMonthText.text = "Month: KES ${String.format("%.2f", earningsMonth)}"
+        // Update UI (labels are now in the card layout, only show values)
+        binding.ordersTodayText.text = ordersToday.toString()
+        binding.ordersWeekText.text = ordersWeek.toString()
+        binding.ordersMonthText.text = ordersMonth.toString()
+        binding.earningsTodayText.text = "KES ${String.format("%.2f", earningsToday)}"
+        binding.earningsWeekText.text = "KES ${String.format("%.2f", earningsWeek)}"
+        binding.earningsMonthText.text = "KES ${String.format("%.2f", earningsMonth)}"
     }
 
     private fun parseOrderDate(dateString: String?): Date? {
