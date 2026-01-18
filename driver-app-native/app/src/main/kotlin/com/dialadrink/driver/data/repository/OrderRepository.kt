@@ -51,134 +51,62 @@ object OrderRepository {
         context: Context,
         forceRefresh: Boolean = false
     ): List<Order> {
-        val cacheKey = "active_orders"
-        
-            // Return cached data immediately if available and fresh
-            if (!forceRefresh) {
-                val cached = OrderCache.getCachedOrders()
-                if (cached != null) {
-                    val active = cached.filter { 
-                        it.driverAccepted == true && 
-                        it.status != "completed" && 
-                        it.status != "cancelled" 
-                    }
-                    if (active.isNotEmpty()) {
-                        Log.d(TAG, "✅ Cache hit: Returning ${active.size} cached active orders (driverAccepted=true)")
-                        _activeOrders.value = active
-                        return active
-                    }
-                }
-            
-            // Fallback to disk cache
-            val diskCache = SharedPrefs.getCachedOrders(context)
-            if (diskCache.isNotEmpty()) {
-                val active = diskCache.filter { 
+        // Return cached data immediately if available
+        if (!forceRefresh) {
+            val cached = OrderCache.getCachedOrders()
+            if (cached != null) {
+                val active = cached.filter { 
                     it.driverAccepted == true && 
                     it.status != "completed" && 
                     it.status != "cancelled" 
                 }
                 if (active.isNotEmpty()) {
-                    Log.d(TAG, "✅ Disk cache hit: Returning ${active.size} cached active orders")
-                    OrderCache.setCachedOrders(active) // Promote to memory cache
-                    _activeOrders.value = active
                     return active
                 }
             }
         }
         
-        // Check if request is already in flight (deduplication)
-        return requestMutex.withLock {
-            val existingRequest = inFlightRequests[cacheKey]
-            if (existingRequest != null && !existingRequest.isCompleted) {
-                Log.d(TAG, "⏸️ Request deduplication: Reusing existing request")
-                return@withLock existingRequest.await()
-            }
+        // Use the SAME working endpoint as pending orders - call it directly
+        val driverId = SharedPrefs.getDriverId(context) ?: return emptyList()
+        
+        return try {
+            ensureApiClientInitialized(context)
             
-            // Start new request
-            val driverId = SharedPrefs.getDriverId(context) ?: run {
-                Log.e(TAG, "❌ No driver ID found")
+            val activeStatuses = "pending,confirmed,preparing,out_for_delivery"
+            val response = ApiClient.getApiService().getDriverOrdersDirect(
+                driverId,
+                activeStatuses,
+                summary = true
+            )
+            
+            if (!response.isSuccessful || response.body() == null) {
                 return emptyList()
             }
             
-            Log.d(TAG, "🌐 Fetching active orders from API (deduplicated)")
-            val deferred = repositoryScope.async {
-                try {
-                    ensureApiClientInitialized(context)
-                    
-                    // Request summary mode + filter active orders on backend
-                    val activeStatuses = "pending,confirmed,preparing,out_for_delivery"
-                    val response = ApiClient.getApiService().getDriverOrdersDirect(
-                        driverId,
-                        activeStatuses,
-                        summary = true // Shrink payload
-                    )
-                    
-                    if (!response.isSuccessful || response.body() == null) {
-                        val responseCode: Int = response.code()
-                        val errorBody = response.errorBody()?.string()
-                        Log.e(TAG, "❌ Invalid API response: $responseCode")
-                        Log.e(TAG, "❌ Error body: $errorBody")
-                        throw IllegalStateException("Invalid API response: ${errorBody ?: "null body"}")
-                    }
-                    
-                    // Backend returns WRAPPED response: { success: true, data: [...] }
-                    val apiResponse = response.body()!!
-                    if (apiResponse.success != true || apiResponse.data == null) {
-                        Log.e(TAG, "❌ API returned error: ${apiResponse.error}")
-                        throw IllegalStateException("API error: ${apiResponse.error ?: "unknown"}")
-                    }
-                    
-                    val allOrders = apiResponse.data
-                    val payloadSize = estimatePayloadSize(allOrders)
-                    
-                    // Filter for active orders: driverAccepted == true and not completed/cancelled
-                    val activeOrders = allOrders.filter { 
-                        it.driverAccepted == true && 
-                        it.status != "completed" && 
-                        it.status != "cancelled"
-                    }
-                    
-                    Log.d(TAG, "✅ Fetched ${allOrders.size} total orders, ${activeOrders.size} active orders (${payloadSize} KB)")
-                    
-                    // Cache all orders in memory and disk (for pending orders to use)
-                    OrderCache.setCachedOrders(allOrders)
-                    SharedPrefs.saveCachedOrders(context, allOrders)
-                    
-                    // Update state flow with filtered active orders
-                    _activeOrders.value = activeOrders
-                    
-                    activeOrders
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error fetching orders", e)
-                    Log.e(TAG, "❌ Exception type: ${e.javaClass.simpleName}, message: ${e.message}")
-                    e.printStackTrace()
-                    emptyList()
-                } finally {
-                    // Remove from in-flight requests
-                    requestMutex.withLock {
-                        inFlightRequests.remove(cacheKey)
-                    }
-                }
+            val apiResponse = response.body()!!
+            if (apiResponse.success != true || apiResponse.data == null) {
+                return emptyList()
             }
             
-            inFlightRequests[cacheKey] = deferred
-            try {
-                withTimeoutOrNull(2000) { // 2 second timeout
-                    deferred.await()
-                } ?: run {
-                    Log.e(TAG, "❌ Timeout waiting for active orders response")
-                    requestMutex.withLock {
-                        inFlightRequests.remove(cacheKey)
-                    }
-                    emptyList()
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Exception awaiting active orders", e)
-                requestMutex.withLock {
-                    inFlightRequests.remove(cacheKey)
-                }
-                emptyList()
+            val allOrders = apiResponse.data
+            
+            // Cache all orders
+            OrderCache.setCachedOrders(allOrders)
+            SharedPrefs.saveCachedOrders(context, allOrders)
+            
+            // Filter for active orders: driverAccepted == true and not completed/cancelled
+            val activeOrders = allOrders.filter { 
+                it.driverAccepted == true && 
+                it.status != "completed" && 
+                it.status != "cancelled"
             }
+            
+            // Update state flow with filtered active orders
+            _activeOrders.value = activeOrders
+            
+            activeOrders
+        } catch (e: Exception) {
+            emptyList()
         }
     }
     
