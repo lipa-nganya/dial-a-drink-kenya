@@ -1,15 +1,20 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const path = require('path');
 const db = require('./models');
 
 const app = express();
+
+// Enable gzip compression for all responses
+app.use(compression());
 
 // Middleware
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
   process.env.ADMIN_URL || 'http://localhost:3001',
   process.env.ZEUS_URL || 'http://localhost:3003',
+  process.env.SHOP_AGENT_URL || 'http://localhost:3002',
   'http://localhost:3002',
   'http://localhost:8080', // Wolfgang website
   // Old service URLs (kept for backward compatibility)
@@ -97,7 +102,10 @@ app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/pos', require('./routes/pos'));
 app.use('/api/inventory', require('./routes/inventory')); // Inventory management
+// Register admin notifications BEFORE /api/admin to ensure it matches first
+app.use('/api/admin/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/shop-agents', require('./routes/shopAgents'));
 app.use('/api/countdown', require('./routes/countdown'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/set-offers', require('./routes/set-offers'));
@@ -147,11 +155,27 @@ app.use('/api/mpesa', require('./routes/mpesa'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/order-notifications', require('./routes/order-notifications'));
 app.use('/api/auth', require('./routes/auth'));
+// Mount driver-notifications router BEFORE the main drivers router
+// This ensures specific notification routes are matched first
+app.use('/api/drivers', require('./routes/driver-notifications'));
+
+// Log all requests to /api/drivers before routing
+app.use('/api/drivers', (req, res, next) => {
+  console.log(`🌐 [APP.JS] ${req.method} ${req.path} - OriginalUrl: ${req.originalUrl}`);
+  if (req.path.includes('notifications')) {
+    console.log(`🔔 [APP.JS] NOTIFICATION REQUEST: ${req.method} ${req.path}`);
+    console.log(`🔔 [APP.JS] Headers:`, JSON.stringify(req.headers, null, 2));
+  }
+  next();
+});
 app.use('/api/drivers', require('./routes/drivers'));
 app.use('/api/driver-orders', require('./routes/driver-orders'));
 app.use('/api/driver-wallet', require('./routes/driver-wallet'));
+app.use('/api/driver-wallet', require('./routes/cash-submissions'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/territories', require('./routes/territories'));
+// Temporary migration endpoint - remove after use
+app.use('/api/admin-branch-migration', require('./routes/admin-branch-migration'));
 app.use('/api/developers', require('./routes/developers'));
 
 // Valkyrie Partner API (feature flag controlled)
@@ -193,8 +217,19 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', message: 'Dial A Drink API is running' });
 });
 
+// Test endpoint to verify requests are reaching the backend
+app.get('/api/test-notifications', (req, res) => {
+  console.log('🧪 [TEST] /api/test-notifications hit!');
+  console.log('🧪 [TEST] Headers:', JSON.stringify(req.headers, null, 2));
+  res.json({ status: 'OK', message: 'Test endpoint reached', timestamp: new Date().toISOString() });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
+  // Don't send response if headers have already been sent
+  if (res.headersSent) {
+    return next(err);
+  }
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
