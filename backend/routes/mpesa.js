@@ -530,10 +530,13 @@ const calculateDeliveryFee = async (orderId) => {
     }
 
     // Get delivery settings
-    const [testModeSetting, withAlcoholSetting, withoutAlcoholSetting] = await Promise.all([
+    const [testModeSetting, feeModeSetting, withAlcoholSetting, withoutAlcoholSetting, perKmWithAlcoholSetting, perKmWithoutAlcoholSetting] = await Promise.all([
       db.Settings.findOne({ where: { key: 'deliveryTestMode' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'deliveryFeeMode' } }).catch(() => null),
       db.Settings.findOne({ where: { key: 'deliveryFeeWithAlcohol' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'deliveryFeeWithoutAlcohol' } }).catch(() => null)
+      db.Settings.findOne({ where: { key: 'deliveryFeeWithoutAlcohol' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'deliveryFeePerKmWithAlcohol' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'deliveryFeePerKmWithoutAlcohol' } }).catch(() => null)
     ]);
 
     const isTestMode = testModeSetting?.value === 'true';
@@ -542,19 +545,85 @@ const calculateDeliveryFee = async (orderId) => {
       return 0;
     }
 
-    const deliveryFeeWithAlcohol = parseFloat(withAlcoholSetting?.value || '50');
-    const deliveryFeeWithoutAlcohol = parseFloat(withoutAlcoholSetting?.value || '30');
+    const feeMode = feeModeSetting?.value || 'fixed';
+    const isPerKmMode = feeMode === 'perKm';
 
     // Check if all items are from Soft Drinks category
     const allSoftDrinks = order.items.every(item => 
       item.drink && item.drink.category && item.drink.category.name === 'Soft Drinks'
     );
 
-    if (allSoftDrinks && order.items.length > 0) {
-      return deliveryFeeWithoutAlcohol;
-    }
+    if (isPerKmMode) {
+      // Per KM mode: calculate fee based on distance
+      const perKmWithAlcohol = parseFloat(perKmWithAlcoholSetting?.value || '20');
+      const perKmWithoutAlcohol = parseFloat(perKmWithoutAlcoholSetting?.value || '15');
+      
+      const perKmRate = allSoftDrinks ? perKmWithoutAlcohol : perKmWithAlcohol;
+      
+      // Calculate distance from branch to delivery address
+      let distanceKm = 1; // Default to minimum 1km
+      if (order.deliveryAddress && order.branchId) {
+        try {
+          const branch = await db.Branch.findByPk(order.branchId);
+          if (branch) {
+            // Check if delivery address matches branch address (same location = minimum distance)
+            const normalizedDeliveryAddress = order.deliveryAddress.trim().toLowerCase();
+            const normalizedBranchAddress = branch.address ? branch.address.trim().toLowerCase() : '';
+            
+            if (normalizedDeliveryAddress === normalizedBranchAddress || 
+                normalizedDeliveryAddress.includes(normalizedBranchAddress) ||
+                normalizedBranchAddress.includes(normalizedDeliveryAddress)) {
+              // Same location, use minimum 1km
+              distanceKm = 1;
+            } else if (branch.latitude && branch.longitude) {
+              // Try to find delivery coordinates from SavedAddress
+              const savedAddress = await db.SavedAddress.findOne({
+                where: {
+                  address: order.deliveryAddress
+                }
+              });
+              
+              if (savedAddress && savedAddress.latitude && savedAddress.longitude) {
+                // Use Haversine formula to calculate distance
+                const R = 6371; // Earth's radius in kilometers
+                const dLat = (savedAddress.latitude - branch.latitude) * Math.PI / 180;
+                const dLon = (savedAddress.longitude - branch.longitude) * Math.PI / 180;
+                const a = 
+                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(branch.latitude * Math.PI / 180) * Math.cos(savedAddress.latitude * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const calculatedDistance = R * c;
+                
+                // Minimum 1km, use calculated distance if greater
+                distanceKm = Math.max(calculatedDistance, 1);
+              }
+              // If no saved address found, use minimum 1km
+            }
+            // If branch has no coordinates, use minimum 1km
+          }
+        } catch (distanceError) {
+          console.error('Error calculating distance:', distanceError);
+          distanceKm = 1; // Default to minimum 1km on error
+        }
+      }
+      
+      // Ensure minimum 1km distance
+      distanceKm = Math.max(distanceKm, 1);
+      
+      const fee = distanceKm * perKmRate;
+      return Number(fee.toFixed(2));
+    } else {
+      // Fixed mode: use fixed amounts
+      const deliveryFeeWithAlcohol = parseFloat(withAlcoholSetting?.value || '50');
+      const deliveryFeeWithoutAlcohol = parseFloat(withoutAlcoholSetting?.value || '30');
 
-    return deliveryFeeWithAlcohol;
+      if (allSoftDrinks && order.items.length > 0) {
+        return deliveryFeeWithoutAlcohol;
+      }
+
+      return deliveryFeeWithAlcohol;
+    }
   } catch (error) {
     console.error('Error calculating delivery fee:', error);
     return 50; // Default fee
@@ -925,7 +994,7 @@ router.post('/stk-push', async (req, res) => {
       const responseMessage = shouldSimulatePayment 
         ? 'Test mode: Payment will be automatically confirmed in a few seconds. No STK push was sent to your phone.'
         : (stkResponse.CustomerMessage || stkResponse.customerMessage || 'STK Push initiated successfully. Please check your phone to complete payment.');
-      
+
       res.json({
         success: true,
         message: responseMessage,
@@ -1609,7 +1678,7 @@ router.post('/callback', async (req, res) => {
             // For newly paid orders, move them into confirmed so they flow through the rest of the lifecycle
             newOrderStatus = 'confirmed';
             console.log(`📝 Order #${order.id} was "${currentOrderStatus}", updating to "confirmed" after payment confirmation`);
-          } else if (currentOrderStatus === 'confirmed' || currentOrderStatus === 'preparing') {
+          } else if (currentOrderStatus === 'confirmed') {
             // For orders that haven't been delivered yet, only update payment status, keep current status
             newOrderStatus = currentOrderStatus;
             console.log(`📝 Order #${order.id} is "${currentOrderStatus}", keeping status but updating paymentStatus to 'paid'`);
@@ -2052,6 +2121,99 @@ router.post('/callback', async (req, res) => {
               console.log(`✅✅✅ Payment processed successfully with alternative callback structure!`);
               return;
             }
+          }
+        }
+      }
+
+      // Handle cash_settlement transactions (driver remitting cash to business via M-Pesa)
+      // These transactions don't have an associated order
+      if (!order && checkoutRequestID) {
+        console.log(`🔍 Checking for cash_settlement transaction with CheckoutRequestID: ${checkoutRequestID}`);
+        
+        const cashSettlementTransaction = await db.Transaction.findOne({
+          where: {
+            checkoutRequestID: checkoutRequestID,
+            transactionType: 'cash_settlement'
+          }
+        });
+
+        if (cashSettlementTransaction) {
+          console.log(`✅ Found cash_settlement transaction #${cashSettlementTransaction.id} for CheckoutRequestID: ${checkoutRequestID}`);
+          
+          if (resultCode === 0) {
+            // Payment successful
+            const callbackMetadata = stkCallback.CallbackMetadata || {};
+            const items = callbackMetadata.Item || [];
+            
+            const receiptNumber = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
+            const amount = items.find(item => item.Name === 'Amount')?.Value;
+            const transactionDate = items.find(item => item.Name === 'TransactionDate')?.Value;
+            const phoneNumber = items.find(item => item.Name === 'PhoneNumber')?.Value;
+
+            console.log(`💰 Cash settlement payment details from callback:`);
+            console.log(`   Receipt: ${receiptNumber || 'N/A'}`);
+            console.log(`   Amount: ${amount || 'N/A'}`);
+            console.log(`   Phone: ${phoneNumber || 'N/A'}`);
+            console.log(`   Transaction Date: ${transactionDate || 'N/A'}`);
+
+            if (receiptNumber) {
+              // Update transaction with receipt number and mark as completed
+              await cashSettlementTransaction.update({
+                status: 'completed',
+                paymentStatus: 'paid',
+                receiptNumber: receiptNumber,
+                transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+                phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
+                notes: `Cash remittance to business via M-Pesa: KES ${Math.abs(parseFloat(cashSettlementTransaction.amount)).toFixed(2)} - Receipt: ${receiptNumber}`
+              });
+
+              // Credit admin wallet
+              try {
+                let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+                if (!adminWallet) {
+                  adminWallet = await db.AdminWallet.create({
+                    id: 1,
+                    balance: 0,
+                    totalRevenue: 0,
+                    totalOrders: 0
+                  });
+                }
+
+                const settlementAmount = Math.abs(parseFloat(cashSettlementTransaction.amount));
+                const oldBalance = parseFloat(adminWallet.balance) || 0;
+                const oldTotalRevenue = parseFloat(adminWallet.totalRevenue) || 0;
+
+                await adminWallet.update({
+                  balance: oldBalance + settlementAmount,
+                  totalRevenue: oldTotalRevenue + settlementAmount
+                });
+
+                console.log(`✅ Credited admin wallet for cash settlement #${cashSettlementTransaction.id}:`);
+                console.log(`   Amount: KES ${settlementAmount.toFixed(2)}`);
+                console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(adminWallet.balance).toFixed(2)}`);
+                console.log(`   Total revenue: ${oldTotalRevenue.toFixed(2)} → ${parseFloat(adminWallet.totalRevenue).toFixed(2)}`);
+              } catch (walletError) {
+                console.error(`❌ Error crediting admin wallet for cash settlement:`, walletError);
+                // Don't fail the transaction update if wallet credit fails
+              }
+
+              console.log(`✅✅✅ Cash settlement #${cashSettlementTransaction.id} processed successfully!`);
+              console.log(`   Driver ID: ${cashSettlementTransaction.driverId}`);
+              console.log(`   Amount: KES ${Math.abs(parseFloat(cashSettlementTransaction.amount)).toFixed(2)}`);
+              console.log(`   Receipt: ${receiptNumber}`);
+              return; // Exit early since we processed the cash settlement
+            } else {
+              console.error(`❌ Cash settlement callback missing receipt number`);
+            }
+          } else {
+            // Payment failed
+            console.error(`❌ Cash settlement payment failed. ResultCode: ${resultCode}`);
+            await cashSettlementTransaction.update({
+              status: 'failed',
+              paymentStatus: 'failed',
+              notes: `M-Pesa payment failed: ResultCode ${resultCode}`
+            });
+            return; // Exit early since we processed the callback (even though it failed)
           }
         }
       }
@@ -3033,21 +3195,26 @@ router.post('/b2c-callback', (req, res) => {
         console.log(`   ResultDesc: ${resultDesc}`);
 
         // Find withdrawal transaction by conversationID or originatorConversationID
+        // Check both 'withdrawal' (wallet balance) and 'savings_withdrawal' (savings)
         let transaction = await db.Transaction.findOne({
           where: {
             [db.Sequelize.Op.or]: [
               { checkoutRequestID: conversationID },
               { merchantRequestID: originatorConversationID }
             ],
-            transactionType: 'withdrawal'
+            transactionType: {
+              [db.Sequelize.Op.in]: ['withdrawal', 'savings_withdrawal']
+            }
           }
         });
 
         if (!transaction) {
-          // Try to find by driverId and recent withdrawal transactions
+          // Try to find by driverId and recent withdrawal transactions (both types)
           const recentWithdrawals = await db.Transaction.findAll({
             where: {
-              transactionType: 'withdrawal',
+              transactionType: {
+                [db.Sequelize.Op.in]: ['withdrawal', 'savings_withdrawal']
+              },
               status: 'pending'
             },
             order: [['createdAt', 'DESC']],
@@ -3094,7 +3261,8 @@ router.post('/b2c-callback', (req, res) => {
                 `✅ B2C payment completed. Receipt: ${transactionReceipt || 'N/A'}`
             });
 
-            // Wallet balance was already deducted when withdrawal was initiated
+            // For savings withdrawals, savings was already deducted when withdrawal was initiated
+            // For wallet balance withdrawals, wallet balance was already deducted
             // No need to update wallet again - it's already correct
 
             // Emit socket event to notify driver
@@ -3116,14 +3284,23 @@ router.post('/b2c-callback', (req, res) => {
             console.log(`   ResultCode: ${resultCode}`);
             console.log(`   ResultDesc: ${resultDesc}`);
 
-            // Refund wallet balance
+            // Refund wallet balance or savings depending on transaction type
             const wallet = await db.DriverWallet.findByPk(transaction.driverWalletId);
             if (wallet) {
               const refundAmount = parseFloat(transaction.amount);
-              await wallet.update({
-                balance: parseFloat(wallet.balance) + refundAmount
-              });
-              console.log(`✅ Refunded KES ${refundAmount.toFixed(2)} to driver wallet #${wallet.id}`);
+              if (transaction.transactionType === 'savings_withdrawal') {
+                // Refund savings
+                await wallet.update({
+                  savings: parseFloat(wallet.savings || 0) + refundAmount
+                });
+                console.log(`✅ Refunded KES ${refundAmount.toFixed(2)} to driver savings (wallet #${wallet.id})`);
+              } else {
+                // Refund wallet balance
+                await wallet.update({
+                  balance: parseFloat(wallet.balance) + refundAmount
+                });
+                console.log(`✅ Refunded KES ${refundAmount.toFixed(2)} to driver wallet #${wallet.id}`);
+              }
             }
 
             // Update transaction

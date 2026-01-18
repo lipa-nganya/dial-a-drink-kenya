@@ -57,24 +57,55 @@ const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress
       const perKmRate = allSoftDrinks ? perKmWithoutAlcohol : perKmWithAlcohol;
       
       // Calculate distance from branch to delivery address
-      let distanceKm = 0;
+      let distanceKm = 1; // Default to minimum 1km
       if (deliveryAddress && branchId) {
         try {
           const branch = await db.Branch.findByPk(branchId);
-          if (branch && branch.address) {
-            // Use Haversine formula for distance calculation
-            // Note: This is a simplified calculation. For production, consider using Google Maps API
-            // For now, we'll use a simple fallback or require coordinates
-            // TODO: Implement proper distance calculation using Google Maps API
-            distanceKm = 5; // Default to 5km if distance can't be calculated
+          if (branch) {
+            // Check if delivery address matches branch address (same location = minimum distance)
+            const normalizedDeliveryAddress = deliveryAddress.trim().toLowerCase();
+            const normalizedBranchAddress = branch.address ? branch.address.trim().toLowerCase() : '';
+            
+            if (normalizedDeliveryAddress === normalizedBranchAddress || 
+                normalizedDeliveryAddress.includes(normalizedBranchAddress) ||
+                normalizedBranchAddress.includes(normalizedDeliveryAddress)) {
+              // Same location, use minimum 1km
+              distanceKm = 1;
+            } else if (branch.latitude && branch.longitude) {
+              // Try to find delivery coordinates from SavedAddress
+              const savedAddress = await db.SavedAddress.findOne({
+                where: {
+                  address: deliveryAddress
+                }
+              });
+              
+              if (savedAddress && savedAddress.latitude && savedAddress.longitude) {
+                // Use Haversine formula to calculate distance
+                const R = 6371; // Earth's radius in kilometers
+                const dLat = (savedAddress.latitude - branch.latitude) * Math.PI / 180;
+                const dLon = (savedAddress.longitude - branch.longitude) * Math.PI / 180;
+                const a = 
+                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                  Math.cos(branch.latitude * Math.PI / 180) * Math.cos(savedAddress.latitude * Math.PI / 180) *
+                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                const calculatedDistance = R * c;
+                
+                // Minimum 1km, use calculated distance if greater
+                distanceKm = Math.max(calculatedDistance, 1);
+              }
+              // If no saved address found, use minimum 1km
+            }
+            // If branch has no coordinates, use minimum 1km
           }
         } catch (distanceError) {
           console.error('Error calculating distance:', distanceError);
-          distanceKm = 5; // Default fallback
+          distanceKm = 1; // Default to minimum 1km on error
         }
-      } else {
-        distanceKm = 5; // Default fallback if no address or branch
       }
+      
+      // Ensure minimum 1km distance
+      distanceKm = Math.max(distanceKm, 1);
       
       const fee = distanceKm * perKmRate;
       return Number(fee.toFixed(2));
