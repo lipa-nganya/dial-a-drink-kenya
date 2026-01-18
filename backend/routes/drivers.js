@@ -4,8 +4,19 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
 const { verifyAdmin } = require('./admin');
-const { Expo } = require('expo-server-sdk');
 const { checkDriverCreditLimit } = require('../utils/creditLimit');
+const { sendSuccess, sendError } = require('../utils/apiResponse');
+
+// Debug middleware - log ALL requests to drivers router
+router.use((req, res, next) => {
+  console.log(`🔍 [DRIVERS ROUTER] ${req.method} ${req.path} - OriginalUrl: ${req.originalUrl}`);
+  if (req.path.includes('notifications') || req.originalUrl.includes('notifications')) {
+    console.log(`🔍 [DRIVERS ROUTER] NOTIFICATION REQUEST DETECTED`);
+    console.log(`🔍 [DRIVERS ROUTER] Path: ${req.path}, OriginalUrl: ${req.originalUrl}`);
+    console.log(`🔍 [DRIVERS ROUTER] Authorization header:`, req.headers.authorization ? 'PRESENT' : 'MISSING');
+  }
+  next();
+});
 
 /**
  * Calculate cash at hand for a driver from transactions
@@ -67,6 +78,9 @@ async function calculateCashAtHand(driverId) {
 }
 
 // Public routes (for driver app) - no authentication required
+// NOTE: Notification routes have been moved to driver-notifications.js and mounted in app.js
+// before this router to ensure they match before any /:id routes
+
 /**
  * Get driver by phone number (for driver app)
  * GET /api/drivers/phone/:phoneNumber
@@ -188,7 +202,7 @@ router.get('/phone/:phoneNumber', async (req, res) => {
         limit: 10
       });
       console.error('📋 Sample drivers in database:', allDrivers.map(d => ({ id: d.id, phone: d.phoneNumber })));
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
     
     const elapsed = Date.now() - startTime;
@@ -201,7 +215,7 @@ router.get('/phone/:phoneNumber', async (req, res) => {
     const driverData = driver.toJSON();
     delete driverData.pinHash;
     
-    res.json({
+    sendSuccess(res, {
       ...driverData,
       hasPin: hasPin
     });
@@ -217,13 +231,10 @@ router.get('/phone/:phoneNumber', async (req, res) => {
     
     // Check if it's a timeout error
     if (error.message && error.message.includes('timed out')) {
-      return res.status(408).json({ 
-        error: 'Driver lookup timed out after 60 seconds. Please try again or contact support.',
-        timeout: true
-      });
+      return sendError(res, 'Driver lookup timed out after 60 seconds. Please try again or contact support.', 408);
     }
     
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -239,8 +250,7 @@ router.get('/debug/list', async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
     
-    res.json({
-      success: true,
+    sendSuccess(res, {
       count: drivers.length,
       drivers: drivers.map(d => ({
         id: d.id,
@@ -256,7 +266,7 @@ router.get('/debug/list', async (req, res) => {
     });
   } catch (error) {
     console.error('Error listing drivers for debug:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -279,7 +289,7 @@ router.put('/:id/location', async (req, res) => {
 
     if (!latitude || !longitude) {
       console.log('❌ Missing latitude or longitude');
-      return res.status(400).json({ error: 'Latitude and longitude are required' });
+      return sendError(res, 'Latitude and longitude are required', 400);
     }
 
     const lat = parseFloat(latitude);
@@ -289,24 +299,24 @@ router.put('/:id/location', async (req, res) => {
 
     if (isNaN(lat) || isNaN(lng)) {
       console.log('❌ Invalid latitude or longitude values (NaN)');
-      return res.status(400).json({ error: 'Invalid latitude or longitude values' });
+      return sendError(res, 'Invalid latitude or longitude values', 400);
     }
 
     if (lat < -90 || lat > 90) {
       console.log(`❌ Latitude out of range: ${lat}`);
-      return res.status(400).json({ error: 'Latitude must be between -90 and 90' });
+      return sendError(res, 'Latitude must be between -90 and 90', 400);
     }
 
     if (lng < -180 || lng > 180) {
       console.log(`❌ Longitude out of range: ${lng}`);
-      return res.status(400).json({ error: 'Longitude must be between -180 and 180' });
+      return sendError(res, 'Longitude must be between -180 and 180', 400);
     }
 
     console.log(`📍 Looking up driver with ID: ${id}`);
     const driver = await db.Driver.findByPk(id);
     if (!driver) {
       console.log(`❌ Driver not found with ID: ${id}`);
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
 
     console.log(`✅ Driver found: ${driver.name} (ID: ${driver.id})`);
@@ -320,8 +330,7 @@ router.put('/:id/location', async (req, res) => {
 
     console.log(`✅✅✅ Updated location for driver ${driver.name} (ID: ${id}): ${lat}, ${lng}`);
 
-    res.json({
-      success: true,
+    sendSuccess(res, {
       message: 'Location updated successfully',
       driver: {
         id: driver.id,
@@ -333,7 +342,7 @@ router.put('/:id/location', async (req, res) => {
   } catch (error) {
     console.error('❌❌❌ Error updating driver location:', error);
     console.error('❌ Error stack:', error.stack);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -393,7 +402,7 @@ router.patch('/phone/:phoneNumber/activity', async (req, res) => {
     }
     
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
 
     const { locationLatitude, locationLongitude } = req.body;
@@ -411,24 +420,25 @@ router.patch('/phone/:phoneNumber/activity', async (req, res) => {
 
     await driver.update(updateData);
 
-    res.json(driver);
+    sendSuccess(res, driver);
   } catch (error) {
     console.error('Error updating driver activity:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
 /**
  * Set PIN for driver (after OTP verification)
  * POST /api/drivers/phone/:phoneNumber/set-pin
+ * POST /api/drivers/phone/:phoneNumber/setup-pin (alias for Android app compatibility)
  */
-router.post('/phone/:phoneNumber/set-pin', async (req, res) => {
+const handleSetPin = async (req, res) => {
   try {
     const { phoneNumber } = req.params;
     const { pin } = req.body;
     
     if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
+      return sendError(res, 'PIN must be exactly 4 digits');
     }
     
     const cleanedPhone = phoneNumber.replace(/\D/g, '');
@@ -475,7 +485,7 @@ router.post('/phone/:phoneNumber/set-pin', async (req, res) => {
     }
     
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
     
     // Hash the PIN before storing
@@ -491,15 +501,16 @@ router.post('/phone/:phoneNumber/set-pin', async (req, res) => {
     
     console.log(`✅ PIN set for driver: ${driver.name} (${driver.phoneNumber})`);
     
-    res.json({
-      success: true,
-      message: 'PIN set successfully'
-    });
+    sendSuccess(res, null, 'PIN set successfully');
   } catch (error) {
     console.error('Error setting PIN:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
-});
+};
+
+// Register both routes for compatibility
+router.post('/phone/:phoneNumber/set-pin', handleSetPin);
+router.post('/phone/:phoneNumber/setup-pin', handleSetPin);
 
 /**
  * Verify PIN for driver login
@@ -511,7 +522,7 @@ router.post('/phone/:phoneNumber/verify-pin', async (req, res) => {
     const { pin } = req.body;
     
     if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
-      return res.status(400).json({ error: 'PIN must be exactly 4 digits' });
+      return sendError(res, 'PIN must be exactly 4 digits');
     }
     
     const cleanedPhone = phoneNumber.replace(/\D/g, '');
@@ -558,18 +569,18 @@ router.post('/phone/:phoneNumber/verify-pin', async (req, res) => {
     }
     
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
     
     if (!driver.pinHash) {
-      return res.status(400).json({ error: 'PIN not set. Please set up your PIN first.' });
+      return sendError(res, 'PIN not set. Please set up your PIN first.');
     }
     
     // Verify PIN
     const isPinValid = await bcrypt.compare(pin, driver.pinHash);
     
     if (!isPinValid) {
-      return res.status(401).json({ error: 'Invalid PIN' });
+      return sendError(res, 'Invalid PIN');
     }
     
     // Update last activity and status
@@ -584,51 +595,383 @@ router.post('/phone/:phoneNumber/verify-pin', async (req, res) => {
     const driverData = driver.toJSON();
     delete driverData.pinHash;
     
-    res.json({
-      success: true,
-      driver: driverData,
-      message: 'PIN verified successfully'
-    });
+    sendSuccess(res, {
+      driver: driverData
+    }, 'PIN verified successfully');
   } catch (error) {
     console.error('Error verifying PIN:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
 /**
- * Register or update driver Expo push token
+ * Verify OTP for driver (after send-otp)
+ * POST /api/drivers/phone/:phone/verify-otp
+ */
+router.post('/phone/:phone/verify-otp', async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const { otpCode, otp } = req.body;
+    const codeToVerify = otpCode || otp;
+
+    if (!codeToVerify) {
+      return sendError(res, 'OTP code is required', 400);
+    }
+
+    const cleanedPhone = phone.replace(/\D/g, '');
+    const phoneVariants = new Set();
+    phoneVariants.add(cleanedPhone);
+    
+    // Generate all possible formats
+    if (cleanedPhone.startsWith('254') && cleanedPhone.length === 12) {
+      phoneVariants.add('0' + cleanedPhone.substring(3));
+      phoneVariants.add(cleanedPhone.substring(3));
+    } else if (cleanedPhone.startsWith('0') && cleanedPhone.length === 10) {
+      phoneVariants.add('254' + cleanedPhone.substring(1));
+      phoneVariants.add(cleanedPhone.substring(1));
+    } else if (cleanedPhone.length === 9 && cleanedPhone.startsWith('7')) {
+      phoneVariants.add('254' + cleanedPhone);
+      phoneVariants.add('0' + cleanedPhone);
+    }
+
+    const variants = Array.from(phoneVariants).filter(v => v && v.length > 0);
+
+    // Clean and normalize OTP code (remove whitespace, ensure string)
+    const cleanedOtpCode = String(codeToVerify || '').trim().replace(/\s/g, '');
+
+    if (!cleanedOtpCode) {
+      return sendError(res, 'OTP code is required', 400);
+    }
+
+    console.log(`🔍 Verifying OTP for phone: ${phone} (cleaned: ${cleanedPhone}), variants: ${variants.join(', ')}, OTP: ${cleanedOtpCode}`);
+
+    // Find OTP record - try all phone variants and match OTP code (case-insensitive, trimmed)
+    let otpRecord = null;
+    for (const variant of variants) {
+      // Find OTP records for this phone number (not used, not expired)
+      const otpRecords = await db.Otp.findAll({
+        where: {
+          phoneNumber: {
+            [Op.iLike]: variant
+          },
+          isUsed: false
+        },
+        order: [['createdAt', 'DESC']]
+      });
+
+      // Check each OTP record - compare codes after trimming and normalizing
+      for (const record of otpRecords) {
+        // Normalize OTP codes: convert to string, trim, remove all whitespace
+        const recordOtpCode = String(record.otpCode || '').trim().replace(/\s/g, '');
+        const normalizedOtpCode = cleanedOtpCode.trim().replace(/\s/g, '');
+        
+        // Log comparison for debugging
+        console.log(`🔍 Comparing OTP: stored="${recordOtpCode}" (type: ${typeof record.otpCode}, length: ${recordOtpCode.length}) vs entered="${normalizedOtpCode}" (type: ${typeof codeToVerify}, length: ${normalizedOtpCode.length})`);
+        
+        // Strict comparison - exact match after normalization
+        if (recordOtpCode === normalizedOtpCode) {
+          otpRecord = record;
+          console.log(`✅ Found matching OTP record for variant: ${variant}`);
+          break;
+        } else {
+          console.log(`❌ OTP mismatch: "${recordOtpCode}" !== "${normalizedOtpCode}"`);
+        }
+      }
+      if (otpRecord) break;
+    }
+
+    if (!otpRecord) {
+      console.log(`❌ No matching OTP found for phone: ${cleanedPhone}, OTP entered: "${cleanedOtpCode}"`);
+      // Log recent OTPs for debugging
+      try {
+        const recentOtps = await db.Otp.findAll({
+          where: {
+            phoneNumber: {
+              [Op.iLike]: cleanedPhone
+            }
+          },
+          order: [['createdAt', 'DESC']],
+          limit: 5
+        });
+        console.log(`📋 Recent OTPs for this phone (showing last 5):`, recentOtps.map(o => ({
+          otpCode: o.otpCode,
+          otpCodeType: typeof o.otpCode,
+          otpCodeLength: String(o.otpCode || '').length,
+          isUsed: o.isUsed,
+          expiresAt: o.expiresAt,
+          createdAt: o.createdAt,
+          timeAgo: `${Math.round((new Date() - new Date(o.createdAt)) / 1000)}s ago`
+        })));
+        
+        // Also log the exact OTP codes for easier debugging
+        if (recentOtps.length > 0) {
+          const latestOtp = recentOtps[0];
+          console.log(`📋 Latest OTP details: code="${latestOtp.otpCode}", stored as type ${typeof latestOtp.otpCode}, entered="${cleanedOtpCode}", entered as type ${typeof codeToVerify}`);
+        }
+      } catch (logError) {
+        console.error('Error logging recent OTPs:', logError);
+      }
+      return sendError(res, 'Invalid or expired OTP code. Please check the code and try again.', 400);
+    }
+
+    // Check if OTP is expired
+    if (new Date() > new Date(otpRecord.expiresAt)) {
+      console.log(`❌ OTP expired. Expires at: ${otpRecord.expiresAt}, Current: ${new Date()}`);
+      return sendError(res, 'OTP code has expired', 400);
+    }
+
+    // Find driver by phone (driver may not exist for new accounts)
+    let driver = null;
+    for (const variant of variants) {
+      driver = await db.Driver.findOne({
+        where: {
+          phoneNumber: {
+            [Op.iLike]: variant
+          }
+        }
+      });
+      if (driver) break;
+    }
+
+    // For new driver accounts, driver may not exist yet - that's OK
+    // The driver will be created by admin or during PIN setup
+    if (!driver) {
+      console.log(`ℹ️ Driver not found for phone: ${cleanedPhone} - this is OK for new accounts`);
+    }
+
+    // Mark OTP as used
+    await otpRecord.update({ isUsed: true });
+
+    // If driver exists, update activity
+    if (driver) {
+      await driver.update({
+        lastActivity: new Date(),
+        status: 'active'
+      });
+
+      // Don't return pinHash in response
+      const driverData = driver.toJSON();
+      delete driverData.pinHash;
+
+      sendSuccess(res, {
+        driver: driverData,
+        hasPin: !!driver.pinHash
+      }, 'OTP verified successfully');
+    } else {
+      // Driver doesn't exist yet (new account) - return success with minimal info
+      console.log(`✅ OTP verified for new driver account with phone: ${cleanedPhone}`);
+      sendSuccess(res, {
+        driver: null,
+        hasPin: false,
+        phoneNumber: cleanedPhone
+      }, 'OTP verified successfully. Please proceed to set up your PIN.');
+    }
+  } catch (error) {
+    console.error('Error verifying OTP for driver:', error);
+    sendError(res, error.message, 500);
+  }
+});
+
+/**
+ * Register or update driver push token (native FCM/APNs)
  * POST /api/drivers/push-token
  */
 router.post('/push-token', async (req, res) => {
   try {
-    const { driverId, pushToken } = req.body || {};
+    const { driverId, pushToken, tokenType, error, errorCode, errorName } = req.body || {};
+
+    // Log ALL push-token requests for debugging
+    console.log('📱 ===== PUSH TOKEN REQUEST RECEIVED =====');
+    console.log(`📱 Driver ID: ${driverId}`);
+    console.log(`📱 Token Type: ${tokenType || 'not provided'}`);
+    console.log(`📱 Has Token: ${!!pushToken}`);
+    console.log(`📱 Has Error: ${!!error}`);
+    if (error) console.log(`📱 Error: ${error}`);
+    if (errorCode) console.log(`📱 Error Code: ${errorCode}`);
+    console.log('==========================================');
+
+    // If this is a "starting" message, just log it
+    if (tokenType === 'starting') {
+      console.log('✅ Push token registration function was called');
+      return sendSuccess(res, null, 'Registration started');
+    }
+
+    // If this is an error notification (token acquisition failed), log it but don't fail
+    if (error && tokenType === 'error') {
+      console.log('📱 ===== PUSH TOKEN REGISTRATION FAILURE REPORT =====');
+      console.log(`📱 Driver ID: ${driverId}`);
+      console.log(`📱 Error: ${error}`);
+      console.log(`📱 Error Code: ${errorCode || 'N/A'}`);
+      console.log(`📱 Error Name: ${errorName || 'N/A'}`);
+      console.log('📱 This means the app could not acquire a push token');
+      console.log('📱 Possible causes:');
+      console.log('   1. google-services.json missing or incorrectly configured');
+      console.log('   2. FCM credentials not configured');
+      console.log('   3. Notification permissions not granted');
+      console.log('   4. getDevicePushTokenAsync() failed');
+      
+      // Still return success so app doesn't retry unnecessarily
+      return sendSuccess(res, {
+        driverId: driverId,
+        error: error
+      }, 'Error logged - push token registration failed on device');
+    }
 
     if (!driverId || !pushToken) {
-      return res.status(400).json({ error: 'driverId and pushToken are required' });
+      return sendError(res, 'driverId and pushToken are required', 400);
     }
 
     const driver = await db.Driver.findByPk(driverId);
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
 
-    if (!Expo.isExpoPushToken(pushToken)) {
-      console.warn(`⚠️ Invalid Expo push token received for driver #${driverId}: ${pushToken}`);
-      return res.status(400).json({ error: 'Invalid Expo push token' });
+    const detectedTokenType = tokenType || 'FCM/Native';
+    
+    console.log(`📱 ===== SAVING PUSH TOKEN =====`);
+    console.log(`📱 Driver ID: ${driverId}`);
+    console.log(`📱 Token type (from app): ${tokenType || 'not provided'}`);
+    console.log(`📱 Detected token type: ${detectedTokenType}`);
+    console.log(`📱 Token format: FCM/APNs (long string)`);
+    console.log(`📱 Token preview: ${pushToken.substring(0, 50)}...`);
+    console.log(`📱 Token length: ${pushToken.length} characters`);
+
+    // Accept native FCM/APNs tokens
+    // FCM tokens: Long alphanumeric string (for Android standalone builds)
+    // APNs tokens: Hex string (for iOS standalone builds)
+    
+    if (!pushToken || pushToken.length < 10) {
+      console.error(`❌ Invalid push token: too short or empty`);
+      return sendError(res, 'Invalid push token format', 400);
     }
 
+    // Save the token regardless of type
+    console.log(`📱 Saving ${detectedTokenType} push token for driver #${driverId}...`);
     driver.pushToken = pushToken;
     await driver.save();
+    
+    // Verify token was saved
+    const savedDriver = await db.Driver.findByPk(driverId);
+    if (savedDriver.pushToken === pushToken) {
+      console.log(`✅ ✅ ✅ Push token successfully saved for driver #${driverId}`);
+      console.log(`✅ Token type: ${detectedTokenType}`);
+      console.log(`✅ Token will be routed to: Firebase Cloud Messaging (FCM)`);
+    } else {
+      console.error(`❌ Push token verification failed for driver #${driverId}`);
+    }
 
-    res.json({ success: true, driverId: driver.id, pushToken: driver.pushToken });
+    sendSuccess(res, {
+      driverId: driver.id, 
+      pushToken: driver.pushToken,
+      tokenType: detectedTokenType
+    });
   } catch (error) {
-    console.error('Error saving driver push token:', error);
-    res.status(500).json({ error: 'Failed to save push token' });
+    console.error('❌ Error saving driver push token:', error);
+    sendError(res, 'Failed to save push token', 500);
   }
 });
 
+/**
+ * Update driver status (driver can update their own status)
+ * PATCH /api/drivers/:id/status
+ */
+router.patch('/:id/status', async (req, res) => {
+  try {
+    console.log('🔄 Driver status update request received');
+    console.log('   Method:', req.method);
+    console.log('   Path:', req.path);
+    console.log('   Params:', req.params);
+    console.log('   Body:', req.body);
+    console.log('   Headers:', JSON.stringify(req.headers, null, 2));
+    
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    if (!status || !['active', 'offline', 'inactive', 'on_delivery'].includes(status)) {
+      console.log('❌ Invalid status:', status);
+      return sendError(res, 'Invalid status. Must be one of: active, offline, inactive, on_delivery', 400);
+    }
+    
+    const driver = await db.Driver.findByPk(id);
+    if (!driver) {
+      console.log('❌ Driver not found:', id);
+      return sendError(res, 'Driver not found', 404);
+    }
+    
+    console.log('✅ Driver found:', driver.name, 'Current status:', driver.status);
+    
+    const oldStatus = driver.status;
+    await driver.update({ 
+      status: status,
+      lastActivity: new Date()
+    });
+    
+    // Reload driver to get updated data
+    await driver.reload();
+    
+    // If status changed, emit notification to admin
+    if (status !== oldStatus) {
+      const io = req.app.get('io');
+      if (io) {
+        const driverData = driver.toJSON();
+        
+        // Send notification when rider starts or ends shift
+        if ((oldStatus === 'offline' || oldStatus === 'inactive') && status === 'active') {
+          // Rider started shift
+          io.to('admin').emit('driver-shift-started', {
+            driverId: driver.id,
+            driverName: driver.name,
+            message: `${driver.name} has started shift`,
+            driver: driverData
+          });
+          console.log(`📢 Notified admin: ${driver.name} has started shift`);
+        } else if (oldStatus === 'active' && (status === 'offline' || status === 'inactive')) {
+          // Rider ended shift
+          io.to('admin').emit('driver-shift-ended', {
+            driverId: driver.id,
+            driverName: driver.name,
+            message: `${driver.name} has ended shift`,
+            driver: driverData
+          });
+          console.log(`📢 Notified admin: ${driver.name} has ended shift`);
+        }
+        
+        // Also emit a general driver status update
+        io.to('admin').emit('driver-status-updated', {
+          driverId: driver.id,
+          driver: driverData,
+          oldStatus: oldStatus,
+          newStatus: status
+        });
+      }
+    }
+    
+    sendSuccess(res, driver);
+  } catch (error) {
+    console.error('Error updating driver status:', error);
+    sendError(res, error.message, 500);
+  }
+});
+
+
 // Admin routes - require admin authentication
-router.use(verifyAdmin);
+// IMPORTANT: All routes after this line require admin authentication
+router.use((req, res, next) => {
+  // Log ALL requests hitting admin middleware to debug routing issues
+  console.log(`🔒 [ADMIN MIDDLEWARE] ${req.method} ${req.path} - OriginalUrl: ${req.originalUrl}`);
+  console.log(`🔒 [ADMIN MIDDLEWARE] Params:`, JSON.stringify(req.params));
+  if (req.path.includes('notifications')) {
+    console.error(`❌ [ADMIN MIDDLEWARE ERROR] Notification route hit admin middleware!`);
+    console.error(`❌ Path: ${req.path}, Method: ${req.method}`);
+    console.error(`❌ This should NOT happen - notification routes are public!`);
+    console.error(`❌ Route stack:`, router.stack.map((s, i) => ({
+      index: i,
+      path: s.route?.path,
+      methods: s.route ? Object.keys(s.route.methods) : 'middleware'
+    })).slice(0, 20));
+  }
+  verifyAdmin(req, res, next);
+});
 
 /**
  * Get latest OTP for a driver (admin only)
@@ -638,7 +981,7 @@ router.get('/:id/latest-otp', async (req, res) => {
   try {
     const driver = await db.Driver.findByPk(req.params.id);
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
 
     // Get the latest unused OTP for this driver's phone number
@@ -709,7 +1052,7 @@ router.get('/:id/latest-otp', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching driver OTP:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -719,14 +1062,56 @@ router.get('/:id/latest-otp', async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
+    // Get actual columns that exist in the database for Driver
+    let validDriverAttributes, validWalletAttributes;
+    try {
+      const [existingDriverColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'drivers' ORDER BY column_name"
+      );
+      const driverColumnNames = new Set(existingDriverColumns.map(col => col.column_name.toLowerCase()));
+      
+      // Map model attributes to database column names and filter to only existing columns
+      validDriverAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Driver.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        // Check if the database column exists (case-insensitive)
+        if (driverColumnNames.has(dbColumnName.toLowerCase())) {
+          validDriverAttributes.push(attrName);
+        }
+      }
+      
+      // Get actual columns that exist in the database for DriverWallet
+      const [existingWalletColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'driver_wallets' ORDER BY column_name"
+      );
+      const walletColumnNames = new Set(existingWalletColumns.map(col => col.column_name.toLowerCase()));
+      
+      // Map model attributes to database column names and filter to only existing columns
+      validWalletAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.DriverWallet.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        // Check if the database column exists (case-insensitive)
+        if (walletColumnNames.has(dbColumnName.toLowerCase())) {
+          validWalletAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      // Fallback: use safe default attributes if schema query fails
+      console.warn('⚠️ Could not query information_schema, using default attributes:', schemaError.message);
+      validDriverAttributes = ['id', 'name', 'phoneNumber', 'status', 'createdAt', 'updatedAt'];
+      validWalletAttributes = ['id', 'driverId', 'balance', 'createdAt', 'updatedAt'];
+    }
+    
     // Try to order by lastActivity first, fallback to createdAt if column doesn't exist
     let drivers;
     try {
       drivers = await db.Driver.findAll({
+        attributes: validDriverAttributes,
         include: [{
           model: db.DriverWallet,
           as: 'wallet',
-          required: false
+          required: false,
+          attributes: validWalletAttributes
         }],
         order: [['lastActivity', 'DESC'], ['createdAt', 'DESC']]
       });
@@ -735,10 +1120,12 @@ router.get('/', async (req, res) => {
       if (orderError.message && orderError.message.includes('column') && orderError.message.includes('lastActivity')) {
         console.warn('⚠️ lastActivity column not found, ordering by createdAt only');
         drivers = await db.Driver.findAll({
+          attributes: validDriverAttributes,
           include: [{
             model: db.DriverWallet,
             as: 'wallet',
-            required: false
+            required: false,
+            attributes: validWalletAttributes
           }],
           order: [['createdAt', 'DESC']]
         });
@@ -750,13 +1137,13 @@ router.get('/', async (req, res) => {
     // Add credit limit status and cash at hand to each driver
     const driversWithCreditStatus = await Promise.all(drivers.map(async (driver) => {
       const driverData = driver.toJSON();
-      const creditCheck = await checkDriverCreditLimit(driver.id);
+      const creditCheck = await checkDriverCreditLimit(driver.id, false);
       driverData.creditStatus = {
         exceeded: creditCheck.exceeded,
-        balance: creditCheck.balance,
+        cashAtHand: creditCheck.cashAtHand,
         creditLimit: creditCheck.creditLimit,
-        debt: creditCheck.debt,
-        canAcceptOrders: creditCheck.canAcceptOrders
+        canAcceptOrders: creditCheck.canAcceptOrders,
+        canUpdateOrders: creditCheck.canUpdateOrders
       };
       
       // Use stored cashAtHand value from database as the source of truth
@@ -786,11 +1173,11 @@ router.post('/:id/invite-whatsapp', async (req, res) => {
     
     const driver = await db.Driver.findByPk(id);
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
     
     if (!driver.phoneNumber) {
-      return res.status(400).json({ error: 'Driver has no phone number' });
+      return sendError(res, 'Driver has no phone number');
     }
     
     const whatsappService = require('../services/whatsapp');
@@ -802,13 +1189,12 @@ router.post('/:id/invite-whatsapp', async (req, res) => {
     );
     
     if (!result.success) {
-      return res.status(400).json({ error: result.error });
+      return sendError(res, result.error);
     }
     
     console.log(`📱 WhatsApp invitation generated for driver: ${driver.name} (${driver.phoneNumber})`);
     
-    res.json({
-      success: true,
+    sendSuccess(res, {
       whatsappLink: result.whatsappLink,
       message: result.message,
       phoneNumber: result.phoneNumber,
@@ -816,7 +1202,7 @@ router.post('/:id/invite-whatsapp', async (req, res) => {
     });
   } catch (error) {
     console.error('Error generating WhatsApp invitation:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -825,15 +1211,17 @@ router.post('/:id/invite-whatsapp', async (req, res) => {
  * GET /api/drivers/:id
  */
 router.get('/:id', async (req, res) => {
+  console.log(`🔒 [ADMIN ROUTE] GET /:id matched - path: ${req.path}, params:`, req.params);
+  console.log(`🔒 [ADMIN ROUTE] WARNING: This route matched ${req.path} - if this is /6/notifications, there's a routing bug!`);
   try {
     const driver = await db.Driver.findByPk(req.params.id);
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
-    res.json(driver);
+    sendSuccess(res, driver);
   } catch (error) {
     console.error('Error fetching driver:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -846,13 +1234,13 @@ router.post('/', async (req, res) => {
     const { name, phoneNumber, status } = req.body;
 
     if (!name || !phoneNumber) {
-      return res.status(400).json({ error: 'Driver name and phone number are required' });
+      return sendError(res, 'Driver name and phone number are required');
     }
 
     // Validate phone number format
     const cleanedPhone = phoneNumber.replace(/\D/g, '');
     if (cleanedPhone.length < 9) {
-      return res.status(400).json({ error: 'Invalid phone number format' });
+      return sendError(res, 'Invalid phone number format');
     }
 
     // Check if driver with this phone number already exists
@@ -861,7 +1249,7 @@ router.post('/', async (req, res) => {
     });
 
     if (existingDriver) {
-      return res.status(400).json({ error: 'Driver with this phone number already exists' });
+      return sendError(res, 'Driver with this phone number already exists');
     }
 
     const driver = await db.Driver.create({
@@ -874,7 +1262,7 @@ router.post('/', async (req, res) => {
     res.status(201).json(driver);
   } catch (error) {
     console.error('Error creating driver:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -888,7 +1276,7 @@ router.put('/:id', async (req, res) => {
     const driver = await db.Driver.findByPk(req.params.id);
 
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
 
     const updateData = {};
@@ -896,7 +1284,7 @@ router.put('/:id', async (req, res) => {
     if (phoneNumber !== undefined) {
       const cleanedPhone = phoneNumber.replace(/\D/g, '');
       if (cleanedPhone.length < 9) {
-        return res.status(400).json({ error: 'Invalid phone number format' });
+        return sendError(res, 'Invalid phone number format');
       }
       
       // Check if another driver has this phone number
@@ -908,7 +1296,7 @@ router.put('/:id', async (req, res) => {
       });
 
       if (existingDriver) {
-        return res.status(400).json({ error: 'Another driver with this phone number already exists' });
+        return sendError(res, 'Another driver with this phone number already exists');
       }
       
       updateData.phoneNumber = cleanedPhone;
@@ -917,14 +1305,14 @@ router.put('/:id', async (req, res) => {
     if (creditLimit !== undefined) {
       const parsedLimit = parseFloat(creditLimit);
       if (isNaN(parsedLimit) || parsedLimit < 0) {
-        return res.status(400).json({ error: 'Credit limit must be a non-negative number' });
+        return sendError(res, 'Credit limit must be a non-negative number');
       }
       updateData.creditLimit = parsedLimit;
     }
     if (cashAtHand !== undefined) {
       const parsedCash = parseFloat(cashAtHand);
       if (isNaN(parsedCash) || parsedCash < 0) {
-        return res.status(400).json({ error: 'Cash at hand must be a non-negative number' });
+        return sendError(res, 'Cash at hand must be a non-negative number');
       }
       updateData.cashAtHand = parsedCash;
     }
@@ -972,10 +1360,10 @@ router.put('/:id', async (req, res) => {
       }
     }
     
-    res.json(driver);
+    sendSuccess(res, driver);
   } catch (error) {
     console.error('Error updating driver:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -987,7 +1375,7 @@ router.patch('/:id/activity', async (req, res) => {
   try {
     const driver = await db.Driver.findByPk(req.params.id);
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
 
     const { locationLatitude, locationLongitude } = req.body;
@@ -1004,10 +1392,10 @@ router.patch('/:id/activity', async (req, res) => {
 
     await driver.update(updateData);
 
-    res.json(driver);
+    sendSuccess(res, driver);
   } catch (error) {
     console.error('Error updating driver activity:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -1019,14 +1407,143 @@ router.delete('/:id', async (req, res) => {
   try {
     const driver = await db.Driver.findByPk(req.params.id);
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      return sendError(res, 'Driver not found', 404);
     }
 
     await driver.destroy();
     res.json({ message: 'Driver deleted successfully' });
   } catch (error) {
     console.error('Error deleting driver:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
+  }
+});
+
+/**
+ * Receive push token diagnostics from app
+ * POST /api/drivers/push-token-diagnostics
+ */
+router.post('/push-token-diagnostics', async (req, res) => {
+  try {
+    const { driverId, diagnostics } = req.body || {};
+    
+    if (!driverId || !diagnostics) {
+      return sendError(res, 'driverId and diagnostics are required');
+    }
+
+    console.log('🔍 ===== PUSH TOKEN DIAGNOSTICS RECEIVED =====');
+    console.log(`📱 Driver ID: ${driverId}`);
+    console.log(`📱 Platform: ${diagnostics.platform}`);
+    console.log(`📱 Timestamp: ${diagnostics.timestamp}`);
+    console.log('');
+    
+    // Log each test result
+    if (diagnostics.results.permissions) {
+      const p = diagnostics.results.permissions;
+      console.log('📋 Test 1 - Permissions:');
+      console.log(`   Status: ${p.status}`);
+      console.log(`   Granted: ${p.granted ? '✅' : '❌'}`);
+      if (p.error) console.log(`   Error: ${p.error}`);
+    }
+    
+    if (diagnostics.results.buildType) {
+      const b = diagnostics.results.buildType;
+      console.log('📋 Test 2 - Build Type:');
+      console.log(`   App Ownership: ${b.appOwnership}`);
+      console.log(`   Execution Environment: ${b.executionEnvironment}`);
+      console.log(`   Is Standalone: ${b.isStandalone ? '✅' : '❌'}`);
+      console.log(`   __DEV__: ${b.__DEV__}`);
+    }
+    
+    if (diagnostics.results.googleServices) {
+      const g = diagnostics.results.googleServices;
+      console.log('📋 Test 3 - Google Services:');
+      console.log(`   Configured: ${g.configured ? '✅' : '❌'}`);
+      console.log(`   Path: ${g.path}`);
+      if (g.error) console.log(`   Error: ${g.error}`);
+    }
+    
+    if (diagnostics.results.nativeToken) {
+      const n = diagnostics.results.nativeToken;
+      console.log('📋 Test 4 - Native FCM Token:');
+      if (n.success) {
+        console.log(`   ✅ SUCCESS! Token obtained`);
+        console.log(`   Token Type: ${n.tokenType}`);
+        console.log(`   Token Length: ${n.tokenLength}`);
+        console.log(`   Token Preview: ${n.tokenPreview}...`);
+      } else {
+        console.log(`   ❌ FAILED!`);
+        console.log(`   Error: ${n.error}`);
+        console.log(`   Error Code: ${n.errorCode || 'N/A'}`);
+        console.log(`   Error Name: ${n.errorName || 'N/A'}`);
+        if (n.errorStack) console.log(`   Stack: ${n.errorStack.substring(0, 200)}...`);
+      }
+    }
+    
+    // Expo token diagnostics removed - using native FCM only
+    
+    if (diagnostics.results.apiConnectivity) {
+      const a = diagnostics.results.apiConnectivity;
+      console.log('📋 Test 6 - API Connectivity:');
+      console.log(`   Can Reach Backend: ${a.canReachBackend ? '✅' : '❌'}`);
+      if (a.error) console.log(`   Error: ${a.error}`);
+    }
+    
+    console.log('');
+    console.log('🔍 ===== DIAGNOSTICS SUMMARY =====');
+    
+    // Determine root cause
+    let rootCause = 'Unknown';
+    if (diagnostics.results.permissions && !diagnostics.results.permissions.granted) {
+      rootCause = 'Permissions not granted';
+    } else if (diagnostics.results.nativeToken && !diagnostics.results.nativeToken.success) {
+      rootCause = `Native token generation failed: ${diagnostics.results.nativeToken.error}`;
+    // Expo token check removed - using native FCM only
+    } else if (diagnostics.results.nativeToken && diagnostics.results.nativeToken.success) {
+      rootCause = 'Token generation successful - issue may be in registration flow';
+    }
+    
+    console.log(`🎯 ROOT CAUSE: ${rootCause}`);
+    console.log('==========================================');
+    
+    res.json({ 
+      success: true, 
+      message: 'Diagnostics received',
+      rootCause: rootCause,
+      diagnostics: diagnostics
+    });
+  } catch (error) {
+    console.error('❌ Error processing diagnostics:', error);
+    res.status(500).json({ error: 'Failed to process diagnostics' });
+  }
+});
+
+/**
+ * Get push token status for a driver (admin only)
+ * GET /api/drivers/:driverId/push-token-status
+ */
+router.get('/:driverId/push-token-status', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const driver = await db.Driver.findByPk(driverId);
+    
+    if (!driver) {
+      return sendError(res, 'Driver not found', 404);
+    }
+    
+    res.json({
+      driverId: driver.id,
+      driverName: driver.name,
+      phoneNumber: driver.phoneNumber,
+      hasPushToken: !!driver.pushToken,
+      pushToken: driver.pushToken ? driver.pushToken.substring(0, 50) + '...' : null,
+      tokenType: driver.pushToken ? 'FCM/APNs' : null,
+      tokenLength: driver.pushToken ? driver.pushToken.length : 0,
+      lastActivity: driver.lastActivity,
+      status: driver.status
+    });
+  } catch (error) {
+    console.error('❌ Error getting push token status:', error);
+    res.status(500).json({ error: 'Failed to get push token status' });
   }
 });
 
@@ -1036,30 +1553,68 @@ router.delete('/:id', async (req, res) => {
  */
 router.post('/test-push/:driverId', async (req, res) => {
   try {
+    console.log(`🧪 TEST-PUSH REQUEST RECEIVED: driverId=${req.params.driverId}`);
+    console.log(`🧪 Request headers:`, JSON.stringify(req.headers, null, 2));
+    console.log(`🧪 Request body:`, JSON.stringify(req.body, null, 2));
+    
     const { driverId } = req.params;
-    const driver = await db.Driver.findByPk(driverId);
+    
+    // Get actual columns that exist in the database for Driver
+    let validDriverAttributes;
+    try {
+      const [existingDriverColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'drivers' ORDER BY column_name"
+      );
+      const driverColumnNames = new Set(existingDriverColumns.map(col => col.column_name.toLowerCase()));
+      
+      validDriverAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Driver.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        if (driverColumnNames.has(dbColumnName.toLowerCase())) {
+          validDriverAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      console.warn('⚠️ Could not query information_schema for drivers, using default attributes:', schemaError.message);
+      validDriverAttributes = ['id', 'name', 'phoneNumber', 'status', 'pushToken', 'createdAt', 'updatedAt'];
+    }
+    
+    const driver = await db.Driver.findByPk(driverId, {
+      attributes: validDriverAttributes
+    });
     
     if (!driver) {
-      return res.status(404).json({ error: 'Driver not found' });
+      console.error(`❌ Driver not found: ${driverId}`);
+      return sendError(res, 'Driver not found', 404);
     }
     
     if (!driver.pushToken) {
-      return res.status(400).json({ error: 'Driver has no push token registered' });
+      console.error(`❌ Driver ${driver.name || driverId} has no push token registered`);
+      return sendError(res, 'Driver has no push token registered');
     }
     
     const pushNotifications = require('../services/pushNotifications');
-    const testOrder = {
-      id: 999,
-      customerName: 'Test Customer',
-      customerPhone: '0712345678',
-      deliveryAddress: 'Test Address',
-      totalAmount: '100.00'
-    };
     
-    console.log(`🧪 Testing push notification for driver ${driver.name} (ID: ${driverId})`);
+    console.log(`🧪 Testing push notification for driver ${driver.name || driverId} (ID: ${driverId})`);
     console.log(`🧪 Push token: ${driver.pushToken.substring(0, 30)}...`);
     
-    const result = await pushNotifications.sendOrderNotification(driver.pushToken, testOrder);
+    // Send test notification with type "test-notification" to trigger overlay
+    const message = {
+      sound: 'default',
+      title: 'Test Notification',
+      body: `Test push notification for ${driver.name}`,
+      data: {
+        type: 'test-notification',
+        driverName: driver.name,
+      },
+      priority: 'high',
+      badge: 1,
+      channelId: 'order-assignments',
+    };
+    
+    // Send notification via native FCM (no Expo support)
+    console.log(`🧪 Sending test notification via native FCM`);
+    const result = await pushNotifications.sendFCMNotification(driver.pushToken, message);
     
     if (result.success) {
       res.json({ 
@@ -1076,7 +1631,7 @@ router.post('/test-push/:driverId', async (req, res) => {
     }
   } catch (error) {
     console.error('Error testing push notification:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
