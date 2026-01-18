@@ -25,113 +25,128 @@ router.post('/autocomplete', async (req, res) => {
     // Normalize input for searching
     const normalizedInput = input.toLowerCase().trim();
 
-    // First, check database for saved addresses that match the input
-    // Skip database lookup for now if columns are missing - will be fixed with migration
-    let savedAddresses = [];
-    try {
-      // Only query columns that definitely exist
-      savedAddresses = await db.SavedAddress.findAll({
-        where: {
-          address: {
-            [Op.iLike]: `%${normalizedInput}%`
-          }
-        },
-        order: [['createdAt', 'DESC']], // Removed searchCount in case column doesn't exist
-        limit: 5,
-        attributes: ['id', 'address', 'placeId', 'formattedAddress', 'createdAt', 'updatedAt'] // Only select columns that definitely exist
-      });
-    } catch (dbError) {
-      // If there's an error (e.g., missing columns), just skip database lookup
-      console.log('⚠️  Error querying saved addresses, skipping database lookup:', dbError.message);
-      savedAddresses = [];
-    }
-
-    // If we found saved addresses, return them as suggestions
-    if (savedAddresses.length > 0) {
-      const suggestions = savedAddresses.map(addr => ({
-        placeId: addr.placeId,
-        description: addr.formattedAddress || addr.address,
-        structuredFormat: {
-          main_text: addr.address.split(',')[0] || addr.address,
-          secondary_text: addr.address.split(',').slice(1).join(',').trim() || ''
-        },
-        fromDatabase: true // Flag to indicate this came from database
-      }));
-
-      // Update search count for all matched addresses (only if columns exist)
-      try {
-        // Try to update, but don't fail if columns don't exist
-        await Promise.all(
-          savedAddresses.map(async (addr) => {
-            try {
-              const updates = {};
-              // Only update columns that exist
-              if (addr.searchCount !== undefined) {
-                updates.searchCount = (addr.searchCount || 0) + 1;
-              }
-              if (addr.apiCallsSaved !== undefined) {
-                updates.apiCallsSaved = (addr.apiCallsSaved || 0) + 1;
-              }
-              if (addr.costSaved !== undefined) {
-                updates.costSaved = parseFloat(addr.costSaved || 0) + (GOOGLE_AUTOCOMPLETE_COST_USD * USD_TO_KES_RATE);
-              }
-              if (Object.keys(updates).length > 0) {
-                await addr.update(updates);
-              }
-            } catch (updateError) {
-              // Ignore update errors for missing columns
-              console.log('⚠️  Could not update address stats:', updateError.message);
-            }
-          })
-        );
-      } catch (updateError) {
-        // If update fails, just log and continue
-        console.log('⚠️  Error updating search count, continuing:', updateError.message);
-      }
-
-      console.log(`✅ Found ${savedAddresses.length} addresses in database, saved API call (KES ${(GOOGLE_AUTOCOMPLETE_COST_USD * USD_TO_KES_RATE).toFixed(4)})`);
-      return res.json({ suggestions, fromDatabase: true });
-    }
-
-    // If no saved addresses found, call Google API
+    // Check Google API first - it's fast and comprehensive
+    // Database will be checked in parallel for exact/starts-with matches only
     if (!GOOGLE_MAPS_API_KEY) {
       return res.status(500).json({ 
         error: 'Google Maps API key not configured' 
       });
     }
 
-    // Try the legacy Places API AutocompleteService (still works, even if deprecated)
+    // Call Google API immediately (don't wait for database)
+    let googleSuggestions = [];
     try {
       const legacyUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_MAPS_API_KEY}&components=country:ke&types=geocode|establishment`;
       
       const legacyResponse = await fetch(legacyUrl);
       
-      if (!legacyResponse.ok) {
-        throw new Error(`HTTP error! status: ${legacyResponse.status}`);
+      if (legacyResponse.ok) {
+        const legacyData = await legacyResponse.json();
+        
+        if (legacyData && legacyData.predictions) {
+          googleSuggestions = legacyData.predictions.map(pred => ({
+            placeId: pred.place_id,
+            description: pred.description,
+            structuredFormat: pred.structured_formatting,
+            fromDatabase: false
+          }));
+        }
       }
-      
-      const legacyData = await legacyResponse.json();
-
-      if (legacyData && legacyData.predictions) {
-        const formattedSuggestions = legacyData.predictions.map(pred => ({
-          placeId: pred.place_id,
-          description: pred.description,
-          structuredFormat: pred.structured_formatting,
-          fromDatabase: false
-        }));
-
-        // Save new unique addresses to database
-        // Note: We'll save addresses when user selects them, not here
-        // This prevents saving addresses that are never selected
-
-        return res.json({ suggestions: formattedSuggestions, fromDatabase: false });
-      }
-    } catch (legacyError) {
-      console.error('Places API failed:', legacyError.message);
-      // Continue to return empty suggestions instead of throwing
+    } catch (googleError) {
+      console.error('Places API failed:', googleError.message);
+      // Continue even if Google fails - will check database
     }
 
-    res.json({ suggestions: [] });
+    // Check database in parallel for exact/starts-with matches only (more strict than before)
+    // This prevents database from blocking Google results with broad partial matches
+    let savedAddresses = [];
+    try {
+      // Only search for addresses that start with the input (strict match)
+      // This is much more restrictive than '%input%' and won't block Google
+      savedAddresses = await db.SavedAddress.findAll({
+        where: {
+          address: {
+            [Op.iLike]: `${normalizedInput}%` // Starts with, not contains
+          }
+        },
+        order: [['createdAt', 'DESC']],
+        limit: 3, // Fewer database results since we have Google too
+        attributes: ['id', 'address', 'placeId', 'formattedAddress', 'createdAt', 'updatedAt']
+      });
+    } catch (dbError) {
+      // If there's an error, just skip database lookup
+      console.log('⚠️  Error querying saved addresses, skipping database lookup:', dbError.message);
+      savedAddresses = [];
+    }
+
+    // Convert database addresses to suggestion format
+    const dbSuggestions = savedAddresses.map(addr => ({
+      placeId: addr.placeId,
+      description: addr.formattedAddress || addr.address,
+      structuredFormat: {
+        main_text: addr.address.split(',')[0] || addr.address,
+        secondary_text: addr.address.split(',').slice(1).join(',').trim() || ''
+      },
+      fromDatabase: true
+    }));
+
+    // Merge results: database matches first (if any), then Google results
+    // Remove duplicates based on description (case-insensitive)
+    const allSuggestions = [];
+    const seenDescriptions = new Set();
+
+    // Add database suggestions first (they're more relevant)
+    dbSuggestions.forEach(sugg => {
+      const desc = sugg.description.toLowerCase();
+      if (!seenDescriptions.has(desc)) {
+        seenDescriptions.add(desc);
+        allSuggestions.push(sugg);
+      }
+    });
+
+    // Add Google suggestions (they're comprehensive)
+    googleSuggestions.forEach(sugg => {
+      const desc = sugg.description.toLowerCase();
+      if (!seenDescriptions.has(desc)) {
+        seenDescriptions.add(desc);
+        allSuggestions.push(sugg);
+      }
+    });
+
+    // Update search count for matched database addresses (non-blocking)
+    if (savedAddresses.length > 0) {
+      Promise.all(
+        savedAddresses.map(async (addr) => {
+          try {
+            const updates = {};
+            if (addr.searchCount !== undefined) {
+              updates.searchCount = (addr.searchCount || 0) + 1;
+            }
+            if (addr.apiCallsSaved !== undefined) {
+              updates.apiCallsSaved = (addr.apiCallsSaved || 0) + 1;
+            }
+            if (addr.costSaved !== undefined) {
+              updates.costSaved = parseFloat(addr.costSaved || 0) + (GOOGLE_AUTOCOMPLETE_COST_USD * USD_TO_KES_RATE);
+            }
+            if (Object.keys(updates).length > 0) {
+              await addr.update(updates);
+            }
+          } catch (updateError) {
+            // Ignore update errors
+            console.log('⚠️  Could not update address stats:', updateError.message);
+          }
+        })
+      ).catch(() => {
+        // Ignore - non-critical
+      });
+    }
+
+    // Return combined results (database first, then Google)
+    return res.json({ 
+      suggestions: allSuggestions, 
+      fromDatabase: dbSuggestions.length > 0,
+      hasGoogleResults: googleSuggestions.length > 0
+    });
   } catch (error) {
     console.error('Error fetching place suggestions:', error);
     res.status(500).json({ 
