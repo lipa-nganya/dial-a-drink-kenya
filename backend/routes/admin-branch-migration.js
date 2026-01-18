@@ -6,8 +6,30 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const jwt = require('jsonwebtoken');
 
-router.post('/consolidate-branches-to-4', async (req, res) => {
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
+
+const verifyAdmin = (req, res, next) => {
+  const authHeader = req.headers.authorization || req.headers.Authorization;
+
+  if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
+    return res.status(401).json({ error: 'Authorization token missing' });
+  }
+
+  const token = authHeader.split(' ')[1];
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.admin = decoded;
+    return next();
+  } catch (error) {
+    console.warn('Admin auth token verification failed:', error.message);
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+};
+
+router.post('/consolidate-branches-to-4', verifyAdmin, async (req, res) => {
   try {
     console.log('🔄 Starting branch consolidation to ID 4...');
     
