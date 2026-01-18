@@ -43,8 +43,17 @@ const calculateRoadDistance = async (destinationAddress, originAddress = null) =
   // Use branch address if provided, otherwise fall back to default
   const origin = originAddress || ORIGIN_ADDRESS;
 
+  if (!origin || !origin.trim()) {
+    console.error('❌ Origin address is empty! Cannot calculate distance.');
+    return { distance: null, isRoadDistance: false };
+  }
+
   try {
     const distanceMatrixUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destinationAddress)}&key=${GOOGLE_MAPS_API_KEY}&units=metric`;
+
+    console.log(`🌐 Calling Google Distance Matrix API:`);
+    console.log(`   Origin: ${origin}`);
+    console.log(`   Destination: ${destinationAddress}`);
 
     const response = await fetch(distanceMatrixUrl);
     
@@ -55,7 +64,7 @@ const calculateRoadDistance = async (destinationAddress, originAddress = null) =
     const data = await response.json();
 
     if (data.status !== 'OK') {
-      console.error('Google Distance Matrix API error:', data.status, data.error_message);
+      console.error('❌ Google Distance Matrix API error:', data.status, data.error_message);
       return { distance: null, isRoadDistance: false };
     }
 
@@ -64,16 +73,20 @@ const calculateRoadDistance = async (destinationAddress, originAddress = null) =
       
       if (element.status === 'OK' && element.distance) {
         const distanceKm = element.distance.value / 1000; // Convert meters to kilometers
+        console.log(`✅ Distance Matrix API returned: ${distanceKm} km (${element.distance.text})`);
         return { distance: parseFloat(distanceKm.toFixed(2)), isRoadDistance: true };
       } else {
-        console.warn(`Distance Matrix API returned status: ${element.status}`);
+        console.warn(`⚠️ Distance Matrix API returned status: ${element.status} for origin "${origin}" to destination "${destinationAddress}"`);
         return { distance: null, isRoadDistance: false };
       }
     }
 
+    console.warn(`⚠️ Distance Matrix API returned invalid response structure`);
     return { distance: null, isRoadDistance: false };
   } catch (error) {
-    console.error('Error calling Google Distance Matrix API:', error.message);
+    console.error('❌ Error calling Google Distance Matrix API:', error.message);
+    console.error('   Origin:', origin);
+    console.error('   Destination:', destinationAddress);
     return { distance: null, isRoadDistance: false };
   }
 };
@@ -134,18 +147,24 @@ const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress
             const branch = await db.Branch.findByPk(branchId);
             if (branch && branch.address) {
               originAddress = branch.address;
-              console.log(`📍 Using branch address as origin: ${branch.name} - ${originAddress}`);
+              console.log(`📍 Using branch address as origin: ${branch.name} (ID: ${branchId}) - ${originAddress}`);
+            } else {
+              console.warn(`⚠️ Branch ID ${branchId} not found or has no address, using ORIGIN_ADDRESS`);
             }
+          } else {
+            console.warn(`⚠️ No branchId provided, using ORIGIN_ADDRESS: ${ORIGIN_ADDRESS}`);
           }
           
           // Use Google Distance Matrix API to calculate road distance from branch to delivery address
           const distanceResult = await calculateRoadDistance(deliveryAddress, originAddress);
           if (distanceResult.isRoadDistance && distanceResult.distance) {
             distanceKm = distanceResult.distance;
-            console.log(`✅ Road distance calculated: ${distanceKm} km from ${originAddress || ORIGIN_ADDRESS}`);
+            console.log(`✅ Road distance calculated: ${distanceKm} km from ${originAddress || ORIGIN_ADDRESS} to ${deliveryAddress}`);
           } else {
             // Fallback: use minimum 1km if road distance calculation fails
-            console.warn('⚠️ Road distance calculation failed, using minimum 1km');
+            console.warn(`⚠️ Road distance calculation failed (isRoadDistance: ${distanceResult.isRoadDistance}, distance: ${distanceResult.distance}), using minimum 1km`);
+            console.warn(`   Origin: ${originAddress || ORIGIN_ADDRESS}`);
+            console.warn(`   Destination: ${deliveryAddress}`);
             distanceKm = 1;
           }
         } catch (distanceError) {
