@@ -2638,6 +2638,47 @@ const Orders = () => {
                     Order Summary
                   </Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {/* Items Subtotal */}
+                    {selectedOrderForDetail.items && selectedOrderForDetail.items.length > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body1">
+                          <strong>Items Subtotal:</strong>
+                        </Typography>
+                        <Typography variant="body1">
+                          KES {(() => {
+                            const itemsTotal = selectedOrderForDetail.itemsTotal || 
+                              selectedOrderForDetail.items.reduce((sum, item) => 
+                                sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
+                              );
+                            return Number(itemsTotal).toFixed(2);
+                          })()}
+                        </Typography>
+                      </Box>
+                    )}
+                    {/* Delivery Fee */}
+                    {selectedOrderForDetail.deliveryFee !== undefined && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body1">
+                          <strong>Delivery Fee:</strong>
+                        </Typography>
+                        <Typography variant="body1">
+                          KES {Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2)}
+                        </Typography>
+                      </Box>
+                    )}
+                    {/* Tip Amount */}
+                    {selectedOrderForDetail.tipAmount && parseFloat(selectedOrderForDetail.tipAmount) > 0 && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body1">
+                          <strong>Tip:</strong>
+                        </Typography>
+                        <Typography variant="body1">
+                          KES {Number(selectedOrderForDetail.tipAmount).toFixed(2)}
+                        </Typography>
+                      </Box>
+                    )}
+                    <Divider sx={{ my: 1 }} />
+                    {/* Total Amount */}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body1">
                         <strong>Total Amount:</strong>
@@ -2688,6 +2729,16 @@ const Orders = () => {
                         return <Chip size="small" {...statusChip} />;
                       })()}
                     </Box>
+                    {selectedOrderForDetail.deliveryDistance && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body1">
+                          <strong>Delivery Distance:</strong>
+                        </Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          {Number(selectedOrderForDetail.deliveryDistance).toFixed(2)} km
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                 </CardContent>
               </Card>

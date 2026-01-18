@@ -239,13 +239,61 @@ const OrderTracking = ({ order }) => {
         <Divider sx={{ my: 3 }} />
 
         {/* Order Summary */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AttachMoney /> Total Amount
+        <Box>
+          <Typography variant="h6" sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AttachMoney /> Order Summary
           </Typography>
-          <Typography variant="h5" color="primary">
-            KES {Number(orderDetails.totalAmount).toFixed(2)}
-          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {/* Items Subtotal */}
+            {orderDetails.items && orderDetails.items.length > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body1">
+                  Items Subtotal:
+                </Typography>
+                <Typography variant="body1">
+                  KES {(() => {
+                    const itemsTotal = orderDetails.itemsTotal || 
+                      orderDetails.items.reduce((sum, item) => 
+                        sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
+                      );
+                    return Number(itemsTotal).toFixed(2);
+                  })()}
+                </Typography>
+              </Box>
+            )}
+            {/* Delivery Fee */}
+            {orderDetails.deliveryFee !== undefined && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body1">
+                  Delivery Fee:
+                </Typography>
+                <Typography variant="body1">
+                  KES {Number(orderDetails.deliveryFee || 0).toFixed(2)}
+                </Typography>
+              </Box>
+            )}
+            {/* Tip Amount */}
+            {orderDetails.tipAmount && parseFloat(orderDetails.tipAmount) > 0 && (
+              <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                <Typography variant="body1">
+                  Tip:
+                </Typography>
+                <Typography variant="body1">
+                  KES {Number(orderDetails.tipAmount).toFixed(2)}
+                </Typography>
+              </Box>
+            )}
+            <Divider sx={{ my: 1 }} />
+            {/* Total Amount */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Total Amount:
+              </Typography>
+              <Typography variant="h5" color="primary" sx={{ fontWeight: 600 }}>
+                KES {Number(orderDetails.totalAmount).toFixed(2)}
+              </Typography>
+            </Box>
+          </Box>
         </Box>
 
         {orderDetails.paymentType && (

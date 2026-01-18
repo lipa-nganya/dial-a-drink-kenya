@@ -94,7 +94,7 @@ const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress
     const isTestMode = testModeSetting?.value === 'true';
     
     if (isTestMode) {
-      return 0;
+      return { fee: 0, distance: null };
     }
 
     const feeMode = feeModeSetting?.value || 'fixed';
@@ -667,7 +667,26 @@ router.post('/', async (req, res) => {
       // Only send for customer orders (not admin orders)
       if (!adminOrder && completeOrder.trackingToken && completeOrder.customerPhone) {
         try {
-          const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+          // Determine frontend URL based on environment
+          const { isProduction } = require('../utils/envDetection');
+          let frontendUrl;
+          
+          // Priority 1: Use FRONTEND_URL environment variable if explicitly set
+          if (process.env.FRONTEND_URL) {
+            frontendUrl = process.env.FRONTEND_URL;
+            console.log(`✅ Using FRONTEND_URL from environment: ${frontendUrl}`);
+          }
+          // Priority 2: Use production URL if in production/cloud
+          else if (isProduction()) {
+            frontendUrl = 'https://dialadrink.thewolfgang.tech';
+            console.log(`✅ Using production frontend URL: ${frontendUrl}`);
+          }
+          // Priority 3: Fallback to localhost for local development
+          else {
+            frontendUrl = 'http://localhost:3000';
+            console.log(`⚠️  Using localhost fallback. Set FRONTEND_URL for production: ${frontendUrl}`);
+          }
+          
           const trackingUrl = `${frontendUrl}/order-tracking?token=${completeOrder.trackingToken}`;
           
           const customerSmsMessage = `Order Confirmed! Order #${completeOrder.id}\n` +
@@ -675,6 +694,7 @@ router.post('/', async (req, res) => {
             `Track your order: ${trackingUrl}`;
           
           console.log(`📱 Sending order confirmation SMS to customer ${completeOrder.customerPhone} for order #${completeOrder.id}`);
+          console.log(`📱 Tracking URL: ${trackingUrl}`);
           const smsResult = await smsService.sendSMS(completeOrder.customerPhone, customerSmsMessage);
           
           if (smsResult.success) {
@@ -1006,6 +1026,18 @@ router.get('/:id', async (req, res) => {
     if (orderData.items) {
       orderData.orderItems = orderData.items;
     }
+    
+    // Calculate delivery fee from order data (totalAmount - tipAmount - itemsTotal)
+    const itemsTotal = (orderData.items || []).reduce((sum, item) => {
+      const price = parseFloat(item.price || 0);
+      const quantity = parseFloat(item.quantity || 0);
+      return sum + (price * quantity);
+    }, 0);
+    const tipAmount = parseFloat(orderData.tipAmount || 0);
+    const totalAmount = parseFloat(orderData.totalAmount || 0);
+    const deliveryFee = Math.max(0, totalAmount - tipAmount - itemsTotal);
+    orderData.deliveryFee = Number(deliveryFee.toFixed(2));
+    orderData.itemsTotal = Number(itemsTotal.toFixed(2));
     
     // For completed orders, include payment transaction data (transactionCode and transactionDate)
     if (orderData.status === 'completed' && orderData.paymentStatus === 'paid') {
