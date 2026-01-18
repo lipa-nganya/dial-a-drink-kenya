@@ -1,0 +1,83 @@
+.dashboard-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0D0D0D 0%, #1a1a1a 100%);
+  padding: 20px;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: #121212;
+  border: 1px solid #333;
+  border-radius: 12px;
+}
+
+.dashboard-header h1 {
+  color: #00E0B8;
+  font-size: 24px;
+  margin: 0;
+}
+
+.btn-logout {
+  background: transparent;
+  color: #FF3366;
+  border: 1px solid #FF3366;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-logout:hover {
+  background: rgba(255, 51, 102, 0.1);
+}
+
+.dashboard-content {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.welcome-card,
+.info-card {
+  background: #121212;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 30px;
+  margin-bottom: 20px;
+}
+
+.welcome-card h2 {
+  color: #00E0B8;
+  font-size: 24px;
+  margin-bottom: 10px;
+}
+
+.welcome-card p {
+  color: #B0B0B0;
+  font-size: 16px;
+}
+
+.info-card h3 {
+  color: #F5F5F5;
+  font-size: 20px;
+  margin-bottom: 10px;
+}
+
+.info-card p {
+  color: #B0B0B0;
+  font-size: 16px;
+}
+
+.loading {
+  text-align: center;
+  color: #00E0B8;
+  font-size: 18px;
+  padding: 40px;
+}
+
+

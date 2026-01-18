@@ -1,0 +1,117 @@
+.setup-pin-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #0D0D0D 0%, #1a1a1a 100%);
+  padding: 20px;
+}
+
+.setup-pin-card {
+  background: #121212;
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 40px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.setup-pin-card h1 {
+  color: #00E0B8;
+  font-size: 28px;
+  font-weight: bold;
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.subtitle {
+  color: #B0B0B0;
+  font-size: 16px;
+  margin-bottom: 40px;
+  text-align: center;
+}
+
+.pin-input-container {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.pin-input {
+  width: 200px;
+  height: 60px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  font-size: 32px;
+  text-align: center;
+  color: #00E0B8;
+  font-weight: bold;
+  letter-spacing: 20px;
+  padding: 0 10px;
+}
+
+.pin-input:focus {
+  outline: none;
+  border-color: #00E0B8;
+}
+
+.btn-primary {
+  width: 100%;
+  background: #00E0B8;
+  color: #0D0D0D;
+  border: none;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 10px;
+  transition: background 0.2s;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #00C4A3;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  width: 100%;
+  background: transparent;
+  color: #B0B0B0;
+  border: 1px solid #333;
+  padding: 16px;
+  border-radius: 8px;
+  font-size: 18px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #1a1a1a;
+  border-color: #00E0B8;
+  color: #00E0B8;
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.error-message {
+  background: rgba(255, 51, 102, 0.1);
+  border: 1px solid #FF3366;
+  color: #FF3366;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  text-align: center;
+}
+
+
