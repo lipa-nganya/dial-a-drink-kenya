@@ -132,7 +132,7 @@ class ActiveOrdersActivity : AppCompatActivity() {
         lifecycleScope.launch {
             var orders = emptyList<Order>()
             try {
-                orders = withTimeoutOrNull(10000) {
+                orders = withTimeoutOrNull(2000) { // 2 second timeout
                     OrderRepository.getActiveOrders(this@ActiveOrdersActivity, forceRefresh = false)
                 } ?: emptyList()
             } catch (e: CancellationException) {
