@@ -171,7 +171,7 @@ class ActiveOrdersActivity : AppCompatActivity() {
         lifecycleScope.launch {
             var orders = emptyList<Order>()
             try {
-                orders = withTimeoutOrNull(10000) {
+                orders = withTimeoutOrNull(2000) { // 2 second timeout
                     OrderRepository.refreshActiveOrders(this@ActiveOrdersActivity)
                 } ?: emptyList()
             } catch (e: CancellationException) {
