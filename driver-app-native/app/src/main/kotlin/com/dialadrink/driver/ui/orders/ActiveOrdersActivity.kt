@@ -134,8 +134,13 @@ class ActiveOrdersActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
-                // Repository returns cached data immediately, fetches in background if needed
-                val orders = OrderRepository.getActiveOrders(this@ActiveOrdersActivity, forceRefresh = false)
+                // Add timeout to prevent infinite loading
+                val orders = withTimeoutOrNull(20000) { // 20 second timeout
+                    OrderRepository.getActiveOrders(this@ActiveOrdersActivity, forceRefresh = false)
+                } ?: run {
+                    Log.e(TAG, "⏱️ Timeout loading orders from repository")
+                    emptyList<Order>()
+                }
                 
                 withContext(Dispatchers.Main) {
                     Log.d(TAG, "📊 Orders loaded: ${orders.size} orders")
@@ -151,6 +156,7 @@ class ActiveOrdersActivity : AppCompatActivity() {
                 }
             } catch (e: CancellationException) {
                 // Activity destroyed, ignore
+                Log.d(TAG, "🛑 Loading cancelled")
                 isLoading = false
                 withContext(Dispatchers.Main) {
                     binding.loadingProgress.visibility = View.GONE
@@ -161,11 +167,11 @@ class ActiveOrdersActivity : AppCompatActivity() {
                 isLoading = false
                 withContext(Dispatchers.Main) {
                     showEmptyState("Error loading orders")
+                    binding.loadingProgress.visibility = View.GONE
+                    binding.swipeRefresh.isRefreshing = false
                 }
             } finally {
-                if (isLoading) {
-                    isLoading = false
-                }
+                isLoading = false
                 withContext(Dispatchers.Main) {
                     binding.loadingProgress.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
