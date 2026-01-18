@@ -237,12 +237,17 @@ class ActiveOrdersActivity : AppCompatActivity() {
         // Then show empty state
         binding.emptyStateText.text = message
         binding.emptyStateText.visibility = View.VISIBLE
+        // Make sure it's the only visible child
         binding.emptyStateText.bringToFront()
+        // Ensure text color is visible
+        binding.emptyStateText.setTextColor(getColor(R.color.text_secondary_dark))
         // Force layout update
         binding.emptyStateText.requestLayout()
         binding.ordersContainer.requestLayout()
         binding.ordersContainer.invalidate()
-        Log.d(TAG, "✅ Empty state visible: ${binding.emptyStateText.visibility == View.VISIBLE}, text: '${binding.emptyStateText.text}', container children: ${binding.ordersContainer.childCount}, emptyStateText parent: ${binding.emptyStateText.parent}")
+        binding.emptyStateText.post {
+            Log.d(TAG, "✅ Empty state post: visible=${binding.emptyStateText.visibility == View.VISIBLE}, text='${binding.emptyStateText.text}', alpha=${binding.emptyStateText.alpha}, container children: ${binding.ordersContainer.childCount}")
+        }
     }
     
     private fun ensureEmptyStateTextExists() {
@@ -363,8 +368,11 @@ class ActiveOrdersActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         // Refresh orders when activity resumes (e.g., returning from accepting an order)
-        // Only refresh if we don't already have orders displayed
-        if (binding.ordersContainer.childCount == 0) {
+        // Only refresh if we don't already have orders displayed (check if we have order cards, not emptyStateText)
+        val hasOrderCards = (0 until binding.ordersContainer.childCount).any { i ->
+            binding.ordersContainer.getChildAt(i) is MaterialCardView
+        }
+        if (!hasOrderCards && currentOrders.isEmpty()) {
             refreshOrdersFromRepository()
         } else {
             // Just ensure spinner is hidden if we already have orders

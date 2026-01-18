@@ -100,7 +100,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="none"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                         android:minHeight="56dp"
                         android:padding="16dp"
                         android:textSize="16sp" />
@@ -137,7 +137,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="text"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />
@@ -165,7 +165,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="text"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />
@@ -193,7 +193,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="numberDecimal"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />
@@ -221,7 +221,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="text"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />
@@ -250,7 +250,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="textPersonName"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />
@@ -279,7 +279,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="textMultiLine"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />
@@ -309,7 +309,7 @@
                             android:layout_height="wrap_content"
                             android:inputType="none"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />
@@ -340,7 +340,7 @@
                         android:layout_height="wrap_content"
                         android:inputType="numberDecimal"
                         android:textColor="#FFFFFF"
-                        android:textColorHint="#999999"
+                        android:textColorHint="#FFFFFF"
                         android:minHeight="56dp"
                         android:padding="16dp"
                         android:textSize="16sp" />
