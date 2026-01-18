@@ -209,13 +209,11 @@ class ActiveOrdersActivity : AppCompatActivity() {
     }
     
     private fun showEmptyState(message: String) {
-        Log.d(TAG, "📭 Showing empty state: $message")
         binding.loadingProgress.visibility = View.GONE
         binding.swipeRefresh.isRefreshing = false
         removeOrderCards()
         binding.emptyStateText.text = message
         binding.emptyStateText.visibility = View.VISIBLE
-        Log.d(TAG, "✅ Empty state set: visible=${binding.emptyStateText.visibility == View.VISIBLE}, text='${binding.emptyStateText.text}', container children: ${binding.ordersContainer.childCount}")
     }
     
     private fun ensureEmptyStateTextExists() {
