@@ -36,8 +36,8 @@ const Footer = () => {
           {/* DIAL A DRINK KENYA Section */}
           <Grid item xs={12} sm={6} md={3}>
             <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-              <LocalBar sx={{ color: colors.accentText, fontSize: 28 }} />
-              <Typography variant="h6" sx={{ fontWeight: 700, color: colors.textPrimary }}>
+              <LocalBar sx={{ color: colors.accentText, fontSize: 20 }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: colors.textPrimary, fontSize: '0.9rem' }}>
                 DIAL A DRINK KENYA
               </Typography>
             </Box>
@@ -49,6 +49,7 @@ const Footer = () => {
                   color: colors.textSecondary,
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  fontSize: '0.8rem',
                   '&:hover': {
                     color: colors.accentText,
                     textDecoration: 'underline'
@@ -65,6 +66,7 @@ const Footer = () => {
                   color: colors.textSecondary,
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  fontSize: '0.8rem',
                   '&:hover': {
                     color: colors.accentText,
                     textDecoration: 'underline'
@@ -81,6 +83,7 @@ const Footer = () => {
                   color: colors.textSecondary,
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  fontSize: '0.8rem',
                   '&:hover': {
                     color: colors.accentText,
                     textDecoration: 'underline'
@@ -95,7 +98,7 @@ const Footer = () => {
 
           {/* GENERAL LINKS Section */}
           <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2, textAlign: 'center' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2, textAlign: 'center', fontSize: '0.9rem' }}>
               GENERAL LINKS
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center' }}>
@@ -106,6 +109,7 @@ const Footer = () => {
                   color: colors.textSecondary,
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  fontSize: '0.8rem',
                   '&:hover': {
                     color: colors.accentText,
                     textDecoration: 'underline'
@@ -122,6 +126,7 @@ const Footer = () => {
                   color: colors.textSecondary,
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  fontSize: '0.8rem',
                   '&:hover': {
                     color: colors.accentText,
                     textDecoration: 'underline'
@@ -138,6 +143,7 @@ const Footer = () => {
                   color: colors.textSecondary,
                   textDecoration: 'none',
                   cursor: 'pointer',
+                  fontSize: '0.8rem',
                   '&:hover': {
                     color: colors.accentText,
                     textDecoration: 'underline'
@@ -152,17 +158,18 @@ const Footer = () => {
 
           {/* Contact Information */}
           <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2, textAlign: 'center' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2, textAlign: 'center', fontSize: '0.9rem' }}>
               CONTACT US
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Phone sx={{ fontSize: 18, color: colors.accentText }} />
+                <Phone sx={{ fontSize: 16, color: colors.accentText }} />
                 <Link
                   href="tel:+254723688108"
                   sx={{
                     color: colors.textSecondary,
                     textDecoration: 'none',
+                    fontSize: '0.8rem',
                     '&:hover': {
                       color: colors.accentText,
                       textDecoration: 'underline'
@@ -177,20 +184,20 @@ const Footer = () => {
 
           {/* Payment Methods */}
           <Grid item xs={12} sm={6} md={3}>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2, textAlign: 'center' }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2, textAlign: 'center', fontSize: '0.9rem' }}>
               PAYMENT METHODS
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
                 • Cash On Delivery
               </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
                 • Pay via MPESA
               </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
                 • Pay via VISA
               </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
                 • Pay Via Master Card
               </Typography>
             </Box>
@@ -200,7 +207,7 @@ const Footer = () => {
         <Divider sx={{ my: 3, borderColor: colors.border }} />
 
         <Box sx={{ textAlign: 'center' }}>
-          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
             © {new Date().getFullYear()} Dial a Drink Kenya - All Rights Reserved
           </Typography>
         </Box>
