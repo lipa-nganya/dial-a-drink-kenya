@@ -30,7 +30,8 @@ import {
   DialogActions,
   Grid,
   Tabs,
-  Tab
+  Tab,
+  Autocomplete
 } from '@mui/material';
 import {
   Search,
@@ -43,10 +44,12 @@ import {
   Receipt,
   Phone,
   Info,
-  AccountBalanceWallet
+  AccountBalanceWallet,
+  ShoppingCart
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAdmin } from '../contexts/AdminContext';
 import {
   getPaymentMethodChipProps,
   getTransactionTypeChipProps,
@@ -56,6 +59,9 @@ import {
 const Transactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
+  const [pendingCashSubmissions, setPendingCashSubmissions] = useState([]);
+  const [approvedCashSubmissions, setApprovedCashSubmissions] = useState([]);
+  const [rejectedCashSubmissions, setRejectedCashSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
@@ -69,7 +75,20 @@ const Transactions = () => {
   const [expandedRows, setExpandedRows] = useState(() => new Set());
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [transactionDialogTab, setTransactionDialogTab] = useState('transaction');
+  const [currentTab, setCurrentTab] = useState('transactions');
+  const [cashSubmissionTab, setCashSubmissionTab] = useState('pending');
+  const [createSubmissionDialogOpen, setCreateSubmissionDialogOpen] = useState(false);
+  const [submissionFormData, setSubmissionFormData] = useState({
+    submissionType: 'cash',
+    amount: '',
+    details: {},
+    orderIds: []
+  });
+  const [availableOrders, setAvailableOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
   const { isDarkMode, colors } = useTheme();
+  const { user } = useAdmin();
+  const isSuperAdmin = user?.role === 'super_admin';
 
   const dateFieldStyles = {
     minWidth: 180,
@@ -102,7 +121,22 @@ const Transactions = () => {
   useEffect(() => {
     fetchTransactions();
     fetchMerchantWallet();
+    fetchPendingCashSubmissions();
+    fetchApprovedCashSubmissions();
+    fetchRejectedCashSubmissions();
   }, []);
+
+  useEffect(() => {
+    if (currentTab === 'cash-submissions') {
+      if (cashSubmissionTab === 'pending') {
+        fetchPendingCashSubmissions();
+      } else if (cashSubmissionTab === 'approved') {
+        fetchApprovedCashSubmissions();
+      } else if (cashSubmissionTab === 'rejected') {
+        fetchRejectedCashSubmissions();
+      }
+    }
+  }, [currentTab, cashSubmissionTab]);
 
   useEffect(() => {
     filterTransactions();
@@ -139,6 +173,172 @@ const Transactions = () => {
     } catch (error) {
       console.error('Error fetching merchant wallet:', error);
       // Don't set error state, just log it
+    }
+  };
+
+  const fetchOrdersForSelection = async () => {
+    try {
+      setLoadingOrders(true);
+      
+      // Fetch orders and approved cash submissions in parallel
+      const [ordersResponse, approvedSubmissionsResponse] = await Promise.all([
+        api.get('/admin/orders'),
+        api.get('/driver-wallet/admin/cash-submissions/all')
+      ]);
+      
+      // Get all orders
+      const allOrders = ordersResponse.data || [];
+      
+      // Get approved cash submissions with their associated orders
+      const allSubmissions = approvedSubmissionsResponse.data?.data?.submissions || approvedSubmissionsResponse.data?.submissions || [];
+      const approvedSubmissions = allSubmissions.filter(s => s.status === 'approved');
+      
+      // Collect order IDs that are already associated with approved submissions
+      const usedOrderIds = new Set();
+      approvedSubmissions.forEach(submission => {
+        if (submission.orders && Array.isArray(submission.orders)) {
+          submission.orders.forEach(order => {
+            usedOrderIds.add(order.id);
+          });
+        }
+      });
+      
+      // Filter to only show POS orders with CASH payment method
+      // POS orders are identified by: adminOrder === true OR status === 'pos_order' OR deliveryAddress === 'In-Store Purchase'
+      const isPOSOrder = (order) => {
+        return order.adminOrder === true || 
+               order.status === 'pos_order' ||
+               (order.deliveryAddress && order.deliveryAddress.includes('In-Store Purchase'));
+      };
+
+      // Filter out cancelled orders, non-POS orders, non-cash payment methods, and orders already associated with approved submissions
+      const availableOrders = allOrders.filter(order => {
+        // Must not be cancelled
+        if (order.status === 'cancelled') return false;
+        
+        // Must be a POS order
+        if (!isPOSOrder(order)) return false;
+        
+        // Must have payment method === 'cash'
+        if (order.paymentMethod !== 'cash') return false;
+        
+        // Must not be already associated with an approved submission
+        if (usedOrderIds.has(order.id)) return false;
+        
+        return true;
+      });
+      
+      console.log(`📋 Filtered orders for cash submission: ${availableOrders.length} POS orders with CASH payment method out of ${allOrders.length} total orders`);
+      
+      setAvailableOrders(availableOrders);
+    } catch (error) {
+      console.error('Error fetching orders:', error);
+      setAvailableOrders([]);
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  const fetchPendingCashSubmissions = async () => {
+    try {
+      const response = await api.get('/driver-wallet/cash-submissions/pending');
+      // Backend wraps response in { success: true, data: { submissions: [...], total: ... } }
+      const submissions = response.data?.data?.submissions || response.data?.submissions || [];
+      console.log('Pending cash submissions fetched:', submissions.length);
+      setPendingCashSubmissions(submissions);
+    } catch (error) {
+      console.error('Error fetching pending cash submissions:', error);
+      console.error('Error details:', error.response?.data);
+      setPendingCashSubmissions([]);
+    }
+  };
+
+  const fetchApprovedCashSubmissions = async () => {
+    try {
+      // Get all cash submissions and filter for approved
+      const response = await api.get('/driver-wallet/cash-submissions/all');
+      const allSubmissions = response.data?.data?.submissions || response.data?.submissions || [];
+      console.log('All submissions fetched:', allSubmissions.length);
+      console.log('All submissions statuses:', allSubmissions.map(s => ({ id: s.id, status: s.status })));
+      const approved = allSubmissions.filter(s => s.status === 'approved');
+      console.log('Approved submissions filtered:', approved.length);
+      console.log('Approved submissions:', approved.map(s => ({ id: s.id, status: s.status, approver: s.approver?.name })));
+      setApprovedCashSubmissions(approved);
+    } catch (error) {
+      console.error('Error fetching approved cash submissions:', error);
+      console.error('Error details:', error.response?.data);
+      setApprovedCashSubmissions([]);
+    }
+  };
+
+  const fetchRejectedCashSubmissions = async () => {
+    try {
+      // Get all cash submissions and filter for rejected
+      const response = await api.get('/driver-wallet/cash-submissions/all');
+      const allSubmissions = response.data?.data?.submissions || response.data?.submissions || [];
+      const rejected = allSubmissions.filter(s => s.status === 'rejected');
+      setRejectedCashSubmissions(rejected);
+    } catch (error) {
+      console.error('Error fetching rejected cash submissions:', error);
+      setRejectedCashSubmissions([]);
+    }
+  };
+
+  const handleCreateSubmission = async () => {
+    try {
+      // Validate form data based on submission type
+      if (!submissionFormData.amount || parseFloat(submissionFormData.amount) <= 0) {
+        alert('Please enter a valid amount');
+        return;
+      }
+
+      const details = {};
+      if (submissionFormData.submissionType === 'purchases') {
+        if (!submissionFormData.details.supplier || !submissionFormData.details.item || !submissionFormData.details.price || !submissionFormData.details.deliveryLocation) {
+          alert('Please fill in all required fields for purchases');
+          return;
+        }
+        details.supplier = submissionFormData.details.supplier;
+        details.item = submissionFormData.details.item;
+        details.price = submissionFormData.details.price;
+        details.deliveryLocation = submissionFormData.details.deliveryLocation;
+      } else if (submissionFormData.submissionType === 'cash') {
+        if (!submissionFormData.details.recipientName) {
+          alert('Please enter recipient name');
+          return;
+        }
+        details.recipientName = submissionFormData.details.recipientName;
+      } else if (submissionFormData.submissionType === 'general_expense') {
+        if (!submissionFormData.details.nature) {
+          alert('Please enter expense nature');
+          return;
+        }
+        details.nature = submissionFormData.details.nature;
+      } else if (submissionFormData.submissionType === 'payment_to_office') {
+        if (!submissionFormData.details.accountType) {
+          alert('Please select account type');
+          return;
+        }
+        details.accountType = submissionFormData.details.accountType;
+      } else if (submissionFormData.submissionType === 'walk_in_sale') {
+        // Walk-in sale details are optional
+      }
+
+      await api.post('/driver-wallet/admin/cash-submissions', {
+        submissionType: submissionFormData.submissionType,
+        amount: parseFloat(submissionFormData.amount),
+        details,
+        orderIds: submissionFormData.orderIds || []
+      });
+
+      alert('Cash submission created successfully!');
+      setCreateSubmissionDialogOpen(false);
+      setSubmissionFormData({ submissionType: 'cash', amount: '', details: {}, orderIds: [] });
+      setAvailableOrders([]);
+      await fetchPendingCashSubmissions();
+    } catch (error) {
+      console.error('Error creating cash submission:', error);
+      alert(error.response?.data?.error || 'Failed to create cash submission');
     }
   };
 
@@ -390,7 +590,68 @@ const Transactions = () => {
         </Box>
       )}
 
+      {/* Main Tabs */}
+      <Box sx={{ mb: 3 }}>
+        <Tabs
+          value={currentTab}
+          onChange={(event, newValue) => {
+            setCurrentTab(newValue);
+            if (newValue === 'cash-submissions') {
+              setCashSubmissionTab('pending'); // Reset to pending when switching to cash submissions
+            }
+          }}
+          textColor="secondary"
+          indicatorColor="secondary"
+          sx={{
+            borderBottom: `1px solid ${colors.border}`,
+            '& .MuiTab-root': {
+              color: colors.textSecondary,
+              fontWeight: 600,
+              fontSize: '1rem'
+            },
+            '& .Mui-selected': {
+              color: colors.accentText
+            }
+          }}
+        >
+          <Tab label="All Transactions" value="transactions" />
+          <Tab label="Cash Submissions" value="cash-submissions" />
+        </Tabs>
+      </Box>
+
+      {/* Cash Submissions Sub-Tabs */}
+      {currentTab === 'cash-submissions' && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, mb: 2 }}>
+            Cash Submissions
+          </Typography>
+          <Tabs
+            value={cashSubmissionTab}
+            onChange={(event, newValue) => setCashSubmissionTab(newValue)}
+            textColor="secondary"
+            indicatorColor="secondary"
+            sx={{
+              borderBottom: `1px solid ${colors.border}`,
+              '& .MuiTab-root': {
+                color: colors.textSecondary,
+                fontWeight: 600,
+                fontSize: '0.95rem'
+              },
+              '& .Mui-selected': {
+                color: colors.accentText
+              }
+            }}
+          >
+            <Tab label="My Submissions" value="my_submissions" />
+            <Tab label={`Pending (${pendingCashSubmissions.length})`} value="pending" />
+            <Tab label={`Approved (${approvedCashSubmissions.length})`} value="approved" />
+            <Tab label={`Rejected (${rejectedCashSubmissions.length})`} value="rejected" />
+          </Tabs>
+        </Box>
+      )}
+
       {/* Summary Stats */}
+      {currentTab === 'transactions' && (
       <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Total Transactions</Typography>
@@ -433,8 +694,10 @@ const Transactions = () => {
           </Typography>
         </Paper>
       </Box>
+      )}
 
-      {/* Filters */}
+      {/* Filters - Only show for transactions tab */}
+      {currentTab === 'transactions' && (
       <Box sx={{ mb: 3 }}>
         <Paper sx={{ p: 2, mb: 2 }}>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
@@ -549,7 +812,11 @@ const Transactions = () => {
           />
         </Paper>
       </Box>
+      )}
 
+      {/* Transactions Table */}
+      {currentTab === 'transactions' && (
+      <>
       {filteredTransactions.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Receipt sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
@@ -1177,6 +1444,330 @@ const Transactions = () => {
           />
         </TableContainer>
       )}
+      </>
+      )}
+
+      {/* Cash Submissions Tables */}
+      {currentTab === 'cash-submissions' && (
+        <>
+          {/* Create Submission Button */}
+          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant="contained"
+              onClick={() => setCreateSubmissionDialogOpen(true)}
+              sx={{
+                backgroundColor: colors.accentText,
+                color: '#FFFFFF',
+                fontWeight: 600,
+                '&:hover': { 
+                  backgroundColor: '#00C4A3',
+                  color: '#FFFFFF'
+                }
+              }}
+            >
+              Create Cash Submission
+            </Button>
+          </Box>
+          {/* Helper functions */}
+          {(() => {
+            const getSubmissionTypeLabel = (type) => {
+              switch (type) {
+                case 'purchases': return 'Purchases';
+                case 'cash': return 'Cash';
+                case 'general_expense': return 'General Expense';
+                case 'payment_to_office': return 'Payment to Office';
+                case 'walk_in_sale': return 'Walk-In Sale';
+                default: return type;
+              }
+            };
+
+            const getSubmissionDetails = (submission) => {
+              if (!submission.details) return 'N/A';
+              const details = submission.details;
+              let typeSpecific = '';
+              
+              switch (submission.submissionType) {
+                case 'purchases':
+                  typeSpecific = `${details.item || 'N/A'} from ${details.supplier || 'N/A'}`;
+                  break;
+                case 'cash':
+                  typeSpecific = details.recipientName ? `Recipient: ${details.recipientName}` : '';
+                  break;
+                case 'general_expense':
+                  typeSpecific = details.nature || 'N/A';
+                  break;
+                case 'payment_to_office':
+                  typeSpecific = `Account: ${details.accountType || 'N/A'}`;
+                  break;
+                case 'walk_in_sale':
+                  typeSpecific = 'Walk-in sale';
+                  break;
+                default:
+                  typeSpecific = JSON.stringify(details);
+              }
+              
+              return typeSpecific || 'N/A';
+            };
+
+            const renderSubmissionTable = (submissions, showActions = false) => {
+              if (submissions.length === 0) {
+                return (
+                  <Paper sx={{ p: 4, textAlign: 'center' }}>
+                    <Receipt sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary">
+                      {cashSubmissionTab === 'my_submissions'
+                        ? 'No Submissions to Display'
+                        : `No ${cashSubmissionTab} cash submissions`}
+                    </Typography>
+                  </Paper>
+                );
+              }
+
+              return (
+                <TableContainer component={Paper} sx={{ width: '100%', overflowX: 'auto' }}>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Submission ID</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Submitted By</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Type</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Amount</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Details</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Submitted</TableCell>
+                        {cashSubmissionTab === 'approved' && (
+                          <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Approved By</TableCell>
+                        )}
+                        {cashSubmissionTab === 'rejected' && (
+                          <>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Rejected By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Reason</TableCell>
+                          </>
+                        )}
+                        {showActions && (
+                          <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="center">Actions</TableCell>
+                        )}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {submissions.map((submission) => (
+                        <TableRow key={submission.id}>
+                          <TableCell>#{submission.id}</TableCell>
+                          <TableCell>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {submission.driver 
+                                  ? submission.driver.name 
+                                  : submission.admin 
+                                    ? (submission.admin.name || submission.admin.username || 'Admin')
+                                    : 'Unknown'}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary">
+                                {submission.driver 
+                                  ? submission.driver.phoneNumber 
+                                  : submission.admin 
+                                    ? (submission.admin.mobileNumber || '')
+                                    : 'N/A'}
+                              </Typography>
+                              {submission.driver && (
+                                <Chip label="Driver" size="small" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
+                              )}
+                              {submission.admin && (
+                                <Chip label="Admin" size="small" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem', backgroundColor: '#2196F3', color: '#fff' }} />
+                              )}
+                            </Box>
+                          </TableCell>
+                          <TableCell>
+                            <Chip
+                              label={getSubmissionTypeLabel(submission.submissionType)}
+                              size="small"
+                              sx={{
+                                backgroundColor: colors.accentText + '20',
+                                color: colors.accentText,
+                                fontWeight: 600
+                              }}
+                            />
+                          </TableCell>
+                          <TableCell sx={{ fontWeight: 600, color: colors.accentText }}>
+                            KES {parseFloat(submission.amount || 0).toFixed(2)}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2">
+                              {getSubmissionDetails(submission)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {new Date(submission.createdAt).toLocaleString('en-KE', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
+                            })}
+                          </TableCell>
+                          {cashSubmissionTab === 'approved' && (
+                            <TableCell>
+                              <Typography variant="body2">
+                                {submission.approver?.name || 'N/A'}
+                              </Typography>
+                              {submission.approvedAt && (
+                                <Typography variant="caption" color="text.secondary">
+                                  {new Date(submission.approvedAt).toLocaleDateString('en-KE')}
+                                </Typography>
+                              )}
+                            </TableCell>
+                          )}
+                          {cashSubmissionTab === 'rejected' && (
+                            <>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {submission.rejector?.name || 'N/A'}
+                                </Typography>
+                                {submission.rejectedAt && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {new Date(submission.rejectedAt).toLocaleDateString('en-KE')}
+                                  </Typography>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" color="error">
+                                  {submission.rejectionReason || 'No reason provided'}
+                                </Typography>
+                              </TableCell>
+                            </>
+                          )}
+                          {showActions && isSuperAdmin && (
+                            <TableCell align="center">
+                              <Button
+                                variant="contained"
+                                size="small"
+                                onClick={async () => {
+                                  try {
+                                    // Determine the correct endpoint based on whether it's a driver or admin submission
+                                    const endpoint = submission.adminId 
+                                      ? `/driver-wallet/admin/cash-submissions/${submission.id}/approve`
+                                      : `/driver-wallet/${submission.driverId}/cash-submissions/${submission.id}/approve`;
+                                    
+                                    const response = await api.post(endpoint);
+                                    console.log('Approval response:', response.data);
+                                    console.log('Approval response submission:', response.data?.data?.submission);
+                                    
+                                    // Wait a bit to ensure database commit
+                                    await new Promise(resolve => setTimeout(resolve, 500));
+                                    
+                                    // Refresh all lists in sequence to ensure fresh data
+                                    await fetchPendingCashSubmissions();
+                                    console.log('Pending submissions after refresh:', pendingCashSubmissions.length);
+                                    
+                                    await fetchApprovedCashSubmissions();
+                                    console.log('Approved submissions after refresh:', approvedCashSubmissions.length);
+                                    
+                                    await fetchRejectedCashSubmissions();
+                                    await fetchMerchantWallet();
+                                    await fetchTransactions();
+                                    
+                                    // Show success message
+                                    alert('Cash submission approved successfully!');
+                                  } catch (error) {
+                                    console.error('Error approving submission:', error);
+                                    console.error('Error response:', error.response?.data);
+                                    alert(error.response?.data?.error || 'Failed to approve submission');
+                                  }
+                                }}
+                                sx={{
+                                  backgroundColor: colors.accentText,
+                                  color: '#FFFFFF',
+                                  fontWeight: 600,
+                                  '&:hover': { 
+                                    backgroundColor: '#00C4A3',
+                                    color: '#FFFFFF'
+                                  },
+                                  mr: 1
+                                }}
+                              >
+                                Approve
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={async () => {
+                                  const reason = prompt('Enter rejection reason:');
+                                  if (reason) {
+                                    try {
+                                      // Determine the correct endpoint based on whether it's a driver or admin submission
+                                      const endpoint = submission.adminId 
+                                        ? `/driver-wallet/admin/cash-submissions/${submission.id}/reject`
+                                        : `/driver-wallet/${submission.driverId}/cash-submissions/${submission.id}/reject`;
+                                        
+                                      const response = await api.post(endpoint, {
+                                        rejectionReason: reason
+                                      });
+                                      console.log('Rejection response:', response.data);
+                                      // Refresh all lists
+                                      await fetchPendingCashSubmissions();
+                                      await fetchApprovedCashSubmissions();
+                                      await fetchRejectedCashSubmissions();
+                                      await fetchMerchantWallet();
+                                      await fetchTransactions();
+                                      // Show success message
+                                      alert('Cash submission rejected successfully!');
+                                    } catch (error) {
+                                      console.error('Error rejecting submission:', error);
+                                      alert(error.response?.data?.error || 'Failed to reject submission');
+                                    }
+                                  }
+                                }}
+                                sx={{
+                                  borderColor: '#FF3366',
+                                  color: '#FF3366',
+                                  '&:hover': { borderColor: '#FF3366', backgroundColor: '#FF336620' }
+                                }}
+                              >
+                                Reject
+                              </Button>
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              );
+            };
+
+            const getMySubmissions = () => {
+              if (!user?.id) return [];
+              // Combine all cached submissions and filter by current admin
+              const all = [
+                ...pendingCashSubmissions,
+                ...approvedCashSubmissions,
+                ...rejectedCashSubmissions
+              ];
+              // Use adminId to identify submissions created by this admin
+              const seen = new Set();
+              return all.filter((submission) => {
+                if (submission.adminId !== user.id) {
+                  return false;
+                }
+                // De-duplicate by submission id
+                if (seen.has(submission.id)) {
+                  return false;
+                }
+                seen.add(submission.id);
+                return true;
+              });
+            };
+
+            return (
+              <>
+                {cashSubmissionTab === 'my_submissions' && renderSubmissionTable(getMySubmissions(), false)}
+                {cashSubmissionTab === 'pending' && renderSubmissionTable(pendingCashSubmissions, true)}
+                {cashSubmissionTab === 'approved' && renderSubmissionTable(approvedCashSubmissions, false)}
+                {cashSubmissionTab === 'rejected' && renderSubmissionTable(rejectedCashSubmissions, false)}
+              </>
+            );
+          })()}
+        </>
+      )}
 
       {/* Transaction Details Dialog */}
       <Dialog
@@ -1410,6 +2001,245 @@ const Transactions = () => {
             </DialogActions>
           </>
         )}
+      </Dialog>
+
+      {/* Create Cash Submission Dialog */}
+      <Dialog
+        open={createSubmissionDialogOpen}
+        onClose={() => {
+          setCreateSubmissionDialogOpen(false);
+          setSubmissionFormData({ submissionType: 'cash', amount: '', details: {}, orderIds: [] });
+          setAvailableOrders([]);
+        }}
+        TransitionProps={{
+          onEnter: () => {
+            // Fetch orders when dialog opens
+            fetchOrdersForSelection();
+          }
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Create Cash Submission
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+            <FormControl fullWidth>
+              <InputLabel>Submission Type</InputLabel>
+              <Select
+                value={submissionFormData.submissionType}
+                onChange={(e) => setSubmissionFormData({ ...submissionFormData, submissionType: e.target.value, details: {}, orderIds: submissionFormData.orderIds || [] })}
+                label="Submission Type"
+              >
+                <MenuItem value="cash">Cash</MenuItem>
+                <MenuItem value="purchases">Purchases</MenuItem>
+                <MenuItem value="general_expense">General Expense</MenuItem>
+                <MenuItem value="payment_to_office">Payment to Office</MenuItem>
+                <MenuItem value="walk_in_sale">Walk-In Sale</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Order Selection - Moved to second position */}
+            <Autocomplete
+              multiple
+              options={availableOrders}
+              getOptionLabel={(option) => {
+                const orderId = option.id || option;
+                const customerName = option.customerName || 'Unknown';
+                const totalAmount = option.totalAmount || 0;
+                return `Order #${orderId} - ${customerName} (KES ${parseFloat(totalAmount).toFixed(2)})`;
+              }}
+              value={availableOrders.filter(order => (submissionFormData?.orderIds || []).includes(order.id))}
+              onChange={(event, newValue) => {
+                // Calculate total from selected orders
+                const totalAmount = newValue.reduce((sum, order) => {
+                  return sum + parseFloat(order.totalAmount || 0);
+                }, 0);
+                
+                setSubmissionFormData({
+                  ...submissionFormData,
+                  orderIds: newValue.map(order => order.id),
+                  amount: totalAmount > 0 ? totalAmount.toFixed(2) : ''
+                });
+              }}
+              loading={loadingOrders}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Associated Orders (Optional)"
+                  placeholder="Select orders to associate with this cash submission"
+                  helperText="Select orders to automatically calculate the total amount"
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {loadingOrders ? <CircularProgress color="inherit" size={20} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              renderOption={(props, option) => (
+                <li {...props} key={option.id}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      Order #{option.id} - {option.customerName || 'Unknown'}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      KES {parseFloat(option.totalAmount || 0).toFixed(2)} • {option.status || 'unknown'}
+                    </Typography>
+                  </Box>
+                </li>
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    {...getTagProps({ index })}
+                    key={option.id}
+                    label={`Order #${option.id}`}
+                    size="small"
+                    icon={<ShoppingCart />}
+                  />
+                ))
+              }
+            />
+
+            <TextField
+              label="Amount (KES)"
+              type="number"
+              value={submissionFormData.amount}
+              onChange={(e) => setSubmissionFormData({ ...submissionFormData, amount: e.target.value })}
+              fullWidth
+              required
+              helperText={submissionFormData.orderIds && submissionFormData.orderIds.length > 0 
+                ? `Total from ${submissionFormData.orderIds.length} selected order(s)` 
+                : 'Enter amount or select orders to auto-calculate'}
+            />
+
+            {submissionFormData.submissionType === 'cash' && (
+              <TextField
+                label="Recipient"
+                value={submissionFormData.details.recipientName || ''}
+                onChange={(e) => setSubmissionFormData({
+                  ...submissionFormData,
+                  details: { ...submissionFormData.details, recipientName: e.target.value }
+                })}
+                fullWidth
+                required
+                helperText="The person who received the cash submission"
+              />
+            )}
+
+            {submissionFormData.submissionType === 'purchases' && (
+              <>
+                <TextField
+                  label="Supplier"
+                  value={submissionFormData.details.supplier || ''}
+                  onChange={(e) => setSubmissionFormData({
+                    ...submissionFormData,
+                    details: { ...submissionFormData.details, supplier: e.target.value }
+                  })}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="Item"
+                  value={submissionFormData.details.item || ''}
+                  onChange={(e) => setSubmissionFormData({
+                    ...submissionFormData,
+                    details: { ...submissionFormData.details, item: e.target.value }
+                  })}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="Price"
+                  type="number"
+                  value={submissionFormData.details.price || ''}
+                  onChange={(e) => setSubmissionFormData({
+                    ...submissionFormData,
+                    details: { ...submissionFormData.details, price: e.target.value }
+                  })}
+                  fullWidth
+                  required
+                />
+                <TextField
+                  label="Delivery Location"
+                  value={submissionFormData.details.deliveryLocation || ''}
+                  onChange={(e) => setSubmissionFormData({
+                    ...submissionFormData,
+                    details: { ...submissionFormData.details, deliveryLocation: e.target.value }
+                  })}
+                  fullWidth
+                  required
+                />
+              </>
+            )}
+
+            {submissionFormData.submissionType === 'general_expense' && (
+              <TextField
+                label="Nature of Expense"
+                value={submissionFormData.details.nature || ''}
+                onChange={(e) => setSubmissionFormData({
+                  ...submissionFormData,
+                  details: { ...submissionFormData.details, nature: e.target.value }
+                })}
+                fullWidth
+                required
+              />
+            )}
+
+            {submissionFormData.submissionType === 'payment_to_office' && (
+              <FormControl fullWidth>
+                <InputLabel>Account Type</InputLabel>
+                <Select
+                  value={submissionFormData.details.accountType || ''}
+                  onChange={(e) => setSubmissionFormData({
+                    ...submissionFormData,
+                    details: { ...submissionFormData.details, accountType: e.target.value }
+                  })}
+                  label="Account Type"
+                  required
+                >
+                  <MenuItem value="mpesa">M-Pesa</MenuItem>
+                  <MenuItem value="till">Till</MenuItem>
+                  <MenuItem value="bank">Bank</MenuItem>
+                  <MenuItem value="paybill">Paybill</MenuItem>
+                  <MenuItem value="pdq">PDQ</MenuItem>
+                </Select>
+              </FormControl>
+            )}
+
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            onClick={() => {
+              setCreateSubmissionDialogOpen(false);
+              setSubmissionFormData({ submissionType: 'cash', amount: '', details: {}, orderIds: [] });
+            }}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateSubmission}
+            variant="contained"
+            sx={{
+              backgroundColor: colors.accentText,
+              color: '#FFFFFF',
+              fontWeight: 600,
+              '&:hover': { 
+                backgroundColor: '#00C4A3',
+                color: '#FFFFFF'
+              }
+            }}
+          >
+            Create
+          </Button>
+        </DialogActions>
       </Dialog>
     </Container>
   );
