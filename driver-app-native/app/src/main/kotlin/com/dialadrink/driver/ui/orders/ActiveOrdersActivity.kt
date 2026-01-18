@@ -258,19 +258,13 @@ class ActiveOrdersActivity : AppCompatActivity() {
     private fun removeOrderCards() {
         // Remove only MaterialCardView instances (order cards), preserve TextView (emptyStateText)
         // We need to iterate backwards to avoid index issues when removing
-        val viewsToRemove = mutableListOf<View>()
         for (i in binding.ordersContainer.childCount - 1 downTo 0) {
             val child = binding.ordersContainer.getChildAt(i)
             // Keep TextView (emptyStateText), remove MaterialCardView (order cards)
             if (child is MaterialCardView) {
-                viewsToRemove.add(child)
+                binding.ordersContainer.removeViewAt(i)
             }
         }
-        // Remove all MaterialCardViews
-        viewsToRemove.forEach { binding.ordersContainer.removeView(it) }
-        // Ensure emptyStateText is still in the container after removal
-        ensureEmptyStateTextExists()
-        Log.d(TAG, "🗑️ Removed ${viewsToRemove.size} order cards, remaining children: ${binding.ordersContainer.childCount}")
     }
     
     private fun createOrderCard(order: com.dialadrink.driver.data.model.Order): View {
