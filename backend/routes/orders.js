@@ -21,8 +21,9 @@ if (!process.env.GOOGLE_MAPS_API_KEY && !process.env.REACT_APP_GOOGLE_MAPS_API_K
 
 const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
 
-// Reference point: Taveta Shopping Mall - Stall G1, Taveta Road, Nairobi, Kenya
-const ORIGIN_ADDRESS = 'Taveta Shopping Mall - Stall G1, Taveta Road, Nairobi, Kenya';
+// Reference point: Taveta Shopping Mall - M 48, Taveta Shopping Mall, Taveta Road, Nairobi
+// This is a fallback if no branch is specified - should match branch 4 address
+const ORIGIN_ADDRESS = 'Taveta Shopping Mall - M 48, Taveta Shopping Mall, Taveta Road, Nairobi';
 const ORIGIN_COORDS = { lat: -1.359872, lng: 36.6641152 };
 
 /**
