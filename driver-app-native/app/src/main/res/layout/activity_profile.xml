@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/paper_dark"
+            app:title="Profile"
+            app:titleTextColor="@color/accent"
+            app:navigationIcon="@android:drawable/ic_menu_revert"
+            app:navigationIconTint="@color/accent" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="20dp"
+        android:fillViewport="true"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingBottom="100dp">
+
+            <!-- Driver Info Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/driverInfoCard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="@color/paper_dark"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="2dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Name:"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp"
+                        android:layout_marginTop="6dp" />
+
+                    <TextView
+                        android:id="@+id/driverNameText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Driver Name"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Phone:"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp"
+                        android:layout_marginTop="6dp" />
+
+                    <TextView
+                        android:id="@+id/driverPhoneText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Phone Number"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Status:"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp"
+                        android:layout_marginTop="6dp" />
+
+                    <TextView
+                        android:id="@+id/driverStatusText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="offline"
+                        android:textColor="@color/accent"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="5dp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- App Info Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/appInfoCard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="@color/paper_dark"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="2dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/driverInfoCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/appInfoTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="App Info"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="10dp"
+                        android:layout_marginTop="0dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Version:"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp"
+                        android:layout_marginTop="6dp" />
+
+                    <TextView
+                        android:id="@+id/appVersionText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="1.0.0"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Branch:"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp"
+                        android:layout_marginTop="6dp" />
+
+                    <TextView
+                        android:id="@+id/appBranchText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="N/A"
+                        android:textColor="@color/accent"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="6dp" />
+
+                    <TextView
+                        android:id="@+id/appChannelLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Channel:"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp"
+                        android:layout_marginTop="6dp"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/appChannelText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="N/A"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="5dp"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- Help Section Card -->
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/helpCard"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                app:cardBackgroundColor="@color/paper_dark"
+                app:cardCornerRadius="8dp"
+                app:cardElevation="2dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@id/appInfoCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="12dp">
+
+                    <TextView
+                        android:id="@+id/helpTitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Help"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginBottom="10dp"
+                        android:layout_marginTop="0dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/termsOfUseButton"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Terms of Use"
+                        android:textColor="@color/accent"
+                        android:gravity="start|center_vertical"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:minHeight="48dp"
+                        android:textSize="16sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/privacyPolicyButton"
+                        style="@style/Widget.MaterialComponents.Button.TextButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Privacy Policy"
+                        android:textColor="@color/accent"
+                        android:gravity="start|center_vertical"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="0dp"
+                        android:insetLeft="0dp"
+                        android:insetRight="0dp"
+                        android:minHeight="48dp"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/wolfgangLink"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Developed with love by Wolfgang"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp"
+                        android:clickable="true"
+                        android:focusable="true" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Logout Button (positioned at bottom left) -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/logoutButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:layout_margin="20dp"
+        android:layout_marginBottom="20dp"
+        android:text="Logout"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        app:backgroundTint="#FF3366"
+        app:icon="@android:drawable/ic_menu_revert"
+        app:iconTint="@android:color/white"
+        app:iconGravity="textStart"
+        app:iconPadding="6dp" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
+

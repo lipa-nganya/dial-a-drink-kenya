@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/paper_dark"
+            app:title="Completed Orders"
+            app:titleTextColor="@color/accent"
+            app:navigationIcon="@android:drawable/ic_menu_revert"
+            app:navigationIconTint="@color/accent" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+        android:id="@+id/swipeRefresh"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
+
+        <androidx.core.widget.NestedScrollView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Date Filter Section -->
+                <LinearLayout
+                    android:id="@+id/dateFilterContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="12dp"
+                    android:background="@color/paper_dark"
+                    android:elevation="2dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/fromDateButton"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="6dp"
+                        android:text="From Date"
+                        android:textSize="12sp"
+                        android:textAllCaps="false"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        app:icon="@android:drawable/ic_menu_my_calendar"
+                        app:iconSize="16dp"
+                        app:iconGravity="textStart"
+                        app:iconPadding="4dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/toDateButton"
+                        android:layout_width="0dp"
+                        android:layout_height="36dp"
+                        android:layout_weight="1"
+                        android:layout_marginStart="6dp"
+                        android:layout_marginEnd="6dp"
+                        android:text="To Date"
+                        android:textSize="12sp"
+                        android:textAllCaps="false"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        app:icon="@android:drawable/ic_menu_my_calendar"
+                        app:iconSize="16dp"
+                        app:iconGravity="textStart"
+                        app:iconPadding="4dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/clearDatesButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="36dp"
+                        android:text="Clear"
+                        android:textSize="12sp"
+                        android:textAllCaps="false"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="12dp"
+                        app:icon="@android:drawable/ic_menu_close_clear_cancel"
+                        app:iconSize="16dp"
+                        app:iconGravity="textStart"
+                        app:iconPadding="4dp" />
+
+                </LinearLayout>
+
+                <!-- Stats Section -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/statsCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_margin="16dp"
+                    app:cardBackgroundColor="@color/paper_dark"
+                    app:cardCornerRadius="12dp"
+                    app:cardElevation="4dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:padding="16dp">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="Quick Stats"
+                            android:textColor="@color/text_primary_dark"
+                            android:textSize="18sp"
+                            android:textStyle="bold"
+                            android:layout_marginBottom="12dp" />
+
+                        <!-- Orders Completed -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="8dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Orders Completed:"
+                                android:textColor="@color/text_secondary_dark"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/ordersTodayText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Today: 0"
+                                    android:textColor="@color/accent"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold"
+                                    android:layout_marginEnd="12dp" />
+
+                                <TextView
+                                    android:id="@+id/ordersWeekText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Week: 0"
+                                    android:textColor="@color/accent"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold"
+                                    android:layout_marginEnd="12dp" />
+
+                                <TextView
+                                    android:id="@+id/ordersMonthText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Month: 0"
+                                    android:textColor="@color/accent"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                        <!-- Money Earned -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="Money Earned:"
+                                android:textColor="@color/text_secondary_dark"
+                                android:textSize="14sp" />
+
+                            <LinearLayout
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal">
+
+                                <TextView
+                                    android:id="@+id/earningsTodayText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Today: KES 0"
+                                    android:textColor="@color/accent"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold"
+                                    android:layout_marginEnd="12dp" />
+
+                                <TextView
+                                    android:id="@+id/earningsWeekText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Week: KES 0"
+                                    android:textColor="@color/accent"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold"
+                                    android:layout_marginEnd="12dp" />
+
+                                <TextView
+                                    android:id="@+id/earningsMonthText"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="Month: KES 0"
+                                    android:textColor="@color/accent"
+                                    android:textSize="14sp"
+                                    android:textStyle="bold" />
+
+                            </LinearLayout>
+
+                        </LinearLayout>
+
+                    </LinearLayout>
+
+                </com.google.android.material.card.MaterialCardView>
+
+                <LinearLayout
+                    android:id="@+id/ordersContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingStart="20dp"
+                    android:paddingEnd="20dp"
+                    android:paddingTop="20dp"
+                    android:paddingBottom="20dp">
+
+                    <TextView
+                        android:id="@+id/emptyStateText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="30dp"
+                        android:gravity="center"
+                        android:text="No completed orders"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="16sp"
+                        android:visibility="gone" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </androidx.core.widget.NestedScrollView>
+
+    </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+
+    <ProgressBar
+        android:id="@+id/loadingProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

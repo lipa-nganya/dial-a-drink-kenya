@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- Total Cash At Hand Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="@color/paper_dark"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="4dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/accent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Total Cash At Hand"
+                    android:textColor="@color/text_secondary_dark"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/totalCashText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="KES 0.00"
+                    android:textColor="@color/accent"
+                    android:textSize="32sp"
+                    android:textStyle="bold" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Submit Cash Submission Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="@color/paper_dark"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="4dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/accent"
+            android:clipToPadding="false"
+            android:clipChildren="false">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Submit Cash Submission"
+                    android:textColor="@color/text_primary_dark"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Submission Type Dropdown -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/submissionTypeLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:hint="Submission Type"
+                    app:boxBackgroundMode="outline"
+                    app:boxBackgroundColor="@color/paper_dark"
+                    app:boxStrokeColor="@color/form_field_border_light_green"
+                    app:hintTextColor="#FFFFFF"
+                    app:hintEnabled="true"
+                    app:boxStrokeWidth="2dp"
+                    app:boxStrokeWidthFocused="2dp"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    app:endIconMode="dropdown_menu">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/submissionTypeSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                        android:minHeight="56dp"
+                        android:padding="16dp"
+                        android:textSize="16sp" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Dynamic Form Fields Container -->
+                <LinearLayout
+                    android:id="@+id/dynamicFieldsContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <!-- Purchases Fields -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/supplierLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Supplier"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/supplierEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/itemLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Item Purchased"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/itemEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/priceLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Price (KES)"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/priceEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="numberDecimal"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/deliveryLocationLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Delivery Location"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/deliveryLocationEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="text"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Cash Fields -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/recipientNameLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Recipient Name"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/recipientNameEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textPersonName"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- General Expense Fields -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/natureLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Nature of Expenditure"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/natureEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="textMultiLine"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Payment to Office Fields -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/accountTypeLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Account Type"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        app:endIconMode="dropdown_menu">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/accountTypeSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                </LinearLayout>
+
+                <!-- Amount Field (always visible) -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/amountLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="12dp"
+                    android:hint="Amount (KES)"
+                    app:boxBackgroundMode="outline"
+                    app:boxBackgroundColor="@color/paper_dark"
+                    app:boxStrokeColor="@color/form_field_border_light_green"
+                    app:hintTextColor="#FFFFFF"
+                    app:hintEnabled="true"
+                    app:boxStrokeWidth="2dp"
+                    app:boxStrokeWidthFocused="2dp"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/amountEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="numberDecimal"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#999999"
+                        android:minHeight="56dp"
+                        android:padding="16dp"
+                        android:textSize="16sp" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/errorText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@android:color/holo_red_light"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
+                <ProgressBar
+                    android:id="@+id/loadingProgress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="16dp"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/submitButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:layout_marginTop="16dp"
+                    android:text="Submit Cash Submission"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="@color/accent"
+                    app:cornerRadius="8dp" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+
+</androidx.core.widget.NestedScrollView>
