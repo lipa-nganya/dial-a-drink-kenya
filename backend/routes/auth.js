@@ -214,13 +214,20 @@ router.post('/send-otp', async (req, res) => {
     const otpCode = (isDriver || isShopAgent) ? generateDriverOTP() : generateOTP();
     const expiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000); // 3 hours from now
     
+    // Check if this is a PIN reset request (for any user type)
+    const isResetRequest = req.body.resetPin === true || req.body.reset === true;
+    
     const userType = isShopAgent ? 'Shop Agent' : (isDriver ? 'Driver' : 'Customer');
-    console.log(`📱 ${userType} OTP generated: ${otpCode.length} digits`);
+    const actionType = isResetRequest ? 'PIN reset' : 'login';
+    console.log(`📱 ${userType} OTP generated for ${actionType}: ${otpCode.length} digits`);
     if (driver) {
       console.log(`📱 Driver found: ${driver.name} (${driver.phoneNumber})`);
     }
     if (shopAgent) {
       console.log(`📱 Shop Agent found: ${shopAgent.name} (${shopAgent.mobileNumber})`);
+    }
+    if (isResetRequest) {
+      console.log(`🔄 PIN reset requested - OTP will be sent via SMS`);
     }
 
     // Invalidate any existing unused OTPs for this phone number
@@ -245,7 +252,8 @@ router.post('/send-otp', async (req, res) => {
 
     // Send OTP via SMS (always send, not subject to admin SMS settings)
     // For shop agents and drivers, force sending via Advanta SMS even in local dev
-    const forceSendSMS = isDriver || isShopAgent;
+    // For PIN reset requests, always force send SMS regardless of user type
+    const forceSendSMS = isDriver || isShopAgent || isResetRequest;
     const smsResult = await smsService.sendOTP(cleanedPhone, otpCode, forceSendSMS);
 
     // For drivers and shop agents, always return success even if SMS fails
