@@ -146,7 +146,56 @@ const Cart = () => {
     loadSavedDeliveryInfo();
   }, []);
 
-  // Calculate distance using Haversine formula (in kilometers)
+  // Recalculate road distance when address changes (if in perKm mode)
+  useEffect(() => {
+    const address = customerInfo.address;
+    if (address && deliverySettings.deliveryFeeMode === 'perKm' && address.trim().length > 10) {
+      // Debounce the API call to avoid too many requests
+      const timeoutId = setTimeout(() => {
+        calculateRoadDistance(address);
+      }, 1000); // Wait 1 second after user stops typing
+      
+      return () => clearTimeout(timeoutId);
+    } else if (!address || address.trim().length === 0) {
+      setCalculatedDistance(null);
+    }
+  }, [customerInfo.address, deliverySettings.deliveryFeeMode]);
+
+  const [calculatedDistance, setCalculatedDistance] = useState(null);
+  const [distanceLoading, setDistanceLoading] = useState(false);
+
+  // Calculate road distance using backend API
+  const calculateRoadDistance = async (deliveryAddress) => {
+    if (!deliveryAddress || deliveryAddress.trim() === '') {
+      setCalculatedDistance(null);
+      return null;
+    }
+
+    try {
+      setDistanceLoading(true);
+      // Use the same origin address as the backend (branch 4 address)
+      const response = await api.post('/distance/calculate', {
+        origin: 'Taveta Shopping Mall - M 48, Taveta Shopping Mall, Taveta Road, Nairobi',
+        destination: deliveryAddress
+      });
+
+      if (response.data.success && response.data.distance) {
+        setCalculatedDistance(response.data.distance);
+        return response.data.distance;
+      } else {
+        setCalculatedDistance(null);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error calculating road distance:', error);
+      setCalculatedDistance(null);
+      return null;
+    } finally {
+      setDistanceLoading(false);
+    }
+  };
+
+  // Calculate distance using Haversine formula (fallback only)
   const calculateDistance = (lat1, lon1, lat2, lon2) => {
     const R = 6371; // Earth's radius in kilometers
     const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -182,9 +231,12 @@ const Cart = () => {
     
     // If we don't have category info for all items, default to with-alcohol fee
     if (itemsWithCategoryInfo.length !== items.length) {
-      if (deliverySettings.deliveryFeeMode === 'perKm') {
-        if (deliveryCoordinates) {
-          // Reference point: Taveta Shopping Mall
+        if (deliverySettings.deliveryFeeMode === 'perKm') {
+        // Use calculated road distance if available
+        if (calculatedDistance !== null && calculatedDistance > 0) {
+          return Math.ceil(Math.max(calculatedDistance * deliverySettings.deliveryFeePerKmWithAlcohol, deliverySettings.deliveryFeePerKmWithAlcohol));
+        } else if (deliveryCoordinates) {
+          // Fallback: use Haversine if coordinates available
           const referenceLat = -1.359872;
           const referenceLon = 36.6641152;
           const distance = calculateDistance(
@@ -195,7 +247,7 @@ const Cart = () => {
           );
           return Math.ceil(distance * deliverySettings.deliveryFeePerKmWithAlcohol); // Round up to whole number
         }
-        // Default to 5km if no coordinates
+        // Default to 5km if no distance available
         return Math.ceil(5 * deliverySettings.deliveryFeePerKmWithAlcohol); // Round up to whole number
       }
       return deliverySettings.deliveryFeeWithAlcohol;
@@ -212,8 +264,11 @@ const Cart = () => {
         ? deliverySettings.deliveryFeePerKmWithoutAlcohol 
         : deliverySettings.deliveryFeePerKmWithAlcohol;
       
-      if (deliveryCoordinates) {
-        // Reference point: Taveta Shopping Mall - Stall G1, Taveta Road, Nairobi, Kenya
+      // Use calculated road distance if available, otherwise fallback to Haversine or default
+      if (calculatedDistance !== null && calculatedDistance > 0) {
+        return Math.ceil(Math.max(calculatedDistance * perKmRate, perKmRate)); // Minimum 1km fee, round up
+      } else if (deliveryCoordinates) {
+        // Fallback: use Haversine if coordinates available
         const referenceLat = -1.359872;
         const referenceLon = 36.6641152;
         const distance = calculateDistance(
@@ -224,7 +279,7 @@ const Cart = () => {
         );
         return Math.ceil(Math.max(distance * perKmRate, perKmRate)); // Minimum 1km fee, round up
       }
-      // Default to 5km if no coordinates available
+      // Default to 5km if no distance available
       return Math.ceil(5 * perKmRate); // Round up to whole number
     }
 
@@ -832,8 +887,8 @@ const Cart = () => {
                     setDeliveryCoordinates(null);
                   }
                 }}
-                onPlaceSelect={(placeData) => {
-                  // Capture coordinates when address is selected from autocomplete for distance calculation
+                onPlaceSelect={async (placeData) => {
+                  // Capture coordinates when address is selected from autocomplete for fallback distance calculation
                   if (placeData?.geometry?.location) {
                     const lat = typeof placeData.geometry.location.lat === 'function' 
                       ? placeData.geometry.location.lat() 
@@ -846,6 +901,14 @@ const Cart = () => {
                     }
                   } else if (placeData?.lat && placeData?.lng) {
                     setDeliveryCoordinates({ lat: placeData.lat, lng: placeData.lng });
+                  }
+                  
+                  // Calculate road distance using API when address is selected
+                  if (placeData?.formatted_address || placeData?.name) {
+                    const address = placeData.formatted_address || placeData.name || customerInfo.address;
+                    if (address && deliverySettings.deliveryFeeMode === 'perKm') {
+                      await calculateRoadDistance(address);
+                    }
                   }
                 }}
                 placeholder="Start typing your address..."
