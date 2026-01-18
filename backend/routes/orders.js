@@ -1028,16 +1028,20 @@ router.get('/:id', async (req, res) => {
     }
     
     // Calculate delivery fee from order data (totalAmount - tipAmount - itemsTotal)
-    const itemsTotal = (orderData.items || []).reduce((sum, item) => {
+    // Use the same calculation logic as getOrderFinancialBreakdown for consistency
+    const itemsTotalRaw = (orderData.items || []).reduce((sum, item) => {
       const price = parseFloat(item.price || 0);
       const quantity = parseFloat(item.quantity || 0);
       return sum + (price * quantity);
     }, 0);
+    const itemsTotal = Number(itemsTotalRaw.toFixed(2));
     const tipAmount = parseFloat(orderData.tipAmount || 0);
     const totalAmount = parseFloat(orderData.totalAmount || 0);
-    const deliveryFee = Math.max(0, totalAmount - tipAmount - itemsTotal);
-    orderData.deliveryFee = Number(deliveryFee.toFixed(2));
-    orderData.itemsTotal = Number(itemsTotal.toFixed(2));
+    const deliveryFeeRaw = totalAmount - tipAmount - itemsTotal;
+    const deliveryFee = Number(Math.max(deliveryFeeRaw, 0).toFixed(2));
+    
+    orderData.deliveryFee = deliveryFee;
+    orderData.itemsTotal = itemsTotal;
     
     // For completed orders, include payment transaction data (transactionCode and transactionDate)
     if (orderData.status === 'completed' && orderData.paymentStatus === 'paid') {
