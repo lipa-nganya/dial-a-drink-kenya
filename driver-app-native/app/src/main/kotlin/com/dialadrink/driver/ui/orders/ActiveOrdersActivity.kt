@@ -230,24 +230,10 @@ class ActiveOrdersActivity : AppCompatActivity() {
         Log.d(TAG, "📭 Showing empty state: $message")
         binding.loadingProgress.visibility = View.GONE
         binding.swipeRefresh.isRefreshing = false
-        // Remove order cards first
         removeOrderCards()
-        // Ensure empty state text exists in container
-        ensureEmptyStateTextExists()
-        // Then show empty state
         binding.emptyStateText.text = message
         binding.emptyStateText.visibility = View.VISIBLE
-        // Make sure it's the only visible child
-        binding.emptyStateText.bringToFront()
-        // Ensure text color is visible
-        binding.emptyStateText.setTextColor(getColor(R.color.text_secondary_dark))
-        // Force layout update
-        binding.emptyStateText.requestLayout()
-        binding.ordersContainer.requestLayout()
-        binding.ordersContainer.invalidate()
-        binding.emptyStateText.post {
-            Log.d(TAG, "✅ Empty state post: visible=${binding.emptyStateText.visibility == View.VISIBLE}, text='${binding.emptyStateText.text}', alpha=${binding.emptyStateText.alpha}, container children: ${binding.ordersContainer.childCount}")
-        }
+        Log.d(TAG, "✅ Empty state set: visible=${binding.emptyStateText.visibility == View.VISIBLE}, text='${binding.emptyStateText.text}', container children: ${binding.ordersContainer.childCount}")
     }
     
     private fun ensureEmptyStateTextExists() {
