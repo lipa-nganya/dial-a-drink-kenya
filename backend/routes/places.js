@@ -27,9 +27,14 @@ router.post('/autocomplete', async (req, res) => {
 
     // Check Google API first - it's fast and comprehensive
     // Database will be checked in parallel for exact/starts-with matches only
-    if (!GOOGLE_MAPS_API_KEY) {
-      return res.status(500).json({ 
-        error: 'Google Maps API key not configured' 
+    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY.trim() === '') {
+      console.error('⚠️  GOOGLE_MAPS_API_KEY is not configured in environment variables');
+      // Return empty suggestions instead of 500 error - allows manual typing
+      return res.json({ 
+        suggestions: [],
+        error: 'Google Maps API key not configured. Please configure GOOGLE_MAPS_API_KEY environment variable.',
+        fromDatabase: false,
+        hasGoogleResults: false
       });
     }
 
