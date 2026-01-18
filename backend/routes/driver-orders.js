@@ -8,95 +8,31 @@ const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
 const pushNotifications = require('../services/pushNotifications');
 const { checkDriverCreditLimit } = require('../utils/creditLimit');
+const { sendSuccess, sendError } = require('../utils/apiResponse');
 
-/**
- * Get orders assigned to a driver
- * GET /api/driver-orders/:driverId
- */
-router.get('/:driverId', async (req, res) => {
-  try {
-    const { driverId } = req.params;
-    const { status, startDate, endDate } = req.query;
-
-    // Build where clause
-    const whereClause = { driverId: parseInt(driverId) };
-    
-    // Filter by status if provided (can be multiple statuses)
-    if (status) {
-      const statuses = Array.isArray(status) ? status : [status];
-      whereClause.status = { [Op.in]: statuses };
-    }
-
-    // Filter by date range if provided (for completed orders)
-    let dateFilter = {};
-    if (startDate) {
-      dateFilter.createdAt = { [Op.gte]: new Date(startDate) };
-    }
-    if (endDate) {
-      dateFilter.createdAt = { 
-        ...dateFilter.createdAt,
-        [Op.lte]: new Date(endDate + 'T23:59:59')
-      };
-    }
-
-    const orders = await db.Order.findAll({
-      where: {
-        ...whereClause,
-        ...dateFilter
-      },
-      include: [
-        {
-          model: db.OrderItem,
-          as: 'items',
-          include: [
-            {
-              model: db.Drink,
-              as: 'drink'
-            }
-          ]
-        },
-        {
-          model: db.Branch,
-          as: 'branch',
-          required: false
-        },
-        {
-          model: db.Transaction,
-          as: 'transactions',
-          required: false,
-          order: [['createdAt', 'DESC']]
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-    
-    // Map items to orderItems for compatibility
-    const ordersWithMappedItems = orders.map(order => {
-      const orderData = order.toJSON();
-      if (orderData.items) {
-        orderData.orderItems = orderData.items;
-      }
-      return orderData;
-    });
-
-    res.json(ordersWithMappedItems);
-  } catch (error) {
-    console.error('Error fetching driver orders:', error);
-    res.status(500).json({ error: error.message });
-  }
+// Debug middleware - log all requests to this router
+router.use((req, res, next) => {
+  console.log(`🔍 [DRIVER-ORDERS ROUTER] ${req.method} ${req.path} - OriginalUrl: ${req.originalUrl}`);
+  console.log(`🔍 [DRIVER-ORDERS ROUTER] Route stack:`, router.stack.map(r => r.route ? `${r.route.stack[0].method.toUpperCase()} ${r.route.path}` : 'middleware').join(', '));
+  next();
 });
 
 /**
  * Accept or reject order assignment
  * POST /api/driver-orders/:orderId/respond
+ * IMPORTANT: This route must be defined BEFORE /:driverId to avoid route conflicts
  */
 router.post('/:orderId/respond', async (req, res) => {
+  console.log(`📥 [DRIVER RESPOND] POST /api/driver-orders/:orderId/respond`);
+  console.log(`   OrderId: ${req.params.orderId}`);
+  console.log(`   Body:`, JSON.stringify(req.body, null, 2));
+  console.log(`   Method: ${req.method}, Path: ${req.path}, OriginalUrl: ${req.originalUrl}`);
   try {
     const { orderId } = req.params;
     const { driverId, accepted } = req.body;
 
     if (typeof accepted !== 'boolean') {
-      return res.status(400).json({ error: 'accepted must be a boolean' });
+      return sendError(res, 'accepted must be a boolean', 400);
     }
 
     const order = await db.Order.findByPk(orderId, {
@@ -113,127 +49,625 @@ router.post('/:orderId/respond', async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
+      return sendError(res, 'Order not found', 404);
     }
 
     // Verify driver is assigned to this order
     if (order.driverId !== parseInt(driverId)) {
-      return res.status(403).json({ error: 'Not authorized to respond to this order' });
+      return sendError(res, 'Not authorized to respond to this order', 403);
     }
 
     const oldStatus = order.status;
     const oldDriverId = order.driverId;
-    
-    // Check credit limit if driver is trying to accept the order
+
+    // Check if driver has a pending cancellation request on any order
     if (accepted === true) {
-      const creditCheck = await checkDriverCreditLimit(parseInt(driverId));
-      if (creditCheck.exceeded) {
-        return res.status(403).json({ 
-          error: 'Cannot accept order: Credit limit exceeded',
-          message: `You owe KES ${creditCheck.debt.toFixed(2)} which exceeds your credit limit of KES ${creditCheck.creditLimit.toFixed(2)}. Please settle your balance before accepting new deliveries.`,
-          creditLimit: creditCheck.creditLimit,
-          currentDebt: creditCheck.debt,
-          balance: creditCheck.balance
-        });
+      // Check if cancellationRequested column exists in database
+      let hasCancellationColumns = false;
+      try {
+        const [columns] = await db.sequelize.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'cancellationRequested'"
+        );
+        hasCancellationColumns = columns.length > 0;
+      } catch (schemaError) {
+        // If schema query fails, assume columns don't exist - skip cancellation check
+        hasCancellationColumns = false;
       }
-      
-      // If accepted, update order status to 'confirmed' (in progress)
+
+      // Only check for pending cancellation if columns exist
+      if (hasCancellationColumns) {
+        const pendingCancellation = await db.Order.findOne({
+          where: {
+            driverId: parseInt(driverId),
+            cancellationRequested: true,
+            cancellationApproved: null // Pending approval
+          }
+        });
+
+        if (pendingCancellation) {
+          return sendError(res, `Cannot accept new orders. You have a pending cancellation request for Order #${pendingCancellation.id}. Please wait for admin approval.`, 400);
+        }
+      }
+
+      // If accepted, only update driverAccepted - do NOT change order status
+      // Order status should only be changed by admin or when customer pays
       await order.update({ 
-        driverAccepted: accepted,
-        status: 'confirmed' // Move to in progress
+        driverAccepted: accepted
       });
-      console.log(`✅ Order #${order.id} accepted by driver ${driverId} - status updated from '${oldStatus}' to 'confirmed'`);
+      console.log(`✅ Order #${order.id} accepted by driver ${driverId} - driverAccepted set to true (status remains '${oldStatus}')`);
+      
+      // Update driver's lastActivity when accepting/rejecting orders
+      const driver = await db.Driver.findByPk(driverId);
+      if (driver) {
+        await driver.update({ 
+          lastActivity: new Date()
+        });
+        console.log(`✅ Updated lastActivity for driver ${driverId} (order accept)`);
+      }
     } else {
-      // If rejected, assign order to HOLD driver
-      const { getOrCreateHoldDriver } = require('../utils/holdDriver');
-      const { driver: holdDriver } = await getOrCreateHoldDriver();
-      
+      // If rejected, remove driver assignment (set driverId to null)
       await order.update({ 
         driverAccepted: accepted,
-        driverId: holdDriver.id // Assign to HOLD driver
+        driverId: null // Remove driver assignment - order becomes unassigned
       });
-      console.log(`⚠️ Order #${order.id} rejected by driver ${driverId} - reassigned to HOLD Driver (ID: ${holdDriver.id})`);
+      console.log(`⚠️ Order #${order.id} rejected by driver ${driverId} - driver assignment removed (order is now unassigned)`);
+      
+      // Update driver's lastActivity when rejecting orders
+      const driver = await db.Driver.findByPk(driverId);
+      if (driver) {
+        await driver.update({ 
+          lastActivity: new Date()
+        });
+        console.log(`✅ Updated lastActivity for driver ${driverId} (order reject)`);
+      }
     }
 
-    // Reload order with all associations to get updated data
+    // Reload order with minimal data for response (to avoid large payloads)
     const updatedOrder = await db.Order.findByPk(order.id, {
       include: [
         {
-          model: db.OrderItem,
-          as: 'items',
-          include: [{
-            model: db.Drink,
-            as: 'drink'
-          }]
-        },
-        {
           model: db.Driver,
           as: 'driver',
-          required: false
+          required: false,
+          attributes: ['id', 'name']
         }
-      ]
+      ],
+      attributes: ['id', 'status', 'driverId', 'driverAccepted', 'customerName', 'deliveryAddress', 'totalAmount']
     });
 
-    // Emit Socket.IO events
+    // Emit Socket.IO events (async, don't wait)
     const io = req.app.get('io');
     if (io) {
-      // Notify admin about driver response
-      io.to('admin').emit('driver-order-response', {
-        orderId: order.id,
-        driverId: driverId,
-        accepted: accepted,
-        order: updatedOrder,
-        message: `Driver ${accepted ? 'accepted' : 'rejected'} order #${order.id}`
-      });
-      
-      // Emit order-status-updated event for real-time updates
-      io.to(`order-${order.id}`).emit('order-status-updated', {
-        orderId: order.id,
-        status: updatedOrder.status,
-        oldStatus: oldStatus,
-        paymentStatus: updatedOrder.paymentStatus,
-        order: updatedOrder
-      });
-      
-      // Emit to admin room
-      io.to('admin').emit('order-status-updated', {
-        orderId: order.id,
-        status: updatedOrder.status,
-        oldStatus: oldStatus,
-        paymentStatus: updatedOrder.paymentStatus,
-        order: updatedOrder
-      });
-      
-      // Also emit to driver room if order still has a driver (for accepted orders)
-      // Also emit to old driver room if driver was changed (for rejected orders)
-      if (updatedOrder.driverId) {
-        io.to(`driver-${updatedOrder.driverId}`).emit('order-status-updated', {
+      // Reload full order for socket events (async, don't block response)
+      db.Order.findByPk(order.id, {
+        include: [
+          {
+            model: db.OrderItem,
+            as: 'items',
+            include: [{
+              model: db.Drink,
+              as: 'drink'
+            }]
+          },
+          {
+            model: db.Driver,
+            as: 'driver',
+            required: false
+          }
+        ]
+      }).then(fullOrder => {
+        // Notify admin about driver response FIRST (this is the primary event)
+        io.to('admin').emit('driver-order-response', {
           orderId: order.id,
-          status: updatedOrder.status,
+          driverId: driverId,
+          accepted: accepted,
+          order: fullOrder,
+          driverName: fullOrder?.driver?.name || null,
+          message: accepted 
+            ? `Driver ${accepted ? 'accepted' : 'rejected'} order #${order.id}`
+            : `⚠️ ALERT: Driver rejected order #${order.id}. Order is now unassigned and needs to be reassigned.`,
+          isDriverResponse: true // Flag to distinguish from status updates
+        });
+        
+        // If rejected, send a specific alert to admin
+        if (!accepted) {
+          io.to('admin').emit('order-rejected-by-driver', {
+            orderId: order.id,
+            driverId: driverId,
+            order: fullOrder,
+            message: `⚠️ Driver rejected order #${order.id}. Please reassign the order.`,
+            requiresAction: true
+          });
+        }
+        
+        // Emit order-status-updated event for real-time updates (secondary event)
+        io.to(`order-${order.id}`).emit('order-status-updated', {
+          orderId: order.id,
+          status: fullOrder.status,
           oldStatus: oldStatus,
-          paymentStatus: updatedOrder.paymentStatus,
-          order: updatedOrder
+          paymentStatus: fullOrder.paymentStatus,
+          order: fullOrder,
+          triggeredByDriverResponse: true
         });
-      }
-      
-      // If driver was changed (rejected), also notify old driver
-      if (oldDriverId && oldDriverId !== updatedOrder.driverId) {
-        io.to(`driver-${oldDriverId}`).emit('driver-removed', {
-          orderId: order.id
+        
+        // Emit to admin room
+        io.to('admin').emit('order-status-updated', {
+          orderId: order.id,
+          status: fullOrder.status,
+          oldStatus: oldStatus,
+          paymentStatus: fullOrder.paymentStatus,
+          order: fullOrder,
+          triggeredByDriverResponse: true
         });
-      }
-      
-      console.log(`📡 Emitted order-status-updated for Order #${order.id}: ${oldStatus} → ${updatedOrder.status}`);
+        
+        // Also emit to driver room if order still has a driver (for accepted orders)
+        if (fullOrder.driverId) {
+          io.to(`driver-${fullOrder.driverId}`).emit('order-status-updated', {
+            orderId: order.id,
+            status: fullOrder.status,
+            oldStatus: oldStatus,
+            paymentStatus: fullOrder.paymentStatus,
+            order: fullOrder
+          });
+        }
+        
+        // If driver was changed (rejected), also notify old driver
+        if (oldDriverId && oldDriverId !== fullOrder.driverId) {
+          io.to(`driver-${oldDriverId}`).emit('driver-removed', {
+            orderId: order.id
+          });
+        }
+      }).catch(err => {
+        console.error('Error loading full order for socket events:', err);
+      });
     }
 
-    res.json({
-      success: true,
-      order: updatedOrder,
-      message: `Order ${accepted ? 'accepted' : 'rejected'} successfully`
-    });
+    // Send response immediately with minimal data
+    sendSuccess(res, updatedOrder, `Order ${accepted ? 'accepted' : 'rejected'} successfully`);
   } catch (error) {
     console.error('Error responding to order:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
+  }
+});
+
+/**
+ * Request cancellation of an order
+ * POST /api/driver-orders/:orderId/request-cancellation
+ */
+router.post('/:orderId/request-cancellation', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { driverId, reason } = req.body;
+
+    if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
+      return sendError(res, 'Cancellation reason is required', 400);
+    }
+
+    if (reason.trim().length > 500) {
+      return sendError(res, 'Cancellation reason must be 500 characters or fewer', 400);
+    }
+
+    // Check if cancellationRequested column exists in database
+    let hasCancellationColumns = false;
+    try {
+      const [columns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'cancellationRequested'"
+      );
+      hasCancellationColumns = columns.length > 0;
+    } catch (schemaError) {
+      // If schema query fails, assume columns don't exist
+      console.warn('⚠️ Could not check for cancellationRequested column, assuming it does not exist:', schemaError.message);
+    }
+
+    // Build attributes list - exclude cancellation columns if they don't exist
+    let orderAttributes = null; // null means select all attributes
+    if (!hasCancellationColumns) {
+      // Get all standard order attributes except cancellation fields
+      const allOrderAttrs = Object.keys(db.Order.rawAttributes);
+      orderAttributes = allOrderAttrs.filter(attr => 
+        !attr.includes('cancellation')
+      );
+    }
+
+    const order = await db.Order.findByPk(orderId, {
+      attributes: orderAttributes
+    });
+
+    if (!order) {
+      return sendError(res, 'Order not found', 404);
+    }
+
+    // Verify driver is assigned to this order
+    if (order.driverId !== parseInt(driverId)) {
+      return sendError(res, 'Not authorized to cancel this order', 403);
+    }
+
+    // Check if order can be cancelled (not already cancelled or completed)
+    if (order.status === 'cancelled' || order.status === 'completed' || order.status === 'delivered') {
+      return sendError(res, 'Order cannot be cancelled at this stage', 400);
+    }
+
+    // Check if cancellation already requested (only if column exists)
+    if (hasCancellationColumns && order.cancellationRequested) {
+      return sendError(res, 'Cancellation already requested for this order', 400);
+    }
+
+    // Request cancellation (only if columns exist)
+    if (hasCancellationColumns) {
+      await order.update({
+        cancellationRequested: true,
+        cancellationReason: reason.trim(),
+        cancellationRequestedAt: new Date()
+      });
+    } else {
+      return sendError(res, 'Cancellation feature is not available in this database version', 501);
+    }
+
+    // Add note to order
+    const cancellationNote = `[${new Date().toISOString()}] Cancellation requested by driver. Reason: ${reason.trim()}`;
+    order.notes = order.notes ? `${order.notes}\n${cancellationNote}` : cancellationNote;
+    await order.save();
+
+    console.log(`📋 Order #${order.id} cancellation requested by driver ${driverId}`);
+
+    // Reload order for response
+    const updatedOrder = await db.Order.findByPk(order.id);
+
+    sendSuccess(res, updatedOrder, 'Cancellation request submitted. Waiting for admin approval.');
+  } catch (error) {
+    console.error('Error requesting cancellation:', error);
+    sendError(res, error.message, 500);
+  }
+});
+
+/**
+ * Get pending orders for a driver (assigned but not yet accepted/rejected)
+ * GET /api/driver-orders/:driverId/pending
+ */
+router.get('/:driverId/pending', async (req, res) => {
+  const queryStartTime = Date.now();
+  try {
+    const { driverId } = req.params;
+    const { summary } = req.query;
+
+    // Get orders assigned to this driver where driverAccepted is null or false
+    // Also exclude cancelled and completed orders from pending list
+    const whereClause = { 
+      driverId: parseInt(driverId),
+      status: {
+        [Op.notIn]: ['cancelled', 'completed']
+      },
+      [Op.or]: [
+        { driverAccepted: null },
+        { driverAccepted: false }
+      ]
+    };
+    
+    console.log(`🔍 [PENDING ORDERS] Query for driver ${driverId}:`, JSON.stringify(whereClause, null, 2));
+
+    // Build includes - for summary mode, exclude all nested objects to shrink payload
+    const includes = [];
+    
+    if (summary !== 'true') {
+      // Full mode: include items and drinks (for detail view)
+      includes.push(
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [
+            {
+              model: db.Drink,
+              as: 'drink'
+            }
+          ]
+        },
+        {
+          model: db.Branch,
+          as: 'branch',
+          required: false
+        }
+      );
+    }
+
+    const dbQueryStartTime = Date.now();
+    const orders = await db.Order.findAll({
+      where: whereClause,
+      include: includes,
+      order: [['createdAt', 'DESC']]
+    });
+    const dbQueryTime = Date.now() - dbQueryStartTime;
+    
+    console.log(`🔍 [PENDING ORDERS] Found ${orders.length} pending orders for driver ${driverId}`);
+    if (orders.length > 0) {
+      console.log(`📋 [PENDING ORDERS] Order IDs: ${orders.map(o => `#${o.id} (status: ${o.status}, driverAccepted: ${o.driverAccepted})`).join(', ')}`);
+    } else {
+      // Debug: Check if there are any orders assigned to this driver at all
+      const allDriverOrders = await db.Order.findAll({
+        where: { driverId: parseInt(driverId) },
+        attributes: ['id', 'status', 'driverAccepted', 'driverId'],
+        limit: 10
+      });
+      console.log(`🔍 [PENDING ORDERS DEBUG] Total orders for driver ${driverId}: ${allDriverOrders.length}`);
+      if (allDriverOrders.length > 0) {
+        console.log(`📋 [PENDING ORDERS DEBUG] Sample orders:`, JSON.stringify(allDriverOrders.map(o => ({
+          id: o.id,
+          status: o.status,
+          driverAccepted: o.driverAccepted,
+          driverId: o.driverId
+        })), null, 2));
+      }
+    }
+    
+    // Map items to orderItems for compatibility and add credit limit status
+    const mappingStartTime = Date.now();
+    const { checkDriverCreditLimit } = require('../utils/creditLimit');
+    
+    let ordersWithMappedItems;
+    
+    if (summary === 'true') {
+      // Summary mode: Return only essential fields (no nested objects)
+      ordersWithMappedItems = await Promise.all(orders.map(async (order) => {
+        const orderData = order.toJSON();
+        const result = {
+          id: orderData.id,
+          customerName: orderData.customerName,
+          deliveryAddress: orderData.deliveryAddress,
+          status: orderData.status,
+          paymentStatus: orderData.paymentStatus,
+          totalAmount: orderData.totalAmount,
+          driverId: orderData.driverId,
+          driverAccepted: orderData.driverAccepted,
+          createdAt: orderData.createdAt
+          // Exclude: items, drinks, transactions, branch, etc.
+        };
+        
+        // Add credit limit status for driver app to determine if update button should be disabled
+        const creditCheck = await checkDriverCreditLimit(parseInt(driverId), true);
+        result.creditStatus = {
+          canUpdateOrders: creditCheck.canUpdateOrders,
+          exceeded: creditCheck.exceeded,
+          cashAtHand: creditCheck.cashAtHand,
+          creditLimit: creditCheck.creditLimit,
+          pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
+        };
+        
+        return result;
+      }));
+    } else {
+      // Full mode: Include all nested objects
+      ordersWithMappedItems = await Promise.all(orders.map(async (order) => {
+        const orderData = order.toJSON();
+        if (orderData.items) {
+          orderData.orderItems = orderData.items;
+        }
+        
+        // Add credit limit status for driver app to determine if update button should be disabled
+        const creditCheck = await checkDriverCreditLimit(parseInt(driverId), true);
+        orderData.creditStatus = {
+          canUpdateOrders: creditCheck.canUpdateOrders,
+          exceeded: creditCheck.exceeded,
+          cashAtHand: creditCheck.cashAtHand,
+          creditLimit: creditCheck.creditLimit,
+          pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
+        };
+        
+        return orderData;
+      }));
+    }
+    
+    const mappingTime = Date.now() - mappingStartTime;
+    const totalTime = Date.now() - queryStartTime;
+    const payloadSize = JSON.stringify(ordersWithMappedItems).length;
+    console.log(`📊 GET /api/driver-orders/${driverId}/pending - Query: ${dbQueryTime}ms, Mapping: ${mappingTime}ms, Total: ${totalTime}ms, Orders: ${orders.length}, Payload: ${(payloadSize / 1024).toFixed(2)} KB`);
+
+    sendSuccess(res, ordersWithMappedItems);
+  } catch (error) {
+    const totalTime = Date.now() - queryStartTime;
+    console.error(`❌ Error fetching pending orders (${totalTime}ms):`, error);
+    sendError(res, error.message, 500);
+  }
+});
+
+/**
+ * Get orders assigned to a driver
+ * GET /api/driver-orders/:driverId
+ */
+router.get('/:driverId', async (req, res) => {
+  const queryStartTime = Date.now();
+  console.log(`🔍 [ACTIVE ORDERS] Request received: GET /api/driver-orders/${req.params.driverId}`);
+  console.log(`🔍 [ACTIVE ORDERS] Query params:`, req.query);
+  try {
+    const { driverId } = req.params;
+    const { status, startDate, endDate, includeTransactions, summary } = req.query;
+
+    // Build where clause
+    const whereClause = { driverId: parseInt(driverId) };
+    
+    // Filter by status if provided (can be multiple statuses)
+    if (status) {
+      // Handle comma-separated string or array
+      let statuses;
+      if (Array.isArray(status)) {
+        statuses = status;
+      } else if (typeof status === 'string' && status.includes(',')) {
+        statuses = status.split(',').map(s => s.trim());
+      } else {
+        statuses = [status];
+      }
+      
+      // For active orders (when status filter includes active statuses), also require driverAccepted = true
+      // This ensures only accepted orders show in active list, regardless of status
+      const activeStatuses = ['pending', 'confirmed', 'out_for_delivery'];
+      const isActiveQuery = statuses.some(s => activeStatuses.includes(s));
+      
+      console.log(`🔍 [ACTIVE ORDERS] Status filter: ${status}, isActiveQuery: ${isActiveQuery}, statuses:`, statuses);
+      
+      if (isActiveQuery) {
+        // Active orders: require driverAccepted = true and exclude cancelled/completed
+        whereClause.driverAccepted = true;
+        // Filter out cancelled/completed from the statuses array before using Op.in
+        const filteredStatuses = statuses.filter(s => !['cancelled', 'completed'].includes(s));
+        whereClause.status = { [Op.in]: filteredStatuses };
+        console.log(`🔍 [ACTIVE ORDERS] Filtered statuses:`, filteredStatuses);
+        console.log(`🔍 [ACTIVE ORDERS] Where clause:`, JSON.stringify(whereClause, null, 2));
+      } else {
+        // Non-active orders: just filter by status
+        whereClause.status = { [Op.in]: statuses };
+      }
+    }
+
+    // Filter by date range if provided (for completed orders)
+    let dateFilter = {};
+    if (startDate) {
+      dateFilter.createdAt = { [Op.gte]: new Date(startDate) };
+    }
+    if (endDate) {
+      dateFilter.createdAt = { 
+        ...dateFilter.createdAt,
+        [Op.lte]: new Date(endDate + 'T23:59:59')
+      };
+    }
+
+    // Build includes - for summary mode, exclude all nested objects to shrink payload
+    const includes = [];
+    
+    if (summary !== 'true') {
+      // Full mode: include items and drinks (for detail view)
+      includes.push(
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [
+            {
+              model: db.Drink,
+              as: 'drink'
+            }
+          ]
+        },
+        {
+          model: db.Branch,
+          as: 'branch',
+          required: false
+        }
+      );
+
+      // Only include transactions if explicitly requested (for completed orders detail view)
+      if (includeTransactions === 'true') {
+        includes.push({
+          model: db.Transaction,
+          as: 'transactions',
+          required: false,
+          order: [['createdAt', 'DESC']],
+          limit: 10 // Limit transactions to most recent 10 for performance
+        });
+      }
+    }
+
+    const dbQueryStartTime = Date.now();
+    const finalWhereClause = {...whereClause, ...dateFilter};
+    console.log(`🔍 [ACTIVE ORDERS] Executing query with whereClause:`, JSON.stringify(finalWhereClause, null, 2));
+    const orders = await db.Order.findAll({
+      where: finalWhereClause,
+      include: includes,
+      order: [['createdAt', 'DESC']]
+    });
+    const dbQueryTime = Date.now() - dbQueryStartTime;
+    console.log(`🔍 [ACTIVE ORDERS] Query completed in ${dbQueryTime}ms, found ${orders.length} orders`);
+    
+    // Map items to orderItems for compatibility and add credit limit status
+    const mappingStartTime = Date.now();
+    const { checkDriverCreditLimit } = require('../utils/creditLimit');
+    
+    let ordersWithMappedItems;
+    
+    if (summary === 'true') {
+      // Summary mode: Return only essential fields (no nested objects)
+      // For completed orders, also include payment transaction data
+      ordersWithMappedItems = await Promise.all(orders.map(async (order) => {
+        const orderData = order.toJSON();
+        const result = {
+          id: orderData.id,
+          customerName: orderData.customerName,
+          deliveryAddress: orderData.deliveryAddress,
+          status: orderData.status,
+          paymentStatus: orderData.paymentStatus,
+          paymentMethod: orderData.paymentMethod,
+          totalAmount: orderData.totalAmount,
+          driverId: orderData.driverId,
+          driverAccepted: orderData.driverAccepted,
+          createdAt: orderData.createdAt
+        };
+        
+        // Add credit limit status for driver app to determine if update button should be disabled
+        const creditCheck = await checkDriverCreditLimit(parseInt(driverId), true);
+        result.creditStatus = {
+          canUpdateOrders: creditCheck.canUpdateOrders,
+          exceeded: creditCheck.exceeded,
+          cashAtHand: creditCheck.cashAtHand,
+          creditLimit: creditCheck.creditLimit,
+          pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
+        };
+        
+        // For completed orders, include payment transaction data
+        if (orderData.status === 'completed' && orderData.paymentStatus === 'paid') {
+          try {
+            const paymentTransaction = await db.Transaction.findOne({
+              where: {
+                orderId: orderData.id,
+                transactionType: 'payment',
+                paymentStatus: 'paid'
+              },
+              order: [['createdAt', 'DESC']],
+              attributes: ['receiptNumber', 'transactionDate']
+            });
+            
+            if (paymentTransaction) {
+              const txData = paymentTransaction.toJSON();
+              result.transactionCode = txData.receiptNumber;
+              result.transactionDate = txData.transactionDate;
+            }
+          } catch (txError) {
+            // If transaction lookup fails, continue without transaction data
+            console.warn(`Could not fetch transaction for order ${orderData.id}:`, txError.message);
+          }
+        }
+        
+        return result;
+      }));
+    } else {
+      // Full mode: Include all nested objects
+      ordersWithMappedItems = await Promise.all(orders.map(async (order) => {
+        const orderData = order.toJSON();
+        if (orderData.items) {
+          orderData.orderItems = orderData.items;
+        }
+        
+        // Add credit limit status for driver app to determine if update button should be disabled
+        const creditCheck = await checkDriverCreditLimit(parseInt(driverId), true);
+        orderData.creditStatus = {
+          canUpdateOrders: creditCheck.canUpdateOrders,
+          exceeded: creditCheck.exceeded,
+          cashAtHand: creditCheck.cashAtHand,
+          creditLimit: creditCheck.creditLimit,
+          pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
+        };
+        
+        return orderData;
+      }));
+    }
+    
+    const mappingTime = Date.now() - mappingStartTime;
+    const totalTime = Date.now() - queryStartTime;
+    const payloadSize = JSON.stringify(ordersWithMappedItems).length;
+    console.log(`📊 GET /api/driver-orders/${driverId} - Query: ${dbQueryTime}ms, Mapping: ${mappingTime}ms, Total: ${totalTime}ms, Orders: ${orders.length}, Payload: ${(payloadSize / 1024).toFixed(2)} KB`);
+
+    // Return standardized response format (wrapped in ApiResponse)
+    // All endpoints should use sendSuccess/sendError for consistency
+    sendSuccess(res, ordersWithMappedItems);
+  } catch (error) {
+    const totalTime = Date.now() - queryStartTime;
+    console.error(`❌ Error fetching driver orders (${totalTime}ms):`, error);
+    sendError(res, error.message, 500);
   }
 });
 
@@ -246,13 +680,9 @@ router.patch('/:orderId/status', async (req, res) => {
     const { orderId } = req.params;
     const { status, driverId, oldStatus } = req.body;
 
-    // Drivers cannot update to 'preparing' - only admin can
-    if (status === 'preparing') {
-      return res.status(403).json({ error: 'Only admin can update order to preparing status' });
-    }
 
     if (!status || !['out_for_delivery', 'delivered', 'completed'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
+      return sendError(res, 'Invalid status', 400);
     }
 
     const order = await db.Order.findByPk(orderId, {
@@ -260,33 +690,51 @@ router.patch('/:orderId/status', async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
+      return sendError(res, 'Order not found', 404);
     }
 
     // Verify driver is assigned to this order
     if (order.driverId !== parseInt(driverId)) {
-      return res.status(403).json({ error: 'Not authorized to update this order' });
+      return sendError(res, 'Not authorized to update this order', 403);
     }
 
+    // Check credit limit - driver can update orders if:
+    // 1. Cash at hand is within limit, OR
+    // 2. Cash at hand exceeds limit BUT has pending cash submissions (which will reduce cash at hand when approved)
+    const creditCheck = await checkDriverCreditLimit(parseInt(driverId), true);
+    console.log(`🔍 [Credit Limit Check] Order #${orderId}, Driver ${driverId}:`, {
+      cashAtHand: creditCheck.cashAtHand,
+      creditLimit: creditCheck.creditLimit,
+      exceeded: creditCheck.exceeded,
+      effectiveCashAtHand: creditCheck.effectiveCashAtHand,
+      pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount,
+      canUpdateOrders: creditCheck.canUpdateOrders
+    });
+    
+    if (!creditCheck.canUpdateOrders) {
+      console.log(`❌ [Credit Limit Blocked] Order #${orderId} update blocked for driver ${driverId}: Cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds limit (KES ${creditCheck.creditLimit.toFixed(2)})`);
+      return sendError(res, `Cannot update order: Credit limit exceeded. Your cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds your credit limit of KES ${creditCheck.creditLimit.toFixed(2)}. Please make cash submissions and wait for approval before updating orders.`, 403);
+    }
+    
+    console.log(`✅ [Credit Limit Passed] Order #${orderId} update allowed for driver ${driverId}`);
+
     // Strict step-by-step validation: Cannot skip statuses
-    const statusFlow = ['pending', 'confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'];
+    const statusFlow = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed'];
     const currentStatusIndex = statusFlow.indexOf(order.status);
     const newStatusIndex = statusFlow.indexOf(status);
 
     if (currentStatusIndex === -1 || newStatusIndex === -1) {
-      return res.status(400).json({ error: 'Invalid status transition' });
+      return sendError(res, 'Invalid status transition', 400);
     }
 
     // Must be exactly one step forward (unless auto-completing from delivered)
     if (status === 'completed') {
       // Allow completion only from delivered status
       if (order.status !== 'delivered') {
-        return res.status(400).json({ error: 'Can only complete orders that are delivered' });
+        return sendError(res, 'Can only complete orders that are delivered', 400);
       }
     } else if (newStatusIndex !== currentStatusIndex + 1) {
-      return res.status(400).json({ 
-        error: `Cannot update to ${status}. Order must be in ${statusFlow[currentStatusIndex]} status first.` 
-      });
+      return sendError(res, `Cannot update to ${status}. Order must be in ${statusFlow[currentStatusIndex]} status first.`, 400);
     }
 
     let finalStatus = status;
@@ -294,7 +742,7 @@ router.patch('/:orderId/status', async (req, res) => {
     // If delivered and payment is paid, auto-update to completed
     if (status === 'delivered') {
       if (order.paymentType === 'pay_on_delivery' && order.paymentStatus !== 'paid') {
-        return res.status(400).json({ error: 'Cannot mark order as delivered until payment is confirmed as paid.' });
+        return sendError(res, 'Cannot mark order as delivered until payment is confirmed as paid.', 400);
       }
     }
 
@@ -304,6 +752,15 @@ router.patch('/:orderId/status', async (req, res) => {
     } else {
       // Update order status
       await order.update({ status });
+    }
+
+    // Update driver's lastActivity whenever they update an order status
+    const driver = await db.Driver.findByPk(driverId);
+    if (driver) {
+      await driver.update({ 
+        lastActivity: new Date()
+      });
+      console.log(`✅ Updated lastActivity for driver ${driverId} (order status update)`);
     }
 
     // Trigger Valkyrie webhooks if enabled
@@ -359,11 +816,11 @@ router.patch('/:orderId/status', async (req, res) => {
       }
     } else if (finalStatus === 'out_for_delivery') {
       // Update driver status to on_delivery
-      const driver = await db.Driver.findByPk(driverId);
-      if (driver) {
-        await driver.update({ 
-          status: 'on_delivery',
-          lastActivity: new Date()
+      // Note: lastActivity is already updated above for all status updates
+      const driverForStatus = await db.Driver.findByPk(driverId);
+      if (driverForStatus) {
+        await driverForStatus.update({ 
+          status: 'on_delivery'
         });
       }
     }
@@ -423,10 +880,10 @@ router.patch('/:orderId/status', async (req, res) => {
       console.log(`📡 Emitted order-status-updated to admin room for Order #${freshOrder.id}: ${oldStatus} → ${freshOrder.status}`);
     }
 
-    res.json(order);
+    sendSuccess(res, freshOrder);
   } catch (error) {
     console.error('Error updating order status:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -442,26 +899,26 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
     const order = await db.Order.findByPk(orderId);
 
     if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
+      return sendError(res, 'Order not found', 404);
     }
 
     // Verify driver is assigned to this order
     if (order.driverId !== parseInt(driverId)) {
-      return res.status(403).json({ error: 'Not authorized' });
+      return sendError(res, 'Not authorized', 403);
     }
 
     // Check if order is pay on delivery
     if (order.paymentType !== 'pay_on_delivery') {
-      return res.status(400).json({ error: 'Order is not pay on delivery' });
+      return sendError(res, 'Order is not pay on delivery', 400);
     }
 
     // Check if already paid
     if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Order is already paid' });
+      return sendError(res, 'Order is already paid', 400);
     }
 
     if (!['out_for_delivery'].includes(order.status)) {
-      return res.status(400).json({ error: 'Order must be marked as On the Way before sending a payment prompt.' });
+      return sendError(res, 'Order must be marked as On the Way before sending a payment prompt.', 400);
     }
 
     // Format phone number
@@ -631,24 +1088,19 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
       // Don't wait for callback - that will come separately
       // The callback will handle payment status updates and notify driver via socket
       
-      res.json({
-        success: true,
-        message: 'Payment request sent to customer. Waiting for payment confirmation...',
+      sendSuccess(res, {
         checkoutRequestID: checkoutRequestID,
         merchantRequestID: merchantRequestID,
         status: 'pending' // Payment is pending until callback confirms
-      });
+      }, 'Payment request sent to customer. Waiting for payment confirmation...');
     } else {
       // Only fail if STK push couldn't be initiated at all (network error, invalid credentials, etc.)
       // Not if it's just waiting for user to enter PIN
-      res.status(500).json({
-        success: false,
-        error: stkResult.error || 'Failed to initiate payment request'
-      });
+      sendError(res, stkResult.error || 'Failed to initiate payment request', 500);
     }
   } catch (error) {
     console.error('Error initiating payment:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
 });
 
@@ -671,19 +1123,19 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     });
 
     if (!order) {
-      return res.status(404).json({ error: 'Order not found' });
+      return sendError(res, 'Order not found', 404);
     }
 
     if (order.driverId !== parseInt(driverId)) {
-      return res.status(403).json({ error: 'Not authorized' });
+      return sendError(res, 'Not authorized', 403);
     }
 
     if (order.paymentType !== 'pay_on_delivery') {
-      return res.status(400).json({ error: 'Order is not pay on delivery' });
+      return sendError(res, 'Order is not pay on delivery', 400);
     }
 
     if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Order payment is already marked as paid' });
+      return sendError(res, 'Order payment is already marked as paid', 400);
     }
 
     const now = new Date();
@@ -756,16 +1208,33 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     const { itemsTotal, deliveryFee, tipAmount } = await getOrderFinancialBreakdown(order.id);
     const totalAmount = parseFloat(order.totalAmount) || 0;
 
-    const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+    const [driverPayEnabledSetting, driverPayModeSetting, driverPayAmountSetting, driverPayPercentageSetting] = await Promise.all([
       db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryMode' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryPercentage' } }).catch(() => null)
     ]);
 
     const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
+    const driverPayMode = driverPayModeSetting?.value || 'amount';
+    const isPercentageMode = driverPayMode === 'percentage';
     const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-    const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
-      ? Math.min(parseFloat(deliveryFee) || 0, configuredDriverPayAmount)
-      : 0;
+    const configuredDriverPayPercentage = parseFloat(driverPayPercentageSetting?.value || '30');
+    
+    let driverPayAmount = 0;
+    if (driverPaySettingEnabled && order.driverId) {
+      if (isPercentageMode) {
+        // Percentage mode: calculate driver pay as percentage of delivery fee
+        const deliveryFeeAmount = parseFloat(deliveryFee) || 0;
+        driverPayAmount = deliveryFeeAmount * (configuredDriverPayPercentage / 100);
+        driverPayAmount = Math.min(driverPayAmount, deliveryFeeAmount);
+      } else {
+        // Amount mode: use fixed amount
+        driverPayAmount = configuredDriverPayAmount > 0
+          ? Math.min(parseFloat(deliveryFee) || 0, configuredDriverPayAmount)
+          : 0;
+      }
+    }
     const merchantDeliveryAmount = Math.max((parseFloat(deliveryFee) || 0) - driverPayAmount, 0);
 
     if (merchantDeliveryAmount > 0.01) {
@@ -876,6 +1345,7 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
 
     await order.update({
       paymentStatus: 'paid',
+      paymentMethod: paymentMethod, // Save payment method (cash or mobile_money)
       paymentConfirmedAt: now,
       notes: order.notes ? `${order.notes}\n${manualConfirmationNote}` : manualConfirmationNote,
       driverPayAmount: driverPayAmount > 0 ? driverPayAmount : order.driverPayAmount
@@ -970,14 +1440,19 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       });
     }
 
-    res.json({
-      success: true,
-      order
-    });
+    sendSuccess(res, order);
   } catch (error) {
     console.error('Error confirming cash payment:', error);
-    res.status(500).json({ error: error.message });
+    sendError(res, error.message, 500);
   }
+});
+
+// Catch-all route to debug unmatched requests
+router.use((req, res, next) => {
+  console.log(`⚠️ [DRIVER-ORDERS] Unmatched request: ${req.method} ${req.path} - OriginalUrl: ${req.originalUrl}`);
+  console.log(`⚠️ [DRIVER-ORDERS] Query:`, req.query);
+  console.log(`⚠️ [DRIVER-ORDERS] Params:`, req.params);
+  next(); // Let Express handle 404
 });
 
 module.exports = router;

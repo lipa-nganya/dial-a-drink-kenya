@@ -41,17 +41,33 @@ const buildAdminUserResponse = (adminInstance) => {
   if (!adminInstance) {
     return null;
   }
-  const data = adminInstance.toJSON ? adminInstance.toJSON() : adminInstance;
-  return {
-    id: data.id,
-    username: data.username,
-    email: data.email,
-    role: data.role || 'admin',
-    name: data.name || null,
-    mobileNumber: data.mobileNumber || null,
-    createdAt: data.createdAt || null,
-    updatedAt: data.updatedAt || null
-  };
+  try {
+    // Handle Sequelize instances, plain objects, and objects with toJSON
+    const data = adminInstance.toJSON ? adminInstance.toJSON() : (adminInstance.dataValues || adminInstance);
+    return {
+      id: data.id,
+      username: data.username,
+      email: data.email,
+      role: data.role || 'admin',
+      name: data.name || null,
+      mobileNumber: data.mobileNumber || null,
+      createdAt: data.createdAt || null,
+      updatedAt: data.updatedAt || null
+    };
+  } catch (err) {
+    console.error('Error building admin user response:', err);
+    // Fallback to direct property access
+    return {
+      id: adminInstance.id,
+      username: adminInstance.username,
+      email: adminInstance.email,
+      role: adminInstance.role || 'admin',
+      name: adminInstance.name || null,
+      mobileNumber: adminInstance.mobileNumber || null,
+      createdAt: adminInstance.createdAt || null,
+      updatedAt: adminInstance.updatedAt || null
+    };
+  }
 };
 
 const toNumber = (value) => {
@@ -281,54 +297,35 @@ router.post('/auth/login', async (req, res) => {
 
     const trimmedUsername = username.trim();
 
-    // Find admin user - try exact match first (simpler and faster)
-    let adminUser = await db.Admin.findOne({
-      where: {
-        [Op.or]: [
-          { username: trimmedUsername },
-          { email: trimmedUsername }
-        ]
-      },
-      attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
-    });
-
-    // If not found, try case-insensitive search
-    if (!adminUser) {
-      const lowerUsername = trimmedUsername.toLowerCase();
-      // Use raw query for case-insensitive search as fallback
-      const [results] = await db.sequelize.query(
-        `SELECT id, username, email, password, role, name, "mobileNumber", "createdAt", "updatedAt" 
-         FROM admins 
-         WHERE LOWER(username) = :username OR LOWER(email) = :email 
-         LIMIT 1`,
-        {
-          replacements: { username: lowerUsername, email: lowerUsername },
-          type: db.sequelize.QueryTypes.SELECT
-        }
-      );
-      if (results && results.length > 0) {
-        adminUser = await db.Admin.findByPk(results[0].id, {
-          attributes: ['id', 'username', 'email', 'password', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
-        });
+    // Use raw SQL query - only select columns that definitely exist
+    // Start with just the essential columns to avoid column errors
+    const results = await db.sequelize.query(
+      `SELECT id, username, email, password, role, "createdAt", "updatedAt" 
+       FROM admins 
+       WHERE username = :username OR email = :username
+       LIMIT 1`,
+      {
+        replacements: { username: trimmedUsername },
+        type: db.sequelize.QueryTypes.SELECT
       }
-    }
+    );
 
-    if (!adminUser) {
+    if (!results || results.length === 0) {
       return res.status(401).json({
         success: false,
         error: 'Invalid username or password'
       });
     }
 
-    // Check if password exists
-    if (!adminUser.password) {
+    const adminUser = results[0];
+
+    if (!adminUser || !adminUser.password) {
       return res.status(401).json({
         success: false,
         error: 'Invalid username or password'
       });
     }
 
-    // Verify password
     const isPasswordValid = await bcrypt.compare(password, adminUser.password);
 
     if (!isPasswordValid) {
@@ -338,7 +335,6 @@ router.post('/auth/login', async (req, res) => {
       });
     }
 
-    // Generate JWT token
     const tokenPayload = {
       id: adminUser.id,
       username: adminUser.username,
@@ -349,20 +345,40 @@ router.post('/auth/login', async (req, res) => {
       expiresIn: ADMIN_TOKEN_TTL
     });
 
-    // Return success response
     return res.json({
       success: true,
       message: 'Login successful',
       token,
-      user: buildAdminUserResponse(adminUser)
+      user: {
+        id: adminUser.id,
+        username: adminUser.username,
+        email: adminUser.email,
+        role: adminUser.role || 'admin',
+        name: null,
+        mobileNumber: null,
+        createdAt: adminUser.createdAt || null,
+        updatedAt: adminUser.updatedAt || null
+      }
     });
   } catch (error) {
+    // Don't send response if headers have already been sent
+    if (res.headersSent) {
+      console.error('Admin login error (headers already sent):', error);
+      return;
+    }
+    
     console.error('Admin login error:', error);
-    console.error('Error details:', {
-      name: error.name,
-      message: error.message,
-      stack: error.stack
-    });
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    if (error.original) {
+      console.error('Original error:', error.original.message);
+      console.error('Original code:', error.original.code);
+      console.error('Original SQL:', error.original.sql);
+      console.error('Original routine:', error.original.routine);
+    }
+    if (error.stack) {
+      console.error('Error stack:', error.stack);
+    }
     
     return res.status(500).json({
       success: false,
@@ -510,16 +526,45 @@ router.get('/stats', async (req, res) => {
 // Get all transactions (admin)
 router.get('/transactions', async (req, res) => {
   try {
+    // Get actual columns that exist in the database for Order
+    let validOrderAttributes;
+    try {
+      const [existingOrderColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
+      );
+      const orderColumnNames = new Set(existingOrderColumns.map(col => col.column_name.toLowerCase()));
+      
+      // Map model attributes to database column names and filter to only existing columns
+      validOrderAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        // Check if the database column exists (case-insensitive)
+        if (orderColumnNames.has(dbColumnName.toLowerCase())) {
+          validOrderAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      // Fallback: use a safe default set of attributes if schema query fails
+      console.warn('⚠️ Could not query information_schema for orders, using default attributes:', schemaError.message);
+      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'notes', 'createdAt', 'updatedAt'];
+    }
+    
     // Build includes array conditionally
     const orderIncludes = [
       {
         model: db.OrderItem,
         as: 'items',
         required: false,
+        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
         include: [{
           model: db.Drink,
           as: 'drink',
-          required: false
+          required: false,
+          attributes: [
+            'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+            'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+            'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+          ]
         }]
       },
       {
@@ -530,21 +575,15 @@ router.get('/transactions', async (req, res) => {
       }
     ];
     
-    // Include Branch association (branchId column exists and association is set up)
-    if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
-      orderIncludes.push({
-        model: db.Branch,
-        as: 'branch',
-        required: false,
-        attributes: ['id', 'name', 'address', 'latitude', 'longitude']
-      });
-    }
+    // Branch association removed - no longer relevant/displayed
     
     const transactions = await db.Transaction.findAll({
+      attributes: ['id', 'orderId', 'driverId', 'driverWalletId', 'transactionType', 'paymentMethod', 'paymentProvider', 'amount', 'status', 'paymentStatus', 'receiptNumber', 'checkoutRequestID', 'merchantRequestID', 'phoneNumber', 'transactionDate', 'notes', 'createdAt', 'updatedAt'],
       include: [{
         model: db.Order,
         as: 'order',
         required: false,
+        attributes: validOrderAttributes,
         include: orderIncludes
       }, {
         model: db.Driver,
@@ -571,7 +610,9 @@ router.get('/transactions', async (req, res) => {
     res.json(normalizedTransactions);
   } catch (error) {
     console.error('Error fetching transactions:', error);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
@@ -607,17 +648,50 @@ router.get('/merchant-wallet', async (req, res) => {
 // Get all drinks (admin)
 router.get('/drinks', async (req, res) => {
   try {
+    // Get actual columns that exist in the database for Drink
+    let validDrinkAttributes;
+    try {
+      const [existingDrinkColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'drinks' ORDER BY column_name"
+      );
+      const drinkColumnNames = new Set(existingDrinkColumns.map(col => col.column_name.toLowerCase()));
+      
+      // Map model attributes to database column names and filter to only existing columns
+      validDrinkAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        // Check if the database column exists (case-insensitive)
+        if (drinkColumnNames.has(dbColumnName.toLowerCase())) {
+          validDrinkAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      // Fallback: use a safe default set of attributes if schema query fails (exclude purchasePrice)
+      console.warn('⚠️ Could not query information_schema for drinks, using default attributes:', schemaError.message);
+      validDrinkAttributes = [
+        'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+        'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+        'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+      ];
+    }
+    
     const drinks = await db.Drink.findAll({
-      // Include all attributes by default (purchasePrice is included)
+      attributes: validDrinkAttributes,
       include: [{
         model: db.Category,
-        as: 'category'
+        as: 'category',
+        attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
+        required: false
       }, {
         model: db.SubCategory,
-        as: 'subCategory'
+        as: 'subCategory',
+        required: false,
+        attributes: ['id', 'name', 'categoryId', 'createdAt', 'updatedAt']
       }, {
         model: db.Brand,
-        as: 'brand'
+        as: 'brand',
+        required: false,
+        attributes: ['id', 'name', 'description', 'isActive', 'createdAt', 'updatedAt']
       }],
       order: [['name', 'ASC']]
     });
@@ -625,7 +699,9 @@ router.get('/drinks', async (req, res) => {
     res.json(drinks);
   } catch (error) {
     console.error('Error fetching drinks:', error);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
@@ -1042,25 +1118,54 @@ router.get('/save-the-fishes', async (req, res) => {
 // Get all orders (admin)
 router.get('/orders', verifyAdmin, async (req, res) => {
   try {
+    // Get actual columns that exist in the database for Order
+    let validOrderAttributes;
+    try {
+      const [existingOrderColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
+      );
+      const orderColumnNames = new Set(existingOrderColumns.map(col => col.column_name.toLowerCase()));
+      
+      // Map model attributes to database column names and filter to only existing columns
+      validOrderAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        // Check if the database column exists (case-insensitive)
+        if (orderColumnNames.has(dbColumnName.toLowerCase())) {
+          validOrderAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      // Fallback: use a safe default set of attributes if schema query fails
+      console.warn('⚠️ Could not query information_schema for orders, using default attributes:', schemaError.message);
+      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'notes', 'createdAt', 'updatedAt'];
+    }
+    
     // Build includes array conditionally
     const orderIncludes = [
       {
         model: db.OrderItem,
         as: 'items',
         required: false,
+        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
         include: [
           {
             model: db.Drink,
             as: 'drink',
-            required: false
-            // Include all attributes by default (purchasePrice should be included)
+            required: false,
+            attributes: [
+              'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+              'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+            ]
           }
         ]
       },
       {
         model: db.Transaction,
         as: 'transactions',
-        required: false
+        required: false,
+        attributes: ['id', 'orderId', 'driverId', 'driverWalletId', 'transactionType', 'paymentMethod', 'paymentProvider', 'amount', 'status', 'paymentStatus', 'receiptNumber', 'checkoutRequestID', 'merchantRequestID', 'phoneNumber', 'transactionDate', 'notes', 'createdAt', 'updatedAt']
       },
       {
         model: db.Driver,
@@ -1070,32 +1175,11 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       }
     ];
     
-    // Include Admin association if it exists (for POS orders)
-    if (db.Admin && db.Order && db.Order.associations && db.Order.associations.servicedByAdmin) {
-      orderIncludes.push({
-        model: db.Admin,
-        as: 'servicedByAdmin',
-        required: false,
-        attributes: ['id', 'username', 'name']
-      });
-    }
-    
-    // Include Branch association only if it exists and is properly set up
-    try {
-      if (db.Branch && db.Order && db.Order.associations && db.Order.associations.branch) {
-        orderIncludes.push({
-          model: db.Branch,
-          as: 'branch',
-          required: false,
-          attributes: ['id', 'name', 'address', 'latitude', 'longitude']
-        });
-      }
-    } catch (branchError) {
-      console.warn('Warning: Could not include Branch association:', branchError.message);
-      // Continue without Branch association
-    }
+    // Branch association removed - no longer relevant/displayed
+    // Admin association (servicedByAdmin) removed - not needed for orders list, same as transactions endpoint
     
     const orders = await db.Order.findAll({
+      attributes: validOrderAttributes,
       include: orderIncludes,
       order: [['createdAt', 'DESC']]
     });
@@ -1113,11 +1197,20 @@ router.get('/orders', verifyAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error fetching admin orders:', error);
     console.error('Error stack:', error.stack);
-    // Return more detailed error in development, generic in production
-    const errorMessage = process.env.NODE_ENV === 'production' 
-      ? 'Failed to fetch orders' 
-      : (error.message || 'Failed to fetch orders');
-    res.status(500).json({ error: errorMessage });
+    if (error.original) {
+      console.error('Original error:', error.original.message);
+      console.error('Error code:', error.original.code);
+      if (error.original.sql) {
+        console.error('SQL query:', error.original.sql.substring(0, 500));
+      }
+    }
+    if (!res.headersSent) {
+      // Return more detailed error in development, generic in production
+      const errorMessage = process.env.NODE_ENV === 'production' 
+        ? 'Failed to fetch orders' 
+        : (error.message || 'Failed to fetch orders');
+      res.status(500).json({ error: errorMessage });
+    }
   }
 });
 
@@ -1277,12 +1370,42 @@ router.patch('/orders/:id/cancellation-request', verifyAdmin, async (req, res) =
       return res.status(400).json({ error: 'approved must be a boolean' });
     }
 
-    const order = await db.Order.findByPk(id);
+    // Check if cancellationRequested column exists in database
+    let hasCancellationColumns = false;
+    try {
+      const [columns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'cancellationRequested'"
+      );
+      hasCancellationColumns = columns.length > 0;
+    } catch (schemaError) {
+      // If schema query fails, assume columns don't exist
+      console.warn('⚠️ Could not check for cancellationRequested column, assuming it does not exist:', schemaError.message);
+    }
+
+    // Build attributes list - exclude cancellation columns if they don't exist
+    let orderAttributes = null; // null means select all attributes
+    if (!hasCancellationColumns) {
+      // Get all standard order attributes except cancellation fields
+      const allOrderAttrs = Object.keys(db.Order.rawAttributes);
+      orderAttributes = allOrderAttrs.filter(attr => 
+        !attr.includes('cancellation')
+      );
+    }
+
+    const order = await db.Order.findByPk(id, {
+      attributes: orderAttributes
+    });
 
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    // If cancellation columns don't exist, return error
+    if (!hasCancellationColumns) {
+      return res.status(501).json({ error: 'Cancellation feature is not available in this database version' });
+    }
+
+    // Check if cancellation already requested (only if column exists)
     if (!order.cancellationRequested) {
       return res.status(400).json({ error: 'No cancellation request found for this order' });
     }
@@ -2399,7 +2522,29 @@ router.get('/me', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const adminRecord = await db.Admin.findByPk(req.admin.id);
+    // Get actual columns that exist in the database for Admin
+    let validAdminAttributes;
+    try {
+      const [existingAdminColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'admins' ORDER BY column_name"
+      );
+      const adminColumnNames = new Set(existingAdminColumns.map(col => col.column_name.toLowerCase()));
+      
+      validAdminAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Admin.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        if (adminColumnNames.has(dbColumnName.toLowerCase())) {
+          validAdminAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      console.warn('⚠️ Could not query information_schema for admins, using default attributes:', schemaError.message);
+      validAdminAttributes = ['id', 'username', 'email', 'role', 'createdAt', 'updatedAt'];
+    }
+
+    const adminRecord = await db.Admin.findByPk(req.admin.id, {
+      attributes: validAdminAttributes
+    });
 
     if (!adminRecord) {
       return res.status(404).json({ error: 'Admin user not found' });
@@ -2408,7 +2553,9 @@ router.get('/me', async (req, res) => {
     return res.json(buildAdminUserResponse(adminRecord));
   } catch (error) {
     console.error('Error fetching current admin user:', error);
-    return res.status(500).json({ error: 'Failed to fetch admin profile' });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Failed to fetch admin profile' });
+    }
   }
 });
 
@@ -2499,14 +2646,39 @@ router.get('/users/:id/whatsapp-link', async (req, res) => {
 // Get all admin users
 router.get('/users', async (req, res) => {
   try {
+    // Get actual columns that exist in the database for Admin
+    let validAdminAttributes;
+    try {
+      const [existingAdminColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'admins' ORDER BY column_name"
+      );
+      const adminColumnNames = new Set(existingAdminColumns.map(col => col.column_name.toLowerCase()));
+      
+      validAdminAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Admin.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        if (adminColumnNames.has(dbColumnName.toLowerCase())) {
+          validAdminAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      console.warn('⚠️ Could not query information_schema for admins, using default attributes:', schemaError.message);
+      validAdminAttributes = ['id', 'username', 'email', 'role', 'createdAt', 'updatedAt'];
+    }
+
     const users = await db.Admin.findAll({
-      attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'hasSetPin'],
+      attributes: validAdminAttributes,
       order: [['createdAt', 'DESC']]
     });
-    res.json(users);
+    
+    if (!res.headersSent) {
+      res.json(users);
+    }
   } catch (error) {
     console.error('Error fetching users:', error);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
@@ -3548,9 +3720,36 @@ router.get('/latest-orders', async (req, res) => {
 // Get inventory analytics (stock valuation, out of stock, slow-moving)
 router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
   try {
+    // Get actual columns that exist in the database for Drink
+    let validDrinkAttributes;
+    let hasPurchasePrice = false;
+    try {
+      const [existingDrinkColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'drinks' ORDER BY column_name"
+      );
+      const drinkColumnNames = new Set(existingDrinkColumns.map(col => col.column_name.toLowerCase()));
+      hasPurchasePrice = drinkColumnNames.has('purchaseprice');
+      
+      // Build attributes list - exclude purchasePrice if it doesn't exist
+      const baseAttributes = ['id', 'name', 'stock', 'isAvailable', 'price', 'originalPrice'];
+      validDrinkAttributes = baseAttributes.filter(attr => {
+        const dbColumnName = db.Drink.rawAttributes[attr]?.field || attr;
+        return drinkColumnNames.has(dbColumnName.toLowerCase());
+      });
+      
+      // Only add purchasePrice if it exists
+      if (hasPurchasePrice) {
+        validDrinkAttributes.push('purchasePrice');
+      }
+    } catch (schemaError) {
+      // Fallback: use attributes without purchasePrice
+      console.warn('⚠️ Could not query information_schema for drinks, using default attributes:', schemaError.message);
+      validDrinkAttributes = ['id', 'name', 'stock', 'isAvailable', 'price', 'originalPrice'];
+    }
+    
     // Get all drinks with their stock and purchase price
     const allDrinks = await db.Drink.findAll({
-      attributes: ['id', 'name', 'stock', 'purchasePrice', 'isAvailable', 'price', 'originalPrice'],
+      attributes: validDrinkAttributes,
       include: [{
         model: db.Category,
         as: 'category',
@@ -3560,10 +3759,13 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
     });
 
     // Calculate stock valuation (sum of stock * purchasePrice)
+    // If purchasePrice doesn't exist, calculate as 70% of price
     let totalStockValuation = 0;
     const drinksWithValuation = allDrinks.map(drink => {
       const stock = parseInt(drink.stock) || 0;
-      const purchasePrice = parseFloat(drink.purchasePrice) || 0;
+      const purchasePrice = hasPurchasePrice && drink.purchasePrice 
+        ? parseFloat(drink.purchasePrice) 
+        : (parseFloat(drink.price) || 0) * 0.7; // Calculate as 70% of price if purchasePrice doesn't exist
       const valuation = stock * purchasePrice;
       totalStockValuation += valuation;
       
@@ -3581,18 +3783,24 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
     const outOfStockItems = allDrinks.filter(drink => {
       const stock = parseInt(drink.stock) || 0;
       return stock === 0 || drink.isAvailable === false;
-    }).map(drink => ({
-      id: drink.id,
-      name: drink.name,
-      stock: parseInt(drink.stock) || 0,
-      purchasePrice: parseFloat(drink.purchasePrice) || 0,
-      price: parseFloat(drink.price) || 0,
-      originalPrice: parseFloat(drink.originalPrice) || 0,
-      category: drink.category ? {
-        id: drink.category.id,
-        name: drink.category.name
-      } : null
-    }));
+    }).map(drink => {
+      const purchasePrice = hasPurchasePrice && drink.purchasePrice 
+        ? parseFloat(drink.purchasePrice) 
+        : (parseFloat(drink.price) || 0) * 0.7;
+      
+      return {
+        id: drink.id,
+        name: drink.name,
+        stock: parseInt(drink.stock) || 0,
+        purchasePrice: purchasePrice,
+        price: parseFloat(drink.price) || 0,
+        originalPrice: parseFloat(drink.originalPrice) || 0,
+        category: drink.category ? {
+          id: drink.category.id,
+          name: drink.category.name
+        } : null
+      };
+    });
 
     // Get slow-moving stock (no sales in completed orders in the last 3 months)
     const threeMonthsAgo = new Date();
@@ -3648,19 +3856,25 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
     // Find drinks that are NOT in the recently sold list (no sales in last 3 months)
     const slowMovingItems = allDrinks
       .filter(drink => !recentlySoldDrinkIds.has(drink.id))
-      .map(drink => ({
-        id: drink.id,
-        name: drink.name,
-        stock: parseInt(drink.stock) || 0,
-        purchasePrice: parseFloat(drink.purchasePrice) || 0,
-        price: parseFloat(drink.price) || 0,
-        originalPrice: parseFloat(drink.originalPrice) || 0,
-        lastSoldDate: lastSaleMap.get(drink.id) || null,
-        category: drink.category ? {
-          id: drink.category.id,
-          name: drink.category.name
-        } : null
-      }));
+      .map(drink => {
+        const purchasePrice = hasPurchasePrice && drink.purchasePrice 
+          ? parseFloat(drink.purchasePrice) 
+          : (parseFloat(drink.price) || 0) * 0.7;
+        
+        return {
+          id: drink.id,
+          name: drink.name,
+          stock: parseInt(drink.stock) || 0,
+          purchasePrice: purchasePrice,
+          price: parseFloat(drink.price) || 0,
+          originalPrice: parseFloat(drink.originalPrice) || 0,
+          lastSoldDate: lastSaleMap.get(drink.id) || null,
+          category: drink.category ? {
+            id: drink.category.id,
+            name: drink.category.name
+          } : null
+        };
+      });
 
     res.json({
       success: true,
