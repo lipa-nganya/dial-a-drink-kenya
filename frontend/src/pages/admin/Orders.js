@@ -173,8 +173,7 @@ const Orders = () => {
     const priorityMap = {
       'pending': 1,
       'confirmed': 2,
-      'preparing': 3,
-      'out_for_delivery': 4,
+      'out_for_delivery': 3,
       'delivered': 5,
       'completed': 6,
       'cancelled': 7
@@ -346,7 +345,6 @@ const Orders = () => {
     switch (status) {
       case 'pending': return 'warning';
       case 'confirmed': return 'info';
-      case 'preparing': return 'primary';
       case 'out_for_delivery': return 'secondary';
       case 'delivered': return 'success';
       case 'completed': return 'success';
@@ -359,7 +357,6 @@ const Orders = () => {
     switch (status) {
       case 'pending': return <AccessTime />;
       case 'confirmed': return <CheckCircle />;
-      case 'preparing': return <ShoppingCart />;
       case 'out_for_delivery': return <LocalShipping />;
       case 'delivered': return <DoneAll />;
       case 'completed': return <DoneAll />;
@@ -372,7 +369,6 @@ const Orders = () => {
     switch (status) {
       case 'pending': return 'Pending';
       case 'confirmed': return 'Confirmed';
-      case 'preparing': return 'Preparing';
       case 'out_for_delivery': return 'On the Way';
       case 'delivered': return 'Delivered';
       case 'completed': return 'Completed';
@@ -408,10 +404,8 @@ const Orders = () => {
       }
       options.push({ value: 'cancelled', label: 'Cancel' });
     } else if (currentStatus === 'confirmed') {
-      options.push({ value: 'preparing', label: 'Start Preparing' });
-      options.push({ value: 'cancelled', label: 'Cancel' });
-    } else if (currentStatus === 'preparing') {
       options.push({ value: 'out_for_delivery', label: 'On the Way' });
+      options.push({ value: 'cancelled', label: 'Cancel' });
     } else if (currentStatus === 'out_for_delivery') {
       options.push({ value: 'delivered', label: 'Mark as Delivered' });
     } else if (currentStatus === 'delivered') {
@@ -509,7 +503,6 @@ const Orders = () => {
             <MenuItem value="all">All Statuses</MenuItem>
             <MenuItem value="pending">Pending</MenuItem>
             <MenuItem value="confirmed">Confirmed</MenuItem>
-            <MenuItem value="preparing">Preparing</MenuItem>
             <MenuItem value="out_for_delivery">On the Way</MenuItem>
             <MenuItem value="delivered">Delivered</MenuItem>
             <MenuItem value="completed">Completed</MenuItem>

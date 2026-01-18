@@ -189,7 +189,6 @@ const AdminDashboard = () => {
     switch (status) {
       case 'pending': return 'warning';
       case 'confirmed': return 'info';
-      case 'preparing': return 'primary';
       case 'out_for_delivery': return 'secondary';
       case 'delivered': return 'success';
       case 'cancelled': return 'error';

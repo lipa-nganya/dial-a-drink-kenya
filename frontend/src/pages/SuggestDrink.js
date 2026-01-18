@@ -17,7 +17,6 @@ const SuggestDrink = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
   const [drinkName, setDrinkName] = useState('');
-  const [description, setDescription] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,7 +32,6 @@ const SuggestDrink = () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       setSubmitted(true);
       setDrinkName('');
-      setDescription('');
     } catch (err) {
       setError('Failed to submit suggestion. Please try again.');
       console.error('Error submitting drink suggestion:', err);
@@ -67,7 +65,7 @@ const SuggestDrink = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
               <Lightbulb sx={{ fontSize: 40, color: colors.accent }} />
               <Typography variant="h6" sx={{ color: colors.textPrimary }}>
-                Have a drink idea? We'd love to hear it!
+                Found everything you need? Tell us what's missing!
               </Typography>
             </Box>
 
@@ -80,18 +78,6 @@ const SuggestDrink = () => {
                 required
                 sx={{ mb: 3 }}
                 placeholder="e.g., Mango Mojito"
-              />
-
-              <TextField
-                fullWidth
-                label="Description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                required
-                multiline
-                rows={6}
-                sx={{ mb: 3 }}
-                placeholder="Tell us about this drink - ingredients, flavor profile, why you think it would be great..."
               />
 
               {error && (

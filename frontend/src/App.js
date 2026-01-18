@@ -2,13 +2,14 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
-import { Snackbar, Alert } from '@mui/material';
+import { Snackbar, Alert, Box } from '@mui/material';
 import { CartProvider, useCart } from './contexts/CartContext';
 import { CustomerProvider } from './contexts/CustomerContext';
 import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import Header from './components/Header';
 import AdminHeader from './components/AdminHeader';
+import Footer from './components/Footer';
 import FloatingHelpButton from './components/FloatingHelpButton';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
@@ -22,10 +23,16 @@ import MyOrders from './pages/MyOrders';
 import CustomerLogin from './pages/CustomerLogin';
 import VerifyEmail from './pages/VerifyEmail';
 import ProductPage from './pages/ProductPage';
+import Brands from './pages/Brands';
+import BrandDetail from './pages/BrandDetail';
 import SuggestDrink from './pages/SuggestDrink';
 import ReportProblem from './pages/ReportProblem';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import TermsOfService from './pages/TermsOfService';
+import DeliveryLocations from './pages/DeliveryLocations';
+import LocationDetails from './pages/LocationDetails';
+import Pricelist from './pages/Pricelist';
+import Sitemap from './pages/Sitemap';
 import AdminOverview from './pages/admin/AdminOverview';
 import Orders from './pages/admin/Orders';
 import Inventory from './pages/admin/Inventory';
@@ -181,14 +188,17 @@ function AppContent() {
   return (
     <MUIThemeProvider theme={muiTheme}>
       <CssBaseline />
-      <div className="App" style={{ backgroundColor: '#FFFFFF', minHeight: '100vh' }}>
+      <div className="App" style={{ backgroundColor: '#FFFFFF', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
         {isAdminRoute && !isAdminLogin && <AdminHeader />}
         {!isAdminRoute && <Header />}
         {!isAdminRoute && <FloatingHelpButton />}
+        <Box component="main" sx={{ flexGrow: 1 }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
           <Route path="/product/:id" element={<ProductPage />} />
+          <Route path="/brands" element={<Brands />} />
+          <Route path="/brand/:id" element={<BrandDetail />} />
           <Route path="/offers" element={<Offers />} />
           <Route path="/test-offers" element={<TestOffers />} />
           <Route path="/cart" element={<Cart />} />
@@ -202,6 +212,10 @@ function AppContent() {
           <Route path="/report-problem" element={<ReportProblem />} />
           <Route path="/privacy-policy" element={<PrivacyPolicy />} />
           <Route path="/terms-of-service" element={<TermsOfService />} />
+          <Route path="/delivery-locations" element={<DeliveryLocations />} />
+          <Route path="/delivery-location/:locationName" element={<LocationDetails />} />
+          <Route path="/pricelist" element={<Pricelist />} />
+          <Route path="/sitemap" element={<Sitemap />} />
           <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
@@ -213,6 +227,8 @@ function AppContent() {
           <Route path="/admin/drivers" element={<PrivateRoute><Drivers /></PrivateRoute>} />
           <Route path="/admin/payables" element={<PrivateRoute><Payables /></PrivateRoute>} />
         </Routes>
+        </Box>
+        {!isAdminRoute && <Footer />}
         
         {/* Cart Snackbar */}
         <Snackbar

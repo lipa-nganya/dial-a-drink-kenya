@@ -248,7 +248,6 @@ const MyOrders = () => {
     switch (status) {
       case 'pending': return 'warning';
       case 'confirmed': return 'info';
-      case 'preparing': return 'primary';
       case 'out_for_delivery': return 'secondary';
       case 'delivered': return 'success';
       case 'completed': return 'success';
@@ -261,7 +260,6 @@ const MyOrders = () => {
     switch (status) {
       case 'pending': return <AccessTime />;
       case 'confirmed': return <CheckCircle />;
-      case 'preparing': return <ShoppingCart />;
       case 'out_for_delivery': return <LocalShipping />;
       case 'delivered': return <CheckCircle />;
       case 'completed': return <CheckCircle />;
@@ -274,7 +272,6 @@ const MyOrders = () => {
     switch (status) {
       case 'pending': return 'Pending';
       case 'confirmed': return 'Confirmed';
-      case 'preparing': return 'Preparing';
       case 'out_for_delivery': return 'On the Way';
       case 'delivered': return 'Delivered';
       case 'completed': return 'Completed';
@@ -476,8 +473,7 @@ const MyOrders = () => {
   const getProgressSteps = (status) => {
     const steps = [
       { label: 'Order Placed', status: 'pending', completed: true },
-      { label: 'Confirmed', status: 'confirmed', completed: ['confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'].includes(status) },
-      { label: 'Preparing', status: 'preparing', completed: ['preparing', 'out_for_delivery', 'delivered', 'completed'].includes(status) },
+      { label: 'Confirmed', status: 'confirmed', completed: ['confirmed', 'out_for_delivery', 'delivered', 'completed'].includes(status) },
       { label: 'On the Way', status: 'out_for_delivery', completed: ['out_for_delivery', 'delivered', 'completed'].includes(status) },
       { label: 'Delivered', status: 'delivered', completed: ['delivered', 'completed'].includes(status) }
     ];

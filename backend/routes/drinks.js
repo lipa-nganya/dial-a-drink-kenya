@@ -6,10 +6,12 @@ const { Op } = require('sequelize');
 // Get all drinks
 router.get('/', async (req, res) => {
   // Set request timeout to prevent hanging
-  req.setTimeout(5000); // 5 second timeout
+  req.setTimeout(30000); // 30 second timeout
+  
+  let queryTimeout = null;
   
   try {
-    const { category, search, popular, available_only } = req.query;
+    const { category, search, popular, available_only, brandId } = req.query;
     let whereClause = {};
     
     // Only filter by availability if explicitly requested
@@ -19,6 +21,10 @@ router.get('/', async (req, res) => {
     
     if (category) {
       whereClause.categoryId = category;
+    }
+    
+    if (brandId) {
+      whereClause.brandId = brandId;
     }
     
     if (search) {
@@ -33,26 +39,28 @@ router.get('/', async (req, res) => {
     }
     
     // Add query timeout to prevent hanging on database connection issues
-    const queryTimeout = setTimeout(() => {
+    queryTimeout = setTimeout(() => {
       console.error('⚠️ Drinks query timeout - database may be unresponsive');
       if (!res.headersSent) {
         res.status(503).json({ error: 'Database query timeout. Please try again.' });
       }
-    }, 8000); // 8 second timeout
+    }, 10000); // 10 second timeout
     
     try {
       const drinks = await Promise.race([
         db.Drink.findAll({
           where: whereClause,
+          attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'],
           include: [{
             model: db.Category,
-            as: 'category'
-          }, {
-            model: db.SubCategory,
-            as: 'subCategory'
+            as: 'category',
+            required: false,
+            attributes: ['id', 'name', 'description', 'image', 'isActive']
           }, {
             model: db.Brand,
-            as: 'brand'
+            as: 'brand',
+            required: false,
+            attributes: ['id', 'name']
           }],
           order: [
             ['isAvailable', 'DESC'], // Available items first (true = 1, false = 0)
@@ -60,31 +68,36 @@ router.get('/', async (req, res) => {
           ]
         }),
         new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Query timeout')), 8000)
+          setTimeout(() => reject(new Error('Query timeout')), 10000)
         )
       ]);
       
-      clearTimeout(queryTimeout);
+      if (queryTimeout) {
+        clearTimeout(queryTimeout);
+        queryTimeout = null;
+      }
       
-      console.log('Returning drinks with capacity pricing:', drinks.map(d => ({ 
-        id: d.id, 
-        name: d.name, 
-        capacityPricing: d.capacityPricing 
-      })));
+      console.log(`✅ Returning ${drinks.length} drinks`);
       
       if (!res.headersSent) {
         res.json(drinks);
       }
     } catch (queryError) {
-      clearTimeout(queryTimeout);
+      if (queryTimeout) {
+        clearTimeout(queryTimeout);
+        queryTimeout = null;
+      }
       throw queryError;
     }
   } catch (error) {
+    if (queryTimeout) {
+      clearTimeout(queryTimeout);
+    }
     console.error('❌ Error fetching drinks:', error);
     if (!res.headersSent) {
       res.status(500).json({ 
-        error: error.message || 'Failed to fetch drinks',
-        message: 'Database connection issue. Please try again in a moment.'
+        error: 'Failed to fetch drinks',
+        message: 'Database query failed. Please try again in a moment.'
       });
     }
   }
@@ -258,9 +271,16 @@ router.get('/:id/testing-notes', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const drink = await db.Drink.findByPk(req.params.id, {
+      attributes: [
+        'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+        'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+        'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+      ],
       include: [{
         model: db.Category,
-        as: 'category'
+        as: 'category',
+        attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
+        required: false
       }]
     });
     
@@ -270,7 +290,13 @@ router.get('/:id', async (req, res) => {
     
     res.json(drink);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error('❌ Error fetching drink by ID:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ 
+        error: 'Failed to fetch drink',
+        message: error.message || 'Database query failed. Please try again in a moment.'
+      });
+    }
   }
 });
 

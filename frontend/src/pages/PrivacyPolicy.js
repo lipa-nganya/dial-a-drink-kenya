@@ -51,8 +51,10 @@ const PrivacyPolicy = () => {
           <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2 }}>
             <li>Name, phone number, and email address</li>
             <li>Delivery address and location information</li>
-            <li>Order history and preferences</li>
+            <li>Order history and preferences (including alcoholic beverage preferences)</li>
             <li>Payment information (processed securely through third-party providers)</li>
+            <li>Age verification information (for compliance with alcohol sales regulations)</li>
+            <li>ID verification data (when required for age verification at delivery)</li>
           </Typography>
         </Box>
 
@@ -61,11 +63,13 @@ const PrivacyPolicy = () => {
             2. How We Use Your Information
           </Typography>
           <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2 }}>
-            <li>Process and fulfill your orders</li>
+            <li>Process and fulfill your orders for alcoholic beverages</li>
+            <li>Verify age and identity for compliance with alcohol sales regulations</li>
             <li>Communicate with you about your orders and our services</li>
             <li>Improve our services and customer experience</li>
-            <li>Send you promotional offers (with your consent)</li>
-            <li>Comply with legal obligations</li>
+            <li>Send you promotional offers (with your consent, and only to customers of legal drinking age)</li>
+            <li>Comply with legal obligations, including alcohol sales regulations and age verification requirements</li>
+            <li>Prevent fraud and ensure responsible alcohol sales</li>
           </Typography>
         </Box>
 
@@ -77,10 +81,11 @@ const PrivacyPolicy = () => {
             We do not sell your personal information. We may share your information with:
           </Typography>
           <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2 }}>
-            <li>Delivery drivers to fulfill your orders</li>
+            <li>Delivery drivers to fulfill your orders (including age verification requirements)</li>
             <li>Payment processors to handle transactions</li>
             <li>Service providers who assist in our operations</li>
-            <li>Legal authorities when required by law</li>
+            <li>Legal authorities when required by law, including alcohol regulatory bodies</li>
+            <li>Age verification services to ensure compliance with alcohol sales regulations</li>
           </Typography>
         </Box>
 

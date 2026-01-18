@@ -62,11 +62,14 @@ import {
   Close,
   KeyboardArrowUp,
   KeyboardArrowDown,
-  AutoAwesome
+  AutoAwesome,
+  Phone,
+  Payment
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { useTheme } from '../contexts/ThemeContext';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { getBackendUrl } from '../utils/backendUrl';
 import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChipProps } from '../utils/chipStyles';
 import NewOrderDialog from '../components/NewOrderDialog';
@@ -79,6 +82,8 @@ const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
 
 const Orders = () => {
   const { isDarkMode, colors } = useTheme();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,6 +91,7 @@ const Orders = () => {
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [customFilter, setCustomFilter] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [branches, setBranches] = useState([]);
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
@@ -101,9 +107,14 @@ const Orders = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [newOrderDialogOpen, setNewOrderDialogOpen] = useState(false);
+  const [orderDetailDialogOpen, setOrderDetailDialogOpen] = useState(false);
+  const [selectedOrderForDetail, setSelectedOrderForDetail] = useState(null);
+  const [promptingPayment, setPromptingPayment] = useState(false);
+  const [paymentPollingInterval, setPaymentPollingInterval] = useState(null);
   
   // Route Optimisation state
   const [activeTab, setActiveTab] = useState(0);
+  const [orderTab, setOrderTab] = useState('all'); // 'all', 'completed', 'pending', 'unassigned', 'confirmed'
   const [riderRoutes, setRiderRoutes] = useState([]);
   const [allRiderRoutes, setAllRiderRoutes] = useState([]);
   const [allRiders, setAllRiders] = useState([]);
@@ -209,7 +220,7 @@ const Orders = () => {
             // Sort by status priority
             const sorted = sortOrdersByStatus(updated);
             // Apply filters after update
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
             return sorted;
           });
         }
@@ -237,43 +248,138 @@ const Orders = () => {
     // Listen for driver order response
     socket.on('driver-order-response', async (data) => {
       console.log('✅ Driver responded to order:', data);
-      // Update the specific order in the list
+      
+      // Show notification to admin about driver response
+      if (data.accepted) {
+        const driverName = data.order?.driver?.name || 'Driver';
+        alert(`✅ Driver Response: ${driverName} accepted Order #${data.orderId}. Order is now in progress.`);
+      } else {
+        const driverName = data.order?.driver?.name || 'Driver';
+        alert(`⚠️ Driver Response: ${driverName} rejected Order #${data.orderId}. Order is now unassigned.`);
+      }
+      
+      // Update the specific order in the list - prioritize driver response data
       setOrders(prevOrders => {
         const updated = prevOrders.map(order => 
           order.id === data.orderId 
-            ? { ...order, driverAccepted: data.accepted, driver: data.order?.driver }
+            ? { 
+                ...order, 
+                driverAccepted: data.accepted, 
+                driver: data.order?.driver || order.driver, 
+                driverId: data.order?.driverId !== undefined ? data.order.driverId : order.driverId,
+                // Only update status if it's explicitly provided in the driver response
+                status: data.order?.status || order.status
+              }
             : order
         );
         const sorted = sortOrdersByStatus(updated);
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
+        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
+    });
+
+    // Listen for order rejected by driver
+    socket.on('order-rejected-by-driver', async (data) => {
+      console.log('⚠️ Order rejected by driver:', data);
+      
+      // Show alert to admin
+      if (data.requiresAction) {
+        alert(`⚠️ ALERT: Driver rejected Order #${data.orderId}. The order is now unassigned and needs to be reassigned.`);
+      }
+      
+      // Update the order - remove driver assignment
+      setOrders(prevOrders => {
+        const updated = prevOrders.map(order => 
+          order.id === data.orderId 
+            ? { ...order, driverId: null, driver: null, driverAccepted: false }
+            : order
+        );
+        const sorted = sortOrdersByStatus(updated);
+        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+        return sorted;
+      });
+      
+      // Refresh orders to get latest data
+      await fetchOrders();
     });
 
     // Listen for order status updates from driver app
     socket.on('order-status-updated', async (data) => {
       console.log('✅ Order status updated via Socket.IO:', data);
       if (data.orderId) {
+        // If this was triggered by a driver response, don't show as a status update
+        // The driver-order-response event already handled the notification
+        if (data.triggeredByDriverResponse) {
+          console.log('📋 Status update triggered by driver response - driver-response event already handled notification');
+        }
+        
         // Update order immediately with status from event
+        // But preserve driverAccepted status if it was set by driver response
         setOrders(prevOrders => {
-          const updated = prevOrders.map(order => 
-            order.id === data.orderId 
-              ? { 
-                  ...order, 
-                  status: data.status || order.status,
-                  paymentStatus: data.paymentStatus || order.paymentStatus,
-                  ...(data.order || {}) // Merge full order object if provided
-                }
-              : order
-          );
+          const updated = prevOrders.map(order => {
+            if (order.id === data.orderId) {
+              // If this order was just accepted/rejected by driver, preserve driverAccepted
+              const updatedOrder = { 
+                ...order, 
+                status: data.status || order.status,
+                paymentStatus: data.paymentStatus || order.paymentStatus,
+                ...(data.order || {}) // Merge full order object if provided
+              };
+              
+              // Preserve driverAccepted if it was set (driver response takes precedence)
+              if (order.driverAccepted !== undefined && order.driverAccepted !== null) {
+                updatedOrder.driverAccepted = order.driverAccepted;
+              }
+              
+              return updatedOrder;
+            }
+            return order;
+          });
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
       }
     });
 
     // Listen for order updates (status changes, payment confirmations, etc.)
+    // Listen for driver status updates
+    socket.on('driver-status-updated', (data) => {
+      console.log('Driver status updated in Orders:', data);
+      // Update driver in local state immediately
+      if (data.driver) {
+        setDrivers(prevDrivers => 
+          prevDrivers.map(driver => 
+            driver.id === data.driverId ? { ...driver, ...data.driver } : driver
+          )
+        );
+      }
+    });
+
+    socket.on('driver-shift-started', (data) => {
+      console.log('Driver started shift in Orders:', data);
+      // Update driver in local state immediately
+      if (data.driver) {
+        setDrivers(prevDrivers => 
+          prevDrivers.map(driver => 
+            driver.id === data.driverId ? { ...driver, ...data.driver } : driver
+          )
+        );
+      }
+    });
+
+    socket.on('driver-shift-ended', (data) => {
+      console.log('Driver ended shift in Orders:', data);
+      // Update driver in local state immediately
+      if (data.driver) {
+        setDrivers(prevDrivers => 
+          prevDrivers.map(driver => 
+            driver.id === data.driverId ? { ...driver, ...data.driver } : driver
+          )
+        );
+      }
+    });
+
     socket.on('payment-confirmed', async (data) => {
       console.log('✅ Payment confirmed for order:', data);
       if (data.orderId) {
@@ -316,8 +422,7 @@ const Orders = () => {
     const priorityMap = {
       'pending': 1,
       'confirmed': 2,
-      'preparing': 3,
-      'out_for_delivery': 4,
+      'out_for_delivery': 3,
       'delivered': 5,
       'completed': 6,
       'cancelled': 7
@@ -364,7 +469,7 @@ const Orders = () => {
       setOrders(sortedOrders);
       setError(null);
       // Apply filters after fetching
-      applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchQuery);
+      applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
     } catch (error) {
       console.error('Error fetching orders:', error);
       setError(error.response?.data?.error || error.message);
@@ -386,8 +491,26 @@ const Orders = () => {
   };
 
   // Apply filters to orders
-  const applyFilters = (ordersList, orderStatus, transactionStatus, search) => {
+  const applyFilters = (ordersList, orderStatus, transactionStatus, search, customFilter, tabFilter) => {
     let filtered = [...ordersList];
+
+    // Apply tab-based filtering first
+    if (tabFilter === 'pending') {
+      filtered = filtered.filter(order => order.status === 'pending' || order.status === 'confirmed');
+    } else if (tabFilter === 'completed') {
+      filtered = filtered.filter(order => order.status === 'completed');
+    } else if (tabFilter === 'unassigned') {
+      filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
+    } else if (tabFilter === 'confirmed') {
+      filtered = filtered.filter(order => order.status === 'confirmed');
+    }
+
+    // Apply custom filters from URL params
+    if (customFilter === 'no-driver') {
+      filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
+    } else if (customFilter === 'pending') {
+      filtered = filtered.filter(order => order.status === 'pending');
+    }
 
     // Filter by search query (customer name or order number)
     if (search && search.trim()) {
@@ -421,10 +544,38 @@ const Orders = () => {
     setFilteredOrders(sorted);
   };
 
+  // Handle URL query parameters
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const filter = searchParams.get('filter');
+    const action = searchParams.get('action');
+    
+    if (filter === 'no-driver') {
+      setCustomFilter('no-driver');
+      setOrderStatusFilter('all'); // Reset status filter when using custom filter
+    } else if (filter === 'pending') {
+      setCustomFilter('pending');
+      setOrderStatusFilter('pending');
+    } else {
+      setCustomFilter(null);
+    }
+    
+    if (action === 'assign') {
+      // Find first order without driver and open assignment dialog
+      const orderWithoutDriver = orders.find(order => !order.driverId || order.driver?.name === 'HOLD Driver');
+      if (orderWithoutDriver) {
+        setSelectedOrder(orderWithoutDriver);
+        setDriverDialogOpen(true);
+        // Clear the action from URL
+        navigate(location.pathname, { replace: true });
+      }
+    }
+  }, [location.search, orders, navigate, location.pathname]);
+
   // Update filters when filter values change
   useEffect(() => {
-    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery);
-  }, [orderStatusFilter, transactionStatusFilter, searchQuery, orders]);
+    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+  }, [orderStatusFilter, transactionStatusFilter, searchQuery, orders, customFilter, orderTab]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     if (newStatus === 'cancelled') {
@@ -518,6 +669,38 @@ const Orders = () => {
     }
   };
 
+  const handleApproveCancellation = async (orderId) => {
+    try {
+      const response = await api.patch(`/admin/orders/${orderId}/cancellation-request`, { approved: true });
+      setOrders(prevOrders => {
+        const updated = prevOrders.map(order => 
+          order.id === orderId ? { ...order, ...response.data } : order
+        );
+        return sortOrdersByStatus(updated);
+      });
+      setError(null);
+    } catch (error) {
+      console.error('Error approving cancellation:', error);
+      setError(error.response?.data?.error || error.message);
+    }
+  };
+
+  const handleRejectCancellation = async (orderId) => {
+    try {
+      const response = await api.patch(`/admin/orders/${orderId}/cancellation-request`, { approved: false });
+      setOrders(prevOrders => {
+        const updated = prevOrders.map(order => 
+          order.id === orderId ? { ...order, ...response.data } : order
+        );
+        return sortOrdersByStatus(updated);
+      });
+      setError(null);
+    } catch (error) {
+      console.error('Error rejecting cancellation:', error);
+      setError(error.response?.data?.error || error.message);
+    }
+  };
+
   const handlePaymentStatusUpdate = async (orderId, paymentStatus) => {
     try {
       const response = await api.patch(`/admin/orders/${orderId}/payment-status`, { paymentStatus });
@@ -528,12 +711,29 @@ const Orders = () => {
         // Re-sort after payment status update (status might have changed to completed)
         const sorted = sortOrdersByStatus(updated);
         // Apply filters to updated orders
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery);
+        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
     } catch (error) {
       console.error('Error updating payment status:', error);
       setError(error.response?.data?.error || error.message);
+    }
+  };
+
+  const handlePromptPayment = async (orderId) => {
+    try {
+      setLoading(true);
+      const response = await api.post(`/admin/orders/${orderId}/prompt-payment`);
+      setError(null);
+      // Show success message
+      alert(response.data.message || 'Payment request sent to customer. They will receive an M-Pesa prompt on their phone.');
+      // Refresh orders to get updated status
+      fetchOrders();
+    } catch (error) {
+      console.error('Error prompting payment:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to prompt payment');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1352,10 +1552,8 @@ const Orders = () => {
       }
       options.push({ value: 'cancelled', label: 'Cancel' });
     } else if (currentStatus === 'confirmed') {
-      options.push({ value: 'preparing', label: 'Start Preparing' });
-      options.push({ value: 'cancelled', label: 'Cancel' });
-    } else if (currentStatus === 'preparing') {
       options.push({ value: 'out_for_delivery', label: 'On the Way' });
+      options.push({ value: 'cancelled', label: 'Cancel' });
     } else if (currentStatus === 'out_for_delivery') {
       options.push({ value: 'delivered', label: 'Mark as Delivered' });
     } else if (currentStatus === 'delivered') {
@@ -1444,6 +1642,39 @@ const Orders = () => {
       {/* Orders Management Tab */}
       {activeTab === 0 && (
         <Box>
+      {/* Order Tabs: Completed, Pending, Unassigned */}
+      <Paper sx={{ mb: 3, backgroundColor: colors.paper }}>
+        <Tabs
+          value={orderTab}
+          onChange={(event, newValue) => {
+            setOrderTab(newValue);
+            setPage(0);
+            applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, newValue);
+          }}
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: 48,
+              color: colors.textSecondary,
+              fontSize: '0.95rem',
+              '&.Mui-selected': {
+                color: colors.accentText,
+                fontWeight: 600
+              }
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: colors.accentText,
+              height: 3
+            }
+          }}
+        >
+          <Tab label="All Orders" value="all" />
+          <Tab label="Pending" value="pending" />
+          <Tab label="Confirmed" value="confirmed" />
+          <Tab label="Completed" value="completed" />
+          <Tab label="Unassigned" value="unassigned" />
+        </Tabs>
+      </Paper>
+
       {/* Filters */}
       <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         {/* Search Input */}
@@ -1514,7 +1745,6 @@ const Orders = () => {
             <MenuItem value="all">All Statuses</MenuItem>
             <MenuItem value="pending">Pending</MenuItem>
             <MenuItem value="confirmed">Confirmed</MenuItem>
-            <MenuItem value="preparing">Preparing</MenuItem>
             <MenuItem value="out_for_delivery">On the Way</MenuItem>
             <MenuItem value="delivered">Delivered</MenuItem>
             <MenuItem value="completed">Completed</MenuItem>
@@ -1589,11 +1819,9 @@ const Orders = () => {
               <TableRow>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order ID</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Customer</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Items</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Total Amount</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Payment Status</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Branch</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Driver</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
@@ -1602,6 +1830,7 @@ const Orders = () => {
             <TableBody>
               {filteredOrders.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((order) => {
                 const isUnpaidDelivered = order.status === 'delivered' && order.paymentStatus === 'unpaid';
+                const hasPendingCancellation = order.cancellationRequested && order.cancellationApproved === null;
                 const statusChip = getOrderStatusChipProps(order.status);
                 const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
                 const nextStatusOptions = getNextStatusOptions(order.status, order.paymentType, order.paymentStatus);
@@ -1609,47 +1838,52 @@ const Orders = () => {
                 return (
                   <TableRow
                     key={order.id}
+                    onClick={() => {
+                      setSelectedOrderForDetail(order);
+                      setOrderDetailDialogOpen(true);
+                    }}
                     sx={{
-                      backgroundColor: isUnpaidDelivered ? 'rgba(255, 51, 102, 0.1)' : 'transparent',
+                      backgroundColor: hasPendingCancellation 
+                        ? 'rgba(255, 193, 7, 0.2)' 
+                        : isUnpaidDelivered 
+                          ? 'rgba(255, 51, 102, 0.1)' 
+                          : 'transparent',
+                      cursor: 'pointer',
+                      borderLeft: hasPendingCancellation ? '4px solid #FFC107' : 'none',
                       '&:hover': {
-                        backgroundColor: isUnpaidDelivered ? 'rgba(255, 51, 102, 0.15)' : 'rgba(0, 224, 184, 0.05)'
+                        backgroundColor: hasPendingCancellation 
+                          ? 'rgba(255, 193, 7, 0.25)' 
+                          : isUnpaidDelivered 
+                            ? 'rgba(255, 51, 102, 0.15)' 
+                            : 'rgba(0, 224, 184, 0.05)'
                       }
                     }}
                   >
                     <TableCell>
-                      <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '1rem' }}>
                         #{order.id}
                       </Typography>
                     </TableCell>
                     <TableCell>
                       <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
                           {order.customerName}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
                           {order.customerPhone}
                         </Typography>
                         {order.customerEmail && (
-                          <Typography variant="caption" color="text.secondary" display="block">
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.85rem' }}>
                             {order.customerEmail}
                           </Typography>
                         )}
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
-                        {order.items?.length || 0} item(s)
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {order.items?.slice(0, 2).map(item => item.drink?.name).join(', ')}
-                        {order.items?.length > 2 && '...'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366' }}>
+                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366', fontSize: '1rem' }}>
                         KES {Number(order.totalAmount).toFixed(2)}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
                         {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
                       </Typography>
                     </TableCell>
@@ -1724,77 +1958,11 @@ const Orders = () => {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      {order.branch ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            {order.branch.name}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ mb: 1 }}>
-                            {order.branch.address}
-                          </Typography>
-                          <Button
-                            variant="text"
-                            size="small"
-                            startIcon={<Edit />}
-                            onClick={() => handleOpenBranchDialog(order)}
-                            disabled={order.status === 'cancelled' || order.status === 'completed'}
-                            sx={{ 
-                              alignSelf: 'flex-start',
-                              p: 0, 
-                              minWidth: 'auto', 
-                              fontSize: '0.7rem',
-                              color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : colors.accentText,
-                              '&:hover': {
-                                backgroundColor: (order.status === 'cancelled' || order.status === 'completed') ? 'transparent' : 'rgba(0, 224, 184, 0.1)',
-                                color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : '#00C4A3'
-                              },
-                              '&.Mui-disabled': {
-                                color: colors.textSecondary,
-                                opacity: 0.5
-                              }
-                            }}
-                          >
-                            Change
-                          </Button>
-                        </Box>
-                      ) : (
-                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                            Not assigned
-                          </Typography>
-                          <Button
-                            variant="text"
-                            size="small"
-                            startIcon={<Edit />}
-                            onClick={() => handleOpenBranchDialog(order)}
-                            disabled={order.status === 'cancelled' || order.status === 'completed'}
-                            sx={{ 
-                              alignSelf: 'flex-start',
-                              p: 0, 
-                              minWidth: 'auto', 
-                              fontSize: '0.7rem',
-                              color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : colors.accentText,
-                              '&:hover': {
-                                backgroundColor: (order.status === 'cancelled' || order.status === 'completed') ? 'transparent' : 'rgba(0, 224, 184, 0.1)',
-                                color: (order.status === 'cancelled' || order.status === 'completed') ? colors.textSecondary : '#00C4A3'
-                              },
-                              '&.Mui-disabled': {
-                                color: colors.textSecondary,
-                                opacity: 0.5
-                              }
-                            }}
-                          >
-                            Assign
-                          </Button>
-                        </Box>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {order.driver ? (
+                      {order.driverId && order.driver ? (
                         <Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                             <Person fontSize="small" color="text.secondary" />
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
                               {order.driver.name}
                             </Typography>
                           </Box>
@@ -1822,15 +1990,37 @@ const Orders = () => {
                               sx={{ mt: 0.5 }}
                             />
                           )}
+                          {hasPendingCancellation && (
+                            <Chip 
+                              label="Cancellation Requested" 
+                              color="warning" 
+                              size="small" 
+                              sx={{ 
+                                mt: 0.5,
+                                backgroundColor: '#FFC107',
+                                color: '#000',
+                                fontWeight: 600
+                              }}
+                            />
+                          )}
+                        </Box>
+                      ) : !order.driverId ? (
+                        <Box>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                            <Person fontSize="small" color="error" />
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: 'error.main', fontSize: '0.95rem' }}>
+                              Unassigned
+                            </Typography>
+                          </Box>
                         </Box>
                       ) : (
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.95rem' }}>
                           Not assigned
                         </Typography>
                       )}
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
+                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.95rem' }}>
                         {new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
@@ -1838,7 +2028,7 @@ const Orders = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }} onClick={(e) => e.stopPropagation()}>
                         <Button
                           variant="outlined"
                           size="small"
@@ -1900,6 +2090,50 @@ const Orders = () => {
                           </FormControl>
                         )}
                         
+                        {hasPendingCancellation && (
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              color="success"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleApproveCancellation(order.id);
+                              }}
+                              sx={{ flex: 1 }}
+                            >
+                              Approve Cancellation
+                            </Button>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              color="error"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRejectCancellation(order.id);
+                              }}
+                              sx={{ flex: 1 }}
+                            >
+                              Reject
+                            </Button>
+                          </Box>
+                        )}
+                        {order.paymentStatus === 'unpaid' && order.paymentType === 'pay_on_delivery' && (
+                          <Button
+                            variant="contained"
+                            size="small"
+                            color="primary"
+                            startIcon={<Assignment />}
+                            onClick={async () => {
+                              if (window.confirm(`Send payment prompt to customer for Order #${order.id}?\n\nCustomer: ${order.customerName}\nPhone: ${order.customerPhone}\nAmount: KES ${parseFloat(order.totalAmount).toFixed(2)}`)) {
+                                await handlePromptPayment(order.id);
+                              }
+                            }}
+                            sx={{ mt: 1, mr: 1 }}
+                          >
+                            Prompt Payment
+                          </Button>
+                        )}
                         {order.status === 'delivered' && order.paymentStatus === 'unpaid' && (
                           <Button
                             variant="contained"
@@ -2163,11 +2397,35 @@ const Orders = () => {
                 <MenuItem value="">
                   <em>No Driver (Unassign)</em>
                 </MenuItem>
-                {drivers.map((driver) => (
-                  <MenuItem key={driver.id} value={driver.id}>
-                    {driver.name} - {driver.phoneNumber} ({driver.status})
-                  </MenuItem>
-                ))}
+                {drivers.map((driver) => {
+                  const statusLabel = driver.status === 'active' ? 'On Shift' :
+                                     driver.status === 'offline' ? 'Off Shift' :
+                                     driver.status === 'on_delivery' ? 'On Delivery' :
+                                     driver.status || 'Unknown';
+                  const cashAtHand = parseFloat(driver.cashAtHand || 0).toFixed(2);
+                  return (
+                    <MenuItem key={driver.id} value={driver.id}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {driver.name} - {driver.phoneNumber}
+                          </Typography>
+                          <Chip 
+                            label={statusLabel}
+                            size="small"
+                            color={driver.status === 'active' ? 'success' : 
+                                   driver.status === 'offline' ? 'error' : 
+                                   driver.status === 'on_delivery' ? 'warning' : 'default'}
+                            sx={{ ml: 1, height: 20, fontSize: '0.7rem' }}
+                          />
+                        </Box>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                          Cash at Hand: KES {cashAtHand}
+                        </Typography>
+                      </Box>
+                    </MenuItem>
+                  );
+                })}
               </Select>
             </FormControl>
             {selectedOrder && (
@@ -2250,6 +2508,379 @@ const Orders = () => {
             sx={{ backgroundColor: '#FF3366', color: isDarkMode ? '#0D0D0D' : '#FFFFFF', '&:hover': { backgroundColor: '#FF1744' } }}
           >
             Confirm Cancel
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Order Details Dialog */}
+      <Dialog
+        open={orderDetailDialogOpen}
+        onClose={() => setOrderDetailDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Order Details #{selectedOrderForDetail?.id}
+        </DialogTitle>
+        <DialogContent>
+          {selectedOrderForDetail && (
+            <Box sx={{ pt: 2 }}>
+              {/* Customer Information */}
+              <Card sx={{ mb: 2 }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                    Customer Information
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Typography variant="body1">
+                      <strong>Name:</strong> {selectedOrderForDetail.customerName}
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body1">
+                        <strong>Phone:</strong> {selectedOrderForDetail.customerPhone}
+                      </Typography>
+                      {selectedOrderForDetail.customerPhone && selectedOrderForDetail.customerPhone !== 'POS' && (
+                        <Button
+                          size="small"
+                          startIcon={<Phone />}
+                          href={`tel:${selectedOrderForDetail.customerPhone}`}
+                          sx={{
+                            color: colors.accentText,
+                            fontSize: '0.75rem',
+                            minWidth: 'auto',
+                            padding: '2px 8px'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          Call
+                        </Button>
+                      )}
+                    </Box>
+                      {selectedOrderForDetail.customerPhone && selectedOrderForDetail.customerPhone !== 'POS' && (
+                        <Button
+                          size="small"
+                          startIcon={<Phone />}
+                          href={`tel:${selectedOrderForDetail.customerPhone}`}
+                          sx={{
+                            color: colors.accentText,
+                            fontSize: '0.75rem',
+                            minWidth: 'auto',
+                            padding: '2px 8px'
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          Call
+                        </Button>
+                      )}
+                    </Box>
+                    {selectedOrderForDetail.customerEmail && (
+                      <Typography variant="body1">
+                        <strong>Email:</strong> {selectedOrderForDetail.customerEmail}
+                      </Typography>
+                    )}
+                    {selectedOrderForDetail.deliveryAddress && (
+                      <Typography variant="body1">
+                        <strong>Delivery Address:</strong> {selectedOrderForDetail.deliveryAddress}
+                      </Typography>
+                    )}
+                  </Box>
+                </CardContent>
+              </Card>
+
+              {/* Order Items */}
+              <Card sx={{ mb: 2 }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                    Order Items ({selectedOrderForDetail.items?.length || 0})
+                  </Typography>
+                  {selectedOrderForDetail.items && selectedOrderForDetail.items.length > 0 ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      {selectedOrderForDetail.items.map((item, index) => (
+                        <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, borderBottom: `1px solid ${colors.border}` }}>
+                          <Box>
+                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                              {item.drink?.name || 'Unknown Item'}
+                            </Typography>
+                            {item.quantity > 1 && (
+                              <Typography variant="caption" color="text.secondary">
+                                Quantity: {item.quantity}
+                              </Typography>
+                            )}
+                            {item.specialInstructions && (
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                Note: {item.specialInstructions}
+                              </Typography>
+                            )}
+                          </Box>
+                          <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
+                            KES {Number(item.price || 0).toFixed(2)}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      No items found
+                    </Typography>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Order Summary */}
+              <Card sx={{ mb: 2 }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                    Order Summary
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body1">
+                        <strong>Total Amount:</strong>
+                      </Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366' }}>
+                        KES {Number(selectedOrderForDetail.totalAmount).toFixed(2)}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body1">
+                        <strong>Payment Type:</strong>
+                      </Typography>
+                      <Typography variant="body1">
+                        {selectedOrderForDetail.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
+                      </Typography>
+                    </Box>
+                    {selectedOrderForDetail.paymentMethod && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body1">
+                          <strong>Payment Method:</strong>
+                        </Typography>
+                        <Typography variant="body1">
+                          {selectedOrderForDetail.paymentMethod === 'mobile_money' ? 'M-Pesa' : 
+                           selectedOrderForDetail.paymentMethod === 'cash' ? 'Cash' : 
+                           selectedOrderForDetail.paymentMethod}
+                        </Typography>
+                      </Box>
+                    )}
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body1">
+                        <strong>Payment Status:</strong>
+                      </Typography>
+                      {(() => {
+                        const paymentStatusChip = getPaymentStatusChipProps(selectedOrderForDetail.paymentStatus, selectedOrderForDetail.status);
+                        return paymentStatusChip ? (
+                          <Chip size="small" {...paymentStatusChip} />
+                        ) : (
+                          <Typography variant="body1">—</Typography>
+                        );
+                      })()}
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Typography variant="body1">
+                        <strong>Order Status:</strong>
+                      </Typography>
+                      {(() => {
+                        const statusChip = getOrderStatusChipProps(selectedOrderForDetail.status);
+                        return <Chip size="small" {...statusChip} />;
+                      })()}
+                    </Box>
+                  </Box>
+                </CardContent>
+              </Card>
+
+              {/* Branch Information */}
+              {selectedOrderForDetail.branch && (
+                <Card sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                      Branch Information
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Typography variant="body1">
+                        <strong>Name:</strong> {selectedOrderForDetail.branch.name}
+                      </Typography>
+                      {selectedOrderForDetail.branch.address && (
+                        <Typography variant="body1">
+                          <strong>Address:</strong> {selectedOrderForDetail.branch.address}
+                        </Typography>
+                      )}
+                    </Box>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Driver Information */}
+              {selectedOrderForDetail.driver && (
+                <Card sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                      Driver Information
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Typography variant="body1">
+                        <strong>Name:</strong> {selectedOrderForDetail.driver.name}
+                      </Typography>
+                      {selectedOrderForDetail.driver.phoneNumber && (
+                        <Typography variant="body1">
+                          <strong>Phone:</strong> {selectedOrderForDetail.driver.phoneNumber}
+                        </Typography>
+                      )}
+                      {selectedOrderForDetail.driverAccepted === true && (
+                        <Chip label="Accepted" color="success" size="small" sx={{ width: 'fit-content' }} />
+                      )}
+                      {selectedOrderForDetail.driverAccepted === false && (
+                        <Chip label="Rejected" color="error" size="small" sx={{ width: 'fit-content' }} />
+                      )}
+                      {selectedOrderForDetail.driverAccepted === null && selectedOrderForDetail.driverId && (
+                        <Chip label="Pending Response" color="warning" size="small" sx={{ width: 'fit-content' }} />
+                      )}
+                    </Box>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Order Date */}
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                    Order Date
+                  </Typography>
+                  <Typography variant="body1">
+                    {new Date(selectedOrderForDetail.createdAt).toLocaleDateString('en-US', { 
+                      weekday: 'long',
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {new Date(selectedOrderForDetail.createdAt).toLocaleTimeString('en-US', { 
+                      hour: 'numeric', 
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </Typography>
+                </CardContent>
+              </Card>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          {selectedOrderForDetail && 
+           selectedOrderForDetail.paymentMethod === 'mobile_money' && 
+           selectedOrderForDetail.paymentStatus === 'unpaid' && 
+           selectedOrderForDetail.customerPhone && 
+           selectedOrderForDetail.customerPhone !== 'POS' && (
+            <Button
+              variant="contained"
+              startIcon={promptingPayment ? <CircularProgress size={16} /> : <Payment />}
+              onClick={async () => {
+                if (!selectedOrderForDetail.customerPhone || selectedOrderForDetail.customerPhone === 'POS') {
+                  alert('Customer phone number is required to prompt for payment');
+                  return;
+                }
+
+                setPromptingPayment(true);
+                try {
+                  const promptResponse = await api.post(`/admin/orders/${selectedOrderForDetail.id}/prompt-payment`);
+                  
+                  const checkoutRequestID = promptResponse.data.checkoutRequestID || promptResponse.data.CheckoutRequestID;
+                  if (promptResponse.data.success || checkoutRequestID) {
+                    alert('Payment request sent to customer. Waiting for payment confirmation...');
+                    
+                    // Start polling for payment status
+                    const interval = setInterval(async () => {
+                      try {
+                        const statusResponse = await api.get(`/mpesa/poll-transaction/${checkoutRequestID}`);
+                        
+                        if (statusResponse.data.success && statusResponse.data.status === 'completed' && statusResponse.data.receiptNumber) {
+                          // Payment completed!
+                          alert(`Payment received! Transaction code: ${statusResponse.data.receiptNumber}`);
+                          setPromptingPayment(false);
+                          clearInterval(interval);
+                          setPaymentPollingInterval(null);
+                          
+                          // Refresh orders to show updated payment status
+                          await fetchOrders();
+                          
+                          // Update selected order detail
+                          try {
+                            const updatedOrderResponse = await api.get(`/admin/orders`);
+                            const updatedOrder = updatedOrderResponse.data.find(o => o.id === selectedOrderForDetail.id);
+                            if (updatedOrder) {
+                              setSelectedOrderForDetail(updatedOrder);
+                            }
+                          } catch (fetchError) {
+                            console.error('Error fetching updated order:', fetchError);
+                          }
+                        } else if (statusResponse.data.status === 'failed' || statusResponse.data.status === 'cancelled') {
+                          alert(statusResponse.data.message || 'Payment was cancelled or failed');
+                          setPromptingPayment(false);
+                          clearInterval(interval);
+                          setPaymentPollingInterval(null);
+                        }
+                      } catch (pollError) {
+                        console.error('Error polling payment status:', pollError);
+                        // Continue polling on error
+                      }
+                    }, 3000); // Poll every 3 seconds
+                    
+                    setPaymentPollingInterval(interval);
+                    
+                    // Stop polling after 5 minutes
+                    setTimeout(() => {
+                      if (interval) {
+                        clearInterval(interval);
+                        setPaymentPollingInterval(null);
+                        if (promptingPayment) {
+                          setPromptingPayment(false);
+                          alert('Payment timeout. Please check payment status manually.');
+                        }
+                      }
+                    }, 300000); // 5 minutes
+                  } else {
+                    alert(promptResponse.data.error || 'Failed to initiate payment request');
+                    setPromptingPayment(false);
+                  }
+                } catch (error) {
+                  console.error('Error prompting payment:', error);
+                  alert(error.response?.data?.error || error.message || 'Failed to prompt customer for payment');
+                  setPromptingPayment(false);
+                }
+              }}
+              disabled={promptingPayment}
+              sx={{
+                backgroundColor: colors.accentText,
+                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                mr: 1,
+                '&:hover': {
+                  backgroundColor: '#00C4A3'
+                },
+                '&:disabled': {
+                  backgroundColor: colors.border,
+                  color: colors.textSecondary
+                }
+              }}
+            >
+              {promptingPayment ? 'Prompting...' : 'Prompt Payment'}
+            </Button>
+          )}
+          <Button 
+            onClick={() => {
+              setOrderDetailDialogOpen(false);
+              if (paymentPollingInterval) {
+                clearInterval(paymentPollingInterval);
+                setPaymentPollingInterval(null);
+              }
+              setPromptingPayment(false);
+            }}
+            sx={{ color: colors.textSecondary }}
+          >
+            Close
           </Button>
         </DialogActions>
       </Dialog>
@@ -2561,9 +3192,34 @@ const Orders = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
                               <LocalShipping sx={{ fontSize: 32, color: colors.accentText }} />
                               <Box sx={{ flex: 1 }}>
-                                <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                                  {route.rider.name}
-                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                  <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                                    {route.rider.name}
+                                  </Typography>
+                                  {route.rider.status && (
+                                    <Chip
+                                      label={
+                                        route.rider.status === 'active' ? 'On Shift' :
+                                        route.rider.status === 'offline' ? 'Off Shift' :
+                                        route.rider.status === 'on_delivery' ? 'On Delivery' :
+                                        route.rider.status === 'inactive' ? 'Inactive' :
+                                        route.rider.status
+                                      }
+                                      size="small"
+                                      color={
+                                        route.rider.status === 'active' ? 'success' :
+                                        route.rider.status === 'offline' ? 'error' :
+                                        route.rider.status === 'on_delivery' ? 'warning' :
+                                        'default'
+                                      }
+                                      sx={{
+                                        height: 20,
+                                        fontSize: '0.7rem',
+                                        fontWeight: 600
+                                      }}
+                                    />
+                                  )}
+                                </Box>
                                 <Typography variant="body2" color="text.secondary">
                                   {route.rider.phoneNumber} • {route.orders.length} order{route.orders.length !== 1 ? 's' : ''}
                                 </Typography>
@@ -2719,9 +3375,30 @@ const Orders = () => {
                             >
                               {timelineItems.length === 0 ? (
                                 <Box sx={{ py: 3, textAlign: 'center' }}>
-                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mb: 2 }}>
                                     No active orders assigned
                                   </Typography>
+                                  <Button
+                                    variant="outlined"
+                                    startIcon={<Add />}
+                                    onClick={() => {
+                                      setSelectedRiderForStop(route.rider.id);
+                                      setSelectedOrderIndexForStop(-1);
+                                      setStopDialogOpen(true);
+                                    }}
+                                    sx={{
+                                      borderColor: colors.accentText,
+                                      color: colors.accentText,
+                                      '&:hover': {
+                                        borderColor: colors.accentText,
+                                        backgroundColor: isDarkMode 
+                                          ? 'rgba(0, 224, 184, 0.1)' 
+                                          : 'rgba(0, 224, 184, 0.05)'
+                                      }
+                                    }}
+                                  >
+                                    Add Stop
+                                  </Button>
                                 </Box>
                               ) : (
                                 <>

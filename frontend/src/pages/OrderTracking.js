@@ -21,21 +21,27 @@ import {
   LocationOn,
   AttachMoney
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
 
 const OrderTracking = ({ order }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [orderDetails, setOrderDetails] = useState(order);
   const [loading, setLoading] = useState(!order);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    const trackingToken = searchParams.get('token');
+    
     if (order) {
       setOrderDetails(order);
       setLoading(false);
+    } else if (trackingToken) {
+      // Fetch order by tracking token from URL
+      fetchOrderByToken(trackingToken);
     } else {
       // Try to get order from localStorage
       const savedOrder = localStorage.getItem('customerOrder');
@@ -43,20 +49,15 @@ const OrderTracking = ({ order }) => {
         const { orderId } = JSON.parse(savedOrder);
         fetchOrder(orderId);
       } else {
-        setError('No order found. Please log in again.');
+        setError('No order found. Please use the tracking link from your SMS or log in again.');
         setLoading(false);
       }
     }
-    
-    // Set up Socket.IO for real-time order status updates
-    const orderId = order?.id || (() => {
-      const savedOrder = localStorage.getItem('customerOrder');
-      if (savedOrder) {
-        const parsed = JSON.parse(savedOrder);
-        return parsed.orderId;
-      }
-      return null;
-    })();
+  }, [order, searchParams]);
+
+  // Set up Socket.IO for real-time order status updates
+  useEffect(() => {
+    const orderId = order?.id || orderDetails?.id;
     
     if (orderId) {
       const socketUrl = getBackendUrl();
@@ -82,7 +83,7 @@ const OrderTracking = ({ order }) => {
         socket.close();
       };
     }
-  }, [order]);
+  }, [order?.id, orderDetails?.id]);
 
   const fetchOrder = async (orderId) => {
     try {
@@ -98,11 +99,24 @@ const OrderTracking = ({ order }) => {
     }
   };
 
+  const fetchOrderByToken = async (token) => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/orders/track/${token}`);
+      setOrderDetails(response.data);
+      setError('');
+    } catch (err) {
+      console.error('Error fetching order by token:', err);
+      setError(err.response?.data?.error || 'Invalid tracking link. Please check your SMS or contact support.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return 'warning';
       case 'confirmed': return 'success';
-      case 'preparing': return 'info';
       case 'out_for_delivery': return 'primary';
       case 'delivered': return 'success';
       case 'cancelled': return 'error';
@@ -114,7 +128,6 @@ const OrderTracking = ({ order }) => {
     switch (status) {
       case 'pending': return <AccessTime />;
       case 'confirmed': return <CheckCircle />;
-      case 'preparing': return <ShoppingCart />;
       case 'out_for_delivery': return <LocalShipping />;
       case 'delivered': return <CheckCircle />;
       default: return <ShoppingCart />;
@@ -125,7 +138,6 @@ const OrderTracking = ({ order }) => {
     switch (status) {
       case 'pending': return 'Pending';
       case 'confirmed': return 'Confirmed';
-      case 'preparing': return 'Preparing';
       case 'out_for_delivery': return 'Out for Delivery';
       case 'delivered': return 'Delivered';
       case 'cancelled': return 'Cancelled';

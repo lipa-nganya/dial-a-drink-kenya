@@ -23,7 +23,9 @@ import {
   InputLabel,
   Paper,
   Divider,
-  Pagination
+  Pagination,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   LocalBar,
@@ -41,11 +43,14 @@ import {
   Add,
   LocalOffer,
   QrCodeScanner,
-  Star
+  Star,
+  AttachMoney,
+  Calculate
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import EditDrinkDialog from '../components/EditDrinkDialog';
+import InventoryChecks from '../components/InventoryChecks';
 import { getBackendUrl } from '../utils/backendUrl';
 
 const InventoryPage = () => {
@@ -58,6 +63,9 @@ const InventoryPage = () => {
   const [error, setError] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState(null);
+  const [populatingPurchasePrices, setPopulatingPurchasePrices] = useState(false);
+  const [purchasePriceMessage, setPurchasePriceMessage] = useState(null);
+  const [currentTab, setCurrentTab] = useState(0);
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
@@ -114,6 +122,22 @@ const InventoryPage = () => {
         api.get('/categories'),
         api.get('/brands/all')
       ]);
+      
+      // Debug: Check if purchasePrice is in the response
+      if (drinksResponse.data && drinksResponse.data.length > 0) {
+        const sampleDrink = drinksResponse.data.find(d => d.name && d.name.includes('1659'));
+        if (sampleDrink) {
+          console.log('🔍 Sample drink from API:', {
+            id: sampleDrink.id,
+            name: sampleDrink.name,
+            purchasePrice: sampleDrink.purchasePrice,
+            purchasePriceType: typeof sampleDrink.purchasePrice,
+            hasPurchasePrice: 'purchasePrice' in sampleDrink,
+            originalPrice: sampleDrink.originalPrice
+          });
+        }
+      }
+      
       setDrinks(drinksResponse.data);
       setCategories(categoriesResponse.data);
       setBrands(brandsResponse.data || []);
@@ -286,25 +310,6 @@ const InventoryPage = () => {
     }
   };
 
-  const handleStockUpdate = async (drinkId, newStock) => {
-    try {
-      const stockValue = parseInt(newStock) || 0;
-      if (isNaN(stockValue) || stockValue < 0) {
-        setError('Stock must be a non-negative whole number');
-        return;
-      }
-
-      await api.post('/inventory/update-stock', { drinkId, stock: stockValue });
-      setDrinks(drinks.map(drink => 
-        drink.id === drinkId ? { ...drink, stock: stockValue } : drink
-      ));
-      // Clear any previous errors on success
-      setError(null);
-    } catch (error) {
-      console.error('Error updating stock:', error);
-      setError(error.response?.data?.error || 'Failed to update stock');
-    }
-  };
 
   const getAvailabilityColor = (isAvailable) => {
     return isAvailable ? 'success' : 'error';
@@ -330,6 +335,44 @@ const InventoryPage = () => {
     // Note: If the updated item's brand doesn't match the selected brand filter,
     // it will be filtered out. Users can search for it to find it, as search
     // bypasses brand and category filters.
+  };
+
+  const handlePopulatePurchasePrices = async () => {
+    if (!window.confirm('This will populate purchase prices for all inventory items.\nPurchase price will be calculated as 70% of the selling price.\n\nDo you want to continue?')) {
+      return;
+    }
+
+    setPopulatingPurchasePrices(true);
+    setPurchasePriceMessage(null);
+
+    try {
+      const response = await api.post('/admin/drinks/populate-purchase-prices');
+      
+      if (response.data.success) {
+        setPurchasePriceMessage({
+          type: 'success',
+          text: response.data.message || `Successfully updated ${response.data.updated} items. ${response.data.skipped} items skipped.`
+        });
+        
+        // Refresh the drinks list to show updated purchase prices
+        await fetchData();
+      } else {
+        setPurchasePriceMessage({
+          type: 'error',
+          text: response.data.message || 'Failed to populate purchase prices'
+        });
+      }
+    } catch (error) {
+      console.error('Error populating purchase prices:', error);
+      setPurchasePriceMessage({
+        type: 'error',
+        text: error.response?.data?.error || 'Failed to populate purchase prices. Please try again.'
+      });
+    } finally {
+      setPopulatingPurchasePrices(false);
+      // Clear message after 5 seconds
+      setTimeout(() => setPurchasePriceMessage(null), 5000);
+    }
   };
 
   if (loading) {
@@ -360,22 +403,77 @@ const InventoryPage = () => {
             Manage inventory availability and stock status
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => {
-            setSelectedDrink(null);
-            setEditDialogOpen(true);
-          }}
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <Button
+            variant="outlined"
+            startIcon={populatingPurchasePrices ? <CircularProgress size={20} /> : <Calculate />}
+            onClick={handlePopulatePurchasePrices}
+            disabled={populatingPurchasePrices}
+            sx={{
+              borderColor: colors.accentText,
+              color: colors.accentText,
+              '&:hover': {
+                borderColor: '#00C4A3',
+                backgroundColor: 'rgba(0, 224, 184, 0.1)'
+              },
+              '&:disabled': {
+                borderColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {populatingPurchasePrices ? 'Populating...' : 'Populate Purchase Prices'}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => {
+              setSelectedDrink(null);
+              setEditDialogOpen(true);
+            }}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': { backgroundColor: '#00C4A3' }
+            }}
+          >
+            Create New Item
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Tabs */}
+      <Box sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs
+          value={currentTab}
+          onChange={(e, newValue) => setCurrentTab(newValue)}
           sx={{
-            backgroundColor: colors.accentText,
-            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-            '&:hover': { backgroundColor: '#00C4A3' }
+            '& .MuiTab-root': {
+              color: colors.textSecondary,
+              '&.Mui-selected': {
+                color: colors.accentText
+              }
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: colors.accentText
+            }
           }}
         >
-          Create New Item
-        </Button>
+          <Tab label="Inventory Items" />
+          <Tab label="Inventory Checks" />
+        </Tabs>
       </Box>
+
+      {/* Purchase Price Population Message */}
+      {purchasePriceMessage && (
+        <Alert 
+          severity={purchasePriceMessage.type} 
+          sx={{ mb: 2 }}
+          onClose={() => setPurchasePriceMessage(null)}
+        >
+          {purchasePriceMessage.text}
+        </Alert>
+      )}
 
       {/* Summary Stats */}
       <Box sx={{ mb: 4 }}>
@@ -865,11 +963,24 @@ const InventoryPage = () => {
                           KES {Number(drink.price).toFixed(2)}
                         </Typography>
                     )}
+                    {drink.purchasePrice && (
+                      <Typography 
+                        variant="caption" 
+                        sx={{ 
+                          color: '#666', 
+                          fontSize: '0.65rem',
+                          display: 'block',
+                          mt: 0.5
+                        }}
+                      >
+                        Cost: KES {Number(drink.purchasePrice).toFixed(2)}
+                      </Typography>
+                    )}
                   </Box>
 
-                  {/* Stock Quantity Display with Quick Edit */}
+                  {/* Stock Quantity Display (Read-Only) */}
                   <Box sx={{ mb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Inventory 
                         sx={{ 
                           fontSize: '0.9rem', 
@@ -887,45 +998,6 @@ const InventoryPage = () => {
                         Stock: {drink.stock !== undefined && drink.stock !== null ? drink.stock : 0}
                       </Typography>
                     </Box>
-                    <TextField
-                      size="small"
-                      type="number"
-                      inputProps={{ step: "1", min: "0" }}
-                      value={drink.stock !== undefined && drink.stock !== null ? drink.stock : 0}
-                      onChange={(e) => {
-                        const newStock = e.target.value;
-                        // Update immediately in UI for better UX
-                        setDrinks(drinks.map(d => 
-                          d.id === drink.id ? { ...d, stock: newStock === '' ? 0 : parseInt(newStock) || 0 } : d
-                        ));
-                      }}
-                      onBlur={(e) => {
-                        const newStock = parseInt(e.target.value) || 0;
-                        if (newStock !== drink.stock) {
-                          handleStockUpdate(drink.id, newStock);
-                        }
-                      }}
-                      sx={{
-                        width: '100%',
-                        '& .MuiOutlinedInput-root': {
-                          fontSize: '0.7rem',
-                          height: '28px',
-                          '& input': {
-                            padding: '4px 8px',
-                            textAlign: 'center'
-                          },
-                          '& fieldset': {
-                            borderColor: colors.border,
-                          },
-                          '&:hover fieldset': {
-                            borderColor: colors.accentText,
-                          },
-                          '&.Mui-focused fieldset': {
-                            borderColor: colors.accentText,
-                          },
-                        },
-                      }}
-                    />
                   </Box>
 
                   {/* ABV Display */}
@@ -1046,6 +1118,12 @@ const InventoryPage = () => {
             </Box>
           )}
         </>
+      )}
+
+      {currentTab === 1 && (
+        <Box sx={{ mt: 3 }}>
+          <InventoryChecks />
+        </Box>
       )}
 
       {/* Edit Drink Dialog */}

@@ -2702,14 +2702,36 @@ router.post('/users', async (req, res) => {
       const generatedUsername = `shop_agent_${cleanMobile}`;
       const generatedEmail = `${cleanMobile}@shopagent.local`;
 
+      // Check which columns exist in the admins table (check early for existing user validation)
+      let hasNameColumn = false;
+      let hasMobileNumberColumn = false;
+      let hasHasSetPinColumn = false;
+      try {
+        const [existingColumns] = await db.sequelize.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_name = 'admins' ORDER BY column_name"
+        );
+        const columnNames = new Set(existingColumns.map(col => col.column_name.toLowerCase()));
+        hasNameColumn = columnNames.has('name');
+        hasMobileNumberColumn = columnNames.has('mobilenumber');
+        hasHasSetPinColumn = columnNames.has('hassetpin');
+      } catch (schemaError) {
+        console.warn('⚠️ Could not query information_schema for admins table, using defaults:', schemaError.message);
+        // Default to false if we can't check - will skip these fields
+      }
+
+      // Build existing user check - only include mobileNumber if column exists
+      const existingUserWhere = [
+        { username: generatedUsername },
+        { email: generatedEmail }
+      ];
+      if (hasMobileNumberColumn) {
+        existingUserWhere.push({ mobileNumber: mobileNumber.trim() });
+      }
+
       // Check if user already exists
       const existingUser = await db.Admin.findOne({
         where: {
-          [Op.or]: [
-            { username: generatedUsername },
-            { email: generatedEmail },
-            { mobileNumber: mobileNumber.trim() }
-          ]
+          [Op.or]: existingUserWhere
         }
       });
 
@@ -2722,18 +2744,30 @@ router.post('/users', async (req, res) => {
       const inviteToken = crypto.randomBytes(32).toString('hex');
       const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-      // Create shop agent
-      const user = await db.Admin.create({
+      // Column existence already checked above for existingUser validation
+
+      // Build create object with only existing columns
+      const createData = {
         username: generatedUsername,
         email: generatedEmail,
         role: 'shop_agent',
         password: null, // Shop agents don't need password/login
-        name: name.trim(),
-        mobileNumber: mobileNumber.trim(),
         inviteToken,
-        inviteTokenExpiry,
-        hasSetPin: false
-      });
+        inviteTokenExpiry
+      };
+
+      if (hasNameColumn) {
+        createData.name = name.trim();
+      }
+      if (hasMobileNumberColumn) {
+        createData.mobileNumber = mobileNumber.trim();
+      }
+      if (hasHasSetPinColumn) {
+        createData.hasSetPin = false;
+      }
+
+      // Create shop agent
+      const user = await db.Admin.create(createData);
 
       // Generate WhatsApp invitation link
       let whatsappLink = null;
@@ -2792,16 +2826,25 @@ router.post('/users', async (req, res) => {
         // Don't fail user creation if WhatsApp fails
       }
 
-      return res.status(201).json({
+      // Build response with only existing fields
+      const responseData = {
         id: user.id,
         username: user.username,
         email: user.email,
         role: user.role,
-        name: user.name,
-        mobileNumber: user.mobileNumber,
         createdAt: user.createdAt,
         whatsappLink: whatsappLink // Include WhatsApp link in response
-      });
+      };
+
+      // Only include name and mobileNumber if they exist
+      if (hasNameColumn && user.name) {
+        responseData.name = user.name;
+      }
+      if (hasMobileNumberColumn && user.mobileNumber) {
+        responseData.mobileNumber = user.mobileNumber;
+      }
+
+      return res.status(201).json(responseData);
     }
 
     // For admin and manager roles, username and email are required
