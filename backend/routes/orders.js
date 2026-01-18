@@ -10,6 +10,73 @@ const { generateReceiptPDF } = require('../services/pdfReceipt');
 const pushNotifications = require('../services/pushNotifications');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 
+// Ensure dotenv is loaded for Google Maps API key
+if (!process.env.GOOGLE_MAPS_API_KEY && !process.env.REACT_APP_GOOGLE_MAPS_API_KEY) {
+  try {
+    require('dotenv').config();
+  } catch (e) {
+    // dotenv might already be loaded
+  }
+}
+
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
+
+// Reference point: Taveta Shopping Mall - Stall G1, Taveta Road, Nairobi, Kenya
+const ORIGIN_ADDRESS = 'Taveta Shopping Mall - Stall G1, Taveta Road, Nairobi, Kenya';
+const ORIGIN_COORDS = { lat: -1.359872, lng: 36.6641152 };
+
+/**
+ * Calculate road distance using Google Distance Matrix API
+ * Falls back to Haversine formula if API is unavailable
+ * @param {string} destinationAddress - Delivery address
+ * @param {string} originAddress - Origin address (branch address). If not provided, uses default ORIGIN_ADDRESS
+ * @returns {Promise<{distance: number, isRoadDistance: boolean}>} - Distance in kilometers
+ */
+const calculateRoadDistance = async (destinationAddress, originAddress = null) => {
+  // If no API key, fall back to Haversine if we have coordinates
+  if (!GOOGLE_MAPS_API_KEY) {
+    console.warn('⚠️ Google Maps API key not configured. Cannot calculate road distance.');
+    return { distance: null, isRoadDistance: false };
+  }
+
+  // Use branch address if provided, otherwise fall back to default
+  const origin = originAddress || ORIGIN_ADDRESS;
+
+  try {
+    const distanceMatrixUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destinationAddress)}&key=${GOOGLE_MAPS_API_KEY}&units=metric`;
+
+    const response = await fetch(distanceMatrixUrl);
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status !== 'OK') {
+      console.error('Google Distance Matrix API error:', data.status, data.error_message);
+      return { distance: null, isRoadDistance: false };
+    }
+
+    if (data.rows && data.rows[0] && data.rows[0].elements && data.rows[0].elements[0]) {
+      const element = data.rows[0].elements[0];
+      
+      if (element.status === 'OK' && element.distance) {
+        const distanceKm = element.distance.value / 1000; // Convert meters to kilometers
+        return { distance: parseFloat(distanceKm.toFixed(2)), isRoadDistance: true };
+      } else {
+        console.warn(`Distance Matrix API returned status: ${element.status}`);
+        return { distance: null, isRoadDistance: false };
+      }
+    }
+
+    return { distance: null, isRoadDistance: false };
+  } catch (error) {
+    console.error('Error calling Google Distance Matrix API:', error.message);
+    return { distance: null, isRoadDistance: false };
+  }
+};
+
 // Helper function to calculate delivery fee
 const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress = null, branchId = null) => {
   try {
@@ -50,81 +117,62 @@ const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress
     }
 
     if (isPerKmMode) {
-      // Per KM mode: calculate fee based on distance
+      // Per KM mode: calculate fee based on road distance
       const perKmWithAlcohol = parseFloat(perKmWithAlcoholSetting?.value || '20');
       const perKmWithoutAlcohol = parseFloat(perKmWithoutAlcoholSetting?.value || '15');
       
       const perKmRate = allSoftDrinks ? perKmWithoutAlcohol : perKmWithAlcohol;
       
-      // Calculate distance from branch to delivery address
-      let distanceKm = 1; // Default to minimum 1km
-      if (deliveryAddress && branchId) {
+      // Calculate road distance from branch to delivery address
+      let distanceKm = null;
+      if (deliveryAddress) {
         try {
-          const branch = await db.Branch.findByPk(branchId);
-          if (branch) {
-            // Check if delivery address matches branch address (same location = minimum distance)
-            const normalizedDeliveryAddress = deliveryAddress.trim().toLowerCase();
-            const normalizedBranchAddress = branch.address ? branch.address.trim().toLowerCase() : '';
-            
-            if (normalizedDeliveryAddress === normalizedBranchAddress || 
-                normalizedDeliveryAddress.includes(normalizedBranchAddress) ||
-                normalizedBranchAddress.includes(normalizedDeliveryAddress)) {
-              // Same location, use minimum 1km
-              distanceKm = 1;
-            } else if (branch.latitude && branch.longitude) {
-              // Try to find delivery coordinates from SavedAddress
-              const savedAddress = await db.SavedAddress.findOne({
-                where: {
-                  address: deliveryAddress
-                }
-              });
-              
-              if (savedAddress && savedAddress.latitude && savedAddress.longitude) {
-                // Use Haversine formula to calculate distance
-                const R = 6371; // Earth's radius in kilometers
-                const dLat = (savedAddress.latitude - branch.latitude) * Math.PI / 180;
-                const dLon = (savedAddress.longitude - branch.longitude) * Math.PI / 180;
-                const a = 
-                  Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                  Math.cos(branch.latitude * Math.PI / 180) * Math.cos(savedAddress.latitude * Math.PI / 180) *
-                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                const calculatedDistance = R * c;
-                
-                // Minimum 1km, use calculated distance if greater
-                distanceKm = Math.max(calculatedDistance, 1);
-              }
-              // If no saved address found, use minimum 1km
+          // Get branch address if branchId is provided
+          let originAddress = null;
+          if (branchId) {
+            const branch = await db.Branch.findByPk(branchId);
+            if (branch && branch.address) {
+              originAddress = branch.address;
+              console.log(`📍 Using branch address as origin: ${branch.name} - ${originAddress}`);
             }
-            // If branch has no coordinates, use minimum 1km
+          }
+          
+          // Use Google Distance Matrix API to calculate road distance from branch to delivery address
+          const distanceResult = await calculateRoadDistance(deliveryAddress, originAddress);
+          if (distanceResult.isRoadDistance && distanceResult.distance) {
+            distanceKm = distanceResult.distance;
+            console.log(`✅ Road distance calculated: ${distanceKm} km from ${originAddress || ORIGIN_ADDRESS}`);
+          } else {
+            // Fallback: use minimum 1km if road distance calculation fails
+            console.warn('⚠️ Road distance calculation failed, using minimum 1km');
+            distanceKm = 1;
           }
         } catch (distanceError) {
-          console.error('Error calculating distance:', distanceError);
+          console.error('Error calculating road distance:', distanceError);
           distanceKm = 1; // Default to minimum 1km on error
         }
+      } else {
+        distanceKm = 1; // Default to minimum 1km if no address
       }
       
       // Ensure minimum 1km distance
-      distanceKm = Math.max(distanceKm, 1);
+      distanceKm = Math.max(distanceKm || 1, 1);
       
       const fee = distanceKm * perKmRate;
       // Round up to nearest whole number (no decimals)
-      return Math.ceil(fee);
+      return { fee: Math.ceil(fee), distance: distanceKm };
     } else {
-      // Fixed mode: use fixed amounts
+      // Fixed mode: use fixed amounts (no distance calculation needed)
       const deliveryFeeWithAlcohol = parseFloat(withAlcoholSetting?.value || '50');
       const deliveryFeeWithoutAlcohol = parseFloat(withoutAlcoholSetting?.value || '30');
 
-      if (allSoftDrinks) {
-        return deliveryFeeWithoutAlcohol;
-      }
-
-      return deliveryFeeWithAlcohol;
+      const fee = allSoftDrinks ? deliveryFeeWithoutAlcohol : deliveryFeeWithAlcohol;
+      return { fee, distance: null }; // Distance is null for fixed mode
     }
   } catch (error) {
     console.error('Error calculating delivery fee:', error);
     // Default to standard delivery fee on error
-    return 50;
+    return { fee: 50, distance: null };
   }
 };
 
@@ -384,7 +432,7 @@ router.post('/', async (req, res) => {
       }
 
       // Calculate delivery fee (after branch assignment, as it's needed for perKm mode)
-      const deliveryFee = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
+      const { fee: deliveryFee, distance: deliveryDistance } = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
       const finalTotal = totalAmount + deliveryFee + tip;
 
       // Only assign driver if explicitly provided (for admin orders)
@@ -433,7 +481,8 @@ router.post('/', async (req, res) => {
         territoryId: territoryId ? parseInt(territoryId) : null,
         isStop: isStop || false,
         stopDeductionAmount: isStop && stopDeductionAmount ? parseFloat(stopDeductionAmount) : null,
-        trackingToken: trackingToken
+        trackingToken: trackingToken,
+        deliveryDistance: deliveryDistance || null // Store road distance in kilometers
       }, { transaction });
 
       createdOrderId = order.id;
