@@ -14,7 +14,7 @@
         app:boxBackgroundMode="outline"
         app:boxBackgroundColor="@color/paper_dark"
         app:boxStrokeColor="@color/accent"
-        app:hintTextColor="@color/text_secondary_dark"
+        app:hintTextColor="#999999"
         app:hintEnabled="true"
         app:boxStrokeWidth="2dp"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
@@ -39,7 +39,7 @@
         app:boxBackgroundMode="outline"
         app:boxBackgroundColor="@color/paper_dark"
         app:boxStrokeColor="@color/accent"
-        app:hintTextColor="@color/text_secondary_dark"
+        app:hintTextColor="#999999"
         app:hintEnabled="true"
         app:boxStrokeWidth="2dp"
         style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">

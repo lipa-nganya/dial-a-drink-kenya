@@ -138,10 +138,13 @@ class ActiveOrdersActivity : AppCompatActivity() {
                 val orders = OrderRepository.getActiveOrders(this@ActiveOrdersActivity, forceRefresh = false)
                 
                 withContext(Dispatchers.Main) {
+                    Log.d(TAG, "📊 Orders loaded: ${orders.size} orders")
                     if (orders.isEmpty()) {
+                        Log.d(TAG, "📭 No orders found, showing empty state")
                         showEmptyState("No orders in progress")
                         currentOrders = emptyList()
                     } else {
+                        Log.d(TAG, "📦 Orders found, displaying ${orders.size} orders")
                         displayOrders(orders)
                         currentOrders = orders
                     }
@@ -234,10 +237,12 @@ class ActiveOrdersActivity : AppCompatActivity() {
         // Then show empty state
         binding.emptyStateText.text = message
         binding.emptyStateText.visibility = View.VISIBLE
+        binding.emptyStateText.bringToFront()
         // Force layout update
         binding.emptyStateText.requestLayout()
         binding.ordersContainer.requestLayout()
-        Log.d(TAG, "✅ Empty state visible: ${binding.emptyStateText.visibility == View.VISIBLE}, text: '${binding.emptyStateText.text}', container children: ${binding.ordersContainer.childCount}")
+        binding.ordersContainer.invalidate()
+        Log.d(TAG, "✅ Empty state visible: ${binding.emptyStateText.visibility == View.VISIBLE}, text: '${binding.emptyStateText.text}', container children: ${binding.ordersContainer.childCount}, emptyStateText parent: ${binding.emptyStateText.parent}")
     }
     
     private fun ensureEmptyStateTextExists() {
@@ -292,6 +297,8 @@ class ActiveOrdersActivity : AppCompatActivity() {
         }
         // Remove all MaterialCardViews
         viewsToRemove.forEach { binding.ordersContainer.removeView(it) }
+        // Ensure emptyStateText is still in the container after removal
+        ensureEmptyStateTextExists()
         Log.d(TAG, "🗑️ Removed ${viewsToRemove.size} order cards, remaining children: ${binding.ordersContainer.childCount}")
     }
     

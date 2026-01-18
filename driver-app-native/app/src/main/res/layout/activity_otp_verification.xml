@@ -35,7 +35,7 @@
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:hint="@string/enter_otp"
-        app:hintTextColor="@color/text_secondary_dark"
+        app:hintTextColor="#999999"
         app:boxStrokeColor="@color/accent"
         app:boxStrokeWidth="2dp"
         app:boxStrokeWidthFocused="2dp"
