@@ -122,10 +122,7 @@ class ActiveOrdersActivity : AppCompatActivity() {
      * This is the ONLY way to get orders - goes through centralized repository
      */
     private fun loadOrdersFromRepository() {
-        if (isLoading) {
-            Log.d(TAG, "⏸️ Already loading, skipping loadOrdersFromRepository")
-            return
-        }
+        if (isLoading) return
         
         isLoading = true
         binding.loadingProgress.visibility = View.VISIBLE
@@ -133,48 +130,27 @@ class ActiveOrdersActivity : AppCompatActivity() {
         binding.swipeRefresh.isRefreshing = false
         
         lifecycleScope.launch {
+            var orders = emptyList<Order>()
             try {
-                // Add timeout to prevent infinite loading
-                val orders = withTimeoutOrNull(20000) { // 20 second timeout
+                orders = withTimeoutOrNull(10000) {
                     OrderRepository.getActiveOrders(this@ActiveOrdersActivity, forceRefresh = false)
-                } ?: run {
-                    Log.e(TAG, "⏱️ Timeout loading orders from repository")
-                    emptyList<Order>()
-                }
-                
-                withContext(Dispatchers.Main) {
-                    Log.d(TAG, "📊 Orders loaded: ${orders.size} orders")
-                    if (orders.isEmpty()) {
-                        Log.d(TAG, "📭 No orders found, showing empty state")
-                        showEmptyState("No orders in progress")
-                        currentOrders = emptyList()
-                    } else {
-                        Log.d(TAG, "📦 Orders found, displaying ${orders.size} orders")
-                        displayOrders(orders)
-                        currentOrders = orders
-                    }
-                }
+                } ?: emptyList()
             } catch (e: CancellationException) {
-                // Activity destroyed, ignore
-                Log.d(TAG, "🛑 Loading cancelled")
-                isLoading = false
-                withContext(Dispatchers.Main) {
-                    binding.loadingProgress.visibility = View.GONE
-                    binding.swipeRefresh.isRefreshing = false
-                }
+                // Ignore
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Error loading orders from repository", e)
-                isLoading = false
-                withContext(Dispatchers.Main) {
-                    showEmptyState("Error loading orders")
-                    binding.loadingProgress.visibility = View.GONE
-                    binding.swipeRefresh.isRefreshing = false
-                }
+                orders = emptyList()
             } finally {
                 isLoading = false
                 withContext(Dispatchers.Main) {
                     binding.loadingProgress.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
+                    if (orders.isEmpty()) {
+                        showEmptyState("No orders in progress")
+                        currentOrders = emptyList()
+                    } else {
+                        displayOrders(orders)
+                        currentOrders = orders
+                    }
                 }
             }
         }
