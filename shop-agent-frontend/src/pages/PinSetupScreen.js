@@ -9,7 +9,7 @@ const PinSetupScreen = () => {
   const otpCode = location.state?.otpCode;
   const isResetPin = location.state?.isResetPin || false;
   const [pin, setPin] = useState('');
-  const [loading, setLoading] = useState(false);
+  const loading = false; // Placeholder for future loading state
   const [error, setError] = useState('');
 
   useEffect(() => {
