@@ -299,26 +299,55 @@ class OrderDetailActivity : AppCompatActivity() {
     
     private fun loadDriverData() {
         val driverPhone = SharedPrefs.getDriverPhone(this) ?: return
+        val driverId = SharedPrefs.getDriverId(this) ?: return
         
         lifecycleScope.launch {
             try {
-                val response = ApiClient.getApiService().getDriverByPhone(driverPhone)
+                // Load driver data and pending cash submissions in parallel
+                val driverResponse = ApiClient.getApiService().getDriverByPhone(driverPhone)
                 
-                if (response.isSuccessful && response.body()?.data != null) {
-                    val driver = response.body()!!.data!!
+                if (driverResponse.isSuccessful && driverResponse.body()?.data != null) {
+                    val driver = driverResponse.body()!!.data!!
                     driverCashAtHand = driver.cashAtHand ?: 0.0
                     driverCreditLimit = driver.creditLimit ?: 0.0
+                    
+                    // Check for pending cash submissions
+                    var pendingSubmissionsAmount = 0.0
+                    try {
+                        val submissionsResponse = ApiClient.getApiService().getCashSubmissions(driverId, "pending")
+                        if (submissionsResponse.isSuccessful && submissionsResponse.body()?.success == true) {
+                            val submissions = submissionsResponse.body()?.data?.submissions ?: emptyList()
+                            pendingSubmissionsAmount = submissions
+                                .filter { it.status == "pending" }
+                                .sumOf { it.amount }
+                        }
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Error fetching pending submissions, proceeding without them", e)
+                    }
+                    
+                    // Calculate tentative balance (cash at hand after pending submissions)
+                    val tentativeBalance = driverCashAtHand - pendingSubmissionsAmount
                     
                     // Check if credit limit is exceeded
                     // If creditLimit is 0, any cashAtHand > 0 means exceeded
                     // If creditLimit > 0, cashAtHand > creditLimit means exceeded
-                    creditLimitExceeded = if (driverCreditLimit > 0) {
+                    val exceededByCurrentBalance = if (driverCreditLimit > 0) {
                         driverCashAtHand > driverCreditLimit
                     } else {
                         driverCashAtHand > 0
                     }
                     
-                    Log.d(TAG, "Driver credit limit check: cashAtHand=$driverCashAtHand, creditLimit=$driverCreditLimit, exceeded=$creditLimitExceeded")
+                    // Allow updates if:
+                    // 1. Current balance is within limit, OR
+                    // 2. Current balance exceeds limit BUT tentative balance is 0 or below (pending submissions clear the balance)
+                    creditLimitExceeded = if (exceededByCurrentBalance) {
+                        // If tentative balance is 0 or below, allow updates even if current balance exceeds limit
+                        tentativeBalance > 0 && pendingSubmissionsAmount == 0.0
+                    } else {
+                        false
+                    }
+                    
+                    Log.d(TAG, "Driver credit limit check: cashAtHand=$driverCashAtHand, creditLimit=$driverCreditLimit, pendingSubmissions=$pendingSubmissionsAmount, tentativeBalance=$tentativeBalance, exceeded=$creditLimitExceeded")
                     
                     // Update button states if order is already loaded
                     currentOrder?.let { updateButtonVisibility(it) }
