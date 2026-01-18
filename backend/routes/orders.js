@@ -108,7 +108,8 @@ const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress
       distanceKm = Math.max(distanceKm, 1);
       
       const fee = distanceKm * perKmRate;
-      return Number(fee.toFixed(2));
+      // Round up to nearest whole number (no decimals)
+      return Math.ceil(fee);
     } else {
       // Fixed mode: use fixed amounts
       const deliveryFeeWithAlcohol = parseFloat(withAlcoholSetting?.value || '50');

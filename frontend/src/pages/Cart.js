@@ -46,9 +46,13 @@ const Cart = () => {
   const [tipAmount, setTipAmount] = useState(0);
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
+    deliveryFeeMode: 'fixed',
     deliveryFeeWithAlcohol: 50,
-    deliveryFeeWithoutAlcohol: 30
+    deliveryFeeWithoutAlcohol: 30,
+    deliveryFeePerKmWithAlcohol: 20,
+    deliveryFeePerKmWithoutAlcohol: 15
   });
+  const [deliveryCoordinates, setDeliveryCoordinates] = useState(null);
   const navigate = useNavigate();
 
   const formatPhoneForDisplay = (phone) => {
@@ -72,26 +76,35 @@ const Cart = () => {
     return digits;
   };
 
-  // Fetch delivery settings
+  // Fetch delivery settings - always fetch fresh from admin settings API
+  // This ensures we use current admin settings even when reordering
   useEffect(() => {
     const fetchDeliverySettings = async () => {
       try {
-        const [testModeRes, withAlcoholRes, withoutAlcoholRes] = await Promise.all([
+        const [testModeRes, feeModeRes, withAlcoholRes, withoutAlcoholRes, perKmWithAlcoholRes, perKmWithoutAlcoholRes] = await Promise.all([
           api.get('/settings/deliveryTestMode').catch(() => ({ data: { value: 'false' } })),
+          api.get('/settings/deliveryFeeMode').catch(() => ({ data: { value: 'fixed' } })),
           api.get('/settings/deliveryFeeWithAlcohol').catch(() => ({ data: { value: '50' } })),
-          api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: { value: '30' } }))
+          api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: { value: '30' } })),
+          api.get('/settings/deliveryFeePerKmWithAlcohol').catch(() => ({ data: { value: '20' } })),
+          api.get('/settings/deliveryFeePerKmWithoutAlcohol').catch(() => ({ data: { value: '15' } }))
         ]);
 
         setDeliverySettings({
           isTestMode: testModeRes.data?.value === 'true',
+          deliveryFeeMode: feeModeRes.data?.value || 'fixed',
           deliveryFeeWithAlcohol: parseFloat(withAlcoholRes.data?.value || '50'),
-          deliveryFeeWithoutAlcohol: parseFloat(withoutAlcoholRes.data?.value || '30')
+          deliveryFeeWithoutAlcohol: parseFloat(withoutAlcoholRes.data?.value || '30'),
+          deliveryFeePerKmWithAlcohol: parseFloat(perKmWithAlcoholRes.data?.value || '20'),
+          deliveryFeePerKmWithoutAlcohol: parseFloat(perKmWithoutAlcoholRes.data?.value || '15')
         });
       } catch (error) {
         console.error('Error fetching delivery settings:', error);
+        // Keep default values if API fails
       }
     };
 
+    // Always fetch fresh settings when Cart component loads (including reorders)
     fetchDeliverySettings();
     
     // Load saved delivery information from localStorage
@@ -133,7 +146,20 @@ const Cart = () => {
     loadSavedDeliveryInfo();
   }, []);
 
-  // Calculate delivery fee based on cart contents
+  // Calculate distance using Haversine formula (in kilometers)
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371; // Earth's radius in kilometers
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  // Calculate delivery fee based on cart contents and delivery settings
   const calculateDeliveryFee = () => {
     if (deliverySettings.isTestMode) {
       return 0;
@@ -141,6 +167,10 @@ const Cart = () => {
 
     // If no items, return default fee
     if (!items || items.length === 0) {
+      if (deliverySettings.deliveryFeeMode === 'perKm') {
+        // In perKm mode, default to 5km if no address
+        return 5 * deliverySettings.deliveryFeePerKmWithAlcohol;
+      }
       return deliverySettings.deliveryFeeWithAlcohol;
     }
 
@@ -152,6 +182,22 @@ const Cart = () => {
     
     // If we don't have category info for all items, default to with-alcohol fee
     if (itemsWithCategoryInfo.length !== items.length) {
+      if (deliverySettings.deliveryFeeMode === 'perKm') {
+        if (deliveryCoordinates) {
+          // Reference point: Taveta Shopping Mall
+          const referenceLat = -1.359872;
+          const referenceLon = 36.6641152;
+          const distance = calculateDistance(
+            referenceLat,
+            referenceLon,
+            deliveryCoordinates.lat,
+            deliveryCoordinates.lng
+          );
+          return Math.ceil(distance * deliverySettings.deliveryFeePerKmWithAlcohol); // Round up to whole number
+        }
+        // Default to 5km if no coordinates
+        return Math.ceil(5 * deliverySettings.deliveryFeePerKmWithAlcohol); // Round up to whole number
+      }
       return deliverySettings.deliveryFeeWithAlcohol;
     }
 
@@ -160,6 +206,29 @@ const Cart = () => {
       item.drink?.category?.name === softDrinksCategoryName
     );
 
+    // Handle perKm mode
+    if (deliverySettings.deliveryFeeMode === 'perKm') {
+      const perKmRate = allSoftDrinks 
+        ? deliverySettings.deliveryFeePerKmWithoutAlcohol 
+        : deliverySettings.deliveryFeePerKmWithAlcohol;
+      
+      if (deliveryCoordinates) {
+        // Reference point: Taveta Shopping Mall - Stall G1, Taveta Road, Nairobi, Kenya
+        const referenceLat = -1.359872;
+        const referenceLon = 36.6641152;
+        const distance = calculateDistance(
+          referenceLat,
+          referenceLon,
+          deliveryCoordinates.lat,
+          deliveryCoordinates.lng
+        );
+        return Math.ceil(Math.max(distance * perKmRate, perKmRate)); // Minimum 1km fee, round up
+      }
+      // Default to 5km if no coordinates available
+      return Math.ceil(5 * perKmRate); // Round up to whole number
+    }
+
+    // Fixed mode
     if (allSoftDrinks) {
       return deliverySettings.deliveryFeeWithoutAlcohol;
     }
@@ -644,7 +713,7 @@ const Cart = () => {
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography>Delivery:</Typography>
-                <Typography>KES {deliveryFee.toFixed(2)}</Typography>
+                <Typography>KES {Math.ceil(deliveryFee)}</Typography>
               </Box>
               
               {/* Tip Section */}
@@ -755,7 +824,30 @@ const Cart = () => {
               <AddressAutocomplete
                 label="Delivery Address *"
                 value={customerInfo.address}
-                onChange={(e) => handleInputChange('address', e.target.value)}
+                onChange={(e) => {
+                  handleInputChange('address', e.target.value);
+                  // Clear coordinates if address is manually edited (not from autocomplete)
+                  // Coordinates will be set again when user selects from autocomplete
+                  if (!e.target.value) {
+                    setDeliveryCoordinates(null);
+                  }
+                }}
+                onPlaceSelect={(placeData) => {
+                  // Capture coordinates when address is selected from autocomplete for distance calculation
+                  if (placeData?.geometry?.location) {
+                    const lat = typeof placeData.geometry.location.lat === 'function' 
+                      ? placeData.geometry.location.lat() 
+                      : placeData.geometry.location.lat;
+                    const lng = typeof placeData.geometry.location.lng === 'function' 
+                      ? placeData.geometry.location.lng() 
+                      : placeData.geometry.location.lng;
+                    if (lat && lng) {
+                      setDeliveryCoordinates({ lat, lng });
+                    }
+                  } else if (placeData?.lat && placeData?.lng) {
+                    setDeliveryCoordinates({ lat: placeData.lat, lng: placeData.lng });
+                  }
+                }}
                 placeholder="Start typing your address..."
               />
               <TextField
