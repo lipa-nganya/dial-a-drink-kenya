@@ -30,19 +30,24 @@ const AddressAutocomplete = ({
     
     setLoading(true);
     try {
+      console.log('[AddressAutocomplete] Fetching suggestions for:', input);
       const response = await api.post('/places/autocomplete', {
         input: input
       });
+      console.log('[AddressAutocomplete] API response:', response.data);
 
       if (response.data && response.data.suggestions && response.data.suggestions.length > 0) {
         setSuggestions(response.data.suggestions);
+        console.log('[AddressAutocomplete] Setting suggestions:', response.data.suggestions.length, 'items');
         setOpen(true); // Open dropdown when suggestions are available
       } else {
+        console.log('[AddressAutocomplete] No suggestions found');
         setSuggestions([]);
         setOpen(false);
       }
     } catch (error) {
-      console.error('Error fetching address suggestions:', error);
+      console.error('[AddressAutocomplete] Error fetching address suggestions:', error);
+      console.error('[AddressAutocomplete] Error details:', error.response?.data || error.message);
       // Fallback: if API fails, just show empty suggestions (user can type manually)
       setSuggestions([]);
       setOpen(false);
