@@ -167,15 +167,60 @@ router.post('/send-otp', async (req, res) => {
         }
       });
     }
+
+    // Check if this is a shop agent phone number
+    const forceShopAgent = normalizedContext === 'shop_agent';
+    let shopAgent = null;
+    if (forceShopAgent) {
+      // Try multiple phone number formats to find shop agent
+      const phoneVariations = [
+        cleanedPhone,
+        cleanedPhone.replace(/^254/, '0'),
+        cleanedPhone.replace(/^254/, ''),
+        `+${cleanedPhone}`
+      ];
+      
+      shopAgent = await db.Admin.findOne({
+        where: {
+          role: 'shop_agent',
+          mobileNumber: {
+            [db.Sequelize.Op.in]: phoneVariations
+          }
+        }
+      });
+      
+      // If shop agent found and PIN is already set, reject OTP request
+      // OTP should only be sent for PIN setup or PIN reset
+      if (shopAgent && shopAgent.hasSetPin) {
+        const isResetRequest = req.body.resetPin === true || req.body.reset === true;
+        
+        if (!isResetRequest) {
+          return res.status(400).json({
+            success: false,
+            error: 'PIN already set. Please use PIN login instead.',
+            hasPin: true,
+            shouldUsePinLogin: true
+          });
+        }
+        
+        // If it's a reset request, allow OTP to be sent
+        console.log(`🔄 PIN reset requested for shop agent: ${shopAgent.name} (${shopAgent.mobileNumber})`);
+      }
+    }
     
-    // Generate OTP - 4 digits for drivers, 6 digits for customers
-    const isDriver = forceDriver || (!!driver && !forceCustomer);
-    const otpCode = isDriver ? generateDriverOTP() : generateOTP();
+    // Generate OTP - 4 digits for drivers and shop agents, 6 digits for customers
+    const isDriver = forceDriver || (!!driver && !forceCustomer && !forceShopAgent);
+    const isShopAgent = forceShopAgent || (!!shopAgent && !forceCustomer && !forceDriver);
+    const otpCode = (isDriver || isShopAgent) ? generateDriverOTP() : generateOTP();
     const expiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000); // 3 hours from now
     
-    console.log(`📱 ${isDriver ? 'Driver' : 'Customer'} OTP generated: ${otpCode.length} digits`);
+    const userType = isShopAgent ? 'Shop Agent' : (isDriver ? 'Driver' : 'Customer');
+    console.log(`📱 ${userType} OTP generated: ${otpCode.length} digits`);
     if (driver) {
       console.log(`📱 Driver found: ${driver.name} (${driver.phoneNumber})`);
+    }
+    if (shopAgent) {
+      console.log(`📱 Shop Agent found: ${shopAgent.name} (${shopAgent.mobileNumber})`);
     }
 
     // Invalidate any existing unused OTPs for this phone number
@@ -199,11 +244,13 @@ router.post('/send-otp', async (req, res) => {
     });
 
     // Send OTP via SMS (always send, not subject to admin SMS settings)
-    const smsResult = await smsService.sendOTP(cleanedPhone, otpCode);
+    // For shop agents and drivers, force sending via Advanta SMS even in local dev
+    const forceSendSMS = isDriver || isShopAgent;
+    const smsResult = await smsService.sendOTP(cleanedPhone, otpCode, forceSendSMS);
 
-    // For drivers, always return success even if SMS fails
+    // For drivers and shop agents, always return success even if SMS fails
     // The OTP is generated and stored, admin can provide it from dashboard
-    if (isDriver) {
+    if (isDriver || isShopAgent) {
       if (!smsResult.success) {
         console.error('Failed to send OTP to driver:', smsResult.error);
         console.log(`📱 Driver OTP generated (SMS failed): ${otpCode} - Admin can provide from dashboard`);
@@ -403,8 +450,33 @@ router.post('/verify-otp', async (req, res) => {
       });
     }
 
-    // Mark OTP as used
-    await otpRecord.update({ isUsed: true });
+    // Check if this is a shop agent - don't mark OTP as used yet
+    // OTP will be marked as used when PIN is actually set in /shop-agents/set-pin
+    const forceShopAgent = normalizedContext === 'shop_agent';
+    let isShopAgent = false;
+    
+    if (forceShopAgent) {
+      isShopAgent = true;
+    } else {
+      // Check if phone number belongs to a shop agent
+      const shopAgent = await db.Admin.findOne({
+        where: {
+          role: 'shop_agent',
+          mobileNumber: {
+            [db.Sequelize.Op.in]: Array.from(candidatePhones)
+          }
+        }
+      });
+      isShopAgent = !!shopAgent;
+    }
+
+    // Only mark OTP as used if NOT a shop agent
+    // Shop agents will have OTP marked as used when PIN is set
+    if (!isShopAgent) {
+      await otpRecord.update({ isUsed: true });
+    } else {
+      console.log(`📱 Shop agent OTP verified - will be marked as used when PIN is set`);
+    }
 
     // Check if this is a driver phone number FIRST
     let driver = null;
