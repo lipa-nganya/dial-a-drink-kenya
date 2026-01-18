@@ -174,8 +174,6 @@ app.use('/api/driver-wallet', require('./routes/driver-wallet'));
 app.use('/api/driver-wallet', require('./routes/cash-submissions'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/territories', require('./routes/territories'));
-// Temporary migration endpoint - remove after use
-app.use('/api/admin-branch-migration', require('./routes/admin-branch-migration'));
 app.use('/api/developers', require('./routes/developers'));
 
 // Valkyrie Partner API (feature flag controlled)
