@@ -216,23 +216,6 @@ class ActiveOrdersActivity : AppCompatActivity() {
         binding.emptyStateText.visibility = View.VISIBLE
     }
     
-    private fun ensureEmptyStateTextExists() {
-        // Check if emptyStateText is still in the container
-        var found = false
-        for (i in 0 until binding.ordersContainer.childCount) {
-            if (binding.ordersContainer.getChildAt(i) == binding.emptyStateText) {
-                found = true
-                break
-            }
-        }
-        
-        // If not found, add it back (shouldn't happen, but defensive)
-        if (!found) {
-            Log.w(TAG, "⚠️ emptyStateText not found in container, re-adding")
-            binding.ordersContainer.addView(binding.emptyStateText, 0)
-        }
-    }
-    
     private fun displayOrders(orders: List<com.dialadrink.driver.data.model.Order>) {
         binding.loadingProgress.visibility = View.GONE
         binding.swipeRefresh.isRefreshing = false
