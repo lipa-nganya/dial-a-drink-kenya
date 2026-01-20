@@ -25,9 +25,12 @@ const resolveApiBaseUrl = () => {
   }
 
   // Netlify production deployments (thewolfgang.tech)
+  // CRITICAL: Always use production backend for Netlify, ignore REACT_APP_API_URL
+  // This prevents incorrect localhost URLs from Netlify environment variables
   const isNetlifyProd = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
   if (isNetlifyProd) {
-    return { url: DEFAULT_PRODUCTION_API_BASE, source: 'netlify-prod' };
+    // Force production URL - ignore any REACT_APP_API_URL that might be set incorrectly
+    return { url: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api', source: 'netlify-prod-forced' };
   }
 
   // Other managed hosts (onrender.com, etc.)
