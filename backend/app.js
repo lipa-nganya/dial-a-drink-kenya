@@ -47,41 +47,7 @@ const allowedOrigins = [
   'https://*.netlify.app'
 ].filter(Boolean);
 
-const corsOptions = {
-  origin(origin, callback) {
-    // CRITICAL: Allow requests with no origin (like M-Pesa callbacks)
-    // M-Pesa callbacks don't send Origin header, so we must allow them
-    if (!origin) {
-      return callback(null, true);
-    }
-    
-    // Check exact match first
-    if (allowedOrigins.includes(origin)) {
-      console.log(`✅ CORS allowed: ${origin} (exact match)`);
-      return callback(null, origin); // Return origin explicitly for CORS headers
-    }
-    
-    // Check for Netlify preview URLs (wildcard pattern)
-    if (origin.includes('.netlify.app')) {
-      console.log(`✅ CORS allowed: ${origin} (netlify.app domain)`);
-      return callback(null, origin); // Return origin explicitly
-    }
-    
-    // Check for thewolfgang.tech domains (any subdomain or root domain)
-    if (origin.includes('.thewolfgang.tech') || origin === 'https://thewolfgang.tech') {
-      console.log(`✅ CORS allowed: ${origin} (thewolfgang.tech domain)`);
-      return callback(null, origin); // Return origin explicitly for CORS headers
-    }
-    
-    console.warn(`❌ CORS blocked origin: ${origin}`);
-    console.warn(`   Allowed origins:`, allowedOrigins.slice(0, 5), '...');
-    return callback(new Error('Not allowed by CORS'));
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  optionsSuccessStatus: 204
-};
+// CORS is handled by explicit middleware below - no cors package needed
 
 // CRITICAL: Explicit CORS headers FIRST (before cors package)
 // This ensures headers are ALWAYS set, even if cors package fails
