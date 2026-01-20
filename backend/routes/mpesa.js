@@ -158,10 +158,23 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
   }
 
-  const normalizedReceipt = receiptNumber || paymentTransaction.receiptNumber;
+  let normalizedReceipt = receiptNumber || paymentTransaction.receiptNumber;
+  const paymentProvider = paymentTransaction.paymentProvider || 'mpesa';
 
+  // For M-Pesa, receipt number is required. For other providers (e.g., PesaPal), generate a fallback
   if (!normalizedReceipt) {
-    throw new Error('Missing M-Pesa receipt number; cannot finalize payment without Safaricom confirmation.');
+    if (paymentProvider === 'mpesa') {
+      throw new Error('Missing M-Pesa receipt number; cannot finalize payment without Safaricom confirmation.');
+    } else {
+      // For non-M-Pesa providers, generate a receipt number from available transaction data
+      const fallbackReceipt = paymentTransaction.checkoutRequestID 
+        ? `${paymentProvider.toUpperCase()}-${paymentTransaction.checkoutRequestID}`
+        : `${paymentProvider.toUpperCase()}-${paymentTransaction.id || Date.now()}`;
+      console.log(`⚠️  No receipt number provided for ${paymentProvider} payment. Using fallback: ${fallbackReceipt}`);
+      normalizedReceipt = fallbackReceipt;
+      // Update the transaction with the fallback receipt
+      await paymentTransaction.update({ receiptNumber: normalizedReceipt }, { transaction: dbTransaction });
+    }
   }
 
   const initialTransactionDate = paymentTransaction.transactionDate || null;
@@ -169,7 +182,7 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
     ? new Date(initialTransactionDate)
     : new Date();
   const paymentMethod = paymentTransaction.paymentMethod || orderInstance.paymentMethod || 'mobile_money';
-  const paymentProvider = paymentTransaction.paymentProvider || 'mpesa';
+  // paymentProvider already declared above
 
   await paymentTransaction.update({
     amount: itemsTotal,
@@ -186,18 +199,26 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
 
   // CRITICAL: Update order status as part of the transaction
   // This ensures the order status is updated atomically with payment finalization
+  // For successful payments, always set status to 'confirmed' (unless it's a POS order which becomes 'completed')
+  let finalStatus = 'confirmed'; // Default to 'confirmed' for successful payments
+  
+  // For POS orders, set status to 'completed' immediately (no delivery needed)
+  if (isPOSOrder) {
+    finalStatus = 'completed';
+  } else if (orderInstance.status && orderInstance.status !== 'pending' && orderInstance.status !== 'unpaid') {
+    // If order already has a status other than pending/unpaid, preserve it (e.g., 'out_for_delivery', 'delivered')
+    // But only if it's not a POS order
+    finalStatus = orderInstance.status;
+  }
+  // Otherwise, use 'confirmed' (default)
+  
   const orderUpdatePayload = {
     paymentStatus: 'paid',
-    status: orderInstance.status === 'pending' ? 'confirmed' : orderInstance.status
+    status: finalStatus
   };
 
   if (driverPayAmount > 0.009) {
     orderUpdatePayload.driverPayAmount = driverPayAmount;
-  }
-
-  // For POS orders, set status to 'completed' immediately (no delivery needed)
-  if (isPOSOrder) {
-    orderUpdatePayload.status = 'completed';
   }
   
   // Update order within the transaction to ensure it's committed atomically
@@ -237,40 +258,66 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   const io = req?.app?.get('io');
   if (io) {
     const paymentConfirmedAt = new Date().toISOString();
+    
+    // Ensure order object has correct paymentStatus before serializing
+    const orderJson = orderInstance.toJSON ? orderInstance.toJSON() : orderInstance;
+    // CRITICAL: Ensure paymentStatus is explicitly set to 'paid' in the order object
+    if (orderJson) {
+      orderJson.paymentStatus = 'paid';
+      orderJson.status = orderInstance.status; // Ensure status is also correct
+    }
+    
+    console.log(`📡 Emitting payment-confirmed event for Order #${orderInstance.id}`);
+    console.log(`   Order paymentStatus: ${orderInstance.paymentStatus}`);
+    console.log(`   Order status: ${orderInstance.status}`);
+    console.log(`   Order JSON paymentStatus: ${orderJson?.paymentStatus}`);
+    
     const payload = {
       orderId: orderInstance.id,
       status: orderInstance.status,
-      paymentStatus: 'paid',
+      paymentStatus: 'paid', // Explicitly set in payload
       receiptNumber: normalizedReceipt,
       transactionId: paymentTransaction.id,
       transactionStatus: 'completed',
       paymentConfirmedAt,
-      order: orderInstance.toJSON ? orderInstance.toJSON() : orderInstance,
+      paymentProvider: paymentTransaction.paymentProvider || paymentProvider || 'mpesa',
+      paymentMethod: paymentTransaction.paymentMethod || paymentMethod || 'mobile_money',
+      order: orderJson, // Use order object with explicit paymentStatus: 'paid'
       message: `Payment confirmed for Order #${orderInstance.id}`
     };
 
     // Emit payment-confirmed event
+    console.log(`📡 Emitting payment-confirmed to order-${orderInstance.id} room`);
     io.to(`order-${orderInstance.id}`).emit('payment-confirmed', payload);
     
     // Also emit order-status-updated event for broader compatibility
+    // Use the same corrected orderJson with explicit paymentStatus: 'paid'
     const orderStatusUpdateData = {
       orderId: orderInstance.id,
       status: orderInstance.status,
-      paymentStatus: 'paid',
-      order: orderInstance.toJSON ? orderInstance.toJSON() : orderInstance,
+      paymentStatus: 'paid', // Explicitly set
+      order: orderJson, // Use corrected orderJson with paymentStatus: 'paid'
       message: `Order #${orderInstance.id} status updated`
     };
+    
+    console.log(`📡 Emitting order-status-updated event for Order #${orderInstance.id}`);
+    console.log(`   Order paymentStatus: ${orderInstance.paymentStatus}`);
+    console.log(`   Order status: ${orderInstance.status}`);
+    console.log(`   Order JSON paymentStatus: ${orderJson?.paymentStatus}`);
     io.to(`order-${orderInstance.id}`).emit('order-status-updated', orderStatusUpdateData);
 
     if (orderInstance.driverId) {
+      console.log(`📡 Emitting payment-confirmed to driver-${orderInstance.driverId} room`);
       io.to(`driver-${orderInstance.driverId}`).emit('payment-confirmed', payload);
       io.to(`driver-${orderInstance.driverId}`).emit('order-status-updated', orderStatusUpdateData);
     }
 
+    console.log(`📡 Emitting payment-confirmed to admin room`);
     io.to('admin').emit('payment-confirmed', {
       ...payload,
       message: `${context} for Order #${orderInstance.id}`
     });
+    console.log(`📡 Emitting order-status-updated to admin room`);
     io.to('admin').emit('order-status-updated', orderStatusUpdateData);
     
     // For "pay now" orders, emit 'new-order' event after payment is confirmed
@@ -723,34 +770,33 @@ router.post('/stk-push', async (req, res) => {
 
     console.log('STK Push response received:', JSON.stringify(stkResponse, null, 2));
 
-    // Check if STK push was successful
-    // M-Pesa returns ResponseCode as string '0' for success
-    // Also check for errorCode or errorMessage
-    const responseCode = stkResponse.ResponseCode || stkResponse.responseCode || stkResponse.errorCode;
-    const errorMessage = stkResponse.errorMessage || stkResponse.errorDescription || stkResponse.errorMessage;
-    const requestId = stkResponse.requestId || stkResponse.RequestID;
-    const checkoutRequestID = stkResponse.CheckoutRequestID || stkResponse.checkoutRequestID;
+    // Handle normalized response from service (or simulated response)
+    // The service now returns a normalized response with success property
+    // But simulated responses might still use old format, so check both
+    const isSuccess = stkResponse.success !== undefined 
+      ? stkResponse.success 
+      : (stkResponse.ResponseCode === '0' || stkResponse.ResponseCode === 0);
     
-    console.log('Response code:', responseCode);
-    console.log('Error message:', errorMessage);
-    console.log('Request ID:', requestId);
-    console.log('CheckoutRequestID:', checkoutRequestID);
-    console.log('MerchantRequestID:', stkResponse.MerchantRequestID);
-    console.log('CustomerMessage:', stkResponse.CustomerMessage);
+    const responseCode = stkResponse.responseCode || stkResponse.ResponseCode || stkResponse.errorCode;
+    const errorMessage = stkResponse.error || stkResponse.errorMessage || stkResponse.errorDescription;
+    const checkoutRequestID = stkResponse.checkoutRequestID || stkResponse.CheckoutRequestID;
+    const merchantRequestID = stkResponse.merchantRequestID || stkResponse.MerchantRequestID;
+    const customerMessage = stkResponse.customerMessage || stkResponse.CustomerMessage;
     
-    // Check if response indicates success (ResponseCode === '0' means success)
-    // Even if ResponseCode is not '0', if we have CheckoutRequestID, it might still be successful
-    // M-Pesa sandbox sometimes returns different response formats
-    const hasCheckoutRequestID = !!checkoutRequestID;
-    const isSuccessCode = responseCode === '0' || responseCode === 0;
+    console.log('📋 STK Push response analysis:', {
+      success: isSuccess,
+      responseCode: responseCode,
+      checkoutRequestID: checkoutRequestID,
+      merchantRequestID: merchantRequestID,
+      error: errorMessage,
+      customerMessage: customerMessage
+    });
     
-    console.log('Has CheckoutRequestID:', hasCheckoutRequestID);
-    console.log('Is success code:', isSuccessCode);
-    
-      if (isSuccessCode || hasCheckoutRequestID) {
+    // Check if STK push was initiated successfully
+    // M-Pesa returns success even if the request is accepted, but payment hasn't completed yet
+    // We should return success immediately and wait for callback to determine final status
+      if (isSuccess || checkoutRequestID) {
       // Update order with M-Pesa transaction details
-      const checkoutRequestID = stkResponse.CheckoutRequestID || stkResponse.checkoutRequestID;
-      
       // Store checkout request ID and also store it in a way that's easy to find
       const checkoutNote = `M-Pesa CheckoutRequestID: ${checkoutRequestID}`;
       await order.update({
@@ -792,12 +838,12 @@ router.post('/stk-push', async (req, res) => {
           status: 'pending',
         paymentStatus: 'pending',
           checkoutRequestID: checkoutRequestID,
-          merchantRequestID: stkResponse.MerchantRequestID,
+          merchantRequestID: merchantRequestID,
         phoneNumber: phoneNumber
       };
 
       try {
-        const paymentNote = `STK Push initiated. ${stkResponse.CustomerMessage || ''} Order portion: KES ${itemsTotal.toFixed(2)}.${tipAmount > 0 ? ` Tip (KES ${tipAmount.toFixed(2)}) will be recorded separately.` : ''}`;
+        const paymentNote = `STK Push initiated. ${customerMessage || ''} Order portion: KES ${itemsTotal.toFixed(2)}.${tipAmount > 0 ? ` Tip (KES ${tipAmount.toFixed(2)}) will be recorded separately.` : ''}`;
 
         // CRITICAL: Check for ANY existing payment transaction for this order FIRST
         // This prevents duplicates even if checkoutRequestID is different or null
@@ -994,23 +1040,32 @@ router.post('/stk-push', async (req, res) => {
       // In test mode, payment is automatically finalized - no actual STK push is sent
       const responseMessage = shouldSimulatePayment 
         ? 'Test mode: Payment will be automatically confirmed in a few seconds. No STK push was sent to your phone.'
-        : (stkResponse.CustomerMessage || stkResponse.customerMessage || 'STK Push initiated successfully. Please check your phone to complete payment.');
+        : (customerMessage || 'STK Push initiated successfully. Please check your phone to complete payment.');
 
       res.json({
         success: true,
         message: responseMessage,
         checkoutRequestID: checkoutRequestID,
-        customerMessage: stkResponse.CustomerMessage || stkResponse.customerMessage,
+        merchantRequestID: merchantRequestID,
+        customerMessage: customerMessage,
         testMode: shouldSimulatePayment,
         response: stkResponse
       });
     } else {
       // Log the full response for debugging
-      console.error('STK Push failed. Full response:', JSON.stringify(stkResponse, null, 2));
+      console.error('❌ STK Push failed. Full response:', JSON.stringify(stkResponse, null, 2));
+      console.error('❌ STK Push failure details:', {
+        success: isSuccess,
+        responseCode: responseCode,
+        checkoutRequestID: checkoutRequestID,
+        error: errorMessage,
+        customerMessage: customerMessage
+      });
       res.status(400).json({
         success: false,
-        error: errorMessage || 'Failed to initiate STK Push',
+        error: errorMessage || customerMessage || 'Failed to initiate STK Push',
         responseCode: responseCode,
+        checkoutRequestID: checkoutRequestID,
         response: stkResponse
       });
     }
