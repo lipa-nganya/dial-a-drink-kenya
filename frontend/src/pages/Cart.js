@@ -40,6 +40,7 @@ const Cart = () => {
   const [paymentMethod, setPaymentMethod] = useState(null);
   const [mobileMoneyProvider, setMobileMoneyProvider] = useState(null); // 'mpesa' or 'airtel'
   const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
+  const [pesapalRedirectUrl, setPesapalRedirectUrl] = useState(null);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -443,6 +444,12 @@ const Cart = () => {
       }
     }
 
+    // For card payments, we need to get PesaPal redirect URL first
+    if (paymentType === 'pay_now' && paymentMethod === 'card' && !pesapalRedirectUrl) {
+      // Don't validate card fields - PesaPal will handle that in their iframe
+      // Just ensure order is created first
+    }
+
     // Set processing state immediately for M-Pesa payments
     if (paymentType === 'pay_now' && paymentMethod === 'mobile_money' && mobileMoneyProvider === 'mpesa') {
       setIsProcessingPayment(true);
@@ -476,9 +483,27 @@ const Cart = () => {
         completeAddress += `, Floor ${customerInfo.floorNumber.trim()}`;
       }
 
+      // Normalize phone to 254 format before sending to backend
+      const normalizePhoneForStorage = (phone) => {
+        if (!phone) return phone;
+        const cleaned = phone.replace(/\D/g, '');
+        // Store in 254 format if it's a valid Kenyan number
+        if (cleaned.startsWith('254') && cleaned.length === 12) {
+          return cleaned;
+        } else if (cleaned.startsWith('0') && cleaned.length === 10) {
+          return `254${cleaned.slice(1)}`;
+        } else if (cleaned.length === 9 && cleaned.startsWith('7')) {
+          return `254${cleaned}`;
+        }
+        return cleaned; // Return cleaned version
+      };
+      
+      const normalizedPhone = normalizePhoneForStorage(customerInfo.phone);
+      console.log(`📱 Frontend: Normalizing phone "${customerInfo.phone}" -> "${normalizedPhone}" before sending to backend`);
+      
       const orderData = {
         customerName: customerInfo.name,
-        customerPhone: customerInfo.phone,
+        customerPhone: normalizedPhone, // Send normalized phone to backend
         customerEmail: customerInfo.email,
         deliveryAddress: completeAddress,
         notes: customerInfo.notes,
@@ -487,7 +512,9 @@ const Cart = () => {
         tipAmount: tipAmount || 0,
         items: items.map(item => ({
           drinkId: item.drinkId,
-          quantity: item.quantity
+          quantity: item.quantity,
+          selectedPrice: item.price, // Send the selected price from cart
+          selectedCapacity: item.selectedCapacity || null // Send the selected capacity
         }))
       };
 
@@ -498,9 +525,10 @@ const Cart = () => {
       const totalAmount = parseFloat(response.data.totalAmount);
       
       // Save delivery information for future orders
+      const displayPhone = formatPhoneForDisplay(customerInfo.phone);
       localStorage.setItem('customerDeliveryInfo', JSON.stringify({
         name: customerInfo.name,
-        phone: customerInfo.phone,
+        phone: displayPhone,
         email: customerInfo.email,
         address: customerInfo.address,
         apartmentHouseNumber: customerInfo.apartmentHouseNumber,
@@ -508,17 +536,34 @@ const Cart = () => {
         notes: customerInfo.notes
       }));
       
-      // Also update customerOrder in localStorage
+      console.log(`📱 Frontend phone normalization: "${customerInfo.phone}" -> "${normalizedPhone}" (display: "${displayPhone}")`);
+      
+      // Also update customerOrder in localStorage - preserve customer login data
       const savedOrder = localStorage.getItem('customerOrder');
       if (savedOrder) {
-        const orderData = JSON.parse(savedOrder);
-        localStorage.setItem('customerOrder', JSON.stringify({
-          ...orderData,
-          orderId: orderId,
-          email: customerInfo.email,
-          phone: customerInfo.phone,
-          customerName: customerInfo.name
-        }));
+        try {
+          const orderData = JSON.parse(savedOrder);
+          // Preserve all existing customer data (id, username, loggedInAt, etc.)
+          localStorage.setItem('customerOrder', JSON.stringify({
+            ...orderData, // Preserve existing customer login data
+            orderId: orderId, // Add order ID
+            email: customerInfo.email || orderData.email, // Use new email if provided, otherwise keep existing
+            phone: normalizedPhone || orderData.phone, // Store normalized phone for searching
+            phoneDisplay: displayPhone, // Keep display format for UI
+            customerName: customerInfo.name || orderData.customerName, // Use new name if provided, otherwise keep existing
+            customerPhone: normalizedPhone || orderData.customerPhone, // Store normalized phone
+            username: normalizedPhone || orderData.username // Use normalized phone as username
+          }));
+        } catch (error) {
+          console.error('Error updating customerOrder:', error);
+          // If parsing fails, create new entry but preserve customer login structure
+          localStorage.setItem('customerOrder', JSON.stringify({
+            orderId: orderId,
+            email: customerInfo.email,
+            phone: customerInfo.phone,
+            customerName: customerInfo.name
+          }));
+        }
       } else {
         localStorage.setItem('customerOrder', JSON.stringify({
           orderId: orderId,
@@ -583,6 +628,98 @@ const Cart = () => {
                               paymentError.response?.data?.message || 
                               paymentError.message || 
                               'Failed to initiate payment. Please try again.';
+          setError(errorMessage);
+          setIsProcessingPayment(false);
+          setLoading(false);
+        }
+      } else if (paymentType === 'pay_now' && paymentMethod === 'card') {
+        // Handle card payment with PesaPal - load iframe
+        try {
+          // If we don't have the redirect URL yet, get it
+          if (!pesapalRedirectUrl) {
+            setIsProcessingPayment(true);
+            
+            console.log('💳 Initiating PesaPal card payment:', {
+              orderId: orderId,
+              amount: totalAmount
+            });
+            
+            // Get current URL for callbacks
+            const currentUrl = window.location.origin;
+            const callbackUrl = `${currentUrl}/payment-success?orderId=${orderId}`;
+            const cancellationUrl = `${currentUrl}/payment-cancelled?orderId=${orderId}`;
+            
+            console.log('💳 Calling /pesapal/initiate-payment to get PesaPal iframe URL');
+            console.log('💳 Request payload:', { orderId, callbackUrl, cancellationUrl });
+            
+            const paymentResponse = await api.post('/pesapal/initiate-payment', {
+              orderId: orderId,
+              callbackUrl: callbackUrl,
+              cancellationUrl: cancellationUrl
+            });
+
+            console.log('💳 PesaPal payment response:', paymentResponse.data);
+            console.log('💳 Response success:', paymentResponse.data.success);
+            console.log('💳 Response redirectUrl:', paymentResponse.data.redirectUrl);
+
+            if (paymentResponse.data.success && paymentResponse.data.redirectUrl) {
+              // Load PesaPal payment form in iframe
+              console.log('💳 ✅ Success! Loading PesaPal payment form in iframe');
+              console.log('💳 Redirect URL:', paymentResponse.data.redirectUrl);
+              setPesapalRedirectUrl(paymentResponse.data.redirectUrl);
+              setIsProcessingPayment(false);
+              setLoading(false);
+              // Scroll to iframe to make it visible
+              setTimeout(() => {
+                const iframeElement = document.querySelector('iframe[src*="pesapal"]');
+                if (iframeElement) {
+                  iframeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+              }, 100);
+              // Don't navigate - the iframe will show the payment form
+            } else {
+              const errorMsg = paymentResponse.data.error || paymentResponse.data.message || 'Failed to initiate card payment. Please try again.';
+              console.error('💳 ❌ PesaPal payment failed:', paymentResponse.data);
+              console.error('💳 ❌ Error details:', {
+                success: paymentResponse.data.success,
+                redirectUrl: paymentResponse.data.redirectUrl,
+                error: paymentResponse.data.error,
+                message: paymentResponse.data.message
+              });
+              setError(errorMsg);
+              setIsProcessingPayment(false);
+              setLoading(false);
+            }
+          } else {
+            // If we already have the redirect URL, the iframe is showing
+            // User should complete payment in the iframe
+            setError('Please complete the payment in the form above');
+          }
+        } catch (paymentError) {
+          console.error('💳 PesaPal payment error:', paymentError);
+          console.error('💳 PesaPal payment error response:', paymentError.response?.data);
+          
+          let errorMessage = 'Failed to initiate card payment. Please try again.';
+          
+          if (paymentError.response?.data) {
+            const errorData = paymentError.response.data;
+            if (errorData.error) {
+              if (typeof errorData.error === 'string') {
+                errorMessage = errorData.error;
+              } else if (errorData.error.message) {
+                errorMessage = errorData.error.message;
+              } else if (errorData.error.code === 'invalid_consumer_key_or_secret_provided') {
+                errorMessage = 'PesaPal credentials are invalid. Please contact support.';
+              }
+            } else if (errorData.message) {
+              errorMessage = errorData.message;
+            } else if (errorData.details) {
+              errorMessage = `Payment error: ${errorData.details}`;
+            }
+          } else if (paymentError.message) {
+            errorMessage = paymentError.message;
+          }
+          
           setError(errorMessage);
           setIsProcessingPayment(false);
           setLoading(false);
@@ -658,8 +795,8 @@ const Cart = () => {
 
       <Grid container spacing={{ xs: 2, sm: 4 }}>
         {/* Cart Items */}
-        <Grid size={{ xs: 12, md: 8 }}>
-          <Paper sx={{ p: 3 }}>
+        <Grid size={{ xs: 12 }}>
+          <Paper sx={{ p: 3, width: '100%' }}>
             <Typography variant="h6" gutterBottom>
               Cart Items ({items.length})
             </Typography>
@@ -755,8 +892,8 @@ const Cart = () => {
         </Grid>
 
         {/* Order Summary & Checkout */}
-        <Grid size={{ xs: 12, md: 4 }}>
-          <Paper sx={{ p: 3, position: 'sticky', top: 20 }}>
+        <Grid size={{ xs: 12 }}>
+          <Paper sx={{ p: 3, width: '100%', overflow: 'visible' }}>
             <Typography variant="h6" gutterBottom>
               Order Summary
             </Typography>
@@ -1001,9 +1138,12 @@ const Cart = () => {
                       transition: 'all 0.2s'
                     }}
                     onClick={() => {
+                      console.log('💳 Card payment method selected');
                       setPaymentMethod('card');
                       setMobileMoneyProvider(null);
                       setMpesaPhoneNumber('');
+                      // Reset PesaPal redirect URL when switching payment methods
+                      setPesapalRedirectUrl(null);
                     }}
                   >
                     <CardContent sx={{ textAlign: 'center', py: 2, '&:last-child': { pb: 2 } }}>
@@ -1124,6 +1264,96 @@ const Cart = () => {
                     KES {(getTotalPrice() + deliveryFee + tipAmount).toFixed(2)}
                   </Typography>
                 </Box>
+              </Box>
+            )}
+
+            {/* PesaPal Payment Form (iframe) */}
+            {paymentType === 'pay_now' && paymentMethod === 'card' && (
+              <Box sx={{ mb: 2, width: '100%' }}>
+                {!pesapalRedirectUrl ? (
+                  <Box sx={{ 
+                    p: 2, 
+                    bgcolor: 'background.default', 
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    textAlign: 'center'
+                  }}>
+                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                      Total Amount to Pay:
+                    </Typography>
+                    <Typography variant="h6" color="primary" fontWeight="bold" sx={{ mb: 2 }}>
+                      KES {(getTotalPrice() + deliveryFee + tipAmount).toFixed(2)}
+                    </Typography>
+                    {isProcessingPayment ? (
+                      <Box sx={{ mt: 2 }}>
+                        <Typography variant="body2" color="text.secondary" gutterBottom>
+                          Initiating PesaPal payment...
+                        </Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        Click "Place Order" to load PesaPal secure payment form
+                      </Typography>
+                    )}
+                  </Box>
+                ) : (
+                  <Box sx={{ 
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    width: '100%',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <Box sx={{ 
+                      p: 1.5, 
+                      bgcolor: 'background.default',
+                      borderBottom: '1px solid',
+                      borderColor: 'divider'
+                    }}>
+                      <Typography variant="body2" fontWeight="medium" color="text.secondary">
+                        Secure Payment by PesaPal
+                      </Typography>
+                    </Box>
+                    <Box sx={{
+                      width: '100%',
+                      position: 'relative',
+                      overflow: 'auto',
+                      minHeight: '900px',
+                      backgroundColor: '#f5f5f5',
+                      border: '2px solid #1976d2',
+                      borderRadius: 1
+                    }}>
+                      <iframe
+                        src={pesapalRedirectUrl}
+                        width="100%"
+                        height="1200"
+                        frameBorder="0"
+                        scrolling="yes"
+                        title="PesaPal Payment Form"
+                        onLoad={() => {
+                          console.log('💳 ✅ PesaPal iframe loaded successfully');
+                        }}
+                        onError={(e) => {
+                          console.error('💳 ❌ PesaPal iframe failed to load:', e);
+                          setError('Failed to load PesaPal payment form. Please try again.');
+                        }}
+                        style={{
+                          border: 'none',
+                          minHeight: '1200px',
+                          width: '100%',
+                          display: 'block',
+                          backgroundColor: 'transparent'
+                        }}
+                        title="PesaPal Payment Form"
+                        allow="payment *"
+                        sandbox="allow-forms allow-scripts allow-same-origin allow-top-navigation allow-popups allow-popups-to-escape-sandbox allow-modals"
+                      />
+                    </Box>
+                  </Box>
+                )}
               </Box>
             )}
 
