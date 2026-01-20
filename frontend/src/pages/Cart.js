@@ -1323,7 +1323,7 @@ const Cart = () => {
             {paymentType === 'pay_now' && paymentMethod === 'card' && (
               <Box sx={{ mb: 2, width: '100%', border: '2px dashed #1976d2', p: 2, borderRadius: 2 }}>
                 <Typography variant="h6" gutterBottom sx={{ color: '#1976d2', mb: 2 }}>
-                  💳 Card Payment - PesaPal
+                  💳 Card Payment - PesaPal (v2.0 - Latest Code)
                 </Typography>
                 {console.log('💳 [RENDER] PesaPal section rendering - paymentType:', paymentType, 'paymentMethod:', paymentMethod, 'pesapalRedirectUrl:', pesapalRedirectUrl, 'isProcessingPayment:', isProcessingPayment)}
                 {!pesapalRedirectUrl ? (
