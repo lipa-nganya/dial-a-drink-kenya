@@ -634,9 +634,14 @@ const Cart = () => {
         }
       } else if (paymentType === 'pay_now' && paymentMethod === 'card') {
         // Handle card payment with PesaPal - load iframe
+        console.log('💳 Card payment flow started');
+        console.log('💳 Order ID:', orderId);
+        console.log('💳 Total Amount:', totalAmount);
+        console.log('💳 Current pesapalRedirectUrl state:', pesapalRedirectUrl);
         try {
           // If we don't have the redirect URL yet, get it
           if (!pesapalRedirectUrl) {
+            console.log('💳 No redirect URL - initiating PesaPal payment...');
             setIsProcessingPayment(true);
             
             console.log('💳 Initiating PesaPal card payment:', {
@@ -726,15 +731,17 @@ const Cart = () => {
         }
       } else {
         // For other payment methods or pay on delivery, send to WhatsApp and navigate to success
+        console.log('📦 Order created, but not card payment - navigating to success page');
         sendOrderToWhatsApp(orderId, totalAmount);
         clearCart();
         navigate('/order-success', { state: { orderId: orderId, paymentPending: false } });
       }
     } catch (error) {
-      console.error('Order error:', error);
-      console.error('Order error response:', error.response?.data);
+      console.error('❌ Order error:', error);
+      console.error('❌ Order error response:', error.response?.data);
       setError(error.response?.data?.error || error.response?.data?.message || 'Failed to place order. Please try again.');
       setIsProcessingPayment(false);
+      setLoading(false);
     } finally {
       setLoading(false);
     }
@@ -1269,7 +1276,11 @@ const Cart = () => {
 
             {/* PesaPal Payment Form (iframe) */}
             {paymentType === 'pay_now' && paymentMethod === 'card' && (
-              <Box sx={{ mb: 2, width: '100%' }}>
+              <Box sx={{ mb: 2, width: '100%', border: '2px dashed #1976d2', p: 2, borderRadius: 2 }}>
+                <Typography variant="h6" gutterBottom sx={{ color: '#1976d2', mb: 2 }}>
+                  💳 Card Payment - PesaPal
+                </Typography>
+                {console.log('💳 [RENDER] PesaPal section rendering - paymentType:', paymentType, 'paymentMethod:', paymentMethod, 'pesapalRedirectUrl:', pesapalRedirectUrl, 'isProcessingPayment:', isProcessingPayment)}
                 {!pesapalRedirectUrl ? (
                   <Box sx={{ 
                     p: 2, 
