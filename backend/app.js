@@ -1,5 +1,5 @@
 const express = require('express');
-const cors = require('cors');
+// const cors = require('cors'); // REMOVED - using explicit headers only
 const compression = require('compression');
 const path = require('path');
 const db = require('./models');
@@ -111,15 +111,16 @@ app.use((req, res, next) => {
     }
   }
   
-  // Don't handle OPTIONS here - let cors package handle it
-  // We just ensure headers are set for all requests
+  // Handle preflight OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    console.log(`🔒 [CORS] OPTIONS preflight for origin: ${origin || 'none'}`);
+    return res.status(204).end();
+  }
+  
   next();
 });
 
-// CRITICAL: CORS middleware MUST be the FIRST middleware (before compression, json parsing, etc.)
-// Using cors package with custom origin function for pattern matching
-// This runs AFTER explicit headers as a backup
-app.use(cors(corsOptions));
+// Note: cors package removed - using explicit headers only to avoid conflicts
 
 // Debug: Log CORS middleware application
 console.log('✅ CORS middleware applied (cors package + explicit headers fallback)');
