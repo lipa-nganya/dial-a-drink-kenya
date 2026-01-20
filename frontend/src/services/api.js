@@ -96,9 +96,8 @@ if (typeof window !== 'undefined') {
   // eslint-disable-next-line no-console
   console.log('API source:', apiSource);
   // eslint-disable-next-line no-console
-  console.log('REACT_APP_API_URL:', process.env.REACT_APP_API_URL);
-  // eslint-disable-next-line no-console
   console.log('Hostname:', window.location.hostname);
+  // Note: REACT_APP_API_URL is ignored for Netlify deployments
   // eslint-disable-next-line no-console
   console.log('========================');
 }

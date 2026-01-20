@@ -83,12 +83,8 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-// CRITICAL: CORS middleware MUST be the FIRST middleware (before compression, json parsing, etc.)
-// Using cors package with custom origin function for pattern matching
-app.use(cors(corsOptions));
-
-// Additional explicit CORS headers as fallback (in case cors package doesn't work in Cloud Run)
-// This runs AFTER cors package to ensure headers are always set
+// CRITICAL: Explicit CORS headers FIRST (before cors package)
+// This ensures headers are ALWAYS set, even if cors package fails
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
@@ -101,27 +97,33 @@ app.use((req, res, next) => {
       origin === 'https://thewolfgang.tech';
     
     if (isAllowed) {
-      // Explicitly set CORS headers (will override/duplicate cors package headers, which is fine)
+      // Explicitly set CORS headers FIRST
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
       
-      // Log for debugging
-      if (process.env.NODE_ENV !== 'production' || origin.includes('thewolfgang.tech')) {
-        console.log(`🔒 Explicit CORS headers set for origin: ${origin}`);
+      // Log for debugging (always log for thewolfgang.tech)
+      if (origin.includes('thewolfgang.tech')) {
+        console.log(`🔒 [CORS] Headers set for origin: ${origin}`);
       }
     }
   }
   
   // Handle preflight OPTIONS requests explicitly
   if (req.method === 'OPTIONS') {
+    console.log(`🔒 [CORS] OPTIONS preflight for origin: ${origin || 'none'}`);
     return res.status(204).end();
   }
   
   next();
 });
+
+// CRITICAL: CORS middleware MUST be the FIRST middleware (before compression, json parsing, etc.)
+// Using cors package with custom origin function for pattern matching
+// This runs AFTER explicit headers as a backup
+app.use(cors(corsOptions));
 
 // Debug: Log CORS middleware application
 console.log('✅ CORS middleware applied (cors package + explicit headers fallback)');
