@@ -452,7 +452,23 @@ router.post('/', async (req, res) => {
       }
 
       // Calculate delivery fee (after branch assignment, as it's needed for perKm mode)
-      const { fee: deliveryFee, distance: deliveryDistance } = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
+      // CRITICAL: Walk-in orders (POS orders) should NOT have delivery fees
+      // Walk-in orders are identified by: customerName === 'POS' OR deliveryAddress === 'In-Store Purchase'
+      const isWalkInOrder = customerName === 'POS' || deliveryAddress === 'In-Store Purchase' || 
+                           (deliveryAddress && deliveryAddress.includes('In-Store Purchase'));
+      
+      let deliveryFee = 0;
+      let deliveryDistance = null;
+      
+      if (!isWalkInOrder) {
+        // Only calculate delivery fee for non-walk-in orders
+        const feeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
+        deliveryFee = feeResult.fee || 0;
+        deliveryDistance = feeResult.distance || null;
+      } else {
+        console.log(`🛍️  Walk-in order detected (customerName: ${customerName}, deliveryAddress: ${deliveryAddress}). Skipping delivery fee calculation.`);
+      }
+      
       const finalTotal = totalAmount + deliveryFee + tip;
 
       // Only assign driver if explicitly provided (for admin orders)
@@ -482,14 +498,38 @@ router.post('/', async (req, res) => {
       // Generate secure tracking token for customer SMS link
       const trackingToken = crypto.randomBytes(32).toString('hex');
 
+      // Normalize phone number to ensure consistent format for searching
+      const normalizePhoneForStorage = (phone) => {
+        if (!phone) return phone;
+        const cleaned = phone.replace(/\D/g, '');
+        // Store in 254 format if it's a valid Kenyan number, otherwise store as-is
+        if (cleaned.startsWith('254') && cleaned.length === 12) {
+          return cleaned;
+        } else if (cleaned.startsWith('0') && cleaned.length === 10) {
+          return `254${cleaned.slice(1)}`;
+        } else if (cleaned.length === 9 && cleaned.startsWith('7')) {
+          return `254${cleaned}`;
+        }
+        return cleaned; // Return cleaned version
+      };
+      
+      const normalizedCustomerPhone = normalizePhoneForStorage(customerPhone);
+      console.log(`📱 Phone normalization: "${customerPhone}" -> "${normalizedCustomerPhone}"`);
+      
       const order = await db.Order.create({
         customerName,
-        customerPhone,
+        customerPhone: normalizedCustomerPhone,
         customerEmail,
         deliveryAddress,
         totalAmount: finalTotal,
         tipAmount: tip,
-        notes: notes ? `${notes}\nDelivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}` : `Delivery Fee: KES ${deliveryFee.toFixed(2)}${tip > 0 ? `\nTip: KES ${tip.toFixed(2)}` : ''}`,
+        notes: (() => {
+          let noteParts = [];
+          if (notes) noteParts.push(notes);
+          if (!isWalkInOrder && deliveryFee > 0) noteParts.push(`Delivery Fee: KES ${deliveryFee.toFixed(2)}`);
+          if (tip > 0) noteParts.push(`Tip: KES ${tip.toFixed(2)}`);
+          return noteParts.join('\n') || null;
+        })(),
         paymentType: paymentType || 'pay_on_delivery',
         paymentMethod: paymentType === 'pay_now' || (adminOrder && finalPaymentStatus === 'paid') ? paymentMethod : null,
         paymentStatus: finalPaymentStatus,
@@ -1141,27 +1181,140 @@ router.patch('/:id/status', async (req, res) => {
  */
 router.post('/find-all', async (req, res) => {
   try {
-    const { email, phone } = req.body;
+    const { email, phone, customerId } = req.body;
+    
+    console.log(`🔍 [FIND-ALL] Request received:`, { email, phone, customerId });
+    console.log(`🔍 [FIND-ALL] Raw body:`, JSON.stringify(req.body, null, 2));
 
-    if (!email && !phone) {
+    if (!email && !phone && !customerId) {
       return res.status(400).json({ 
         success: false,
-        error: 'Email or phone number is required' 
+        error: 'Email, phone number, or customer ID is required' 
       });
     }
 
     let whereClause = {};
+    const allConditions = [];
+    const phoneConditions = []; // Initialize phoneConditions array
+    
+    // If customerId is provided, use it directly (most reliable)
+    if (customerId) {
+      // Note: We don't have a direct customerId field in orders, but we can check via Customer table
+      // For now, we'll still use email/phone matching, but customerId can be used for validation
+      console.log(`🔍 Customer ID provided: ${customerId} (will use email/phone matching)`);
+    }
     
     if (email) {
-      whereClause.customerEmail = email;
+      allConditions.push({ customerEmail: email });
     }
+    
     if (phone) {
-      // Clean phone number for comparison
+      // Build phone lookup variants to handle different formats
       const cleanedPhone = phone.replace(/\D/g, '');
-      whereClause.customerPhone = {
-        [db.Sequelize.Op.like]: `%${cleanedPhone}%`
-      };
+      const normalizedPhone = cleanedPhone.startsWith('254') && cleanedPhone.length === 12
+        ? cleanedPhone
+        : cleanedPhone.startsWith('0') && cleanedPhone.length === 10
+        ? `254${cleanedPhone.slice(1)}`
+        : cleanedPhone.length === 9 && cleanedPhone.startsWith('7')
+        ? `254${cleanedPhone}`
+        : cleanedPhone;
+      
+      // Build phone variants for comprehensive matching
+      const phoneVariants = new Set();
+      phoneVariants.add(cleanedPhone);
+      phoneVariants.add(normalizedPhone);
+      
+      if (cleanedPhone.startsWith('254')) {
+        phoneVariants.add('0' + cleanedPhone.slice(3));
+        phoneVariants.add(cleanedPhone.slice(3));
+      }
+      if (cleanedPhone.startsWith('0') && cleanedPhone.length === 10) {
+        phoneVariants.add(`254${cleanedPhone.slice(1)}`);
+        phoneVariants.add(cleanedPhone.slice(1));
+      }
+      if (cleanedPhone.length === 9 && cleanedPhone.startsWith('7')) {
+        phoneVariants.add(`0${cleanedPhone}`);
+        phoneVariants.add(`254${cleanedPhone}`);
+      }
+      
+      const uniqueVariants = Array.from(phoneVariants).filter(Boolean);
+      
+      console.log(`🔍 Finding orders for phone: ${phone}`);
+      console.log(`   Cleaned: ${cleanedPhone}`);
+      console.log(`   Normalized: ${normalizedPhone}`);
+      console.log(`   Variants: ${uniqueVariants.join(', ')}`);
+      
+      // Build phone conditions - use LIKE for flexible matching
+      // Also try matching just the last 9 digits (core phone number without prefix)
+      const corePhoneDigits = cleanedPhone.length >= 9 
+        ? cleanedPhone.slice(-9) // Last 9 digits (e.g., "727893741" from "0727893741" or "254727893741")
+        : cleanedPhone;
+      
+      // Build phone conditions with multiple matching strategies
+      uniqueVariants.forEach(variant => {
+        // LIKE match (handles partial matches)
+        phoneConditions.push({
+          customerPhone: {
+            [db.Sequelize.Op.like]: `%${variant}%`
+          }
+        });
+        
+        // Exact match (handles exact phone numbers)
+        phoneConditions.push({
+          customerPhone: variant
+        });
+        
+        // Trimmed match (handles phones with leading/trailing spaces)
+        phoneConditions.push(
+          db.sequelize.where(
+            db.sequelize.fn('TRIM', db.sequelize.col('customerPhone')),
+            variant
+          )
+        );
+      });
+      
+      // Also add condition to match core phone digits (last 9 digits) - handles cases where phone is stored differently
+      if (corePhoneDigits.length >= 9 && !uniqueVariants.includes(corePhoneDigits)) {
+        phoneConditions.push({
+          customerPhone: {
+            [db.Sequelize.Op.like]: `%${corePhoneDigits}%`
+          }
+        });
+        phoneConditions.push({
+          customerPhone: corePhoneDigits
+        });
+        phoneConditions.push(
+          db.sequelize.where(
+            db.sequelize.fn('TRIM', db.sequelize.col('customerPhone')),
+            corePhoneDigits
+          )
+        );
+      }
+      
+      console.log(`   Phone conditions count: ${phoneConditions.length}`);
+      console.log(`   Core digits (last 9): ${corePhoneDigits}`);
+      
+      // If multiple phone variants, combine with OR
+      if (phoneConditions.length > 1) {
+        allConditions.push({
+          [db.Sequelize.Op.or]: phoneConditions
+        });
+      } else if (phoneConditions.length === 1) {
+        allConditions.push(phoneConditions[0]);
+      }
     }
+    
+    // Combine email and phone conditions with OR (customer can match by email OR phone)
+    if (allConditions.length > 1) {
+      whereClause[db.Sequelize.Op.or] = allConditions;
+    } else if (allConditions.length === 1) {
+      whereClause = allConditions[0];
+    }
+
+    console.log('🔍 Final whereClause structure:', JSON.stringify(whereClause, null, 2));
+    console.log('🔍 All conditions count:', allConditions.length);
+    console.log('🔍 Email condition:', email ? 'YES' : 'NO');
+    console.log('🔍 Phone condition:', phone ? 'YES' : 'NO');
 
     // Get actual columns that exist in the database
     const [existingColumns] = await db.sequelize.query(
@@ -1183,6 +1336,9 @@ router.post('/find-all', async (req, res) => {
     const orders = await db.Order.findAll({
       where: whereClause,
       attributes: validAttributes,
+      logging: (sql) => {
+        console.log('📊 SQL Query:', sql);
+      },
       include: [
         {
           model: db.OrderItem,
@@ -1208,6 +1364,121 @@ router.post('/find-all', async (req, res) => {
       ],
       order: [['createdAt', 'DESC']]
     });
+
+    console.log(`✅ Found ${orders.length} orders for ${email ? `email: ${email}` : ''} ${phone ? `phone: ${phone}` : ''}`);
+    
+    // Log details of each found order for debugging
+    if (orders.length > 0) {
+      console.log('📋 Found order IDs:', orders.map(o => o.id).join(', '));
+      console.log('📋 Found order details:');
+      orders.forEach(order => {
+        console.log(`   Order ${order.id}: customerPhone="${order.customerPhone}", customerEmail="${order.customerEmail || '(null)'}", customerName="${order.customerName}"`);
+      });
+    } else {
+      console.log('⚠️ No orders found. Checking for potential matches...');
+    }
+    
+    // Always check Order 304 if phone is provided (for debugging)
+    if (phone) {
+      // Rebuild phone variants for debugging
+      const cleanedPhone = phone.replace(/\D/g, '');
+      const normalizedPhone = cleanedPhone.startsWith('254') && cleanedPhone.length === 12
+        ? cleanedPhone
+        : cleanedPhone.startsWith('0') && cleanedPhone.length === 10
+        ? `254${cleanedPhone.slice(1)}`
+        : cleanedPhone.length === 9 && cleanedPhone.startsWith('7')
+        ? `254${cleanedPhone}`
+        : cleanedPhone;
+      
+      const phoneVariants = new Set();
+      phoneVariants.add(cleanedPhone);
+      phoneVariants.add(normalizedPhone);
+      
+      if (cleanedPhone.startsWith('254')) {
+        phoneVariants.add('0' + cleanedPhone.slice(3));
+        phoneVariants.add(cleanedPhone.slice(3));
+      }
+      if (cleanedPhone.startsWith('0') && cleanedPhone.length === 10) {
+        phoneVariants.add(`254${cleanedPhone.slice(1)}`);
+        phoneVariants.add(cleanedPhone.slice(1));
+      }
+      if (cleanedPhone.length === 9 && cleanedPhone.startsWith('7')) {
+        phoneVariants.add(`0${cleanedPhone}`);
+        phoneVariants.add(`254${cleanedPhone}`);
+      }
+      const debugVariants = Array.from(phoneVariants).filter(Boolean);
+      
+      const directCheck = await db.Order.findOne({
+        where: { id: 304 },
+        attributes: ['id', 'customerPhone', 'customerEmail', 'customerName']
+      });
+      if (directCheck) {
+        console.log(`🔍 DEBUG: Direct check for Order 304:`);
+        console.log(`   Order 304 customerPhone: "${directCheck.customerPhone}"`);
+        console.log(`   Order 304 customerEmail: "${directCheck.customerEmail || '(null)'}"`);
+        console.log(`   Order 304 customerName: "${directCheck.customerName}"`);
+        console.log(`   Search phone: "${phone}"`);
+        console.log(`   Search email: "${email || '(null)'}"`);
+        console.log(`   Phone variants generated: ${debugVariants.join(', ')}`);
+        
+        // Check if Order 304 would match
+        const phoneMatches = debugVariants.some(variant => 
+          directCheck.customerPhone && (
+            directCheck.customerPhone === variant ||
+            directCheck.customerPhone.includes(variant) ||
+            variant.includes(directCheck.customerPhone)
+          )
+        );
+        const emailMatches = email && directCheck.customerEmail && directCheck.customerEmail.toLowerCase() === email.toLowerCase();
+        console.log(`   Order 304 would match by phone: ${phoneMatches}`);
+        console.log(`   Order 304 would match by email: ${emailMatches}`);
+        console.log(`   Order 304 should be included: ${phoneMatches || emailMatches}`);
+      } else {
+        console.log(`🔍 DEBUG: Order 304 not found in database`);
+      }
+    }
+    
+    if (orders.length > 0) {
+      const orderIds = orders.map(o => o.id);
+      console.log(`   Order IDs found:`, orderIds.join(', '));
+      if (phone) {
+        console.log(`   Order customerPhone values:`, orders.map(o => ({ id: o.id, phone: o.customerPhone })));
+        
+        // Check if specific orders are missing
+        const missingOrderIds = [293, 304];
+        const foundMissing = missingOrderIds.filter(id => orderIds.includes(id));
+        const actuallyMissing = missingOrderIds.filter(id => !orderIds.includes(id));
+        
+        if (actuallyMissing.length > 0) {
+          console.log(`   ⚠️  Missing order IDs: ${actuallyMissing.join(', ')}`);
+          console.log(`   🔍 Checking why these orders are missing...`);
+          
+          // Query the missing orders directly to see their phone format
+          const missingOrders = await db.Order.findAll({
+            where: {
+              id: actuallyMissing
+            },
+            attributes: ['id', 'customerPhone', 'customerEmail', 'customerName']
+          });
+          
+          missingOrders.forEach(missingOrder => {
+            const missingPhone = missingOrder.customerPhone ? missingOrder.customerPhone.replace(/\D/g, '') : '';
+            const searchPhone = phone.replace(/\D/g, '');
+            console.log(`   Order ${missingOrder.id}:`);
+            console.log(`     Stored phone: "${missingOrder.customerPhone}" (cleaned: "${missingPhone}")`);
+            console.log(`     Search phone: "${phone}" (cleaned: "${searchPhone}")`);
+            console.log(`     Search variants: ${uniqueVariants.join(', ')}`);
+            console.log(`     Core digits match: ${missingPhone.includes(corePhoneDigits) || corePhoneDigits.includes(missingPhone) ? '✅ YES' : '❌ NO'}`);
+            console.log(`     Any variant match: ${uniqueVariants.some(v => missingPhone.includes(v) || v.includes(missingPhone)) ? '✅ YES' : '❌ NO'}`);
+          });
+        }
+      }
+    } else {
+      console.log(`   ⚠️  No orders found. Check if phone number format matches stored format.`);
+      if (phone) {
+        console.log(`   Searched with variants: ${uniqueVariants.join(', ')}`);
+      }
+    }
 
     res.json({
       success: true,
