@@ -6,10 +6,12 @@ const db = require('./models');
 
 const app = express();
 
-// Enable gzip compression for all responses
-app.use(compression());
-
 // Middleware
+// CRITICAL: Log environment variables for CORS debugging
+console.log('🌐 CORS Configuration:');
+console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET (using default)');
+console.log('   ADMIN_URL:', process.env.ADMIN_URL || 'NOT SET (using default)');
+
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
   process.env.ADMIN_URL || 'http://localhost:3001',
@@ -27,6 +29,12 @@ const allowedOrigins = [
   'https://dialadrink-customer-910510650031.us-central1.run.app',
   'https://dialadrink-admin-910510650031.us-central1.run.app',
   'https://dialadrink-backend-910510650031.us-central1.run.app',
+  // DeliveryOS backend service URLs (dev environment)
+  'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
+  'https://deliveryos-backend-910510650031.us-central1.run.app',
+  // Note: Frontends are on Netlify, not Cloud Run
+  // Customer: https://dialadrink.thewolfgang.tech
+  // Admin: https://dialadrink-admin.thewolfgang.tech
   // Liquoros service URLs
   'https://liquoros-customer-910510650031.us-central1.run.app',
   'https://liquoros-admin-910510650031.us-central1.run.app',
@@ -50,20 +58,24 @@ const corsOptions = {
     
     // Check exact match first
     if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
+      console.log(`✅ CORS allowed: ${origin} (exact match)`);
+      return callback(null, origin); // Return origin explicitly for CORS headers
     }
     
     // Check for Netlify preview URLs (wildcard pattern)
     if (origin.includes('.netlify.app')) {
-      return callback(null, true);
+      console.log(`✅ CORS allowed: ${origin} (netlify.app domain)`);
+      return callback(null, origin); // Return origin explicitly
     }
     
     // Check for thewolfgang.tech domains (any subdomain or root domain)
     if (origin.includes('.thewolfgang.tech') || origin === 'https://thewolfgang.tech') {
-      return callback(null, true);
+      console.log(`✅ CORS allowed: ${origin} (thewolfgang.tech domain)`);
+      return callback(null, origin); // Return origin explicitly for CORS headers
     }
     
-    console.warn(`Blocked CORS origin: ${origin}`);
+    console.warn(`❌ CORS blocked origin: ${origin}`);
+    console.warn(`   Allowed origins:`, allowedOrigins.slice(0, 5), '...');
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
@@ -72,7 +84,48 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-app.use(cors(corsOptions));
+// Manual CORS headers (primary method - works reliably with Express 5)
+// CRITICAL: Must be BEFORE compression and other middleware
+// Using manual headers instead of cors package to ensure headers are set correctly
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  // Allow requests with no origin (like M-Pesa callbacks)
+  if (!origin) {
+    return next();
+  }
+  
+  // Check if origin should be allowed using pattern matching
+  const isAllowed = allowedOrigins.includes(origin) || 
+                    origin.includes('.netlify.app') || 
+                    origin.includes('.thewolfgang.tech') || 
+                    origin === 'https://thewolfgang.tech';
+  
+  if (isAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return res.status(204).end();
+    }
+  }
+  
+  next();
+});
+
+// Debug: Log CORS middleware application
+console.log('✅ CORS middleware applied with options:', {
+  credentials: corsOptions.credentials,
+  methods: corsOptions.methods,
+  allowedHeaders: corsOptions.allowedHeaders
+});
+
+// Enable gzip compression for all responses (AFTER CORS)
+app.use(compression());
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -151,7 +204,10 @@ app.use('/api/update-wine-subcategories', require('./routes/update-wine-subcateg
 app.use('/api/cleanup', require('./routes/cleanup-drinks'));
 app.use('/api/scrape-images', require('./routes/scrape-images'));
 app.use('/api/places', require('./routes/places'));
+app.use('/api/distance', require('./routes/distance'));
 app.use('/api/mpesa', require('./routes/mpesa'));
+app.use('/api/pesapal', require('./routes/pesapal'));
+app.use('/api/pdq-payment', require('./routes/pdq-payment'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/order-notifications', require('./routes/order-notifications'));
 app.use('/api/auth', require('./routes/auth'));

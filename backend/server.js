@@ -46,10 +46,15 @@ minimalApp.get('/', (req, res) => {
 const server = http.createServer(minimalApp);
 
 // Start server IMMEDIATELY - before loading anything else
-console.log(`📡 Starting server on port ${PORT}...`);
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`✅ Server successfully started and listening on 0.0.0.0:${PORT}`);
-  console.log(`🔗 Health check: http://0.0.0.0:${PORT}/api/health`);
+// Use 127.0.0.1 for local development (avoid IPv6 issues), 0.0.0.0 for production/Cloud Run
+// Default to 127.0.0.1 unless explicitly set to production
+const isProduction = process.env.NODE_ENV === 'production';
+const HOST = process.env.HOST || (isProduction ? '0.0.0.0' : '127.0.0.1');
+console.log(`📡 Starting server on ${HOST}:${PORT}...`);
+console.log(`🔧 Environment: NODE_ENV=${process.env.NODE_ENV || 'undefined'}, isProduction=${isProduction}`);
+server.listen(PORT, HOST, () => {
+  console.log(`✅ Server successfully started and listening on ${HOST}:${PORT}`);
+  console.log(`🔗 Health check: http://${HOST}:${PORT}/api/health`);
   console.log(`🌐 Server ready to accept requests!`);
   
   // NOW load the full app and routes asynchronously (non-blocking)
@@ -119,9 +124,10 @@ async function loadFullApplication() {
             'https://dialadrink-customer-910510650031.us-central1.run.app',
             'https://dialadrink-admin-910510650031.us-central1.run.app',
             'https://dialadrink-backend-910510650031.us-central1.run.app',
-            'https://deliveryos-customer-910510650031.us-central1.run.app',
-            'https://deliveryos-admin-910510650031.us-central1.run.app',
             'https://deliveryos-backend-910510650031.us-central1.run.app',
+            // Note: Frontends are on Netlify, not Cloud Run
+            // Customer: https://dialadrink.thewolfgang.tech (already in Netlify URLs below)
+            // Admin: https://dialadrink-admin.thewolfgang.tech (already in Netlify URLs below)
             // Wolfgang website production URL
             'https://thewolfgang.tech',
             // Netlify Production Domains
@@ -178,13 +184,19 @@ async function loadFullApplication() {
       socket.on('register-driver', (driverId) => {
         const driverIdInt = parseInt(driverId);
         driverSocketMap.set(driverIdInt, socket.id);
-        console.log(`Driver ${driverIdInt} registered with socket ${socket.id}`);
+        // Join driver room for real-time updates (works even if socket reconnects)
+        const roomName = `driver-${driverIdInt}`;
+        socket.join(roomName);
+        console.log(`Driver ${driverIdInt} registered with socket ${socket.id} and joined room ${roomName}`);
       });
-      
+
       socket.on('join-driver', (driverId) => {
         const driverIdInt = parseInt(driverId);
         driverSocketMap.set(driverIdInt, socket.id);
-        console.log(`Driver ${driverIdInt} registered via join-driver with socket ${socket.id}`);
+        // Join driver room for real-time updates
+        const roomName = `driver-${driverIdInt}`;
+        socket.join(roomName);
+        console.log(`Driver ${driverIdInt} registered via join-driver with socket ${socket.id} and joined room ${roomName}`);
       });
 
       socket.on('join-order', (orderId) => {
@@ -211,6 +223,9 @@ async function loadFullApplication() {
     
     // Start background job to auto-sync pending M-Pesa transactions
     startTransactionSyncJob();
+    
+    // Start background job to check for inactive drivers and set them to offline
+    startDriverActivityCheckJob(app);
     
     console.log('✅ Full application loaded successfully');
   } catch (appError) {
@@ -431,6 +446,68 @@ function startTransactionSyncJob() {
   setInterval(() => {
     syncPendingTransactions();
   }, 30000); // 30 seconds
+}
+
+// Background job to check for inactive drivers and set them to offline
+// This runs every hour to check for drivers with no activity in 6 hours
+function startDriverActivityCheckJob(app) {
+  console.log('🔄 Starting driver activity check job (runs every hour)...');
+  
+  const { checkInactiveDrivers } = require('./utils/driverActivity');
+  
+  // Run immediately on startup (after a delay), then every hour
+  setTimeout(async () => {
+    try {
+      const result = await checkInactiveDrivers();
+      
+      // Emit Socket.IO events if drivers were updated
+      if (result.updated > 0 && app) {
+        const io = app.get('io');
+        if (io) {
+          result.drivers.forEach(driver => {
+            io.to('admin').emit('driver-status-updated', {
+              driverId: driver.id,
+              name: driver.name,
+              oldStatus: driver.oldStatus,
+              newStatus: 'offline',
+              reason: 'inactive_6_hours',
+              lastActivity: driver.lastActivity
+            });
+            console.log(`📡 Emitted driver-status-updated event for driver ${driver.id} (auto-offline)`);
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in driver activity check:', error);
+    }
+  }, 30000); // Wait 30 seconds after startup to ensure DB is ready
+  
+  // Then run every hour (3600000 ms)
+  setInterval(async () => {
+    try {
+      const result = await checkInactiveDrivers();
+      
+      // Emit Socket.IO events if drivers were updated
+      if (result.updated > 0 && app) {
+        const io = app.get('io');
+        if (io) {
+          result.drivers.forEach(driver => {
+            io.to('admin').emit('driver-status-updated', {
+              driverId: driver.id,
+              name: driver.name,
+              oldStatus: driver.oldStatus,
+              newStatus: 'offline',
+              reason: 'inactive_6_hours',
+              lastActivity: driver.lastActivity
+            });
+            console.log(`📡 Emitted driver-status-updated event for driver ${driver.id} (auto-offline)`);
+          });
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error in driver activity check:', error);
+    }
+  }, 3600000); // 1 hour
 }
 
 async function syncPendingTransactions() {

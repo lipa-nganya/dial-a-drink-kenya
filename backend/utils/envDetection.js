@@ -84,11 +84,36 @@ function getDatabaseConfigName() {
   return 'development';
 }
 
+/**
+ * Get redirect URL for payment callbacks
+ */
+function getRedirectUrl() {
+  // Priority 1: Explicit redirect URL
+  if (process.env.PESAPAL_REDIRECT_URL) {
+    return process.env.PESAPAL_REDIRECT_URL;
+  }
+  
+  // Priority 2: ngrok URL
+  const ngrokUrl = process.env.NGROK_URL;
+  if (ngrokUrl) {
+    return ngrokUrl;
+  }
+  
+  // Priority 3: Production URL (Netlify)
+  if (isProduction()) {
+    return 'https://dialadrink.thewolfgang.tech';
+  }
+  
+  // Default for local development
+  return 'http://localhost:3000';
+}
+
 module.exports = {
   isCloudRun,
   isProduction,
   isLocal,
   getEnvironment,
-  getDatabaseConfigName
+  getDatabaseConfigName,
+  getRedirectUrl
 };
 
