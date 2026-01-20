@@ -21,7 +21,7 @@ The backend service can be accessed via multiple URL formats (Cloud Run supports
 
 2. **Numeric format (alternative):**
    ```
-   https://deliveryos-backend-910510650031.us-central1.run.app
+   https://deliveryos-backend-p6bkgryxqa-uc.a.run.app (correct URL)
    ```
 
 Both URLs point to the same service. Use the alphanumeric format as the primary URL.

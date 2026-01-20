@@ -7,8 +7,8 @@
 **Primary URL:** `https://deliveryos-backend-p6bkgryxqa-uc.a.run.app`  
 **API Base:** `https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api`
 
-### Alternative URL (Same Service)
-**Numeric Format:** `https://deliveryos-backend-910510650031.us-central1.run.app`
+### Alternative URL (Same Service - DO NOT USE)
+**Numeric Format:** `https://deliveryos-backend-910510650031.us-central1.run.app` (deprecated, use primary URL)
 
 ---
 
