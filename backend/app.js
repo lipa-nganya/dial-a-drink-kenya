@@ -111,12 +111,8 @@ app.use((req, res, next) => {
     }
   }
   
-  // Handle preflight OPTIONS requests explicitly
-  if (req.method === 'OPTIONS') {
-    console.log(`🔒 [CORS] OPTIONS preflight for origin: ${origin || 'none'}`);
-    return res.status(204).end();
-  }
-  
+  // Don't handle OPTIONS here - let cors package handle it
+  // We just ensure headers are set for all requests
   next();
 });
 
