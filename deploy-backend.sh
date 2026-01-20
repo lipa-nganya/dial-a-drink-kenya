@@ -16,7 +16,19 @@ echo "🚀 Deploying Backend to Google Cloud Run..."
 echo "📋 Target Service: deliveryos-backend (Cloud/Dev)"
 echo ""
 
+# Run pre-deployment checks
+echo "🔍 Running pre-deployment validation..."
 cd "$(dirname "$0")/backend"
+if [ -f "./pre-deploy-check.sh" ]; then
+  ./pre-deploy-check.sh || {
+    echo ""
+    echo "❌ Pre-deployment checks failed! Fix errors before deploying."
+    exit 1
+  }
+else
+  echo "⚠️  Warning: pre-deploy-check.sh not found. Skipping validation."
+fi
+echo ""
 
 # Set project and region
 gcloud config set project drink-suite
