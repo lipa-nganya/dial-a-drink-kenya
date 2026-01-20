@@ -419,6 +419,14 @@ const Cart = () => {
   };
 
   const handleSubmitOrder = async () => {
+    console.log('🚀 handleSubmitOrder called');
+    console.log('🚀 Current payment state:', {
+      paymentType: paymentType,
+      paymentMethod: paymentMethod,
+      mobileMoneyProvider: mobileMoneyProvider,
+      pesapalRedirectUrl: pesapalRedirectUrl
+    });
+    
     if (!customerInfo.name || !customerInfo.phone || !customerInfo.address || !customerInfo.apartmentHouseNumber) {
       setError('Please fill in all required fields');
       return;
@@ -426,9 +434,15 @@ const Cart = () => {
 
     // Validate payment method if paying now
     if (paymentType === 'pay_now' && !paymentMethod) {
+      console.log('❌ Payment method not selected');
       setError('Please select a payment method (Card or Mobile Money)');
       return;
     }
+    
+    console.log('✅ Payment validation passed:', {
+      paymentType: paymentType,
+      paymentMethod: paymentMethod
+    });
 
     // Validate M-Pesa phone number if paying with M-Pesa
     if (paymentType === 'pay_now' && paymentMethod === 'mobile_money') {
@@ -523,6 +537,23 @@ const Cart = () => {
       // Use the totalAmount from the order response to ensure it matches what's stored in the database
       // Note: The backend will include tip in the totalAmount, so we use that
       const totalAmount = parseFloat(response.data.totalAmount);
+      
+      // DEBUG: Log payment state after order creation
+      console.log('📦 Order created successfully:', {
+        orderId: orderId,
+        totalAmount: totalAmount,
+        paymentType: paymentType,
+        paymentMethod: paymentMethod,
+        mobileMoneyProvider: mobileMoneyProvider,
+        pesapalRedirectUrl: pesapalRedirectUrl
+      });
+      console.log('📦 Payment condition check:', {
+        'paymentType === "pay_now"': paymentType === 'pay_now',
+        'paymentMethod === "card"': paymentMethod === 'card',
+        'paymentMethod === "mobile_money"': paymentMethod === 'mobile_money',
+        'Will enter card flow?': paymentType === 'pay_now' && paymentMethod === 'card',
+        'Will enter mobile money flow?': paymentType === 'pay_now' && paymentMethod === 'mobile_money'
+      });
       
       // Save delivery information for future orders
       const displayPhone = formatPhoneForDisplay(customerInfo.phone);
@@ -732,6 +763,13 @@ const Cart = () => {
       } else {
         // For other payment methods or pay on delivery, send to WhatsApp and navigate to success
         console.log('📦 Order created, but not card payment - navigating to success page');
+        console.log('📦 Why not card payment?', {
+          paymentType: paymentType,
+          paymentMethod: paymentMethod,
+          'paymentType === "pay_now"': paymentType === 'pay_now',
+          'paymentMethod === "card"': paymentMethod === 'card',
+          'Condition result': paymentType === 'pay_now' && paymentMethod === 'card'
+        });
         sendOrderToWhatsApp(orderId, totalAmount);
         clearCart();
         navigate('/order-success', { state: { orderId: orderId, paymentPending: false } });
@@ -1145,12 +1183,19 @@ const Cart = () => {
                       transition: 'all 0.2s'
                     }}
                     onClick={() => {
-                      console.log('💳 Card payment method selected');
+                      console.log('💳 Card payment method clicked');
+                      console.log('💳 Current paymentType:', paymentType);
+                      if (paymentType !== 'pay_now') {
+                        console.warn('⚠️ Payment type is not "pay_now", setting it now');
+                        setPaymentType('pay_now');
+                      }
+                      console.log('💳 Setting paymentMethod to "card"');
                       setPaymentMethod('card');
                       setMobileMoneyProvider(null);
                       setMpesaPhoneNumber('');
                       // Reset PesaPal redirect URL when switching payment methods
                       setPesapalRedirectUrl(null);
+                      console.log('💳 Card payment method set successfully');
                     }}
                   >
                     <CardContent sx={{ textAlign: 'center', py: 2, '&:last-child': { pb: 2 } }}>
