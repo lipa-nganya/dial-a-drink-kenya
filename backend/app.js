@@ -88,10 +88,11 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Additional explicit CORS headers as fallback (in case cors package doesn't work in Cloud Run)
+// This runs AFTER cors package to ensure headers are always set
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Check if origin should be allowed
+  // Check if origin should be allowed (same logic as corsOptions)
   if (origin) {
     const isAllowed = 
       allowedOrigins.includes(origin) ||
@@ -100,15 +101,21 @@ app.use((req, res, next) => {
       origin === 'https://thewolfgang.tech';
     
     if (isAllowed) {
+      // Explicitly set CORS headers (will override/duplicate cors package headers, which is fine)
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+      
+      // Log for debugging
+      if (process.env.NODE_ENV !== 'production' || origin.includes('thewolfgang.tech')) {
+        console.log(`🔒 Explicit CORS headers set for origin: ${origin}`);
+      }
     }
   }
   
-  // Handle preflight requests
+  // Handle preflight OPTIONS requests explicitly
   if (req.method === 'OPTIONS') {
     return res.status(204).end();
   }
