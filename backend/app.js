@@ -31,7 +31,6 @@ const allowedOrigins = [
   'https://dialadrink-backend-910510650031.us-central1.run.app',
   // DeliveryOS backend service URLs (dev environment)
   'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
-  'https://deliveryos-backend-910510650031.us-central1.run.app',
   // Note: Frontends are on Netlify, not Cloud Run
   // Customer: https://dialadrink.thewolfgang.tech
   // Admin: https://dialadrink-admin.thewolfgang.tech
@@ -84,46 +83,44 @@ const corsOptions = {
   optionsSuccessStatus: 204
 };
 
-// Manual CORS headers (primary method - works reliably with Express 5)
-// CRITICAL: Must be BEFORE compression and other middleware
-// Using manual headers instead of cors package to ensure headers are set correctly
+// CRITICAL: CORS middleware MUST be the FIRST middleware (before compression, json parsing, etc.)
+// Using cors package with custom origin function for pattern matching
+app.use(cors(corsOptions));
+
+// Additional explicit CORS headers as fallback (in case cors package doesn't work in Cloud Run)
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Allow requests with no origin (like M-Pesa callbacks)
-  if (!origin) {
-    return next();
+  // Check if origin should be allowed
+  if (origin) {
+    const isAllowed = 
+      allowedOrigins.includes(origin) ||
+      origin.includes('.netlify.app') ||
+      origin.includes('.thewolfgang.tech') ||
+      origin === 'https://thewolfgang.tech';
+    
+    if (isAllowed) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
+    }
   }
   
-  // Check if origin should be allowed using pattern matching
-  const isAllowed = allowedOrigins.includes(origin) || 
-                    origin.includes('.netlify.app') || 
-                    origin.includes('.thewolfgang.tech') || 
-                    origin === 'https://thewolfgang.tech';
-  
-  if (isAllowed) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    
-    // Handle preflight OPTIONS requests
-    if (req.method === 'OPTIONS') {
-      return res.status(204).end();
-    }
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
   }
   
   next();
 });
 
 // Debug: Log CORS middleware application
-console.log('✅ CORS middleware applied with options:', {
-  credentials: corsOptions.credentials,
-  methods: corsOptions.methods,
-  allowedHeaders: corsOptions.allowedHeaders
-});
+console.log('✅ CORS middleware applied (cors package + explicit headers fallback)');
 
 // Enable gzip compression for all responses (AFTER CORS)
+// CRITICAL: Compression must come AFTER CORS to avoid interfering with headers
 app.use(compression());
 
 app.use(express.json());

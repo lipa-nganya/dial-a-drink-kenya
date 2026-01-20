@@ -103,7 +103,7 @@ const Home = () => {
 
   const fetchCategories = async () => {
     try {
-      console.log('Fetching categories from:', process.env.REACT_APP_API_URL || 'http://localhost:5001/api');
+      // Note: API URL is resolved dynamically in api.js interceptor
       const response = await api.get('/categories');
       console.log('Categories response:', response.data);
       setCategories(response.data);
