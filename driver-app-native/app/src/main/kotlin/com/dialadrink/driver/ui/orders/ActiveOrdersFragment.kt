@@ -23,6 +23,9 @@ class ActiveOrdersFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var ordersAdapter: OrdersAdapter
     private val TAG = "ActiveOrders"
+    private var pollingHandler: android.os.Handler? = null
+    private var pollingRunnable: Runnable? = null
+    private val POLLING_INTERVAL_MS = 5000L // Poll every 5 seconds
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -40,6 +43,25 @@ class ActiveOrdersFragment : Fragment() {
         setupSwipeRefresh()
         setupSocketConnection()
         loadOrders()
+        startPolling()
+    }
+    
+    private fun startPolling() {
+        pollingHandler = android.os.Handler(android.os.Looper.getMainLooper())
+        pollingRunnable = object : Runnable {
+            override fun run() {
+                // Poll for order updates (sockets not working)
+                loadOrders()
+                pollingHandler?.postDelayed(this, POLLING_INTERVAL_MS)
+            }
+        }
+        pollingHandler?.postDelayed(pollingRunnable!!, POLLING_INTERVAL_MS)
+    }
+    
+    private fun stopPolling() {
+        pollingRunnable?.let { pollingHandler?.removeCallbacks(it) }
+        pollingHandler = null
+        pollingRunnable = null
     }
     
     private fun setupSocketConnection() {
@@ -144,10 +166,9 @@ class ActiveOrdersFragment : Fragment() {
         }
     }
     
-    override fun onDestroyView() {
-        super.onDestroyView()
-        SocketService.disconnect()
-        _binding = null
+    override fun onPause() {
+        super.onPause()
+        stopPolling()
     }
     
     override fun onResume() {
@@ -157,6 +178,14 @@ class ActiveOrdersFragment : Fragment() {
         if (driverId != null && !SocketService.isConnected()) {
             setupSocketConnection()
         }
+        startPolling()
+    }
+    
+    override fun onDestroyView() {
+        super.onDestroyView()
+        stopPolling()
+        SocketService.disconnect()
+        _binding = null
     }
 }
 
