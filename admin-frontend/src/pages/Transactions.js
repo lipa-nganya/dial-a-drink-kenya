@@ -39,6 +39,7 @@ import {
   ExpandLess,
   ExpandMore,
   Receipt,
+  Info,
   AccountBalanceWallet,
   ShoppingCart
 } from '@mui/icons-material';

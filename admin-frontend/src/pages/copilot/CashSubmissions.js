@@ -52,6 +52,7 @@ const CashSubmissions = () => {
   
   // Orders data
   const [orders, setOrders] = useState([]);
+  const [, setAllOrders] = useState([]);
   const [cashSubmissions, setCashSubmissions] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [selectedAdminId, setSelectedAdminId] = useState('all');
