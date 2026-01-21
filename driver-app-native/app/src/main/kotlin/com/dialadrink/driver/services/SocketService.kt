@@ -9,6 +9,12 @@ import org.json.JSONObject
 object SocketService {
     private const val TAG = "SocketService"
     private var socket: Socket? = null
+    private var handlersRegistered = false
+    
+    // Store multiple callbacks so multiple activities can listen
+    private val orderAssignedCallbacks = mutableListOf<(JSONObject) -> Unit>()
+    private val orderStatusUpdatedCallbacks = mutableListOf<(JSONObject) -> Unit>()
+    private val paymentConfirmedCallbacks = mutableListOf<(JSONObject) -> Unit>()
     
     fun getSocketUrl(): String {
         // Get base URL from build config and remove /api suffix
@@ -24,49 +30,26 @@ object SocketService {
     ) {
         val socketUrl = getSocketUrl()
         
-        // If socket is already connected, just register the handlers (Socket.IO supports multiple listeners)
+        // Add callbacks to lists (multiple activities can register)
+        orderAssignedCallbacks.add(onOrderAssigned)
+        onOrderStatusUpdated?.let { orderStatusUpdatedCallbacks.add(it) }
+        onPaymentConfirmed?.let { paymentConfirmedCallbacks.add(it) }
+        
+        Log.d(TAG, "📝 Callbacks registered. Total: ${orderAssignedCallbacks.size} assigned, ${orderStatusUpdatedCallbacks.size} status, ${paymentConfirmedCallbacks.size} payment")
+        
+        // If socket is already connected, ensure handlers are set up and driver is registered
         if (socket?.connected() == true) {
-            Log.d(TAG, "Socket already connected, registering handlers")
+            Log.d(TAG, "Socket already connected, ensuring handlers are registered and re-registering driver")
             
-            // Always register handlers, even if socket is already connected
-            // This allows multiple activities to listen to the same events
-            socket?.on("order-assigned") { args ->
-                Log.d(TAG, "📦 Order assigned via socket: ${args[0]}")
-                try {
-                    val orderData = args[0] as? JSONObject
-                    if (orderData != null) {
-                        onOrderAssigned(orderData)
-                    } else {
-                        Log.e(TAG, "❌ Invalid order data in socket event")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error handling order-assigned event", e)
-                }
+            // If handlers aren't registered yet, register them now
+            if (!handlersRegistered) {
+                Log.w(TAG, "⚠️ Handlers not registered but socket is connected! Registering now...")
+                registerEventHandlers()
             }
             
-            socket?.on("order-status-updated") { args ->
-                Log.d(TAG, "📦 Order status updated via socket: ${args[0]}")
-                try {
-                    val orderData = args[0] as? JSONObject
-                    if (orderData != null && onOrderStatusUpdated != null) {
-                        onOrderStatusUpdated(orderData)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error handling order-status-updated event", e)
-                }
-            }
-            
-            socket?.on("payment-confirmed") { args ->
-                Log.d(TAG, "💰 Payment confirmed via socket: ${args[0]}")
-                try {
-                    val paymentData = args[0] as? JSONObject
-                    if (paymentData != null && onPaymentConfirmed != null) {
-                        onPaymentConfirmed(paymentData)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error handling payment-confirmed event", e)
-                }
-            }
+            // Re-register driver to ensure we're in the correct room
+            socket?.emit("register-driver", driverId)
+            Log.d(TAG, "✅ Re-registered driver $driverId with socket")
             
             return
         }
@@ -103,13 +86,37 @@ object SocketService {
             // Reconnection is handled automatically by socket.io-client
             // When reconnected, EVENT_CONNECT will fire again and we'll re-register the driver
             
-            // Listen for order-assigned event
-            socket?.on("order-assigned") { args ->
+            // Register event handlers
+            registerEventHandlers()
+            
+            socket?.connect()
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error creating socket connection", e)
+        }
+    }
+    
+    private fun registerEventHandlers() {
+        if (handlersRegistered) {
+            Log.d(TAG, "Event handlers already registered, skipping")
+            return
+        }
+        
+        Log.d(TAG, "📡 Registering socket event handlers...")
+        
+        // Listen for order-assigned event - call all registered callbacks
+        socket?.on("order-assigned") { args ->
                 Log.d(TAG, "📦 Order assigned via socket: ${args[0]}")
                 try {
                     val orderData = args[0] as? JSONObject
                     if (orderData != null) {
-                        onOrderAssigned(orderData)
+                        Log.d(TAG, "📦 Calling ${orderAssignedCallbacks.size} order-assigned callbacks")
+                        orderAssignedCallbacks.forEach { callback ->
+                            try {
+                                callback(orderData)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ Error in order-assigned callback", e)
+                            }
+                        }
                     } else {
                         Log.e(TAG, "❌ Invalid order data in socket event")
                     }
@@ -118,42 +125,75 @@ object SocketService {
                 }
             }
             
-            // Listen for order status updates
+            // Listen for order status updates - call all registered callbacks
             socket?.on("order-status-updated") { args ->
                 Log.d(TAG, "📦 Order status updated via socket: ${args[0]}")
                 try {
                     val orderData = args[0] as? JSONObject
-                    if (orderData != null && onOrderStatusUpdated != null) {
-                        onOrderStatusUpdated(orderData)
+                    if (orderData != null) {
+                        Log.d(TAG, "📦 Calling ${orderStatusUpdatedCallbacks.size} order-status-updated callbacks")
+                        orderStatusUpdatedCallbacks.forEach { callback ->
+                            try {
+                                callback(orderData)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ Error in order-status-updated callback", e)
+                            }
+                        }
+                    } else {
+                        Log.e(TAG, "❌ Invalid order data in socket event")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Error handling order-status-updated event", e)
                 }
             }
             
-            // Listen for payment events
+            // Listen for payment events - call all registered callbacks
             socket?.on("payment-confirmed") { args ->
                 Log.d(TAG, "💰 Payment confirmed via socket: ${args[0]}")
                 try {
                     val paymentData = args[0] as? JSONObject
-                    if (paymentData != null && onPaymentConfirmed != null) {
-                        onPaymentConfirmed(paymentData)
+                    if (paymentData != null) {
+                        Log.d(TAG, "💰 Calling ${paymentConfirmedCallbacks.size} payment-confirmed callbacks")
+                        paymentConfirmedCallbacks.forEach { callback ->
+                            try {
+                                callback(paymentData)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "❌ Error in payment-confirmed callback", e)
+                            }
+                        }
+                    } else {
+                        Log.e(TAG, "❌ Invalid payment data in socket event")
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Error handling payment-confirmed event", e)
                 }
             }
-            
-            socket?.connect()
-        } catch (e: Exception) {
-            Log.e(TAG, "❌ Error creating socket connection", e)
-        }
+        
+        handlersRegistered = true
+        Log.d(TAG, "✅ Event handlers registered successfully")
     }
     
     fun disconnect() {
         socket?.disconnect()
         socket = null
-        Log.d(TAG, "Socket disconnected")
+        handlersRegistered = false
+        // Clear all callbacks when disconnecting
+        orderAssignedCallbacks.clear()
+        orderStatusUpdatedCallbacks.clear()
+        paymentConfirmedCallbacks.clear()
+        Log.d(TAG, "Socket disconnected and callbacks cleared")
+    }
+    
+    fun removeCallbacks(
+        onOrderAssigned: (order: JSONObject) -> Unit,
+        onOrderStatusUpdated: ((order: JSONObject) -> Unit)? = null,
+        onPaymentConfirmed: ((paymentData: JSONObject) -> Unit)? = null
+    ) {
+        // Remove specific callbacks when an activity is destroyed
+        orderAssignedCallbacks.remove(onOrderAssigned)
+        onOrderStatusUpdated?.let { orderStatusUpdatedCallbacks.remove(it) }
+        onPaymentConfirmed?.let { paymentConfirmedCallbacks.remove(it) }
+        Log.d(TAG, "Callbacks removed. Remaining: ${orderAssignedCallbacks.size} assigned, ${orderStatusUpdatedCallbacks.size} status, ${paymentConfirmedCallbacks.size} payment")
     }
     
     fun isConnected(): Boolean {

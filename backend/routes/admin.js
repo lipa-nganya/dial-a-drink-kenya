@@ -1331,6 +1331,10 @@ router.patch('/orders/:id/status', async (req, res) => {
     // Emit socket event for real-time updates
     const io = req.app.get('io');
     if (io) {
+      console.log(`📡 [ADMIN STATUS UPDATE] Emitting order-status-updated for Order #${order.id}`);
+      console.log(`   Status: ${order.status} → ${finalStatus}`);
+      console.log(`   Driver ID: ${order.driverId || 'none'}`);
+      
       io.to('admin').emit('order-status-updated', {
         orderId: order.id,
         status: finalStatus,
@@ -1340,13 +1344,20 @@ router.patch('/orders/:id/status', async (req, res) => {
 
       // Also notify driver if assigned
       if (order.driverId) {
-        io.to(`driver-${order.driverId}`).emit('order-status-updated', {
+        const driverRoom = `driver-${order.driverId}`;
+        console.log(`📡 [ADMIN STATUS UPDATE] Emitting to ${driverRoom} room for Order #${order.id}`);
+        io.to(driverRoom).emit('order-status-updated', {
           orderId: order.id,
           status: finalStatus,
           paymentStatus: order.paymentStatus,
           order: orderData
         });
+        console.log(`✅ [ADMIN STATUS UPDATE] Socket event sent to ${driverRoom} for Order #${order.id}: ${order.status} → ${finalStatus}`);
+      } else {
+        console.log(`⚠️ [ADMIN STATUS UPDATE] Order #${order.id} has no driverId, skipping driver notification`);
       }
+    } else {
+      console.warn(`⚠️ [ADMIN STATUS UPDATE] Socket.IO not available for Order #${order.id}`);
     }
 
     res.json(orderData);

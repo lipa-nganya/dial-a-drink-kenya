@@ -173,13 +173,19 @@ object OrderRepository {
     
     /**
      * Get pending orders (assigned to driver but not yet accepted/rejected)
-     * Uses the same working endpoint as active orders, filters on client side
+     * Uses the dedicated pending orders endpoint
      */
     suspend fun getPendingOrders(
         context: Context,
         forceRefresh: Boolean = false
     ): List<Order> {
-        // Return cached data immediately if available
+        // If forceRefresh is true, clear cache first
+        if (forceRefresh) {
+            OrderCache.clear()
+            SharedPrefs.clearCachedOrders(context)
+        }
+        
+        // Return cached data immediately if available (only if not forcing refresh)
         if (!forceRefresh) {
             val cached = OrderCache.getCachedOrders()
             if (cached != null) {
@@ -194,42 +200,48 @@ object OrderRepository {
             }
         }
         
-        // Use the SAME working endpoint as active orders - call it directly
+        // Use the dedicated pending orders endpoint
         val driverId = SharedPrefs.getDriverId(context) ?: return emptyList()
         
         return try {
             ensureApiClientInitialized(context)
             
-            val activeStatuses = "pending,confirmed,preparing,out_for_delivery"
-            val response = ApiClient.getApiService().getDriverOrdersDirect(
+            // Use the dedicated pending orders endpoint (not the active orders endpoint)
+            val response = ApiClient.getApiService().getPendingOrders(
                 driverId,
-                activeStatuses,
                 summary = true
             )
             
             if (!response.isSuccessful || response.body() == null) {
+                Log.w(TAG, "❌ Failed to fetch pending orders: ${response.code()}")
                 return emptyList()
             }
             
             val apiResponse = response.body()!!
             if (apiResponse.success != true || apiResponse.data == null) {
+                Log.w(TAG, "❌ Pending orders API returned error: ${apiResponse.error}")
                 return emptyList()
             }
             
-            val allOrders = apiResponse.data
+            val pendingOrders = apiResponse.data
             
-            // Cache all orders
-            OrderCache.setCachedOrders(allOrders)
-            SharedPrefs.saveCachedOrders(context, allOrders)
-            
-            // Filter for pending: driverId set but driverAccepted is null or false
-            // Include orders with status 'pending' or 'confirmed' that haven't been accepted yet
-            allOrders.filter { 
-                it.driverId != null && 
-                (it.driverAccepted == null || it.driverAccepted == false) &&
-                (it.status == "pending" || it.status == "confirmed")
+            // Update cache with pending orders only (don't fetch all orders here to avoid delays)
+            // The active orders screen will fetch its own data when needed
+            val cached = OrderCache.getCachedOrders() ?: emptyList()
+            // Remove old pending orders from cache and add new ones
+            val nonPendingOrders = cached.filter { 
+                !(it.driverId != null && 
+                  (it.driverAccepted == null || it.driverAccepted == false) &&
+                  (it.status == "pending" || it.status == "confirmed"))
             }
+            val mergedOrders = (nonPendingOrders + pendingOrders).distinctBy { it.id }
+            OrderCache.setCachedOrders(mergedOrders)
+            SharedPrefs.saveCachedOrders(context, mergedOrders)
+            
+            Log.d(TAG, "✅ Fetched ${pendingOrders.size} pending orders for driver $driverId")
+            pendingOrders
         } catch (e: Exception) {
+            Log.e(TAG, "❌ Error fetching pending orders", e)
             emptyList()
         }
     }

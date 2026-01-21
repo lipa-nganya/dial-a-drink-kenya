@@ -24,6 +24,7 @@ import com.dialadrink.driver.utils.SharedPrefs
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -132,7 +133,10 @@ class PendingOrdersActivity : AppCompatActivity() {
     }
     
     private fun refreshOrdersFromRepository() {
-        if (isLoading) return
+        if (isLoading) {
+            Log.d(TAG, "⚠️ Refresh already in progress, skipping")
+            return
+        }
         
         isLoading = true
         binding.loadingProgress.visibility = View.GONE
@@ -141,12 +145,19 @@ class PendingOrdersActivity : AppCompatActivity() {
         lifecycleScope.launch {
             var orders = emptyList<Order>()
             try {
-                orders = withTimeoutOrNull(10000) {
+                Log.d(TAG, "🔄 Starting refresh of pending orders...")
+                orders = withTimeoutOrNull(15000) { // Increased timeout to 15 seconds
                     OrderRepository.getPendingOrders(this@PendingOrdersActivity, forceRefresh = true)
-                } ?: emptyList()
+                } ?: run {
+                    Log.w(TAG, "⏱️ Timeout while fetching pending orders")
+                    emptyList()
+                }
+                Log.d(TAG, "✅ Fetched ${orders.size} pending orders")
             } catch (e: CancellationException) {
+                Log.d(TAG, "🚫 Refresh cancelled")
                 // Ignore
             } catch (e: Exception) {
+                Log.e(TAG, "❌ Error refreshing pending orders", e)
                 orders = emptyList()
             } finally {
                 isLoading = false
@@ -266,13 +277,41 @@ class PendingOrdersActivity : AppCompatActivity() {
                             "Order #${order.id} accepted successfully",
                             Toast.LENGTH_SHORT
                         ).show()
-                        // Clear cache and refresh to remove accepted order from pending list
-                        refreshOrdersFromRepository()
+                        
+                        // Immediately remove the accepted order from the displayed list
+                        // Find and remove the card view for this order
+                        for (i in binding.ordersContainer.childCount - 1 downTo 0) {
+                            val child = binding.ordersContainer.getChildAt(i)
+                            if (child is MaterialCardView) {
+                                // Check if this card is for the accepted order
+                                val cardBinding = ItemPendingOrderBinding.bind(child)
+                                val orderNumberText = cardBinding.orderNumberText.text.toString()
+                                if (orderNumberText.contains("Order #${order.id}")) {
+                                    binding.ordersContainer.removeViewAt(i)
+                                    break
+                                }
+                            }
+                        }
+                        
+                        // If no more order cards, show empty state
+                        val hasOrderCards = (0 until binding.ordersContainer.childCount).any { i ->
+                            binding.ordersContainer.getChildAt(i) is MaterialCardView
+                        }
+                        if (!hasOrderCards) {
+                            showEmptyState("No pending orders")
+                        }
+                        
                         // Send broadcast to notify active orders screen to refresh
                         val intent = Intent("com.dialadrink.driver.ORDER_ACCEPTED").apply {
                             putExtra("orderId", order.id)
                         }
                         LocalBroadcastManager.getInstance(this@PendingOrdersActivity).sendBroadcast(intent)
+                        
+                        // Refresh in background to sync with server (non-blocking)
+                        lifecycleScope.launch {
+                            delay(500) // Small delay to let UI update first
+                            refreshOrdersFromRepository()
+                        }
                     } else {
                         showError(errorMessage ?: "Failed to accept order. Please try again.")
                     }

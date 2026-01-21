@@ -100,17 +100,32 @@ class OrderDetailActivity : AppCompatActivity() {
                     val status = orderData.optString("status", "")
                     val paymentStatus = orderData.optString("paymentStatus", "")
                     
-                    Log.d(TAG, "📦 Order status updated via socket: Order #$updatedOrderId -> $status, Payment: $paymentStatus")
+                    Log.d(TAG, "📦 [SOCKET] Order status updated via socket: Order #$updatedOrderId -> $status, Payment: $paymentStatus")
+                    Log.d(TAG, "📦 [SOCKET] Current order ID: $orderId, Updated order ID: $updatedOrderId")
                     
                     if (updatedOrderId == orderId) {
-                        // This order was updated, reload details immediately
-                        Log.d(TAG, "✅ Reloading order details for Order #$orderId due to socket update")
-                        loadOrderDetails()
+                        // This order was updated - reload immediately from API to get latest data
+                        Log.d(TAG, "✅✅✅ [SOCKET] MATCH! Reloading order details for Order #$orderId due to socket update")
+                        // Ensure we're on the main thread
+                        runOnUiThread {
+                            loadOrderDetails()
+                        }
+                    } else {
+                        Log.d(TAG, "⚠️ [SOCKET] Order ID mismatch: current=$orderId, updated=$updatedOrderId, skipping reload")
                     }
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error handling order-status-updated event", e)
+                    Log.e(TAG, "❌ [SOCKET] Error handling order-status-updated event", e)
                     // Still reload on error to ensure UI is up to date
-                    loadOrderDetails()
+                    val updatedOrderId = try {
+                        orderData.optInt("orderId", orderData.optInt("id", -1))
+                    } catch (e: Exception) {
+                        -1
+                    }
+                    if (updatedOrderId == orderId) {
+                        runOnUiThread {
+                            loadOrderDetails()
+                        }
+                    }
                 }
             },
             onPaymentConfirmed = { paymentData ->
@@ -804,12 +819,20 @@ class OrderDetailActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         startPolling()
+        // Ensure socket is connected when activity resumes
+        val driverId = SharedPrefs.getDriverId(this)
+        if (driverId != null && !SocketService.isConnected()) {
+            Log.d(TAG, "🔄 Socket not connected, reconnecting...")
+            setupSocketConnection()
+        }
     }
     
     override fun onDestroy() {
         super.onDestroy()
         stopPolling()
-        SocketService.disconnect()
+        // Don't disconnect socket - other activities might be using it
+        // SocketService.disconnect()
+        Log.d(TAG, "OrderDetailActivity destroyed, socket remains connected for other activities")
     }
     
     override fun onSupportNavigateUp(): Boolean {

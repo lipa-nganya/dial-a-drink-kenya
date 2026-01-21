@@ -55,12 +55,27 @@ class ActiveOrdersActivity : AppCompatActivity() {
         loadOrdersFromRepository()
     }
     
+    override fun onResume() {
+        super.onResume()
+        // Ensure socket is connected when activity resumes
+        val driverId = SharedPrefs.getDriverId(this)
+        if (driverId != null && !SocketService.isConnected()) {
+            Log.d(TAG, "🔄 Socket not connected, reconnecting...")
+            setupSocketConnection()
+        }
+        // Refresh orders when activity resumes (e.g., returning from accepting an order from pending screen)
+        // Always refresh to ensure we have the latest data, especially after accepting an order
+        if (!isLoading) {
+            refreshOrdersFromRepository()
+        }
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
-        // Disconnect socket when activity is destroyed
-        SocketService.disconnect()
+        // Don't disconnect socket - other activities might be using it
+        // SocketService.disconnect()
         LocalBroadcastManager.getInstance(this).unregisterReceiver(orderAcceptedReceiver)
-        Log.d(TAG, "Socket disconnected on activity destroy")
+        Log.d(TAG, "Activity destroyed, socket remains connected for other activities")
     }
     
     private fun setupBroadcastReceiver() {
@@ -103,18 +118,35 @@ class ActiveOrdersActivity : AppCompatActivity() {
             onOrderStatusUpdated = { orderData ->
                 try {
                     // Handle both orderId and id fields (backend may send either)
-                    val orderId = orderData.optInt("orderId", orderData.optInt("id", -1))
+                    val updatedOrderId = orderData.optInt("orderId", orderData.optInt("id", -1))
                     val status = orderData.optString("status", "")
                     val paymentStatus = orderData.optString("paymentStatus", "")
-                    Log.d(TAG, "📦 Order status updated via socket: Order #$orderId -> $status, Payment: $paymentStatus")
+                    Log.d(TAG, "📦 [SOCKET] Order status updated via socket: Order #$updatedOrderId -> $status, Payment: $paymentStatus")
                     
-                    // Refresh active orders automatically when order status or payment status updates
-                    // This ensures the driver sees the updated status without manual refresh
-                    refreshOrdersFromRepository()
+                    // Check if this order is in our current list
+                    val orderInList = currentOrders.any { it.id == updatedOrderId }
+                    
+                    if (orderInList) {
+                        // Order exists in list - update it immediately or refresh
+                        Log.d(TAG, "✅✅✅ [SOCKET] Order #$updatedOrderId found in active orders list, refreshing...")
+                        // Force refresh even if currently loading
+                        runOnUiThread {
+                            refreshOrdersFromRepository(forceRefresh = true)
+                        }
+                    } else {
+                        // Order not in list - might have been removed or is new
+                        // Refresh to sync with server
+                        Log.d(TAG, "⚠️ [SOCKET] Order #$updatedOrderId not in current list, refreshing...")
+                        runOnUiThread {
+                            refreshOrdersFromRepository(forceRefresh = true)
+                        }
+                    }
                 } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error handling order-status-updated event", e)
+                    Log.e(TAG, "❌ [SOCKET] Error handling order-status-updated event", e)
                     // Still refresh on error to ensure UI is up to date
-                    refreshOrdersFromRepository()
+                    runOnUiThread {
+                        refreshOrdersFromRepository(forceRefresh = true)
+                    }
                 }
             },
             onPaymentConfirmed = { paymentData ->
@@ -176,24 +208,35 @@ class ActiveOrdersActivity : AppCompatActivity() {
     /**
      * Refresh orders from repository (force fetch)
      */
-    private fun refreshOrdersFromRepository() {
-        if (isLoading) return
+    private fun refreshOrdersFromRepository(forceRefresh: Boolean = false) {
+        // If already loading and not forcing, skip
+        if (isLoading && !forceRefresh) {
+            Log.d(TAG, "⚠️ Refresh already in progress, skipping (forceRefresh=$forceRefresh)")
+            return
+        }
         
         isLoading = true
         binding.loadingProgress.visibility = View.GONE
-        binding.swipeRefresh.isRefreshing = true
+        // Only show swipe refresh indicator if user initiated (not from socket)
+        if (!forceRefresh) {
+            binding.swipeRefresh.isRefreshing = true
+        }
         
         val previousOrders = currentOrders.toList()
         
         lifecycleScope.launch {
             var orders = emptyList<Order>()
             try {
-                orders = withTimeoutOrNull(2000) { // 2 second timeout
+                Log.d(TAG, "🔄 [REFRESH] Fetching active orders from repository...")
+                orders = withTimeoutOrNull(5000) { // Increased timeout to 5 seconds
                     OrderRepository.refreshActiveOrders(this@ActiveOrdersActivity)
                 } ?: emptyList()
+                Log.d(TAG, "✅ [REFRESH] Fetched ${orders.size} active orders")
             } catch (e: CancellationException) {
+                Log.d(TAG, "🚫 [REFRESH] Cancelled")
                 // Ignore
             } catch (e: Exception) {
+                Log.e(TAG, "❌ [REFRESH] Error fetching orders", e)
                 orders = emptyList()
             } finally {
                 isLoading = false
@@ -201,23 +244,29 @@ class ActiveOrdersActivity : AppCompatActivity() {
                     binding.loadingProgress.visibility = View.GONE
                     binding.swipeRefresh.isRefreshing = false
                     
-                    // Check if orders are the same (compare by IDs)
-                    val ordersChanged = orders.map { it.id }.toSet() != previousOrders.map { it.id }.toSet()
+                    // Check if orders changed (compare by IDs and status)
+                    val previousOrderMap = previousOrders.associateBy { it.id }
+                    val currentOrderMap = orders.associateBy { it.id }
+                    
+                    val ordersChanged = orders.map { it.id }.toSet() != previousOrders.map { it.id }.toSet() ||
+                        orders.any { order ->
+                            val previous = previousOrderMap[order.id]
+                            previous != null && (previous.status != order.status || previous.paymentStatus != order.paymentStatus)
+                        }
                     
                     if (orders.isEmpty()) {
                         showEmptyState("No active orders")
                         currentOrders = emptyList()
                     } else {
-                        displayOrders(orders)
-                        currentOrders = orders
-                        
-                        // Show toast if orders haven't changed
-                        if (!ordersChanged && previousOrders.isNotEmpty()) {
-                            Toast.makeText(
-                                this@ActiveOrdersActivity,
-                                "Active orders are up to date",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                        // Always update UI if orders changed or if forced refresh
+                        if (ordersChanged || forceRefresh) {
+                            Log.d(TAG, "✅ [REFRESH] Orders changed or forced refresh, updating UI")
+                            displayOrders(orders)
+                            currentOrders = orders
+                        } else {
+                            Log.d(TAG, "ℹ️ [REFRESH] No changes detected, skipping UI update")
+                            // Still update currentOrders to keep it in sync
+                            currentOrders = orders
                         }
                     }
                 }
@@ -323,13 +372,6 @@ class ActiveOrdersActivity : AppCompatActivity() {
         val intent = Intent(this, OrderDetailActivity::class.java)
         intent.putExtra("orderId", orderId)
         startActivity(intent)
-    }
-    
-    override fun onResume() {
-        super.onResume()
-        // Refresh orders when activity resumes (e.g., returning from accepting an order from pending screen)
-        // Always refresh to ensure we have the latest data, especially after accepting an order
-        refreshOrdersFromRepository()
     }
 }
 
