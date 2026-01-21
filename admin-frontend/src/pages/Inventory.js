@@ -13,8 +13,6 @@ import {
   FormControlLabel,
   Alert,
   CircularProgress,
-  IconButton,
-  Tooltip,
   TextField,
   InputAdornment,
   Select,
@@ -22,7 +20,6 @@ import {
   FormControl,
   InputLabel,
   Paper,
-  Divider,
   Pagination,
   Tabs,
   Tab
@@ -32,8 +29,6 @@ import {
   CheckCircle,
   Cancel,
   Edit,
-  Visibility,
-  VisibilityOff,
   Inventory,
   TrendingUp,
   TrendingDown,
@@ -44,7 +39,6 @@ import {
   LocalOffer,
   QrCodeScanner,
   Star,
-  AttachMoney,
   Calculate
 } from '@mui/icons-material';
 import { api } from '../services/api';
@@ -311,10 +305,12 @@ const InventoryPage = () => {
   };
 
 
+  // eslint-disable-next-line no-unused-vars
   const getAvailabilityColor = (isAvailable) => {
     return isAvailable ? 'success' : 'error';
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getAvailabilityIcon = (isAvailable) => {
     return isAvailable ? <CheckCircle /> : <Cancel />;
   };

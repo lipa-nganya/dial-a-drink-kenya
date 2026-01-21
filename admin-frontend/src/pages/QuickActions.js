@@ -36,7 +36,6 @@ import NewOrderDialog from '../components/NewOrderDialog';
 const QuickActions = () => {
   const { isDarkMode, colors } = useTheme();
   const navigate = useNavigate();
-  const location = useLocation();
 
   const [newOrderDialogOpen, setNewOrderDialogOpen] = useState(false);
   const [forceCompleteDialogOpen, setForceCompleteDialogOpen] = useState(false);

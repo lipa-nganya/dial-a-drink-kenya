@@ -32,7 +32,7 @@ import { getOrderStatusChipProps, getPaymentStatusChipProps } from '../../utils/
 const RiderDetails = () => {
   const { riderId } = useParams();
   const navigate = useNavigate();
-  const { isDarkMode, colors } = useTheme();
+  const { colors } = useTheme();
   const [rider, setRider] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);

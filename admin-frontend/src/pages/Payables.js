@@ -39,8 +39,7 @@ import {
   PersonAdd,
   Receipt,
   ArrowBack,
-  CheckCircle,
-  Info
+  CheckCircle
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';

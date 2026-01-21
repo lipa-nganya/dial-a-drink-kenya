@@ -70,7 +70,7 @@ const formatDate = (date) => {
 };
 
 const Customers = () => {
-  const { isDarkMode, colors } = useTheme();
+  const { colors } = useTheme();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

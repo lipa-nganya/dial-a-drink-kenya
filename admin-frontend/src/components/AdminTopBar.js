@@ -8,8 +8,7 @@ import {
 } from '@mui/material';
 import {
   Menu as MenuIcon,
-  DesktopWindows,
-  PhoneAndroid
+  DesktopWindows
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
 import { useMobileView } from '../contexts/MobileViewContext';

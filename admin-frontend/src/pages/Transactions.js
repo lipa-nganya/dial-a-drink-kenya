@@ -35,15 +35,10 @@ import {
 } from '@mui/material';
 import {
   Search,
-  Cancel,
-  RemoveCircle,
-  LocalShipping,
   Clear,
   ExpandLess,
   ExpandMore,
   Receipt,
-  Phone,
-  Info,
   AccountBalanceWallet,
   ShoppingCart
 } from '@mui/icons-material';

@@ -30,8 +30,6 @@ import {
   LocalShipping,
   ShoppingCart,
   Download,
-  AccountBalanceWallet,
-  FilterList
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -54,7 +52,6 @@ const CashSubmissions = () => {
   
   // Orders data
   const [orders, setOrders] = useState([]);
-  const [allOrders, setAllOrders] = useState([]);
   const [cashSubmissions, setCashSubmissions] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [selectedAdminId, setSelectedAdminId] = useState('all');
@@ -250,7 +247,7 @@ const CashSubmissions = () => {
   const posOrdersWithAdmin = useMemo(() => {
     if (activeTab !== 1) return [];
     
-    const { startDate, endDate } = getDateRange(dateRange);
+    getDateRange(dateRange); // startDate, endDate unused
     
     // Create a map of orderId -> admin from cash submissions
     const orderToAdminMap = new Map();

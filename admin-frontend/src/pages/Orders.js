@@ -877,7 +877,8 @@ const Orders = () => {
     }
   };
 
-  const handleOpenBranchDialog = (order) => {
+  // eslint-disable-next-line no-unused-vars
+  const _handleOpenBranchDialog = (order) => {
     // Prevent opening dialog for cancelled or completed orders
     if (order.status === 'cancelled') {
       setError('Cannot change branch assignment for cancelled orders.');
@@ -1182,7 +1183,7 @@ const Orders = () => {
         }
 
         // Geocode all order addresses
-        const orderLocations = [];
+        // const orderLocations = []; // Unused
         const geocodePromises = route.orders.map(async (order) => {
           if (!order.deliveryAddress || order.deliveryAddress === 'In-Store Purchase') {
             return null;

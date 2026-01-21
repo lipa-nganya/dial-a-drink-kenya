@@ -43,7 +43,6 @@ import {
   Store,
   Refresh,
   Info,
-  Map,
   Add,
   ShoppingCart,
   Search,
@@ -502,7 +501,7 @@ const Reports = () => {
               try {
                 const walletResponse = await api.get(`/driver-wallet/${driver.id}`);
                 if (walletResponse.data && walletResponse.data.success) {
-                  const wallet = walletResponse.data.wallet;
+                  // const wallet = walletResponse.data.wallet; // Unused
                   
                   // Get cash settlement transactions to calculate total settled
                   const cashSettlements = walletResponse.data.cashSettlements || [];

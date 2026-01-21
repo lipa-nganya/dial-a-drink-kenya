@@ -24,13 +24,11 @@ import {
   Chip,
   Grid,
   InputAdornment,
-  Divider,
   IconButton
 } from '@mui/material';
 import {
   ArrowBack,
   Edit,
-  Add,
   AttachMoney,
   TrendingUp,
   TrendingDown,

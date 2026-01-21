@@ -24,7 +24,6 @@ import {
   FormControlLabel
 } from '@mui/material';
 import {
-  Analytics,
   TrendingUp,
   TrendingDown,
   Download,

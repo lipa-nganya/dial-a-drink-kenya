@@ -22,9 +22,7 @@ import {
   LocalFlorist,
   People,
   Store,
-  PointOfSale,
   AccountBalance,
-  Map,
   ChevronLeft,
   Psychology
 } from '@mui/icons-material';

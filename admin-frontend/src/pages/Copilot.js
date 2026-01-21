@@ -29,7 +29,7 @@ import Sales from './copilot/Sales';
 const Copilot = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isDarkMode, colors } = useTheme();
+  const { colors } = useTheme();
 
   // Determine current tab based on pathname
   const getCurrentTab = () => {

@@ -12,7 +12,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   CircularProgress,
   Alert,
   Chip,
@@ -28,7 +27,6 @@ import {
   ShoppingCart,
   Person,
   AttachMoney,
-  TrendingUp,
   DateRange,
   ExpandMore,
   ExpandLess

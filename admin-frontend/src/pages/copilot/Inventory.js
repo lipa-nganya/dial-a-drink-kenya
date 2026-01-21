@@ -12,13 +12,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   CircularProgress,
   Alert,
   Chip
 } from '@mui/material';
 import {
-  Inventory as InventoryIcon,
   Warning,
   TrendingDown,
   AttachMoney,

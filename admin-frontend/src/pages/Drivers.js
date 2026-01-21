@@ -27,9 +27,7 @@ import {
   Alert,
   Tooltip,
   Snackbar,
-  Collapse,
-  Switch,
-  FormControlLabel
+  Collapse
 } from '@mui/material';
 import {
   Add,
@@ -40,8 +38,7 @@ import {
   Cancel,
   RemoveCircle,
   Phone,
-  Visibility,
-  VisibilityOff,
+  VpnKey,
   VpnKey,
   WhatsApp,
   Search,
@@ -750,6 +747,7 @@ const Drivers = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getStatusColor = (status) => {
     switch (status) {
       case 'active': return 'success'; // On Shift
@@ -760,6 +758,7 @@ const Drivers = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getStatusIcon = (status) => {
     switch (status) {
       case 'active': return <CheckCircle fontSize="small" />;
@@ -770,6 +769,7 @@ const Drivers = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getStatusLabel = (status) => {
     switch (status) {
       case 'active': return 'On Shift';
@@ -975,7 +975,7 @@ const Drivers = () => {
                 const cashAtHand = creditStatus.cashAtHand || driver.cashAtHand || 0;
                 const creditLimit = creditStatus.creditLimit || driver.creditLimit || 0;
                 const exceeded = creditStatus.exceeded || false;
-                const walletBalance = driver.wallet?.balance || 0;
+                // const walletBalance = driver.wallet?.balance || 0; // Unused
                 
                 return (
                 <TableRow key={driver.id} hover>

@@ -11,11 +11,9 @@ import {
   TableHead,
   TableRow,
   Button,
-  TextField,
   Select,
   MenuItem,
   FormControl,
-  InputLabel,
   IconButton,
   Alert,
   Chip
@@ -24,7 +22,6 @@ import {
   Delete,
   ShoppingCart,
   Send,
-  WhatsApp,
   ArrowBack,
   Add,
   Remove
@@ -38,7 +35,6 @@ const ResupplyCart = () => {
   const navigate = useNavigate();
   const { cartItems, removeFromCart, updateCartItem, clearCart } = useResupplyCart();
   const [suppliers, setSuppliers] = useState([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetchSuppliers();
@@ -84,7 +80,8 @@ const ResupplyCart = () => {
     });
   };
 
-  const generateWhatsAppMessage = () => {
+  // eslint-disable-next-line no-unused-vars
+  const _generateWhatsAppMessage = () => {
     if (cartItems.length === 0) return '';
 
     // Group items by supplier

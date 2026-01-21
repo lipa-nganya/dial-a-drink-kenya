@@ -46,7 +46,6 @@ const QuickActionsMenu = () => {
   // Show on screens smaller than 960px (md breakpoint)
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const navigate = useNavigate();
-  const location = useLocation();
 
   // Debug: Log mobile detection (remove in production)
   React.useEffect(() => {
@@ -62,7 +61,7 @@ const QuickActionsMenu = () => {
   const [completeError, setCompleteError] = useState('');
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const menuOpen = Boolean(menuAnchorEl);
-  const [orderTab, setOrderTab] = useState('pending'); // 'pending', 'completed', 'unassigned'
+  const [, setOrderTab] = useState('pending'); // 'pending', 'completed', 'unassigned'
   const [recentOrders, setRecentOrders] = useState([]);
   const [loadingRecentOrders, setLoadingRecentOrders] = useState(false);
   const [postStopDialogOpen, setPostStopDialogOpen] = useState(false);

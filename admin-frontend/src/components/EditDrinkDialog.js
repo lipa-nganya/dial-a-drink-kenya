@@ -297,8 +297,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       } else {
         // Create new drink
         console.log('Creating new drink');
-        const response = await api.post('/admin/drinks', saveData);
-        const newDrinkId = response.data.id;
+        await api.post('/admin/drinks', saveData);
         
         // Stock updates are not allowed for admins - removed stock update call
         

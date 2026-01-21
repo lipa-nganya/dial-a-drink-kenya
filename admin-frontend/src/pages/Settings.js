@@ -293,7 +293,7 @@ const Settings = () => {
         ? { role: userFormData.role, name: userFormData.name, mobileNumber: userFormData.mobileNumber }
         : userFormData;
       
-      const response = await api.post('/admin/users', payload);
+      await api.post('/admin/users', payload);
       const successMessage = userFormData.role === 'shop_agent' 
         ? 'Shop agent created successfully! Click the WhatsApp icon to send the invite.' 
         : 'User created and invite email sent successfully!';
@@ -391,7 +391,7 @@ const Settings = () => {
       return;
     }
 
-    const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+    const phoneRegex = /^[\d\s\-+()]+$/;
     if (!phoneRegex.test(formData.phoneNumber.trim())) {
       setFormError('Please enter a valid phone number');
       return;
