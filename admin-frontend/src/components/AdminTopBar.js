@@ -4,15 +4,27 @@ import {
   Toolbar,
   IconButton,
   Typography,
-  Box
+  Tooltip
 } from '@mui/material';
 import {
-  Menu as MenuIcon
+  Menu as MenuIcon,
+  DesktopWindows,
+  PhoneAndroid
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
+import { useMobileView } from '../contexts/MobileViewContext';
 
 const AdminTopBar = ({ onMenuClick, onSidebarToggle, sidebarOpen }) => {
   const { isDarkMode, colors } = useTheme();
+  const { isMobileView, toggleMobileView, enableMobileView, isMobileDevice } = useMobileView();
+
+  const handleMenuClick = () => {
+    // Enable mobile view when hamburger menu is clicked on mobile
+    if (isMobileDevice && !isMobileView) {
+      enableMobileView();
+    }
+    onMenuClick();
+  };
 
   return (
     <AppBar
@@ -32,7 +44,7 @@ const AdminTopBar = ({ onMenuClick, onSidebarToggle, sidebarOpen }) => {
           color="inherit"
           aria-label="open drawer"
           edge="start"
-          onClick={onMenuClick}
+          onClick={handleMenuClick}
           sx={{ 
             mr: 2, 
             color: colors.textPrimary,
@@ -67,6 +79,23 @@ const AdminTopBar = ({ onMenuClick, onSidebarToggle, sidebarOpen }) => {
         >
           Admin Panel
         </Typography>
+        
+        {/* Mobile/Desktop View Toggle - Only show in mobile view */}
+        {isMobileView && (
+          <Tooltip title={isMobileView ? "Switch to Desktop View" : "Switch to Mobile View"}>
+            <IconButton
+              color="inherit"
+              aria-label="toggle view"
+              onClick={toggleMobileView}
+              sx={{ 
+                color: colors.textPrimary,
+                ml: 1
+              }}
+            >
+              <DesktopWindows />
+            </IconButton>
+          </Tooltip>
+        )}
       </Toolbar>
     </AppBar>
   );

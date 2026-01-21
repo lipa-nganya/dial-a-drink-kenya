@@ -133,10 +133,10 @@ const SalesDateDetails = () => {
       // 1. Order is explicitly marked as paid
       // 2. Order is completed/delivered (indicates payment was received)
       // 3. Order is pay_on_delivery (will be paid on delivery)
-      // 4. Order is confirmed or preparing (likely paid or will be paid)
+      // 4. Order is confirmed (likely paid or will be paid)
       // Note: We're more inclusive here to ensure we capture all revenue
       if (isPaid || isCompleted || order.paymentType === 'pay_on_delivery' || 
-          order.status === 'confirmed' || order.status === 'preparing' || order.status === 'out_for_delivery') {
+          order.status === 'confirmed' || order.status === 'out_for_delivery') {
         return sum + revenue;
       }
       return sum;

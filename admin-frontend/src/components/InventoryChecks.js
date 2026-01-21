@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -34,7 +34,7 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 
 const InventoryChecks = () => {
-  const { isDarkMode, colors } = useTheme();
+  const { colors } = useTheme();
   const [checks, setChecks] = useState([]);
   const [filteredChecks, setFilteredChecks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,9 +52,23 @@ const InventoryChecks = () => {
     fetchChecks();
   }, []);
 
+  const filterChecks = useCallback(() => {
+    let filtered = [...checks];
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(check => check.status === statusFilter);
+    }
+
+    if (flaggedOnly) {
+      filtered = filtered.filter(check => check.isFlagged);
+    }
+
+    setFilteredChecks(filtered);
+  }, [checks, statusFilter, flaggedOnly]);
+
   useEffect(() => {
     filterChecks();
-  }, [checks, statusFilter, flaggedOnly]);
+  }, [filterChecks]);
 
   const fetchChecks = async () => {
     try {

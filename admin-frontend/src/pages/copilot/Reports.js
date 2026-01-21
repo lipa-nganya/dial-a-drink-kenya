@@ -71,7 +71,6 @@ const Reports = () => {
   const [ridersPage, setRidersPage] = useState(0);
   const [drinksPage, setDrinksPage] = useState(0);
   const [suppliersPage, setSuppliersPage] = useState(0);
-  const [territoriesPage, setTerritoriesPage] = useState(0);
   const rowsPerPage = 10;
   
   // Sales data
@@ -105,9 +104,6 @@ const Reports = () => {
   
   // Suppliers data
   const [suppliers, setSuppliers] = useState([]);
-  
-  // Territories data
-  const [territories, setTerritories] = useState([]);
   
   // Settlement dialog state
   const [settlementDialogOpen, setSettlementDialogOpen] = useState(false);
@@ -145,9 +141,6 @@ const Reports = () => {
       } else if (activeTab === 3) {
         // Fetch suppliers data
         await fetchSuppliersData();
-      } else if (activeTab === 4) {
-        // Fetch territories data
-        await fetchTerritoriesData();
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -230,8 +223,8 @@ const Reports = () => {
     try {
       const response = await api.get('/admin/stats');
       if (response.data) {
-        const totalSales = response.data.totalRevenue || 0;
-        const totalOrders = response.data.totalOrders || 0;
+        let totalSales = response.data.totalRevenue || 0;
+        let totalOrders = response.data.totalOrders || 0;
         
         // Calculate average order value if not provided or if it's zero
         let averageOrder = response.data.averageOrderValue || 0;
@@ -670,63 +663,6 @@ const Reports = () => {
     }
   };
 
-  const fetchTerritoriesData = async () => {
-    try {
-      // Fetch all territories
-      const territoriesResponse = await api.get('/territories');
-      const allTerritories = territoriesResponse.data || [];
-      
-      // Fetch all orders
-      const ordersResponse = await api.get('/admin/orders');
-      const allOrders = ordersResponse.data || [];
-      
-      // Filter orders by date range
-      const { startDate, endDate } = getDateRange(dateRange);
-      const filteredOrders = allOrders.filter(order => {
-        const orderDate = new Date(order.createdAt);
-        return orderDate >= startDate && orderDate <= endDate;
-      });
-      
-      // Group orders by territory
-      const territoriesWithStats = allTerritories.map(territory => {
-        const territoryOrders = filteredOrders.filter(order => 
-          order.territoryId === territory.id
-        );
-        
-        // Calculate revenue for this territory
-        const revenue = territoryOrders.reduce((sum, order) => {
-          const isPaid = order.paymentStatus === 'paid' || 
-                        (order.transactions && Array.isArray(order.transactions) && 
-                         order.transactions.some(t => 
-                           t && t.transactionType === 'payment' && 
-                           (t.status === 'completed' || t.paymentStatus === 'paid')
-                         ));
-          
-          if (isPaid || order.status === 'completed' || order.status === 'delivered' ||
-              order.paymentType === 'pay_on_delivery' || order.status === 'confirmed' ||
-              order.status === 'preparing' || order.status === 'out_for_delivery') {
-            const orderAmount = parseFloat(order.totalAmount) || 0;
-            const tipAmount = parseFloat(order.tipAmount) || 0;
-            return sum + (orderAmount - tipAmount);
-          }
-          return sum;
-        }, 0);
-        
-        return {
-          ...territory,
-          orderCount: territoryOrders.length,
-          revenue: revenue
-        };
-      });
-      
-      // Sort by order count (descending)
-      territoriesWithStats.sort((a, b) => b.orderCount - a.orderCount);
-      
-      setTerritories(territoriesWithStats);
-    } catch (error) {
-      console.error('Error fetching territories data:', error);
-    }
-  };
 
   const handleAddToResupplyCart = (drink) => {
     addToCart(drink);
@@ -745,7 +681,6 @@ const Reports = () => {
     setRidersPage(0);
     setDrinksPage(0);
     setSuppliersPage(0);
-    setTerritoriesPage(0);
     // Clear rider filters when switching away from riders tab
     if (newValue !== 1) {
       setRiderSearchTerm('');
@@ -955,7 +890,6 @@ const Reports = () => {
           <Tab icon={<LocalShipping />} iconPosition="start" label="Riders" />
           <Tab icon={<LocalBar />} iconPosition="start" label="Drinks" />
           <Tab icon={<Store />} iconPosition="start" label="Suppliers" />
-          <Tab icon={<Map />} iconPosition="start" label="Territories" />
         </Tabs>
       </Paper>
 
@@ -1859,100 +1793,6 @@ const Reports = () => {
         </Box>
       )}
 
-      {/* Territories Tab */}
-      {activeTab === 4 && (
-        <Box>
-          <Paper sx={{ backgroundColor: colors.paper, p: 3 }}>
-            <Typography variant="h6" sx={{ mb: 2, color: colors.textPrimary }}>
-              Territories Report
-            </Typography>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Territory Name</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order Count</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Revenue</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Delivery Fee (CBD)</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Delivery Fee (Ruaka)</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {loading ? (
-                    <TableRow>
-                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
-                        Loading...
-                      </TableCell>
-                    </TableRow>
-                  ) : territories.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
-                        No territories data available
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    territories
-                      .slice(territoriesPage * rowsPerPage, territoriesPage * rowsPerPage + rowsPerPage)
-                      .map((territory) => (
-                      <TableRow key={territory.id}>
-                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                          {territory.name}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textPrimary }}>
-                          {territory.orderCount || 0}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                          {formatCurrency(territory.revenue || 0)}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textSecondary }}>
-                          {formatCurrency(territory.deliveryFromCBD || 0)}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textSecondary }}>
-                          {formatCurrency(territory.deliveryFromRuaka || 0)}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-              <TablePagination
-                component="div"
-                count={territories.length}
-                page={territoriesPage}
-                onPageChange={(event, newPage) => setTerritoriesPage(newPage)}
-                rowsPerPage={rowsPerPage}
-                onRowsPerPageChange={() => {}} // Keep rowsPerPage fixed at 10
-                rowsPerPageOptions={[]}
-                labelRowsPerPage=""
-                sx={{
-                  borderTop: `1px solid ${colors.border}`,
-                  '& .MuiTablePagination-toolbar': {
-                    color: colors.textPrimary,
-                  },
-                  '& .MuiTablePagination-selectLabel': {
-                    color: colors.textPrimary,
-                  },
-                  '& .MuiTablePagination-displayedRows': {
-                    color: colors.textPrimary,
-                  },
-                  '& .MuiTablePagination-select': {
-                    color: colors.textPrimary,
-                  },
-                  '& .MuiTablePagination-selectIcon': {
-                    color: colors.textPrimary,
-                  },
-                  '& .MuiIconButton-root': {
-                    color: colors.textPrimary,
-                    '&:disabled': {
-                      color: colors.textSecondary,
-                    },
-                  },
-                }}
-              />
-            </TableContainer>
-          </Paper>
-        </Box>
-      )}
 
       {/* Settlement Dialog */}
       <Dialog

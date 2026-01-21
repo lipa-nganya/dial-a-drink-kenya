@@ -50,6 +50,63 @@ export const AdminProvider = ({ children }) => {
     }
   };
 
+  // Request browser notification permission
+  const requestNotificationPermission = async () => {
+    if (!('Notification' in window)) {
+      console.log('This browser does not support notifications');
+      return false;
+    }
+
+    if (Notification.permission === 'granted') {
+      return true;
+    }
+
+    if (Notification.permission !== 'denied') {
+      const permission = await Notification.requestPermission();
+      return permission === 'granted';
+    }
+
+    return false;
+  };
+
+  // Show browser notification
+  const showBrowserNotification = (title, body, type = 'info') => {
+    if (!('Notification' in window)) {
+      console.log('This browser does not support notifications');
+      return;
+    }
+
+    if (Notification.permission === 'granted') {
+      const icon = '/favicon.ico';
+      const notification = new Notification(title, {
+        body: body,
+        icon: icon,
+        badge: '/favicon.ico',
+        tag: `driver-shift-${Date.now()}`, // Unique tag to prevent duplicate notifications
+        requireInteraction: false,
+        silent: false
+      });
+
+      // Auto-close after 5 seconds
+      setTimeout(() => {
+        notification.close();
+      }, 5000);
+
+      // Handle click - focus the window
+      notification.onclick = () => {
+        window.focus();
+        notification.close();
+      };
+    } else if (Notification.permission !== 'denied') {
+      // Request permission if not already denied
+      requestNotificationPermission().then(granted => {
+        if (granted) {
+          showBrowserNotification(title, body, type);
+        }
+      });
+    }
+  };
+
   // Play notification sound
   const playNotificationSound = () => {
     try {
@@ -113,6 +170,9 @@ export const AdminProvider = ({ children }) => {
     const token = localStorage.getItem('adminToken');
     if (!token || !isAuthenticated) return;
 
+    // Request notification permission on mount
+    requestNotificationPermission();
+
     // Initialize socket connection for admin
     // Use the same backend URL resolution logic as API calls
     const socketUrl = getBackendUrl();
@@ -125,18 +185,41 @@ export const AdminProvider = ({ children }) => {
       playNotificationSound();
       fetchPendingOrdersCount();
     });
-    
+
+    // Listen for cancellation requests from drivers
+    newSocket.on('order-cancellation-requested', (data) => {
+      console.log('⚠️ Cancellation requested for order:', data);
+      playNotificationSound();
+      // Show browser notification
+      showBrowserNotification(
+        '⚠️ Cancellation Request',
+        `Driver requested cancellation for Order #${data.orderId}. Reason: ${data.reason || 'N/A'}`,
+        'warning'
+      );
+      fetchPendingOrdersCount();
+    });
+
     // Listen for driver shift events
     newSocket.on('driver-shift-started', (data) => {
       console.log('Driver started shift:', data);
       playNotificationSound();
-      // You can add a notification here if needed
+      // Show browser notification
+      showBrowserNotification(
+        '✅ Driver Started Shift',
+        `${data.driverName || 'Driver'} has started their shift`,
+        'success'
+      );
     });
     
     newSocket.on('driver-shift-ended', (data) => {
       console.log('Driver ended shift:', data);
       playNotificationSound();
-      // You can add a notification here if needed
+      // Show browser notification
+      showBrowserNotification(
+        '⏸️ Driver Ended Shift',
+        `${data.driverName || 'Driver'} has ended their shift`,
+        'info'
+      );
     });
 
     setSocket(newSocket);

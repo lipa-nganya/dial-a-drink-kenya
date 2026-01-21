@@ -25,7 +25,11 @@ import {
   MenuItem,
   CircularProgress,
   Alert,
-  Tooltip
+  Tooltip,
+  Snackbar,
+  Collapse,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import {
   Add,
@@ -41,12 +45,440 @@ import {
   VpnKey,
   WhatsApp,
   Search,
-  Notifications
+  Notifications,
+  AccessTime,
+  Download
 } from '@mui/icons-material';
+import {
+  Tabs,
+  Tab
+} from '@mui/material';
+import NotificationEditor from '../components/NotificationEditor';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
+
+// Shift Report Tab Component
+const ShiftReportTab = () => {
+  const { isDarkMode, colors } = useTheme();
+  const [shiftData, setShiftData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [dateRange, setDateRange] = useState('today');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  useEffect(() => {
+    fetchShiftReport();
+  }, [dateRange, customStartDate, customEndDate]);
+
+  const getDateRange = (range) => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    
+    let startDate, endDate;
+    
+    if (range === 'custom' && customStartDate && customEndDate) {
+      startDate = new Date(customStartDate);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(customEndDate);
+      endDate.setHours(23, 59, 59, 999);
+    } else {
+      switch (range) {
+        case 'today':
+          // Today only - from start of today to current time
+          startDate = new Date(today);
+          startDate.setHours(0, 0, 0, 0);
+          endDate = new Date(now); // Current time, not end of day
+          break;
+        case 'last7days':
+          endDate = new Date(today);
+          startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 7);
+          break;
+        case 'last30days':
+          endDate = new Date(today);
+          startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 30);
+          break;
+        case 'last90days':
+          endDate = new Date(today);
+          startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 90);
+          break;
+        case 'thisMonth':
+          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+          endDate = new Date(today);
+          break;
+        case 'thisYear':
+          startDate = new Date(now.getFullYear(), 0, 1);
+          endDate = new Date(today);
+          break;
+        default:
+          endDate = new Date(today);
+          startDate = new Date(today);
+          startDate.setDate(startDate.getDate() - 30);
+      }
+    }
+    
+    return { startDate, endDate };
+  };
+
+  const fetchShiftReport = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const { startDate, endDate } = getDateRange(dateRange);
+      
+      console.log('📊 Fetching shift report:', { startDate, endDate, dateRange });
+      
+      const response = await api.get('/admin/shift-report', {
+        params: {
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString()
+        }
+      });
+      
+      console.log('📊 Shift report response:', response.data);
+      
+      if (response.data?.success && Array.isArray(response.data.data)) {
+        setShiftData(response.data.data);
+      } else {
+        console.warn('⚠️ Unexpected response format:', response.data);
+        setShiftData([]);
+      }
+    } catch (err) {
+      console.error('❌ Error fetching shift report:', err);
+      console.error('Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      setError(err.response?.data?.error || err.message || 'Failed to load shift report. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDuration = (ms) => {
+    if (!ms || ms <= 0) return '00:00:00';
+    
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  };
+
+  const formatDate = (dateString) => {
+    // Handle both YYYY-MM-DD format and ISO strings
+    let date;
+    if (dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      // YYYY-MM-DD format - parse as local date
+      const [year, month, day] = dateString.split('-').map(Number);
+      date = new Date(year, month - 1, day);
+    } else {
+      // ISO string - parse and use local date
+      date = new Date(dateString);
+    }
+    
+    return date.toLocaleDateString('en-KE', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Group shifts by driver and date
+  const groupedShifts = useMemo(() => {
+    const grouped = {};
+    
+    shiftData.forEach(driver => {
+      if (!driver.shifts || !Array.isArray(driver.shifts)) {
+        console.warn('Driver missing shifts array:', driver);
+        return;
+      }
+      
+      driver.shifts.forEach(shift => {
+        // Handle both Date objects and ISO strings
+        const shiftDate = shift.date instanceof Date 
+          ? shift.date 
+          : new Date(shift.date);
+        
+        if (isNaN(shiftDate.getTime())) {
+          console.warn('Invalid date in shift:', shift);
+          return;
+        }
+        
+        // Use local date instead of UTC to avoid timezone issues
+        const year = shiftDate.getFullYear();
+        const month = String(shiftDate.getMonth() + 1).padStart(2, '0');
+        const day = String(shiftDate.getDate()).padStart(2, '0');
+        const dateKey = `${year}-${month}-${day}`;
+        const key = `${driver.driverId}-${dateKey}`;
+        
+        if (!grouped[key]) {
+          grouped[key] = {
+            driverId: driver.driverId,
+            driverName: driver.driverName,
+            phoneNumber: driver.phoneNumber,
+            date: dateKey,
+            shiftDurationMs: 0
+          };
+        }
+        
+        grouped[key].shiftDurationMs += (shift.shiftDurationMs || 0);
+      });
+    });
+    
+    return Object.values(grouped).sort((a, b) => {
+      // Sort by date (newest first), then by driver name
+      const dateCompare = new Date(b.date) - new Date(a.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.driverName.localeCompare(b.driverName);
+    });
+  }, [shiftData]);
+
+  const paginatedShifts = groupedShifts.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+
+  const handleExportCSV = () => {
+    if (groupedShifts.length === 0) {
+      alert('No shift data to export');
+      return;
+    }
+
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    const headers = [
+      'Date',
+      'Driver Name',
+      'Phone Number',
+      'Shift Duration (HH:MM:SS)'
+    ];
+
+    const csvRows = groupedShifts.map(shift => {
+      return [
+        formatDate(shift.date),
+        escapeCSV(shift.driverName),
+        escapeCSV(shift.phoneNumber),
+        formatDuration(shift.shiftDurationMs)
+      ].join(',');
+    });
+
+    // Add summary row
+    const totalMs = groupedShifts.reduce((sum, shift) => sum + shift.shiftDurationMs, 0);
+    const summaryRow = [
+      '',
+      'TOTAL',
+      '',
+      formatDuration(totalMs)
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...csvRows,
+      summaryRow.join(',')
+    ].join('\n');
+
+    // Create blob and download
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const { startDate, endDate } = getDateRange(dateRange);
+    const fileName = `shift-report-${startDate.toISOString().split('T')[0]}-to-${endDate.toISOString().split('T')[0]}.csv`;
+    link.setAttribute('download', fileName);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 1 }}>
+          Shift Report
+        </Typography>
+        <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+          Track driver shift durations per day
+        </Typography>
+      </Box>
+
+      {/* Filters */}
+      <Paper sx={{ p: 2, mb: 3, backgroundColor: colors.paper }}>
+        <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
+            <InputLabel sx={{ color: colors.textSecondary }}>Date Range</InputLabel>
+            <Select
+              value={dateRange}
+              onChange={(e) => {
+                setDateRange(e.target.value);
+                setPage(0);
+              }}
+              label="Date Range"
+              sx={{
+                color: colors.textPrimary,
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.border,
+                },
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accentText,
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accentText,
+                },
+                '& .MuiSvgIcon-root': {
+                  color: colors.accentText,
+                }
+              }}
+            >
+              <MenuItem value="today">Today</MenuItem>
+              <MenuItem value="last7days">Last 7 Days</MenuItem>
+              <MenuItem value="last30days">Last 30 Days</MenuItem>
+              <MenuItem value="last90days">Last 90 Days</MenuItem>
+              <MenuItem value="thisMonth">This Month</MenuItem>
+              <MenuItem value="thisYear">This Year</MenuItem>
+              <MenuItem value="custom">Custom Range</MenuItem>
+            </Select>
+          </FormControl>
+          
+          <Collapse 
+            in={dateRange === 'custom'} 
+            orientation="horizontal"
+            sx={{
+              transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+              '& .MuiCollapse-wrapper': {
+                transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)'
+              }
+            }}
+          >
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              <TextField
+                type="date"
+                label="From"
+                size="small"
+                value={customStartDate}
+                onChange={(e) => {
+                  setCustomStartDate(e.target.value);
+                  setPage(0);
+                }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: 150 }}
+              />
+              <TextField
+                type="date"
+                label="To"
+                size="small"
+                value={customEndDate}
+                onChange={(e) => {
+                  setCustomEndDate(e.target.value);
+                  setPage(0);
+                }}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: 150 }}
+              />
+            </Box>
+          </Collapse>
+
+          <Box sx={{ flexGrow: 1 }} />
+          
+          <Button
+            variant="contained"
+            startIcon={<Download />}
+            onClick={handleExportCSV}
+            disabled={groupedShifts.length === 0}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              },
+              '&:disabled': {
+                backgroundColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            Export CSV
+          </Button>
+        </Box>
+      </Paper>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Date</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Driver Name</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Phone Number</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Shift Duration</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {paginatedShifts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    No shift data found for the selected date range.
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            ) : (
+              paginatedShifts.map((shift, index) => (
+                <TableRow key={`${shift.driverId}-${shift.date}-${index}`} hover>
+                  <TableCell>{formatDate(shift.date)}</TableCell>
+                  <TableCell sx={{ fontWeight: 500 }}>{shift.driverName}</TableCell>
+                  <TableCell>{shift.phoneNumber}</TableCell>
+                  <TableCell align="right" sx={{ fontFamily: 'monospace', fontWeight: 500 }}>
+                    {formatDuration(shift.shiftDurationMs)}
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+        <TablePagination
+          rowsPerPageOptions={[10, 25, 50, 100]}
+          component="div"
+          count={groupedShifts.length}
+          rowsPerPage={rowsPerPage}
+          page={page}
+          onPageChange={(event, newPage) => setPage(newPage)}
+          onRowsPerPageChange={(event) => {
+            setRowsPerPage(parseInt(event.target.value, 10));
+            setPage(0);
+          }}
+        />
+      </TableContainer>
+    </Box>
+  );
+};
 
 const Drivers = () => {
   const { isDarkMode, colors } = useTheme();
@@ -71,6 +503,8 @@ const Drivers = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [searchQuery, setSearchQuery] = useState('');
+  const [notification, setNotification] = useState(null);
+  const [activeTab, setActiveTab] = useState(0);
 
   useEffect(() => {
     fetchDrivers();
@@ -83,18 +517,49 @@ const Drivers = () => {
     // Listen for driver shift events
     socket.on('driver-shift-started', (data) => {
       console.log('Driver started shift:', data);
-      fetchDrivers(); // Refresh drivers list
+      // Update driver in local state immediately
+      if (data.driver) {
+        setDrivers(prevDrivers => 
+          prevDrivers.map(driver => 
+            driver.id === data.driverId ? { ...driver, ...data.driver } : driver
+          )
+        );
+      }
+      // Show notification
+      setNotification({
+        message: `${data.driverName || 'Driver'} has started shift`,
+        severity: 'success'
+      });
     });
     
     socket.on('driver-shift-ended', (data) => {
       console.log('Driver ended shift:', data);
-      fetchDrivers(); // Refresh drivers list
+      // Update driver in local state immediately
+      if (data.driver) {
+        setDrivers(prevDrivers => 
+          prevDrivers.map(driver => 
+            driver.id === data.driverId ? { ...driver, ...data.driver } : driver
+          )
+        );
+      }
+      // Show notification
+      setNotification({
+        message: `${data.driverName || 'Driver'} has ended shift`,
+        severity: 'info'
+      });
     });
     
     // Listen for general driver status updates
     socket.on('driver-status-updated', (data) => {
       console.log('Driver status updated:', data);
-      fetchDrivers(); // Refresh drivers list
+      // Update driver in local state immediately
+      if (data.driver) {
+        setDrivers(prevDrivers => 
+          prevDrivers.map(driver => 
+            driver.id === data.driverId ? { ...driver, ...data.driver } : driver
+          )
+        );
+      }
     });
     
     return () => {
@@ -368,90 +833,125 @@ const Drivers = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <LocalShipping sx={{ fontSize: 40, color: colors.accentText }} />
           <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
             Riders Management
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={() => handleOpenDialog()}
+        {activeTab === 0 && (
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => handleOpenDialog()}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              }
+            }}
+          >
+            Add Rider
+          </Button>
+        )}
+      </Box>
+
+      {/* Tabs */}
+      <Paper sx={{ mb: 3, backgroundColor: colors.paper }}>
+        <Tabs
+          value={activeTab}
+          onChange={(e, newValue) => setActiveTab(newValue)}
           sx={{
-            backgroundColor: colors.accentText,
-            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-            '&:hover': {
-              backgroundColor: '#00C4A3'
+            borderBottom: `1px solid ${colors.border}`,
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              minHeight: 64,
+              color: colors.textSecondary,
+              '&.Mui-selected': {
+                color: colors.accentText,
+                fontWeight: 600
+              }
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: colors.accentText,
+              height: 3
             }
           }}
         >
-          Add Rider
-        </Button>
-      </Box>
+          <Tab icon={<LocalShipping />} iconPosition="start" label="Riders" />
+          <Tab icon={<Notifications />} iconPosition="start" label="Custom Notifications" />
+          <Tab icon={<AccessTime />} iconPosition="start" label="Shift Report" />
+        </Tabs>
+      </Paper>
 
-      {pushTestResult && (
-        <Alert 
-          severity={pushTestResult.success ? 'success' : 'error'} 
-          sx={{ mb: 3 }}
-          onClose={() => setPushTestResult(null)}
-        >
-          {pushTestResult.message}
-        </Alert>
-      )}
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
+      {activeTab === 0 && (
+        <>
+          {pushTestResult && (
+            <Alert 
+              severity={pushTestResult.success ? 'success' : 'error'} 
+              sx={{ mb: 3 }}
+              onClose={() => setPushTestResult(null)}
+            >
+              {pushTestResult.message}
+            </Alert>
+          )}
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+              {error}
+            </Alert>
+          )}
 
-      {/* Search Bar */}
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          placeholder="Search riders by name or phone number..."
-          value={searchQuery}
-          onChange={(e) => {
-            setSearchQuery(e.target.value);
-            setPage(0); // Reset to first page when search changes
-          }}
-          InputProps={{
-            startAdornment: (
-              <Search sx={{ color: colors.textSecondary, mr: 1 }} />
-            )
-          }}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              backgroundColor: colors.paper,
-              '& fieldset': {
-                borderColor: colors.border,
-              },
-              '&:hover fieldset': {
-                borderColor: colors.accentText,
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: colors.accentText,
-              },
-            },
-            '& .MuiInputBase-input': {
-              color: colors.textPrimary,
-            },
-            '& .MuiInputBase-input::placeholder': {
-              color: colors.textSecondary,
-              opacity: 1,
-            },
-          }}
-        />
-      </Box>
+          {/* Search Bar */}
+          <Box sx={{ mb: 3 }}>
+            <TextField
+              fullWidth
+              placeholder="Search riders by name or phone number..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(0); // Reset to first page when search changes
+              }}
+              InputProps={{
+                startAdornment: (
+                  <Search sx={{ color: colors.textSecondary, mr: 1 }} />
+                )
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  backgroundColor: colors.paper,
+                  '& fieldset': {
+                    borderColor: colors.border,
+                  },
+                  '&:hover fieldset': {
+                    borderColor: colors.accentText,
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: colors.accentText,
+                  },
+                },
+                '& .MuiInputBase-input': {
+                  color: colors.textPrimary,
+                },
+                '& .MuiInputBase-input::placeholder': {
+                  color: colors.textSecondary,
+                  opacity: 1,
+                },
+              }}
+            />
+          </Box>
 
-      <TableContainer component={Paper}>
+          <TableContainer component={Paper}>
         <Table>
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Rider Name</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Phone Number</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Status</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Cash at Hand</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Credit Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Last Activity</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>OTP</TableCell>
@@ -461,7 +961,7 @@ const Drivers = () => {
           <TableBody>
             {filteredDrivers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
                     {searchQuery.trim() 
                       ? `No riders found matching "${searchQuery}".` 
@@ -472,9 +972,8 @@ const Drivers = () => {
             ) : (
               filteredDrivers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((driver) => {
                 const creditStatus = driver.creditStatus || {};
-                const balance = creditStatus.balance || 0;
-                const creditLimit = creditStatus.creditLimit || 0;
-                const debt = creditStatus.debt || 0;
+                const cashAtHand = creditStatus.cashAtHand || driver.cashAtHand || 0;
+                const creditLimit = creditStatus.creditLimit || driver.creditLimit || 0;
                 const exceeded = creditStatus.exceeded || false;
                 const walletBalance = driver.wallet?.balance || 0;
                 
@@ -534,6 +1033,11 @@ const Drivers = () => {
                     </FormControl>
                   </TableCell>
                   <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 500, color: colors.textPrimary }}>
+                      KES {parseFloat(cashAtHand).toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                       <Chip
                         label={exceeded ? 'Limit Exceeded' : 'Within Limit'}
@@ -542,17 +1046,19 @@ const Drivers = () => {
                         sx={{ fontWeight: 'bold' }}
                       />
                       <Typography variant="caption" color="text.secondary">
-                        Balance: KES {parseFloat(walletBalance).toFixed(2)}
+                        Cash at Hand: KES {parseFloat(cashAtHand).toFixed(2)}
                       </Typography>
                       {creditLimit > 0 && (
-                        <Typography variant="caption" color="text.secondary">
-                          Limit: KES {parseFloat(creditLimit).toFixed(2)}
-                        </Typography>
-                      )}
-                      {debt > 0 && (
-                        <Typography variant="caption" color={exceeded ? 'error' : 'warning.main'}>
-                          Debt: KES {parseFloat(debt).toFixed(2)}
-                        </Typography>
+                        <>
+                          <Typography variant="caption" color="text.secondary">
+                            Credit Limit: KES {parseFloat(creditLimit).toFixed(2)}
+                          </Typography>
+                          {exceeded && (
+                            <Typography variant="caption" color="error">
+                              Exceeds by: KES {(parseFloat(cashAtHand) - parseFloat(creditLimit)).toFixed(2)}
+                            </Typography>
+                          )}
+                        </>
                       )}
                     </Box>
                   </TableCell>
@@ -618,41 +1124,41 @@ const Drivers = () => {
                           </IconButton>
                         </span>
                       </Tooltip>
-                      <Tooltip title="Invite via WhatsApp">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleInviteDriver(driver)}
-                          disabled={invitingDriver === driver.id}
-                          sx={{ 
-                            color: '#25D366',
-                            '&:hover': { backgroundColor: 'rgba(37, 211, 102, 0.1)' }
-                          }}
-                        >
-                          {invitingDriver === driver.id ? (
-                            <CircularProgress size={20} />
-                          ) : (
-                            <WhatsApp />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Edit Rider">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleOpenDialog(driver)}
-                          sx={{ color: colors.accentText }}
-                        >
-                          <Edit />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Delete Rider">
-                        <IconButton
-                          size="small"
-                          onClick={() => handleDelete(driver.id)}
-                          sx={{ color: '#FF3366' }}
-                        >
-                          <Delete />
-                        </IconButton>
-                      </Tooltip>
+                    <Tooltip title="Invite via WhatsApp">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleInviteDriver(driver)}
+                        disabled={invitingDriver === driver.id}
+                        sx={{ 
+                          color: '#25D366',
+                          '&:hover': { backgroundColor: 'rgba(37, 211, 102, 0.1)' }
+                        }}
+                      >
+                        {invitingDriver === driver.id ? (
+                          <CircularProgress size={20} />
+                        ) : (
+                          <WhatsApp />
+                        )}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Edit Rider">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleOpenDialog(driver)}
+                        sx={{ color: colors.accentText }}
+                      >
+                        <Edit />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Delete Rider">
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDelete(driver.id)}
+                        sx={{ color: '#FF3366' }}
+                      >
+                        <Delete />
+                      </IconButton>
+                    </Tooltip>
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -674,6 +1180,16 @@ const Drivers = () => {
           }}
         />
       </TableContainer>
+        </>
+      )}
+
+      {activeTab === 1 && (
+        <NotificationEditor onNotificationSent={() => {}} />
+      )}
+
+      {activeTab === 2 && (
+        <ShiftReportTab />
+      )}
 
       {/* Add/Edit Rider Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
@@ -759,6 +1275,29 @@ const Drivers = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Notification Snackbar */}
+      <Snackbar
+        open={!!notification}
+        autoHideDuration={4000}
+        onClose={() => setNotification(null)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert 
+          onClose={() => setNotification(null)} 
+          severity={notification?.severity || 'info'}
+          sx={{ 
+            width: '100%',
+            backgroundColor: notification?.severity === 'success' ? colors.accentText : undefined,
+            color: notification?.severity === 'success' && isDarkMode ? '#0D0D0D' : undefined,
+            '& .MuiAlert-icon': {
+              color: notification?.severity === 'success' && isDarkMode ? '#0D0D0D' : undefined
+            }
+          }}
+        >
+          {notification?.message}
+        </Alert>
+      </Snackbar>
     </Container>
   );
 };

@@ -18,13 +18,13 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  InputAdornment
 } from '@mui/material';
 import {
   Close,
   CloudUpload,
-  AttachMoney,
-  Image as ImageIcon
+  AttachMoney
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -46,7 +46,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     capacity: [],
     capacityPricing: [],
     abv: '',
-    stock: 0
+    stock: 0,
+    purchasePrice: ''
   });
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
@@ -59,7 +60,24 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     if (drink) {
       // Get brandId from drink.brandId or drink.brand?.id
       const brandId = drink.brandId || (drink.brand && drink.brand.id) || '';
-      setFormData({
+      
+      // Debug purchasePrice
+      console.log('🔍 EditDrinkDialog - Loading drink:', {
+        id: drink.id,
+        name: drink.name,
+        purchasePrice: drink.purchasePrice,
+        purchasePriceType: typeof drink.purchasePrice,
+        hasPurchasePrice: 'purchasePrice' in drink,
+        allKeys: Object.keys(drink)
+      });
+      
+      const purchasePriceValue = drink.purchasePrice !== undefined && drink.purchasePrice !== null 
+        ? String(drink.purchasePrice).trim() 
+        : '';
+      
+      console.log('🔍 PurchasePrice value to set:', purchasePriceValue);
+      
+      const newFormData = {
         name: drink.name || '',
         description: drink.description || '',
         isAvailable: drink.isAvailable !== undefined ? drink.isAvailable : true,
@@ -73,8 +91,17 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || '',
-        stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0
+        stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0,
+        purchasePrice: purchasePriceValue
+      };
+      
+      console.log('🔍 FormData being set:', {
+        purchasePrice: newFormData.purchasePrice,
+        purchasePriceType: typeof newFormData.purchasePrice,
+        purchasePriceLength: newFormData.purchasePrice ? newFormData.purchasePrice.length : 0
       });
+      
+      setFormData(newFormData);
       // Fetch subcategories for the drink's category
       if (drink.categoryId) {
         fetchSubcategories(drink.categoryId);
@@ -96,7 +123,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacity: [],
         capacityPricing: [],
         abv: '',
-        stock: 0
+        stock: 0,
+        purchasePrice: ''
       });
       setImagePreview('');
       setSubcategories([]);
@@ -108,6 +136,17 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     fetchCategories();
     fetchBrands();
   }, []);
+  
+  // Debug: Log formData.purchasePrice changes
+  useEffect(() => {
+    if (formData.purchasePrice !== undefined) {
+      console.log('🔍 FormData purchasePrice changed:', {
+        value: formData.purchasePrice,
+        type: typeof formData.purchasePrice,
+        isEmpty: !formData.purchasePrice || formData.purchasePrice === ''
+      });
+    }
+  }, [formData.purchasePrice]);
 
   const fetchBrands = async () => {
     try {
@@ -243,7 +282,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacity: formData.capacity,
         capacityPricing: formData.capacityPricing,
         abv: formData.abv ? parseFloat(formData.abv) : null,
-        stock: formData.stock !== undefined && formData.stock !== null ? parseInt(formData.stock) || 0 : 0
+        // Stock is not included - admins cannot update stock quantity
+        purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null
       };
 
       if (drink && drink.id) {
@@ -251,16 +291,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         console.log('Updating drink:', drink.id);
         await api.put(`/admin/drinks/${drink.id}`, saveData);
         
-        // Also update stock via inventory endpoint
-        try {
-          await api.post('/inventory/update-stock', {
-            drinkId: drink.id,
-            stock: parseInt(formData.stock) || 0
-          });
-        } catch (stockError) {
-          console.warn('Failed to update stock via inventory endpoint:', stockError);
-          // Continue even if stock update fails - main drink update succeeded
-        }
+        // Stock updates are not allowed for admins - removed stock update call
         
         console.log('Drink updated successfully');
       } else {
@@ -269,17 +300,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         const response = await api.post('/admin/drinks', saveData);
         const newDrinkId = response.data.id;
         
-        // Update stock for new drink
-        if (newDrinkId && (formData.stock !== undefined && formData.stock !== null)) {
-          try {
-            await api.post('/inventory/update-stock', {
-              drinkId: newDrinkId,
-              stock: parseInt(formData.stock) || 0
-            });
-          } catch (stockError) {
-            console.warn('Failed to update stock for new drink:', stockError);
-          }
-        }
+        // Stock updates are not allowed for admins - removed stock update call
         
         console.log('Drink created successfully');
       }
@@ -588,10 +609,31 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             fullWidth
             label="Stock Quantity"
             type="number"
-            inputProps={{ step: "1", min: "0" }}
+            inputProps={{ step: "1", min: "0", readOnly: true }}
             value={formData.stock}
-            onChange={(e) => handleInputChange('stock', e.target.value)}
-            helperText="Number of items currently in stock"
+            disabled
+            helperText="Stock quantity cannot be edited by admins"
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.border },
+                '&.Mui-focused fieldset': { borderColor: colors.border }
+              }
+            }}
+          />
+
+          <TextField
+            fullWidth
+            label="Purchase Price"
+            type="number"
+            inputProps={{ step: "0.01", min: "0" }}
+            value={formData.purchasePrice}
+            onChange={(e) => handleInputChange('purchasePrice', e.target.value)}
+            helperText="Cost price of the item. Selling price will be automatically set to 70% of purchase price."
+            InputProps={{
+              startAdornment: <InputAdornment position="start">KES</InputAdornment>
+            }}
             sx={{
               mb: 2,
               '& .MuiOutlinedInput-root': {

@@ -18,10 +18,8 @@ import {
   Chip
 } from '@mui/material';
 import {
-  Dashboard,
   AttachMoney,
   ShoppingCart,
-  LocalBar,
   TrendingUp,
   AccountBalanceWallet,
   EmojiEvents,
@@ -50,7 +48,7 @@ const AdminOverview = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
-  const [socket, setSocket] = useState(null);
+  const [, setSocket] = useState(null);
   const [latestOrders, setLatestOrders] = useState([]);
   const [topInventoryItems, setTopInventoryItems] = useState([]);
   const [latestTransactions, setLatestTransactions] = useState([]);
@@ -97,7 +95,7 @@ const AdminOverview = () => {
     return () => {
       newSocket.close();
     };
-  }, []);
+  }, [fetchPendingOrdersCount]);
 
   const fetchStats = async () => {
     try {

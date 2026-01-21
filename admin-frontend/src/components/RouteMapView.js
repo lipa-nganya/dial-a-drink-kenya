@@ -100,7 +100,6 @@ const RouteMapView = ({
 
       setGeocodingInProgress(true);
       const newOrderCoords = {};
-      const newStopCoords = {};
 
       // Geocode orders
       for (const route of riderRoutes) {
@@ -276,7 +275,6 @@ const RouteMapView = ({
 
       {/* Polylines for routes */}
       {Object.entries(routePaths).map(([riderId, path]) => {
-        const route = riderRoutes.find(r => r.rider.id.toString() === riderId);
         const distanceData = routeDistances[riderId];
         
         return (

@@ -17,7 +17,7 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 
 const RichTextEditor = ({ value, onChange, placeholder, rows = 15, ...props }) => {
-  const { isDarkMode, colors } = useTheme();
+  const { colors } = useTheme();
   const textFieldRef = useRef(null);
   const textareaRef = useRef(null);
   const [selection, setSelection] = useState({ start: 0, end: 0 });

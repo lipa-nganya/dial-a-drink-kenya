@@ -138,9 +138,66 @@ const Transactions = () => {
     }
   }, [currentTab, cashSubmissionTab]);
 
+  // Get card payment transactions
+  const getCardPaymentTransactions = () => {
+    return transactions.filter(t => {
+      // Filter for card payments: paymentMethod === 'card' or paymentProvider === 'pesapal'
+      return t.paymentMethod === 'card' || t.paymentProvider === 'pesapal';
+    });
+  };
+
+  // Filter card payment transactions
+  const filterCardPaymentTransactions = () => {
+    let filtered = getCardPaymentTransactions();
+
+    // Apply same filters as regular transactions
+    if (searchTerm) {
+      const search = searchTerm.toLowerCase();
+      filtered = filtered.filter(t => {
+        return (
+          t.receiptNumber?.toLowerCase().includes(search) ||
+          t.orderId?.toString().includes(search) ||
+          t.phoneNumber?.includes(search) ||
+          t.order?.customerName?.toLowerCase().includes(search) ||
+          t.order?.customerPhone?.includes(search)
+        );
+      });
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(t => t.status === statusFilter);
+    }
+
+    if (startDate || endDate) {
+      filtered = filtered.filter(t => {
+        const transactionDate = new Date(t.transactionDate || t.createdAt);
+        transactionDate.setHours(0, 0, 0, 0);
+        
+        if (startDate && endDate) {
+          const start = new Date(startDate);
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          return transactionDate >= start && transactionDate <= end;
+        } else if (startDate) {
+          const start = new Date(startDate);
+          return transactionDate >= start;
+        } else if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          return transactionDate <= end;
+        }
+        return true;
+      });
+    }
+
+    return filtered;
+  };
+
   useEffect(() => {
-    filterTransactions();
-  }, [searchTerm, statusFilter, paymentMethodFilter, startDate, endDate, transactions]);
+    if (currentTab === 'transactions') {
+      filterTransactions();
+    }
+  }, [searchTerm, statusFilter, paymentMethodFilter, startDate, endDate, transactions, currentTab]);
 
   const fetchTransactions = async () => {
     try {
@@ -503,13 +560,14 @@ const Transactions = () => {
   };
 
   useEffect(() => {
-    if (page > 0 && page * rowsPerPage >= filteredTransactions.length) {
-      const lastPage = Math.max(0, Math.ceil(filteredTransactions.length / rowsPerPage) - 1);
+    const transactionsToCheck = currentTab === 'card-payments' ? filterCardPaymentTransactions() : filteredTransactions;
+    if (page > 0 && page * rowsPerPage >= transactionsToCheck.length) {
+      const lastPage = Math.max(0, Math.ceil(transactionsToCheck.length / rowsPerPage) - 1);
       if (page !== lastPage) {
         setPage(lastPage);
       }
     }
-  }, [filteredTransactions.length, page, rowsPerPage]);
+  }, [filteredTransactions.length, page, rowsPerPage, currentTab, transactions]);
 
   if (loading) {
     return (
@@ -528,7 +586,16 @@ const Transactions = () => {
     );
   }
 
-  const paginatedTransactions = filteredTransactions.slice(
+  // Get transactions to display based on current tab
+  const getDisplayTransactions = () => {
+    if (currentTab === 'card-payments') {
+      return filterCardPaymentTransactions();
+    }
+    return filteredTransactions;
+  };
+
+  const displayTransactions = getDisplayTransactions();
+  const paginatedTransactions = displayTransactions.slice(
     page * rowsPerPage,
     page * rowsPerPage + rowsPerPage
   );
@@ -599,6 +666,8 @@ const Transactions = () => {
             if (newValue === 'cash-submissions') {
               setCashSubmissionTab('pending'); // Reset to pending when switching to cash submissions
             }
+            // Reset page when switching tabs
+            setPage(0);
           }}
           textColor="secondary"
           indicatorColor="secondary"
@@ -615,6 +684,7 @@ const Transactions = () => {
           }}
         >
           <Tab label="All Transactions" value="transactions" />
+          <Tab label="Card Payments" value="card-payments" />
           <Tab label="Cash Submissions" value="cash-submissions" />
         </Tabs>
       </Box>
@@ -651,12 +721,12 @@ const Transactions = () => {
       )}
 
       {/* Summary Stats */}
-      {currentTab === 'transactions' && (
+      {(currentTab === 'transactions' || currentTab === 'card-payments') && (
       <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Total Transactions</Typography>
           <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
-            {filteredTransactions.length}
+            {currentTab === 'card-payments' ? filterCardPaymentTransactions().length : filteredTransactions.length}
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
@@ -668,13 +738,13 @@ const Transactions = () => {
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Complete Transactions</Typography>
           <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
-            {filteredTransactions.filter(t => t.status === 'completed').length}
+            {displayTransactions.filter(t => t.status === 'completed').length}
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Total Amount (Excludes Tips)</Typography>
           <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
-            KES {filteredTransactions
+            KES {displayTransactions
               .filter(t => {
                 // Exclude tips
                 if (t.transactionType === 'tip') return false;
@@ -690,14 +760,14 @@ const Transactions = () => {
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Pending/Failed</Typography>
           <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
-            {filteredTransactions.filter(t => t.status === 'pending' || t.status === 'failed').length}
+            {displayTransactions.filter(t => t.status === 'pending' || t.status === 'failed').length}
           </Typography>
         </Paper>
       </Box>
       )}
 
-      {/* Filters - Only show for transactions tab */}
-      {currentTab === 'transactions' && (
+      {/* Filters - Show for transactions and card-payments tabs */}
+      {(currentTab === 'transactions' || currentTab === 'card-payments') && (
       <Box sx={{ mb: 3 }}>
         <Paper sx={{ p: 2, mb: 2 }}>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
@@ -815,9 +885,9 @@ const Transactions = () => {
       )}
 
       {/* Transactions Table */}
-      {currentTab === 'transactions' && (
+      {(currentTab === 'transactions' || currentTab === 'card-payments') && (
       <>
-      {filteredTransactions.length === 0 ? (
+      {displayTransactions.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <Receipt sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h6" color="text.secondary">
@@ -1411,7 +1481,7 @@ const Transactions = () => {
           </Table>
           <TablePagination
             component="div"
-            count={filteredTransactions.length}
+            count={displayTransactions.length}
             page={page}
             onPageChange={handleChangePage}
             rowsPerPage={rowsPerPage}

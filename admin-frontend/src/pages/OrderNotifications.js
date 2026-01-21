@@ -118,7 +118,7 @@ const OrderNotifications = () => {
     }
 
     // Basic phone number validation
-    const phoneRegex = /^[\d\s\-\+\(\)]+$/;
+    const phoneRegex = /^[\d\s\-+()]+$/;
     if (!phoneRegex.test(formData.phoneNumber.trim())) {
       setFormError('Please enter a valid phone number');
       return;

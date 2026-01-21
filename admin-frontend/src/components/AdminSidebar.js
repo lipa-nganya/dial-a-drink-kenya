@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Drawer,
   List,
@@ -10,8 +10,7 @@ import {
   Box,
   Divider,
   Badge,
-  IconButton,
-  Tooltip
+  IconButton
 } from '@mui/material';
 import {
   Dashboard,
@@ -26,7 +25,6 @@ import {
   PointOfSale,
   AccountBalance,
   Map,
-  Menu as MenuIcon,
   ChevronLeft,
   Psychology
 } from '@mui/icons-material';
@@ -62,11 +60,11 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
     { path: '/transactions', label: 'Transactions', icon: Receipt },
     { path: '/inventory', label: 'Inventory', icon: Inventory },
     { path: '/payables', label: 'Payables', icon: AccountBalance },
-    { path: '/pos', label: 'POS', icon: PointOfSale },
+    // { path: '/pos', label: 'POS', icon: PointOfSale }, // Removed
     { path: '/admin/customers', label: 'Customers', icon: People },
     { path: '/drivers', label: 'Riders', icon: LocalShipping },
     { path: '/branches', label: 'Branches', icon: Store },
-    { path: '/territories', label: 'Territories', icon: Map },
+    // { path: '/territories', label: 'Territories', icon: Map }, // Hidden
     { path: '/copilot', label: 'Copilot', icon: Psychology },
     ...(isEasterEggActive ? [{ path: '/save-the-fishes', label: 'Save the Fishes', icon: LocalFlorist }] : []),
     { path: '/settings', label: 'Settings', icon: SettingsIcon }

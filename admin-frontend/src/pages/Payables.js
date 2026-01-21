@@ -231,6 +231,10 @@ const Payables = () => {
           }
         }
         break;
+      
+      default:
+        // No validation needed for other fields
+        break;
     }
     
     setFormErrors(errors);

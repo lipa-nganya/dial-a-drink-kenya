@@ -15,8 +15,6 @@ export const getOrderStatusChipProps = (status) => {
       return { label: 'Pending', color: 'warning', icon: <AccessTime fontSize="small" /> };
     case 'confirmed':
       return { label: 'Confirmed', color: 'info', icon: <CheckCircle fontSize="small" /> };
-    case 'preparing':
-      return { label: 'Preparing', color: 'primary', icon: <ShoppingCart fontSize="small" /> };
     case 'out_for_delivery':
       return { label: 'On the Way', color: 'secondary', icon: <LocalShipping fontSize="small" /> };
     case 'delivered':

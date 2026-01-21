@@ -9,7 +9,6 @@ import {
 } from '@mui/material';
 import {
   Dashboard,
-  Inventory,
   Logout,
   Receipt,
   Settings as SettingsIcon,
@@ -113,14 +112,7 @@ const AdminHeader = () => {
           >
             Payables
           </Button>
-          <Button
-            color="inherit"
-            onClick={() => navigate('/pos')}
-            startIcon={<PointOfSale />}
-            sx={buttonStyle('/pos')}
-          >
-            POS
-          </Button>
+          {/* POS button removed */}
           <Button
             color="inherit"
             onClick={() => navigate('/admin/customers')}
@@ -145,14 +137,7 @@ const AdminHeader = () => {
           >
             Branches
           </Button>
-          <Button
-            color="inherit"
-            onClick={() => navigate('/territories')}
-            startIcon={<Map />}
-            sx={buttonStyle('/territories')}
-          >
-            Territories
-          </Button>
+          {/* Territories button hidden */}
           <Button
             color="inherit"
             onClick={() => navigate('/copilot')}

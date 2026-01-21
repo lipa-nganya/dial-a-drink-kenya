@@ -56,9 +56,21 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [paymentMethod, setPaymentMethod] = useState('');
   const [transactionCode, setTransactionCode] = useState('');
   const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
+  const [walkInCustomerName, setWalkInCustomerName] = useState('');
   const [promptingPayment, setPromptingPayment] = useState(false);
-  const [paymentCheckoutRequestID, setPaymentCheckoutRequestID] = useState(null);
+  const [, setPaymentCheckoutRequestID] = useState(null);
   const [paymentPollingInterval, setPaymentPollingInterval] = useState(null);
+  const [paymentSuccess, setPaymentSuccess] = useState(null); // { customerName, phoneNumber, transactionCode, orderId }
+  const [cardPaymentType, setCardPaymentType] = useState('pesapal'); // 'pesapal' or 'pdq'
+  const [pdqDialogOpen, setPdqDialogOpen] = useState(false);
+  const [pdqPaymentData, setPdqPaymentData] = useState({
+    receiptNumber: '',
+    cardLast4: '',
+    cardType: '',
+    authorizationCode: '',
+    amount: ''
+  });
+  const [processingPdqPayment, setProcessingPdqPayment] = useState(false);
   const [deliveryStatus, setDeliveryStatus] = useState('pending');
   const [selectedDriver, setSelectedDriver] = useState('');
   const [isStop, setIsStop] = useState(initialIsStop);
@@ -114,7 +126,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     if (selectedCustomer?.phone && !isWalkIn && paymentMethod === 'mobile_money' && !mpesaPhoneNumber) {
       setMpesaPhoneNumber(selectedCustomer.phone);
     }
-  }, [selectedCustomer, isWalkIn, paymentMethod]);
+  }, [selectedCustomer, isWalkIn, paymentMethod, mpesaPhoneNumber]);
 
   const fetchCustomers = async () => {
     try {
@@ -208,7 +220,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   };
 
   const handlePriceChangeConfirm = async (applyToInventory) => {
-    const { itemIndex, newPrice, drinkId, drinkName, originalPrice, quantity } = priceChangeDialog;
+    const { itemIndex, newPrice, drinkId, drinkName, originalPrice } = priceChangeDialog;
     
     try {
       if (applyToInventory) {
@@ -456,8 +468,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setPaymentMethod('');
     setTransactionCode('');
     setMpesaPhoneNumber('');
+    setWalkInCustomerName('');
     setPromptingPayment(false);
     setPaymentCheckoutRequestID(null);
+    setPaymentSuccess(null);
     if (paymentPollingInterval) {
       clearInterval(paymentPollingInterval);
       setPaymentPollingInterval(null);
@@ -500,9 +514,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     setPromptingPayment(true);
     setError('');
+    setPaymentSuccess(null);
 
     try {
-      // First, create the order without transaction code
+      // First, create the order without transaction code (pending payment)
       let finalDeliveryAddress = deliveryLocation;
       let branchId = null;
       if (isWalkIn && selectedBranch) {
@@ -554,10 +569,19 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         }
       }
 
+      // For walk-in orders, use the entered customer name if provided, otherwise use 'POS'; otherwise use customer name from selected customer
+      const customerNameForOrder = isWalkIn 
+        ? (walkInCustomerName.trim() || 'POS')
+        : (finalCustomer?.customerName || finalCustomer?.name || '');
+      
+      const customerPhoneForOrder = isWalkIn 
+        ? mpesaPhoneNumber.trim() 
+        : (finalCustomer?.phone || mpesaPhoneNumber.trim());
+
       const orderData = {
-        customerName: isWalkIn ? 'POS' : (finalCustomer.customerName || finalCustomer.name || ''),
-        customerPhone: isWalkIn ? 'POS' : (finalCustomer.phone || mpesaPhoneNumber.trim()),
-        customerEmail: isWalkIn ? null : (finalCustomer.email || null),
+        customerName: customerNameForOrder,
+        customerPhone: customerPhoneForOrder,
+        customerEmail: isWalkIn ? null : (finalCustomer?.email || null),
         deliveryAddress: finalDeliveryAddress,
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
@@ -576,19 +600,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null
       };
 
-      // Create order first
+      // Create order first (pending payment)
       const orderResponse = await api.post('/orders', orderData);
       const orderId = orderResponse.data.id;
 
-      // Update order with M-Pesa phone number if different from customer phone
-      if (!isWalkIn && mpesaPhoneNumber.trim() && finalCustomer.phone !== mpesaPhoneNumber.trim()) {
-        await api.patch(`/admin/orders/${orderId}`, {
-          customerPhone: mpesaPhoneNumber.trim()
-        });
-      }
-
       // Now prompt for payment
-      const promptResponse = await api.post(`/admin/orders/${orderId}/prompt-payment`);
+      // For walk-in orders, send customerPhone in request body since order.customerPhone might be different
+      const promptPayload = isWalkIn && mpesaPhoneNumber.trim() 
+        ? { customerPhone: mpesaPhoneNumber.trim() }
+        : {};
+      const promptResponse = await api.post(`/admin/orders/${orderId}/prompt-payment`, promptPayload);
       
       const checkoutRequestID = promptResponse.data.checkoutRequestID || promptResponse.data.CheckoutRequestID;
       if (promptResponse.data.success || checkoutRequestID) {
@@ -597,32 +618,129 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         // Start polling for payment status
         const interval = setInterval(async () => {
           try {
-            const statusResponse = await api.get(`/mpesa/poll-transaction/${checkoutRequestID}`);
+            // Poll transaction status, order status, and transaction status by order ID for redundancy
+            const [statusResponse, orderResponse, transactionStatusResponse] = await Promise.all([
+              api.get(`/mpesa/poll-transaction/${checkoutRequestID}`).catch((err) => {
+                console.log('Transaction poll error:', err);
+                return { data: {} };
+              }),
+              api.get(`/orders/${orderId}`).catch((err) => {
+                console.log('Order poll error:', err);
+                return { data: {} };
+              }),
+              api.get(`/mpesa/transaction-status/${orderId}`).catch((err) => {
+                console.log('Transaction status by order error:', err);
+                return { data: {} };
+              })
+            ]);
             
-            if (statusResponse.data.success && statusResponse.data.status === 'completed' && statusResponse.data.receiptNumber) {
+            // Log responses for debugging
+            const order = orderResponse.data;
+            console.log('🔍 Polling payment status:', {
+              checkoutRequestID,
+              orderId,
+              transactionStatus: statusResponse.data?.status,
+              transactionSuccess: statusResponse.data?.success,
+              transactionReceipt: statusResponse.data?.receiptNumber,
+              orderPaymentStatus: order?.paymentStatus,
+              orderTransactionCode: order?.transactionCode,
+              orderStatus: order?.status,
+              fullOrderData: JSON.stringify(order, null, 2)
+            });
+            
+            // Check if payment completed via transaction status
+            const receiptFromTransaction = statusResponse.data?.receiptNumber;
+            const isTransactionCompleted = statusResponse.data?.success && 
+                                          statusResponse.data?.status === 'completed' && 
+                                          receiptFromTransaction;
+            
+            // Check if payment completed via order status (callback might have updated it)
+            // Check multiple possible field names for paymentStatus
+            const orderPaymentStatus = order?.paymentStatus || order?.payment_status;
+            const orderTransactionCode = order?.transactionCode || order?.transaction_code;
+            const isOrderPaid = orderPaymentStatus === 'paid' && orderTransactionCode;
+            const receiptFromOrder = orderTransactionCode;
+            
+            // Also check if order has paymentStatus 'paid' even without transactionCode (callback might have updated it)
+            const isOrderPaidWithoutCode = orderPaymentStatus === 'paid';
+            
+            // Also check if order status is 'completed' which indicates payment was successful
+            const isOrderCompleted = order?.status === 'completed' && orderPaymentStatus === 'paid';
+            
+            // Check transaction status by order ID (more reliable)
+            const transactionStatus = transactionStatusResponse.data;
+            const isTransactionStatusPaid = transactionStatus?.status === 'completed' && transactionStatus?.receiptNumber;
+            const receiptFromTransactionStatus = transactionStatus?.receiptNumber;
+            
+            console.log('🔍 Payment detection:', {
+              isTransactionCompleted,
+              isOrderPaid,
+              isOrderPaidWithoutCode,
+              isOrderCompleted,
+              isTransactionStatusPaid,
+              orderPaymentStatus,
+              orderTransactionCode,
+              orderStatus: order?.status,
+              transactionStatusData: transactionStatus
+            });
+            
+            // Payment is completed if any method confirms it
+            if (isTransactionCompleted || isOrderPaid || isOrderPaidWithoutCode || isOrderCompleted || isTransactionStatusPaid) {
               // Payment completed!
-              setTransactionCode(statusResponse.data.receiptNumber);
-              setPromptingPayment(false);
-              clearInterval(interval);
-              setPaymentPollingInterval(null);
-              
-              // Update order with transaction code
-              await api.patch(`/admin/orders/${orderId}`, {
-                transactionCode: statusResponse.data.receiptNumber,
-                paymentStatus: 'paid'
+              const receiptNumber = receiptFromTransaction || receiptFromTransactionStatus || receiptFromOrder || 'Pending';
+              console.log('✅ Payment confirmed! Receipt:', receiptNumber, {
+                isTransactionCompleted,
+                isOrderPaid,
+                isOrderPaidWithoutCode
               });
               
-              // Close dialog and notify parent
-              handleClose();
-              if (onOrderCreated) {
-                onOrderCreated(orderResponse.data);
-              }
-            } else if (statusResponse.data.status === 'failed' || statusResponse.data.status === 'cancelled') {
-              // Payment failed or cancelled
-              setError(statusResponse.data.message || 'Payment was cancelled or failed');
+              setTransactionCode(receiptNumber);
               setPromptingPayment(false);
               clearInterval(interval);
               setPaymentPollingInterval(null);
+              
+              // Update order with transaction code and mark as paid (if not already done)
+              if (!isOrderPaid && receiptNumber !== 'Pending') {
+                try {
+                  await api.patch(`/admin/orders/${orderId}`, {
+                    transactionCode: receiptNumber,
+                    paymentStatus: 'paid'
+                  });
+                } catch (updateError) {
+                  console.error('Error updating order:', updateError);
+                }
+              }
+              
+              // Get final order data
+              let finalOrder = order;
+              if (!finalOrder || !finalOrder.customerName) {
+                try {
+                  const finalOrderResponse = await api.get(`/orders/${orderId}`);
+                  finalOrder = finalOrderResponse.data;
+                } catch (fetchError) {
+                  console.error('Error fetching final order:', fetchError);
+                  // Use order data we already have
+                }
+              }
+              
+              // Set payment success information to display in modal
+              setPaymentSuccess({
+                customerName: finalOrder?.customerName || customerNameForOrder || 'POS',
+                phoneNumber: finalOrder?.customerPhone || customerPhoneForOrder || mpesaPhoneNumber.trim(),
+                transactionCode: receiptNumber,
+                orderId: orderId
+              });
+              
+              if (onOrderCreated) {
+                onOrderCreated(finalOrder || order);
+              }
+            } else if (statusResponse.data?.status === 'failed' || statusResponse.data?.status === 'cancelled') {
+              // Payment failed or cancelled
+              setError(statusResponse.data?.message || 'Payment was cancelled or failed. Order remains unpaid.');
+              setPromptingPayment(false);
+              clearInterval(interval);
+              setPaymentPollingInterval(null);
+              // Order remains in database with paymentStatus='unpaid' - admin can retry or manually update
             }
           } catch (pollError) {
             console.error('Error polling payment status:', pollError);
@@ -637,9 +755,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           if (interval) {
             clearInterval(interval);
             setPaymentPollingInterval(null);
-            if (!transactionCode) {
-              setError('Payment timeout. Please check payment status manually.');
+            if (!transactionCode && !paymentSuccess) {
+              setError('Payment timeout. Order remains unpaid. Please check payment status manually.');
               setPromptingPayment(false);
+              // Order remains in database with paymentStatus='unpaid' - admin can check and update manually
             }
           }
         }, 300000); // 5 minutes
@@ -654,6 +773,215 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
   };
 
+  const handlePromptCardPayment = async () => {
+    // Calculate total amount
+    const totalAmount = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    if (totalAmount <= 0) {
+      setError('Order total must be greater than 0');
+      return;
+    }
+
+    setPromptingPayment(true);
+    setError('');
+    setPaymentSuccess(null);
+
+    try {
+      // First, create the order without transaction code (pending payment)
+      let finalDeliveryAddress = deliveryLocation;
+      let branchId = null;
+      if (isWalkIn && selectedBranch) {
+        const branch = branches.find(b => b.id === parseInt(selectedBranch));
+        if (branch) {
+          finalDeliveryAddress = `${branch.name}, ${branch.address}`;
+          branchId = branch.id;
+        } else {
+          finalDeliveryAddress = 'In-Store Purchase';
+        }
+      }
+
+      if (!finalDeliveryAddress || !finalDeliveryAddress.trim()) {
+        setError('Delivery address is required');
+        setPromptingPayment(false);
+        return;
+      }
+
+      // Get final customer
+      let finalCustomer = selectedCustomer;
+      if (!isWalkIn && !selectedCustomer) {
+        const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
+        if (phoneMatch) {
+          const phoneNumber = phoneMatch[1];
+          try {
+            const createResponse = await api.post('/admin/customers', {
+              phone: phoneNumber,
+              customerName: 'Online Customer'
+            });
+            
+            if (createResponse.data?.success && createResponse.data?.customer) {
+              finalCustomer = createResponse.data.customer;
+              await fetchCustomers();
+            } else {
+              setError('Please select a customer or enter a valid phone number');
+              setPromptingPayment(false);
+              return;
+            }
+          } catch (error) {
+            console.error('Error creating customer:', error);
+            setError('Please select a customer or enter a valid phone number');
+            setPromptingPayment(false);
+            return;
+          }
+        } else {
+          setError('Please select a customer');
+          setPromptingPayment(false);
+          return;
+        }
+      }
+
+      // For walk-in orders, use the entered customer name if provided, otherwise use 'POS'
+      const customerNameForOrder = isWalkIn 
+        ? (walkInCustomerName.trim() || 'POS')
+        : (finalCustomer?.customerName || finalCustomer?.name || '');
+      
+      const customerPhoneForOrder = isWalkIn 
+        ? (finalCustomer?.phone || 'POS')
+        : (finalCustomer?.phone || '');
+
+      const orderData = {
+        customerName: customerNameForOrder,
+        customerPhone: customerPhoneForOrder,
+        customerEmail: isWalkIn ? null : (finalCustomer?.email || null),
+        deliveryAddress: finalDeliveryAddress,
+        items: cartItems.map(item => ({
+          drinkId: item.drinkId,
+          quantity: item.quantity,
+          selectedPrice: item.price
+        })),
+        paymentType: 'pay_now',
+        paymentMethod: 'card',
+        paymentStatus: 'unpaid',
+        status: deliveryStatus,
+        adminOrder: true,
+        branchId: branchId,
+        driverId: selectedDriver ? parseInt(selectedDriver) : null,
+        transactionCode: null, // Will be populated after payment
+        isStop: isStop,
+        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null
+      };
+
+      // Create order first (pending payment)
+      const orderResponse = await api.post('/orders', orderData);
+      const orderId = orderResponse.data.id;
+
+      // Get current URL for callbacks
+      const currentUrl = window.location.origin;
+      const callbackUrl = `${currentUrl}/payment-success?orderId=${orderId}`;
+      const cancellationUrl = `${currentUrl}/payment-cancelled?orderId=${orderId}`;
+
+      // Initiate PesaPal payment
+      const paymentResponse = await api.post('/pesapal/initiate-payment', {
+        orderId: orderId,
+        callbackUrl: callbackUrl,
+        cancellationUrl: cancellationUrl
+      });
+
+      if (paymentResponse.data.success && paymentResponse.data.redirectUrl) {
+        // Open payment page in new window/tab
+        const paymentWindow = window.open(
+          paymentResponse.data.redirectUrl,
+          'PesaPalPayment',
+          'width=800,height=600,scrollbars=yes,resizable=yes'
+        );
+
+        // Poll for payment status
+        const interval = setInterval(async () => {
+          try {
+            // Check if payment window was closed (user might have completed payment)
+            if (paymentWindow && paymentWindow.closed) {
+              // Check payment status
+              const statusResponse = await api.get(`/pesapal/transaction-status/${orderId}`);
+              
+              if (statusResponse.data.success && statusResponse.data.status === 'completed') {
+                // Payment completed
+                clearInterval(interval);
+                setPaymentPollingInterval(null);
+                setPromptingPayment(false);
+
+                // Get final order data
+                const finalOrderResponse = await api.get(`/orders/${orderId}`);
+                const finalOrder = finalOrderResponse.data;
+
+                setPaymentSuccess({
+                  customerName: finalOrder?.customerName || customerNameForOrder || 'POS',
+                  phoneNumber: finalOrder?.customerPhone || customerPhoneForOrder || 'N/A',
+                  transactionCode: statusResponse.data.receiptNumber || 'PESAPAL-' + orderId,
+                  orderId: orderId
+                });
+
+                if (onOrderCreated) {
+                  onOrderCreated(finalOrder);
+                }
+              }
+            }
+
+            // Also check payment status directly
+            const statusResponse = await api.get(`/pesapal/transaction-status/${orderId}`);
+            
+            if (statusResponse.data.success && statusResponse.data.status === 'completed') {
+              // Payment completed
+              if (paymentWindow && !paymentWindow.closed) {
+                paymentWindow.close();
+              }
+              clearInterval(interval);
+              setPaymentPollingInterval(null);
+              setPromptingPayment(false);
+
+              // Get final order data
+              const finalOrderResponse = await api.get(`/orders/${orderId}`);
+              const finalOrder = finalOrderResponse.data;
+
+              setPaymentSuccess({
+                customerName: finalOrder?.customerName || customerNameForOrder || 'POS',
+                phoneNumber: finalOrder?.customerPhone || customerPhoneForOrder || 'N/A',
+                transactionCode: statusResponse.data.receiptNumber || 'PESAPAL-' + orderId,
+                orderId: orderId
+              });
+
+              if (onOrderCreated) {
+                onOrderCreated(finalOrder);
+              }
+            }
+          } catch (pollError) {
+            console.error('Error polling card payment status:', pollError);
+            // Continue polling on error
+          }
+        }, 3000); // Poll every 3 seconds
+
+        setPaymentPollingInterval(interval);
+
+        // Stop polling after 5 minutes
+        setTimeout(() => {
+          if (interval) {
+            clearInterval(interval);
+            setPaymentPollingInterval(null);
+            if (!paymentSuccess) {
+              setError('Payment timeout. Order remains unpaid. Please check payment status manually.');
+              setPromptingPayment(false);
+            }
+          }
+        }, 300000); // 5 minutes
+      } else {
+        setError(paymentResponse.data.error || 'Failed to initiate card payment');
+        setPromptingPayment(false);
+      }
+    } catch (error) {
+      console.error('Error initiating card payment:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to initiate card payment');
+      setPromptingPayment(false);
+    }
+  };
+
   const filteredCustomers = customers.filter(customer => {
     if (!customerSearch) return true;
     const search = customerSearch.toLowerCase();
@@ -661,6 +989,134 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     const phone = (customer.phone || '').toLowerCase();
     return name.includes(search) || phone.includes(search);
   });
+
+  const handleProcessPdqPayment = async () => {
+    if (!pdqPaymentData.receiptNumber || !pdqPaymentData.amount) {
+      setError('Please enter receipt number and amount');
+      return;
+    }
+
+    setProcessingPdqPayment(true);
+    setError('');
+
+    try {
+      // First, create the order
+      let finalDeliveryAddress = deliveryLocation;
+      let branchId = null;
+      if (isWalkIn && selectedBranch) {
+        const branch = branches.find(b => b.id === parseInt(selectedBranch));
+        if (branch) {
+          finalDeliveryAddress = `${branch.name}, ${branch.address}`;
+          branchId = branch.id;
+        } else {
+          finalDeliveryAddress = 'In-Store Purchase';
+        }
+      }
+
+      if (!finalDeliveryAddress || !finalDeliveryAddress.trim()) {
+        setError('Delivery address is required');
+        setProcessingPdqPayment(false);
+        return;
+      }
+
+      // Get final customer
+      let finalCustomer = selectedCustomer;
+      if (!isWalkIn && !selectedCustomer) {
+        const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
+        if (phoneMatch) {
+          const phoneNumber = phoneMatch[1];
+          try {
+            const createResponse = await api.post('/admin/customers', {
+              phone: phoneNumber,
+              customerName: 'Online Customer'
+            });
+            
+            if (createResponse.data?.success && createResponse.data?.customer) {
+              finalCustomer = createResponse.data.customer;
+              await fetchCustomers();
+            } else {
+              setError('Please select a customer or enter a valid phone number');
+              setProcessingPdqPayment(false);
+              return;
+            }
+          } catch (error) {
+            console.error('Error creating customer:', error);
+            setError('Please select a customer or enter a valid phone number');
+            setProcessingPdqPayment(false);
+            return;
+          }
+        } else {
+          setError('Please select a customer');
+          setProcessingPdqPayment(false);
+          return;
+        }
+      }
+
+      const customerNameForOrder = isWalkIn 
+        ? (walkInCustomerName.trim() || 'POS')
+        : (finalCustomer?.customerName || finalCustomer?.name || '');
+      
+      const customerPhoneForOrder = isWalkIn 
+        ? (finalCustomer?.phone || 'POS')
+        : (finalCustomer?.phone || '');
+
+      const orderData = {
+        customerName: customerNameForOrder,
+        customerPhone: customerPhoneForOrder,
+        customerEmail: isWalkIn ? null : (finalCustomer?.email || null),
+        deliveryAddress: finalDeliveryAddress,
+        items: cartItems.map(item => ({
+          drinkId: item.drinkId,
+          quantity: item.quantity,
+          selectedPrice: item.price
+        })),
+        paymentType: 'pay_now',
+        paymentMethod: 'card',
+        paymentStatus: 'unpaid', // Will be updated after PDQ payment
+        status: deliveryStatus,
+        adminOrder: true,
+        branchId: branchId,
+        driverId: selectedDriver ? parseInt(selectedDriver) : null,
+        isStop: isStop,
+        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null
+      };
+
+      // Create order first
+      const orderResponse = await api.post('/orders', orderData);
+      const orderId = orderResponse.data.id;
+
+      // Process PDQ payment
+      const pdqResponse = await api.post('/pdq-payment/process', {
+        orderId: orderId,
+        amount: pdqPaymentData.amount,
+        receiptNumber: pdqPaymentData.receiptNumber,
+        cardLast4: pdqPaymentData.cardLast4,
+        cardType: pdqPaymentData.cardType,
+        authorizationCode: pdqPaymentData.authorizationCode
+      });
+
+      if (pdqResponse.data.success) {
+        setPaymentSuccess({
+          customerName: customerNameForOrder || 'POS',
+          phoneNumber: customerPhoneForOrder || 'N/A',
+          transactionCode: pdqPaymentData.receiptNumber,
+          orderId: orderId
+        });
+        setPdqDialogOpen(false);
+        
+        if (onOrderCreated) {
+          onOrderCreated(pdqResponse.data.order);
+        }
+      } else {
+        setError(pdqResponse.data.error || 'Failed to process PDQ payment');
+      }
+    } catch (error) {
+      console.error('Error processing PDQ payment:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to process PDQ payment');
+    } finally {
+      setProcessingPdqPayment(false);
+    }
+  };
 
   return (
     <>
@@ -903,6 +1359,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 ))}
               </Select>
             </FormControl>
+          )}
+
+          {/* Customer Name - Only shown when walk-in is enabled */}
+          {isWalkIn && (
+            <TextField
+              fullWidth
+              label="Customer Name (Optional)"
+              value={walkInCustomerName}
+              onChange={(e) => setWalkInCustomerName(e.target.value)}
+              placeholder="Enter customer name (optional)"
+              helperText="Leave blank to use 'POS' as customer name"
+            />
           )}
 
           {/* Delivery Location - Only shown when walk-in is disabled */}
@@ -1173,7 +1641,14 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 onChange={(e) => setMpesaPhoneNumber(e.target.value)}
                 placeholder="e.g., 0712345678 or 254712345678"
                 sx={{ mb: 2 }}
-                helperText={selectedCustomer?.phone && !isWalkIn ? "Customer phone number (can be edited)" : "Enter customer's M-Pesa registered phone number"}
+                helperText={
+                  isWalkIn 
+                    ? "Enter customer's M-Pesa registered phone number (required for walk-in orders)" 
+                    : selectedCustomer?.phone && !isWalkIn 
+                      ? "Customer phone number (can be edited)" 
+                      : "Enter customer's M-Pesa registered phone number"
+                }
+                required
               />
               <Button
                 fullWidth
@@ -1195,17 +1670,56 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
               >
                 {promptingPayment ? 'Prompting Customer...' : 'Prompt Customer for Payment'}
               </Button>
-              {promptingPayment && (
+              {promptingPayment && !paymentSuccess && (
                 <Box sx={{ mb: 2, p: 2, backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.05)', borderRadius: 1 }}>
                   <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
                     Waiting for customer to complete payment...
                   </Typography>
                   <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                    Customer should receive an M-Pesa prompt on their phone. Transaction code will be populated automatically when payment is completed.
+                    Customer should receive an M-Pesa prompt on their phone. Order will be created after successful payment.
                   </Typography>
                 </Box>
               )}
-              {transactionCode && (
+              {paymentSuccess && (
+                <Box sx={{ mb: 2, p: 2, backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.15)' : 'rgba(0, 224, 184, 0.1)', borderRadius: 1, border: `2px solid ${colors.accentText}` }}>
+                  <Typography variant="h6" sx={{ color: colors.accentText, mb: 2, fontWeight: 700 }}>
+                    ✅ Payment Successful!
+                  </Typography>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Customer Name:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                      {paymentSuccess.customerName}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Phone Number:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                      {paymentSuccess.phoneNumber}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Transaction Code:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.accentText, fontWeight: 700, fontSize: '1.1rem' }}>
+                      {paymentSuccess.transactionCode}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Order ID:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                      #{paymentSuccess.orderId}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
+              {transactionCode && !paymentSuccess && (
                 <TextField
                   fullWidth
                   label="Transaction Code"
@@ -1230,6 +1744,122 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 sx={{ mb: 2 }}
                 helperText="You can also enter transaction code manually if payment was completed outside this flow"
               />
+            </Box>
+          )}
+
+          {/* Card Payment Section */}
+          {paymentMethod === 'card' && (
+            <Box>
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Card Payment Method</InputLabel>
+                <Select
+                  value={cardPaymentType}
+                  label="Card Payment Method"
+                  onChange={(e) => setCardPaymentType(e.target.value)}
+                >
+                  <MenuItem value="pesapal">PesaPal (Online)</MenuItem>
+                  <MenuItem value="pdq">PDQ Machine</MenuItem>
+                </Select>
+              </FormControl>
+
+              {cardPaymentType === 'pesapal' && (
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={handlePromptCardPayment}
+                  disabled={promptingPayment || cartItems.length === 0}
+                  sx={{
+                    backgroundColor: colors.accentText,
+                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                    mb: 2,
+                    '&:hover': {
+                      backgroundColor: '#00C4A3'
+                    },
+                    '&:disabled': {
+                      backgroundColor: colors.border,
+                      color: colors.textSecondary
+                    }
+                  }}
+                >
+                  {promptingPayment ? 'Initiating Payment...' : 'Charge Customer via Card (PesaPal)'}
+                </Button>
+              )}
+
+              {cardPaymentType === 'pdq' && (
+                <Button
+                  fullWidth
+                  variant="contained"
+                  onClick={() => {
+                    const totalAmount = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                    setPdqPaymentData(prev => ({ ...prev, amount: totalAmount.toFixed(2) }));
+                    setPdqDialogOpen(true);
+                  }}
+                  disabled={cartItems.length === 0}
+                  sx={{
+                    backgroundColor: colors.accentText,
+                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                    mb: 2,
+                    '&:hover': {
+                      backgroundColor: '#00C4A3'
+                    },
+                    '&:disabled': {
+                      backgroundColor: colors.border,
+                      color: colors.textSecondary
+                    }
+                  }}
+                >
+                  Process PDQ Payment
+                </Button>
+              )}
+              {promptingPayment && !paymentSuccess && (
+                <Box sx={{ mb: 2, p: 2, backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.05)', borderRadius: 1 }}>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
+                    Redirecting customer to payment page...
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                    Customer will be redirected to PesaPal to complete card payment. Order will be created after successful payment.
+                  </Typography>
+                </Box>
+              )}
+              {paymentSuccess && (
+                <Box sx={{ mb: 2, p: 2, backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.15)' : 'rgba(0, 224, 184, 0.1)', borderRadius: 1, border: `2px solid ${colors.accentText}` }}>
+                  <Typography variant="h6" sx={{ color: colors.accentText, mb: 2, fontWeight: 700 }}>
+                    ✅ Payment Successful!
+                  </Typography>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Customer Name:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                      {paymentSuccess.customerName}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Phone Number:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                      {paymentSuccess.phoneNumber}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ mb: 1.5 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Transaction Code:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.accentText, fontWeight: 700, fontSize: '1.1rem' }}>
+                      {paymentSuccess.transactionCode}
+                    </Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Order ID:
+                    </Typography>
+                    <Typography variant="body1" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                      #{paymentSuccess.orderId}
+                    </Typography>
+                  </Box>
+                </Box>
+              )}
             </Box>
           )}
 
@@ -1347,28 +1977,44 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         </Box>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
-        <Button
-          onClick={handleClose}
-          disabled={loading}
-          sx={{ color: colors.textSecondary }}
-        >
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={loading}
-          sx={{
-            backgroundColor: colors.accentText,
-            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-            '&:hover': { backgroundColor: '#00C4A3' },
-            '&.Mui-disabled': {
-              backgroundColor: colors.textSecondary
-            }
-          }}
-        >
-          {loading ? <CircularProgress size={20} /> : 'Create Order'}
-        </Button>
+        {paymentSuccess ? (
+          <Button
+            onClick={handleClose}
+            variant="contained"
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': { backgroundColor: '#00C4A3' }
+            }}
+          >
+            Close
+          </Button>
+        ) : (
+          <>
+            <Button
+              onClick={handleClose}
+              disabled={loading || promptingPayment}
+              sx={{ color: colors.textSecondary }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              variant="contained"
+              disabled={loading || promptingPayment || (paymentMethod === 'mobile_money' && isWalkIn)}
+              sx={{
+                backgroundColor: colors.accentText,
+                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                '&:hover': { backgroundColor: '#00C4A3' },
+                '&.Mui-disabled': {
+                  backgroundColor: colors.textSecondary
+                }
+              }}
+            >
+              {loading ? <CircularProgress size={20} /> : 'Create Order'}
+            </Button>
+          </>
+        )}
       </DialogActions>
     </Dialog>
 
@@ -1438,7 +2084,100 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           Apply to Inventory
         </Button>
       </DialogActions>
-    </Dialog>
+      </Dialog>
+
+      {/* PDQ Payment Dialog */}
+      <Dialog
+        open={pdqDialogOpen}
+        onClose={() => !processingPdqPayment && setPdqDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Process PDQ Payment
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2, color: colors.textSecondary }}>
+            Enter payment details from the PDQ machine:
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label="Receipt Number *"
+            value={pdqPaymentData.receiptNumber}
+            onChange={(e) => setPdqPaymentData(prev => ({ ...prev, receiptNumber: e.target.value }))}
+            sx={{ mb: 2 }}
+            required
+            disabled={processingPdqPayment}
+          />
+
+          <TextField
+            fullWidth
+            label="Amount (KES) *"
+            type="number"
+            value={pdqPaymentData.amount}
+            onChange={(e) => setPdqPaymentData(prev => ({ ...prev, amount: e.target.value }))}
+            sx={{ mb: 2 }}
+            required
+            disabled={processingPdqPayment}
+            inputProps={{ step: 0.01, min: 0 }}
+          />
+
+          <TextField
+            fullWidth
+            label="Card Last 4 Digits"
+            value={pdqPaymentData.cardLast4}
+            onChange={(e) => setPdqPaymentData(prev => ({ ...prev, cardLast4: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+            sx={{ mb: 2 }}
+            disabled={processingPdqPayment}
+            inputProps={{ maxLength: 4 }}
+            helperText="Last 4 digits of the card used"
+          />
+
+          <TextField
+            fullWidth
+            label="Card Type"
+            value={pdqPaymentData.cardType}
+            onChange={(e) => setPdqPaymentData(prev => ({ ...prev, cardType: e.target.value }))}
+            sx={{ mb: 2 }}
+            disabled={processingPdqPayment}
+            placeholder="e.g., Visa, Mastercard"
+          />
+
+          <TextField
+            fullWidth
+            label="Authorization Code"
+            value={pdqPaymentData.authorizationCode}
+            onChange={(e) => setPdqPaymentData(prev => ({ ...prev, authorizationCode: e.target.value }))}
+            sx={{ mb: 2 }}
+            disabled={processingPdqPayment}
+            helperText="Authorization code from PDQ machine (optional)"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setPdqDialogOpen(false)}
+            disabled={processingPdqPayment}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleProcessPdqPayment}
+            variant="contained"
+            disabled={processingPdqPayment || !pdqPaymentData.receiptNumber || !pdqPaymentData.amount}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              }
+            }}
+          >
+            {processingPdqPayment ? 'Processing...' : 'Process Payment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

@@ -6,7 +6,7 @@ import { AdminProvider } from './contexts/AdminContext';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { EasterEggProvider, useEasterEgg } from './contexts/EasterEggContext';
 import { ResupplyCartProvider } from './contexts/ResupplyCartContext';
-import AdminHeader from './components/AdminHeader';
+import { MobileViewProvider } from './contexts/MobileViewContext';
 import AdminLayout from './components/AdminLayout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
@@ -18,12 +18,15 @@ import Transactions from './pages/Transactions';
 import OrderNotifications from './pages/OrderNotifications';
 import Drivers from './pages/Drivers';
 import Branches from './pages/Branches';
-import Territories from './pages/Territories';
+// import Territories from './pages/Territories'; // Hidden
+import QuickActions from './pages/QuickActions';
+import OrdersWithoutDriver from './pages/OrdersWithoutDriver';
+import PendingOrders from './pages/PendingOrders';
 import Settings from './pages/Settings';
 import SupplierDetail from './pages/SupplierDetail';
 import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
-import POS from './pages/POS';
+// import POS from './pages/POS'; // Removed
 import Payables from './pages/Payables';
 import Copilot from './pages/Copilot';
 import SalesDateDetails from './pages/copilot/SalesDateDetails';
@@ -180,8 +183,9 @@ function AppContent() {
       <CssBaseline />
       <div className="App" style={{ backgroundColor: isDarkMode ? '#0D0D0D' : '#FFFFFF', minHeight: '100vh' }}>
         <AdminProvider>
-          <ResupplyCartProvider>
-            <Router>
+          <MobileViewProvider>
+            <ResupplyCartProvider>
+              <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/setup-password" element={<SetupPassword />} />
@@ -202,6 +206,22 @@ function AppContent() {
                     <AdminLayout>
                       <Orders />
                     </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/orders/without-driver"
+                element={
+                  <PrivateRoute>
+                    <OrdersWithoutDriver />
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/orders/pending"
+                element={
+                  <PrivateRoute>
+                    <PendingOrders />
                   </PrivateRoute>
                 }
               />
@@ -255,13 +275,22 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
-              <Route
+              {/* Territories route hidden */}
+              {/* <Route
                 path="/territories"
                 element={
                   <PrivateRoute>
                     <AdminLayout>
                       <Territories />
                     </AdminLayout>
+                  </PrivateRoute>
+                }
+              /> */}
+              <Route
+                path="/quick-actions"
+                element={
+                  <PrivateRoute>
+                    <QuickActions />
                   </PrivateRoute>
                 }
               />
@@ -307,7 +336,8 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
-              <Route
+              {/* POS route removed */}
+              {/* <Route
                 path="/pos"
                 element={
                   <PrivateRoute>
@@ -316,7 +346,7 @@ function AppContent() {
                     </AdminLayout>
                   </PrivateRoute>
                 }
-              />
+              /> */}
               <Route
                 path="/suppliers/:id"
                 element={
@@ -361,8 +391,9 @@ function AppContent() {
               />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
             </Routes>
-          </Router>
+            </Router>
           </ResupplyCartProvider>
+          </MobileViewProvider>
         </AdminProvider>
       </div>
     </MUIThemeProvider>

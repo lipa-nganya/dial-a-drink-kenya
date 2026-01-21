@@ -19,7 +19,6 @@ import {
   InputLabel,
   Alert,
   CircularProgress,
-  LinearProgress,
   IconButton,
   Tooltip,
   Dialog,
@@ -39,7 +38,6 @@ import {
   Menu
 } from '@mui/material';
 import {
-  Cancel,
   ShoppingCart,
   Warning,
   Assignment,
@@ -49,7 +47,6 @@ import {
   MoreVert,
   Search,
   Clear,
-  Store,
   PictureAsPdf,
   Route as RouteIcon,
   LocalShipping,
@@ -73,7 +70,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { getBackendUrl } from '../utils/backendUrl';
 import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChipProps } from '../utils/chipStyles';
 import NewOrderDialog from '../components/NewOrderDialog';
-import { GoogleMap, LoadScript, Marker, Polyline, InfoWindow, useJsApiLoader } from '@react-google-maps/api';
+import { useJsApiLoader } from '@react-google-maps/api';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import RouteMapView from '../components/RouteMapView';
 
@@ -114,7 +111,7 @@ const Orders = () => {
   
   // Route Optimisation state
   const [activeTab, setActiveTab] = useState(0);
-  const [orderTab, setOrderTab] = useState('all'); // 'all', 'completed', 'pending', 'unassigned', 'confirmed'
+  const [orderTab, setOrderTab] = useState('all'); // 'all', 'completed', 'pending', 'unassigned', 'confirmed', 'cancelled', 'cancellation-requests'
   const [riderRoutes, setRiderRoutes] = useState([]);
   const [allRiderRoutes, setAllRiderRoutes] = useState([]);
   const [allRiders, setAllRiders] = useState([]);
@@ -140,7 +137,7 @@ const Orders = () => {
   const [mapCenter, setMapCenter] = useState({ lat: -1.2921, lng: 36.8219 });
   const [optimizedRoutes, setOptimizedRoutes] = useState({}); // riderId -> array of order IDs in optimized order
   const [optimizing, setOptimizing] = useState(false);
-  const [optimizationSavings, setOptimizationSavings] = useState({}); // riderId -> { timeSaved, costSaved }
+  const [, setOptimizationSavings] = useState({}); // riderId -> { timeSaved, costSaved }
   const [optimizationProgress, setOptimizationProgress] = useState({
     open: false,
     step: 0,
@@ -313,18 +310,19 @@ const Orders = () => {
           console.log('📋 Status update triggered by driver response - driver-response event already handled notification');
         }
         
-        // Update order immediately with status from event
+        // Update order immediately with status from event - merge full order object if provided
         // But preserve driverAccepted status if it was set by driver response
         setOrders(prevOrders => {
           const updated = prevOrders.map(order => {
             if (order.id === data.orderId) {
-              // If this order was just accepted/rejected by driver, preserve driverAccepted
-              const updatedOrder = { 
-                ...order, 
-                status: data.status || order.status,
-                paymentStatus: data.paymentStatus || order.paymentStatus,
-                ...(data.order || {}) // Merge full order object if provided
-              };
+              // Merge order object if provided, otherwise just update status fields
+              const updatedOrder = data.order 
+                ? { ...order, ...data.order, status: data.status || order.status, paymentStatus: data.paymentStatus || order.paymentStatus }
+                : { 
+                    ...order, 
+                    status: data.status || order.status,
+                    paymentStatus: data.paymentStatus || order.paymentStatus
+                  };
               
               // Preserve driverAccepted if it was set (driver response takes precedence)
               if (order.driverAccepted !== undefined && order.driverAccepted !== null) {
@@ -335,6 +333,7 @@ const Orders = () => {
             }
             return order;
           });
+          // Re-sort after update and apply filters to update filteredOrders immediately
           const sorted = sortOrdersByStatus(updated);
           applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
@@ -380,34 +379,126 @@ const Orders = () => {
       }
     });
 
+    // Listen for cancellation requests from drivers
+    socket.on('order-cancellation-requested', async (data) => {
+      console.log('⚠️ Cancellation requested for order:', data);
+      
+      // Show alert to admin
+      const driverName = data.order?.driver?.name || 'Driver';
+      alert(`⚠️ CANCELLATION REQUEST: ${driverName} has requested cancellation for Order #${data.orderId}.\nReason: ${data.reason || 'N/A'}\n\nPlease review and approve or reject the request.`);
+      
+      // Switch to cancellation-requests tab to show the new request
+      setOrderTab('cancellation-requests');
+      
+      // Update order in list
+      if (data.order) {
+        setOrders(prevOrders => {
+          const existingIndex = prevOrders.findIndex(o => o.id === data.orderId);
+          let updated;
+          
+          if (existingIndex >= 0) {
+            updated = [...prevOrders];
+            updated[existingIndex] = { ...updated[existingIndex], ...data.order };
+          } else {
+            updated = [data.order, ...prevOrders];
+          }
+          
+          const sorted = sortOrdersByStatus(updated);
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancellation-requests');
+          return sorted;
+        });
+      } else {
+        // Refresh orders if order data not provided
+        await fetchOrders();
+      }
+    });
+
+    // Listen for cancellation request processed
+    socket.on('order-cancellation-processed', async (data) => {
+      console.log('✅ Cancellation request processed:', data);
+      
+      if (data.order) {
+        setOrders(prevOrders => {
+          const updated = prevOrders.map(order => 
+            order.id === data.orderId ? { ...order, ...data.order } : order
+          );
+          const sorted = sortOrdersByStatus(updated);
+          
+          // If cancellation was approved and we're on cancellation-requests tab, switch to cancelled tab
+          if (data.approved && orderTab === 'cancellation-requests' && data.order.status === 'cancelled') {
+            setOrderTab('cancelled');
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled');
+          } else if (!data.approved && orderTab === 'cancellation-requests') {
+            // If cancellation was rejected and we're on cancellation-requests tab, switch to pending tab
+            setOrderTab('pending');
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'pending');
+          } else {
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          }
+          return sorted;
+        });
+      } else {
+        await fetchOrders();
+      }
+    });
+
     socket.on('payment-confirmed', async (data) => {
       console.log('✅ Payment confirmed for order:', data);
+      console.log('   Event data:', JSON.stringify(data, null, 2));
       if (data.orderId) {
+        // CRITICAL: Always use 'paid' for paymentStatus when payment is confirmed
+        // The event is only emitted when payment is successful, so paymentStatus must be 'paid'
+        const finalPaymentStatus = 'paid'; // Always 'paid' for payment-confirmed events
+        const finalStatus = data.status || data.order?.status || 'confirmed';
+        
+        console.log(`💰 Processing payment-confirmed for Order #${data.orderId}`);
+        console.log(`   Setting paymentStatus to: ${finalPaymentStatus}`);
+        console.log(`   Setting status to: ${finalStatus}`);
+        console.log(`   Event data.paymentStatus: ${data.paymentStatus}`);
+        console.log(`   Event data.order.paymentStatus: ${data.order?.paymentStatus}`);
+        
         // Update order immediately with payment status from event - merge full order object if provided
         setOrders(prevOrders => {
           const updated = prevOrders.map(order => {
             if (order.id === data.orderId) {
-              // Merge order object if provided, otherwise just update status fields
+              // Merge order object if provided, but ALWAYS override paymentStatus to 'paid'
               const updatedOrder = data.order 
-                ? { ...order, ...data.order, status: data.status || 'confirmed', paymentStatus: 'paid', paymentConfirmedAt: data.paymentConfirmedAt }
+                ? { 
+                    ...order, 
+                    ...data.order, 
+                    status: finalStatus, 
+                    paymentStatus: finalPaymentStatus, // ALWAYS 'paid' for payment-confirmed events
+                    paymentConfirmedAt: data.paymentConfirmedAt,
+                    receiptNumber: data.receiptNumber || data.order.receiptNumber,
+                    transactionCode: data.receiptNumber || data.order.transactionCode
+                  }
                 : { 
                     ...order, 
-                    status: data.status || 'confirmed',
-                    paymentStatus: 'paid',
+                    status: finalStatus,
+                    paymentStatus: finalPaymentStatus, // ALWAYS 'paid' for payment-confirmed events
                     paymentConfirmedAt: data.paymentConfirmedAt,
+                    receiptNumber: data.receiptNumber,
+                    transactionCode: data.receiptNumber,
                     transactions: order.transactions?.map(tx => 
                       tx.id === data.transactionId 
                         ? { ...tx, status: 'completed', receiptNumber: data.receiptNumber }
                         : tx
                     ) || []
                   };
-              console.log(`✅ Updated order #${data.orderId}: paymentStatus → paid, status → ${data.status || 'confirmed'}`);
+              
+              console.log(`✅ Updated order #${data.orderId} in state:`);
+              console.log(`   paymentStatus: ${updatedOrder.paymentStatus}`);
+              console.log(`   status: ${updatedOrder.status}`);
+              console.log(`   receiptNumber: ${updatedOrder.receiptNumber}`);
+              
               return updatedOrder;
             }
             return order;
           });
-          // Re-sort after update (filtering will be handled by the useEffect that watches orders)
-          return sortOrdersByStatus(updated);
+          // Re-sort after update and apply filters to update filteredOrders immediately
+          const sorted = sortOrdersByStatus(updated);
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          return sorted;
         });
       }
     });
@@ -496,13 +587,18 @@ const Orders = () => {
 
     // Apply tab-based filtering first
     if (tabFilter === 'pending') {
-      filtered = filtered.filter(order => order.status === 'pending' || order.status === 'confirmed');
+      filtered = filtered.filter(order => (order.status === 'pending' || order.status === 'confirmed') && !(order.cancellationRequested && order.cancellationApproved === null));
+    } else if (tabFilter === 'cancellation-requests') {
+      // Show only orders with pending cancellation requests
+      filtered = filtered.filter(order => order.cancellationRequested && order.cancellationApproved === null);
     } else if (tabFilter === 'completed') {
       filtered = filtered.filter(order => order.status === 'completed');
     } else if (tabFilter === 'unassigned') {
       filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
     } else if (tabFilter === 'confirmed') {
       filtered = filtered.filter(order => order.status === 'confirmed');
+    } else if (tabFilter === 'cancelled') {
+      filtered = filtered.filter(order => order.status === 'cancelled');
     }
 
     // Apply custom filters from URL params
@@ -676,7 +772,15 @@ const Orders = () => {
         const updated = prevOrders.map(order => 
           order.id === orderId ? { ...order, ...response.data } : order
         );
-        return sortOrdersByStatus(updated);
+        const sorted = sortOrdersByStatus(updated);
+        // If we're on cancellation-requests tab and order is now cancelled, switch to cancelled tab
+        if (orderTab === 'cancellation-requests' && response.data.status === 'cancelled') {
+          setOrderTab('cancelled');
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled');
+        } else {
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+        }
+        return sorted;
       });
       setError(null);
     } catch (error) {
@@ -692,7 +796,15 @@ const Orders = () => {
         const updated = prevOrders.map(order => 
           order.id === orderId ? { ...order, ...response.data } : order
         );
-        return sortOrdersByStatus(updated);
+        const sorted = sortOrdersByStatus(updated);
+        // If we're on cancellation-requests tab and cancellation was rejected, switch to pending tab
+        if (orderTab === 'cancellation-requests') {
+          setOrderTab('pending');
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'pending');
+        } else {
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+        }
+        return sorted;
       });
       setError(null);
     } catch (error) {
@@ -1669,9 +1781,32 @@ const Orders = () => {
         >
           <Tab label="All Orders" value="all" />
           <Tab label="Pending" value="pending" />
+          <Tab 
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <span>Cancellation Requests</span>
+                {orders.filter(o => o.cancellationRequested && o.cancellationApproved === null).length > 0 && (
+                  <Chip 
+                    label={orders.filter(o => o.cancellationRequested && o.cancellationApproved === null).length}
+                    size="small"
+                    sx={{
+                      backgroundColor: '#FFC107',
+                      color: '#000',
+                      fontWeight: 700,
+                      height: 20,
+                      minWidth: 20,
+                      fontSize: '0.7rem'
+                    }}
+                  />
+                )}
+              </Box>
+            } 
+            value="cancellation-requests" 
+          />
           <Tab label="Confirmed" value="confirmed" />
           <Tab label="Completed" value="completed" />
           <Tab label="Unassigned" value="unassigned" />
+          <Tab label="Cancelled" value="cancelled" />
         </Tabs>
       </Paper>
 

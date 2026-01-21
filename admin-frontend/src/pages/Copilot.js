@@ -12,13 +12,19 @@ import {
   Assessment,
   Analytics,
   TrendingUp,
-  Search
+  Search,
+  AccountBalanceWallet,
+  Inventory,
+  ShoppingCart
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
 import Reports from './copilot/Reports';
 import Analysis from './copilot/Analysis';
 import Predictions from './copilot/Predictions';
 import SEO from './copilot/SEO';
+import CashSubmissions from './copilot/CashSubmissions';
+import InventoryAnalytics from './copilot/Inventory';
+import Sales from './copilot/Sales';
 
 const Copilot = () => {
   const location = useLocation();
@@ -32,11 +38,22 @@ const Copilot = () => {
     if (path.includes('/analysis')) return 1;
     if (path.includes('/predictions')) return 2;
     if (path.includes('/seo')) return 3;
+    if (path.includes('/cash-submissions')) return 4;
+    if (path.includes('/inventory')) return 5;
+    if (path.includes('/sales')) return 6;
     return 0; // Default to reports
   };
 
   const handleTabChange = (event, newValue) => {
-    const routes = ['/copilot/reports', '/copilot/analysis', '/copilot/predictions', '/copilot/seo'];
+    const routes = [
+      '/copilot/reports',
+      '/copilot/analysis',
+      '/copilot/predictions',
+      '/copilot/seo',
+      '/copilot/cash-submissions',
+      '/copilot/inventory',
+      '/copilot/sales'
+    ];
     navigate(routes[newValue]);
   };
 
@@ -78,6 +95,9 @@ const Copilot = () => {
           <Tab icon={<Analytics />} iconPosition="start" label="Analysis" />
           <Tab icon={<TrendingUp />} iconPosition="start" label="Predictions" />
           <Tab icon={<Search />} iconPosition="start" label="SEO" />
+          <Tab icon={<AccountBalanceWallet />} iconPosition="start" label="Cash Submissions" />
+          <Tab icon={<Inventory />} iconPosition="start" label="Inventory" />
+          <Tab icon={<ShoppingCart />} iconPosition="start" label="Sales" />
         </Tabs>
       </Paper>
 
@@ -87,6 +107,9 @@ const Copilot = () => {
           <Route path="analysis" element={<Analysis />} />
           <Route path="predictions" element={<Predictions />} />
           <Route path="seo" element={<SEO />} />
+          <Route path="cash-submissions" element={<CashSubmissions />} />
+          <Route path="inventory" element={<InventoryAnalytics />} />
+          <Route path="sales" element={<Sales />} />
           <Route index element={<Navigate to="reports" replace />} />
         </Routes>
       </Box>

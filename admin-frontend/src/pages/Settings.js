@@ -28,7 +28,10 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  ToggleButton,
+  ToggleButtonGroup,
+  InputAdornment
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -90,11 +93,16 @@ const Settings = () => {
   // Delivery Fee Settings state
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
+    deliveryFeeMode: 'fixed', // 'fixed' or 'perKm'
     deliveryFeeWithAlcohol: 50,
     deliveryFeeWithoutAlcohol: 30,
+    deliveryFeePerKmWithAlcohol: 20, // per km value
+    deliveryFeePerKmWithoutAlcohol: 15, // per km value
     maxTipEnabled: false,
     driverPayPerDeliveryEnabled: false,
-    driverPayPerDeliveryAmount: 0
+    driverPayPerDeliveryMode: 'amount', // 'amount' or 'percentage'
+    driverPayPerDeliveryAmount: 0,
+    driverPayPerDeliveryPercentage: 30 // percentage of delivery fee
   });
   const [showDeliverySettings, setShowDeliverySettings] = useState(false);
   const [deliverySettingsLoading, setDeliverySettingsLoading] = useState(false);
@@ -183,7 +191,9 @@ const Settings = () => {
   const [userFormData, setUserFormData] = useState({
     username: '',
     email: '',
-    role: 'manager'
+    role: 'manager',
+    name: '',
+    mobileNumber: ''
   });
   const [userFormError, setUserFormError] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState(null);
@@ -226,39 +236,68 @@ const Settings = () => {
   };
 
   const handleOpenUserDialog = () => {
-    setUserFormData({ username: '', email: '', role: 'manager' });
+    setUserFormData({ username: '', email: '', role: 'manager', name: '', mobileNumber: '' });
     setUserFormError('');
     setOpenUserDialog(true);
   };
 
   const handleCloseUserDialog = () => {
     setOpenUserDialog(false);
-    setUserFormData({ username: '', email: '', role: 'manager' });
+    setUserFormData({ username: '', email: '', role: 'manager', name: '', mobileNumber: '' });
     setUserFormError('');
   };
 
   const handleSaveUser = async () => {
     setUserFormError('');
     
-    if (!userFormData.username.trim()) {
-      setUserFormError('Username is required');
-      return;
-    }
+    // For shop agents, validate name and mobile number
+    if (userFormData.role === 'shop_agent') {
+      if (!userFormData.name.trim()) {
+        setUserFormError('Name is required');
+        return;
+      }
 
-    if (!userFormData.email.trim()) {
-      setUserFormError('Email is required');
-      return;
-    }
+      if (!userFormData.mobileNumber.trim()) {
+        setUserFormError('Mobile number is required');
+        return;
+      }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(userFormData.email.trim())) {
-      setUserFormError('Please enter a valid email address');
-      return;
+      // Basic phone number validation
+      const phoneRegex = /^[\d\s\-+()]+$/;
+      if (!phoneRegex.test(userFormData.mobileNumber.trim())) {
+        setUserFormError('Please enter a valid mobile number');
+        return;
+      }
+    } else {
+      // For admin and manager, validate username and email
+      if (!userFormData.username.trim()) {
+        setUserFormError('Username is required');
+        return;
+      }
+
+      if (!userFormData.email.trim()) {
+        setUserFormError('Email is required');
+        return;
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userFormData.email.trim())) {
+        setUserFormError('Please enter a valid email address');
+        return;
+      }
     }
 
     try {
-      await api.post('/admin/users', userFormData);
-      setNotification({ message: 'User created and invite email sent successfully!' });
+      // For shop agents, only send name, mobileNumber, and role (not username/email)
+      const payload = userFormData.role === 'shop_agent' 
+        ? { role: userFormData.role, name: userFormData.name, mobileNumber: userFormData.mobileNumber }
+        : userFormData;
+      
+      const response = await api.post('/admin/users', payload);
+      const successMessage = userFormData.role === 'shop_agent' 
+        ? 'Shop agent created successfully! Click the WhatsApp icon to send the invite.' 
+        : 'User created and invite email sent successfully!';
+      setNotification({ message: successMessage });
       handleCloseUserDialog();
       fetchUsers();
     } catch (error) {
@@ -528,32 +567,47 @@ Welcome aboard! 🎉`;
   // ========== DELIVERY FEE SETTINGS ==========
   const fetchDeliverySettings = async () => {
     try {
-      const [testModeRes, withAlcoholRes, withoutAlcoholRes, maxTipRes, driverPayEnabledRes, driverPayAmountRes] = await Promise.all([
+      const [testModeRes, feeModeRes, withAlcoholRes, withoutAlcoholRes, perKmWithAlcoholRes, perKmWithoutAlcoholRes, maxTipRes, driverPayEnabledRes, driverPayModeRes, driverPayAmountRes, driverPayPercentageRes] = await Promise.all([
         api.get('/settings/deliveryTestMode').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/deliveryFeeMode').catch(() => ({ data: null, status: 404 })),
         api.get('/settings/deliveryFeeWithAlcohol').catch(() => ({ data: null, status: 404 })),
         api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/deliveryFeePerKmWithAlcohol').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/deliveryFeePerKmWithoutAlcohol').catch(() => ({ data: null, status: 404 })),
         api.get('/settings/maxTipEnabled').catch(() => ({ data: null, status: 404 })),
         api.get('/settings/driverPayPerDeliveryEnabled').catch(() => ({ data: null, status: 404 })),
-        api.get('/settings/driverPayPerDeliveryAmount').catch(() => ({ data: null, status: 404 }))
+        api.get('/settings/driverPayPerDeliveryMode').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/driverPayPerDeliveryAmount').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/driverPayPerDeliveryPercentage').catch(() => ({ data: null, status: 404 }))
       ]);
 
       setDeliverySettings({
         isTestMode: testModeRes.data?.value === 'true' || false,
+        deliveryFeeMode: feeModeRes.data?.value || 'fixed',
         deliveryFeeWithAlcohol: parseFloat(withAlcoholRes.data?.value || '50'),
         deliveryFeeWithoutAlcohol: parseFloat(withoutAlcoholRes.data?.value || '30'),
+        deliveryFeePerKmWithAlcohol: parseFloat(perKmWithAlcoholRes.data?.value || '20'),
+        deliveryFeePerKmWithoutAlcohol: parseFloat(perKmWithoutAlcoholRes.data?.value || '15'),
         maxTipEnabled: maxTipRes.data?.value === 'true' || false,
         driverPayPerDeliveryEnabled: driverPayEnabledRes.data?.value === 'true' || false,
-        driverPayPerDeliveryAmount: parseFloat(driverPayAmountRes.data?.value || '0')
+        driverPayPerDeliveryMode: driverPayModeRes.data?.value || 'amount',
+        driverPayPerDeliveryAmount: parseFloat(driverPayAmountRes.data?.value || '0'),
+        driverPayPerDeliveryPercentage: parseFloat(driverPayPercentageRes.data?.value || '30')
       });
     } catch (error) {
       console.error('Error fetching delivery settings:', error);
       setDeliverySettings({
         isTestMode: false,
+        deliveryFeeMode: 'fixed',
         deliveryFeeWithAlcohol: 50,
         deliveryFeeWithoutAlcohol: 30,
+        deliveryFeePerKmWithAlcohol: 20,
+        deliveryFeePerKmWithoutAlcohol: 15,
         maxTipEnabled: false,
         driverPayPerDeliveryEnabled: false,
-        driverPayPerDeliveryAmount: 0
+        driverPayPerDeliveryMode: 'amount',
+        driverPayPerDeliveryAmount: 0,
+        driverPayPerDeliveryPercentage: 30
       });
     }
   };
@@ -563,11 +617,16 @@ Welcome aboard! 🎉`;
       setDeliverySettingsLoading(true);
       await Promise.all([
         api.put('/settings/deliveryTestMode', { value: deliverySettings.isTestMode.toString() }),
+        api.put('/settings/deliveryFeeMode', { value: deliverySettings.deliveryFeeMode }),
         api.put('/settings/deliveryFeeWithAlcohol', { value: deliverySettings.deliveryFeeWithAlcohol.toString() }),
         api.put('/settings/deliveryFeeWithoutAlcohol', { value: deliverySettings.deliveryFeeWithoutAlcohol.toString() }),
+        api.put('/settings/deliveryFeePerKmWithAlcohol', { value: deliverySettings.deliveryFeePerKmWithAlcohol.toString() }),
+        api.put('/settings/deliveryFeePerKmWithoutAlcohol', { value: deliverySettings.deliveryFeePerKmWithoutAlcohol.toString() }),
         api.put('/settings/maxTipEnabled', { value: deliverySettings.maxTipEnabled.toString() }),
         api.put('/settings/driverPayPerDeliveryEnabled', { value: deliverySettings.driverPayPerDeliveryEnabled.toString() }),
-        api.put('/settings/driverPayPerDeliveryAmount', { value: deliverySettings.driverPayPerDeliveryAmount.toString() })
+        api.put('/settings/driverPayPerDeliveryMode', { value: deliverySettings.driverPayPerDeliveryMode }),
+        api.put('/settings/driverPayPerDeliveryAmount', { value: deliverySettings.driverPayPerDeliveryAmount.toString() }),
+        api.put('/settings/driverPayPerDeliveryPercentage', { value: deliverySettings.driverPayPerDeliveryPercentage.toString() })
       ]);
       setNotification({ message: 'Delivery settings saved successfully!' });
       setShowDeliverySettings(false);
@@ -854,8 +913,8 @@ Welcome aboard! 🎉`;
         </Alert>
       )}
 
-      {/* User Management Module - Admin Only */}
-      {currentUserRole === 'admin' && (
+      {/* User Management Module - Admin and Super Admin Only */}
+      {(currentUserRole === 'admin' || currentUserRole === 'super_admin') && (
         <Card sx={{ mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -888,21 +947,34 @@ Welcome aboard! 🎉`;
                 <Table>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Username</TableCell>
-                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Email</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Name/Username</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Email/Mobile</TableCell>
                       <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Role</TableCell>
                       <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Created</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {users.map((user) => (
                       <TableRow key={user.id}>
-                        <TableCell sx={{ color: colors.textPrimary }}>{user.username}</TableCell>
-                        <TableCell sx={{ color: colors.textPrimary }}>{user.email}</TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {user.role === 'shop_agent' ? (user.name || user.username) : user.username}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {user.role === 'shop_agent' ? (user.mobileNumber || user.email) : user.email}
+                        </TableCell>
                         <TableCell>
                           <Chip
-                            label={user.role === 'admin' ? 'Admin' : 'Manager'}
-                            color={user.role === 'admin' ? 'primary' : 'default'}
+                            label={
+                              user.role === 'admin' ? 'Admin' : 
+                              user.role === 'shop_agent' ? 'Shop Agent' : 
+                              'Manager'
+                            }
+                            color={
+                              user.role === 'admin' ? 'primary' : 
+                              user.role === 'shop_agent' ? 'secondary' : 
+                              'default'
+                            }
                             size="small"
                           />
                         </TableCell>
@@ -913,11 +985,56 @@ Welcome aboard! 🎉`;
                             day: 'numeric'
                           })}
                         </TableCell>
+                        <TableCell>
+                          {user.role === 'shop_agent' && (
+                            <IconButton
+                              onClick={async () => {
+                                try {
+                                  const response = await api.get(`/admin/users/${user.id}/whatsapp-link`);
+                                  if (response.data?.whatsappLink) {
+                                    window.open(response.data.whatsappLink, '_blank');
+                                    // Show warning if localhost is being used
+                                    if (response.data?.warning) {
+                                      setNotification({
+                                        type: 'warning',
+                                        message: response.data.warning
+                                      });
+                                    }
+                                  }
+                                } catch (error) {
+                                  console.error('Error getting WhatsApp link:', error);
+                                  const errorData = error.response?.data;
+                                  let errorMessage = errorData?.error || 'Failed to generate WhatsApp link';
+                                  
+                                  // Include detailed instructions if available
+                                  if (errorData?.message) {
+                                    errorMessage = errorData.message;
+                                  }
+                                  if (errorData?.instructions && Array.isArray(errorData.instructions)) {
+                                    errorMessage += '\n\n' + errorData.instructions.join('\n');
+                                  }
+                                  
+                                  setError(errorMessage);
+                                }
+                              }}
+                              size="small"
+                              sx={{
+                                color: '#25D366',
+                                '&:hover': {
+                                  backgroundColor: 'rgba(37, 211, 102, 0.1)'
+                                }
+                              }}
+                              title="Send WhatsApp Invite"
+                            >
+                              <WhatsApp />
+                            </IconButton>
+                          )}
+                        </TableCell>
                       </TableRow>
                     ))}
                     {users.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} align="center" sx={{ py: 4, color: colors.textSecondary }}>
+                        <TableCell colSpan={5} align="center" sx={{ py: 4, color: colors.textSecondary }}>
                           <Typography variant="body2" color="text.secondary">
                             No users found
                           </Typography>
@@ -1179,23 +1296,60 @@ Welcome aboard! 🎉`;
                         Set delivery fee to 0 (for testing only)
                       </Typography>
                     </Box>
-                    <Chip
-                      label={deliverySettings.isTestMode ? 'ON' : 'OFF'}
-                      color={deliverySettings.isTestMode ? 'warning' : 'default'}
-                      sx={{ mr: 2 }}
-                    />
-                    <Switch
-                      checked={deliverySettings.isTestMode}
-                      onChange={(e) => handleTestModeToggle(e.target.checked)}
-                      sx={{
-                        '& .MuiSwitch-switchBase.Mui-checked': {
-                          color: '#FF9800',
-                        },
-                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                          backgroundColor: '#FF9800',
-                        },
-                      }}
-                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <Chip
+                        label={deliverySettings.isTestMode ? 'ON' : 'OFF'}
+                        color={deliverySettings.isTestMode ? 'warning' : 'default'}
+                      />
+                      <Switch
+                        checked={deliverySettings.isTestMode}
+                        onChange={(e) => handleTestModeToggle(e.target.checked)}
+                        sx={{
+                          '& .MuiSwitch-switchBase.Mui-checked': {
+                            color: '#FF9800',
+                          },
+                          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                            backgroundColor: '#FF9800',
+                          },
+                        }}
+                      />
+                      <Box sx={{ display: 'flex', gap: 2, ml: 2 }}>
+                        <Button
+                          variant="outlined"
+                          onClick={() => {
+                            setShowDeliverySettings(false);
+                            fetchDeliverySettings();
+                          }}
+                          disabled={deliverySettingsLoading}
+                          sx={{
+                            borderColor: colors.border,
+                            color: colors.textPrimary,
+                            '&:hover': { 
+                              borderColor: colors.accentText,
+                              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)'
+                            }
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          variant="contained"
+                          onClick={saveDeliverySettings}
+                          disabled={deliverySettingsLoading}
+                          startIcon={deliverySettingsLoading ? <CircularProgress size={20} /> : <Save />}
+                          sx={{
+                            backgroundColor: colors.accentText,
+                            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                            '&:hover': { backgroundColor: '#00C4A3' },
+                            '&.Mui-disabled': {
+                              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.3)' : 'rgba(0, 224, 184, 0.5)'
+                            }
+                          }}
+                        >
+                          {deliverySettingsLoading ? 'Saving...' : 'Save Settings'}
+                        </Button>
+                      </Box>
+                    </Box>
                   </Box>
                 </Grid>
 
@@ -1226,169 +1380,332 @@ Welcome aboard! 🎉`;
                   </Grid>
                 )}
 
-                {/* Driver Pay Per Delivery */}
-                <Grid item xs={12}>
-                  <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                      <Box>
-                        <Typography variant="subtitle1" fontWeight={600}>
-                          Driver Pay Per Delivery
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Pay drivers a fixed amount per completed delivery
-                        </Typography>
-                      </Box>
-                      <Switch
-                        checked={deliverySettings.driverPayPerDeliveryEnabled}
-                        onChange={(e) => setDeliverySettings(prev => ({ ...prev, driverPayPerDeliveryEnabled: e.target.checked }))}
-                        sx={{
-                          '& .MuiSwitch-switchBase.Mui-checked': {
-                            color: colors.accentText,
-                          },
-                          '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                            backgroundColor: colors.accentText,
-                          },
-                        }}
-                      />
-                    </Box>
-                    <TextField
-                      fullWidth
-                      label="Amount Per Delivery (KES)"
-                      type="number"
-                      value={deliverySettings.driverPayPerDeliveryAmount}
-                      onChange={(e) => setDeliverySettings(prev => ({
-                        ...prev,
-                        driverPayPerDeliveryAmount: parseFloat(e.target.value) || 0
-                      }))}
-                      inputProps={{ min: 0, step: 0.01 }}
-                      helperText="Amount drivers receive for each completed delivery"
-                      disabled={!deliverySettings.driverPayPerDeliveryEnabled}
-                      sx={{
-                        '& .MuiOutlinedInput-root': {
-                          backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                          '& fieldset': { borderColor: colors.border },
-                          '&:hover fieldset': { borderColor: colors.accentText },
-                          '&.Mui-focused fieldset': { borderColor: colors.accentText },
-                          '&.Mui-disabled': {
-                            backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-                            color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'
-                          }
-                        },
-                        '& .MuiInputBase-input': {
-                          color: colors.textPrimary
-                        },
-                        '& .MuiInputLabel-root': {
-                          color: colors.textSecondary
-                        },
-                        '& .MuiInputLabel-root.Mui-focused': {
-                          color: colors.accentText
-                        }
-                      }}
-                    />
-                  </Box>
-                </Grid>
-
                 {!deliverySettings.isTestMode && (
                   <>
-                    <Grid item xs={12} md={6}>
-                      <TextField
-                        fullWidth
-                        label="Delivery Fee (With Alcohol)"
-                        type="number"
-                        value={deliverySettings.deliveryFeeWithAlcohol}
-                        onChange={(e) => setDeliverySettings(prev => ({
-                          ...prev,
-                          deliveryFeeWithAlcohol: parseFloat(e.target.value) || 0
-                        }))}
-                        inputProps={{ min: 0, step: 0.01 }}
-                        helperText="Applied when order contains alcohol items"
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                            '& fieldset': { borderColor: colors.border },
-                            '&:hover fieldset': { borderColor: colors.accentText },
-                            '&.Mui-focused fieldset': { borderColor: colors.accentText }
-                          },
-                          '& .MuiInputBase-input': {
-                            color: colors.textPrimary
-                          },
-                          '& .MuiInputLabel-root': {
-                            color: colors.textSecondary
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: colors.accentText
-                          }
-                        }}
-                      />
+                    <Grid container spacing={3}>
+                      {/* Driver Pay Per Delivery */}
+                      <Grid item xs={12} md={6}>
+                        <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, height: '100%' }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Box>
+                              <Typography variant="subtitle1" fontWeight={600}>
+                                Driver Pay Per Delivery
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                Pay drivers a fixed amount per completed delivery
+                              </Typography>
+                            </Box>
+                            <Switch
+                              checked={deliverySettings.driverPayPerDeliveryEnabled}
+                              onChange={(e) => setDeliverySettings(prev => ({ ...prev, driverPayPerDeliveryEnabled: e.target.checked }))}
+                              sx={{
+                                '& .MuiSwitch-switchBase.Mui-checked': {
+                                  color: colors.accentText,
+                                },
+                                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                  backgroundColor: colors.accentText,
+                                },
+                              }}
+                            />
+                          </Box>
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="subtitle2" sx={{ mb: 1, color: colors.textSecondary }}>
+                              Driver Pay Mode
+                            </Typography>
+                            <ToggleButtonGroup
+                              value={deliverySettings.driverPayPerDeliveryMode}
+                              exclusive
+                              onChange={(e, newMode) => {
+                                if (newMode !== null) {
+                                  setDeliverySettings(prev => ({ ...prev, driverPayPerDeliveryMode: newMode }));
+                                }
+                              }}
+                              aria-label="driver pay mode"
+                              disabled={!deliverySettings.driverPayPerDeliveryEnabled}
+                              sx={{
+                                '& .MuiToggleButton-root': {
+                                  borderColor: colors.border,
+                                  color: colors.textSecondary,
+                                  '&.Mui-selected': {
+                                    backgroundColor: colors.accentText,
+                                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                                    '&:hover': {
+                                      backgroundColor: '#00C4A3'
+                                    }
+                                  },
+                                  '&.Mui-disabled': {
+                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'
+                                  }
+                                }
+                              }}
+                            >
+                              <ToggleButton value="amount" aria-label="amount per delivery">
+                                Amount
+                              </ToggleButton>
+                              <ToggleButton value="percentage" aria-label="percentage of delivery fee">
+                                % of Delivery Fee
+                              </ToggleButton>
+                            </ToggleButtonGroup>
+                          </Box>
+                          {deliverySettings.driverPayPerDeliveryMode === 'amount' ? (
+                            <TextField
+                              fullWidth
+                              label="Amount Per Delivery (KES)"
+                              type="number"
+                              value={deliverySettings.driverPayPerDeliveryAmount}
+                              onChange={(e) => setDeliverySettings(prev => ({
+                                ...prev,
+                                driverPayPerDeliveryAmount: parseFloat(e.target.value) || 0
+                              }))}
+                              inputProps={{ min: 0, step: 0.01 }}
+                              helperText="Fixed amount drivers receive for each completed delivery"
+                              disabled={!deliverySettings.driverPayPerDeliveryEnabled}
+                              sx={{
+                                '& .MuiOutlinedInput-root': {
+                                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                                  '& fieldset': { borderColor: colors.border },
+                                  '&:hover fieldset': { borderColor: colors.accentText },
+                                  '&.Mui-focused fieldset': { borderColor: colors.accentText },
+                                  '&.Mui-disabled': {
+                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'
+                                  }
+                                },
+                                '& .MuiInputBase-input': {
+                                  color: colors.textPrimary
+                                },
+                                '& .MuiInputLabel-root': {
+                                  color: colors.textSecondary
+                                },
+                                '& .MuiInputLabel-root.Mui-focused': {
+                                  color: colors.accentText
+                                }
+                              }}
+                            />
+                          ) : (
+                            <TextField
+                              fullWidth
+                              label="Driver Pay %"
+                              type="number"
+                              value={deliverySettings.driverPayPerDeliveryPercentage}
+                              onChange={(e) => setDeliverySettings(prev => ({
+                                ...prev,
+                                driverPayPerDeliveryPercentage: parseFloat(e.target.value) || 0
+                              }))}
+                              inputProps={{ min: 0, max: 100, step: 0.1 }}
+                              InputProps={{
+                                endAdornment: <InputAdornment position="end"><Typography variant="body2" sx={{ color: colors.textSecondary }}>%</Typography></InputAdornment>
+                              }}
+                              helperText="Percentage of delivery fee that drivers receive"
+                              disabled={!deliverySettings.driverPayPerDeliveryEnabled}
+                              sx={{
+                                '& .MuiOutlinedInput-root': {
+                                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                                  '& fieldset': { borderColor: colors.border },
+                                  '&:hover fieldset': { borderColor: colors.accentText },
+                                  '&.Mui-focused fieldset': { borderColor: colors.accentText },
+                                  '&.Mui-disabled': {
+                                    backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)'
+                                  }
+                                },
+                                '& .MuiInputBase-input': {
+                                  color: colors.textPrimary
+                                },
+                                '& .MuiInputLabel-root': {
+                                  color: colors.textSecondary
+                                },
+                                '& .MuiInputLabel-root.Mui-focused': {
+                                  color: colors.accentText
+                                }
+                              }}
+                            />
+                          )}
+                        </Box>
+                      </Grid>
+
+                      {/* Delivery Fee Calculation Mode */}
+                      <Grid item xs={12} md={6}>
+                      <Box sx={{ mb: 2, p: 2, border: `1px solid ${colors.border}`, borderRadius: 1, backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)' }}>
+                        <Typography variant="subtitle2" sx={{ mb: 2, color: colors.textSecondary }}>
+                          Delivery Fee Calculation Mode
+                        </Typography>
+                        <ToggleButtonGroup
+                          value={deliverySettings.deliveryFeeMode}
+                          exclusive
+                          onChange={(e, newMode) => {
+                            if (newMode !== null) {
+                              setDeliverySettings(prev => ({ ...prev, deliveryFeeMode: newMode }));
+                            }
+                          }}
+                          aria-label="delivery fee mode"
+                          sx={{
+                            mb: 3,
+                            '& .MuiToggleButton-root': {
+                              borderColor: colors.border,
+                              color: colors.textSecondary,
+                              '&.Mui-selected': {
+                                backgroundColor: colors.accentText,
+                                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                                '&:hover': {
+                                  backgroundColor: '#00C4A3'
+                                }
+                              }
+                            }
+                          }}
+                        >
+                          <ToggleButton value="fixed" aria-label="fixed amount">
+                            Fixed
+                          </ToggleButton>
+                          <ToggleButton value="perKm" aria-label="per km">
+                            Per KM
+                          </ToggleButton>
+                        </ToggleButtonGroup>
+
+                        {deliverySettings.deliveryFeeMode === 'fixed' ? (
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                fullWidth
+                                label="Delivery Fee (With Alcohol)"
+                                type="number"
+                                value={deliverySettings.deliveryFeeWithAlcohol}
+                                onChange={(e) => setDeliverySettings(prev => ({
+                                  ...prev,
+                                  deliveryFeeWithAlcohol: parseFloat(e.target.value) || 0
+                                }))}
+                                inputProps={{ min: 0, step: 0.01 }}
+                                helperText="Fixed fee when order contains alcohol items"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                                    '& fieldset': { borderColor: colors.border },
+                                    '&:hover fieldset': { borderColor: colors.accentText },
+                                    '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                                  },
+                                  '& .MuiInputBase-input': {
+                                    color: colors.textPrimary
+                                  },
+                                  '& .MuiInputLabel-root': {
+                                    color: colors.textSecondary
+                                  },
+                                  '& .MuiInputLabel-root.Mui-focused': {
+                                    color: colors.accentText
+                                  }
+                                }}
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                fullWidth
+                                label="Delivery Fee (Without Alcohol)"
+                                type="number"
+                                value={deliverySettings.deliveryFeeWithoutAlcohol}
+                                onChange={(e) => setDeliverySettings(prev => ({
+                                  ...prev,
+                                  deliveryFeeWithoutAlcohol: parseFloat(e.target.value) || 0
+                                }))}
+                                inputProps={{ min: 0, step: 0.01 }}
+                                helperText="Fixed fee when order only contains soft drinks"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                                    '& fieldset': { borderColor: colors.border },
+                                    '&:hover fieldset': { borderColor: colors.accentText },
+                                    '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                                  },
+                                  '& .MuiInputBase-input': {
+                                    color: colors.textPrimary
+                                  },
+                                  '& .MuiInputLabel-root': {
+                                    color: colors.textSecondary
+                                  },
+                                  '& .MuiInputLabel-root.Mui-focused': {
+                                    color: colors.accentText
+                                  }
+                                }}
+                              />
+                            </Grid>
+                          </Grid>
+                        ) : (
+                          <Grid container spacing={2}>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                fullWidth
+                                label="Delivery Fee Per KM (With Alcohol)"
+                                type="number"
+                                value={deliverySettings.deliveryFeePerKmWithAlcohol}
+                                onChange={(e) => setDeliverySettings(prev => ({
+                                  ...prev,
+                                  deliveryFeePerKmWithAlcohol: parseFloat(e.target.value) || 0
+                                }))}
+                                inputProps={{ min: 0, step: 0.01 }}
+                                InputProps={{
+                                  endAdornment: <InputAdornment position="end"><Typography variant="body2" sx={{ color: colors.textSecondary }}>KES/km</Typography></InputAdornment>
+                                }}
+                                helperText="Fee per kilometer when order contains alcohol items"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                                    '& fieldset': { borderColor: colors.border },
+                                    '&:hover fieldset': { borderColor: colors.accentText },
+                                    '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                                  },
+                                  '& .MuiInputBase-input': {
+                                    color: colors.textPrimary
+                                  },
+                                  '& .MuiInputLabel-root': {
+                                    color: colors.textSecondary
+                                  },
+                                  '& .MuiInputLabel-root.Mui-focused': {
+                                    color: colors.accentText
+                                  }
+                                }}
+                              />
+                            </Grid>
+                            <Grid item xs={12} md={6}>
+                              <TextField
+                                fullWidth
+                                label="Delivery Fee Per KM (Without Alcohol)"
+                                type="number"
+                                value={deliverySettings.deliveryFeePerKmWithoutAlcohol}
+                                onChange={(e) => setDeliverySettings(prev => ({
+                                  ...prev,
+                                  deliveryFeePerKmWithoutAlcohol: parseFloat(e.target.value) || 0
+                                }))}
+                                inputProps={{ min: 0, step: 0.01 }}
+                                InputProps={{
+                                  endAdornment: <InputAdornment position="end"><Typography variant="body2" sx={{ color: colors.textSecondary }}>KES/km</Typography></InputAdornment>
+                                }}
+                                helperText="Fee per kilometer when order only contains soft drinks"
+                                sx={{
+                                  '& .MuiOutlinedInput-root': {
+                                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                                    '& fieldset': { borderColor: colors.border },
+                                    '&:hover fieldset': { borderColor: colors.accentText },
+                                    '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                                  },
+                                  '& .MuiInputBase-input': {
+                                    color: colors.textPrimary
+                                  },
+                                  '& .MuiInputLabel-root': {
+                                    color: colors.textSecondary
+                                  },
+                                  '& .MuiInputLabel-root.Mui-focused': {
+                                    color: colors.accentText
+                                  }
+                                }}
+                              />
+                            </Grid>
+                          </Grid>
+                        )}
+                      </Box>
                     </Grid>
-                    <Grid item xs={12} md={6}>
-                      <TextField
-                        fullWidth
-                        label="Delivery Fee (Without Alcohol)"
-                        type="number"
-                        value={deliverySettings.deliveryFeeWithoutAlcohol}
-                        onChange={(e) => setDeliverySettings(prev => ({
-                          ...prev,
-                          deliveryFeeWithoutAlcohol: parseFloat(e.target.value) || 0
-                        }))}
-                        inputProps={{ min: 0, step: 0.01 }}
-                        helperText="Applied when order only contains soft drinks"
-                        sx={{
-                          '& .MuiOutlinedInput-root': {
-                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                            '& fieldset': { borderColor: colors.border },
-                            '&:hover fieldset': { borderColor: colors.accentText },
-                            '&.Mui-focused fieldset': { borderColor: colors.accentText }
-                          },
-                          '& .MuiInputBase-input': {
-                            color: colors.textPrimary
-                          },
-                          '& .MuiInputLabel-root': {
-                            color: colors.textSecondary
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: colors.accentText
-                          }
-                        }}
-                      />
                     </Grid>
                   </>
                 )}
 
-                <Grid item xs={12}>
-                  <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-                    <Button
-                      variant="outlined"
-                      onClick={() => {
-                        setShowDeliverySettings(false);
-                        fetchDeliverySettings();
-                      }}
-                      sx={{
-                        borderColor: colors.border,
-                        color: colors.textSecondary,
-                        '&:hover': { 
-                          borderColor: colors.accentText,
-                          backgroundColor: 'rgba(0, 224, 184, 0.05)'
-                        }
-                      }}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="contained"
-                      onClick={saveDeliverySettings}
-                      disabled={deliverySettingsLoading}
-                      startIcon={deliverySettingsLoading ? <CircularProgress size={20} /> : <Save />}
-                      sx={{
-                        backgroundColor: colors.accentText,
-                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                        '&:hover': { backgroundColor: '#00C4A3' }
-                      }}
-                    >
-                      {deliverySettingsLoading ? 'Saving...' : 'Save Settings'}
-                    </Button>
-                  </Box>
-                </Grid>
               </Grid>
             </Box>
           )}
@@ -1403,8 +1720,17 @@ Welcome aboard! 🎉`;
               </Box>
               {!deliverySettings.isTestMode && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  With Alcohol: KES {deliverySettings.deliveryFeeWithAlcohol.toFixed(2)} | 
-                  Without Alcohol: KES {deliverySettings.deliveryFeeWithoutAlcohol.toFixed(2)}
+                  {deliverySettings.deliveryFeeMode === 'fixed' ? (
+                    <>
+                      With Alcohol: KES {deliverySettings.deliveryFeeWithAlcohol.toFixed(2)} | 
+                      Without Alcohol: KES {deliverySettings.deliveryFeeWithoutAlcohol.toFixed(2)}
+                    </>
+                  ) : (
+                    <>
+                      With Alcohol: KES {deliverySettings.deliveryFeePerKmWithAlcohol.toFixed(2)}/km | 
+                      Without Alcohol: KES {deliverySettings.deliveryFeePerKmWithoutAlcohol.toFixed(2)}/km
+                    </>
+                  )}
                 </Typography>
               )}
             </Box>
@@ -2063,7 +2389,7 @@ Welcome aboard! 🎉`;
                       >
                         <img 
                           src={heroImage} 
-                          alt="Current Hero Image" 
+                          alt="Current Hero" 
                           style={{ 
                             width: '100%', 
                             height: 'auto',
@@ -2217,7 +2543,7 @@ Welcome aboard! 🎉`;
                     >
                       <img 
                         src={heroImageInput} 
-                        alt="Hero Image Preview" 
+                        alt="Hero Preview" 
                         style={{ 
                           width: '100%', 
                           height: 'auto',
@@ -2518,7 +2844,7 @@ Welcome aboard! 🎉`;
         }}
       >
         <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
-          Invite New User
+          {userFormData.role === 'shop_agent' ? 'Add Shop Agent' : 'Invite New User'}
         </DialogTitle>
         <DialogContent sx={{ backgroundColor: colors.paper }}>
           {userFormError && (
@@ -2527,65 +2853,21 @@ Welcome aboard! 🎉`;
             </Alert>
           )}
           <Box sx={{ mt: 2 }}>
-            <TextField
-              label="Username"
-              fullWidth
-              required
-              value={userFormData.username}
-              onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })}
-              sx={{ 
-                mb: 2,
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                  '& fieldset': { borderColor: colors.border },
-                  '&:hover fieldset': { borderColor: colors.accentText },
-                  '&.Mui-focused fieldset': { borderColor: colors.accentText }
-                },
-                '& .MuiInputBase-input': {
-                  color: colors.textPrimary
-                },
-                '& .MuiInputLabel-root': {
-                  color: colors.textSecondary
-                },
-                '& .MuiInputLabel-root.Mui-focused': {
-                  color: colors.accentText
-                }
-              }}
-              placeholder="Enter username"
-            />
-            <TextField
-              label="Email"
-              fullWidth
-              required
-              type="email"
-              value={userFormData.email}
-              onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
-              sx={{ 
-                mb: 2,
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                  '& fieldset': { borderColor: colors.border },
-                  '&:hover fieldset': { borderColor: colors.accentText },
-                  '&.Mui-focused fieldset': { borderColor: colors.accentText }
-                },
-                '& .MuiInputBase-input': {
-                  color: colors.textPrimary
-                },
-                '& .MuiInputLabel-root': {
-                  color: colors.textSecondary
-                },
-                '& .MuiInputLabel-root.Mui-focused': {
-                  color: colors.accentText
-                }
-              }}
-              placeholder="user@example.com"
-            />
             <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel sx={{ color: colors.textSecondary }}>Role</InputLabel>
               <Select
                 value={userFormData.role}
                 label="Role"
-                onChange={(e) => setUserFormData({ ...userFormData, role: e.target.value })}
+                onChange={(e) => {
+                  // Reset form data when role changes
+                  setUserFormData({ 
+                    username: '', 
+                    email: '', 
+                    role: e.target.value,
+                    name: '',
+                    mobileNumber: ''
+                  });
+                }}
                 sx={{
                   color: colors.textPrimary,
                   '& .MuiOutlinedInput-notchedOutline': {
@@ -2604,11 +2886,128 @@ Welcome aboard! 🎉`;
               >
                 <MenuItem value="manager">Manager</MenuItem>
                 <MenuItem value="admin">Admin</MenuItem>
+                <MenuItem value="shop_agent">Shop Agent</MenuItem>
               </Select>
             </FormControl>
-            <Alert severity="info" sx={{ mt: 2 }}>
-              An invite email will be sent to the user. They will need to set their password using the link in the email.
-            </Alert>
+
+            {userFormData.role === 'shop_agent' ? (
+              <>
+                <TextField
+                  label="Name"
+                  fullWidth
+                  required
+                  value={userFormData.name}
+                  onChange={(e) => setUserFormData({ ...userFormData, name: e.target.value })}
+                  sx={{ 
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                      '& fieldset': { borderColor: colors.border },
+                      '&:hover fieldset': { borderColor: colors.accentText },
+                      '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                    },
+                    '& .MuiInputBase-input': {
+                      color: colors.textPrimary
+                    },
+                    '& .MuiInputLabel-root': {
+                      color: colors.textSecondary
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: colors.accentText
+                    }
+                  }}
+                  placeholder="Enter shop agent name"
+                />
+                <TextField
+                  label="Mobile Number"
+                  fullWidth
+                  required
+                  value={userFormData.mobileNumber}
+                  onChange={(e) => setUserFormData({ ...userFormData, mobileNumber: e.target.value })}
+                  sx={{ 
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                      '& fieldset': { borderColor: colors.border },
+                      '&:hover fieldset': { borderColor: colors.accentText },
+                      '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                    },
+                    '& .MuiInputBase-input': {
+                      color: colors.textPrimary
+                    },
+                    '& .MuiInputLabel-root': {
+                      color: colors.textSecondary
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: colors.accentText
+                    }
+                  }}
+                  placeholder="e.g., +254712345678"
+                />
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  Shop agents are created without login credentials. They are used for reference purposes only.
+                </Alert>
+              </>
+            ) : (
+              <>
+                <TextField
+                  label="Username"
+                  fullWidth
+                  required
+                  value={userFormData.username}
+                  onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })}
+                  sx={{ 
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                      '& fieldset': { borderColor: colors.border },
+                      '&:hover fieldset': { borderColor: colors.accentText },
+                      '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                    },
+                    '& .MuiInputBase-input': {
+                      color: colors.textPrimary
+                    },
+                    '& .MuiInputLabel-root': {
+                      color: colors.textSecondary
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: colors.accentText
+                    }
+                  }}
+                  placeholder="Enter username"
+                />
+                <TextField
+                  label="Email"
+                  fullWidth
+                  required
+                  type="email"
+                  value={userFormData.email}
+                  onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                  sx={{ 
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                      '& fieldset': { borderColor: colors.border },
+                      '&:hover fieldset': { borderColor: colors.accentText },
+                      '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                    },
+                    '& .MuiInputBase-input': {
+                      color: colors.textPrimary
+                    },
+                    '& .MuiInputLabel-root': {
+                      color: colors.textSecondary
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: colors.accentText
+                    }
+                  }}
+                  placeholder="user@example.com"
+                />
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  An invite email will be sent to the user. They will need to set their password using the link in the email.
+                </Alert>
+              </>
+            )}
           </Box>
         </DialogContent>
         <DialogActions sx={{ backgroundColor: colors.paper, p: 2 }}>
@@ -2631,7 +3030,7 @@ Welcome aboard! 🎉`;
               }
             }}
           >
-            Send Invite
+            {userFormData.role === 'shop_agent' ? 'Create Shop Agent' : 'Send Invite'}
           </Button>
         </DialogActions>
       </Dialog>
