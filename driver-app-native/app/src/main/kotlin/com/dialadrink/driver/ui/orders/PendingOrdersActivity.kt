@@ -52,21 +52,10 @@ class PendingOrdersActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        if (isLoading) return
-        
-        var hasOrderCards = false
-        for (i in 0 until binding.ordersContainer.childCount) {
-            if (binding.ordersContainer.getChildAt(i) is MaterialCardView) {
-                hasOrderCards = true
-                break
-            }
-        }
-        
-        if (!hasOrderCards) {
+        // Always refresh when resuming to ensure new orders from notifications appear
+        // This is especially important when returning from OrderAcceptanceActivity
+        if (!isLoading) {
             refreshOrdersFromRepository()
-        } else {
-            binding.loadingProgress.visibility = View.GONE
-            binding.swipeRefresh.isRefreshing = false
         }
     }
     

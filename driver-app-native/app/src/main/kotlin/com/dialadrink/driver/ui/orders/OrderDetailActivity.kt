@@ -3,6 +3,8 @@ package com.dialadrink.driver.ui.orders
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.View
 import android.widget.Toast
@@ -32,6 +34,9 @@ class OrderDetailActivity : AppCompatActivity() {
     private var driverCashAtHand: Double = 0.0
     private var driverCreditLimit: Double = 0.0
     private var creditLimitExceeded: Boolean = false
+    private var pollingHandler: Handler? = null
+    private var pollingRunnable: Runnable? = null
+    private val POLLING_INTERVAL_MS = 5000L // Poll every 5 seconds
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -53,6 +58,7 @@ class OrderDetailActivity : AppCompatActivity() {
         setupButtons()
         loadDriverData()
         loadOrderDetails()
+        startPolling()
     }
     
     private fun setupToolbar() {
@@ -115,9 +121,36 @@ class OrderDetailActivity : AppCompatActivity() {
                     Log.d(TAG, "💰 Payment confirmed via socket: Order #$paymentOrderId, Status: $paymentStatus")
                     
                     if (paymentOrderId == orderId) {
-                        // Payment confirmed for this order, reload details immediately
-                        Log.d(TAG, "✅ Reloading order details for Order #$orderId due to payment confirmation")
-                        loadOrderDetails()
+                        // Payment confirmed for this order - update UI immediately
+                        // Get payment status from event (should be "paid")
+                        val eventPaymentStatus = paymentStatus.ifEmpty { 
+                            paymentData.optString("paymentStatus", "paid") 
+                        }
+                        val eventStatus = paymentData.optString("status", currentOrder?.status ?: "pending")
+                        
+                        Log.d(TAG, "💰 Payment confirmed - Order #$orderId, paymentStatus: $eventPaymentStatus, status: $eventStatus")
+                        
+                        // First, update payment status in current order if available
+                        currentOrder?.let { order ->
+                            val updatedOrder = order.copy(
+                                paymentStatus = eventPaymentStatus.ifEmpty { "paid" },
+                                status = eventStatus,
+                                transactionCode = paymentData.optString("receiptNumber", order.transactionCode)
+                            )
+                            currentOrder = updatedOrder
+                            displayOrder(updatedOrder)
+                            Log.d(TAG, "✅ Updated order UI immediately for Order #$orderId: paymentStatus → ${updatedOrder.paymentStatus}, status → ${updatedOrder.status}")
+                        } ?: run {
+                            // No current order, reload from API
+                            Log.d(TAG, "⚠️ No current order, reloading from API")
+                            loadOrderDetails()
+                        }
+                        
+                        // Also reload from API after a short delay to ensure we have the latest data
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            Log.d(TAG, "✅ Reloading order details for Order #$orderId to get latest data")
+                            loadOrderDetails()
+                        }, 500) // Small delay to allow immediate UI update first
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "❌ Error handling payment-confirmed event", e)
@@ -191,9 +224,9 @@ class OrderDetailActivity : AppCompatActivity() {
         }
         binding.itemsText.text = itemsText
         
-        // Show/hide customer phone based on status
-        if (status == "completed" || status == "cancelled") {
-            // Hide phone number when order is completed or cancelled
+        // Show/hide customer phone based on status and cancellation request
+        if (status == "completed" || status == "cancelled" || order.cancellationRequested == true) {
+            // Hide phone number when order is completed, cancelled, or cancellation requested
             binding.customerPhoneContainer.visibility = View.GONE
         } else {
             binding.customerPhoneContainer.visibility = View.VISIBLE
@@ -217,16 +250,23 @@ class OrderDetailActivity : AppCompatActivity() {
         binding.branchText.visibility = View.GONE
         binding.navigateToBranchButton.visibility = View.GONE
         
-        // Hide navigate to customer button for completed orders
-        if (completedStatuses.contains(status)) {
+        // Hide navigate to customer button for completed orders or when cancellation requested
+        if (completedStatuses.contains(status) || order.cancellationRequested == true) {
             binding.navigateToCustomerButton.visibility = View.GONE
         } else {
             binding.navigateToCustomerButton.visibility = View.VISIBLE
         }
         
-        // Show/hide call button based on status
+        // Hide customer location (address) when cancellation requested
+        if (order.cancellationRequested == true) {
+            binding.addressText.visibility = View.GONE
+        } else {
+            binding.addressText.visibility = View.VISIBLE
+        }
+        
+        // Show/hide call button based on status or cancellation request
         val hideCallButtonStatuses = listOf("completed", "cancelled", "delivered")
-        if (hideCallButtonStatuses.contains(status)) {
+        if (hideCallButtonStatuses.contains(status) || order.cancellationRequested == true) {
             binding.callCustomerButton.visibility = View.GONE
         } else {
             binding.callCustomerButton.visibility = View.VISIBLE
@@ -239,7 +279,8 @@ class OrderDetailActivity : AppCompatActivity() {
     private fun updateButtonVisibility(order: Order) {
         val status = order.status.lowercase()
         
-        val showOutForDelivery = status == "confirmed"
+        // Hide "out for delivery" button when cancellation requested
+        val showOutForDelivery = status == "confirmed" && order.cancellationRequested != true
         val showDelivered = status == "out_for_delivery"
         val showReceivedCash = status == "out_for_delivery" && order.paymentStatus.lowercase() != "paid"
         
@@ -737,8 +778,37 @@ class OrderDetailActivity : AppCompatActivity() {
         }
     }
     
+    private fun startPolling() {
+        pollingHandler = Handler(Looper.getMainLooper())
+        pollingRunnable = object : Runnable {
+            override fun run() {
+                // Poll for order updates (sockets not working)
+                loadOrderDetails()
+                pollingHandler?.postDelayed(this, POLLING_INTERVAL_MS)
+            }
+        }
+        pollingHandler?.postDelayed(pollingRunnable!!, POLLING_INTERVAL_MS)
+    }
+    
+    private fun stopPolling() {
+        pollingRunnable?.let { pollingHandler?.removeCallbacks(it) }
+        pollingHandler = null
+        pollingRunnable = null
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        stopPolling()
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        startPolling()
+    }
+    
     override fun onDestroy() {
         super.onDestroy()
+        stopPolling()
         SocketService.disconnect()
     }
     

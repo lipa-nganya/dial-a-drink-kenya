@@ -184,7 +184,9 @@ object OrderRepository {
             val cached = OrderCache.getCachedOrders()
             if (cached != null) {
                 val pending = cached.filter { 
-                    it.driverId != null && (it.driverAccepted == null || it.driverAccepted == false)
+                    it.driverId != null && 
+                    (it.driverAccepted == null || it.driverAccepted == false) &&
+                    (it.status == "pending" || it.status == "confirmed")
                 }
                 if (pending.isNotEmpty()) {
                     return pending
@@ -221,8 +223,11 @@ object OrderRepository {
             SharedPrefs.saveCachedOrders(context, allOrders)
             
             // Filter for pending: driverId set but driverAccepted is null or false
+            // Include orders with status 'pending' or 'confirmed' that haven't been accepted yet
             allOrders.filter { 
-                it.driverId != null && (it.driverAccepted == null || it.driverAccepted == false)
+                it.driverId != null && 
+                (it.driverAccepted == null || it.driverAccepted == false) &&
+                (it.status == "pending" || it.status == "confirmed")
             }
         } catch (e: Exception) {
             emptyList()

@@ -111,12 +111,21 @@ class ProfileActivity : AppCompatActivity() {
     }
     
     private fun getBranchFromBuildConfig(): String {
-        // Check BuildConfig for API URL to determine branch
-        val apiUrl = BuildConfig.API_BASE_URL ?: ""
-        return when {
-            apiUrl.contains("ngrok") || apiUrl.contains("localhost") || apiUrl.contains("127.0.0.1") -> "local"
-            apiUrl.contains("gcloud") || apiUrl.contains("cloud") -> "cloud-dev"
-            else -> "Development"
+        // Use BUILD_TYPE from BuildConfig (set in build.gradle based on product flavor)
+        val buildType = BuildConfig.BUILD_TYPE ?: ""
+        return when (buildType.lowercase()) {
+            "local" -> "local"
+            "development" -> "development"
+            "production" -> "production"
+            else -> {
+                // Fallback: Check API URL to determine branch
+                val apiUrl = BuildConfig.API_BASE_URL ?: ""
+                when {
+                    apiUrl.contains("ngrok") || apiUrl.contains("localhost") || apiUrl.contains("127.0.0.1") -> "local"
+                    apiUrl.contains("gcloud") || apiUrl.contains("cloud") -> "cloud-dev"
+                    else -> "development"
+                }
+            }
         }
     }
     
