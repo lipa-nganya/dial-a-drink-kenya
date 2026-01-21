@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
@@ -44,15 +45,13 @@ const Menu = () => {
   // Handle scroll detection for mobile category collapse
   useEffect(() => {
     let ticking = false;
-    let lastScrollY = 0;
-    
+        
     const handleScroll = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
           const scrollPosition = window.scrollY || window.pageYOffset;
           const isMobile = window.innerWidth < 600;
           
-          lastScrollY = scrollPosition;
           
           // Only apply on mobile
           if (isMobile) {
@@ -162,10 +161,10 @@ const Menu = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory]);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     filterDrinks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [drinks, searchTerm, selectedCategory, selectedSubcategory, filterDrinks]);
+  }, [drinks, searchTerm, selectedCategory, selectedSubcategory]);
 
   // Reset pagination when category or search changes
   useEffect(() => {

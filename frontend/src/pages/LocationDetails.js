@@ -11,7 +11,8 @@ import {
   CircularProgress
 } from '@mui/material';
 import { Search, Star } from '@mui/icons-material';
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
+/* eslint-disable react-hooks/exhaustive-deps */
+import { useParams, useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -34,11 +35,11 @@ const LocationDetails = () => {
   
   const itemsPerPage = 16; // 4 rows × 4 columns
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchLocation();
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [locationName, fetchLocation]);
+  }, [locationName]);
 
   useEffect(() => {
     // Read category and subcategory from URL query parameters

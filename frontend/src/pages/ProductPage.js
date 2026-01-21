@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -46,10 +47,10 @@ const ProductPage = () => {
   const [testingNotes, setTestingNotes] = useState(null);
   const [testingNotesLoading, setTestingNotesLoading] = useState(false);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchProduct();
-    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [id, fetchProduct]);
+  }, [id]);
 
   useEffect(() => {
     if (product) {

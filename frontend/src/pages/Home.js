@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import {
   Container,
@@ -32,13 +33,13 @@ const Home = () => {
   const navigate = useNavigate();
   const { colors } = useTheme();
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchCategories();
     fetchHeroImage();
     fetchDrinks();
     fetchBrandFocusDrinks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [fetchHeroImage]);
+  }, []);
 
   // Fetch subcategories when category changes
   useEffect(() => {

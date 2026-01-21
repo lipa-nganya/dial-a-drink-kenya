@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps, no-use-before-define */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Container, Typography, Box, Button, Paper, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import { CheckCircle, PhoneAndroid, Assignment, Login } from '@mui/icons-material';

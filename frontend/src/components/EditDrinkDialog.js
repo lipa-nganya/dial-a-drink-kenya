@@ -23,8 +23,7 @@ import {
 import {
   Close,
   CloudUpload,
-  AttachMoney,
-  Image as ImageIcon
+  AttachMoney
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import CapacityPricingCombined from './CapacityPricingCombined';

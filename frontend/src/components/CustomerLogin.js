@@ -9,7 +9,6 @@ import {
 } from '@mui/material';
 import { PhoneIphone as LoginIcon, Sms } from '@mui/icons-material';
 import { api } from '../services/api';
-import { useCustomer } from '../contexts/CustomerContext';
 import OtpVerification from '../pages/OtpVerification';
 
 const CustomerLogin = ({ onLoginSuccess, orderId }) => {

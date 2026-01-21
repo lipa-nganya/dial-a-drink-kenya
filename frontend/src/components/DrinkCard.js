@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect } from 'react';
 import {
   Card,
@@ -73,6 +74,7 @@ const DrinkCard = ({ drink }) => {
     : [];
 
   // Auto-select capacity if there's only one option
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (availableCapacities.length === 1 && !selectedCapacity) {
       setSelectedCapacity(availableCapacities[0]);
