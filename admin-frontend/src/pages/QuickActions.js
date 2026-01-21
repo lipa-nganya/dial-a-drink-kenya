@@ -28,7 +28,7 @@ import {
   Close,
   ArrowBack
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import NewOrderDialog from '../components/NewOrderDialog';

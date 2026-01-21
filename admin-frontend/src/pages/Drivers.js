@@ -70,7 +70,8 @@ const ShiftReportTab = () => {
 
   useEffect(() => {
     fetchShiftReport();
-  }, [dateRange, customStartDate, customEndDate, fetchShiftReport]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [dateRange, customStartDate, customEndDate]);
 
   const getDateRange = (range) => {
     const now = new Date();

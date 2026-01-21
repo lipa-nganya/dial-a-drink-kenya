@@ -193,8 +193,8 @@ const Transactions = () => {
     if (currentTab === 'transactions') {
       filterTransactions();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, statusFilter, paymentMethodFilter, startDate, endDate, transactions, currentTab, filterTransactions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [searchTerm, statusFilter, paymentMethodFilter, startDate, endDate, transactions, currentTab]);
 
   const fetchTransactions = async () => {
     try {
@@ -565,7 +565,7 @@ const Transactions = () => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredTransactions.length, page, rowsPerPage, currentTab, transactions, filterCardPaymentTransactions, filteredTransactions]);
+  }, [filteredTransactions.length, page, rowsPerPage, currentTab, transactions]);
 
   if (loading) {
     return (

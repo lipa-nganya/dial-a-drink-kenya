@@ -35,8 +35,8 @@ const SalesDateDetails = () => {
 
   useEffect(() => {
     fetchOrdersForDate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, fetchOrdersForDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [date]);
 
   const fetchOrdersForDate = async () => {
     try {

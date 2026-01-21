@@ -102,12 +102,14 @@ const InventoryPage = () => {
 
   useEffect(() => {
     filterDrinks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [drinks, searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
 
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter, filterDrinks]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
 
   const fetchData = async () => {
     try {

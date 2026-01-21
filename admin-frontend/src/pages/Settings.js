@@ -202,8 +202,8 @@ const Settings = () => {
     fetchAllData();
     fetchCurrentUser();
     fetchStockAlertSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fetchAllData]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, []);
 
   const fetchCurrentUser = async () => {
     try {

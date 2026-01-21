@@ -72,8 +72,8 @@ const SupplierDetail = () => {
 
   useEffect(() => {
     fetchSupplierDetails();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, fetchSupplierDetails]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [id]);
 
   const fetchSupplierDetails = async () => {
     try {

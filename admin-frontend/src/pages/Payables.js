@@ -81,8 +81,8 @@ const Payables = () => {
     if (view === 'list' || view === 'payables') {
       filterSuppliers();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm, suppliers, view, filterSuppliers]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [searchTerm, suppliers, view]);
 
   const fetchSuppliers = async () => {
     try {

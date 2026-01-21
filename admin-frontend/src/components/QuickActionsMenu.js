@@ -35,7 +35,7 @@ import {
   Phone,
   StopCircle
 } from '@mui/icons-material';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import NewOrderDialog from './NewOrderDialog';
@@ -61,7 +61,7 @@ const QuickActionsMenu = () => {
   const [completeError, setCompleteError] = useState('');
   const [menuAnchorEl, setMenuAnchorEl] = useState(null);
   const menuOpen = Boolean(menuAnchorEl);
-  const [, setOrderTab] = useState('pending'); // 'pending', 'completed', 'unassigned'
+  // const [orderTab] = useState('pending'); // Unused - removed for linting
   const [recentOrders, setRecentOrders] = useState([]);
   const [loadingRecentOrders, setLoadingRecentOrders] = useState(false);
   const [postStopDialogOpen, setPostStopDialogOpen] = useState(false);

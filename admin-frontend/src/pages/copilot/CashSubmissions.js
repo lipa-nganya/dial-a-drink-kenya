@@ -65,8 +65,8 @@ const CashSubmissions = () => {
     } else if (activeTab === 1) {
       fetchOrdersAndSubmissions();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, dateRange, customStartDate, customEndDate, fetchOrdersAndSubmissions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [activeTab, dateRange, customStartDate, customEndDate]);
 
   useEffect(() => {
     if (activeTab === 1) {

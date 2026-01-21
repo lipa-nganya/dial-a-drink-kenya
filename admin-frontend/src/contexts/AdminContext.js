@@ -241,8 +241,8 @@ export const AdminProvider = ({ children }) => {
       newSocket.close();
       clearInterval(pollInterval);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, showBrowserNotification]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [isAuthenticated]);
 
   const logout = () => {
     localStorage.removeItem('adminToken');
