@@ -39,7 +39,6 @@ import {
   RemoveCircle,
   Phone,
   VpnKey,
-  VpnKey,
   WhatsApp,
   Search,
   Notifications,
