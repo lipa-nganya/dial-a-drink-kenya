@@ -18,7 +18,6 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const LocationDetails = () => {
   const { locationName } = useParams();
-  const navigate = useNavigate();
   const { colors } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drinks, setDrinks] = useState([]);
@@ -38,7 +37,8 @@ const LocationDetails = () => {
   useEffect(() => {
     fetchLocation();
     fetchData();
-  }, [locationName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [locationName, fetchLocation]);
 
   useEffect(() => {
     // Read category and subcategory from URL query parameters
@@ -81,6 +81,7 @@ const LocationDetails = () => {
 
   useEffect(() => {
     filterDrinks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [drinks, searchTerm, selectedCategory, selectedSubcategory]);
 
   // Reset pagination when category or search changes

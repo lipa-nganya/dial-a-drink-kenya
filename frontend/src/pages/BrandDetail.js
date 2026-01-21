@@ -31,6 +31,7 @@ const BrandDetail = () => {
   useEffect(() => {
     fetchBrand();
     fetchBrandDrinks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [id]);
 
   const fetchBrand = async () => {

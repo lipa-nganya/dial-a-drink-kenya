@@ -35,7 +35,6 @@ import {
   Cancel,
   RemoveCircle,
   Phone,
-  Visibility,
   VisibilityOff,
   VpnKey
 } from '@mui/icons-material';

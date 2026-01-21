@@ -4,11 +4,11 @@ const CartContext = createContext();
 
 const cartReducer = (state, action) => {
   switch (action.type) {
-    case 'ADD_TO_CART':
+      case 'ADD_TO_CART':
       // Create a unique key that includes capacity to differentiate items with different capacities
-      const itemKey = action.payload.selectedCapacity 
-        ? `${action.payload.drinkId}-${action.payload.selectedCapacity}`
-        : action.payload.drinkId;
+      // const itemKey = action.payload.selectedCapacity 
+      //   ? `${action.payload.drinkId}-${action.payload.selectedCapacity}`
+      //   : action.payload.drinkId; // Unused
       
       const existingItem = state.items.find(item => 
         item.drinkId === action.payload.drinkId && 

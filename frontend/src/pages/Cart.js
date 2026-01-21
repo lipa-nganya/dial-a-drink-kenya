@@ -18,7 +18,7 @@ import {
   Card,
   CardContent
 } from '@mui/material';
-import { Add, Remove, Delete, ShoppingCart, CreditCard, PhoneAndroid, LocalShipping, AccountBalanceWallet, WhatsApp } from '@mui/icons-material';
+import { Add, Remove, Delete, ShoppingCart, CreditCard, PhoneAndroid, LocalShipping, AccountBalanceWallet } from '@mui/icons-material';
 import { useCart } from '../contexts/CartContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -163,7 +163,7 @@ const Cart = () => {
   }, [customerInfo.address, deliverySettings.deliveryFeeMode]);
 
   const [calculatedDistance, setCalculatedDistance] = useState(null);
-  const [distanceLoading, setDistanceLoading] = useState(false);
+  const [, setDistanceLoading] = useState(false);
 
   // Calculate road distance using backend API
   const calculateRoadDistance = async (deliveryAddress) => {
@@ -1403,7 +1403,6 @@ const Cart = () => {
                           display: 'block',
                           backgroundColor: 'transparent'
                         }}
-                        title="PesaPal Payment Form"
                         allow="payment *"
                         sandbox="allow-forms allow-scripts allow-same-origin allow-top-navigation allow-popups allow-popups-to-escape-sandbox allow-modals"
                       />

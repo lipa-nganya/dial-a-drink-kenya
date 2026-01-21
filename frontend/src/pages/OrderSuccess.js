@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Container, Typography, Box, Button, Paper, CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
-import { CheckCircle, ShoppingCart, PhoneAndroid, Assignment, Login, WhatsApp } from '@mui/icons-material';
+import { CheckCircle, PhoneAndroid, Assignment, Login } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import { useCart } from '../contexts/CartContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { useCustomer } from '../contexts/CustomerContext';
 import CustomerLogin from '../components/CustomerLogin';
 import OrderTracking from './OrderTracking';
@@ -20,8 +19,10 @@ const OrderSuccess = () => {
   const orderId = location.state?.orderId;
   const paymentPending = location.state?.paymentPending || false;
   const paymentMessage = location.state?.paymentMessage;
-  const [orderStatus, setOrderStatus] = useState(null);
-  const [isPolling, setIsPolling] = useState(false);
+  const paymentMethod = location.state?.paymentMethod || 'mobile_money'; // 'mobile_money' or 'card'
+  const paymentProvider = location.state?.paymentProvider || 'mpesa'; // 'mpesa' or 'pesapal'
+  const [, setOrderStatus] = useState(null);
+  const [, setIsPolling] = useState(false);
   const [paymentConfirmed, setPaymentConfirmed] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -102,6 +103,73 @@ const OrderSuccess = () => {
     }
   }, [autoLoggingIn, loginCustomer]);
 
+  // Auto-login if payment is already confirmed (e.g., from PaymentSuccess redirect)
+  useEffect(() => {
+    if (!paymentPending && orderId && !paymentConfirmed && !hasAutoLoggedInRef.current && !autoLoggingIn) {
+      // Payment is already confirmed, auto-login immediately
+      const checkAndAutoLogin = async () => {
+        try {
+          console.log('🔍 Checking order status for auto-login...', { orderId, paymentPending });
+          const orderResponse = await api.get(`/orders/${orderId}`);
+          const order = orderResponse.data;
+          
+          console.log('📦 Order data:', {
+            orderId: order.id,
+            paymentStatus: order.paymentStatus,
+            status: order.status
+          });
+          
+          if (order && order.paymentStatus === 'paid') {
+            console.log('✅ Payment already confirmed, auto-logging in customer...');
+            isProcessingRef.current = true;
+            setPaymentConfirmed(true);
+            setOrderStatus(order.status || 'confirmed');
+            setCurrentTransactionStatus('completed');
+            
+            // Try to get transaction data
+            try {
+              if (paymentProvider === 'pesapal') {
+                const transactionResponse = await api.get(`/pesapal/transaction-status/${orderId}`);
+                if (transactionResponse.data && transactionResponse.data.status === 'completed') {
+                  setTransactionData({
+                    transactionId: transactionResponse.data.transactionId,
+                    orderId: orderId,
+                    status: 'completed',
+                    receiptNumber: transactionResponse.data.receiptNumber,
+                    amount: transactionResponse.data.amount || order.totalAmount,
+                    paymentProvider: 'pesapal',
+                    paymentMethod: 'card'
+                  });
+                }
+              } else {
+                const transactionResponse = await api.get(`/mpesa/transaction-status/${orderId}`);
+                if (transactionResponse.data && transactionResponse.data.status === 'completed') {
+                  setTransactionData(transactionResponse.data);
+                }
+              }
+            } catch (error) {
+              console.log('Could not fetch transaction details, using order data');
+            }
+            
+            clearCart();
+            await autoLoginCustomer(orderId);
+            console.log('✅ Auto-login completed for confirmed payment');
+          } else {
+            console.log('⚠️  Payment not confirmed yet, will wait for confirmation');
+            // If payment is not confirmed, set paymentPending to true to trigger polling
+            // This shouldn't happen if PaymentSuccess checked correctly, but handle it anyway
+          }
+        } catch (error) {
+          console.error('❌ Error checking order status for auto-login:', error);
+          // If error, still try to show login form
+          setShowLogin(true);
+        }
+      };
+      
+      checkAndAutoLogin();
+    }
+  }, [paymentPending, orderId, paymentConfirmed, autoLoginCustomer, clearCart, autoLoggingIn, paymentProvider]);
+
   useEffect(() => {
     if (paymentPending && orderId) {
       // Set up Socket.IO listener for real-time payment confirmation
@@ -132,8 +200,8 @@ const OrderSuccess = () => {
               status: 'completed',
               receiptNumber: data.receiptNumber,
               amount: data.amount,
-              paymentProvider: 'mpesa',
-              paymentMethod: 'mobile_money'
+              paymentProvider: data.paymentProvider || paymentProvider,
+              paymentMethod: data.paymentMethod || paymentMethod
             });
           } else {
             // Update status even if not completed
@@ -195,6 +263,69 @@ const OrderSuccess = () => {
             return;
           }
 
+          // Check payment status based on payment provider
+          if (paymentProvider === 'pesapal') {
+            // For PesaPal card payments, check transaction status
+            const transactionResponse = await api.get(`/pesapal/transaction-status/${orderId}`).catch(() => {
+              return { data: { status: 'pending', transactionId: null } };
+            });
+            
+            const orderResponse = await api.get(`/orders/${orderId}`).catch(() => null);
+            const orderStatus = orderResponse?.data?.status;
+            const transactionStatus = transactionResponse?.data?.status || 'pending';
+            const hasReceiptNumber = transactionResponse?.data?.receiptNumber;
+            
+            setCurrentTransactionStatus(transactionStatus);
+            
+            // Check if payment is completed - be more lenient with the check
+            const isPaymentCompleted = orderResponse?.data?.paymentStatus === 'paid' || 
+                                     transactionStatus === 'completed' ||
+                                     (transactionStatus === 'completed' && hasReceiptNumber);
+            
+            if (isPaymentCompleted) {
+              console.log('✅✅✅ PesaPal payment completed detected!');
+              console.log('   Transaction status:', transactionStatus);
+              console.log('   Order paymentStatus:', orderResponse?.data?.paymentStatus);
+              console.log('   Order status:', orderStatus);
+              console.log('   Receipt number:', hasReceiptNumber || 'N/A');
+              
+              if (pollInterval) {
+                clearInterval(pollInterval);
+                pollInterval = null;
+              }
+              setIsPolling(false);
+              socket.disconnect();
+              
+              if (!isProcessingRef.current && !hasAutoLoggedInRef.current) {
+                isProcessingRef.current = true;
+                setPaymentConfirmed(true);
+                setOrderStatus(orderStatus || 'confirmed');
+                setCurrentTransactionStatus('completed');
+                
+                setTransactionData({
+                  transactionId: transactionResponse.data.transactionId,
+                  orderId: orderId,
+                  status: 'completed',
+                  receiptNumber: transactionResponse.data.receiptNumber || `PESAPAL-${orderId}`,
+                  amount: transactionResponse.data.amount || orderResponse.data.totalAmount,
+                  paymentProvider: 'pesapal',
+                  paymentMethod: 'card'
+                });
+                
+                clearCart();
+                console.log('🔐 Starting automatic customer login for PesaPal payment...');
+                await autoLoginCustomer(orderId);
+                console.log('✅✅✅ PesaPal payment flow completed - customer should be logged in and see OrderTracking');
+              }
+            } else if (transactionStatus === 'pending') {
+              setOrderStatus('pending');
+            } else {
+              setOrderStatus(orderStatus || 'pending');
+            }
+            return; // Exit early for PesaPal payments
+          }
+
+          // M-Pesa payment polling (existing logic)
           // Get transaction first to get checkoutRequestID
           const transactionResponse = await api.get(`/mpesa/transaction-status/${orderId}`).catch((error) => {
             console.log('Transaction status check failed (will retry):', error.response?.status || error.message);
@@ -241,6 +372,7 @@ const OrderSuccess = () => {
           
           // SIMPLE CHECK: Use the new simplified payment check endpoint
           // This directly checks for receipt numbers - most reliable indicator
+          // eslint-disable-next-line no-use-before-define
           let paymentCheckResponse = null;
           try {
             paymentCheckResponse = await api.get(`/mpesa/check-payment/${orderId}`);
@@ -405,14 +537,20 @@ const OrderSuccess = () => {
     return (
       <Container maxWidth="md" sx={{ py: 4 }}>
         <Paper sx={{ p: 4, textAlign: 'center' }}>
-          <PhoneAndroid sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
+          {paymentProvider === 'pesapal' ? (
+            <CheckCircle sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
+          ) : (
+            <PhoneAndroid sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
+          )}
           
           <Typography variant="h4" gutterBottom>
-            Waiting for Payment Confirmation
+            {paymentProvider === 'pesapal' ? 'Payment Processing' : 'Waiting for Payment Confirmation'}
           </Typography>
           
           <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
-            {paymentMessage || 'Please complete the payment on your phone'}
+            {paymentMessage || (paymentProvider === 'pesapal' 
+              ? 'Your card payment is being processed. Please wait...' 
+              : 'Please complete the payment on your phone')}
           </Typography>
           
           {orderId && (
@@ -452,8 +590,9 @@ const OrderSuccess = () => {
           </Box>
           
           <Alert severity="info" sx={{ mb: 3 }}>
-            Please check your phone and enter your M-Pesa PIN to complete the payment. 
-            This page will automatically update once payment is confirmed.
+            {paymentProvider === 'pesapal' 
+              ? 'Your card payment is being verified. This page will automatically update once payment is confirmed.'
+              : 'Please check your phone and enter your M-Pesa PIN to complete the payment. This page will automatically update once payment is confirmed.'}
           </Alert>
 
           {pollingTimedOut && (

@@ -6,7 +6,6 @@ import {
   Paper,
   TextField,
   Button,
-  Divider,
   Alert,
   CircularProgress
 } from '@mui/material';
@@ -28,7 +27,7 @@ import { sanitizeCustomerNotes } from '../utils/sanitizeNotes';
 
 const Profile = () => {
   const navigate = useNavigate();
-  const { customer, isLoggedIn, logout, updateCustomer } = useCustomer();
+  const { isLoggedIn, logout, updateCustomer } = useCustomer();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');

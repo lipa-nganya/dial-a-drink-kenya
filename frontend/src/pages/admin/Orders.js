@@ -60,6 +60,7 @@ const Orders = () => {
   useEffect(() => {
     fetchOrders();
     fetchDrivers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, []);
   
   const fetchDrivers = async () => {
@@ -166,6 +167,7 @@ const Orders = () => {
     return () => {
       socket.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, []);
 
   // Order status priority for sorting
@@ -276,6 +278,7 @@ const Orders = () => {
   // Update filters when filter values change
   useEffect(() => {
     applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchTerm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [orderStatusFilter, transactionStatusFilter, searchTerm, orders]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {

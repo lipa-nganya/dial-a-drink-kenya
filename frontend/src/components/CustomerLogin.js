@@ -13,7 +13,6 @@ import { useCustomer } from '../contexts/CustomerContext';
 import OtpVerification from '../pages/OtpVerification';
 
 const CustomerLogin = ({ onLoginSuccess, orderId }) => {
-  const { login } = useCustomer();
   const [phone, setPhone] = useState('');
   const [otpLoading, setOtpLoading] = useState(false);
   const [error, setError] = useState('');
@@ -39,7 +38,7 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
         userType: 'customer'
       });
 
-      const { success, error: responseError, note, message, smsFailed, smsError } = response.data || {};
+      const { success, error: responseError, note, message, smsFailed } = response.data || {};
       setOtpPhone(phone);
       
       // Always proceed to OTP entry if OTP was generated (success: true)

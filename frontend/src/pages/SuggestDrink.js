@@ -11,7 +11,6 @@ import {
 import { Lightbulb, ArrowBack } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
-import { api } from '../services/api';
 
 const SuggestDrink = () => {
   const navigate = useNavigate();

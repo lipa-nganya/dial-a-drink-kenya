@@ -41,7 +41,7 @@ import { getBackendUrl } from '../utils/backendUrl';
 
 const MyOrders = () => {
   const navigate = useNavigate();
-  const { customer, isLoggedIn } = useCustomer();
+  const { customer, isLoggedIn, login } = useCustomer();
   const { clearCart, addToCart } = useCart();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,7 +54,7 @@ const MyOrders = () => {
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [page, setPage] = useState(0);
-  const rowsPerPage = 10;
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -80,10 +80,27 @@ const MyOrders = () => {
         return;
       }
       
+      console.log('🔍 Fetching orders with:', { email, phone, customerId: customerData.id });
+      console.log('🔍 Customer data:', JSON.stringify(customerData, null, 2));
+      console.log('🔍 Request payload:', JSON.stringify({ email: email || null, phone: phone || null }, null, 2));
+      
       // Fetch orders by email or phone
       const response = await api.post('/orders/find-all', {
         email: email || null,
         phone: phone || null
+      });
+      
+      const orderIds = response.data.orders?.map(o => o.id) || [];
+      console.log('📦 Orders response:', {
+        success: response.data.success,
+        orderCount: response.data.orders?.length || 0,
+        orderIds: orderIds
+      });
+      console.log('📋 Order IDs found:', orderIds.join(', '));
+      console.log('🔍 Checking for specific orders:', {
+        has293: orderIds.includes(293),
+        has304: orderIds.includes(304),
+        allOrderIds: orderIds.sort((a, b) => a - b)
       });
 
       if (response.data.success) {
@@ -112,10 +129,29 @@ const MyOrders = () => {
     }
   }, [customer, navigate]);
 
+  // Restore customer from localStorage if context is lost
+  useEffect(() => {
+    if (!customer && !isLoggedIn) {
+      const customerData = localStorage.getItem('customerOrder');
+      if (customerData) {
+        try {
+          const parsed = JSON.parse(customerData);
+          if (parsed.id || parsed.phone || parsed.email) {
+            // Customer data exists, restore it to context
+            login(parsed);
+            console.log('✅ Restored customer from localStorage in MyOrders');
+          }
+        } catch (error) {
+          console.error('Error restoring customer data:', error);
+        }
+      }
+    }
+  }, [customer, isLoggedIn, login]);
+
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(orders.length / rowsPerPage));
     if (page > 0 && page >= totalPages) {
-      setPage(totalPages - 1);
+      setPage(Math.max(0, totalPages - 1));
     }
   }, [orders.length, page, rowsPerPage]);
   
@@ -193,7 +229,9 @@ const MyOrders = () => {
               ? { 
                   ...order, 
                   paymentStatus: 'paid',
-                  status: data.status || order.status
+                  status: data.status || order.status,
+                  paymentMethod: data.paymentMethod || order.paymentMethod,
+                  paymentProvider: data.paymentProvider || order.paymentProvider
                 }
               : order
           );
@@ -546,10 +584,36 @@ const MyOrders = () => {
         </Paper>
       ) : (
         <>
-          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
             <Typography variant="body2" color="text.secondary">
               Showing {displayStart}-{displayEnd} of {totalOrders} {totalOrders === 1 ? 'order' : 'orders'}
             </Typography>
+            {totalOrders > 10 && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Rows per page:
+                </Typography>
+                <select
+                  value={rowsPerPage}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value));
+                    setPage(0);
+                  }}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid #ccc',
+                    backgroundColor: 'white',
+                    cursor: 'pointer'
+                  }}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </Box>
+            )}
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
           {paginatedOrders.map((order) => (
@@ -634,6 +698,7 @@ const MyOrders = () => {
                       {/* Reorder Button for Completed/Delivered Orders */}
                       {(order.status === 'completed' || order.status === 'delivered') && (
                         <Button
+                          component="div"
                           variant="contained"
                           size="small"
                           startIcon={<Refresh />}
@@ -646,6 +711,7 @@ const MyOrders = () => {
                           sx={{
                             backgroundColor: '#00E0B8',
                             color: '#0D0D0D',
+                            cursor: 'pointer',
                             '&:hover': {
                               backgroundColor: '#00C4A3'
                             }
@@ -657,6 +723,7 @@ const MyOrders = () => {
                       {/* Download Receipt Button for Paid or Completed Orders */}
                       {(order.paymentStatus === 'paid' || order.status === 'completed' || order.status === 'delivered') && (
                         <Button
+                          component="div"
                           variant="contained"
                           size="small"
                           startIcon={<Download />}
@@ -669,6 +736,7 @@ const MyOrders = () => {
                           sx={{
                             backgroundColor: '#00E0B8',
                             color: '#0D0D0D',
+                            cursor: 'pointer',
                             '&:hover': {
                               backgroundColor: '#00C4A3'
                             }
@@ -680,6 +748,7 @@ const MyOrders = () => {
                       {/* Make Payment Button for Unpaid Orders */}
                       {order.paymentStatus !== 'paid' && order.paymentType === 'pay_now' && order.status !== 'cancelled' && (
                         <Button
+                          component="div"
                           variant="contained"
                           size="small"
                           startIcon={<Payment />}
@@ -692,6 +761,7 @@ const MyOrders = () => {
                           sx={{
                             backgroundColor: '#00E0B8',
                             color: '#0D0D0D',
+                            cursor: 'pointer',
                             '&:hover': {
                               backgroundColor: '#00C4A3'
                             }

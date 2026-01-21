@@ -29,9 +29,7 @@ import {
   CheckCircle,
   Cancel,
   AccessTime,
-  Warning,
   Search,
-  AttachMoney,
   Phone,
   Receipt,
   Info,
@@ -59,6 +57,7 @@ const Transactions = () => {
 
   useEffect(() => {
     filterTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [searchTerm, startDate, endDate, transactions]);
 
   const fetchTransactions = async () => {

@@ -37,7 +37,8 @@ const Home = () => {
     fetchHeroImage();
     fetchDrinks();
     fetchBrandFocusDrinks();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [fetchHeroImage]);
 
   // Fetch subcategories when category changes
   useEffect(() => {

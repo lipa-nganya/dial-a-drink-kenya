@@ -15,7 +15,6 @@ import {
 import { ReportProblem as ReportProblemIcon, ArrowBack } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
-import { api } from '../services/api';
 
 const ReportProblem = () => {
   const navigate = useNavigate();

@@ -12,7 +12,6 @@ import {
   RadioGroup,
   FormControlLabel,
   FormControl,
-  Alert,
   IconButton,
   Tooltip
 } from '@mui/material';
@@ -251,9 +250,9 @@ const DrinkCard = ({ drink }) => {
                     : null;
                   const price = pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(drink.price) || 0;
                   const originalPrice = pricing ? parseFloat(pricing.originalPrice) || 0 : parseFloat(drink.originalPrice) || 0;
-                  const discount = originalPrice && originalPrice > price 
-                    ? Math.round(((originalPrice - price) / originalPrice) * 100)
-                    : 0;
+                  // const discount = originalPrice && originalPrice > price 
+                  //   ? Math.round(((originalPrice - price) / originalPrice) * 100)
+                  //   : 0; // Unused
                   
                   return (
                   <FormControlLabel

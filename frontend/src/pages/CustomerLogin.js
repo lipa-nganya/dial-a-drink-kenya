@@ -45,14 +45,20 @@ const CustomerLogin = () => {
     const timer = setTimeout(async () => {
       setCheckingPin(true);
       try {
+        console.log('🔍 Checking PIN status for phone:', phone);
         const response = await api.post('/auth/check-pin-status', { phone });
+        console.log('📱 PIN status response:', response.data);
         if (response.data.success) {
-          setHasPin(response.data.hasPin || false);
+          const hasPinValue = response.data.hasPin || false;
+          console.log('✅ PIN status:', hasPinValue ? 'HAS PIN' : 'NO PIN');
+          setHasPin(hasPinValue);
         } else {
+          console.log('❌ PIN status check failed:', response.data.error);
           setHasPin(false);
         }
       } catch (err) {
-        console.error('PIN status check error:', err);
+        console.error('❌ PIN status check error:', err);
+        console.error('   Error details:', err.response?.data);
         setHasPin(false);
       } finally {
         setCheckingPin(false);
@@ -131,7 +137,7 @@ const CustomerLogin = () => {
         userType: 'customer'
       });
 
-      const { success, error: responseError, note, message, smsFailed, smsError } = response.data || {};
+      const { success, error: responseError, note, message, smsFailed } = response.data || {};
       setOtpPhone(phone);
       
       // Always proceed to OTP entry if OTP was generated (success: true)

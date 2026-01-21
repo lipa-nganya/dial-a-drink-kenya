@@ -14,16 +14,12 @@ import {
   Switch
 } from '@mui/material';
 import {
-  Dashboard,
   Assignment,
   Inventory,
-  AttachMoney,
   ShoppingCart,
   LocalBar,
   TrendingUp,
   TrendingDown,
-  Security,
-  Notifications,
   Add,
   Delete,
   LocalOffer,
@@ -46,7 +42,7 @@ const AdminOverview = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [notification, setNotification] = useState(null);
-  const [socket, setSocket] = useState(null);
+  const [, setSocket] = useState(null);
   const [countdowns, setCountdowns] = useState([]);
   const [showCountdownForm, setShowCountdownForm] = useState(false);
   const [countdownForm, setCountdownForm] = useState({
@@ -128,6 +124,7 @@ const AdminOverview = () => {
     return () => {
       newSocket.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, []);
 
   const fetchStats = async () => {
@@ -590,7 +587,7 @@ const AdminOverview = () => {
                     >
                       <img 
                         src={heroImage} 
-                        alt="Current Hero Image" 
+                        alt="Current Hero" 
                         style={{ 
                           width: '100%', 
                           height: 'auto',
@@ -734,7 +731,7 @@ const AdminOverview = () => {
                   >
                     <img 
                       src={heroImageInput} 
-                      alt="Hero Image Preview" 
+                      alt="Hero Preview" 
                       style={{ 
                         width: '100%', 
                         height: 'auto',

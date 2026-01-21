@@ -6,7 +6,7 @@ import { Snackbar, Alert, Box } from '@mui/material';
 import { CartProvider, useCart } from './contexts/CartContext';
 import { CustomerProvider } from './contexts/CustomerContext';
 import { AdminProvider } from './contexts/AdminContext';
-import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import Header from './components/Header';
 import AdminHeader from './components/AdminHeader';
 import Footer from './components/Footer';
@@ -18,6 +18,7 @@ import Offers from './pages/Offers';
 import Cart from './pages/Cart';
 import OrderSuccess from './pages/OrderSuccess';
 import OrderTracking from './pages/OrderTracking';
+import PaymentSuccess from './pages/PaymentSuccess';
 import Profile from './pages/Profile';
 import MyOrders from './pages/MyOrders';
 import CustomerLogin from './pages/CustomerLogin';
@@ -203,6 +204,7 @@ function AppContent() {
           <Route path="/test-offers" element={<TestOffers />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/order-success" element={<OrderSuccess />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/order-tracking" element={<OrderTracking />} />
           <Route path="/profile" element={<CustomerPrivateRoute><Profile /></CustomerPrivateRoute>} />
           <Route path="/orders" element={<MyOrders />} />

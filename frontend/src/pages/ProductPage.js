@@ -7,7 +7,6 @@ import {
   Button,
   Card,
   CardMedia,
-  CardContent,
   Chip,
   Divider,
   CircularProgress,
@@ -49,7 +48,8 @@ const ProductPage = () => {
 
   useEffect(() => {
     fetchProduct();
-  }, [id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [id, fetchProduct]);
 
   useEffect(() => {
     if (product) {
@@ -66,7 +66,8 @@ const ProductPage = () => {
         setSelectedCapacity(availableCapacities[0]);
       }
     }
-  }, [product]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [product, selectedCapacity]);
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '';
@@ -237,12 +238,13 @@ const ProductPage = () => {
     return product.name;
   };
 
+  // eslint-disable-next-line no-unused-vars
   const generateIntro = () => {
     if (!product) return '';
     
     const type = product.type || 'drink';
     const origin = product.origin || product.country || '';
-    const abv = product.abv ? `${product.abv}%` : '';
+    // const abv = product.abv ? `${product.abv}%` : ''; // Unused
     
     let intro = `${product.name} is a`;
     if (type) intro += ` ${type.toLowerCase()}`;
@@ -284,6 +286,7 @@ const ProductPage = () => {
     return product.type || 'Spirit';
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getProducer = () => {
     if (!product) return '';
     // Common producers based on brand

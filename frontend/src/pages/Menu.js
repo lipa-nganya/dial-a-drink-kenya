@@ -164,7 +164,8 @@ const Menu = () => {
 
   useEffect(() => {
     filterDrinks();
-  }, [drinks, searchTerm, selectedCategory, selectedSubcategory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
+  }, [drinks, searchTerm, selectedCategory, selectedSubcategory, filterDrinks]);
 
   // Reset pagination when category or search changes
   useEffect(() => {

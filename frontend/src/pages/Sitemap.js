@@ -11,7 +11,7 @@ import {
   ListItem,
   ListItemText
 } from '@mui/material';
-import { Map, Home, LocalBar, ShoppingCart, Person, Description, LocationOn, AttachMoney, BrandingWatermark } from '@mui/icons-material';
+import { Map, Home, LocalBar, ShoppingCart, Person, Description } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 

@@ -15,7 +15,7 @@ export const useAdmin = () => {
 
 export const AdminProvider = ({ children }) => {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
-  const [socket, setSocket] = useState(null);
+  const [, setSocket] = useState(null);
 
   // Play notification sound
   const playNotificationSound = () => {
@@ -83,7 +83,7 @@ export const AdminProvider = ({ children }) => {
       // Refresh pending orders count
       fetchPendingOrdersCount();
     });
-    
+
     // Listen for driver shift events
     newSocket.on('driver-shift-started', (data) => {
       console.log('Driver started shift:', data);

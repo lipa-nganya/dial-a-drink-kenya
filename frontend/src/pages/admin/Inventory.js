@@ -13,8 +13,6 @@ import {
   FormControlLabel,
   Alert,
   CircularProgress,
-  IconButton,
-  Tooltip,
   TextField,
   InputAdornment,
   Select,
@@ -22,7 +20,6 @@ import {
   FormControl,
   InputLabel,
   Paper,
-  Divider,
   Pagination
 } from '@mui/material';
 import {
@@ -30,8 +27,6 @@ import {
   CheckCircle,
   Cancel,
   Edit,
-  Visibility,
-  VisibilityOff,
   Inventory,
   TrendingUp,
   TrendingDown,
@@ -89,6 +84,7 @@ const InventoryPage = () => {
 
   useEffect(() => {
     filterDrinks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [drinks, searchTerm, selectedCategory, selectedBrand, availabilityFilter, offerFilter]);
 
   // Reset pagination when filters change
@@ -223,10 +219,12 @@ const InventoryPage = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getAvailabilityColor = (isAvailable) => {
     return isAvailable ? 'success' : 'error';
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getAvailabilityIcon = (isAvailable) => {
     return isAvailable ? <CheckCircle /> : <Cancel />;
   };

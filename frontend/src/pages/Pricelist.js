@@ -13,13 +13,9 @@ import {
   CircularProgress,
   Alert,
   TextField,
-  InputAdornment,
-  Chip,
-  Grid,
-  Card,
-  CardContent
+  InputAdornment
 } from '@mui/material';
-import { Search, LocalBar, AttachMoney } from '@mui/icons-material';
+import { Search, AttachMoney } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 
