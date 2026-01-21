@@ -192,7 +192,8 @@ const Transactions = () => {
     if (currentTab === 'transactions') {
       filterTransactions();
     }
-  }, [searchTerm, statusFilter, paymentMethodFilter, startDate, endDate, transactions, currentTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm, statusFilter, paymentMethodFilter, startDate, endDate, transactions, currentTab, filterTransactions]);
 
   const fetchTransactions = async () => {
     try {
@@ -562,7 +563,8 @@ const Transactions = () => {
         setPage(lastPage);
       }
     }
-  }, [filteredTransactions.length, page, rowsPerPage, currentTab, transactions]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredTransactions.length, page, rowsPerPage, currentTab, transactions, filterCardPaymentTransactions, filteredTransactions]);
 
   if (loading) {
     return (
