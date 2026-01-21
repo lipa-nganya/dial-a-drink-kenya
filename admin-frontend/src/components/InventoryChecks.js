@@ -85,20 +85,6 @@ const InventoryChecks = () => {
     }
   };
 
-  const filterChecks = () => {
-    let filtered = [...checks];
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(check => check.status === statusFilter);
-    }
-
-    if (flaggedOnly) {
-      filtered = filtered.filter(check => check.isFlagged);
-    }
-
-    setFilteredChecks(filtered);
-  };
-
   const handleApprove = async () => {
     if (!selectedCheck) return;
 
