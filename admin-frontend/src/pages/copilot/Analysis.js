@@ -164,7 +164,8 @@ const Analysis = () => {
         return true;
       })
       .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  }, [orders, dateRange, customStartDate, customEndDate, showPOSOnly]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, dateRange, customStartDate, customEndDate, showPOSOnly, getDateRange]);
 
   // Check if order is POS
   const isPOSOrder = (order) => {

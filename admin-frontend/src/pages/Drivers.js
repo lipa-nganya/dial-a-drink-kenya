@@ -70,7 +70,7 @@ const ShiftReportTab = () => {
 
   useEffect(() => {
     fetchShiftReport();
-  }, [dateRange, customStartDate, customEndDate]);
+  }, [dateRange, customStartDate, customEndDate, fetchShiftReport]);
 
   const getDateRange = (range) => {
     const now = new Date();

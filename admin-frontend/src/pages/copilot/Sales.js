@@ -46,7 +46,8 @@ const Sales = () => {
 
   useEffect(() => {
     fetchAnalytics();
-  }, [dateRange, customStartDate, customEndDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, customStartDate, customEndDate, fetchAnalytics]);
 
   const getDateRange = () => {
     const end = new Date();

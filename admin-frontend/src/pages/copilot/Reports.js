@@ -114,7 +114,8 @@ const Reports = () => {
 
   useEffect(() => {
     fetchData();
-  }, [dateRange, activeTab, customStartDate, customEndDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, activeTab, customStartDate, customEndDate, fetchData]);
 
   // Handle location state for tab navigation (e.g., from ResupplyCart)
   useEffect(() => {

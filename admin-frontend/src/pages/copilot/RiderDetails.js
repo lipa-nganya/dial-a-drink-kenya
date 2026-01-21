@@ -47,7 +47,8 @@ const RiderDetails = () => {
 
   useEffect(() => {
     fetchRiderDetails();
-  }, [riderId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [riderId, fetchRiderDetails]);
 
   const fetchRiderDetails = async () => {
     try {

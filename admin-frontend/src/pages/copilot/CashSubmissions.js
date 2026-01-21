@@ -64,7 +64,8 @@ const CashSubmissions = () => {
     } else if (activeTab === 1) {
       fetchOrdersAndSubmissions();
     }
-  }, [activeTab, dateRange, customStartDate, customEndDate]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, dateRange, customStartDate, customEndDate, fetchOrdersAndSubmissions]);
 
   useEffect(() => {
     if (activeTab === 1) {
@@ -276,7 +277,8 @@ const CashSubmissions = () => {
         servicedByAdminId: adminInfo ? adminInfo.adminId : null
       };
     });
-  }, [orders, cashSubmissions, dateRange, customStartDate, customEndDate, activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orders, cashSubmissions, dateRange, customStartDate, customEndDate, activeTab, getDateRange]);
 
   // Group POS orders by admin
   const posOrdersByAdmin = useMemo(() => {

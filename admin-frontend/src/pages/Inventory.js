@@ -107,7 +107,7 @@ const InventoryPage = () => {
   // Reset pagination when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
+  }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter, filterDrinks]);
 
   const fetchData = async () => {
     try {
