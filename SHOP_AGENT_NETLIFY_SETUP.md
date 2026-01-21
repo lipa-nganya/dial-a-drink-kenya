@@ -52,10 +52,12 @@ After the site is created:
 
 1. Go to **Site settings** → **Domain management**
 2. Click **"Add custom domain"**
-3. Enter: `dialadrink-stock.thewolfgang.tech`
+3. Enter: `shop-agent-thewolfgang.tech`
 4. Follow DNS configuration instructions:
    - Add CNAME record pointing to the Netlify site
    - Or configure DNS via your DNS provider (thewolfgang.tech)
+5. Wait for DNS propagation (usually 5-10 minutes)
+6. Netlify will automatically provision SSL certificate for the custom domain
 
 ## 📁 Repository Structure
 

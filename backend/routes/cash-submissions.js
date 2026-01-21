@@ -36,31 +36,53 @@ router.post('/admin/cash-submissions', async (req, res) => {
 
     // Validate details based on submission type
     console.log('   Details:', JSON.stringify(details, null, 2));
+    
+    // All submission types now support items array (multiple items with prices)
+    const hasItems = details?.items && Array.isArray(details.items) && details.items.length > 0;
+    
+    // Validate items array if provided (for all types)
+    if (hasItems) {
+      for (let i = 0; i < details.items.length; i++) {
+        const item = details.items[i];
+        if (!item.item || item.price === undefined || item.price === null || item.price <= 0) {
+          return sendError(res, `Item ${i + 1} is invalid. Each item must have a name and a valid price > 0`, 400);
+        }
+      }
+    }
+    
     if (submissionType === 'purchases') {
-      if (!details || !details.supplier || !details.item || details.price === undefined || details.price === null || !details.deliveryLocation) {
+      // Support both old format (single item) and new format (multiple items)
+      const hasSingleItem = details?.item && details?.price !== undefined && details?.price !== null;
+      
+      if (!details || !details.supplier || (!hasItems && !hasSingleItem) || !details.deliveryLocation) {
         console.log('❌ Missing required purchase fields:', {
           supplier: details?.supplier,
+          items: details?.items,
           item: details?.item,
           price: details?.price,
           deliveryLocation: details?.deliveryLocation
         });
-        return sendError(res, 'For purchases, supplier, item, price, and deliveryLocation are required', 400);
+        return sendError(res, 'For purchases, supplier, items (array) or item+price, and deliveryLocation are required', 400);
       }
     } else if (submissionType === 'cash') {
-      if (!details || !details.recipientName) {
-        console.log('❌ Missing recipientName for cash submission');
-        return sendError(res, 'For cash submissions, recipientName is required', 400);
+      // Cash submissions can have items array OR single recipientName (backward compatibility)
+      if (!hasItems && (!details || !details.recipientName)) {
+        console.log('❌ Missing recipientName or items for cash submission');
+        return sendError(res, 'For cash submissions, either items array or recipientName is required', 400);
       }
     } else if (submissionType === 'general_expense') {
-      if (!details || !details.nature) {
-        console.log('❌ Missing nature for general expense');
-        return sendError(res, 'For general expenses, nature is required', 400);
+      // General expense can have items array OR single nature (backward compatibility)
+      if (!hasItems && (!details || !details.nature)) {
+        console.log('❌ Missing nature or items for general expense');
+        return sendError(res, 'For general expenses, either items array or nature is required', 400);
       }
     } else if (submissionType === 'payment_to_office') {
+      // Payment to office requires accountType, and can have items array
       if (!details || !details.accountType || !['mpesa', 'till', 'bank', 'paybill', 'pdq'].includes(details.accountType)) {
         console.log('❌ Missing or invalid accountType for payment to office:', details?.accountType);
         return sendError(res, 'For payment to office, accountType must be one of: mpesa, till, bank, paybill, pdq', 400);
       }
+      // Items array is optional for payment_to_office
     } else if (submissionType === 'walk_in_sale') {
       // Walk-in sale doesn't require specific details, but can optionally include customer name or items
       // No validation needed as details are optional
@@ -234,31 +256,53 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
 
     // Validate details based on submission type
     console.log('   Details:', JSON.stringify(details, null, 2));
+    
+    // All submission types now support items array (multiple items with prices)
+    const hasItems = details?.items && Array.isArray(details.items) && details.items.length > 0;
+    
+    // Validate items array if provided (for all types)
+    if (hasItems) {
+      for (let i = 0; i < details.items.length; i++) {
+        const item = details.items[i];
+        if (!item.item || item.price === undefined || item.price === null || item.price <= 0) {
+          return sendError(res, `Item ${i + 1} is invalid. Each item must have a name and a valid price > 0`, 400);
+        }
+      }
+    }
+    
     if (submissionType === 'purchases') {
-      if (!details || !details.supplier || !details.item || details.price === undefined || details.price === null || !details.deliveryLocation) {
+      // Support both old format (single item) and new format (multiple items)
+      const hasSingleItem = details?.item && details?.price !== undefined && details?.price !== null;
+      
+      if (!details || !details.supplier || (!hasItems && !hasSingleItem) || !details.deliveryLocation) {
         console.log('❌ Missing required purchase fields:', {
           supplier: details?.supplier,
+          items: details?.items,
           item: details?.item,
           price: details?.price,
           deliveryLocation: details?.deliveryLocation
         });
-        return sendError(res, 'For purchases, supplier, item, price, and deliveryLocation are required', 400);
+        return sendError(res, 'For purchases, supplier, items (array) or item+price, and deliveryLocation are required', 400);
       }
     } else if (submissionType === 'cash') {
-      if (!details || !details.recipientName) {
-        console.log('❌ Missing recipientName for cash submission');
-        return sendError(res, 'For cash submissions, recipientName is required', 400);
+      // Cash submissions can have items array OR single recipientName (backward compatibility)
+      if (!hasItems && (!details || !details.recipientName)) {
+        console.log('❌ Missing recipientName or items for cash submission');
+        return sendError(res, 'For cash submissions, either items array or recipientName is required', 400);
       }
     } else if (submissionType === 'general_expense') {
-      if (!details || !details.nature) {
-        console.log('❌ Missing nature for general expense');
-        return sendError(res, 'For general expenses, nature is required', 400);
+      // General expense can have items array OR single nature (backward compatibility)
+      if (!hasItems && (!details || !details.nature)) {
+        console.log('❌ Missing nature or items for general expense');
+        return sendError(res, 'For general expenses, either items array or nature is required', 400);
       }
     } else if (submissionType === 'payment_to_office') {
+      // Payment to office requires accountType, and can have items array
       if (!details || !details.accountType || !['mpesa', 'till', 'bank', 'paybill', 'pdq'].includes(details.accountType)) {
         console.log('❌ Missing or invalid accountType for payment to office:', details?.accountType);
         return sendError(res, 'For payment to office, accountType must be one of: mpesa, till, bank, paybill, pdq', 400);
       }
+      // Items array is optional for payment_to_office
     } else if (submissionType === 'walk_in_sale') {
       // Walk-in sale doesn't require specific details, but can optionally include customer name or items
       // No validation needed as details are optional
@@ -270,13 +314,9 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       return sendError(res, 'Driver not found', 404);
     }
 
-    // Check if driver has enough cash at hand
-    const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+    // Allow negative cash at hand - driver can submit more than they have
+    // This allows drivers to go into negative balance (credit)
     const submissionAmount = parseFloat(amount);
-    
-    if (submissionAmount > currentCashAtHand) {
-      return sendError(res, `Amount exceeds cash at hand. Current cash at hand: KES ${currentCashAtHand.toFixed(2)}`, 400);
-    }
 
     // Create submission
     const submission = await db.CashSubmission.create({
@@ -421,12 +461,8 @@ router.patch('/:driverId/cash-submissions/:id', async (req, res) => {
         return sendError(res, 'Amount must be greater than 0', 400);
       }
       
-      // Check cash at hand
-      const driver = await db.Driver.findByPk(driverId);
-      const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-      if (newAmount > currentCashAtHand) {
-        return sendError(res, `Amount exceeds cash at hand. Current cash at hand: KES ${currentCashAtHand.toFixed(2)}`, 400);
-      }
+      // Allow negative cash at hand - driver can submit more than they have
+      // This allows drivers to go into negative balance (credit)
       updateData.amount = newAmount;
     }
     if (details !== undefined) {
@@ -505,7 +541,13 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
   try {
     const id = submissionId || req.params.id;
     const driverId = driverIdParam !== null ? driverIdParam : req.params.driverId;
-    const adminId = req.admin?.id;
+    
+    // Check if admin is authenticated
+    if (!req.admin || !req.admin.id) {
+      return sendError(res, 'Admin authentication required', 401);
+    }
+    
+    const adminId = req.admin.id;
     const adminRole = req.admin.role;
 
     // Check if user is admin or super_admin
@@ -567,7 +609,8 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
       if (driver) {
         const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
         const submissionAmount = parseFloat(submission.amount);
-        const newCashAtHand = Math.max(0, currentCashAtHand - submissionAmount);
+        // Allow negative cash at hand - drivers can go into negative balance (credit)
+        const newCashAtHand = currentCashAtHand - submissionAmount;
         
         await driver.update({ cashAtHand: newCashAtHand });
         console.log(`   Driver cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)}`);
@@ -693,7 +736,8 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
       if (driver) {
         const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
         const submissionAmount = parseFloat(submission.amount);
-        const newCashAtHand = Math.max(0, currentCashAtHand - submissionAmount);
+        // Allow negative cash at hand - drivers can go into negative balance (credit)
+        const newCashAtHand = currentCashAtHand - submissionAmount;
         responseData.newCashAtHand = newCashAtHand;
         responseData.previousCashAtHand = currentCashAtHand;
       }
@@ -718,7 +762,7 @@ router.post('/admin/cash-submissions/:id/approve', async (req, res) => {
  * Approve cash submission (admin or super_admin)
  * POST /api/driver-wallet/:driverId/cash-submissions/:id/approve
  */
-router.post('/:driverId/cash-submissions/:id/approve', async (req, res) => {
+router.post('/:driverId/cash-submissions/:id/approve', verifyAdmin, async (req, res) => {
   return handleApproveSubmission(req, res);
 });
 
@@ -728,8 +772,14 @@ const handleRejectSubmission = async (req, res, submissionId, driverIdParam = nu
     const id = submissionId || req.params.id;
     const driverId = driverIdParam !== null ? driverIdParam : req.params.driverId;
     const { rejectionReason } = req.body;
-    const adminId = req.admin?.id;
-    const adminRole = req.admin?.role;
+    
+    // Check if admin is authenticated
+    if (!req.admin || !req.admin.id) {
+      return sendError(res, 'Admin authentication required', 401);
+    }
+    
+    const adminId = req.admin.id;
+    const adminRole = req.admin.role;
 
     // Check if user is admin or super_admin
     if (adminRole !== 'super_admin' && adminRole !== 'admin') {
@@ -829,7 +879,7 @@ router.post('/admin/cash-submissions/:id/reject', async (req, res) => {
  * Reject cash submission (admin or super_admin)
  * POST /api/driver-wallet/:driverId/cash-submissions/:id/reject
  */
-router.post('/:driverId/cash-submissions/:id/reject', async (req, res) => {
+router.post('/:driverId/cash-submissions/:id/reject', verifyAdmin, async (req, res) => {
   return handleRejectSubmission(req, res);
 });
 

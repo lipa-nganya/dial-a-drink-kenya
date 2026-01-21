@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/titleText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/login"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="80dp" />
+
+    <TextView
+        android:id="@+id/phoneText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textColor="@color/text_secondary_dark"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/titleText"
+        android:layout_marginTop="8dp" />
+
+    <EditText
+        android:id="@+id/pinEditText"
+        android:layout_width="200dp"
+        android:layout_height="60dp"
+        android:background="@drawable/pin_input_background"
+        android:hint="0000"
+        android:textColor="@color/accent"
+        android:textColorHint="#666666"
+        android:textSize="32sp"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:inputType="numberPassword"
+        android:maxLength="4"
+        android:letterSpacing="0.3"
+        android:padding="12dp"
+        android:textAlignment="center"
+        android:cursorVisible="true"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/phoneText"
+        android:layout_marginTop="40dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/loginButton"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:text="@string/login"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:backgroundTint="@color/accent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/pinEditText"
+        android:layout_marginTop="32dp" />
+
+    <ProgressBar
+        android:id="@+id/loadingProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/loginButton"
+        android:layout_marginTop="24dp" />
+
+    <TextView
+        android:id="@+id/errorText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:textColor="#FF6B6B"
+        android:textSize="14sp"
+        android:visibility="gone"
+        android:gravity="center"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/loadingProgress"
+        android:layout_marginTop="16dp" />
+
+    <TextView
+        android:id="@+id/forgotPinText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Forgot PIN?"
+        android:textColor="@color/accent"
+        android:textSize="16sp"
+        android:padding="12dp"
+        android:clickable="true"
+        android:focusable="true"
+        android:background="?attr/selectableItemBackground"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/errorText"
+        android:layout_marginTop="24dp" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+

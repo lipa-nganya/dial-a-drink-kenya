@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark">
+
+    <com.google.android.material.appbar.AppBarLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:background="@color/paper_dark"
+            app:title="Order Details"
+            app:titleTextColor="@color/accent"
+            app:navigationIcon="@android:drawable/ic_menu_revert"
+            app:navigationIconTint="@color/accent" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior"
+        android:padding="16dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+
+        <TextView
+            android:id="@+id/orderNumberText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Order #123"
+            android:textColor="@color/accent"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <TextView
+            android:id="@+id/customerNameText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Customer Name"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/orderNumberText" />
+
+        <LinearLayout
+            android:id="@+id/customerPhoneContainer"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/customerNameText">
+
+            <TextView
+                android:id="@+id/customerPhoneText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Phone"
+                android:textColor="@color/text_secondary_dark"
+                android:textSize="14sp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/callCustomerButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:text="Call"
+                android:textSize="12sp"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                app:icon="@android:drawable/ic_menu_call"
+                app:iconSize="16dp"
+                app:iconGravity="textStart"
+                app:iconPadding="4dp" />
+
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/branchText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Branch Location"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/customerPhoneContainer" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/navigateToBranchButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginTop="8dp"
+            android:text="Navigate to Branch"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:visibility="gone"
+            app:icon="@android:drawable/ic_menu_mylocation"
+            app:iconSize="16dp"
+            app:iconGravity="textStart"
+            app:iconPadding="4dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/branchText"
+            app:layout_goneMarginTop="16dp" />
+
+        <TextView
+            android:id="@+id/addressText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Delivery Address"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/customerPhoneContainer" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/navigateToCustomerButton"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginTop="8dp"
+            android:text="Navigate to Customer"
+            android:textSize="12sp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            app:icon="@android:drawable/ic_menu_mylocation"
+            app:iconSize="16dp"
+            app:iconGravity="textStart"
+            app:iconPadding="4dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/addressText" />
+
+        <TextView
+            android:id="@+id/itemsText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Items"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="14sp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/navigateToCustomerButton" />
+
+        <TextView
+            android:id="@+id/totalAmountText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="KES 1,500"
+            android:textColor="@color/accent"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/itemsText" />
+
+        <TextView
+            android:id="@+id/paymentDetailsText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Payment: Cash"
+            android:textColor="@color/text_secondary_dark"
+            android:textSize="12sp"
+            android:maxLines="4"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/totalAmountText" />
+
+        <FrameLayout
+            android:id="@+id/statusBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/paymentDetailsText"
+            app:layout_goneMarginTop="16dp">
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PENDING"
+                android:textColor="#F5F5F5"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+        </FrameLayout>
+
+        <FrameLayout
+            android:id="@+id/paymentStatusBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="4dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="@id/statusBadge">
+
+            <TextView
+                android:id="@+id/paymentStatusText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="UNPAID"
+                android:textColor="#F5F5F5"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+        </FrameLayout>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/prepareButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="24dp"
+            android:text="Mark as Preparing"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/accent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/statusBadge"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/outForDeliveryButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Out for Delivery"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/accent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/prepareButton"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/receivedCashButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Initiate Payment"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="#4CAF50"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/outForDeliveryButton"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/deliveredButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Mark as Delivered"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/accent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/receivedCashButton"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/creditLimitWarningText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:text="Please clear your cash at hand to update orders"
+            android:textColor="@color/status_pending"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/deliveredButton" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/cancelOrderButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="12dp"
+            android:text="Request Cancellation"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="@color/status_cancelled"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/creditLimitWarningText"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/cancellationStatusText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            android:text="Cancellation requested - waiting for admin approval"
+            android:textColor="@color/status_pending"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/deliveredButton" />
+
+        <ProgressBar
+            android:id="@+id/loadingProgress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    </androidx.core.widget.NestedScrollView>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+

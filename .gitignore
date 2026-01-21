@@ -101,3 +101,10 @@ Thumbs.db
 
 # Local Netlify folder
 .netlify
+
+# PesaPal Configuration
+PESAPAL_CONSUMER_KEY=UDLDp9yShy4g0aLPNhT+2kZSX3L+KdsF
+PESAPAL_CONSUMER_SECRET=XeRwDyreZTPde0H3AWlIiStXZD8=
+PESAPAL_ENVIRONMENT=sandbox  # or 'live' for production
+PESAPAL_IPN_CALLBACK_URL=https://your-backend-url/api/pesapal/ipn  # Optional, auto-detected
+PESAPAL_REDIRECT_URL=https://your-frontend-url  # Optional, auto-detected

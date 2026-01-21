@@ -103,6 +103,18 @@ async function loadFullApplication() {
     
     // Initialize Socket.IO
     const { Server } = require('socket.io');
+    // Always include localhost origins for Socket.IO, regardless of env vars
+    const socketAllowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'http://localhost:3003',
+      'http://localhost:8080',
+      process.env.FRONTEND_URL,
+      process.env.ADMIN_URL,
+      process.env.ZEUS_URL,
+    ].filter(Boolean);
+
     const io = new Server(server, {
       cors: {
         origin: (origin, callback) => {
@@ -112,11 +124,7 @@ async function loadFullApplication() {
           }
           
           const allowedOrigins = [
-            process.env.FRONTEND_URL || 'http://localhost:3000',
-            process.env.ADMIN_URL || 'http://localhost:3001',
-            process.env.ZEUS_URL || 'http://localhost:3003',
-            'http://localhost:3002',
-            'http://localhost:8080', // Wolfgang website
+            ...socketAllowedOrigins,
             'https://drink-suite-customer-910510650031.us-central1.run.app',
             'https://drink-suite-admin-910510650031.us-central1.run.app',
             'https://dialadrink-customer-p6bkgryxqa-uc.a.run.app',
@@ -124,7 +132,7 @@ async function loadFullApplication() {
             'https://dialadrink-customer-910510650031.us-central1.run.app',
             'https://dialadrink-admin-910510650031.us-central1.run.app',
             'https://dialadrink-backend-910510650031.us-central1.run.app',
-            'https://deliveryos-backend-910510650031.us-central1.run.app',
+            'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
             // Note: Frontends are on Netlify, not Cloud Run
             // Customer: https://dialadrink.thewolfgang.tech (already in Netlify URLs below)
             // Admin: https://dialadrink-admin.thewolfgang.tech (already in Netlify URLs below)

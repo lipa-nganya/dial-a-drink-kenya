@@ -74,11 +74,20 @@ router.get('/:key', async (req, res) => {
       if (key === 'deliveryTestMode') {
         return res.json({ key: 'deliveryTestMode', value: 'false' });
       }
+      if (key === 'deliveryFeeMode') {
+        return res.json({ key: 'deliveryFeeMode', value: 'fixed' });
+      }
       if (key === 'deliveryFeeWithAlcohol') {
         return res.json({ key: 'deliveryFeeWithAlcohol', value: '50' });
       }
       if (key === 'deliveryFeeWithoutAlcohol') {
         return res.json({ key: 'deliveryFeeWithoutAlcohol', value: '30' });
+      }
+      if (key === 'deliveryFeePerKmWithAlcohol') {
+        return res.json({ key: 'deliveryFeePerKmWithAlcohol', value: '20' });
+      }
+      if (key === 'deliveryFeePerKmWithoutAlcohol') {
+        return res.json({ key: 'deliveryFeePerKmWithoutAlcohol', value: '15' });
       }
       if (key === 'maxTipEnabled') {
         return res.json({ key: 'maxTipEnabled', value: 'false' });
@@ -86,8 +95,14 @@ router.get('/:key', async (req, res) => {
       if (key === 'driverPayPerDeliveryEnabled') {
         return res.json({ key: 'driverPayPerDeliveryEnabled', value: 'false' });
       }
+      if (key === 'driverPayPerDeliveryMode') {
+        return res.json({ key: 'driverPayPerDeliveryMode', value: 'amount' });
+      }
       if (key === 'driverPayPerDeliveryAmount') {
         return res.json({ key: 'driverPayPerDeliveryAmount', value: '0' });
+      }
+      if (key === 'driverPayPerDeliveryPercentage') {
+        return res.json({ key: 'driverPayPerDeliveryPercentage', value: '30' });
       }
       if (key === 'stockAlertQuantity') {
         return res.json({ key: 'stockAlertQuantity', value: '10' });

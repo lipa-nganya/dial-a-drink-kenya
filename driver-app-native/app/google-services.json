@@ -1,0 +1,67 @@
+{
+  "project_info": {
+    "project_number": "910510650031",
+    "project_id": "drink-suite",
+    "storage_bucket": "drink-suite.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:910510650031:android:0ec4f3b7a943c434441a5a",
+        "android_client_info": {
+          "package_name": "com.dialadrink.driver"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCEDZO1Sd299Fs4Uvxw5fONX756gKue_Mw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:910510650031:android:0ec4f3b7a943c434441a5a",
+        "android_client_info": {
+          "package_name": "com.dialadrink.driver.local"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCEDZO1Sd299Fs4Uvxw5fONX756gKue_Mw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:910510650031:android:0ec4f3b7a943c434441a5a",
+        "android_client_info": {
+          "package_name": "com.dialadrink.driver.dev"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCEDZO1Sd299Fs4Uvxw5fONX756gKue_Mw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

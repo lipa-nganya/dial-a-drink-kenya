@@ -20,7 +20,7 @@ module.exports = (sequelize, DataTypes) => {
       unique: true
     },
     role: {
-      type: DataTypes.ENUM('admin', 'manager'),
+      type: DataTypes.ENUM('admin', 'manager', 'shop_agent', 'super_admin'),
       allowNull: false,
       defaultValue: 'manager'
     },
@@ -31,6 +31,26 @@ module.exports = (sequelize, DataTypes) => {
     inviteTokenExpiry: {
       type: DataTypes.DATE,
       allowNull: true
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Full name for shop agents'
+    },
+    mobileNumber: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Mobile number for shop agents'
+    },
+    pinHash: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'Hashed PIN for shop agents'
+    },
+    hasSetPin: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Whether shop agent has set their PIN'
     }
   }, {
     tableName: 'admins',

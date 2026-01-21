@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/titleText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🚨 New Order Assigned!"
+        android:textColor="@color/accent"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        android:layout_marginTop="80dp" />
+
+    <TextView
+        android:id="@+id/orderNumberText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Order #123"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/titleText"
+        android:layout_marginTop="32dp" />
+
+    <TextView
+        android:id="@+id/customerNameText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Customer Name"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/orderNumberText"
+        android:layout_marginTop="24dp" />
+
+    <TextView
+        android:id="@+id/addressText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:text="Delivery Address"
+        android:textColor="@color/text_secondary_dark"
+        android:textSize="16sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/customerNameText"
+        android:layout_marginTop="16dp" />
+
+    <TextView
+        android:id="@+id/amountText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="KES 1,500"
+        android:textColor="@color/accent"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/addressText"
+        android:layout_marginTop="24dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/acceptButton"
+        android:layout_width="0dp"
+        android:layout_height="64dp"
+        android:text="Accept Order"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:backgroundTint="#4CAF50"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/amountText"
+        android:layout_marginTop="48dp" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/rejectButton"
+        android:layout_width="0dp"
+        android:layout_height="64dp"
+        android:text="Reject"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        app:backgroundTint="#F44336"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/acceptButton"
+        android:layout_marginTop="16dp" />
+
+    <ProgressBar
+        android:id="@+id/loadingProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
+
+

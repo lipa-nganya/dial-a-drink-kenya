@@ -6,6 +6,7 @@ import './Dashboard.css';
 const InventoryCheckHistory = () => {
   const navigate = useNavigate();
   const [checks, setChecks] = useState([]);
+  const [pendingChecks, setPendingChecks] = useState([]);
   const [approvedChecks, setApprovedChecks] = useState([]);
   const [rejectedChecks, setRejectedChecks] = useState([]);
   const [activeTab, setActiveTab] = useState('approved');
@@ -19,8 +20,10 @@ const InventoryCheckHistory = () => {
   }, []);
 
   useEffect(() => {
+    const pending = checks.filter(c => c.status === 'pending');
     const approved = checks.filter(c => c.status === 'approved');
     const rejected = checks.filter(c => c.status === 'recount_requested');
+    setPendingChecks(pending);
     setApprovedChecks(approved);
     setRejectedChecks(rejected);
   }, [checks]);
@@ -114,6 +117,21 @@ const InventoryCheckHistory = () => {
         {/* Tabs */}
         <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', borderBottom: '1px solid #333' }}>
           <button
+            onClick={() => setActiveTab('pending')}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: activeTab === 'pending' ? '#FFA500' : 'transparent',
+              color: activeTab === 'pending' ? '#0D0D0D' : '#F5F5F5',
+              border: 'none',
+              borderBottom: activeTab === 'pending' ? '2px solid #FFA500' : '2px solid transparent',
+              cursor: 'pointer',
+              fontSize: '16px',
+              fontWeight: activeTab === 'pending' ? 'bold' : 'normal'
+            }}
+          >
+            Pending ({pendingChecks.length})
+          </button>
+          <button
             onClick={() => setActiveTab('approved')}
             style={{
               padding: '12px 24px',
@@ -144,6 +162,44 @@ const InventoryCheckHistory = () => {
             Rejected ({rejectedChecks.length})
           </button>
         </div>
+
+        {/* Pending Tab */}
+        {activeTab === 'pending' && (
+          <div className="info-card">
+            {pendingChecks.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px', color: '#B0B0B0' }}>
+                <p>No pending inventory checks. All your submissions have been reviewed.</p>
+              </div>
+            ) : (
+              <div style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#121212', color: '#F5F5F5' }}>
+                  <thead>
+                    <tr style={{ background: '#1a1a1a', position: 'sticky', top: 0 }}>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #333', color: '#FFA500', fontWeight: 'bold' }}>Item Name</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #333', color: '#FFA500', fontWeight: 'bold' }}>Category</th>
+                      <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #333', color: '#FFA500', fontWeight: 'bold' }}>Your Count</th>
+                      <th style={{ padding: '12px', textAlign: 'center', borderBottom: '2px solid #333', color: '#FFA500', fontWeight: 'bold' }}>Database Count</th>
+                      <th style={{ padding: '12px', textAlign: 'left', borderBottom: '2px solid #333', color: '#FFA500', fontWeight: 'bold' }}>Submitted Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingChecks.map(check => (
+                      <tr key={check.id} style={{ borderBottom: '1px solid #333' }}>
+                        <td style={{ padding: '12px', color: '#F5F5F5' }}>{check.drink?.name || 'Unknown'}</td>
+                        <td style={{ padding: '12px', color: '#B0B0B0' }}>{check.drink?.category?.name || 'N/A'}</td>
+                        <td style={{ padding: '12px', textAlign: 'center', color: '#F5F5F5', fontWeight: 'bold' }}>{check.agentCount}</td>
+                        <td style={{ padding: '12px', textAlign: 'center', color: '#B0B0B0' }}>{check.databaseCount}</td>
+                        <td style={{ padding: '12px', color: '#B0B0B0' }}>
+                          {new Date(check.createdAt).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Approved Tab */}
         {activeTab === 'approved' && (

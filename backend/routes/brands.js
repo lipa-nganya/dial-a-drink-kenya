@@ -1,12 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const brandScraper = require('../services/brandScraper');
 
 // Get all brands
 router.get('/', async (req, res) => {
   try {
     const brands = await db.Brand.findAll({
       where: { isActive: true },
+      attributes: ['id', 'name', 'description', 'isActive', 'createdAt', 'updatedAt'],
       order: [['name', 'ASC']]
     });
 
@@ -25,15 +27,20 @@ router.get('/all', async (req, res) => {
     console.log(`[Brands API] Total brands in database: ${brandCount}`);
     
     const brands = await db.Brand.findAll({
+      attributes: ['id', 'name', 'description', 'isActive', 'createdAt', 'updatedAt'], // Explicitly select attributes
       order: [['name', 'ASC']]
     });
 
     console.log(`[Brands API] Found ${brands.length} brands, returning to client`);
-    res.json(brands);
+    if (!res.headersSent) {
+      res.json(brands);
+    }
   } catch (error) {
     console.error('Error fetching all brands:', error);
     console.error('Error stack:', error.stack);
-    res.status(500).json({ error: 'Failed to fetch brands' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to fetch brands' });
+    }
   }
 });
 
@@ -115,6 +122,25 @@ router.put('/:id', async (req, res) => {
   } catch (error) {
     console.error('Error updating brand:', error);
     res.status(500).json({ error: 'Failed to update brand' });
+  }
+});
+
+// Scrape brands from dialadrinkkenya.com
+router.post('/scrape', async (req, res) => {
+  try {
+    console.log('📥 Brand scraping request received');
+    const result = await brandScraper.syncBrandsFromWebsite();
+    res.json({
+      success: true,
+      message: `Brand scraping complete: ${result.created} created, ${result.updated} updated`,
+      ...result
+    });
+  } catch (error) {
+    console.error('Error scraping brands:', error);
+    res.status(500).json({ 
+      error: 'Failed to scrape brands',
+      message: error.message 
+    });
   }
 });
 

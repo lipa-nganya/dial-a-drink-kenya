@@ -92,6 +92,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: true,
       defaultValue: 0
+    },
+    purchasePrice: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      comment: 'Purchase/cost price of the inventory item'
     }
   }, {
     tableName: 'drinks',

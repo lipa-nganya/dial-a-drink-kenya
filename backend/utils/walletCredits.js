@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('./orderFinancials');
 const pushNotifications = require('../services/pushNotifications');
 const { getOrCreateHoldDriver } = require('./holdDriver');
+const { calculateDeliveryAccounting } = require('./deliveryAccounting');
 
 // In-memory lock to prevent concurrent execution for the same order
 // This prevents race conditions where multiple calls create duplicate transactions
@@ -236,6 +237,21 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     // Use the MAXIMUM of all sources - this ensures we never miss a tip
     const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrder);
     
+    // Calculate delivery accounting using the new logic
+    const paymentType = order.paymentType || 'pay_on_delivery';
+    const paymentTypeForAccounting = paymentType === 'pay_now' ? 'PAY_NOW' : 'PAY_ON_DELIVERY';
+    
+    // Calculate delivery accounting values (alcoholCost = itemsTotal)
+    const accounting = calculateDeliveryAccounting(itemsTotal, deliveryFee, paymentTypeForAccounting);
+    console.log(`📊 Delivery Accounting for Order #${orderId}:`);
+    console.log(`   Payment Type: ${paymentTypeForAccounting}`);
+    console.log(`   Alcohol Cost: KES ${itemsTotal.toFixed(2)}`);
+    console.log(`   Delivery Fee: KES ${deliveryFee.toFixed(2)}`);
+    console.log(`   Withheld Amount: KES ${accounting.withheldAmount.toFixed(2)}`);
+    console.log(`   Immediate Driver Earnings: KES ${accounting.immediateDriverEarnings.toFixed(2)}`);
+    console.log(`   Cash at Hand Change: KES ${accounting.cashAtHandChange.toFixed(2)}`);
+    console.log(`   Savings Change: KES ${accounting.savingsChange.toFixed(2)}`);
+    
     // ALWAYS log tip detection for debugging
     console.log(`💰 Tip detection for Order #${orderId}:`);
     console.log(`   Breakdown tipAmount: KES ${tipAmountFromBreakdown.toFixed(2)}`);
@@ -246,25 +262,52 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     console.log(`   orderTipAmountAfterReload: KES ${orderTipAmountAfterReload.toFixed(2)}`);
 
     // Get driver pay settings
-    const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+    const [driverPayEnabledSetting, driverPayModeSetting, driverPayAmountSetting, driverPayPercentageSetting] = await Promise.all([
       db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryMode' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null),
+      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryPercentage' } }).catch(() => null)
     ]);
-
+    
     const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
+    const driverPayMode = driverPayModeSetting?.value || 'amount';
+    const isPercentageMode = driverPayMode === 'percentage';
     const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
+    const configuredDriverPayPercentage = parseFloat(driverPayPercentageSetting?.value || '30');
     
     // Calculate driver pay amount
     let driverPayAmount = 0;
-    if (driverPaySettingEnabled && order.driverId) {
-      driverPayAmount = parseFloat(order.driverPayAmount || '0');
-      
-      if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPayAmount > 0) {
-        driverPayAmount = Math.min(deliveryFee, configuredDriverPayAmount);
-      }
-      
-      if (driverPayAmount > deliveryFee) {
-        driverPayAmount = deliveryFee;
+    if (order.driverId) {
+      const deliveryFeeAmount = parseFloat(deliveryFee) || 0;
+
+      if (paymentTypeForAccounting === 'PAY_NOW') {
+        // For PAY_NOW orders:
+        // - Customer pays the business
+        // - Business holds 100% of the delivery fee
+        // - Business must then credit 50% of the delivery fee to the driver's wallet
+        //   and withhold 50% to savings (already handled by deliveryAccounting)
+        //
+        // So for wallet crediting, we ALWAYS use exactly 50% of the delivery fee
+        // as the driver's delivery pay amount, regardless of admin settings.
+        driverPayAmount = deliveryFeeAmount * 0.5;
+      } else if (driverPaySettingEnabled) {
+        // For PAY_ON_DELIVERY orders, respect the admin-configured driver pay
+        if (isPercentageMode) {
+          // Percentage mode: calculate driver pay as percentage of delivery fee
+          driverPayAmount = deliveryFeeAmount * (configuredDriverPayPercentage / 100);
+          driverPayAmount = Math.min(driverPayAmount, deliveryFeeAmount);
+        } else {
+          // Amount mode: use fixed amount
+          driverPayAmount = parseFloat(order.driverPayAmount || '0');
+          
+          if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPayAmount > 0) {
+            driverPayAmount = Math.min(deliveryFeeAmount, configuredDriverPayAmount);
+          }
+          
+          if (driverPayAmount > deliveryFeeAmount) {
+            driverPayAmount = deliveryFeeAmount;
+          }
+        }
       }
     }
     
@@ -428,7 +471,8 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             totalTipsReceived: 0,
             totalTipsCount: 0,
             totalDeliveryPay: 0,
-            totalDeliveryPayCount: 0
+            totalDeliveryPayCount: 0,
+            savings: 0
           }, { transaction: dbTransaction });
         }
 
@@ -437,6 +481,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         const oldDeliveryPayCount = driverWallet.totalDeliveryPayCount || 0;
         const oldTotalTipsReceived = parseFloat(driverWallet.totalTipsReceived || 0);
         const oldTipsCount = driverWallet.totalTipsCount || 0;
+        const oldSavings = parseFloat(driverWallet.savings || 0);
 
         // Credit delivery fee (driver share)
         // CRITICAL: Only create/update driver delivery transaction if effectiveDriverPayAmount > 0
@@ -651,6 +696,61 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           console.log(`⚠️  SKIPPING tip crediting for Order #${orderId} - effectiveTipAmount (${effectiveTipAmount.toFixed(2)}) is too small`);
         }
 
+        // Update savings and cash at hand based on delivery accounting
+        await driverWallet.reload({ transaction: dbTransaction });
+        let newSavings = oldSavings + accounting.savingsChange;
+        
+        // Deduct stop amount from driver savings if order is a stop
+        if (order.isStop && order.stopDeductionAmount && order.stopDeductionAmount > 0) {
+          const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
+          const savingsBeforeStop = newSavings;
+          newSavings = Math.max(0, newSavings - stopDeductionAmount);
+          
+          console.log(`🛑 Stop deduction applied for Order #${orderId}:`);
+          console.log(`   Deduction amount: KES ${stopDeductionAmount.toFixed(2)}`);
+          console.log(`   Driver savings before stop: KES ${savingsBeforeStop.toFixed(2)}`);
+          console.log(`   Driver savings after stop: KES ${newSavings.toFixed(2)}`);
+          
+          // Create transaction record for stop deduction
+          await db.Transaction.create({
+            orderId: orderId,
+            transactionType: 'delivery_fee_debit', // Using existing transaction type
+            paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'cash',
+            paymentProvider: 'stop_deduction',
+            amount: -stopDeductionAmount, // Negative amount for deduction
+            status: 'completed',
+            paymentStatus: 'paid',
+            driverId: order.driverId,
+            driverWalletId: driverWallet.id,
+            notes: `Stop deduction for Order #${orderId} - KES ${stopDeductionAmount.toFixed(2)} deducted from driver savings`
+          }, { transaction: dbTransaction });
+          
+          console.log(`✅ Stop deduction transaction created for Order #${orderId}`);
+        }
+        
+        // Update driver wallet savings
+        await driverWallet.update({
+          savings: newSavings
+        }, { transaction: dbTransaction });
+        
+        console.log(`💰 Updated driver savings for Order #${orderId}:`);
+        console.log(`   Savings: KES ${oldSavings.toFixed(2)} → KES ${newSavings.toFixed(2)} (change: ${accounting.savingsChange >= 0 ? '+' : ''}${accounting.savingsChange.toFixed(2)}${order.isStop && order.stopDeductionAmount ? `, stop deduction: -${parseFloat(order.stopDeductionAmount).toFixed(2)}` : ''})`);
+        
+        // Update driver's cash at hand
+        const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction }).catch(() => null);
+        if (driver) {
+          const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+          // Allow negative cash at hand - drivers can go into negative balance (credit)
+          const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange;
+          
+          await driver.update({
+            cashAtHand: newCashAtHand
+          }, { transaction: dbTransaction });
+          
+          console.log(`💵 Updated driver cash at hand for Order #${orderId}:`);
+          console.log(`   Cash at Hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (change: ${accounting.cashAtHandChange >= 0 ? '+' : ''}${accounting.cashAtHandChange.toFixed(2)})`);
+        }
+        
         await driverWallet.reload({ transaction: dbTransaction });
 
         console.log(`✅ Credited driver wallet for Order #${orderId}:`);
@@ -660,9 +760,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         console.log(`   Final wallet balance: ${parseFloat(driverWallet.balance).toFixed(2)}`);
         console.log(`   Total delivery pay: ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
         console.log(`   Total tips received: ${parseFloat(driverWallet.totalTipsReceived).toFixed(2)}`);
+        console.log(`   Savings: ${parseFloat(driverWallet.savings || 0).toFixed(2)}`);
 
         // Send notifications
-        const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction }).catch(() => null);
         const io = req?.app?.get('io');
         
         if (io) {
@@ -725,6 +825,57 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
       console.log(`   effectiveTipAmount: ${effectiveTipAmount.toFixed(2)}`);
       console.log(`   tipAmount: ${tipAmount.toFixed(2)}`);
       console.log(`   orderTipAmount: ${orderTipAmount.toFixed(2)}`);
+      
+      // Even if we skip wallet crediting, we still need to update savings and cash at hand
+      if (order.driverId) {
+        try {
+          let driverWallet = await db.DriverWallet.findOne({ 
+            where: { driverId: order.driverId },
+            transaction: dbTransaction
+          });
+          
+          if (!driverWallet) {
+            driverWallet = await db.DriverWallet.create({
+              driverId: order.driverId,
+              balance: 0,
+              totalTipsReceived: 0,
+              totalTipsCount: 0,
+              totalDeliveryPay: 0,
+              totalDeliveryPayCount: 0,
+              savings: 0
+            }, { transaction: dbTransaction });
+          }
+          
+          const oldSavings = parseFloat(driverWallet.savings || 0);
+          const newSavings = oldSavings + accounting.savingsChange;
+          
+          // Update driver wallet savings
+          await driverWallet.update({
+            savings: newSavings
+          }, { transaction: dbTransaction });
+          
+          console.log(`💰 Updated driver savings for Order #${orderId} (no wallet crediting):`);
+          console.log(`   Savings: KES ${oldSavings.toFixed(2)} → KES ${newSavings.toFixed(2)} (change: +${accounting.savingsChange.toFixed(2)})`);
+          
+          // Update driver's cash at hand
+          const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction }).catch(() => null);
+          if (driver) {
+            const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+            // Allow negative cash at hand - drivers can go into negative balance (credit)
+          const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange;
+            
+            await driver.update({
+              cashAtHand: newCashAtHand
+            }, { transaction: dbTransaction });
+            
+            console.log(`💵 Updated driver cash at hand for Order #${orderId} (no wallet crediting):`);
+            console.log(`   Cash at Hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (change: ${accounting.cashAtHandChange >= 0 ? '+' : ''}${accounting.cashAtHandChange.toFixed(2)})`);
+          }
+        } catch (accountingError) {
+          console.error(`❌ Error updating savings/cashAtHand for Order #${orderId}:`, accountingError);
+          // Don't throw - allow function to complete even if accounting update fails
+        }
+      }
     }
 
     // Note: We don't mark order with a flag since Order model doesn't have walletsCredited field

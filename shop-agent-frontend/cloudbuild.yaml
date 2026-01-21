@@ -1,0 +1,55 @@
+# Cloud Build configuration for Shop Agent Frontend
+# This file enables automatic deployments from GitHub to Cloud Run
+
+steps:
+  # Build the container image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/dialadrink-shop-agent:$SHORT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/dialadrink-shop-agent:latest'
+      - '--build-arg'
+      - 'REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api'
+      - '.'
+
+  # Push the container image to Container Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/dialadrink-shop-agent:$SHORT_SHA'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/dialadrink-shop-agent:latest'
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'deliveryos-shop-agent'
+      - '--image'
+      - 'gcr.io/$PROJECT_ID/dialadrink-shop-agent:$SHORT_SHA'
+      - '--region'
+      - 'us-central1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+      - '--memory'
+      - '256Mi'
+      - '--set-env-vars'
+      - 'REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api'
+
+images:
+  - 'gcr.io/$PROJECT_ID/dialadrink-shop-agent:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/dialadrink-shop-agent:latest'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '1200s'

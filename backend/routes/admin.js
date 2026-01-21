@@ -1418,12 +1418,13 @@ router.patch('/orders/:id/cancellation-request', verifyAdmin, async (req, res) =
 
     if (approved) {
       // Approve cancellation - mark order as cancelled
+      // Note: paymentStatus enum only allows 'pending', 'paid', 'unpaid' - don't set to 'cancelled'
       await order.update({
         cancellationApproved: true,
         cancellationApprovedAt: now,
         cancellationApprovedBy: adminId,
-        status: 'cancelled',
-        paymentStatus: 'cancelled'
+        status: 'cancelled'
+        // Keep paymentStatus as is - don't change it to 'cancelled' as it's not a valid enum value
       });
 
       // Add note
@@ -1474,12 +1475,15 @@ router.patch('/orders/:id/cancellation-request', verifyAdmin, async (req, res) =
         }
       }
     } else {
-      // Reject cancellation - keep order active
+      // Reject cancellation - keep order active, unassign driver, set status to confirmed
       await order.update({
         cancellationApproved: false,
         cancellationApprovedAt: now,
         cancellationApprovedBy: adminId,
-        cancellationRequested: false // Reset cancellation request
+        cancellationRequested: false, // Reset cancellation request
+        status: 'confirmed', // Set to confirmed so admin can reassign driver
+        driverId: null, // Unassign driver
+        driverAccepted: null // Reset driver acceptance
       });
 
       // Add note
@@ -1684,8 +1688,20 @@ router.post('/orders/:id/prompt-payment', verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Order is already paid' });
     }
 
+    // Get phone number - use request body if provided (for walk-in orders), otherwise use order customerPhone
+    let customerPhone = req.body.customerPhone || order.customerPhone;
+    
+    // For walk-in orders, customerPhone might be 'POS', so require it in request body
+    if ((!customerPhone || customerPhone === 'POS') && !req.body.customerPhone) {
+      return res.status(400).json({ error: 'Customer phone number is required for payment prompt' });
+    }
+    
+    // Use the phone number from request body if provided
+    if (req.body.customerPhone) {
+      customerPhone = req.body.customerPhone;
+    }
+    
     // Format phone number
-    const customerPhone = order.customerPhone;
     const cleanedPhone = customerPhone.replace(/\D/g, '');
     let formattedPhone = cleanedPhone;
     
@@ -1697,12 +1713,25 @@ router.post('/orders/:id/prompt-payment', verifyAdmin, async (req, res) => {
 
     // Initiate STK push
     const amount = parseFloat(order.totalAmount);
+    console.log(`🚀 Admin initiating STK Push for Order #${order.id}:`, {
+      phone: formattedPhone,
+      amount: amount,
+      orderId: order.id
+    });
+    
     const stkResult = await mpesaService.initiateSTKPush(
       formattedPhone,
       amount,
       order.id,
       `Payment for order #${order.id}`
     );
+
+    console.log(`📋 STK Push result for Order #${order.id}:`, {
+      success: stkResult.success,
+      responseCode: stkResult.responseCode,
+      checkoutRequestID: stkResult.checkoutRequestID,
+      error: stkResult.error
+    });
 
     // Check if STK push was initiated successfully
     if (stkResult.success || stkResult.checkoutRequestID || stkResult.CheckoutRequestID) {
@@ -2015,10 +2044,13 @@ router.patch('/orders/:id/driver', async (req, res) => {
 
     // Update driver assignment
     // If assigning a driver (new or reassigning), reset driverAccepted to null so it appears as pending
+    // Also set order status to 'confirmed' when admin assigns a driver (regardless of payment status)
     const updateData = { driverId: newDriverId };
     if (newDriverId) {
       // Always reset driverAccepted when assigning/reassigning a driver
       updateData.driverAccepted = null;
+      // Always set status to 'confirmed' when admin assigns driver, regardless of current status or payment status
+      updateData.status = 'confirmed';
     }
     await order.update(updateData);
 
@@ -4291,23 +4323,29 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
       return sum + (parseFloat(order.totalAmount) || 0);
     }, 0);
 
-    // Get cash settlements (cash remitted/submitted)
-    const cashSettlements = await db.Transaction.findAll({
+    // Get cash settlements where drivers remit cash to business
+    // These are negative amounts from driver perspective, but positive for admin (cash received)
+    const cashSettlementsFromDrivers = await db.Transaction.findAll({
       where: {
         transactionType: 'cash_settlement',
         status: 'completed',
         amount: {
-          [Op.lt]: 0 // Negative amounts (cash remitted)
+          [Op.lt]: 0 // Negative amounts (cash remitted by drivers)
+        },
+        driverId: {
+          [Op.ne]: null // Only driver remittances (not admin transactions)
         }
       },
-      attributes: ['id', 'amount', 'createdAt', 'notes']
+      attributes: ['id', 'amount', 'driverId', 'createdAt', 'notes']
     });
 
-    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => {
+    // Cash remitted by drivers becomes cash received by admin
+    // Amounts are negative, so we take absolute value to get cash received
+    const cashReceivedFromDrivers = Math.abs(cashSettlementsFromDrivers.reduce((sum, tx) => {
       return sum + (parseFloat(tx.amount) || 0);
     }, 0));
 
-    // Also check admin cash submissions
+    // Also check admin cash submissions (cash spent by admin)
     const adminCashSubmissions = await db.CashSubmission.findAll({
       where: {
         driverId: null, // Admin submissions (driverId is null for admin)
@@ -4320,7 +4358,20 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
       return sum + (parseFloat(submission.amount) || 0);
     }, 0);
 
-    const calculatedCashAtHand = Math.max(0, cashReceived - cashRemitted - adminCashSubmitted);
+    // Admin cash at hand = Cash from POS orders + Cash received from drivers - Admin cash submissions
+    const calculatedCashAtHand = Math.max(0, cashReceived + cashReceivedFromDrivers - adminCashSubmitted);
+
+    // CRITICAL: Store calculated cash at hand in database to ensure consistency
+    const storedCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
+    if (Math.abs(storedCashAtHand - calculatedCashAtHand) > 0.01 || storedCashAtHand === 0 || isNaN(storedCashAtHand)) {
+      await adminWallet.update({ cashAtHand: calculatedCashAtHand });
+      console.log(`🔄 [Admin Cash At Hand Sync] Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (calculated: ${calculatedCashAtHand}, cashReceived: ${cashReceived}, cashReceivedFromDrivers: ${cashReceivedFromDrivers}, adminCashSubmitted: ${adminCashSubmitted})`);
+    } else {
+      console.log(`✅ [Admin Cash At Hand Sync] Value in sync (${storedCashAtHand})`);
+    }
+
+    // Reload to get updated value
+    await adminWallet.reload();
 
     res.json({
       success: true,
@@ -4346,10 +4397,11 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
       },
       adminCashAtHand: {
         walletBalance: parseFloat(adminWallet.balance) || 0,
-        calculatedCashAtHand: calculatedCashAtHand,
-        cashReceived: cashReceived,
-        cashRemitted: cashRemitted,
-        cashSubmitted: adminCashSubmitted,
+        cashAtHand: parseFloat(adminWallet.cashAtHand || 0), // Use stored value from database
+        calculatedCashAtHand: calculatedCashAtHand, // Also include calculated for reference
+        cashReceived: cashReceived, // From POS orders
+        cashReceivedFromDrivers: cashReceivedFromDrivers, // From driver remittances
+        cashSubmitted: adminCashSubmitted, // Admin cash submissions (spent)
         currency: 'KES'
       }
     });

@@ -273,10 +273,42 @@ async function initiateSTKPush(phoneNumber, amount, accountReference, transactio
     console.log('CheckoutRequestID:', data.CheckoutRequestID);
     console.log('CustomerMessage:', data.CustomerMessage);
     console.log('MerchantRequestID:', data.MerchantRequestID);
-    return data;
+    
+    // Normalize response - M-Pesa returns ResponseCode '0' for success
+    const responseCode = data.ResponseCode || data.responseCode;
+    const isSuccess = responseCode === '0' || responseCode === 0;
+    const checkoutRequestID = data.CheckoutRequestID || data.checkoutRequestID;
+    const merchantRequestID = data.MerchantRequestID || data.merchantRequestID;
+    const customerMessage = data.CustomerMessage || data.customerMessage;
+    
+    // Return normalized response
+    return {
+      success: isSuccess && !!checkoutRequestID,
+      responseCode: responseCode,
+      checkoutRequestID: checkoutRequestID,
+      CheckoutRequestID: checkoutRequestID, // Keep original for backward compatibility
+      merchantRequestID: merchantRequestID,
+      MerchantRequestID: merchantRequestID, // Keep original for backward compatibility
+      customerMessage: customerMessage,
+      CustomerMessage: customerMessage, // Keep original for backward compatibility
+      error: isSuccess ? null : (data.errorMessage || data.ErrorMessage || data.errorDescription || customerMessage || 'STK Push failed'),
+      rawResponse: data // Include raw response for debugging
+    };
   } catch (error) {
     console.error('Error initiating M-Pesa STK Push:', error);
-    throw error;
+    // Return error response instead of throwing
+    return {
+      success: false,
+      error: error.message || 'Failed to initiate STK Push',
+      responseCode: null,
+      checkoutRequestID: null,
+      CheckoutRequestID: null,
+      merchantRequestID: null,
+      MerchantRequestID: null,
+      customerMessage: null,
+      CustomerMessage: null,
+      rawResponse: null
+    };
   }
 }
 

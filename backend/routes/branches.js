@@ -13,15 +13,41 @@ router.get('/', async (req, res) => {
       where.isActive = true;
     }
     
+    // Get actual columns that exist in the database
+    let validAttributes;
+    try {
+      const [existingColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'branches' ORDER BY column_name"
+      );
+      const columnNames = new Set(existingColumns.map(col => col.column_name.toLowerCase()));
+      
+      // Map model attributes to database column names and filter to only existing columns
+      validAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Branch.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        // Check if the database column exists (case-insensitive)
+        if (columnNames.has(dbColumnName.toLowerCase())) {
+          validAttributes.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      // Fallback: use a safe default set of attributes if schema query fails
+      console.warn('⚠️ Could not query information_schema, using default attributes:', schemaError.message);
+      validAttributes = ['id', 'name', 'address', 'isActive', 'createdAt', 'updatedAt'];
+    }
+    
     const branches = await db.Branch.findAll({
       where,
+      attributes: validAttributes,
       order: [['name', 'ASC']]
     });
     
     res.json(branches);
   } catch (error) {
     console.error('Error fetching branches:', error);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
   }
 });
 
@@ -29,7 +55,26 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const branch = await db.Branch.findByPk(id);
+    
+    // Get actual columns that exist in the database
+    const [existingColumns] = await db.sequelize.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_name = 'branches' ORDER BY column_name"
+    );
+    const columnNames = new Set(existingColumns.map(col => col.column_name.toLowerCase()));
+    
+    // Map model attributes to database column names and filter to only existing columns
+    const validAttributes = [];
+    for (const [attrName, attrDef] of Object.entries(db.Branch.rawAttributes)) {
+      const dbColumnName = attrDef.field || attrName;
+      // Check if the database column exists (case-insensitive)
+      if (columnNames.has(dbColumnName.toLowerCase())) {
+        validAttributes.push(attrName);
+      }
+    }
+    
+    const branch = await db.Branch.findByPk(id, {
+      attributes: validAttributes
+    });
     
     if (!branch) {
       return res.status(404).json({ error: 'Branch not found' });

@@ -19,6 +19,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0
+    },
+    cashAtHand: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Cash at hand amount for admin (calculated from cash orders - settlements - submissions)'
     }
   }, {
     tableName: 'admin_wallets',

@@ -5,7 +5,7 @@
 Dial a Drink Kenya is a comprehensive beverage delivery platform ecosystem consisting of three integrated applications:
 
 1. **Customer Site** - Web application for customers to browse, order, and track deliveries
-2. **Driver App** - Mobile application (React Native/Expo) for drivers to manage deliveries and earnings
+2. **Driver App** - Native Android application (Kotlin) for drivers to manage deliveries and earnings
 3. **Admin Dashboard** - Web application for administrators to manage orders, inventory, drivers, and financials
 
 All three platforms connect to a unified backend API hosted on Google Cloud Run, with data stored in Google Cloud SQL (PostgreSQL).
@@ -19,8 +19,8 @@ All three platforms connect to a unified backend API hosted on Google Cloud Run,
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  Customer Site  │     │   Driver App    │     │  Admin Dashboard│
-│   (React SPA)   │     │  (React Native)  │     │   (React SPA)   │
-│   Port: 3000    │     │   (Expo/OTA)    │     │   Port: 3001    │
+│   (React SPA)   │     │  (Android/Kotlin) │     │   (React SPA)   │
+│   Port: 3000    │     │   (Native APK)    │     │   Port: 3001    │
 └────────┬────────┘     └────────┬─────────┘     └────────┬────────┘
          │                      │                         │
          │                      │                         │
@@ -56,9 +56,9 @@ All three platforms connect to a unified backend API hosted on Google Cloud Run,
 - Socket.IO client for real-time updates
 
 **Driver App:**
-- React Native with Expo
-- Expo Application Services (EAS) for builds
-- OTA (Over-The-Air) updates
+- Native Android (Kotlin)
+- Android Studio for builds
+- APK distribution
 - Socket.IO client for real-time updates
 
 **Infrastructure:**
@@ -66,7 +66,7 @@ All three platforms connect to a unified backend API hosted on Google Cloud Run,
 - Cloud Run for backend and frontend hosting
 - Cloud SQL for database
 - Cloud Build for container builds
-- Expo for mobile app distribution
+- Android APK for mobile app distribution
 
 ---
 
@@ -177,7 +177,9 @@ Delivery fees are calculated based on:
   - Merchant receives full delivery fee
   - Driver receives nothing
 
-### 6. M-Pesa Integration
+### 6. Payment Integration
+
+#### M-Pesa Integration
 
 **Supported Operations:**
 - STK Push (Lipa na M-Pesa)
@@ -192,6 +194,23 @@ Delivery fees are calculated based on:
 - Shortcode
 - Passkey
 - Callback URL (automatically set to Cloud Run backend URL)
+
+#### PesaPal Integration (Card Payments)
+
+**Supported Operations:**
+- Card payments via PesaPal gateway
+- IPN (Instant Payment Notification) callbacks
+
+**Environments:**
+- Sandbox: For testing (`https://cybqa.pesapal.com/pesapalv3`)
+- Live: For production (`https://pay.pesapal.com/v3`)
+
+**Configuration:**
+- `PESAPAL_CONSUMER_KEY`: PesaPal API consumer key
+- `PESAPAL_CONSUMER_SECRET`: PesaPal API consumer secret
+- `PESAPAL_ENVIRONMENT`: `sandbox` or `live` (default: `sandbox`)
+- `PESAPAL_IPN_CALLBACK_URL`: IPN callback URL (optional, auto-detected)
+- `PESAPAL_REDIRECT_URL`: Redirect URL for payment success/cancellation (optional, auto-detected)
 
 ---
 
@@ -213,7 +232,7 @@ Delivery fees are calculated based on:
 - Hosted on Cloud Run as `deliveryos-customer`
 - URL: `https://deliveryos-customer-910510650031.us-central1.run.app`
 
-### Driver App (`DDDriverExpo/`)
+### Driver App (`driver-app-native/`)
 
 **Purpose:** Enable drivers to view assigned orders, update delivery status, confirm payments, and track earnings
 
@@ -224,27 +243,17 @@ Delivery fees are calculated based on:
 - Payment confirmation (M-Pesa or Cash/Mobile Money)
 - Wallet balance and transaction history
 - Push notifications for new orders and wallet credits
+- Shift status management (On Shift/Off Shift)
 
-**Build Profiles:**
-- **local-dev**: Connects to localhost/ngrok backend
-  - Bundle ID: `com.dialadrink.driver.local`
-  - Channel: `local-dev`
-- **cloud-dev**: Connects to cloud-dev backend
-  - Bundle ID: `com.dialadrink.driver`
-  - Channel: `cloud-dev`
-- **production**: Connects to cloud-dev backend
-  - Bundle ID: `com.dialadrink.driver`
-  - Channel: `production`
-
-**OTA Updates:**
-- Updates published to channels via `publish-update.sh`
-- API URL determined by update channel and environment variables
-- Updates download automatically on app launch
+**Build:**
+- Native Android app built with Kotlin
+- Package ID: `com.dialadrink.driver`
+- Built using Android Studio/Gradle
+- APK distribution
 
 **Deployment:**
-- Built via EAS Build
-- Distributed via Expo Application Services
-- OTA updates for code changes (no rebuild needed)
+- Built via Android Studio or Gradle
+- APK distributed directly to drivers
 
 ### Admin Dashboard (`admin-frontend/`)
 
@@ -323,6 +332,11 @@ Delivery fees are calculated based on:
 - `POST /api/mpesa/stk-push` - Initiate STK Push
 - `POST /api/mpesa/callback` - M-Pesa callback handler
 
+**PesaPal (Card Payments):**
+- `POST /api/pesapal/initiate-payment` - Initiate card payment (returns redirect URL)
+- `GET /api/pesapal/ipn` - PesaPal IPN callback handler
+- `GET /api/pesapal/transaction-status/:orderId` - Get payment status for an order
+
 **Drivers:**
 - `GET /api/drivers` - List drivers
 - `GET /api/drivers/phone/:phone` - Get driver by phone
@@ -347,6 +361,13 @@ Delivery fees are calculated based on:
 - `MPESA_SHORTCODE`: M-Pesa shortcode
 - `MPESA_PASSKEY`: M-Pesa passkey
 - `MPESA_ENVIRONMENT`: `sandbox` or `production`
+
+**PesaPal (Card Payments):**
+- `PESAPAL_CONSUMER_KEY`: PesaPal API consumer key (e.g., `UDLDp9yShy4g0aLPNhT+2kZSX3L+KdsF`)
+- `PESAPAL_CONSUMER_SECRET`: PesaPal API consumer secret (e.g., `XeRwDyreZTPde0H3AWlIiStXZD8=`)
+- `PESAPAL_ENVIRONMENT`: `sandbox` or `live` (default: `sandbox`)
+- `PESAPAL_IPN_CALLBACK_URL`: IPN callback URL (optional, auto-detected from NGROK_URL or production URL)
+- `PESAPAL_REDIRECT_URL`: Redirect URL for payment success/cancellation (optional, auto-detected)
 - `MPESA_CALLBACK_URL`: Callback URL for M-Pesa
 
 **Google Maps:**
@@ -368,9 +389,7 @@ Delivery fees are calculated based on:
 - `REACT_APP_API_URL`: Backend API URL (optional, auto-detects localhost)
 
 **Driver App:**
-- `EXPO_PUBLIC_API_BASE_URL`: Backend API URL (set per build profile)
-- `EXPO_PUBLIC_ENV`: Environment (`local`, `cloud`, `production`)
-- `EXPO_PUBLIC_BUILD_PROFILE`: Build profile (`local-dev`, `cloud-dev`, `production`)
+- Driver app API URL configured in Android app settings (see `driver-app-native/README.md`)
 
 ---
 
@@ -403,21 +422,15 @@ Delivery fees are calculated based on:
 
 **Build APK:**
 ```bash
-cd DDDriverExpo
-eas build --platform android --profile production
+cd driver-app-native
+./gradlew assembleRelease
+# APK will be in: app/build/outputs/apk/release/
 ```
 
-**Publish OTA Update:**
+**Install on Device:**
 ```bash
-cd DDDriverExpo
-./publish-update.sh production "Update message"
+adb install app/build/outputs/apk/release/app-release.apk
 ```
-
-**Available Channels:**
-- `local-dev`: For local development (uses ngrok/localhost)
-- `cloud-dev`: For cloud-dev testing (uses cloud-dev API)
-- `production`: For production (uses cloud-dev API)
-- `development`: For development builds (uses cloud-dev API)
 
 ---
 
@@ -462,20 +475,21 @@ PORT=3001 npm start  # Runs on port 3001
 
 **Local Development:**
 ```bash
-cd DDDriverExpo
-npm install
-npm start  # Expo Dev Server
+cd driver-app-native
+# Open in Android Studio
+# Or build with Gradle:
+./gradlew assembleDebug
 ```
 
-**Build Local-Dev APK:**
+**Build APK:**
 ```bash
-cd DDDriverExpo
-./build-local.sh
+cd driver-app-native
+./gradlew assembleRelease
 ```
 
 **Connect to Local Backend:**
 - Ensure ngrok is running: `ngrok http 5001`
-- Update `EXPO_PUBLIC_API_BASE_URL` in `eas.json` or use `./rebuild-local-with-ngrok.sh`
+- Update API URL in app configuration (see `driver-app-native/README.md`)
 
 ---
 
@@ -678,12 +692,12 @@ dial-a-drink/
 │   │   └── services/     # API service
 │   └── public/           # Static assets
 │
-├── DDDriverExpo/        # Driver mobile app
+├── driver-app-native/   # Driver mobile app (Native Android)
 │   ├── src/
 │   │   ├── screens/      # Screen components
 │   │   ├── services/     # API service
 │   │   └── components/   # Reusable components
-│   ├── app.config.js    # Expo configuration
+│   ├── app/              # Android app source code
 │   ├── eas.json         # EAS build configuration
 │   └── publish-update.sh # OTA update script
 │
@@ -700,7 +714,7 @@ dial-a-drink/
 
 - **[TRANSACTION_CREATION_FLOW.md](./TRANSACTION_CREATION_FLOW.md)**: Detailed transaction creation and wallet crediting flow
 - **[ENV_SETUP.md](./ENV_SETUP.md)**: Environment variable setup guide
-- **[DDDriverExpo/ENVIRONMENT_SETUP.md](./DDDriverExpo/ENVIRONMENT_SETUP.md)**: Driver app environment configuration
+- **[driver-app-native/README.md](./driver-app-native/README.md)**: Driver app setup and configuration
 
 ---
 

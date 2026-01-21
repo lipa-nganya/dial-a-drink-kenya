@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="16dp"
+    android:clickable="true"
+    android:focusable="true"
+    app:cardBackgroundColor="@color/paper_dark"
+    app:cardCornerRadius="8dp"
+    app:cardElevation="3dp"
+    app:strokeWidth="0dp">
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="15dp">
+
+        <!-- Header: Order Number and Status Badge -->
+        <LinearLayout
+            android:id="@+id/orderHeader"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintEnd_toStartOf="@id/actionButtons"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <TextView
+                android:id="@+id/orderNumberText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Order #123"
+                android:textColor="@color/accent"
+                android:textSize="16sp"
+                android:textStyle="bold"
+                android:layout_marginEnd="10dp" />
+
+            <FrameLayout
+                android:id="@+id/statusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/status_badge_background"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp">
+
+                <TextView
+                    android:id="@+id/statusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="PENDING"
+                    android:textColor="#F5F5F5"
+                    android:textSize="10sp"
+                    android:textStyle="bold" />
+
+            </FrameLayout>
+
+        </LinearLayout>
+
+        <!-- Action Buttons: Navigate and View -->
+        <LinearLayout
+            android:id="@+id/actionButtons"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/navigateButton"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginEnd="8dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                app:backgroundTint="@color/accent"
+                app:cornerRadius="20dp"
+                app:icon="@android:drawable/ic_menu_mylocation"
+                app:iconTint="@color/background_dark"
+                app:iconSize="20dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/viewButton"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:insetLeft="0dp"
+                android:insetRight="0dp"
+                app:backgroundTint="@color/accent"
+                app:cornerRadius="18dp"
+                app:icon="@android:drawable/ic_menu_info_details"
+                app:iconTint="#FFFFFF"
+                app:iconSize="18dp" />
+
+        </LinearLayout>
+
+        <!-- Body: Customer Name and Address -->
+        <TextView
+            android:id="@+id/customerNameText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Customer Name"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="13sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/orderHeader" />
+
+        <TextView
+            android:id="@+id/addressText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Delivery Address"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="13sp"
+            android:maxLines="3"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/customerNameText" />
+
+        <!-- Footer: Amount and Date -->
+        <View
+            android:id="@+id/footerDivider"
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_marginTop="8dp"
+            android:background="@color/border_dark"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/addressText" />
+
+        <LinearLayout
+            android:id="@+id/footerLayout"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/footerDivider">
+
+            <TextView
+                android:id="@+id/amountText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="KES 1,500.00"
+                android:textColor="@color/accent"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/dateText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Jan 1, 2024"
+                android:textColor="@color/text_secondary_dark"
+                android:textSize="10sp"
+                android:maxLines="3"
+                android:gravity="end" />
+
+        </LinearLayout>
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</com.google.android.material.card.MaterialCardView>
+

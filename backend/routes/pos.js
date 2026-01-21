@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
+const { verifyAdmin } = require('./admin');
 
 /**
  * Credit merchant wallet for POS order
@@ -316,7 +317,7 @@ router.get('/drinks', async (req, res) => {
 });
 
 // Create POS order with cash payment
-router.post('/order/cash', async (req, res) => {
+router.post('/order/cash', verifyAdmin, async (req, res) => {
   const transaction = await db.sequelize.transaction();
   
   try {
@@ -353,6 +354,9 @@ router.post('/order/cash', async (req, res) => {
       });
     }
 
+    // Get admin ID from authenticated request
+    const adminId = req.admin?.id || null;
+    
     // Create order (POS orders don't have delivery address or delivery fee)
     const order = await db.Order.create({
       customerName,
@@ -366,6 +370,8 @@ router.post('/order/cash', async (req, res) => {
       paymentType: 'pay_now',
       paymentMethod: 'cash',
       branchId: branchId || null,
+      adminOrder: true, // Mark as admin order
+      adminId: adminId, // Record which admin serviced this order
       notes: notes || null
     }, { transaction });
 
@@ -453,7 +459,7 @@ router.post('/order/cash', async (req, res) => {
 });
 
 // Create POS order with M-Pesa payment
-router.post('/order/mpesa', async (req, res) => {
+router.post('/order/mpesa', verifyAdmin, async (req, res) => {
   const transaction = await db.sequelize.transaction();
   
   try {
@@ -495,6 +501,9 @@ router.post('/order/mpesa', async (req, res) => {
       });
     }
 
+    // Get admin ID from authenticated request
+    const adminId = req.admin?.id || null;
+
     // Create order (pending payment)
     const order = await db.Order.create({
       customerName,
@@ -508,6 +517,8 @@ router.post('/order/mpesa', async (req, res) => {
       paymentType: 'pay_now',
       paymentMethod: 'mobile_money',
       branchId: branchId || null,
+      adminOrder: true, // Mark as admin order
+      adminId: adminId, // Record which admin serviced this order
       notes: notes || null
     }, { transaction });
 

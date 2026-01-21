@@ -221,15 +221,22 @@ async function sendBulkSMS(phoneNumbers, message) {
  * 
  * @param {string} phoneNumber - Recipient phone number
  * @param {string} otpCode - OTP code to send
+ * @param {boolean} forceSend - Force sending SMS even in local dev (for shop agents, drivers, etc.)
  * @returns {Promise<Object>} Response from SMS API
  */
-async function sendOTP(phoneNumber, otpCode) {
+async function sendOTP(phoneNumber, otpCode, forceSend = false) {
   // Check if we're in local development
-  const isLocalDev = process.env.NODE_ENV !== 'production' || 
-                     process.env.ENVIRONMENT === 'local' ||
-                     process.env.FORCE_LOCAL_SMS === 'true';
+  // Only skip SMS if explicitly in local dev AND forceSend is false
+  // Allow forcing SMS in local dev via ENABLE_SMS_IN_LOCAL_DEV env var
+  const isProduction = process.env.NODE_ENV === 'production' || process.env.K_SERVICE || process.env.RENDER;
+  const enableSmsInLocalDev = process.env.ENABLE_SMS_IN_LOCAL_DEV === 'true';
+  const isLocalDev = !isProduction && 
+                     (process.env.ENVIRONMENT === 'local' || process.env.FORCE_LOCAL_SMS === 'true') && 
+                     !forceSend &&
+                     !enableSmsInLocalDev;
   
-  if (isLocalDev) {
+  // If forceSend is true, always send via Advanta SMS (for shop agents, drivers, customers in production, etc.)
+  if (isLocalDev && !forceSend) {
     // Local development: Only log OTP, don't send actual SMS
     const formattedPhone = formatPhoneNumber(phoneNumber);
     console.log('');

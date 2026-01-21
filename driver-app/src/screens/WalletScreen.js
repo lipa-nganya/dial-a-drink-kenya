@@ -17,6 +17,7 @@ const WalletScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [driverId, setDriverId] = useState(null);
+  const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'transactions'
 
   useEffect(() => {
     loadDriverId();
@@ -65,12 +66,14 @@ const WalletScreen = ({ navigation }) => {
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);
+    // Convert UTC to Nairobi time (EAT, UTC+3)
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
-      minute: '2-digit'
+      minute: '2-digit',
+      timeZone: 'Africa/Nairobi'
     });
   };
 
@@ -100,6 +103,54 @@ const WalletScreen = ({ navigation }) => {
 
   const { wallet, recentTips, recentDeliveryPayments, cashSettlements, recentWithdrawals } = walletData;
 
+  // Combine all wallet-related transactions into a single list for the Transactions tab
+  const allTransactions = [
+    ...(recentTips || []).map((tx) => ({
+      id: `tip-${tx.id}`,
+      kind: 'Tip',
+      emoji: '💵',
+      amount: tx.amount,
+      sign: '+',
+      primary: `Order #${tx.orderNumber}`,
+      secondary: tx.customerName || 'Customer tip',
+      date: tx.date,
+      detail: tx.notes || null,
+    })),
+    ...(recentDeliveryPayments || []).map((tx) => ({
+      id: `delivery-${tx.id}`,
+      kind: 'Delivery Pay',
+      emoji: '🚚',
+      amount: tx.amount,
+      sign: '+',
+      primary: `Order #${tx.orderNumber}`,
+      secondary: tx.customerName || 'Delivery payment',
+      date: tx.date,
+      detail: tx.notes || null,
+    })),
+    ...(cashSettlements || []).map((tx) => ({
+      id: `settlement-${tx.id}`,
+      kind: 'Cash Settlement',
+      emoji: '💳',
+      amount: tx.amount,
+      sign: '-',
+      primary: tx.notes || `Cash settlement for Order #${tx.orderNumber}`,
+      secondary: tx.customerName || null,
+      date: tx.date,
+      detail: null,
+    })),
+    ...(recentWithdrawals || []).map((tx) => ({
+      id: `withdrawal-${tx.id}`,
+      kind: 'Withdrawal',
+      emoji: '📤',
+      amount: Math.abs(tx.amount),
+      sign: '-',
+      primary: `To ${tx.phoneNumber}`,
+      secondary: `Status: ${tx.status} / ${tx.paymentStatus}`,
+      date: tx.date,
+      detail: tx.receiptNumber ? `Receipt: ${tx.receiptNumber}` : null,
+    })),
+  ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
   return (
     <ScrollView 
       style={styles.container}
@@ -110,129 +161,186 @@ const WalletScreen = ({ navigation }) => {
       <View style={styles.content}>
         <Text style={styles.title}>My Wallet</Text>
 
-        {/* Balance Card */}
-        <View style={styles.balanceCard}>
-          <Text style={styles.balanceLabel}>Available Balance</Text>
-          <Text style={styles.balanceAmount}>{formatAmount(wallet.availableBalance)}</Text>
-          {wallet.amountOnHold > 0 && (
-            <View style={styles.onHoldContainer}>
-              <Text style={styles.onHoldLabel}>On Hold:</Text>
-              <Text style={styles.onHoldAmount}>{formatAmount(wallet.amountOnHold)}</Text>
+        {/* Tabs */}
+        <View style={styles.tabRow}>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'overview' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('overview')}
+          >
+            <Text style={[styles.tabText, activeTab === 'overview' && styles.tabTextActive]}>
+              Overview
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tabButton, activeTab === 'transactions' && styles.tabButtonActive]}
+            onPress={() => setActiveTab('transactions')}
+          >
+            <Text style={[styles.tabText, activeTab === 'transactions' && styles.tabTextActive]}>
+              Wallet Transactions
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {activeTab === 'overview' && (
+          <>
+            {/* Balance Card */}
+            <View style={styles.balanceCard}>
+              <Text style={styles.balanceLabel}>Available Balance</Text>
+              <Text style={styles.balanceAmount}>{formatAmount(wallet.availableBalance)}</Text>
+              {wallet.amountOnHold > 0 && (
+                <View style={styles.onHoldContainer}>
+                  <Text style={styles.onHoldLabel}>On Hold:</Text>
+                  <Text style={styles.onHoldAmount}>{formatAmount(wallet.amountOnHold)}</Text>
+                </View>
+              )}
+              <Text style={styles.totalBalanceLabel}>Total Balance: {formatAmount(wallet.balance)}</Text>
             </View>
-          )}
-          <Text style={styles.totalBalanceLabel}>Total Balance: {formatAmount(wallet.balance)}</Text>
-        </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Total Tips</Text>
-            <Text style={styles.statValue}>{formatAmount(wallet.totalTipsReceived)}</Text>
-            <Text style={styles.statCount}>{wallet.totalTipsCount} tips</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Delivery Pay</Text>
-            <Text style={styles.statValue}>{formatAmount(wallet.totalDeliveryPay)}</Text>
-            <Text style={styles.statCount}>{wallet.totalDeliveryPayCount} deliveries</Text>
-          </View>
-        </View>
-
-        {/* Recent Tips */}
-        {recentTips && recentTips.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Tips</Text>
-            {recentTips.slice(0, 5).map((tip) => (
-              <View key={tip.id} style={styles.transactionCard}>
-                <View style={styles.transactionHeader}>
-                  <Text style={styles.transactionType}>💵 Tip</Text>
-                  <Text style={styles.transactionAmount}>+{formatAmount(tip.amount)}</Text>
-                </View>
-                <Text style={styles.transactionDetail}>Order #{tip.orderNumber}</Text>
-                {tip.customerName && (
-                  <Text style={styles.transactionDetail}>{tip.customerName}</Text>
-                )}
-                <Text style={styles.transactionDate}>{formatDate(tip.date)}</Text>
+            {/* Stats Cards */}
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Total Tips</Text>
+                <Text style={styles.statValue}>{formatAmount(wallet.totalTipsReceived)}</Text>
+                <Text style={styles.statCount}>{wallet.totalTipsCount} tips</Text>
               </View>
-            ))}
-          </View>
-        )}
-
-        {/* Recent Delivery Payments */}
-        {recentDeliveryPayments && recentDeliveryPayments.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Delivery Payments</Text>
-            {recentDeliveryPayments.slice(0, 5).map((payment) => (
-              <View key={payment.id} style={styles.transactionCard}>
-                <View style={styles.transactionHeader}>
-                  <Text style={styles.transactionType}>🚚 Delivery Pay</Text>
-                  <Text style={styles.transactionAmount}>+{formatAmount(payment.amount)}</Text>
-                </View>
-                <Text style={styles.transactionDetail}>Order #{payment.orderNumber}</Text>
-                {payment.customerName && (
-                  <Text style={styles.transactionDetail}>{payment.customerName}</Text>
-                )}
-                <Text style={styles.transactionDate}>{formatDate(payment.date)}</Text>
+              <View style={styles.statCard}>
+                <Text style={styles.statLabel}>Delivery Pay</Text>
+                <Text style={styles.statValue}>{formatAmount(wallet.totalDeliveryPay)}</Text>
+                <Text style={styles.statCount}>{wallet.totalDeliveryPayCount} deliveries</Text>
               </View>
-            ))}
-          </View>
-        )}
+            </View>
 
-        {/* Cash Settlements */}
-        {cashSettlements && cashSettlements.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Cash Settlements</Text>
-            {cashSettlements.slice(0, 5).map((settlement) => (
-              <View key={settlement.id} style={styles.transactionCard}>
-                <View style={styles.transactionHeader}>
-                  <Text style={styles.transactionType}>💳 Cash Settlement</Text>
-                  <Text style={[styles.transactionAmount, styles.debitAmount]}>
-                    -{formatAmount(settlement.amount)}
-                  </Text>
-                </View>
-                <Text style={styles.transactionDetail}>Order #{settlement.orderNumber}</Text>
-                {settlement.customerName && (
-                  <Text style={styles.transactionDetail}>{settlement.customerName}</Text>
-                )}
-                <Text style={styles.transactionDate}>{formatDate(settlement.date)}</Text>
+            {/* Recent Tips */}
+            {recentTips && recentTips.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Recent Tips</Text>
+                {recentTips.slice(0, 5).map((tip) => (
+                  <View key={tip.id} style={styles.transactionCard}>
+                    <View style={styles.transactionHeader}>
+                      <Text style={styles.transactionType}>💵 Tip</Text>
+                      <Text style={styles.transactionAmount}>+{formatAmount(tip.amount)}</Text>
+                    </View>
+                    <Text style={styles.transactionDetail}>Order #{tip.orderNumber}</Text>
+                    {tip.customerName && (
+                      <Text style={styles.transactionDetail}>{tip.customerName}</Text>
+                    )}
+                    <Text style={styles.transactionDate}>{formatDate(tip.date)}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
-        )}
+            )}
 
-        {/* Recent Withdrawals */}
-        {recentWithdrawals && recentWithdrawals.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recent Withdrawals</Text>
-            {recentWithdrawals.slice(0, 5).map((withdrawal) => (
-              <View key={withdrawal.id} style={styles.transactionCard}>
-                <View style={styles.transactionHeader}>
-                  <Text style={styles.transactionType}>📤 Withdrawal</Text>
-                  <Text style={[styles.transactionAmount, styles.debitAmount]}>
-                    -{formatAmount(Math.abs(withdrawal.amount))}
-                  </Text>
-                </View>
-                <Text style={styles.transactionDetail}>To: {withdrawal.phoneNumber}</Text>
-                <Text style={styles.transactionDetail}>
-                  Status: {withdrawal.status} / {withdrawal.paymentStatus}
-                </Text>
-                {withdrawal.receiptNumber && (
-                  <Text style={styles.transactionDetail}>Receipt: {withdrawal.receiptNumber}</Text>
-                )}
-                <Text style={styles.transactionDate}>{formatDate(withdrawal.date)}</Text>
+            {/* Recent Delivery Payments */}
+            {recentDeliveryPayments && recentDeliveryPayments.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Recent Delivery Payments</Text>
+                {recentDeliveryPayments.slice(0, 5).map((payment) => (
+                  <View key={payment.id} style={styles.transactionCard}>
+                    <View style={styles.transactionHeader}>
+                      <Text style={styles.transactionType}>🚚 Delivery Pay</Text>
+                      <Text style={styles.transactionAmount}>+{formatAmount(payment.amount)}</Text>
+                    </View>
+                    <Text style={styles.transactionDetail}>Order #{payment.orderNumber}</Text>
+                    {payment.customerName && (
+                      <Text style={styles.transactionDetail}>{payment.customerName}</Text>
+                    )}
+                    <Text style={styles.transactionDate}>{formatDate(payment.date)}</Text>
+                  </View>
+                ))}
               </View>
-            ))}
-          </View>
+            )}
+
+            {/* Cash Settlements */}
+            {cashSettlements && cashSettlements.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Cash Settlements</Text>
+                {cashSettlements.slice(0, 5).map((settlement) => (
+                  <View key={settlement.id} style={styles.transactionCard}>
+                    <View style={styles.transactionHeader}>
+                      <Text style={styles.transactionType}>💳 Cash Settlement</Text>
+                      <Text style={[styles.transactionAmount, styles.debitAmount]}>
+                        -{formatAmount(settlement.amount)}
+                      </Text>
+                    </View>
+                    <Text style={styles.transactionDetail}>Order #{settlement.orderNumber}</Text>
+                    {settlement.customerName && (
+                      <Text style={styles.transactionDetail}>{settlement.customerName}</Text>
+                    )}
+                    <Text style={styles.transactionDate}>{formatDate(settlement.date)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Recent Withdrawals */}
+            {recentWithdrawals && recentWithdrawals.length > 0 && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Recent Withdrawals</Text>
+                {recentWithdrawals.slice(0, 5).map((withdrawal) => (
+                  <View key={withdrawal.id} style={styles.transactionCard}>
+                    <View style={styles.transactionHeader}>
+                      <Text style={styles.transactionType}>📤 Withdrawal</Text>
+                      <Text style={[styles.transactionAmount, styles.debitAmount]}>
+                        -{formatAmount(Math.abs(withdrawal.amount))}
+                      </Text>
+                    </View>
+                    <Text style={styles.transactionDetail}>To: {withdrawal.phoneNumber}</Text>
+                    <Text style={styles.transactionDetail}>
+                      Status: {withdrawal.status} / {withdrawal.paymentStatus}
+                    </Text>
+                    {withdrawal.receiptNumber && (
+                      <Text style={styles.transactionDetail}>Receipt: {withdrawal.receiptNumber}</Text>
+                    )}
+                    <Text style={styles.transactionDate}>{formatDate(withdrawal.date)}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </>
         )}
 
-        {/* Empty State */}
-        {(!recentTips || recentTips.length === 0) &&
-         (!recentDeliveryPayments || recentDeliveryPayments.length === 0) &&
-         (!cashSettlements || cashSettlements.length === 0) &&
-         (!recentWithdrawals || recentWithdrawals.length === 0) && (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No transactions yet</Text>
-          </View>
+        {activeTab === 'transactions' && (
+          <>
+            {allTransactions.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>All Wallet Transactions</Text>
+                {allTransactions.map((tx) => (
+                  <View key={tx.id} style={styles.transactionCard}>
+                    <View style={styles.transactionHeader}>
+                      <Text style={styles.transactionType}>
+                        {tx.emoji} {tx.kind}
+                      </Text>
+                      <Text
+                        style={[
+                          styles.transactionAmount,
+                          tx.sign === '-' && styles.debitAmount,
+                        ]}
+                      >
+                        {tx.sign}
+                        {formatAmount(tx.amount)}
+                      </Text>
+                    </View>
+                    {tx.primary && (
+                      <Text style={styles.transactionDetail}>{tx.primary}</Text>
+                    )}
+                    {tx.secondary && (
+                      <Text style={styles.transactionDetail}>{tx.secondary}</Text>
+                    )}
+                    {tx.detail && (
+                      <Text style={styles.transactionDetail}>{tx.detail}</Text>
+                    )}
+                    <Text style={styles.transactionDate}>{formatDate(tx.date)}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.emptyState}>
+                <Text style={styles.emptyStateText}>No wallet transactions yet</Text>
+              </View>
+            )}
+          </>
         )}
+
       </View>
     </ScrollView>
   );
@@ -276,6 +384,30 @@ const styles = StyleSheet.create({
     color: '#00E0B8',
     marginBottom: 30,
     textAlign: 'center',
+  },
+  tabRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    backgroundColor: '#121212',
+    borderRadius: 999,
+    padding: 4,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    backgroundColor: '#00E0B8',
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#B0B0B0',
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#0D0D0D',
   },
   balanceCard: {
     backgroundColor: '#121212',

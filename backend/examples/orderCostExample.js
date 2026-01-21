@@ -51,7 +51,7 @@ console.log('\n');
 // Example 3: Calculate cost for status updates
 console.log('=== Example 3: Status Update Cost ===\n');
 
-const statusUpdates = ['confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'];
+const statusUpdates = ['confirmed', 'out_for_delivery', 'delivered', 'completed'];
 const statusUpdateCost = calculateStatusUpdateCost(123, statusUpdates);
 console.log('Status Update Cost Summary:');
 console.log(`Total Cost: ${statusUpdateCost.totalCost.formatted}`);

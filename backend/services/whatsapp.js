@@ -165,8 +165,14 @@ async function generateDriverInvitationMessage(driverName, appUrl = null, custom
   message = convertMarkdownLinksForWhatsApp(message);
   
   // Add app URL if provided
+  // Put URL on its own line with spacing to ensure mobile WhatsApp detects it as clickable
+  // Ensure URL starts with http:// or https:// for mobile WhatsApp to detect it
   if (appUrl) {
-    message = `${message}\n\nDownload the app here: ${appUrl}`;
+    let formattedUrl = appUrl;
+    if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+      formattedUrl = `https://${formattedUrl}`;
+    }
+    message = `${message}\n\nDownload the app here:\n\n${formattedUrl}`;
   }
   
   console.log('📝 Final message length:', message.length);
@@ -196,7 +202,13 @@ With our app, you can:
 ✅ View your order history
 ✅ Get exclusive offers and promotions
 
-${appUrl ? `Download the app here: ${appUrl}` : 'Download the app from your app store'}
+${appUrl ? (() => {
+  let formattedUrl = appUrl;
+  if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
+    formattedUrl = `https://${formattedUrl}`;
+  }
+  return `Download the app here:\n\n${formattedUrl}`;
+})() : 'Download the app from your app store'}
 
 If you need any assistance, our support team is here to help!
 

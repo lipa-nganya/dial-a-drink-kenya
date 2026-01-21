@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="CashSubmissionTextInputLayout" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/form_field_border_light_green</item>
+        <item name="boxStrokeWidth">2dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxBackgroundColor">@android:color/transparent</item>
+        <item name="boxBackgroundMode">outline</item>
+        <item name="hintTextColor">#FFFFFF</item>
+        <item name="android:textColorHint">#B0B0B0</item>
+    </style>
+</resources>

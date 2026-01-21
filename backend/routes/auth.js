@@ -253,8 +253,27 @@ router.post('/send-otp', async (req, res) => {
     // Send OTP via SMS (always send, not subject to admin SMS settings)
     // For shop agents and drivers, force sending via Advanta SMS even in local dev
     // For PIN reset requests, always force send SMS regardless of user type
-    const forceSendSMS = isDriver || isShopAgent || isResetRequest;
+    // For customers in production, also force send SMS
+    // Allow forcing SMS in local dev via ENABLE_SMS_IN_LOCAL_DEV env var
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.K_SERVICE || process.env.RENDER;
+    const enableSmsInLocalDev = process.env.ENABLE_SMS_IN_LOCAL_DEV === 'true';
+    const forceSendSMS = isDriver || isShopAgent || isResetRequest || (isProduction && !isDriver && !isShopAgent) || enableSmsInLocalDev;
+    
+    console.log(`📱 OTP sending configuration:`, {
+      phone: cleanedPhone,
+      userType: isDriver ? 'driver' : (isShopAgent ? 'shopAgent' : 'customer'),
+      isProduction,
+      forceSendSMS,
+      isResetRequest
+    });
+    
     const smsResult = await smsService.sendOTP(cleanedPhone, otpCode, forceSendSMS);
+    
+    console.log(`📱 OTP send result:`, {
+      success: smsResult.success,
+      error: smsResult.error,
+      localDev: smsResult.localDev
+    });
 
     // For drivers and shop agents, always return success even if SMS fails
     // The OTP is generated and stored, admin can provide it from dashboard
@@ -1156,19 +1175,81 @@ router.post('/check-pin-status', async (req, res) => {
     }
 
     const phoneVariants = buildPhoneLookupVariants(phone);
+    const cleanedPhone = phone.replace(/\D/g, '');
+    const normalizedPhone = normalizeCustomerPhone(phone) || cleanedPhone;
 
-    const customer = await db.Customer.findOne({
+    console.log(`🔍 Checking PIN status for phone: ${phone}`);
+    console.log(`   Cleaned phone: ${cleanedPhone}`);
+    console.log(`   Normalized phone: ${normalizedPhone}`);
+    console.log(`   Phone variants: ${phoneVariants.join(', ')}`);
+
+    // Build comprehensive lookup conditions
+    const lookupConditions = [];
+    
+    // Add all phone variants
+    if (phoneVariants.length > 0) {
+      phoneVariants.forEach(variant => {
+        lookupConditions.push({ phone: variant });
+        lookupConditions.push({ username: variant });
+      });
+    }
+    
+    // Add cleaned and normalized versions
+    if (cleanedPhone) {
+      lookupConditions.push({ phone: cleanedPhone });
+      lookupConditions.push({ username: cleanedPhone });
+    }
+    if (normalizedPhone && normalizedPhone !== cleanedPhone) {
+      lookupConditions.push({ phone: normalizedPhone });
+      lookupConditions.push({ username: normalizedPhone });
+    }
+    
+    // Also try LIKE patterns for partial matches
+    if (cleanedPhone.length >= 9) {
+      lookupConditions.push({ phone: { [db.Sequelize.Op.like]: `%${cleanedPhone}%` } });
+      lookupConditions.push({ username: { [db.Sequelize.Op.like]: `%${cleanedPhone}%` } });
+    }
+
+    let customer = await db.Customer.findOne({
       where: {
-        [db.Sequelize.Op.or]: phoneVariants.length
-          ? phoneVariants.flatMap((variant) => ([
-              { phone: variant },
-              { username: variant }
-            ]))
-          : [{ phone: phone.replace(/\D/g, '') }]
+        [db.Sequelize.Op.or]: lookupConditions.length > 0 ? lookupConditions : [{ phone: cleanedPhone }]
       }
     });
 
+    // If customer not found in Customer table, check Orders table
     if (!customer) {
+      console.log(`⚠️  Customer not found in Customer table, checking Orders...`);
+      const order = await db.Order.findOne({
+        where: {
+          customerPhone: {
+            [db.Sequelize.Op.like]: `%${cleanedPhone}%`
+          }
+        },
+        order: [['createdAt', 'DESC']]
+      });
+
+      if (order && order.customerPhone) {
+        // Try to find customer using the phone from the order
+        const orderPhoneVariants = buildPhoneLookupVariants(order.customerPhone);
+        customer = await db.Customer.findOne({
+          where: {
+            [db.Sequelize.Op.or]: orderPhoneVariants.length > 0
+              ? orderPhoneVariants.flatMap((variant) => ([
+                  { phone: variant },
+                  { username: variant }
+                ]))
+              : [{ phone: order.customerPhone.replace(/\D/g, '') }]
+          }
+        });
+        
+        if (customer) {
+          console.log(`✅ Found customer via Orders table: ${customer.id}`);
+        }
+      }
+    }
+
+    if (!customer) {
+      console.log(`❌ Customer not found for phone: ${phone} (tried ${lookupConditions.length} lookup conditions)`);
       return res.json({
         success: true,
         hasPin: false,
@@ -1176,10 +1257,14 @@ router.post('/check-pin-status', async (req, res) => {
       });
     }
 
+    const hasPin = Boolean(customer.hasSetPassword && customer.password);
+    console.log(`✅ Customer found: ID=${customer.id}, phone=${customer.phone}, username=${customer.username}`);
+    console.log(`   hasSetPassword: ${customer.hasSetPassword}, hasPassword: ${!!customer.password}, hasPin: ${hasPin}`);
+
     res.json({
       success: true,
-      hasPin: Boolean(customer.hasSetPassword && customer.password),
-      requiresSetup: !(customer.hasSetPassword && customer.password),
+      hasPin: hasPin,
+      requiresSetup: !hasPin,
       username: customer.username,
       phone: customer.phone
     });

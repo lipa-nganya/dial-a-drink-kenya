@@ -200,6 +200,28 @@
 
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- Add Item Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/addItemButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:text="Add Item"
+                        android:textSize="14sp"
+                        android:visibility="gone"
+                        app:backgroundTint="@color/accent"
+                        app:cornerRadius="8dp" />
+
+                    <!-- Items List Display -->
+                    <TextView
+                        android:id="@+id/itemsListText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/deliveryLocationLayout"
                         android:layout_width="match_parent"

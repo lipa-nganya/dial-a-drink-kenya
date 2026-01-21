@@ -12,13 +12,19 @@ console.log('🌐 CORS Configuration:');
 console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET (using default)');
 console.log('   ADMIN_URL:', process.env.ADMIN_URL || 'NOT SET (using default)');
 
+// Always include local development origins, even if env vars are set
+// This ensures localhost admin/customer work regardless of FRONTEND_URL / ADMIN_URL
 const allowedOrigins = [
-  process.env.FRONTEND_URL || 'http://localhost:3000',
-  process.env.ADMIN_URL || 'http://localhost:3001',
-  process.env.ZEUS_URL || 'http://localhost:3003',
-  process.env.SHOP_AGENT_URL || 'http://localhost:3002',
-  'http://localhost:3002',
-  'http://localhost:8080', // Wolfgang website
+  'http://localhost:3000', // Customer local
+  'http://localhost:3001', // Admin local
+  'http://localhost:3002', // Shop agent / consoles local
+  'http://localhost:3003', // Zeus local
+  'http://localhost:8080', // Wolfgang website (local dev)
+  // Env-configured URLs (may point to Netlify / Cloud Run)
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_URL,
+  process.env.ZEUS_URL,
+  process.env.SHOP_AGENT_URL,
   // Old service URLs (kept for backward compatibility)
   'https://drink-suite-customer-910510650031.us-central1.run.app',
   'https://drink-suite-admin-910510650031.us-central1.run.app',

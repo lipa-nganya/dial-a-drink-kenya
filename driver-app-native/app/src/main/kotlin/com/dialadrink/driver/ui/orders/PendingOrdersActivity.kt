@@ -266,7 +266,13 @@ class PendingOrdersActivity : AppCompatActivity() {
                             "Order #${order.id} accepted successfully",
                             Toast.LENGTH_SHORT
                         ).show()
+                        // Clear cache and refresh to remove accepted order from pending list
                         refreshOrdersFromRepository()
+                        // Send broadcast to notify active orders screen to refresh
+                        val intent = Intent("com.dialadrink.driver.ORDER_ACCEPTED").apply {
+                            putExtra("orderId", order.id)
+                        }
+                        LocalBroadcastManager.getInstance(this@PendingOrdersActivity).sendBroadcast(intent)
                     } else {
                         showError(errorMessage ?: "Failed to accept order. Please try again.")
                     }

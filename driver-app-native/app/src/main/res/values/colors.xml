@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark theme colors (matching Expo app) -->
+    <color name="background_dark">#0D0D0D</color>
+    <color name="paper_dark">#1A1A1A</color>
+    <color name="text_primary_dark">#FFFFFF</color>
+    <color name="text_secondary_dark">#999999</color>
+    <color name="accent">#00E0B8</color>
+    <color name="accent_text">#00E0B8</color>
+    <color name="border_dark">#333333</color>
+    
+    <!-- Light theme colors -->
+    <color name="background_light">#FFFFFF</color>
+    <color name="paper_light">#F5F5F5</color>
+    <color name="text_primary_light">#000000</color>
+    <color name="text_secondary_light">#666666</color>
+    <color name="border_light">#E0E0E0</color>
+    
+    <!-- Status colors -->
+    <color name="status_pending">#FFA726</color>
+    <color name="status_confirmed">#42A5F5</color>
+    <color name="status_preparing">#AB47BC</color>
+    <color name="status_out_for_delivery">#66BB6A</color>
+    <color name="status_delivered">#26A69A</color>
+    <color name="status_completed">#00E0B8</color>
+    <color name="status_cancelled">#EF5350</color>
+    <color name="status_default">#B0B0B0</color>
+    
+    <!-- Form field colors -->
+    <color name="form_field_border_light_green">#4CAF50</color>
+</resources>
+

@@ -1,0 +1,156 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.google.gms.google-services'
+}
+
+android {
+    namespace 'com.dialadrink.driver'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.dialadrink.driver"
+        minSdk 24
+        targetSdk 34
+        versionCode 11
+        versionName "1.1.0"
+        
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Product flavors for local, development, and production
+    flavorDimensions "environment"
+    productFlavors {
+        local {
+            dimension "environment"
+            applicationIdSuffix ".local"
+            versionNameSuffix "-local"
+            resValue "string", "app_name", "Dial A Drink Driver (Local)"
+            
+            // Local API URL (ngrok - can be overridden via gradle.properties)
+            buildConfigField "String", "API_BASE_URL", "\"${getLocalApiBaseUrl()}\""
+            buildConfigField "String", "BUILD_TYPE", "\"local\""
+        }
+        
+        development {
+            dimension "environment"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            resValue "string", "app_name", "Dial A Drink Driver (Dev)"
+            
+            // Development API URL (GCP - can be overridden via gradle.properties)
+            buildConfigField "String", "API_BASE_URL", "\"${getDevApiBaseUrl()}\""
+            buildConfigField "String", "BUILD_TYPE", "\"development\""
+        }
+        
+        production {
+            dimension "environment"
+            resValue "string", "app_name", "Dial A Drink Driver"
+            
+            // Production API URL (GCP - can be overridden via gradle.properties)
+            buildConfigField "String", "API_BASE_URL", "\"${getProdApiBaseUrl()}\""
+            buildConfigField "String", "BUILD_TYPE", "\"production\""
+        }
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+            minifyEnabled false
+            // Android will automatically use the default debug keystore
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // For production release, you should configure proper signing
+            // signingConfig signingConfigs.release
+        }
+    }
+    
+    buildFeatures {
+        viewBinding true
+        buildConfig true
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+def getLocalApiBaseUrl() {
+    // Local API URL (ngrok) - can be overridden via gradle.properties
+    // Default to dev backend URL if no local URL is provided
+    def apiUrl = project.findProperty('LOCAL_API_BASE_URL') 
+        ?: project.findProperty('API_BASE_URL') 
+        ?: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app'
+    return apiUrl
+}
+
+def getDevApiBaseUrl() {
+    // Development API URL (GCP) - can be overridden via gradle.properties
+    def apiUrl = project.findProperty('DEV_API_BASE_URL') 
+        ?: project.findProperty('API_BASE_URL') 
+        ?: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app'
+    return apiUrl
+}
+
+def getProdApiBaseUrl() {
+    // Production API URL (GCP) - can be overridden via gradle.properties
+    def apiUrl = project.findProperty('PROD_API_BASE_URL') 
+        ?: project.findProperty('API_BASE_URL') 
+        ?: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app'
+    return apiUrl
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.12.0'
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0'
+    implementation 'androidx.navigation:navigation-fragment-ktx:2.7.6'
+    implementation 'androidx.navigation:navigation-ui-ktx:2.7.6'
+    implementation 'androidx.fragment:fragment-ktx:1.6.2'
+    implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
+    implementation 'androidx.recyclerview:recyclerview:1.3.2'
+    implementation 'androidx.viewpager2:viewpager2:1.0.0'
+    
+    // Networking
+    implementation 'com.squareup.retrofit2:retrofit:2.9.0'
+    implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+    implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+    implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Firebase Cloud Messaging (Native FCM)
+    implementation platform('com.google.firebase:firebase-bom:32.7.0')
+    implementation 'com.google.firebase:firebase-messaging-ktx'
+    
+    // Location
+    implementation 'com.google.android.gms:play-services-location:21.0.1'
+    
+    // Socket.io
+    implementation 'io.socket:socket.io-client:2.1.0'
+    
+    // Coroutines
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
+    
+    // SharedPreferences
+    implementation 'androidx.preference:preference-ktx:1.2.1'
+    
+    // LocalBroadcastManager (for in-app broadcasts)
+    implementation 'androidx.localbroadcastmanager:localbroadcastmanager:1.1.0'
+    
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+
+// Apply google-services plugin at the bottom (required for Firebase)
+apply plugin: 'com.google.gms.google-services'

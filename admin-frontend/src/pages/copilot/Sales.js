@@ -286,7 +286,7 @@ const Sales = () => {
                 </Typography>
               </Box>
               <Typography variant="h3" sx={{ fontWeight: 700, color: '#00E0B8', mb: 1 }}>
-                {formatCurrency(analytics.adminCashAtHand.calculatedCashAtHand)}
+                {formatCurrency(analytics.adminCashAtHand.cashAtHand || analytics.adminCashAtHand.calculatedCashAtHand || 0)}
               </Typography>
               <Typography variant="body2" sx={{ color: colors.textSecondary }}>
                 Cash received: {formatCurrency(analytics.adminCashAtHand.cashReceived)}

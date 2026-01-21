@@ -38,6 +38,12 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.INTEGER,
       allowNull: false,
       defaultValue: 0
+    },
+    savings: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      defaultValue: 0,
+      comment: 'Driver-owned savings (withheld delivery fees). This is leverage, not revenue.'
     }
   }, {
     tableName: 'driver_wallets',

@@ -16,7 +16,7 @@ M-Pesa callbacks are not being received for orders 218-221 (and potentially othe
 - ❌ Transactions remain pending (no receipt numbers)
 
 ### 2. Production Environment
-- ❌ Callback endpoint returns 404: `https://deliveryos-backend-910510650031.us-central1.run.app/api/mpesa/callback`
+- ❌ Callback endpoint returns 404: `https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api/mpesa/callback`
 - ❌ Health endpoint also returns 404
 - This suggests the backend might not be deployed correctly or routes are misconfigured
 

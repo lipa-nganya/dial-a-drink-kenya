@@ -106,7 +106,7 @@ The order cost calculation system tracks all server-side costs incurred during a
 - Order status updated notification per update
 
 **Typical Status Flow:**
-- pending → confirmed → preparing → out_for_delivery → delivered → completed
+- pending → confirmed → out_for_delivery → delivered → completed
 
 **Estimated Cost**: ~0.0065 - 0.026 KES (~$0.00005 - $0.0002 USD)
 
@@ -171,7 +171,7 @@ GET /api/orders/:id/cost
     },
     "statusUpdates": {
       "cost": 0.0001,
-      "statuses": ["confirmed", "preparing", "out_for_delivery", "delivered", "completed"],
+      "statuses": ["confirmed", "out_for_delivery", "delivered", "completed"],
       "operations": {
         "database": {
           "reads": 10,

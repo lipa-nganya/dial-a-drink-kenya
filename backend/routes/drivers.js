@@ -67,9 +67,10 @@ async function calculateCashAtHand(driverId) {
     }, 0));
 
     // Cash at hand = Cash collected - Cash remitted
+    // Allow negative cash at hand - drivers can go into negative balance (credit)
     const cashAtHand = cashCollected - cashRemitted;
 
-    return Math.max(0, cashAtHand); // Ensure non-negative
+    return cashAtHand; // Allow negative values
   } catch (error) {
     console.error(`Error calculating cash at hand for driver ${driverId}:`, error);
     // On error, return 0
@@ -484,8 +485,18 @@ const handleSetPin = async (req, res) => {
       });
     }
     
+    // If driver doesn't exist, create a new driver record
+    // This allows new drivers to set up their PIN after OTP verification
     if (!driver) {
-      return sendError(res, 'Driver not found', 404);
+      console.log(`ℹ️ Driver not found for phone: ${cleanedPhone} - creating new driver record`);
+      // Create a new driver with default name
+      driver = await db.Driver.create({
+        phoneNumber: cleanedPhone,
+        name: 'Driver', // Default name - admin can update later
+        status: 'offline',
+        lastActivity: new Date()
+      });
+      console.log(`✅ Created new driver record with phone: ${cleanedPhone}`);
     }
     
     // Hash the PIN before storing
@@ -649,6 +660,7 @@ router.post('/phone/:phone/verify-otp', async (req, res) => {
     let otpRecord = null;
     for (const variant of variants) {
       // Find OTP records for this phone number (not used, not expired)
+      console.log(`🔍 Searching for OTP with phone variant: ${variant}`);
       const otpRecords = await db.Otp.findAll({
         where: {
           phoneNumber: {
@@ -658,6 +670,7 @@ router.post('/phone/:phone/verify-otp', async (req, res) => {
         },
         order: [['createdAt', 'DESC']]
       });
+      console.log(`📋 Found ${otpRecords.length} unused OTP records for variant: ${variant}`);
 
       // Check each OTP record - compare codes after trimming and normalizing
       for (const record of otpRecords) {
@@ -668,13 +681,27 @@ router.post('/phone/:phone/verify-otp', async (req, res) => {
         // Log comparison for debugging
         console.log(`🔍 Comparing OTP: stored="${recordOtpCode}" (type: ${typeof record.otpCode}, length: ${recordOtpCode.length}) vs entered="${normalizedOtpCode}" (type: ${typeof codeToVerify}, length: ${normalizedOtpCode.length})`);
         
-        // Strict comparison - exact match after normalization
-        if (recordOtpCode === normalizedOtpCode) {
+        // Try string comparison first (strict match after normalization)
+        let isMatch = recordOtpCode === normalizedOtpCode;
+        
+        // Fallback: try numeric comparison if both are valid numbers
+        if (!isMatch && /^\d+$/.test(recordOtpCode) && /^\d+$/.test(normalizedOtpCode)) {
+          const recordNum = parseInt(recordOtpCode, 10);
+          const enteredNum = parseInt(normalizedOtpCode, 10);
+          if (!isNaN(recordNum) && !isNaN(enteredNum)) {
+            isMatch = recordNum === enteredNum;
+            if (isMatch) {
+              console.log(`✅ OTP match found via numeric comparison: ${recordNum} === ${enteredNum}`);
+            }
+          }
+        }
+        
+        if (isMatch) {
           otpRecord = record;
           console.log(`✅ Found matching OTP record for variant: ${variant}`);
           break;
         } else {
-          console.log(`❌ OTP mismatch: "${recordOtpCode}" !== "${normalizedOtpCode}"`);
+          console.log(`❌ OTP mismatch: stored="${recordOtpCode}" !== entered="${normalizedOtpCode}"`);
         }
       }
       if (otpRecord) break;
@@ -1135,21 +1162,99 @@ router.get('/', async (req, res) => {
     }
     
     // Add credit limit status and cash at hand to each driver
+    // CRITICAL: Sync cash at hand value to ensure it matches driver app display
     const driversWithCreditStatus = await Promise.all(drivers.map(async (driver) => {
       const driverData = driver.toJSON();
+      
+      // Sync cash at hand by calling the same calculation logic as driver app
+      // This ensures both admin and driver app show the same value
+      try {
+        const { Op } = require('sequelize');
+        const cashOrders = await db.Order.findAll({
+          where: {
+            driverId: driver.id,
+            paymentType: 'pay_on_delivery',
+            paymentMethod: 'cash',
+            paymentStatus: 'paid',
+            status: { [Op.in]: ['delivered', 'completed'] }
+          },
+          attributes: ['totalAmount', 'driverPayAmount']
+        });
+        
+        const cashSettlements = await db.Transaction.findAll({
+          where: {
+            driverId: driver.id,
+            transactionType: 'cash_settlement',
+            status: 'completed',
+            amount: { [Op.lt]: 0 }
+          },
+          attributes: ['amount']
+        });
+        
+        const approvedCashSubmissions = await db.CashSubmission.findAll({
+          where: {
+            driverId: driver.id,
+            status: 'approved'
+          },
+          attributes: ['amount']
+        });
+        
+        const cashCollected = cashOrders.reduce((sum, order) => {
+          return sum + (parseFloat(order.totalAmount) || 0) - (parseFloat(order.driverPayAmount) || 0);
+        }, 0);
+        
+        const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => {
+          return sum + (parseFloat(tx.amount) || 0);
+        }, 0));
+        
+        const approvedSubmissionsTotal = approvedCashSubmissions.reduce((sum, submission) => {
+          return sum + parseFloat(submission.amount || 0);
+        }, 0);
+        
+        // Allow negative cash at hand - drivers can go into negative balance (credit)
+        const calculatedCashAtHand = cashCollected - cashRemitted - approvedSubmissionsTotal;
+        const storedCashAtHand = parseFloat(driverData.cashAtHand || 0);
+        
+        // ALWAYS sync database value to ensure consistency between admin and driver app
+        // Always use calculated value as source of truth and update database
+        // This ensures both endpoints return the same value
+        if (Math.abs(storedCashAtHand - calculatedCashAtHand) > 0.01 || storedCashAtHand === 0 || isNaN(storedCashAtHand)) {
+          await driver.update({ cashAtHand: calculatedCashAtHand });
+          // Reload driver to get updated value
+          await driver.reload();
+          const updatedValue = parseFloat(driver.cashAtHand || 0);
+          driverData.cashAtHand = updatedValue;
+          console.log(`🔄 [Cash At Hand Sync] Driver ${driver.id}: Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (DB now: ${updatedValue}, calculated: ${calculatedCashAtHand}, cashCollected: ${cashCollected}, cashRemitted: ${cashRemitted}, approvedSubmissions: ${approvedSubmissionsTotal})`);
+        } else {
+          // Even if values match, use calculated value to ensure consistency
+          driverData.cashAtHand = calculatedCashAtHand;
+          console.log(`✅ [Cash At Hand Sync] Driver ${driver.id}: Value in sync (DB: ${storedCashAtHand}, using calculated: ${calculatedCashAtHand})`);
+        }
+      } catch (syncError) {
+        // If sync fails, use stored value
+        console.error(`⚠️ Error syncing cash at hand for driver ${driver.id}:`, syncError);
+        driverData.cashAtHand = parseFloat(driverData.cashAtHand || 0);
+      }
+      
+      // Use synced cashAtHand value for credit check
+      // Reload driver one more time to ensure creditCheck gets the latest value
+      await driver.reload();
       const creditCheck = await checkDriverCreditLimit(driver.id, false);
+      
+      // CRITICAL: Always use the synced driverData.cashAtHand value, not creditCheck.cashAtHand
+      // This ensures consistency - creditCheck might read a stale value from cache
       driverData.creditStatus = {
         exceeded: creditCheck.exceeded,
-        cashAtHand: creditCheck.cashAtHand,
+        cashAtHand: driverData.cashAtHand, // Use synced value from our calculation (source of truth)
         creditLimit: creditCheck.creditLimit,
         canAcceptOrders: creditCheck.canAcceptOrders,
         canUpdateOrders: creditCheck.canUpdateOrders
       };
       
-      // Use stored cashAtHand value from database as the source of truth
-      // The cashAtHand field is manually maintained by admins and should be displayed as-is
-      const storedCashAtHand = parseFloat(driverData.cashAtHand || 0);
-      driverData.cashAtHand = storedCashAtHand;
+      // Log for debugging
+      if (Math.abs(creditCheck.cashAtHand - driverData.cashAtHand) > 0.01) {
+        console.log(`⚠️ [Cash At Hand Mismatch] Driver ${driver.id}: creditCheck.cashAtHand=${creditCheck.cashAtHand}, synced value=${driverData.cashAtHand}`);
+      }
       
       return driverData;
     }));

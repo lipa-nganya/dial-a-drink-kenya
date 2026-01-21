@@ -24,7 +24,7 @@ gcloud run deploy deliveryos-admin \
   --source . \
   --platform managed \
   --allow-unauthenticated \
-  --update-env-vars "REACT_APP_API_URL=https://deliveryos-backend-910510650031.us-central1.run.app/api" \
+  --update-env-vars "REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api" \
   --memory 256Mi
 
 echo ""

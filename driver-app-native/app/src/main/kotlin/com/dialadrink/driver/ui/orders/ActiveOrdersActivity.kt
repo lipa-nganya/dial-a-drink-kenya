@@ -1,6 +1,9 @@
 package com.dialadrink.driver.ui.orders
 
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -8,6 +11,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.model.Order
@@ -29,6 +33,12 @@ class ActiveOrdersActivity : AppCompatActivity() {
     private val TAG = "ActiveOrders"
     private var isLoading = false
     private var currentOrders = emptyList<Order>()
+    private val orderAcceptedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            Log.d(TAG, "📨 Received ORDER_ACCEPTED broadcast - refreshing active orders")
+            refreshOrdersFromRepository()
+        }
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,6 +48,7 @@ class ActiveOrdersActivity : AppCompatActivity() {
         setupToolbar()
         setupSwipeRefresh()
         setupSocketConnection()
+        setupBroadcastReceiver()
         
         // Load orders from repository (cached first, then fetch if needed)
         // This is non-blocking - UI renders immediately
@@ -48,7 +59,13 @@ class ActiveOrdersActivity : AppCompatActivity() {
         super.onDestroy()
         // Disconnect socket when activity is destroyed
         SocketService.disconnect()
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(orderAcceptedReceiver)
         Log.d(TAG, "Socket disconnected on activity destroy")
+    }
+    
+    private fun setupBroadcastReceiver() {
+        val filter = IntentFilter("com.dialadrink.driver.ORDER_ACCEPTED")
+        LocalBroadcastManager.getInstance(this).registerReceiver(orderAcceptedReceiver, filter)
     }
     
     private fun setupToolbar() {
@@ -310,17 +327,9 @@ class ActiveOrdersActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        // Refresh orders when activity resumes (e.g., returning from accepting an order)
-        // Only refresh if we don't already have orders displayed (check if we have order cards, not emptyStateText)
-        val hasOrderCards = (0 until binding.ordersContainer.childCount).any { i ->
-            binding.ordersContainer.getChildAt(i) is MaterialCardView
-        }
-        if (!hasOrderCards && currentOrders.isEmpty()) {
-            refreshOrdersFromRepository()
-        } else {
-            // Just ensure spinner is hidden if we already have orders
-            binding.loadingProgress.visibility = View.GONE
-        }
+        // Refresh orders when activity resumes (e.g., returning from accepting an order from pending screen)
+        // Always refresh to ensure we have the latest data, especially after accepting an order
+        refreshOrdersFromRepository()
     }
 }
 

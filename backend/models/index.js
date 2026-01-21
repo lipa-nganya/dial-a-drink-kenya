@@ -115,6 +115,10 @@ const Territory = require('./Territory')(sequelize, Sequelize.DataTypes);
 const Supplier = require('./Supplier')(sequelize, Sequelize.DataTypes);
 const SupplierTransaction = require('./SupplierTransaction')(sequelize, Sequelize.DataTypes);
 const Stop = require('./Stop')(sequelize, Sequelize.DataTypes);
+const CashSubmission = require('./CashSubmission')(sequelize, Sequelize.DataTypes);
+const Notification = require('./Notification')(sequelize, Sequelize.DataTypes);
+const NotificationRead = require('./NotificationRead')(sequelize, Sequelize.DataTypes);
+const InventoryCheck = require('./InventoryCheck')(sequelize, Sequelize.DataTypes);
 
 // Valkyrie models (conditionally loaded if they exist)
 let ValkyriePartner, ValkyriePartnerUser, ValkyriePartnerDriver, ValkyriePartnerOrder, PartnerGeofence;
@@ -206,10 +210,53 @@ if (Driver && Stop) {
   Driver.hasMany(Stop, { foreignKey: 'driverId', as: 'stops' });
 }
 
+// CashSubmission associations
+if (CashSubmission && Driver) {
+  CashSubmission.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasMany(CashSubmission, { foreignKey: 'driverId', as: 'cashSubmissions' });
+}
+if (CashSubmission && Admin) {
+  CashSubmission.belongsTo(Admin, { foreignKey: 'adminId', as: 'admin' });
+  CashSubmission.belongsTo(Admin, { foreignKey: 'approvedBy', as: 'approver' });
+  CashSubmission.belongsTo(Admin, { foreignKey: 'rejectedBy', as: 'rejector' });
+}
+if (CashSubmission && Order) {
+  CashSubmission.belongsToMany(Order, {
+    through: 'cash_submission_orders',
+    foreignKey: 'cashSubmissionId',
+    otherKey: 'orderId',
+    as: 'orders'
+  });
+  Order.belongsToMany(CashSubmission, {
+    through: 'cash_submission_orders',
+    foreignKey: 'orderId',
+    otherKey: 'cashSubmissionId',
+    as: 'cashSubmissions'
+  });
+}
+
+// Notification associations
+if (Notification && Admin) {
+  Notification.belongsTo(Admin, { foreignKey: 'sentBy', as: 'sender' });
+  Admin.hasMany(Notification, { foreignKey: 'sentBy', as: 'notifications' });
+}
+if (Notification && NotificationRead && Driver) {
+  Notification.hasMany(NotificationRead, { foreignKey: 'notificationId', as: 'reads' });
+  NotificationRead.belongsTo(Notification, { foreignKey: 'notificationId', as: 'notification' });
+  NotificationRead.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasMany(NotificationRead, { foreignKey: 'driverId', as: 'notificationReads' });
+}
+
 // Branch-Order associations
 if (Branch) {
   Order.belongsTo(Branch, { foreignKey: 'branchId', as: 'branch' });
   Branch.hasMany(Order, { foreignKey: 'branchId', as: 'orders' });
+}
+
+// Admin-Order associations
+if (Admin && Order) {
+  Order.belongsTo(Admin, { foreignKey: 'adminId', as: 'servicedByAdmin' });
+  Admin.hasMany(Order, { foreignKey: 'adminId', as: 'servicedOrders' });
 }
 
 db.Category = Category;
@@ -235,6 +282,21 @@ db.Territory = Territory;
 db.Supplier = Supplier;
 db.SupplierTransaction = SupplierTransaction;
 db.Stop = Stop;
+db.CashSubmission = CashSubmission;
+db.Notification = Notification;
+db.NotificationRead = NotificationRead;
+db.InventoryCheck = InventoryCheck;
+
+// InventoryCheck associations
+if (InventoryCheck && Admin) {
+  InventoryCheck.belongsTo(Admin, { foreignKey: 'shopAgentId', as: 'shopAgent' });
+  InventoryCheck.belongsTo(Admin, { foreignKey: 'approvedBy', as: 'approver' });
+  Admin.hasMany(InventoryCheck, { foreignKey: 'shopAgentId', as: 'inventoryChecks' });
+}
+if (InventoryCheck && Drink) {
+  InventoryCheck.belongsTo(Drink, { foreignKey: 'drinkId', as: 'drink' });
+  Drink.hasMany(InventoryCheck, { foreignKey: 'drinkId', as: 'inventoryChecks' });
+}
 
 // Supplier associations - only set up if models are loaded successfully
 try {

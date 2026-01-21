@@ -45,15 +45,25 @@ const PinLoginScreen = ({ route, navigation }) => {
 
     setLoading(true);
     try {
-      const savedPin = await AsyncStorage.getItem('driver_pin');
       const savedPhone = await AsyncStorage.getItem('driver_phone') || phoneNumber;
 
-      if (pin === savedPin) {
-        // Update driver's last activity
-        try {
-          await api.patch(`/drivers/phone/${savedPhone}/activity`);
-        } catch (error) {
-          console.log('Could not update driver activity:', error);
+      // Verify PIN with backend API
+      const response = await api.post(`/drivers/phone/${savedPhone}/verify-pin`, { pin });
+
+      if (response.data && response.data.success) {
+        // Save PIN locally for offline reference
+        await AsyncStorage.setItem('driver_pin', pin);
+        await AsyncStorage.setItem('driver_phone', savedPhone);
+
+        // Save driver info if available
+        if (response.data.data && response.data.data.driver) {
+          const driver = response.data.data.driver;
+          if (driver.id) {
+            await AsyncStorage.setItem('driver_id', String(driver.id));
+          }
+          if (driver.name) {
+            await AsyncStorage.setItem('driver_name', driver.name);
+          }
         }
 
         // Mark as logged in
@@ -62,12 +72,14 @@ const PinLoginScreen = ({ route, navigation }) => {
         // Navigate to home
         navigation.replace('Home', { phoneNumber: savedPhone });
       } else {
-        Alert.alert('Error', 'Incorrect PIN. Please try again.');
+        Alert.alert('Error', response.data?.error || 'Incorrect PIN. Please try again.');
         setPin('');
       }
     } catch (error) {
       console.error('Login error:', error);
-      Alert.alert('Error', 'Failed to login. Please try again.');
+      const errorMessage = error.response?.data?.error || error.message || 'Failed to login. Please try again.';
+      Alert.alert('Error', errorMessage);
+      setPin('');
     } finally {
       setLoading(false);
     }

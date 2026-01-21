@@ -167,27 +167,39 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
   const targetStatus = paymentCompleted ? 'completed' : 'pending';
   const targetPaymentStatus = paymentCompleted ? 'paid' : 'pending';
 
-  const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
+  const [driverPayEnabledSetting, driverPayModeSetting, driverPayAmountSetting, driverPayPercentageSetting] = await Promise.all([
     db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-    db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
+    db.Settings.findOne({ where: { key: 'driverPayPerDeliveryMode' } }).catch(() => null),
+    db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null),
+    db.Settings.findOne({ where: { key: 'driverPayPerDeliveryPercentage' } }).catch(() => null)
   ]);
 
   const driverPayEnabled = driverPayEnabledSetting?.value === 'true';
+  const driverPayMode = driverPayModeSetting?.value || 'amount';
+  const isPercentageMode = driverPayMode === 'percentage';
   const configuredDriverPay = toNumeric(driverPayAmountSetting?.value);
+  const configuredDriverPayPercentage = toNumeric(driverPayPercentageSetting?.value);
 
   // CRITICAL: If driver pay is disabled, driverPayAmount must be 0 (full delivery fee goes to merchant)
   let driverPayAmount = 0;
   
   if (driverPayEnabled) {
-    // Only calculate driver pay if the feature is enabled
-    driverPayAmount = toNumeric(orderModel.driverPayAmount);
+    if (isPercentageMode) {
+      // Percentage mode: calculate driver pay as percentage of delivery fee
+      const percentage = configuredDriverPayPercentage > 0 ? configuredDriverPayPercentage : 30; // default 30%
+      driverPayAmount = deliveryFeeAmount * (percentage / 100);
+      driverPayAmount = Math.min(driverPayAmount, deliveryFeeAmount); // Ensure it doesn't exceed delivery fee
+    } else {
+      // Amount mode: use fixed amount
+      driverPayAmount = toNumeric(orderModel.driverPayAmount);
 
-    if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPay > 0) {
-      driverPayAmount = Math.min(deliveryFeeAmount, configuredDriverPay);
-    }
+      if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPay > 0) {
+        driverPayAmount = Math.min(deliveryFeeAmount, configuredDriverPay);
+      }
 
-    if (driverPayAmount > deliveryFeeAmount) {
-      driverPayAmount = deliveryFeeAmount;
+      if (driverPayAmount > deliveryFeeAmount) {
+        driverPayAmount = deliveryFeeAmount;
+      }
     }
   }
   // If driverPayEnabled is false, driverPayAmount stays 0

@@ -11,7 +11,7 @@ steps:
       - '-t'
       - 'gcr.io/$PROJECT_ID/deliveryos-admin:latest'
       - '--build-arg'
-      - 'REACT_APP_API_URL=https://deliveryos-backend-910510650031.us-central1.run.app/api'
+      - 'REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api'
       - '.'
 
   # Push the container image to Container Registry
@@ -42,7 +42,7 @@ steps:
       - '--memory'
       - '256Mi'
       - '--set-env-vars'
-      - 'REACT_APP_API_URL=https://deliveryos-backend-910510650031.us-central1.run.app/api'
+      - 'REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api'
 
 images:
   - 'gcr.io/$PROJECT_ID/deliveryos-admin:$SHORT_SHA'

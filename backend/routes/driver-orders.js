@@ -31,11 +31,22 @@ router.post('/:orderId/respond', async (req, res) => {
     const { orderId } = req.params;
     const { driverId, accepted } = req.body;
 
+    // Validate orderId
+    const parsedOrderId = parseInt(orderId);
+    if (isNaN(parsedOrderId)) {
+      console.log(`❌ Invalid orderId: ${orderId}`);
+      return sendError(res, `Invalid order ID: ${orderId}`, 400);
+    }
+
     if (typeof accepted !== 'boolean') {
       return sendError(res, 'accepted must be a boolean', 400);
     }
 
-    const order = await db.Order.findByPk(orderId, {
+    if (!driverId) {
+      return sendError(res, 'driverId is required', 400);
+    }
+
+    const order = await db.Order.findByPk(parsedOrderId, {
       include: [
         {
           model: db.OrderItem,
@@ -49,12 +60,16 @@ router.post('/:orderId/respond', async (req, res) => {
     });
 
     if (!order) {
-      return sendError(res, 'Order not found', 404);
+      console.log(`❌ Order not found: ${parsedOrderId}`);
+      return sendError(res, `Order not found: ${parsedOrderId}`, 404);
     }
+
+    console.log(`✅ Order found: #${order.id}, driverId: ${order.driverId}, requested driverId: ${driverId}`);
 
     // Verify driver is assigned to this order
     if (order.driverId !== parseInt(driverId)) {
-      return sendError(res, 'Not authorized to respond to this order', 403);
+      console.log(`❌ Driver mismatch: order.driverId=${order.driverId}, requested driverId=${driverId}`);
+      return sendError(res, `Not authorized to respond to this order. Order is assigned to driver ${order.driverId}, but you are driver ${driverId}`, 403);
     }
 
     const oldStatus = order.status;
@@ -178,6 +193,19 @@ router.post('/:orderId/respond', async (req, res) => {
             message: `⚠️ Driver rejected order #${order.id}. Please reassign the order.`,
             requiresAction: true
           });
+        }
+        
+        // Emit to driver's room for real-time updates (when order is accepted, it should appear in active orders)
+        if (accepted && driverId) {
+          io.to(`driver-${driverId}`).emit('order-status-updated', {
+            orderId: order.id,
+            status: fullOrder.status,
+            paymentStatus: fullOrder.paymentStatus,
+            driverAccepted: fullOrder.driverAccepted,
+            order: fullOrder,
+            triggeredByDriverResponse: true
+          });
+          console.log(`📡 Emitted order-status-updated to driver-${driverId} for accepted order #${order.id}`);
         }
         
         // Emit order-status-updated event for real-time updates (secondary event)
@@ -310,8 +338,40 @@ router.post('/:orderId/request-cancellation', async (req, res) => {
 
     console.log(`📋 Order #${order.id} cancellation requested by driver ${driverId}`);
 
-    // Reload order for response
-    const updatedOrder = await db.Order.findByPk(order.id);
+    // Reload order for response with full details
+    const updatedOrder = await db.Order.findByPk(order.id, {
+      include: [
+        {
+          model: db.Driver,
+          as: 'driver',
+          attributes: ['id', 'name', 'phoneNumber']
+        },
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{ model: db.Drink, as: 'drink' }]
+        }
+      ]
+    });
+
+    // Emit socket event to notify admin
+    const io = req.app.get('io');
+    if (io) {
+      const orderData = updatedOrder.toJSON();
+      if (orderData.items) {
+        orderData.orderItems = orderData.items;
+      }
+      
+      io.to('admin').emit('order-cancellation-requested', {
+        orderId: order.id,
+        order: orderData,
+        driverId: driverId,
+        reason: reason.trim(),
+        timestamp: new Date()
+      });
+      
+      console.log(`📢 Socket event emitted: order-cancellation-requested for Order #${order.id}`);
+    }
 
     sendSuccess(res, updatedOrder, 'Cancellation request submitted. Waiting for admin approval.');
   } catch (error) {
@@ -698,6 +758,32 @@ router.patch('/:orderId/status', async (req, res) => {
       return sendError(res, 'Not authorized to update this order', 403);
     }
 
+    // Check if driver has a pending cancellation request on any order (prevent updating other orders)
+    let hasCancellationColumns = false;
+    try {
+      const [columns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' AND column_name = 'cancellationRequested'"
+      );
+      hasCancellationColumns = columns.length > 0;
+    } catch (schemaError) {
+      hasCancellationColumns = false;
+    }
+
+    if (hasCancellationColumns) {
+      const pendingCancellation = await db.Order.findOne({
+        where: {
+          driverId: parseInt(driverId),
+          cancellationRequested: true,
+          cancellationApproved: null, // Pending approval
+          id: { [Op.ne]: parseInt(orderId) } // Different order
+        }
+      });
+
+      if (pendingCancellation) {
+        return sendError(res, `Cannot update order: You have a pending cancellation request for Order #${pendingCancellation.id}. Please wait for admin approval before updating other orders.`, 400);
+      }
+    }
+
     // Check credit limit - driver can update orders if:
     // 1. Cash at hand is within limit, OR
     // 2. Cash at hand exceeds limit BUT has pending cash submissions (which will reduce cash at hand when approved)
@@ -935,12 +1021,26 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
     // Customer pays full amount including tip (order.totalAmount includes tip)
     // The payment will be split into 2 transactions: order payment (minus tip) and tip transaction
     const amount = parseFloat(order.totalAmount); // Full amount including tip
+    console.log(`🚀 Driver initiating STK Push for Order #${orderId}:`, {
+      phone: formattedPhone,
+      amount: amount,
+      orderId: order.id,
+      driverId: driverId
+    });
+    
     const stkResult = await mpesaService.initiateSTKPush(
       formattedPhone,
       amount,
       order.id,
       `Payment for order #${order.id}`
     );
+
+    console.log(`📋 STK Push result for Order #${orderId}:`, {
+      success: stkResult.success,
+      responseCode: stkResult.responseCode,
+      checkoutRequestID: stkResult.checkoutRequestID,
+      error: stkResult.error
+    });
 
     // Check if STK push was initiated successfully
     // M-Pesa returns success even if the request is accepted, but payment hasn't completed yet
@@ -1105,13 +1205,13 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
 });
 
 /**
- * Manually confirm payment received by driver (cash or direct M-Pesa)
+ * Manually confirm payment received by driver (cash, card, or direct M-Pesa)
  * POST /api/driver-orders/:orderId/confirm-cash-payment
  */
 router.post('/:orderId/confirm-cash-payment', async (req, res) => {
   try {
     const { orderId } = req.params;
-    const { driverId, method = 'cash', receiptNumber: providedReceipt } = req.body || {};
+    const { driverId, method = 'cash', receiptNumber: providedReceipt, cardLast4, cardType, authorizationCode } = req.body || {};
 
     const order = await db.Order.findByPk(orderId, {
       include: [
@@ -1139,12 +1239,35 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     }
 
     const now = new Date();
-    const methodLabel = method === 'mpesa_manual' ? 'driver M-Pesa' : 'cash in hand';
-    const paymentMethod = method === 'mpesa_manual' ? 'mobile_money' : 'cash';
-    const paymentProvider = method === 'mpesa_manual' ? 'driver_mpesa_manual' : 'cash_in_hand';
+    let methodLabel, paymentMethod, paymentProvider;
+    
+    if (method === 'mpesa_manual') {
+      methodLabel = 'driver M-Pesa';
+      paymentMethod = 'mobile_money';
+      paymentProvider = 'driver_mpesa_manual';
+    } else if (method === 'card') {
+      methodLabel = 'card payment';
+      paymentMethod = 'card';
+      // Check if this is a PDQ payment (has card details) or PesaPal web payment
+      paymentProvider = (cardLast4 || cardType || authorizationCode) ? 'pdq' : 'pesapal';
+    } else {
+      methodLabel = 'cash in hand';
+      paymentMethod = 'cash';
+      paymentProvider = 'cash_in_hand';
+    }
+    
     const normalizedReceipt = providedReceipt && typeof providedReceipt === 'string'
       ? providedReceipt.trim().slice(0, 64)
-      : 'CASH';
+      : (method === 'card' ? 'CARD' : 'CASH');
+
+    // Build payment note with card details if available
+    let paymentNote = `Payment confirmed (${methodLabel}) by driver #${driverId}.`;
+    if (method === 'card' && (cardLast4 || cardType || authorizationCode)) {
+      paymentNote += ` Card: ${cardType || 'N/A'} ending in ${cardLast4 || 'N/A'}`;
+      if (authorizationCode) {
+        paymentNote += `, Auth Code: ${authorizationCode}`;
+      }
+    }
 
     let driverWalletInstance = null;
     const ensureDriverWallet = async () => {
@@ -1176,8 +1299,17 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       order: [['createdAt', 'DESC']]
     });
 
-    const manualNote = `Manual payment confirmation by driver #${driverId} (${methodLabel}).`;
-    const manualConfirmationNote = `Payment confirmed (${methodLabel}) by driver #${driverId}.`;
+    // Build payment note with card details if available
+    let paymentDetails = '';
+    if (method === 'card' && (cardLast4 || cardType || authorizationCode)) {
+      paymentDetails = `. Card: ${cardType || 'N/A'} ending in ${cardLast4 || 'N/A'}`;
+      if (authorizationCode) {
+        paymentDetails += `, Auth Code: ${authorizationCode}`;
+      }
+    }
+    
+    const manualNote = `Manual payment confirmation by driver #${driverId} (${methodLabel})${paymentDetails}.`;
+    const manualConfirmationNote = `Payment confirmed (${methodLabel}) by driver #${driverId}${paymentDetails}.`;
 
     if (paymentTransaction) {
       await paymentTransaction.update({

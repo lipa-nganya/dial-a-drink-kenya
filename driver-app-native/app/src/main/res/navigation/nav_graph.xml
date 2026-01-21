@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/nav_active_orders">
+
+    <fragment
+        android:id="@+id/nav_active_orders"
+        android:name="com.dialadrink.driver.ui.orders.ActiveOrdersFragment"
+        android:label="@string/active_orders" />
+
+    <fragment
+        android:id="@+id/nav_order_history"
+        android:name="com.dialadrink.driver.ui.orders.OrderHistoryFragment"
+        android:label="@string/order_history" />
+
+    <fragment
+        android:id="@+id/nav_wallet"
+        android:name="com.dialadrink.driver.ui.wallet.WalletFragment"
+        android:label="@string/wallet" />
+
+    <fragment
+        android:id="@+id/nav_profile"
+        android:name="com.dialadrink.driver.ui.profile.ProfileFragment"
+        android:label="@string/profile" />
+
+    <activity
+        android:id="@+id/nav_order_detail"
+        android:name="com.dialadrink.driver.ui.orders.OrderDetailActivity"
+        android:label="Order Details" />
+
+    <activity
+        android:id="@+id/nav_order_acceptance"
+        android:name="com.dialadrink.driver.ui.orders.OrderAcceptanceActivity"
+        android:label="Order Acceptance" />
+
+</navigation>
+
+

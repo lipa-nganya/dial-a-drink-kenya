@@ -105,8 +105,23 @@ router.get('/', async (req, res) => {
 
     res.json(sortedCategories);
   } catch (error) {
-    console.error('Error fetching categories:', error);
-    res.status(500).json({ error: 'Failed to fetch categories' });
+    console.error('❌ Error fetching categories:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error name:', error.name);
+    console.error('Error code:', error.code);
+    // Check if it's a database connection error
+    if (error.name === 'SequelizeConnectionError' || error.name === 'SequelizeConnectionRefusedError' || error.code === 'ECONNREFUSED') {
+      res.status(503).json({ 
+        error: 'Database connection failed',
+        message: 'Unable to connect to database. Please try again in a moment.'
+      });
+    } else {
+      res.status(500).json({ 
+        error: 'Failed to fetch categories',
+        message: error.message || 'Database query failed. Please try again in a moment.',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
   }
 });
 

@@ -14,6 +14,14 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.TEXT,
       allowNull: true
     },
+    image: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    country: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true

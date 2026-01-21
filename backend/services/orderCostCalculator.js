@@ -453,8 +453,8 @@ function calculateFullOrderCost(orderData) {
     paymentCost = calculatePaymentCost(orderData.id, 'mobile_money');
   }
   
-  // Status update costs (typical flow: pending -> confirmed -> preparing -> out_for_delivery -> delivered -> completed)
-  const statusUpdates = ['confirmed', 'preparing', 'out_for_delivery', 'delivered', 'completed'];
+  // Status update costs (typical flow: pending -> confirmed -> out_for_delivery -> delivered -> completed)
+  const statusUpdates = ['confirmed', 'out_for_delivery', 'delivered', 'completed'];
   const statusUpdateCost = calculateStatusUpdateCost(orderData.id, statusUpdates);
   
   // Combine all costs

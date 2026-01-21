@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dial A Drink Driver</string>
+    
+    <!-- Auth -->
+    <string name="enter_phone_number">Enter Phone Number</string>
+    <string name="phone_number">Phone Number</string>
+    <string name="send_otp">Send OTP</string>
+    <string name="continue_text">Continue</string>
+    <string name="verify_otp">Verify OTP</string>
+    <string name="enter_otp">Enter OTP</string>
+    <string name="setup_pin">Setup PIN</string>
+    <string name="confirm_pin">Confirm PIN</string>
+    <string name="enter_pin">Enter PIN</string>
+    <string name="login">Login</string>
+    
+    <!-- Orders -->
+    <string name="active_orders">Active Orders</string>
+    <string name="order_history">Order History</string>
+    <string name="wallet">Wallet</string>
+    <string name="profile">Profile</string>
+    
+    <!-- Common -->
+    <string name="loading">Loading…</string>
+    <string name="error">Error</string>
+    <string name="retry">Retry</string>
+    <string name="logout">Logout</string>
+</resources>
+
