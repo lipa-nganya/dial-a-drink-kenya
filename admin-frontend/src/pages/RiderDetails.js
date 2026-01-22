@@ -34,13 +34,10 @@ import {
 import {
   ArrowBack,
   LocalShipping,
-  AttachMoney,
-  Assessment,
   Phone,
   Email,
   Person,
-  Download,
-  CalendarToday
+  Download
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';

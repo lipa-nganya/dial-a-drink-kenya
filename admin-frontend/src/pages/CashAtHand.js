@@ -43,7 +43,7 @@ import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
 
 const CashAtHand = () => {
-  const { isDarkMode, colors } = useTheme();
+  const { colors } = useTheme();
   const { user } = useAdmin();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

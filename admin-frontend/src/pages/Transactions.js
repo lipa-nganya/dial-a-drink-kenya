@@ -55,9 +55,6 @@ import {
 const Transactions = () => {
   const [transactions, setTransactions] = useState([]);
   const [filteredTransactions, setFilteredTransactions] = useState([]);
-  const [pendingCashSubmissions, setPendingCashSubmissions] = useState([]);
-  const [approvedCashSubmissions, setApprovedCashSubmissions] = useState([]);
-  const [rejectedCashSubmissions, setRejectedCashSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [page, setPage] = useState(0);
@@ -72,7 +69,6 @@ const Transactions = () => {
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [transactionDialogTab, setTransactionDialogTab] = useState('transaction');
   const [currentTab, setCurrentTab] = useState('transactions');
-  const [cashSubmissionTab, setCashSubmissionTab] = useState('pending');
   const [createSubmissionDialogOpen, setCreateSubmissionDialogOpen] = useState(false);
   const [submissionFormData, setSubmissionFormData] = useState({
     submissionType: 'cash',
@@ -84,7 +80,6 @@ const Transactions = () => {
   const [loadingOrders, setLoadingOrders] = useState(false);
   const { isDarkMode, colors } = useTheme();
   const { user } = useAdmin();
-  const isSuperAdmin = user?.role === 'super_admin';
 
   const dateFieldStyles = {
     minWidth: 180,
@@ -117,9 +112,6 @@ const Transactions = () => {
   useEffect(() => {
     fetchTransactions();
     fetchMerchantWallet();
-    fetchPendingCashSubmissions();
-    fetchApprovedCashSubmissions();
-    fetchRejectedCashSubmissions();
   }, []);
 
   // Removed cash submissions tab - no longer needed
@@ -283,50 +275,6 @@ const Transactions = () => {
     }
   };
 
-  const fetchPendingCashSubmissions = async () => {
-    try {
-      const response = await api.get('/driver-wallet/cash-submissions/pending');
-      // Backend wraps response in { success: true, data: { submissions: [...], total: ... } }
-      const submissions = response.data?.data?.submissions || response.data?.submissions || [];
-      console.log('Pending cash submissions fetched:', submissions.length);
-      setPendingCashSubmissions(submissions);
-    } catch (error) {
-      console.error('Error fetching pending cash submissions:', error);
-      console.error('Error details:', error.response?.data);
-      setPendingCashSubmissions([]);
-    }
-  };
-
-  const fetchApprovedCashSubmissions = async () => {
-    try {
-      // Get all cash submissions and filter for approved
-      const response = await api.get('/driver-wallet/cash-submissions/all');
-      const allSubmissions = response.data?.data?.submissions || response.data?.submissions || [];
-      console.log('All submissions fetched:', allSubmissions.length);
-      console.log('All submissions statuses:', allSubmissions.map(s => ({ id: s.id, status: s.status })));
-      const approved = allSubmissions.filter(s => s.status === 'approved');
-      console.log('Approved submissions filtered:', approved.length);
-      console.log('Approved submissions:', approved.map(s => ({ id: s.id, status: s.status, approver: s.approver?.name })));
-      setApprovedCashSubmissions(approved);
-    } catch (error) {
-      console.error('Error fetching approved cash submissions:', error);
-      console.error('Error details:', error.response?.data);
-      setApprovedCashSubmissions([]);
-    }
-  };
-
-  const fetchRejectedCashSubmissions = async () => {
-    try {
-      // Get all cash submissions and filter for rejected
-      const response = await api.get('/driver-wallet/cash-submissions/all');
-      const allSubmissions = response.data?.data?.submissions || response.data?.submissions || [];
-      const rejected = allSubmissions.filter(s => s.status === 'rejected');
-      setRejectedCashSubmissions(rejected);
-    } catch (error) {
-      console.error('Error fetching rejected cash submissions:', error);
-      setRejectedCashSubmissions([]);
-    }
-  };
 
   const handleCreateSubmission = async () => {
     try {
@@ -379,7 +327,8 @@ const Transactions = () => {
       setCreateSubmissionDialogOpen(false);
       setSubmissionFormData({ submissionType: 'cash', amount: '', details: {}, orderIds: [] });
       setAvailableOrders([]);
-      await fetchPendingCashSubmissions();
+      // Refresh transactions to show the new submission
+      fetchTransactions();
     } catch (error) {
       console.error('Error creating cash submission:', error);
       alert(error.response?.data?.error || 'Failed to create cash submission');

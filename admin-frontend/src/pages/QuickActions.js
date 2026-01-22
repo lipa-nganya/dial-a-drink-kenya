@@ -336,7 +336,6 @@ const QuickActions = () => {
                   </TableHead>
                   <TableBody>
                     {todayCompletedOrders.map((order) => {
-                      const statusChip = getOrderStatusChipProps(order.status);
                       const isPOS = order.isPOS || order.deliveryAddress === 'In-Store Purchase';
 
                       return (
