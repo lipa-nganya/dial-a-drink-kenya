@@ -41,7 +41,6 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import NewOrderDialog from '../components/NewOrderDialog';
-import { getOrderStatusChipProps } from '../utils/chipStyles';
 
 const QuickActions = () => {
   const { isDarkMode, colors } = useTheme();

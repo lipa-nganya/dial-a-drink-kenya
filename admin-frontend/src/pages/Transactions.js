@@ -79,7 +79,6 @@ const Transactions = () => {
   const [availableOrders, setAvailableOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const { isDarkMode, colors } = useTheme();
-  const { user } = useAdmin();
 
   const dateFieldStyles = {
     minWidth: 180,
