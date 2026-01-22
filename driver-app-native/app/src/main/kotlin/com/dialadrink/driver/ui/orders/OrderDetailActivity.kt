@@ -240,8 +240,8 @@ class OrderDetailActivity : AppCompatActivity() {
         binding.itemsText.text = itemsText
         
         // Show/hide customer phone based on status and cancellation request
+        // Hide when: completed, cancelled, or cancellation requested (even if status not yet cancelled)
         if (status == "completed" || status == "cancelled" || order.cancellationRequested == true) {
-            // Hide phone number when order is completed, cancelled, or cancellation requested
             binding.customerPhoneContainer.visibility = View.GONE
         } else {
             binding.customerPhoneContainer.visibility = View.VISIBLE
@@ -272,8 +272,8 @@ class OrderDetailActivity : AppCompatActivity() {
             binding.navigateToCustomerButton.visibility = View.VISIBLE
         }
         
-        // Hide customer location (address) when cancellation requested
-        if (order.cancellationRequested == true) {
+        // Hide customer location (address) when cancellation requested or order is cancelled
+        if (order.cancellationRequested == true || status == "cancelled") {
             binding.addressText.visibility = View.GONE
         } else {
             binding.addressText.visibility = View.VISIBLE
@@ -294,8 +294,8 @@ class OrderDetailActivity : AppCompatActivity() {
     private fun updateButtonVisibility(order: Order) {
         val status = order.status.lowercase()
         
-        // Hide "out for delivery" button when cancellation requested
-        val showOutForDelivery = status == "confirmed" && order.cancellationRequested != true
+        // Hide "out for delivery" button when cancellation requested or order is cancelled
+        val showOutForDelivery = status == "confirmed" && order.cancellationRequested != true && status != "cancelled"
         val showDelivered = status == "out_for_delivery"
         val showReceivedCash = status == "out_for_delivery" && order.paymentStatus.lowercase() != "paid"
         

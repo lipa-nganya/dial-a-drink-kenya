@@ -1535,11 +1535,24 @@ router.patch('/orders/:id/cancellation-request', verifyAdmin, async (req, res) =
       });
 
       if (order.driverId) {
-        io.to(`driver-${order.driverId}`).emit('order-cancellation-processed', {
+        const driverRoom = `driver-${order.driverId}`;
+        
+        // Emit cancellation processed event
+        io.to(driverRoom).emit('order-cancellation-processed', {
           orderId: order.id,
           approved: approved,
           order: orderData
         });
+        
+        // Also emit order-status-updated for real-time UI updates
+        io.to(driverRoom).emit('order-status-updated', {
+          orderId: order.id,
+          status: order.status,
+          paymentStatus: order.paymentStatus,
+          order: orderData
+        });
+        
+        console.log(`📡 [CANCELLATION PROCESSED] Emitted to ${driverRoom} for Order #${order.id}: approved=${approved}, status=${order.status}`);
       }
     }
 

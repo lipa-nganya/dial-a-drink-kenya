@@ -91,16 +91,18 @@ router.post('/:orderId/respond', async (req, res) => {
 
       // Only check for pending cancellation if columns exist
       if (hasCancellationColumns) {
+        // Check if driver has a cancelled order pending admin approval
         const pendingCancellation = await db.Order.findOne({
           where: {
             driverId: parseInt(driverId),
+            status: 'cancelled',
             cancellationRequested: true,
             cancellationApproved: null // Pending approval
           }
         });
 
         if (pendingCancellation) {
-          return sendError(res, `Cannot accept new orders. You have a pending cancellation request for Order #${pendingCancellation.id}. Please wait for admin approval.`, 400);
+          return sendError(res, `Cannot accept new orders. You have a cancelled order (Order #${pendingCancellation.id}) pending admin approval. Please wait for admin approval before accepting new orders.`, 400);
         }
       }
 
@@ -325,7 +327,8 @@ router.post('/:orderId/request-cancellation', async (req, res) => {
       await order.update({
         cancellationRequested: true,
         cancellationReason: reason.trim(),
-        cancellationRequestedAt: new Date()
+        cancellationRequestedAt: new Date(),
+        status: 'cancelled' // Move order to cancelled status immediately
       });
     } else {
       return sendError(res, 'Cancellation feature is not available in this database version', 501);
@@ -354,7 +357,7 @@ router.post('/:orderId/request-cancellation', async (req, res) => {
       ]
     });
 
-    // Emit socket event to notify admin
+    // Emit socket event to notify admin and driver
     const io = req.app.get('io');
     if (io) {
       const orderData = updatedOrder.toJSON();
@@ -362,6 +365,7 @@ router.post('/:orderId/request-cancellation', async (req, res) => {
         orderData.orderItems = orderData.items;
       }
       
+      // Notify admin of cancellation request
       io.to('admin').emit('order-cancellation-requested', {
         orderId: order.id,
         order: orderData,
@@ -370,7 +374,17 @@ router.post('/:orderId/request-cancellation', async (req, res) => {
         timestamp: new Date()
       });
       
+      // Notify driver of status change (order is now cancelled)
+      const driverRoom = `driver-${driverId}`;
+      io.to(driverRoom).emit('order-status-updated', {
+        orderId: order.id,
+        status: 'cancelled',
+        paymentStatus: orderData.paymentStatus,
+        order: orderData
+      });
+      
       console.log(`📢 Socket event emitted: order-cancellation-requested for Order #${order.id}`);
+      console.log(`📡 Socket event emitted: order-status-updated to ${driverRoom} for Order #${order.id} (status: cancelled)`);
     }
 
     sendSuccess(res, updatedOrder, 'Cancellation request submitted. Waiting for admin approval.');
@@ -770,9 +784,11 @@ router.patch('/:orderId/status', async (req, res) => {
     }
 
     if (hasCancellationColumns) {
+      // Check if driver has a cancelled order pending admin approval
       const pendingCancellation = await db.Order.findOne({
         where: {
           driverId: parseInt(driverId),
+          status: 'cancelled',
           cancellationRequested: true,
           cancellationApproved: null, // Pending approval
           id: { [Op.ne]: parseInt(orderId) } // Different order
@@ -780,7 +796,7 @@ router.patch('/:orderId/status', async (req, res) => {
       });
 
       if (pendingCancellation) {
-        return sendError(res, `Cannot update order: You have a pending cancellation request for Order #${pendingCancellation.id}. Please wait for admin approval before updating other orders.`, 400);
+        return sendError(res, `Cannot update order: You have a cancelled order (Order #${pendingCancellation.id}) pending admin approval. Please wait for admin approval before updating other orders.`, 400);
       }
     }
 
