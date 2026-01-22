@@ -45,7 +45,6 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
-import { useAdmin } from '../contexts/AdminContext';
 import {
   getPaymentMethodChipProps,
   getTransactionTypeChipProps,
