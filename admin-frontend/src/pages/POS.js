@@ -16,12 +16,17 @@ import {
   Autocomplete,
   Alert,
   CircularProgress,
-  InputAdornment
+  InputAdornment,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Add,
   Delete,
-  CheckCircle
+  CheckCircle,
+  PersonAdd
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -32,10 +37,19 @@ const POS = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   
-  // Account and Reference
+  // Account and Customer
   const [accountId, setAccountId] = useState('');
-  const [reference, setReference] = useState('');
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [accounts, setAccounts] = useState([]);
+  
+  // Create customer dialog
+  const [createCustomerDialogOpen, setCreateCustomerDialogOpen] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
   
   // Product entry
   const [productSearch, setProductSearch] = useState('');
@@ -57,19 +71,96 @@ const POS = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [drinksResponse, accountsResponse] = await Promise.all([
+      const [drinksResponse, accountsResponse, customersResponse] = await Promise.all([
         api.get('/pos/drinks').catch(() => api.get('/drinks')),
-        api.get('/admin/accounts').catch(() => ({ data: [] }))
+        api.get('/admin/accounts').catch(() => ({ data: [] })),
+        api.get('/admin/customers').catch(() => ({ data: [] }))
       ]);
       
       setDrinks(drinksResponse.data || []);
       setAccounts(accountsResponse.data || []);
+      setCustomers(customersResponse.data || []);
     } catch (err) {
       console.error('Error fetching POS data:', err);
       setError(err.response?.data?.error || 'Failed to load POS data');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCustomerSearch = async (searchValue) => {
+    setCustomerSearch(searchValue);
+    
+    // If search value looks like a phone number and no customer is selected, check if customer exists
+    if (searchValue && !selectedCustomer) {
+      const phoneMatch = searchValue.match(/(\+?\d{9,15})/);
+      if (phoneMatch) {
+        const phoneNumber = phoneMatch[1];
+        // Check if customer exists
+        const existingCustomer = customers.find(c => 
+          c.phone === phoneNumber || 
+          c.phone === phoneNumber.replace(/^\+/, '') ||
+          c.phone === phoneNumber.replace(/^254/, '0') ||
+          c.username === phoneNumber
+        );
+        
+        if (!existingCustomer) {
+          // Customer doesn't exist - will show create option
+          setNewCustomerPhone(phoneNumber);
+        }
+      }
+    }
+  };
+
+  const handleCreateCustomer = async () => {
+    if (!newCustomerPhone || !newCustomerPhone.trim()) {
+      setError('Phone number is required');
+      return;
+    }
+
+    if (!newCustomerName || !newCustomerName.trim()) {
+      setError('Customer name is required');
+      return;
+    }
+
+    setCreatingCustomer(true);
+    setError(null);
+
+    try {
+      const response = await api.post('/admin/customers', {
+        phone: newCustomerPhone.trim(),
+        customerName: newCustomerName.trim()
+      });
+
+      if (response.data?.success && response.data?.customer) {
+        // Add new customer to list
+        setCustomers([...customers, response.data.customer]);
+        // Select the newly created customer
+        setSelectedCustomer(response.data.customer);
+        setCustomerPhone(response.data.customer.phone);
+        setCustomerSearch(`${response.data.customer.customerName || response.data.customer.name} - ${response.data.customer.phone}`);
+        // Close dialog
+        setCreateCustomerDialogOpen(false);
+        setNewCustomerName('');
+        setNewCustomerPhone('');
+      } else {
+        setError('Failed to create customer');
+      }
+    } catch (err) {
+      console.error('Error creating customer:', err);
+      setError(err.response?.data?.error || 'Failed to create customer');
+    } finally {
+      setCreatingCustomer(false);
+    }
+  };
+
+  const openCreateCustomerDialog = () => {
+    // Extract phone number from search if available
+    const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
+    if (phoneMatch) {
+      setNewCustomerPhone(phoneMatch[1]);
+    }
+    setCreateCustomerDialogOpen(true);
   };
 
   const handleProductSelect = (product) => {
@@ -158,8 +249,8 @@ const POS = () => {
       return;
     }
 
-    if (!reference || !reference.trim()) {
-      setError('Please enter a reference');
+    if (!selectedCustomer && !customerPhone) {
+      setError('Please select or enter a customer phone number');
       return;
     }
 
@@ -168,16 +259,29 @@ const POS = () => {
     setOrderSuccess(null);
 
     try {
+      // Determine customer info
+      let finalCustomerName = 'POS';
+      let finalCustomerPhone = '';
+      
+      if (selectedCustomer) {
+        finalCustomerName = selectedCustomer.customerName || selectedCustomer.name || 'POS';
+        finalCustomerPhone = selectedCustomer.phone || '';
+      } else if (customerPhone) {
+        // Use entered phone number
+        finalCustomerPhone = customerPhone.trim();
+        finalCustomerName = 'POS Customer';
+      }
+
       // Create order data
       const orderData = {
-        customerName: reference, // Use reference as customer name for office sales
-        customerPhone: reference, // Use reference as phone for office sales
+        customerName: finalCustomerName,
+        customerPhone: finalCustomerPhone,
         items: items.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
           selectedPrice: item.price
         })),
-        notes: `Office POS Sale - Reference: ${reference}${accountId ? `, Account ID: ${accountId}` : ''}`,
+        notes: `Office POS Sale${accountId ? ` - Account ID: ${accountId}` : ''}`,
         amountPaid: getTotal(),
         branchId: accountId || null
       };
@@ -192,7 +296,9 @@ const POS = () => {
 
         // Clear form
         setItems([]);
-        setReference('');
+        setCustomerPhone('');
+        setCustomerSearch('');
+        setSelectedCustomer(null);
         setAccountId('');
         setSelectedProduct(null);
         setProductSearch('');
@@ -241,19 +347,83 @@ const POS = () => {
         </Alert>
       )}
 
-      {/* Reference Section */}
+      {/* Customer and Account Section */}
       <Paper sx={{ p: 3, mb: 3, backgroundColor: colors.paper }}>
         <TableContainer>
           <Table>
             <TableHead>
               <TableRow>
+                <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Customer Phone</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Account</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Reference</TableCell>
                 <TableCell></TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               <TableRow>
+                <TableCell>
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <Autocomplete
+                      freeSolo
+                      options={customers}
+                      getOptionLabel={(option) => {
+                        if (typeof option === 'string') return option;
+                        const name = option.customerName || option.name || 'Unknown';
+                        const phone = option.phone || '';
+                        return phone ? `${name} - ${phone}` : name;
+                      }}
+                      value={selectedCustomer}
+                      onChange={(event, newValue) => {
+                        if (typeof newValue === 'string') {
+                          // User typed a phone number
+                          setSelectedCustomer(null);
+                          setCustomerPhone(newValue);
+                          handleCustomerSearch(newValue);
+                        } else if (newValue) {
+                          // Customer selected
+                          setSelectedCustomer(newValue);
+                          setCustomerPhone(newValue.phone || '');
+                          setCustomerSearch(`${newValue.customerName || newValue.name} - ${newValue.phone}`);
+                        } else {
+                          // Cleared
+                          setSelectedCustomer(null);
+                          setCustomerPhone('');
+                          setCustomerSearch('');
+                        }
+                      }}
+                      inputValue={customerSearch}
+                      onInputChange={(event, newInputValue) => {
+                        handleCustomerSearch(newInputValue);
+                      }}
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          placeholder="Enter customer phone number"
+                          size="small"
+                          fullWidth
+                        />
+                      )}
+                      sx={{ flex: 1 }}
+                    />
+                    {customerPhone && !selectedCustomer && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<PersonAdd />}
+                        onClick={openCreateCustomerDialog}
+                        sx={{
+                          borderColor: colors.accentText,
+                          color: colors.accentText,
+                          '&:hover': {
+                            borderColor: colors.accentText,
+                            backgroundColor: colors.accentText + '10'
+                          }
+                        }}
+                      >
+                        Create
+                      </Button>
+                    )}
+                  </Box>
+                </TableCell>
                 <TableCell>
                   <TextField
                     type="number"
@@ -265,19 +435,10 @@ const POS = () => {
                   />
                 </TableCell>
                 <TableCell>
-                  <TextField
-                    fullWidth
-                    value={reference}
-                    onChange={(e) => setReference(e.target.value)}
-                    placeholder="Enter reference"
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>
                   <Button
                     variant="contained"
                     onClick={handlePostOfficeSale}
-                    disabled={processing || items.length === 0 || !reference}
+                    disabled={processing || items.length === 0 || (!selectedCustomer && !customerPhone)}
                     sx={{
                       backgroundColor: '#4CAF50',
                       color: '#FFFFFF',
@@ -293,6 +454,71 @@ const POS = () => {
           </Table>
         </TableContainer>
       </Paper>
+
+      {/* Create Customer Dialog */}
+      <Dialog
+        open={createCustomerDialogOpen}
+        onClose={() => {
+          setCreateCustomerDialogOpen(false);
+          setNewCustomerName('');
+          setNewCustomerPhone('');
+          setError(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create New Customer</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            label="Phone Number *"
+            value={newCustomerPhone}
+            onChange={(e) => setNewCustomerPhone(e.target.value)}
+            margin="normal"
+            placeholder="e.g., 0712345678"
+            disabled={creatingCustomer}
+          />
+          <TextField
+            fullWidth
+            label="Customer Name *"
+            value={newCustomerName}
+            onChange={(e) => setNewCustomerName(e.target.value)}
+            margin="normal"
+            placeholder="Enter customer name"
+            disabled={creatingCustomer}
+          />
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setCreateCustomerDialogOpen(false);
+              setNewCustomerName('');
+              setNewCustomerPhone('');
+              setError(null);
+            }}
+            disabled={creatingCustomer}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateCustomer}
+            variant="contained"
+            disabled={creatingCustomer || !newCustomerPhone || !newCustomerName}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: '#FFFFFF',
+              '&:hover': { backgroundColor: colors.accentText, opacity: 0.9 }
+            }}
+          >
+            {creatingCustomer ? <CircularProgress size={20} /> : 'Create Customer'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Product Entry Section */}
       <Paper sx={{ p: 3, mb: 3, backgroundColor: colors.paper }}>

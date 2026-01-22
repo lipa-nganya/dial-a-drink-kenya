@@ -1214,6 +1214,173 @@ router.get('/orders', verifyAdmin, async (req, res) => {
   }
 });
 
+/**
+ * Update order item price
+ * PATCH /api/admin/orders/:orderId/items/:itemId/price
+ * IMPORTANT: This route must be defined BEFORE /orders/:id routes to avoid route conflicts
+ */
+router.patch('/orders/:orderId/items/:itemId/price', verifyAdmin, async (req, res) => {
+  console.log('🔍 [UPDATE ITEM PRICE] Route hit:', req.method, req.path, req.params);
+  try {
+    const { orderId, itemId } = req.params;
+    const { price } = req.body;
+
+    if (!price || isNaN(parseFloat(price)) || parseFloat(price) < 0) {
+      return res.status(400).json({ error: 'Valid price is required' });
+    }
+
+    const newPrice = parseFloat(price);
+
+    // Find the order first to check status
+    const order = await db.Order.findByPk(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if order is cancelled or completed (prevent editing completed orders)
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit prices for completed or cancelled orders' });
+    }
+
+    // Check if order has been paid (prevent editing paid orders)
+    if (order.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Cannot edit prices for orders that have been paid' });
+    }
+
+    // Find the order item
+    const orderItem = await db.OrderItem.findOne({
+      where: { id: itemId, orderId: orderId }
+    });
+
+    if (!orderItem) {
+      return res.status(404).json({ error: 'Order item not found' });
+    }
+
+    // Update the item price
+    await orderItem.update({ price: newPrice });
+
+    // Recalculate order total using getOrderFinancialBreakdown (will use updated price)
+    const breakdown = await getOrderFinancialBreakdown(orderId);
+    
+    // Calculate new total: itemsTotal + deliveryFee + tipAmount
+    const newTotalAmount = breakdown.itemsTotal + breakdown.deliveryFee + breakdown.tipAmount;
+
+    // Update order totalAmount
+    const oldNotes = order.notes || '';
+    const priceUpdateNote = `[${new Date().toISOString()}] Price updated for item #${itemId} (${orderItem.drinkId}): KES ${newPrice.toFixed(2)}`;
+    await order.update({ 
+      totalAmount: newTotalAmount,
+      notes: oldNotes ? `${oldNotes}\n${priceUpdateNote}` : priceUpdateNote
+    });
+
+    // Reload order with items for response
+    const updatedOrder = await db.Order.findByPk(orderId, {
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        include: [{
+          model: db.Drink,
+          as: 'drink'
+        }]
+      }]
+    });
+
+    res.json({
+      success: true,
+      message: 'Item price updated successfully',
+      order: updatedOrder,
+      breakdown: {
+        itemsTotal: breakdown.itemsTotal,
+        deliveryFee: breakdown.deliveryFee,
+        tipAmount: breakdown.tipAmount,
+        totalAmount: newTotalAmount
+      }
+    });
+  } catch (error) {
+    console.error('Error updating order item price:', error);
+    res.status(500).json({ error: 'Failed to update item price' });
+  }
+});
+
+/**
+ * Update order delivery fee
+ * PATCH /api/admin/orders/:orderId/delivery-fee
+ * IMPORTANT: This route must be defined BEFORE /orders/:id routes to avoid route conflicts
+ */
+router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
+  console.log('🔍 [UPDATE DELIVERY FEE] Route hit:', req.method, req.path, req.params, req.body);
+  try {
+    const { orderId } = req.params;
+    const { deliveryFee } = req.body;
+
+    if (deliveryFee === undefined || deliveryFee === null || isNaN(parseFloat(deliveryFee)) || parseFloat(deliveryFee) < 0) {
+      return res.status(400).json({ error: 'Valid delivery fee is required' });
+    }
+
+    const newDeliveryFee = parseFloat(deliveryFee);
+
+    // Find the order first to check status
+    const order = await db.Order.findByPk(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if order is cancelled or completed (prevent editing completed orders)
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit delivery fee for completed or cancelled orders' });
+    }
+
+    // Check if order has been paid (prevent editing paid orders)
+    if (order.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Cannot edit delivery fee for orders that have been paid' });
+    }
+
+    // Get current financial breakdown
+    const breakdown = await getOrderFinancialBreakdown(orderId);
+    
+    // Calculate new total: itemsTotal + newDeliveryFee + tipAmount
+    const newTotalAmount = breakdown.itemsTotal + newDeliveryFee + breakdown.tipAmount;
+
+    // Update order totalAmount
+    const oldNotes = order.notes || '';
+    const deliveryFeeUpdateNote = `[${new Date().toISOString()}] Delivery fee updated: KES ${breakdown.deliveryFee.toFixed(2)} → KES ${newDeliveryFee.toFixed(2)}`;
+    await order.update({ 
+      totalAmount: newTotalAmount,
+      notes: oldNotes ? `${oldNotes}\n${deliveryFeeUpdateNote}` : deliveryFeeUpdateNote
+    });
+
+    // Reload order with items for response
+    const updatedOrder = await db.Order.findByPk(orderId, {
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        include: [{
+          model: db.Drink,
+          as: 'drink'
+        }]
+      }]
+    });
+
+    // Recalculate breakdown with new delivery fee
+    const updatedBreakdown = await getOrderFinancialBreakdown(orderId);
+
+    res.json({
+      success: true,
+      message: 'Delivery fee updated successfully',
+      order: updatedOrder,
+      breakdown: {
+        itemsTotal: updatedBreakdown.itemsTotal,
+        deliveryFee: newDeliveryFee,
+        tipAmount: updatedBreakdown.tipAmount,
+        totalAmount: newTotalAmount
+      }
+    });
+  } catch (error) {
+    console.error('Error updating delivery fee:', error);
+    res.status(500).json({ error: 'Failed to update delivery fee' });
+  }
+});
+
 // Update order status (admin)
 router.patch('/orders/:id/status', async (req, res) => {
   try {
@@ -4434,6 +4601,134 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch sales analytics'
+    });
+  }
+});
+
+/**
+ * Get cash at hand for logged-in admin
+ * GET /api/admin/cash-at-hand
+ */
+router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
+  try {
+    const adminId = req.admin.id;
+
+    // Get admin wallet
+    let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+    if (!adminWallet) {
+      adminWallet = await db.AdminWallet.create({
+        id: 1,
+        balance: 0,
+        totalRevenue: 0,
+        totalOrders: 0,
+        cashAtHand: 0
+      });
+    }
+
+    // Get cash from POS orders serviced by this admin
+    const posCashOrders = await db.Order.findAll({
+      where: {
+        adminId: adminId,
+        adminOrder: true,
+        paymentMethod: 'cash',
+        paymentStatus: 'paid',
+        status: {
+          [Op.in]: ['completed', 'delivered']
+        }
+      },
+      attributes: ['id', 'totalAmount', 'createdAt', 'customerName']
+    });
+
+    const cashFromPOS = posCashOrders.reduce((sum, order) => {
+      return sum + (parseFloat(order.totalAmount) || 0);
+    }, 0);
+
+    // Get cash submissions from drivers approved by this admin
+    const driverSubmissions = await db.CashSubmission.findAll({
+      where: {
+        driverId: { [Op.ne]: null }, // Driver submissions only
+        approvedBy: adminId,
+        status: 'approved'
+      },
+      include: [
+        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false }
+      ],
+      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt']
+    });
+
+    const cashFromDrivers = driverSubmissions.reduce((sum, submission) => {
+      return sum + (parseFloat(submission.amount) || 0);
+    }, 0);
+
+    // Get admin cash submissions created by this admin (cash spent)
+    const adminSubmissions = await db.CashSubmission.findAll({
+      where: {
+        adminId: adminId,
+        driverId: null, // Admin submissions
+        status: 'approved'
+      },
+      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt', 'approvedBy']
+    });
+
+    const cashSpent = adminSubmissions.reduce((sum, submission) => {
+      return sum + (parseFloat(submission.amount) || 0);
+    }, 0);
+
+    // Calculate cash at hand for this admin
+    // Cash at hand = Cash from POS orders + Cash from drivers - Cash spent by admin
+    const cashAtHand = Math.max(0, cashFromPOS + cashFromDrivers - cashSpent);
+
+    // Get all submissions (for display)
+    const allSubmissions = await db.CashSubmission.findAll({
+      where: {
+        [Op.or]: [
+          { approvedBy: adminId, driverId: { [Op.ne]: null } }, // Driver submissions approved by this admin
+          { adminId: adminId, driverId: null } // Admin submissions created by this admin
+        ]
+      },
+      include: [
+        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false },
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      cashAtHand: cashAtHand,
+      breakdown: {
+        cashFromPOS: cashFromPOS,
+        cashFromDrivers: cashFromDrivers,
+        cashSpent: cashSpent
+      },
+      posOrders: posCashOrders.map(order => ({
+        id: order.id,
+        customerName: order.customerName,
+        totalAmount: parseFloat(order.totalAmount) || 0,
+        createdAt: order.createdAt
+      })),
+      submissions: allSubmissions.map(sub => ({
+        id: sub.id,
+        submissionType: sub.submissionType,
+        amount: parseFloat(sub.amount) || 0,
+        status: sub.status,
+        details: sub.details,
+        createdAt: sub.createdAt,
+        approvedAt: sub.approvedAt,
+        driver: sub.driver ? { id: sub.driver.id, name: sub.driver.name, phoneNumber: sub.driver.phoneNumber } : null,
+        admin: sub.admin ? { id: sub.admin.id, username: sub.admin.username, name: sub.admin.name } : null,
+        approver: sub.approver ? { id: sub.approver.id, username: sub.approver.username, name: sub.approver.name } : null,
+        orders: sub.orders || []
+      })),
+      currency: 'KES'
+    });
+  } catch (error) {
+    console.error('Error fetching admin cash at hand:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch cash at hand'
     });
   }
 });

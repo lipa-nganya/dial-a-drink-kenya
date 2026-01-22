@@ -30,6 +30,8 @@ const Home = () => {
   const [selectedSubcategory, setSelectedSubcategory] = useState(0);
   const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
   const [brandFocusLoading, setBrandFocusLoading] = useState(true);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
   const navigate = useNavigate();
   const { colors } = useTheme();
 
@@ -39,6 +41,21 @@ const Home = () => {
     fetchHeroImage();
     fetchDrinks();
     fetchBrandFocusDrinks();
+  }, []);
+
+  // Scroll detection for collapsing categories and fixing search
+  useEffect(() => {
+    const handleScroll = () => {
+      const scrollY = window.scrollY || window.pageYOffset;
+      const shouldCollapse = scrollY > 200; // Collapse after 200px scroll
+      const shouldFixSearch = scrollY > 100; // Fix search after 100px scroll
+      
+      setIsScrolled(shouldFixSearch);
+      setCategoriesCollapsed(shouldCollapse);
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   // Fetch subcategories when category changes
@@ -252,12 +269,23 @@ const Home = () => {
             Limited Offers
           </Button>
 
-          {/* Search Bar */}
+          {/* Search Bar - Fixed when scrolling */}
           <Box
             sx={{
               mb: 4,
               maxWidth: 480,
-              mx: 'auto'
+              mx: 'auto',
+              position: isScrolled ? 'fixed' : 'relative',
+              top: isScrolled ? { xs: '56px', sm: '64px' } : 'auto',
+              left: isScrolled ? '50%' : 'auto',
+              transform: isScrolled ? 'translateX(-50%)' : 'none',
+              zIndex: isScrolled ? 100 : 'auto',
+              width: isScrolled ? '90%' : '100%',
+              maxWidth: isScrolled ? '480px' : '480px',
+              backgroundColor: isScrolled ? '#FFFFFF' : 'transparent',
+              boxShadow: isScrolled ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
+              borderRadius: isScrolled ? 2 : 0,
+              transition: 'all 0.3s ease-in-out'
             }}
           >
             <TextField
@@ -283,6 +311,11 @@ const Home = () => {
               }}
             />
           </Box>
+
+          {/* Spacer to prevent content jump when search is fixed */}
+          {isScrolled && (
+            <Box sx={{ height: '80px', mb: 2 }} />
+          )}
 
           {/* Search Results */}
           {normalizedSearch && (
@@ -337,17 +370,25 @@ const Home = () => {
             </Box>
           )}
 
-          {/* Categories Section - Sticky */}
+          {/* Categories Section - Hidden on scroll */}
           <Box 
             sx={{ 
               position: 'sticky',
-              top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
+              top: isScrolled ? { xs: '120px', sm: '128px' } : { xs: '56px', sm: '64px' }, // Adjust top when search is fixed
               zIndex: 99, // Lower than AppBar (which is typically 1100)
               backgroundColor: colors.background,
-              pt: 1,
-              pb: 1,
-              mb: 2,
-              borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
+              pt: categoriesCollapsed ? 0 : 1,
+              pb: categoriesCollapsed ? 0 : 1,
+              mb: categoriesCollapsed ? 0 : 2,
+              borderBottom: categoriesCollapsed ? 'none' : `1px solid rgba(0, 0, 0, 0.1)`,
+              transition: 'all 0.3s ease-in-out',
+              transform: categoriesCollapsed ? 'translateY(-100%)' : 'translateY(0)',
+              opacity: categoriesCollapsed ? 0 : 1,
+              maxHeight: categoriesCollapsed ? 0 : 'none',
+              height: categoriesCollapsed ? 0 : 'auto',
+              overflow: 'hidden',
+              visibility: categoriesCollapsed ? 'hidden' : 'visible',
+              pointerEvents: categoriesCollapsed ? 'none' : 'auto'
             }}
           >
             <Box

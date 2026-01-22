@@ -624,7 +624,8 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
         id: 1,
         balance: 0,
         totalRevenue: 0,
-        totalOrders: 0
+        totalOrders: 0,
+        cashAtHand: 0
       });
     }
 
@@ -634,6 +635,22 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
       balance: oldBalance + submissionAmount,
       totalRevenue: parseFloat(adminWallet.totalRevenue) + submissionAmount
     });
+
+    // Update admin cash at hand based on submission type
+    const currentCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
+    let newCashAtHand = currentCashAtHand;
+    
+    if (submission.driverId && !submission.adminId) {
+      // Driver submission approved = cash received by admin, so INCREASE cash at hand
+      newCashAtHand = currentCashAtHand + submissionAmount;
+      await adminWallet.update({ cashAtHand: newCashAtHand });
+      console.log(`   Admin cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (added ${submissionAmount.toFixed(2)} from driver)`);
+    } else if (submission.adminId && !submission.driverId) {
+      // Admin submission approved = cash spent by admin, so DECREASE cash at hand
+      newCashAtHand = Math.max(0, currentCashAtHand - submissionAmount);
+      await adminWallet.update({ cashAtHand: newCashAtHand });
+      console.log(`   Admin cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (deducted ${submissionAmount.toFixed(2)} from admin submission)`);
+    }
 
     // Create transaction for cash submission
     const submitterName = submission.driver 

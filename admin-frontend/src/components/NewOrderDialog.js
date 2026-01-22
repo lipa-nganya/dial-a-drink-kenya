@@ -25,7 +25,8 @@ import {
   Add,
   Delete,
   ShoppingCart,
-  Remove
+  Remove,
+  PersonAdd
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import AddressAutocomplete from './AddressAutocomplete';
@@ -75,6 +76,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [selectedDriver, setSelectedDriver] = useState('');
   const [isStop, setIsStop] = useState(initialIsStop);
   const [stopDeductionAmount, setStopDeductionAmount] = useState('100');
+  const [sendSmsToCustomer, setSendSmsToCustomer] = useState(true); // Default to sending SMS
+  
+  // Create customer dialog state
+  const [createCustomerDialogOpen, setCreateCustomerDialogOpen] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState('');
+  const [newCustomerPhone, setNewCustomerPhone] = useState('');
+  const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -426,7 +434,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
         transactionCode: paymentMethod === 'mobile_money' && transactionCode ? transactionCode.trim() : null,
         isStop: isStop,
-        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null
+        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null,
+        sendSmsToCustomer: sendSmsToCustomer
       };
 
       console.log('📦 Order data being sent:', JSON.stringify(orderData, null, 2));
@@ -597,7 +606,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
         transactionCode: null, // Will be populated after payment
         isStop: isStop,
-        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null
+        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null,
+        sendSmsToCustomer: sendSmsToCustomer
       };
 
       // Create order first (pending payment)
@@ -867,7 +877,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
         transactionCode: null, // Will be populated after payment
         isStop: isStop,
-        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null
+        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null,
+        sendSmsToCustomer: sendSmsToCustomer
       };
 
       // Create order first (pending payment)
@@ -990,6 +1001,64 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     return name.includes(search) || phone.includes(search);
   });
 
+  // Check if customerSearch looks like a phone number and no customer matches
+  const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
+  const isPhoneNumber = phoneMatch && phoneMatch[1].length >= 9;
+  const hasNoMatches = filteredCustomers.length === 0 && customerSearch.trim().length > 0;
+  const showCreateOption = isPhoneNumber && hasNoMatches && !selectedCustomer;
+
+  const handleCreateCustomer = async () => {
+    if (!newCustomerPhone || !newCustomerPhone.trim()) {
+      setError('Phone number is required');
+      return;
+    }
+
+    if (!newCustomerName || !newCustomerName.trim()) {
+      setError('Customer name is required');
+      return;
+    }
+
+    setCreatingCustomer(true);
+    setError('');
+
+    try {
+      const response = await api.post('/admin/customers', {
+        phone: newCustomerPhone.trim(),
+        customerName: newCustomerName.trim()
+      });
+
+      if (response.data?.success && response.data?.customer) {
+        // Add new customer to list
+        setCustomers([...customers, response.data.customer]);
+        // Select the newly created customer
+        setSelectedCustomer(response.data.customer);
+        const name = response.data.customer.customerName || response.data.customer.name || 'Unknown';
+        const phone = response.data.customer.phone || '';
+        setCustomerSearch(phone ? `${name} - ${phone}` : name);
+        // Close dialog
+        setCreateCustomerDialogOpen(false);
+        setNewCustomerName('');
+        setNewCustomerPhone('');
+        // Fetch delivery address for new customer
+        try {
+          const addressResponse = await api.get(`/admin/customers/${response.data.customer.id}/latest-address`);
+          if (addressResponse.data?.deliveryAddress) {
+            setDeliveryLocation(addressResponse.data.deliveryAddress);
+          }
+        } catch (error) {
+          console.error('Error fetching customer address:', error);
+        }
+      } else {
+        setError('Failed to create customer');
+      }
+    } catch (err) {
+      console.error('Error creating customer:', err);
+      setError(err.response?.data?.error || 'Failed to create customer');
+    } finally {
+      setCreatingCustomer(false);
+    }
+  };
+
   const handleProcessPdqPayment = async () => {
     if (!pdqPaymentData.receiptNumber || !pdqPaymentData.amount) {
       setError('Please enter receipt number and amount');
@@ -1078,7 +1147,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
         isStop: isStop,
-        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null
+        stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null,
+        sendSmsToCustomer: sendSmsToCustomer
       };
 
       // Create order first
@@ -1235,6 +1305,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             <Autocomplete
               value={selectedCustomer}
               onChange={async (event, newValue) => {
+                // Handle create customer option
+                if (newValue && newValue.isCreateOption) {
+                  setNewCustomerPhone(newValue.phone || customerSearch);
+                  setCreateCustomerDialogOpen(true);
+                  return;
+                }
+                
                 setSelectedCustomer(newValue);
                 // When a customer is selected, update the search to show the selected value
                 if (newValue) {
@@ -1242,7 +1319,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   const phone = newValue.phone || '';
                   setCustomerSearch(phone ? `${name} - ${phone}` : name);
                   
-                  // Fetch and autopopulate delivery address from most recent order
+                  // Always fetch and autopopulate delivery address from most recent order
+                  // This will populate the field when a customer is selected
                   try {
                     const addressResponse = await api.get(`/admin/customers/${newValue.id}/latest-address`);
                     if (addressResponse.data?.deliveryAddress) {
@@ -1283,9 +1361,12 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   setDeliveryLocation('');
                 }
               }}
-              options={filteredCustomers}
+              options={showCreateOption ? [{ isCreateOption: true, phone: phoneMatch?.[1] || customerSearch }, ...filteredCustomers] : filteredCustomers}
               getOptionLabel={(option) => {
                 if (!option) return '';
+                if (option.isCreateOption) {
+                  return `Create new customer: ${option.phone}`;
+                }
                 const name = option.customerName || option.name || 'Unknown';
                 const phone = option.phone || '';
                 return phone ? `${name} - ${phone}` : name;
@@ -1316,30 +1397,60 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   />
                 );
               }}
-              renderOption={(props, option) => (
-                <li {...props} key={option.id || option.phone || option.email}>
-                  <Box>
-                    <Typography 
-                      variant="body2" 
-                      sx={{ 
-                        fontWeight: 600,
-                        fontSize: mobileSize ? '0.9rem' : '0.875rem'
-                      }}
-                    >
-                      {option.customerName || option.name || 'Unknown'}
-                    </Typography>
-                    {option.phone && (
+              renderOption={(props, option) => {
+                if (option.isCreateOption) {
+                  return (
+                    <li {...props} key="create-customer">
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <PersonAdd sx={{ color: colors.accentText, fontSize: '1.2rem' }} />
+                        <Box>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 600,
+                              fontSize: mobileSize ? '0.9rem' : '0.875rem',
+                              color: colors.accentText
+                            }}
+                          >
+                            Create new customer
+                          </Typography>
+                          <Typography 
+                            variant="caption" 
+                            color="text.secondary"
+                            sx={{ fontSize: mobileSize ? '0.72rem' : '0.8rem' }}
+                          >
+                            {option.phone}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </li>
+                  );
+                }
+                return (
+                  <li {...props} key={option.id || option.phone || option.email}>
+                    <Box>
                       <Typography 
-                        variant="caption" 
-                        color="text.secondary"
-                        sx={{ fontSize: mobileSize ? '0.72rem' : '0.8rem' }}
+                        variant="body2" 
+                        sx={{ 
+                          fontWeight: 600,
+                          fontSize: mobileSize ? '0.9rem' : '0.875rem'
+                        }}
                       >
-                        {option.phone}
+                        {option.customerName || option.name || 'Unknown'}
                       </Typography>
-                    )}
-                  </Box>
-                </li>
-              )}
+                      {option.phone && (
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary"
+                          sx={{ fontSize: mobileSize ? '0.72rem' : '0.8rem' }}
+                        >
+                          {option.phone}
+                        </Typography>
+                      )}
+                    </Box>
+                  </li>
+                );
+              }}
             />
           )}
 
@@ -1863,17 +1974,37 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             </Box>
           )}
 
-          {/* Stop Checkbox */}
+          {/* Stop Checkbox - Hidden for walk-in orders */}
+          {!isWalkIn && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={isStop}
+                  onChange={(e) => {
+                    setIsStop(e.target.checked);
+                    if (!e.target.checked) {
+                      setStopDeductionAmount('100');
+                    }
+                  }}
+                  sx={{
+                    color: colors.accentText,
+                    '&.Mui-checked': {
+                      color: colors.accentText
+                    }
+                  }}
+                />
+              }
+              label="This is a stop (deducts from driver savings)"
+              sx={{ color: colors.textPrimary }}
+            />
+          )}
+
+          {/* Send SMS to Customer Checkbox */}
           <FormControlLabel
             control={
               <Checkbox
-                checked={isStop}
-                onChange={(e) => {
-                  setIsStop(e.target.checked);
-                  if (!e.target.checked) {
-                    setStopDeductionAmount('100');
-                  }
-                }}
+                checked={sendSmsToCustomer}
+                onChange={(e) => setSendSmsToCustomer(e.target.checked)}
                 sx={{
                   color: colors.accentText,
                   '&.Mui-checked': {
@@ -1882,7 +2013,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 }}
               />
             }
-            label="This is a stop (deducts from driver savings)"
+            label="Send SMS notification to customer"
             sx={{ color: colors.textPrimary }}
           />
 
@@ -2175,6 +2306,71 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             }}
           >
             {processingPdqPayment ? 'Processing...' : 'Process Payment'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Create Customer Dialog */}
+      <Dialog
+        open={createCustomerDialogOpen}
+        onClose={() => {
+          setCreateCustomerDialogOpen(false);
+          setNewCustomerName('');
+          setNewCustomerPhone('');
+          setError('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Create New Customer</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            label="Phone Number *"
+            value={newCustomerPhone}
+            onChange={(e) => setNewCustomerPhone(e.target.value)}
+            margin="normal"
+            placeholder="e.g., 0712345678"
+            disabled={creatingCustomer}
+          />
+          <TextField
+            fullWidth
+            label="Customer Name *"
+            value={newCustomerName}
+            onChange={(e) => setNewCustomerName(e.target.value)}
+            margin="normal"
+            placeholder="Enter customer name"
+            disabled={creatingCustomer}
+          />
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError('')}>
+              {error}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setCreateCustomerDialogOpen(false);
+              setNewCustomerName('');
+              setNewCustomerPhone('');
+              setError('');
+            }}
+            disabled={creatingCustomer}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleCreateCustomer}
+            variant="contained"
+            disabled={creatingCustomer || !newCustomerPhone || !newCustomerName}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: '#FFFFFF',
+              '&:hover': { backgroundColor: colors.accentText, opacity: 0.9 }
+            }}
+          >
+            {creatingCustomer ? <CircularProgress size={20} /> : 'Create Customer'}
           </Button>
         </DialogActions>
       </Dialog>

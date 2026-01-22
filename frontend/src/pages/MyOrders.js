@@ -17,7 +17,9 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Pagination
+  Pagination,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   CheckCircle,
@@ -30,7 +32,9 @@ import {
   Payment,
   Refresh,
   Phone,
-  Download
+  Download,
+  CreditCard,
+  PhoneAndroid
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -49,10 +53,12 @@ const MyOrders = () => {
   const [expandedOrder, setExpandedOrder] = useState(null);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('mobile_money'); // 'mobile_money' or 'card'
   const [paymentPhone, setPaymentPhone] = useState('');
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [pesapalRedirectUrl, setPesapalRedirectUrl] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -347,8 +353,10 @@ const MyOrders = () => {
     // Prepopulate phone number from customer context, order, or localStorage
     const phoneNumber = customer?.phone || order.customerPhone || '';
     setPaymentPhone(phoneNumber);
+    setPaymentMethod('mobile_money');
     setPaymentError('');
     setPaymentSuccess(false);
+    setPesapalRedirectUrl(null);
     setPaymentDialogOpen(true);
   };
 
@@ -359,9 +367,16 @@ const MyOrders = () => {
     setPaymentError('');
     setPaymentSuccess(false);
     setProcessingPayment(false);
+    setPesapalRedirectUrl(null);
   };
 
-  const handleInitiatePayment = async () => {
+  const handlePaymentMethodChange = (event, newValue) => {
+    setPaymentMethod(newValue);
+    setPaymentError('');
+    setPaymentSuccess(false);
+  };
+
+  const handleInitiateMobileMoneyPayment = async () => {
     if (!paymentPhone || !validateSafaricomPhone(paymentPhone)) {
       setPaymentError('Please enter a valid Safaricom phone number (e.g., 0712345678)');
       return;
@@ -395,8 +410,7 @@ const MyOrders = () => {
         setPaymentError('');
         setPaymentSuccess(true);
         setProcessingPayment(false);
-        // Don't close dialog yet - wait for payment confirmation via socket
-        // The dialog will close automatically when payment-confirmed event is received
+        // Dialog will close automatically when payment-confirmed event is received
         // Also refresh orders after a short delay to get updated payment status
         setTimeout(() => {
           fetchOrders();
@@ -411,6 +425,55 @@ const MyOrders = () => {
                           paymentError.response?.data?.message || 
                           paymentError.message || 
                           'Failed to initiate payment. Please try again.';
+      setPaymentError(errorMessage);
+      setProcessingPayment(false);
+    }
+  };
+
+  const handleInitiateCardPayment = async () => {
+    if (!selectedOrder) {
+      setPaymentError('Order not found');
+      return;
+    }
+
+    setProcessingPayment(true);
+    setPaymentError('');
+
+    try {
+      // Get current URL for callbacks
+      const currentUrl = window.location.origin;
+      const callbackUrl = `${currentUrl}/payment-success?orderId=${selectedOrder.id}`;
+      const cancellationUrl = `${currentUrl}/payment-cancelled?orderId=${selectedOrder.id}`;
+      
+      console.log('Initiating PesaPal card payment:', {
+        orderId: selectedOrder.id,
+        amount: selectedOrder.totalAmount,
+        callbackUrl,
+        cancellationUrl
+      });
+      
+      const paymentResponse = await api.post('/pesapal/initiate-payment', {
+        orderId: selectedOrder.id,
+        callbackUrl: callbackUrl,
+        cancellationUrl: cancellationUrl
+      });
+
+      if (paymentResponse.data.success && paymentResponse.data.redirectUrl) {
+        setPesapalRedirectUrl(paymentResponse.data.redirectUrl);
+        setPaymentError('');
+        setProcessingPayment(false);
+        // Redirect to PesaPal payment page
+        window.location.href = paymentResponse.data.redirectUrl;
+      } else {
+        setPaymentError(paymentResponse.data.error || paymentResponse.data.message || 'Failed to initiate card payment. Please try again.');
+        setProcessingPayment(false);
+      }
+    } catch (paymentError) {
+      console.error('Card payment error:', paymentError);
+      const errorMessage = paymentError.response?.data?.error || 
+                          paymentError.response?.data?.message || 
+                          paymentError.message || 
+                          'Failed to initiate card payment. Please try again.';
       setPaymentError(errorMessage);
       setProcessingPayment(false);
     }
@@ -884,20 +947,65 @@ const MyOrders = () => {
           Make Payment - Order #{selectedOrder?.id}
         </DialogTitle>
         <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
             Total Amount: KES {selectedOrder?.totalAmount ? Number(selectedOrder.totalAmount).toFixed(2) : '0.00'}
           </Typography>
-          <TextField
-            label="Phone Number *"
-            value={paymentPhone}
-            onChange={(e) => setPaymentPhone(e.target.value)}
-            fullWidth
-            placeholder="0712345678"
-            margin="normal"
-            disabled={processingPayment}
-            helperText="Enter your Safaricom phone number to receive payment prompt"
-          />
-          {paymentSuccess && (
+
+          {/* Payment Method Selection */}
+          <Box sx={{ mb: 3 }}>
+            <Tabs
+              value={paymentMethod}
+              onChange={handlePaymentMethodChange}
+              sx={{
+                mb: 2,
+                '& .MuiTab-root': {
+                  minWidth: '50%'
+                }
+              }}
+            >
+              <Tab 
+                icon={<PhoneAndroid />} 
+                iconPosition="start"
+                label="Mobile Money" 
+                value="mobile_money"
+                sx={{ textTransform: 'none' }}
+              />
+              <Tab 
+                icon={<CreditCard />} 
+                iconPosition="start"
+                label="Card" 
+                value="card"
+                sx={{ textTransform: 'none' }}
+              />
+            </Tabs>
+          </Box>
+
+          {/* Mobile Money Payment Form */}
+          {paymentMethod === 'mobile_money' && (
+            <Box>
+              <TextField
+                label="Phone Number *"
+                value={paymentPhone}
+                onChange={(e) => setPaymentPhone(e.target.value)}
+                fullWidth
+                placeholder="0712345678"
+                margin="normal"
+                disabled={processingPayment}
+                helperText="Enter your Safaricom phone number to receive payment prompt"
+              />
+            </Box>
+          )}
+
+          {/* Card Payment Info */}
+          {paymentMethod === 'card' && (
+            <Box>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                You will be redirected to PesaPal to complete your card payment securely.
+              </Alert>
+            </Box>
+          )}
+
+          {paymentSuccess && paymentMethod === 'mobile_money' && (
             <Alert severity="success" sx={{ mt: 2 }}>
               Payment request sent. Please check your phone to enter your M-Pesa PIN.
             </Alert>
@@ -913,9 +1021,9 @@ const MyOrders = () => {
             Cancel
           </Button>
           <Button
-            onClick={handleInitiatePayment}
+            onClick={paymentMethod === 'mobile_money' ? handleInitiateMobileMoneyPayment : handleInitiateCardPayment}
             variant="contained"
-            disabled={processingPayment || !paymentPhone}
+            disabled={processingPayment || (paymentMethod === 'mobile_money' && !paymentPhone)}
             sx={{
               backgroundColor: '#00E0B8',
               color: '#0D0D0D',
@@ -929,8 +1037,10 @@ const MyOrders = () => {
                 <CircularProgress size={16} sx={{ mr: 1 }} />
                 Processing...
               </>
-            ) : (
+            ) : paymentMethod === 'mobile_money' ? (
               'Send Payment Prompt'
+            ) : (
+              'Proceed to Card Payment'
             )}
           </Button>
         </DialogActions>

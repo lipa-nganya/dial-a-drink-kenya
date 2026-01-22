@@ -15,7 +15,7 @@ import {
   useMediaQuery,
   useTheme as useMUITheme,
 } from '@mui/material';
-import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description } from '@mui/icons-material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -321,6 +321,24 @@ const Header = () => {
                 sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, color: colors.textPrimary }}
               >
                 Cart
+              </Button>
+              {/* Business Phone Number - Desktop Only */}
+              <Button
+                component="a"
+                href="tel:+254723688108"
+                startIcon={<Phone />}
+                sx={{ 
+                  textTransform: 'none', 
+                  fontSize: '0.85rem', 
+                  py: 0.5, 
+                  color: colors.textPrimary,
+                  ml: 1,
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.05)'
+                  }
+                }}
+              >
+                +254 723 688 108
               </Button>
             </Box>
           )}

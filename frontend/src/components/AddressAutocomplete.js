@@ -79,8 +79,15 @@ const AddressAutocomplete = ({
   // Handle selection from autocomplete
   const handleSelection = async (event, selectedOption) => {
     if (!selectedOption) {
-          return;
-        }
+      // Clear the field if no option selected
+      setInputValue('');
+      setOpen(false);
+      setSuggestions([]);
+      if (onChange) {
+        onChange({ target: { value: '' } });
+      }
+      return;
+    }
         
     const selectedText = typeof selectedOption === 'string' 
       ? selectedOption 
@@ -226,9 +233,29 @@ const AddressAutocomplete = ({
       onInputChange={(event, newInputValue, reason) => {
         if (reason === 'input') {
           handleInputChange(newInputValue);
+        } else if (reason === 'clear') {
+          // Handle clear button click
+          setInputValue('');
+          setOpen(false);
+          setSuggestions([]);
+          if (onChange) {
+            onChange({ target: { value: '' } });
+          }
         }
       }}
-      onChange={handleSelection}
+      onChange={(event, selectedOption) => {
+        if (selectedOption === null) {
+          // Handle clear/null selection
+          setInputValue('');
+          setOpen(false);
+          setSuggestions([]);
+          if (onChange) {
+            onChange({ target: { value: '' } });
+          }
+        } else {
+          handleSelection(event, selectedOption);
+        }
+      }}
       renderInput={(params) => (
         <TextField
           {...params}

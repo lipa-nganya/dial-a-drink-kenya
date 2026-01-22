@@ -108,6 +108,13 @@ const Orders = () => {
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState(null);
   const [promptingPayment, setPromptingPayment] = useState(false);
   const [paymentPollingInterval, setPaymentPollingInterval] = useState(null);
+  const [editPriceDialogOpen, setEditPriceDialogOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [newPrice, setNewPrice] = useState('');
+  const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [editDeliveryFeeDialogOpen, setEditDeliveryFeeDialogOpen] = useState(false);
+  const [newDeliveryFee, setNewDeliveryFee] = useState('');
+  const [updatingDeliveryFee, setUpdatingDeliveryFee] = useState(false);
   
   // Route Optimisation state
   const [activeTab, setActiveTab] = useState(0);
@@ -543,10 +550,14 @@ const Orders = () => {
     try {
       setLoading(true);
       const response = await api.get('/admin/orders');
-      let orders = response.data;
+      let orders = response.data || [];
+      
+      // Filter out any undefined or null orders
+      orders = orders.filter(order => order != null);
       
       // Additional sync: Check each order and ensure paymentStatus matches transaction status
       orders = orders.map(order => {
+        if (!order) return null;
         if (order.transactions && order.transactions.length > 0) {
           const hasCompletedTransaction = order.transactions.some(tx => tx.status === 'completed');
           // If transaction is completed but paymentStatus is not 'paid', update it
@@ -556,7 +567,7 @@ const Orders = () => {
           }
         }
         return order;
-      });
+      }).filter(order => order != null); // Filter out any null orders after mapping
       
       const sortedOrders = sortOrdersByStatus(orders);
       setOrders(sortedOrders);
@@ -565,7 +576,7 @@ const Orders = () => {
       applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
     } catch (error) {
       console.error('Error fetching orders:', error);
-      setError(error.response?.data?.error || error.message);
+      setError(error.response?.data?.error || error.message || 'Error loading orders');
     } finally {
       setLoading(false);
     }
@@ -835,10 +846,12 @@ const Orders = () => {
     }
   };
 
-  const handlePromptPayment = async (orderId) => {
+  const handlePromptPayment = async (orderId, customerPhone = null) => {
     try {
       setLoading(true);
-      const response = await api.post(`/admin/orders/${orderId}/prompt-payment`);
+      // Include customerPhone in request body if provided (for admin orders where customerPhone might be 'POS' or missing)
+      const payload = customerPhone && customerPhone !== 'POS' ? { customerPhone } : {};
+      const response = await api.post(`/admin/orders/${orderId}/prompt-payment`, payload);
       setError(null);
       // Show success message
       alert(response.data.message || 'Payment request sent to customer. They will receive an M-Pesa prompt on their phone.');
@@ -849,6 +862,91 @@ const Orders = () => {
       setError(error.response?.data?.error || error.message || 'Failed to prompt payment');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleUpdateItemPrice = async () => {
+    if (!editingItem || !selectedOrderForDetail) return;
+    
+    const priceValue = parseFloat(newPrice);
+    if (isNaN(priceValue) || priceValue < 0) {
+      alert('Please enter a valid price');
+      return;
+    }
+
+    setUpdatingPrice(true);
+    try {
+      const response = await api.patch(
+        `/admin/orders/${selectedOrderForDetail.id}/items/${editingItem.id}/price`,
+        { price: priceValue }
+      );
+
+      if (response.data.success) {
+        // Update the order detail with the new data
+        setSelectedOrderForDetail(response.data.order);
+        
+        // Refresh the orders list to reflect the change
+        await fetchOrders();
+        
+        // Close the dialog
+        setEditPriceDialogOpen(false);
+        setEditingItem(null);
+        setNewPrice('');
+        
+        alert('Price updated successfully');
+      } else {
+        alert(response.data.error || 'Failed to update price');
+      }
+    } catch (error) {
+      console.error('Error updating item price:', error);
+      alert(error.response?.data?.error || error.message || 'Failed to update price');
+    } finally {
+      setUpdatingPrice(false);
+    }
+  };
+
+  const handleUpdateDeliveryFee = async () => {
+    if (!selectedOrderForDetail) return;
+    
+    const deliveryFeeValue = parseFloat(newDeliveryFee);
+    if (isNaN(deliveryFeeValue) || deliveryFeeValue < 0) {
+      alert('Please enter a valid delivery fee');
+      return;
+    }
+
+    setUpdatingDeliveryFee(true);
+    try {
+      console.log('🔍 [FRONTEND] Updating delivery fee for order:', selectedOrderForDetail.id, 'new fee:', deliveryFeeValue);
+      const response = await api.patch(
+        `/admin/orders/${selectedOrderForDetail.id}/delivery-fee`,
+        { deliveryFee: deliveryFeeValue }
+      );
+      console.log('🔍 [FRONTEND] Delivery fee update response:', response.data);
+
+      if (response.data.success) {
+        // Update the order detail with the new data
+        setSelectedOrderForDetail(response.data.order);
+        
+        // Refresh the orders list to reflect the change
+        await fetchOrders();
+        
+        // Close the dialog
+        setEditDeliveryFeeDialogOpen(false);
+        setNewDeliveryFee('');
+        
+        alert('Delivery fee updated successfully');
+      } else {
+        alert(response.data.error || 'Failed to update delivery fee');
+      }
+    } catch (error) {
+      console.error('Error updating delivery fee:', error);
+      console.error('Error response:', error.response);
+      console.error('Error status:', error.response?.status);
+      console.error('Error data:', error.response?.data);
+      const errorMessage = error.response?.data?.error || error.response?.statusText || error.message || 'Failed to update delivery fee';
+      alert(`Error: ${errorMessage} (Status: ${error.response?.status || 'N/A'})`);
+    } finally {
+      setUpdatingDeliveryFee(false);
     }
   };
 
@@ -1977,8 +2075,26 @@ const Orders = () => {
                 return (
                   <TableRow
                     key={order.id}
-                    onClick={() => {
-                      setSelectedOrderForDetail(order);
+                    onClick={async () => {
+                      // Calculate deliveryFee and itemsTotal if not present
+                      let orderWithBreakdown = { ...order };
+                      
+                      if (orderWithBreakdown.deliveryFee === undefined || orderWithBreakdown.itemsTotal === undefined) {
+                        // Calculate itemsTotal
+                        const itemsTotal = orderWithBreakdown.items?.reduce((sum, item) => 
+                          sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
+                        ) || 0;
+                        
+                        // Calculate deliveryFee: totalAmount - tipAmount - itemsTotal
+                        const tipAmount = parseFloat(orderWithBreakdown.tipAmount || 0);
+                        const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
+                        const deliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
+                        
+                        orderWithBreakdown.itemsTotal = Number(itemsTotal.toFixed(2));
+                        orderWithBreakdown.deliveryFee = Number(deliveryFee.toFixed(2));
+                      }
+                      
+                      setSelectedOrderForDetail(orderWithBreakdown);
                       setOrderDetailDialogOpen(true);
                     }}
                     sx={{
@@ -2009,7 +2125,7 @@ const Orders = () => {
                           {order.customerName}
                         </Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                          {order.customerPhone}
+                          {order.customerPhone || 'N/A'}
                         </Typography>
                         {order.customerEmail && (
                           <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.85rem' }}>
@@ -2264,8 +2380,10 @@ const Orders = () => {
                             color="primary"
                             startIcon={<Assignment />}
                             onClick={async () => {
-                              if (window.confirm(`Send payment prompt to customer for Order #${order.id}?\n\nCustomer: ${order.customerName}\nPhone: ${order.customerPhone}\nAmount: KES ${parseFloat(order.totalAmount).toFixed(2)}`)) {
-                                await handlePromptPayment(order.id);
+                              const customerPhone = order.customerPhone || 'N/A';
+                              const customerName = order.customerName || 'N/A';
+                              if (window.confirm(`Send payment prompt to customer for Order #${order.id}?\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAmount: KES ${parseFloat(order.totalAmount || 0).toFixed(2)}`)) {
+                                await handlePromptPayment(order.id, order.customerPhone);
                               }
                             }}
                             sx={{ mt: 1, mr: 1 }}
@@ -2672,32 +2790,12 @@ const Orders = () => {
                   </Typography>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     <Typography variant="body1">
-                      <strong>Name:</strong> {selectedOrderForDetail.customerName}
+                      <strong>Name:</strong> {selectedOrderForDetail.customerName || 'N/A'}
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant="body1">
-                        <strong>Phone:</strong> {selectedOrderForDetail.customerPhone}
+                        <strong>Phone:</strong> {selectedOrderForDetail.customerPhone || 'N/A'}
                       </Typography>
-                      {selectedOrderForDetail.customerPhone && selectedOrderForDetail.customerPhone !== 'POS' && (
-                        <Button
-                          size="small"
-                          startIcon={<Phone />}
-                          href={`tel:${selectedOrderForDetail.customerPhone}`}
-                          sx={{
-                            color: colors.accentText,
-                            fontSize: '0.75rem',
-                            minWidth: 'auto',
-                            padding: '2px 8px'
-                          }}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                          }}
-                        >
-                          Call
-                        </Button>
-                      )}
-                    </Box>
                       {selectedOrderForDetail.customerPhone && selectedOrderForDetail.customerPhone !== 'POS' && (
                         <Button
                           size="small"
@@ -2756,9 +2854,26 @@ const Orders = () => {
                               </Typography>
                             )}
                           </Box>
-                          <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
-                            KES {Number(item.price || 0).toFixed(2)}
-                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
+                              KES {Number(item.price || 0).toFixed(2)}
+                            </Typography>
+                            {selectedOrderForDetail.status !== 'completed' && 
+                             selectedOrderForDetail.status !== 'cancelled' && 
+                             selectedOrderForDetail.paymentStatus !== 'paid' && (
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setEditingItem(item);
+                                  setNewPrice(Number(item.price || 0).toFixed(2));
+                                  setEditPriceDialogOpen(true);
+                                }}
+                                sx={{ color: colors.accentText }}
+                              >
+                                <Edit fontSize="small" />
+                              </IconButton>
+                            )}
+                          </Box>
                         </Box>
                       ))}
                     </Box>
@@ -2769,6 +2884,41 @@ const Orders = () => {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Delivery Fee */}
+              {selectedOrderForDetail && selectedOrderForDetail.deliveryFee !== undefined && (
+                <Card sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                      Delivery Fee
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body1">
+                        <strong>Amount:</strong>
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
+                          KES {Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2)}
+                        </Typography>
+                        {selectedOrderForDetail.status !== 'completed' && 
+                         selectedOrderForDetail.status !== 'cancelled' && 
+                         selectedOrderForDetail.paymentStatus !== 'paid' && (
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              setNewDeliveryFee(Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2));
+                              setEditDeliveryFeeDialogOpen(true);
+                            }}
+                            sx={{ color: colors.accentText }}
+                          >
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        )}
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Order Summary */}
               <Card sx={{ mb: 2 }}>
@@ -2794,7 +2944,7 @@ const Orders = () => {
                         </Typography>
                       </Box>
                     )}
-                    {/* Delivery Fee */}
+                    {/* Delivery Fee in Summary */}
                     {selectedOrderForDetail.deliveryFee !== undefined && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                         <Typography variant="body1">
@@ -2976,7 +3126,11 @@ const Orders = () => {
 
                 setPromptingPayment(true);
                 try {
-                  const promptResponse = await api.post(`/admin/orders/${selectedOrderForDetail.id}/prompt-payment`);
+                  // Include customerPhone in request body if it exists and is not 'POS'
+                  const promptPayload = selectedOrderForDetail.customerPhone && selectedOrderForDetail.customerPhone !== 'POS' 
+                    ? { customerPhone: selectedOrderForDetail.customerPhone }
+                    : {};
+                  const promptResponse = await api.post(`/admin/orders/${selectedOrderForDetail.id}/prompt-payment`, promptPayload);
                   
                   const checkoutRequestID = promptResponse.data.checkoutRequestID || promptResponse.data.CheckoutRequestID;
                   if (promptResponse.data.success || checkoutRequestID) {
@@ -3071,6 +3225,151 @@ const Orders = () => {
             sx={{ color: colors.textSecondary }}
           >
             Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Price Dialog */}
+      <Dialog
+        open={editPriceDialogOpen}
+        onClose={() => {
+          setEditPriceDialogOpen(false);
+          setEditingItem(null);
+          setNewPrice('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Edit Item Price
+        </DialogTitle>
+        <DialogContent>
+          {editingItem && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Item:</strong> {editingItem.drink?.name || 'Unknown Item'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Current Price: KES {Number(editingItem.price || 0).toFixed(2)}
+              </Typography>
+              <TextField
+                autoFocus
+                fullWidth
+                label="New Price"
+                type="number"
+                value={newPrice}
+                onChange={(e) => setNewPrice(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">KES</InputAdornment>
+                }}
+                inputProps={{
+                  min: 0,
+                  step: 0.01
+                }}
+                sx={{ mt: 2 }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setEditPriceDialogOpen(false);
+              setEditingItem(null);
+              setNewPrice('');
+            }}
+            disabled={updatingPrice}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUpdateItemPrice}
+            variant="contained"
+            disabled={updatingPrice}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              },
+              '&:disabled': {
+                backgroundColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {updatingPrice ? 'Updating...' : 'Update Price'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Delivery Fee Dialog */}
+      <Dialog
+        open={editDeliveryFeeDialogOpen}
+        onClose={() => {
+          setEditDeliveryFeeDialogOpen(false);
+          setNewDeliveryFee('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Edit Delivery Fee
+        </DialogTitle>
+        <DialogContent>
+          {selectedOrderForDetail && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Current Delivery Fee: KES {Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2)}
+              </Typography>
+              <TextField
+                autoFocus
+                fullWidth
+                label="New Delivery Fee"
+                type="number"
+                value={newDeliveryFee}
+                onChange={(e) => setNewDeliveryFee(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">KES</InputAdornment>
+                }}
+                inputProps={{
+                  min: 0,
+                  step: 0.01
+                }}
+                sx={{ mt: 2 }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setEditDeliveryFeeDialogOpen(false);
+              setNewDeliveryFee('');
+            }}
+            disabled={updatingDeliveryFee}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUpdateDeliveryFee}
+            variant="contained"
+            disabled={updatingDeliveryFee}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              },
+              '&:disabled': {
+                backgroundColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {updatingDeliveryFee ? 'Updating...' : 'Update Delivery Fee'}
           </Button>
         </DialogActions>
       </Dialog>

@@ -849,19 +849,6 @@ const Cart = () => {
             {items.map((item) => (
               <Box key={item.drinkId}>
                 <Box sx={{ display: 'flex', alignItems: 'center', py: 2 }}>
-                  <Box
-                    component="img"
-                    src={item.drink.image}
-                    alt={item.drink.name}
-                    sx={{
-                      width: 80,
-                      height: 80,
-                      objectFit: 'cover',
-                      borderRadius: 1,
-                      mr: 2
-                    }}
-                  />
-                  
                   <Box sx={{ flexGrow: 1 }}>
                     <Typography variant="h6">
                       {item.drink.name}

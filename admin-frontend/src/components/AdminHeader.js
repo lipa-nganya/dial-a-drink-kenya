@@ -20,7 +20,8 @@ import {
   AccountBalance,
   Map,
   Psychology,
-  ShoppingCart
+  ShoppingCart,
+  AttachMoney
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -111,6 +112,14 @@ const AdminHeader = () => {
             sx={buttonStyle('/payables')}
           >
             Payables
+          </Button>
+          <Button
+            color="inherit"
+            onClick={() => navigate('/cash-at-hand')}
+            startIcon={<AttachMoney />}
+            sx={buttonStyle('/cash-at-hand')}
+          >
+            Cash at Hand
           </Button>
           {/* POS button removed */}
           <Button

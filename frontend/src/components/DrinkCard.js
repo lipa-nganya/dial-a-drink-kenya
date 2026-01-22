@@ -73,13 +73,37 @@ const DrinkCard = ({ drink }) => {
     ? drink.capacity 
     : [];
 
-  // Auto-select capacity if there's only one option
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Auto-select capacity: if only one option, select it; if multiple, select most expensive
   useEffect(() => {
-    if (availableCapacities.length === 1 && !selectedCapacity) {
+    if (availableCapacities.length === 1) {
+      // Only one capacity - select it
       setSelectedCapacity(availableCapacities[0]);
+    } else if (availableCapacities.length > 1 && !selectedCapacity) {
+      // Multiple capacities - select the most expensive one
+      const capacitiesWithPrices = availableCapacities.map(capacity => {
+        let price = 0;
+        if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
+          const pricing = drink.capacityPricing.find(p => String(p.capacity) === String(capacity));
+          price = pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(drink.price) || 0;
+        } else {
+          price = parseFloat(drink.price) || 0;
+        }
+        return { capacity, price };
+      });
+      
+      // Sort descending by price to get most expensive first
+      capacitiesWithPrices.sort((a, b) => b.price - a.price);
+      
+      // Select the most expensive capacity
+      const mostExpensive = capacitiesWithPrices[0];
+      setSelectedCapacity(mostExpensive.capacity);
+      console.log(`[DrinkCard] Auto-selected most expensive capacity for ${drink.name}: ${mostExpensive.capacity} (KES ${mostExpensive.price.toFixed(2)})`);
+    } else if (availableCapacities.length === 0) {
+      // No capacities - clear selection
+      setSelectedCapacity('');
     }
-  }, [availableCapacities, selectedCapacity]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableCapacities]);
 
   // Get price for selected capacity
   const getPriceForCapacity = (capacity) => {
@@ -124,6 +148,7 @@ const DrinkCard = ({ drink }) => {
       onClick={handleCardClick}
       sx={{
         width: '100%',
+        maxWidth: '100%',
         height: '100%',
         minHeight: { xs: '350px', sm: '450px', md: '500px' },
         display: 'flex',
@@ -131,6 +156,7 @@ const DrinkCard = ({ drink }) => {
         backgroundColor: '#fff',
         transition: 'transform 0.2s',
         cursor: 'pointer',
+        boxSizing: 'border-box',
         '&:hover': {
           transform: 'translateY(-2px)',
           boxShadow: 2
@@ -143,11 +169,13 @@ const DrinkCard = ({ drink }) => {
           height="240"
           image={getImageUrl(drink.image)}
           alt={drink.name}
+          onClick={handleCardClick}
           sx={{ 
             objectFit: 'contain', 
             p: { xs: 1, sm: 1.5, md: 2 }, 
             backgroundColor: '#fff',
-            height: { xs: 140, sm: 180, md: 240 }
+            height: { xs: 140, sm: 180, md: 240 },
+            cursor: 'pointer'
           }}
           onError={() => {
             setImageError(true);
@@ -155,13 +183,15 @@ const DrinkCard = ({ drink }) => {
         />
       ) : (
         <Box
+          onClick={handleCardClick}
           sx={{
             height: { xs: 140, sm: 180, md: 240 },
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             backgroundColor: '#fff',
-            color: '#666'
+            color: '#666',
+            cursor: 'pointer'
           }}
         >
           <LocalBar sx={{ fontSize: { xs: 40, sm: 50, md: 60 } }} />

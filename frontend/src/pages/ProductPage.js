@@ -57,18 +57,45 @@ const ProductPage = () => {
       fetchRelatedProducts();
       fetchDetailedDescription();
       fetchTestingNotes();
-      // Auto-select capacity if there's only one option
+      
+      // Auto-select capacity: if only one option, select it; if multiple, select most expensive
       const availableCapacities = Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0 
         ? product.capacityPricing.map(pricing => pricing.capacity)
         : Array.isArray(product.capacity) && product.capacity.length > 0 
         ? product.capacity 
         : [];
-      if (availableCapacities.length === 1 && !selectedCapacity) {
+      
+      if (availableCapacities.length === 1) {
+        // Only one capacity - select it
         setSelectedCapacity(availableCapacities[0]);
+      } else if (availableCapacities.length > 1) {
+        // Multiple capacities - select the most expensive one
+        const capacitiesWithPrices = availableCapacities.map(capacity => {
+          let price = 0;
+          if (Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0) {
+            const pricing = product.capacityPricing.find(p => String(p.capacity) === String(capacity));
+            price = pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(product.price) || 0;
+          } else {
+            price = parseFloat(product.price) || 0;
+          }
+          return { capacity, price };
+        });
+        
+        // Sort descending by price to get most expensive first
+        capacitiesWithPrices.sort((a, b) => b.price - a.price);
+        
+        // Select the most expensive capacity
+        const mostExpensive = capacitiesWithPrices[0];
+        setSelectedCapacity(mostExpensive.capacity);
+        console.log(`[ProductPage] Auto-selected most expensive capacity: ${mostExpensive.capacity} (KES ${mostExpensive.price.toFixed(2)})`);
+        console.log(`[ProductPage] All capacities with prices:`, capacitiesWithPrices);
+      } else {
+        // No capacities - clear selection
+        setSelectedCapacity('');
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [product, selectedCapacity]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [product]);
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '';
@@ -578,6 +605,32 @@ const ProductPage = () => {
               </Box>
             )}
           </Card>
+          
+          {/* Add to Cart Button - Mobile Only (below image) */}
+          <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 2 }}>
+            <Button
+              variant="contained"
+              size="large"
+              fullWidth
+              startIcon={<AddShoppingCart />}
+              onClick={handleAddToCart}
+              disabled={!product.isAvailable}
+              sx={{
+                backgroundColor: '#FF6B6B',
+                py: 1.5,
+                fontSize: '1.1rem',
+                '&:hover': {
+                  backgroundColor: '#FF5252'
+                },
+                '&.Mui-disabled': {
+                  backgroundColor: '#ccc',
+                  color: '#666'
+                }
+              }}
+            >
+              Add to Cart
+            </Button>
+          </Box>
         </Box>
 
         {/* Product Details - Right Side */}
@@ -758,30 +811,32 @@ const ProductPage = () => {
               </Typography>
             )}
 
-            {/* Add to Cart Button */}
-            <Button
-              variant="contained"
-              size="large"
-              fullWidth
-              startIcon={<AddShoppingCart />}
-              onClick={handleAddToCart}
-              disabled={!product.isAvailable}
-              sx={{
-                backgroundColor: '#FF6B6B',
-                py: 1.5,
-                fontSize: '1.1rem',
-                mb: 4,
-                '&:hover': {
-                  backgroundColor: '#FF5252'
-                },
-                '&.Mui-disabled': {
-                  backgroundColor: '#ccc',
-                  color: '#666'
-                }
-              }}
-            >
-              Add to Cart
-            </Button>
+            {/* Add to Cart Button - Desktop Only */}
+            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+              <Button
+                variant="contained"
+                size="large"
+                fullWidth
+                startIcon={<AddShoppingCart />}
+                onClick={handleAddToCart}
+                disabled={!product.isAvailable}
+                sx={{
+                  backgroundColor: '#FF6B6B',
+                  py: 1.5,
+                  fontSize: '1.1rem',
+                  mb: 4,
+                  '&:hover': {
+                    backgroundColor: '#FF5252'
+                  },
+                  '&.Mui-disabled': {
+                    backgroundColor: '#ccc',
+                    color: '#666'
+                  }
+                }}
+              >
+                Add to Cart
+              </Button>
+            </Box>
           </Box>
           </Box>
         </Box>

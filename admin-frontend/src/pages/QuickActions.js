@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -18,7 +18,16 @@ import {
   IconButton,
   Divider,
   AppBar,
-  Toolbar
+  Toolbar,
+  Card,
+  CardContent,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper
 } from '@mui/material';
 import {
   Add,
@@ -32,6 +41,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import NewOrderDialog from '../components/NewOrderDialog';
+import { getOrderStatusChipProps } from '../utils/chipStyles';
 
 const QuickActions = () => {
   const { isDarkMode, colors } = useTheme();
@@ -45,6 +55,8 @@ const QuickActions = () => {
   const [selectedOrderForComplete, setSelectedOrderForComplete] = useState(null);
   const [completing, setCompleting] = useState(false);
   const [completeError, setCompleteError] = useState('');
+  const [todayCompletedOrders, setTodayCompletedOrders] = useState([]);
+  const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
 
   const handleAction = (actionFn) => {
     actionFn();
@@ -147,6 +159,75 @@ const QuickActions = () => {
     navigate('/orders');
   };
 
+  const fetchTodayCompletedOrders = async () => {
+    try {
+      setLoadingTodayOrders(true);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Fetch all orders and filter on frontend
+      const response = await api.get('/admin/orders');
+      
+      const orders = response.data || [];
+      
+      // Filter to only completed/delivered orders that were completed today
+      const completedOrders = orders.filter(order => {
+        const isCompleted = order.status === 'completed' || order.status === 'delivered';
+        if (!isCompleted) return false;
+        
+        // Check if order was completed today (use updatedAt as completion time)
+        const completedAt = new Date(order.updatedAt || order.createdAt);
+        completedAt.setHours(0, 0, 0, 0);
+        const isToday = completedAt.getTime() === today.getTime();
+        
+        return isToday;
+      });
+      
+      // Sort by completion time (most recent first)
+      completedOrders.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+        return timeB - timeA;
+      });
+      
+      setTodayCompletedOrders(completedOrders);
+    } catch (error) {
+      console.error('Error fetching today completed orders:', error);
+      setTodayCompletedOrders([]);
+    } finally {
+      setLoadingTodayOrders(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTodayCompletedOrders();
+  }, []);
+
+  // Get today's date and day
+  const today = new Date();
+  const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
+  const dateString = today.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+
+  const formatCurrency = (value) => `KES ${Number(value || 0).toLocaleString('en-KE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
+
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', { 
+      hour: '2-digit', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  };
+
   return (
     <Box sx={{ 
       minHeight: '100vh', 
@@ -206,8 +287,106 @@ const QuickActions = () => {
       <Box sx={{ 
         p: { xs: 3, sm: 2 },
         display: 'flex',
-        justifyContent: 'center'
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 3
       }}>
+        {/* Quick Panel */}
+        <Card sx={{ 
+          backgroundColor: colors.paper, 
+          border: `1px solid ${colors.border}`, 
+          width: { xs: '90%', sm: '100%' },
+          borderRadius: 2
+        }}>
+          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Box>
+                <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, mb: 0.5, fontSize: { xs: '1.08rem', sm: '1.25rem' } }}>
+                  {dayName}
+                </Typography>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: { xs: '0.85rem', sm: '0.95rem' } }}>
+                  {dateString}
+                </Typography>
+              </Box>
+              <Typography variant="body1" sx={{ color: colors.textPrimary, fontWeight: 600, fontSize: { xs: '0.9rem', sm: '1rem' } }}>
+                {todayCompletedOrders.length} {todayCompletedOrders.length === 1 ? 'Order' : 'Orders'} Completed
+              </Typography>
+            </Box>
+
+            {loadingTodayOrders ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+                <CircularProgress size={24} />
+              </Box>
+            ) : todayCompletedOrders.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 3 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: { xs: '0.85rem', sm: '0.9rem' } }}>
+                  No orders completed today
+                </Typography>
+              </Box>
+            ) : (
+              <TableContainer component={Paper} sx={{ backgroundColor: isDarkMode ? '#1a1a1a' : '#FFFFFF', maxHeight: { xs: 300, sm: 400 }, overflow: 'auto' }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Order #</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>Customer</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }} align="right">Amount</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }} align="right">Time</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {todayCompletedOrders.map((order) => {
+                      const statusChip = getOrderStatusChipProps(order.status);
+                      const isPOS = order.isPOS || order.deliveryAddress === 'In-Store Purchase';
+
+                      return (
+                        <TableRow 
+                          key={order.id}
+                          sx={{
+                            backgroundColor: isPOS ? 'rgba(156, 39, 176, 0.08)' : 'transparent',
+                            '&:hover': {
+                              backgroundColor: isPOS ? 'rgba(156, 39, 176, 0.12)' : 'rgba(0, 224, 184, 0.05)',
+                              cursor: 'pointer'
+                            }
+                          }}
+                          onClick={() => navigate(`/orders?orderId=${order.id}`)}
+                        >
+                          <TableCell sx={{ color: colors.textPrimary, fontWeight: 600, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>
+                            #{order.orderNumber || order.id}
+                            {isPOS && (
+                              <Chip
+                                label="POS"
+                                size="small"
+                                sx={{
+                                  ml: 0.5,
+                                  backgroundColor: '#9C27B0',
+                                  color: '#FFFFFF',
+                                  fontWeight: 700,
+                                  fontSize: { xs: '0.6rem', sm: '0.7rem' },
+                                  height: { xs: 16, sm: 18 }
+                                }}
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }}>
+                            {order.customerName || 'Unknown'}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }} align="right">
+                            {formatCurrency(order.totalAmount)}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textSecondary, fontSize: { xs: '0.75rem', sm: '0.875rem' }, py: 1 }} align="right">
+                            {formatTime(order.updatedAt || order.createdAt)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </CardContent>
+        </Card>
+
         <List sx={{ 
           backgroundColor: colors.paper, 
           borderRadius: 2, 

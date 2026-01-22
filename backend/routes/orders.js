@@ -220,7 +220,8 @@ router.post('/', async (req, res) => {
       transactionCode,
       paymentStatus,
       isStop,
-      stopDeductionAmount
+      stopDeductionAmount,
+      sendSmsToCustomer
     } = req.body;
     
     console.log('🔍 DESTRUCTURED paymentMethod:', paymentMethod);
@@ -723,8 +724,10 @@ router.post('/', async (req, res) => {
       }
 
       // Send SMS confirmation to customer with tracking link
-      // Only send for customer orders (not admin orders)
-      if (!adminOrder && completeOrder.trackingToken && completeOrder.customerPhone) {
+      // For customer orders: always send (unless explicitly disabled)
+      // For admin orders: only send if sendSmsToCustomer is true (defaults to true if not specified)
+      const shouldSendSms = !adminOrder || (adminOrder && (sendSmsToCustomer !== false));
+      if (shouldSendSms && completeOrder.trackingToken && completeOrder.customerPhone) {
         try {
           // Determine frontend URL based on environment
           const { isProduction } = require('../utils/envDetection');

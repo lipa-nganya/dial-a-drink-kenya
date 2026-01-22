@@ -31,6 +31,8 @@ import Payables from './pages/Payables';
 import Copilot from './pages/Copilot';
 import SalesDateDetails from './pages/copilot/SalesDateDetails';
 import RiderDetails from './pages/copilot/RiderDetails';
+import RiderDetailsPage from './pages/RiderDetails';
+import CashAtHand from './pages/CashAtHand';
 import ResupplyCart from './pages/ResupplyCart';
 import './App.css';
 
@@ -256,11 +258,31 @@ function AppContent() {
                 }
               />
               <Route
+                path="/drivers/:riderId"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <RiderDetailsPage />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
                 path="/payables"
                 element={
                   <PrivateRoute>
                     <AdminLayout>
                       <Payables />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/cash-at-hand"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <CashAtHand />
                     </AdminLayout>
                   </PrivateRoute>
                 }

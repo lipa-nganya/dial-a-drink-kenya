@@ -592,6 +592,10 @@ const Orders = () => {
               {filteredOrders.map((order) => {
                 const isUnpaidDelivered = order.status === 'delivered' && order.paymentStatus === 'unpaid';
                 const nextStatusOptions = getNextStatusOptions(order.status, order.paymentType, order.paymentStatus);
+                // Check if order is a walk-in order
+                const isWalkInOrder = order.customerName === 'POS' || 
+                                     order.deliveryAddress === 'In-Store Purchase' || 
+                                     (order.deliveryAddress && order.deliveryAddress.includes('In-Store Purchase'));
                 
                 return (
                   <TableRow
@@ -713,22 +717,25 @@ const Orders = () => {
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<Edit />}
-                          onClick={() => handleOpenDriverDialog(order)}
-                          sx={{
-                            borderColor: '#00E0B8',
-                            color: '#00E0B8',
-                            '&:hover': {
-                              borderColor: '#00C4A3',
-                              backgroundColor: 'rgba(0, 224, 184, 0.1)'
-                            }
-                          }}
-                        >
-                          Assign Rider
-                        </Button>
+                        {/* Assign Rider Button - Hidden for walk-in orders */}
+                        {!isWalkInOrder && (
+                          <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={<Edit />}
+                            onClick={() => handleOpenDriverDialog(order)}
+                            sx={{
+                              borderColor: '#00E0B8',
+                              color: '#00E0B8',
+                              '&:hover': {
+                                borderColor: '#00C4A3',
+                                backgroundColor: 'rgba(0, 224, 184, 0.1)'
+                              }
+                            }}
+                          >
+                            Assign Rider
+                          </Button>
+                        )}
                         {nextStatusOptions.length > 0 && (
                           <FormControl size="small" sx={{ minWidth: 150 }}>
                             <InputLabel>Update Status</InputLabel>

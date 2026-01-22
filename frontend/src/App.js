@@ -11,6 +11,7 @@ import Header from './components/Header';
 import AdminHeader from './components/AdminHeader';
 import Footer from './components/Footer';
 import FloatingHelpButton from './components/FloatingHelpButton';
+import FloatingCallButton from './components/FloatingCallButton';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
 import TestOffers from './pages/TestOffers';
@@ -193,6 +194,7 @@ function AppContent() {
         {isAdminRoute && !isAdminLogin && <AdminHeader />}
         {!isAdminRoute && <Header />}
         {!isAdminRoute && <FloatingHelpButton />}
+        {!isAdminRoute && <FloatingCallButton />}
         <Box component="main" sx={{ flexGrow: 1 }}>
         <Routes>
           <Route path="/" element={<Home />} />
@@ -230,7 +232,7 @@ function AppContent() {
           <Route path="/admin/payables" element={<PrivateRoute><Payables /></PrivateRoute>} />
         </Routes>
         </Box>
-        {!isAdminRoute && <Footer />}
+        {!isAdminRoute && location.pathname !== '/cart' && location.pathname !== '/order-tracking' && <Footer />}
         
         {/* Cart Snackbar */}
         <Snackbar

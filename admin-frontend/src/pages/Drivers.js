@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Typography,
@@ -480,6 +481,7 @@ const ShiftReportTab = () => {
 
 const Drivers = () => {
   const { isDarkMode, colors } = useTheme();
+  const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -979,7 +981,12 @@ const Drivers = () => {
                 // const walletBalance = driver.wallet?.balance || 0; // Unused
                 
                 return (
-                <TableRow key={driver.id} hover>
+                <TableRow 
+                  key={driver.id} 
+                  hover
+                  onClick={() => navigate(`/drivers/${driver.id}`)}
+                  sx={{ cursor: 'pointer' }}
+                >
                   <TableCell sx={{ fontWeight: 500 }}>{driver.name}</TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -1125,10 +1132,25 @@ const Drivers = () => {
                           </IconButton>
                         </span>
                       </Tooltip>
+                    <Tooltip title="View Details">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/drivers/${driver.id}`);
+                        }}
+                        sx={{ color: colors.accentText }}
+                      >
+                        <LocalShipping />
+                      </IconButton>
+                    </Tooltip>
                     <Tooltip title="Invite via WhatsApp">
                       <IconButton
                         size="small"
-                        onClick={() => handleInviteDriver(driver)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleInviteDriver(driver);
+                        }}
                         disabled={invitingDriver === driver.id}
                         sx={{ 
                           color: '#25D366',
@@ -1145,7 +1167,10 @@ const Drivers = () => {
                     <Tooltip title="Edit Rider">
                       <IconButton
                         size="small"
-                        onClick={() => handleOpenDialog(driver)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenDialog(driver);
+                        }}
                         sx={{ color: colors.accentText }}
                       >
                         <Edit />
@@ -1154,7 +1179,10 @@ const Drivers = () => {
                     <Tooltip title="Delete Rider">
                       <IconButton
                         size="small"
-                        onClick={() => handleDelete(driver.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(driver.id);
+                        }}
                         sx={{ color: '#FF3366' }}
                       >
                         <Delete />

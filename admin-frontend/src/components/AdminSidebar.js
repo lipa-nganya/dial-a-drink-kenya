@@ -24,7 +24,8 @@ import {
   Store,
   AccountBalance,
   ChevronLeft,
-  Psychology
+  Psychology,
+  AttachMoney
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -58,6 +59,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
     { path: '/transactions', label: 'Transactions', icon: Receipt },
     { path: '/inventory', label: 'Inventory', icon: Inventory },
     { path: '/payables', label: 'Payables', icon: AccountBalance },
+    { path: '/cash-at-hand', label: 'Cash at Hand', icon: AttachMoney },
     // { path: '/pos', label: 'POS', icon: PointOfSale }, // Removed
     { path: '/admin/customers', label: 'Customers', icon: People },
     { path: '/drivers', label: 'Riders', icon: LocalShipping },

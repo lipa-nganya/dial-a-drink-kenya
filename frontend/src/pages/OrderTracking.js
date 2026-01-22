@@ -8,7 +8,17 @@ import {
   Divider,
   Button,
   CircularProgress,
-  Alert
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   CheckCircle,
@@ -19,26 +29,50 @@ import {
   Phone,
   Email,
   LocationOn,
-  AttachMoney
+  AttachMoney,
+  Payment,
+  CreditCard,
+  PhoneAndroid
 } from '@mui/icons-material';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
+import { useCustomer } from '../contexts/CustomerContext';
 
-const OrderTracking = ({ order }) => {
+const OrderTracking = ({ order: orderProp }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
-  const [orderDetails, setOrderDetails] = useState(order);
-  const [loading, setLoading] = useState(!order);
+  const { customer } = useCustomer();
+  // Get order from prop, navigation state, or null
+  const orderFromState = location.state?.order;
+  const initialOrder = orderProp || orderFromState;
+  const [orderDetails, setOrderDetails] = useState(initialOrder);
+  const [loading, setLoading] = useState(!initialOrder);
   const [error, setError] = useState('');
+  
+  // Payment dialog state
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('mobile_money'); // 'mobile_money' or 'card'
+  const [paymentPhone, setPaymentPhone] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [pesapalRedirectUrl, setPesapalRedirectUrl] = useState(null);
 
   useEffect(() => {
     const trackingToken = searchParams.get('token');
     
-    if (order) {
-      setOrderDetails(order);
-      setLoading(false);
+    if (initialOrder) {
+      // If order is passed but doesn't have items loaded, fetch full details
+      if (!initialOrder.items || initialOrder.items.length === 0 || !initialOrder.items[0]?.drink) {
+        console.log('[OrderTracking] Order passed but missing items/drink details, fetching full order...');
+        fetchOrder(initialOrder.id);
+      } else {
+        setOrderDetails(initialOrder);
+        setLoading(false);
+      }
     } else if (trackingToken) {
       // Fetch order by tracking token from URL
       fetchOrderByToken(trackingToken);
@@ -53,11 +87,11 @@ const OrderTracking = ({ order }) => {
         setLoading(false);
       }
     }
-  }, [order, searchParams]);
+  }, [initialOrder, searchParams]);
 
   // Set up Socket.IO for real-time order status updates
   useEffect(() => {
-    const orderId = order?.id || orderDetails?.id;
+    const orderId = orderDetails?.id;
     
     if (orderId) {
       const socketUrl = getBackendUrl();
@@ -79,21 +113,53 @@ const OrderTracking = ({ order }) => {
         }
       });
       
+      // Listen for payment confirmation
+      socket.on('payment-confirmed', (data) => {
+        console.log('💰 Payment confirmed on tracking page:', data);
+        if (data.orderId === orderId) {
+          setOrderDetails(prevOrder => ({
+            ...prevOrder,
+            paymentStatus: 'paid',
+            status: data.status || prevOrder?.status,
+            paymentMethod: data.paymentMethod || prevOrder?.paymentMethod,
+            paymentProvider: data.paymentProvider || prevOrder?.paymentProvider
+          }));
+          setPaymentDialogOpen(false);
+          setPaymentError('');
+          setPaymentSuccess(false);
+          setProcessingPayment(false);
+          // Refresh order to get latest data
+          fetchOrder(orderId);
+        }
+      });
+      
       return () => {
         socket.close();
       };
     }
-  }, [order?.id, orderDetails?.id]);
+  }, [orderDetails?.id]);
 
   const fetchOrder = async (orderId) => {
     try {
       setLoading(true);
-      const response = await api.get(`/orders/${orderId}`);
-      setOrderDetails(response.data);
       setError('');
+      const response = await api.get(`/orders/${orderId}`);
+      // Check if response has data property (wrapped in success response) or is direct order
+      const orderData = response.data?.data || response.data;
+      if (orderData) {
+        setOrderDetails(orderData);
+        console.log('[OrderTracking] Order fetched successfully:', {
+          id: orderData.id,
+          itemsCount: orderData.items?.length || 0,
+          hasItems: !!orderData.items,
+          totalAmount: orderData.totalAmount
+        });
+      } else {
+        setError('Order data not found in response.');
+      }
     } catch (err) {
       console.error('Error fetching order:', err);
-      setError(err.response?.data?.error || 'Failed to load order details.');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Failed to load order details.');
     } finally {
       setLoading(false);
     }
@@ -102,12 +168,24 @@ const OrderTracking = ({ order }) => {
   const fetchOrderByToken = async (token) => {
     try {
       setLoading(true);
-      const response = await api.get(`/orders/track/${token}`);
-      setOrderDetails(response.data);
       setError('');
+      const response = await api.get(`/orders/track/${token}`);
+      // Check if response has data property (wrapped in success response) or is direct order
+      const orderData = response.data?.data || response.data;
+      if (orderData) {
+        setOrderDetails(orderData);
+        console.log('[OrderTracking] Order fetched by token successfully:', {
+          id: orderData.id,
+          itemsCount: orderData.items?.length || 0,
+          hasItems: !!orderData.items,
+          totalAmount: orderData.totalAmount
+        });
+      } else {
+        setError('Order data not found in response.');
+      }
     } catch (err) {
       console.error('Error fetching order by token:', err);
-      setError(err.response?.data?.error || 'Invalid tracking link. Please check your SMS or contact support.');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Invalid tracking link. Please check your SMS or contact support.');
     } finally {
       setLoading(false);
     }
@@ -143,6 +221,146 @@ const OrderTracking = ({ order }) => {
       case 'cancelled': return 'Cancelled';
       default: return status;
     }
+  };
+
+  // Payment helper functions
+  const formatMpesaPhoneNumber = (phone) => {
+    if (!phone) return '';
+    
+    // Remove all non-digit characters
+    let cleaned = phone.replace(/\D/g, '');
+    
+    // If starts with 0, replace with 254
+    if (cleaned.startsWith('0')) {
+      cleaned = '254' + cleaned.substring(1);
+    } else if (!cleaned.startsWith('254')) {
+      // If doesn't start with 254 and is 9 digits, add 254
+      if (cleaned.length === 9 && cleaned.startsWith('7')) {
+        cleaned = '254' + cleaned;
+      }
+    }
+    
+    return cleaned;
+  };
+
+  const validateSafaricomPhone = (phone) => {
+    const cleaned = phone.replace(/\D/g, '');
+    return cleaned.length >= 9 && (cleaned.startsWith('07') || cleaned.startsWith('2547') || (cleaned.startsWith('7') && cleaned.length === 9));
+  };
+
+  const handleOpenPaymentDialog = () => {
+    // Prepopulate phone number from customer context or order
+    const phoneNumber = customer?.phone || orderDetails.customerPhone || '';
+    setPaymentPhone(phoneNumber);
+    setPaymentMethod('mobile_money');
+    setPaymentError('');
+    setPaymentSuccess(false);
+    setPesapalRedirectUrl(null);
+    setPaymentDialogOpen(true);
+  };
+
+  const handleClosePaymentDialog = () => {
+    setPaymentDialogOpen(false);
+    setPaymentPhone('');
+    setPaymentError('');
+    setPaymentSuccess(false);
+    setProcessingPayment(false);
+    setPesapalRedirectUrl(null);
+  };
+
+  const handleInitiateMobileMoneyPayment = async () => {
+    if (!paymentPhone || !validateSafaricomPhone(paymentPhone)) {
+      setPaymentError('Please enter a valid Safaricom phone number (e.g., 0712345678)');
+      return;
+    }
+
+    setProcessingPayment(true);
+    setPaymentError('');
+
+    try {
+      const formattedPhone = formatMpesaPhoneNumber(paymentPhone);
+      
+      console.log('Initiating M-Pesa STK Push for order:', {
+        phoneNumber: formattedPhone,
+        amount: orderDetails.totalAmount,
+        orderId: orderDetails.id
+      });
+      
+      const paymentResponse = await api.post('/mpesa/stk-push', {
+        phoneNumber: formattedPhone,
+        amount: parseFloat(orderDetails.totalAmount),
+        orderId: orderDetails.id,
+        accountReference: `ORDER-${orderDetails.id}`
+      });
+
+      if (paymentResponse.data.success) {
+        setPaymentError('');
+        setPaymentSuccess(true);
+        setProcessingPayment(false);
+        // Dialog will close automatically when payment-confirmed event is received
+      } else {
+        setPaymentError(paymentResponse.data.error || paymentResponse.data.message || 'Failed to initiate payment. Please try again.');
+        setProcessingPayment(false);
+      }
+    } catch (paymentError) {
+      console.error('Payment error:', paymentError);
+      const errorMessage = paymentError.response?.data?.error || 
+                          paymentError.response?.data?.message || 
+                          paymentError.message || 
+                          'Failed to initiate payment. Please try again.';
+      setPaymentError(errorMessage);
+      setProcessingPayment(false);
+    }
+  };
+
+  const handleInitiateCardPayment = async () => {
+    setProcessingPayment(true);
+    setPaymentError('');
+
+    try {
+      // Get current URL for callbacks
+      const currentUrl = window.location.origin;
+      const callbackUrl = `${currentUrl}/payment-success?orderId=${orderDetails.id}`;
+      const cancellationUrl = `${currentUrl}/payment-cancelled?orderId=${orderDetails.id}`;
+      
+      console.log('Initiating PesaPal card payment:', {
+        orderId: orderDetails.id,
+        amount: orderDetails.totalAmount,
+        callbackUrl,
+        cancellationUrl
+      });
+      
+      const paymentResponse = await api.post('/pesapal/initiate-payment', {
+        orderId: orderDetails.id,
+        callbackUrl: callbackUrl,
+        cancellationUrl: cancellationUrl
+      });
+
+      if (paymentResponse.data.success && paymentResponse.data.redirectUrl) {
+        setPesapalRedirectUrl(paymentResponse.data.redirectUrl);
+        setPaymentError('');
+        setProcessingPayment(false);
+        // Redirect to PesaPal payment page
+        window.location.href = paymentResponse.data.redirectUrl;
+      } else {
+        setPaymentError(paymentResponse.data.error || paymentResponse.data.message || 'Failed to initiate card payment. Please try again.');
+        setProcessingPayment(false);
+      }
+    } catch (paymentError) {
+      console.error('Card payment error:', paymentError);
+      const errorMessage = paymentError.response?.data?.error || 
+                          paymentError.response?.data?.message || 
+                          paymentError.message || 
+                          'Failed to initiate card payment. Please try again.';
+      setPaymentError(errorMessage);
+      setProcessingPayment(false);
+    }
+  };
+
+  const handlePaymentMethodChange = (event, newValue) => {
+    setPaymentMethod(newValue);
+    setPaymentError('');
+    setPaymentSuccess(false);
   };
 
   if (loading) {
@@ -194,20 +412,22 @@ const OrderTracking = ({ order }) => {
             <Person /> Customer Information
           </Typography>
           <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-            <Typography><strong>Name:</strong> {orderDetails.customerName}</Typography>
+            <Typography sx={{ textAlign: 'left' }}><strong>Name:</strong> {orderDetails.customerName || 'N/A'}</Typography>
             {orderDetails.customerPhone && (
-              <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1, textAlign: 'left' }}>
                 <Phone fontSize="small" /> {orderDetails.customerPhone}
               </Typography>
             )}
             {orderDetails.customerEmail && (
-              <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1, textAlign: 'left' }}>
                 <Email fontSize="small" /> {orderDetails.customerEmail}
               </Typography>
             )}
-            <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <LocationOn fontSize="small" /> {orderDetails.deliveryAddress}
-            </Typography>
+            {orderDetails.deliveryAddress && (
+              <Typography sx={{ display: 'flex', alignItems: 'center', gap: 1, textAlign: 'left' }}>
+                <LocationOn fontSize="small" /> {orderDetails.deliveryAddress}
+              </Typography>
+            )}
           </Box>
         </Box>
 
@@ -221,12 +441,27 @@ const OrderTracking = ({ order }) => {
           {orderDetails.items && orderDetails.items.length > 0 ? (
             <Box sx={{ mt: 2 }}>
               {orderDetails.items.map((item, index) => (
-                <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', py: 1 }}>
+                <Box key={item.id || index} sx={{ display: 'flex', justifyContent: 'space-between', py: 1 }}>
                   <Typography>
-                    {item.drink?.name || 'Unknown Item'} x {item.quantity}
+                    {item.drink?.name || item.drinkName || 'Unknown Item'} x {item.quantity || 0}
+                    {item.selectedCapacity && ` (${item.selectedCapacity})`}
                   </Typography>
                   <Typography>
-                    KES {Number(item.price * item.quantity).toFixed(2)}
+                    KES {Number((item.price || 0) * (item.quantity || 0)).toFixed(2)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
+          ) : orderDetails.orderItems && orderDetails.orderItems.length > 0 ? (
+            <Box sx={{ mt: 2 }}>
+              {orderDetails.orderItems.map((item, index) => (
+                <Box key={item.id || index} sx={{ display: 'flex', justifyContent: 'space-between', py: 1 }}>
+                  <Typography>
+                    {item.drink?.name || item.drinkName || 'Unknown Item'} x {item.quantity || 0}
+                    {item.selectedCapacity && ` (${item.selectedCapacity})`}
+                  </Typography>
+                  <Typography>
+                    KES {Number((item.price || 0) * (item.quantity || 0)).toFixed(2)}
                   </Typography>
                 </Box>
               ))}
@@ -245,15 +480,16 @@ const OrderTracking = ({ order }) => {
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {/* Items Subtotal */}
-            {orderDetails.items && orderDetails.items.length > 0 && (
+            {((orderDetails.items && orderDetails.items.length > 0) || (orderDetails.orderItems && orderDetails.orderItems.length > 0)) && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body1">
                   Items Subtotal:
                 </Typography>
                 <Typography variant="body1">
                   KES {(() => {
+                    const items = orderDetails.items || orderDetails.orderItems || [];
                     const itemsTotal = orderDetails.itemsTotal || 
-                      orderDetails.items.reduce((sum, item) => 
+                      items.reduce((sum, item) => 
                         sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
                       );
                     return Number(itemsTotal).toFixed(2);
@@ -290,7 +526,7 @@ const OrderTracking = ({ order }) => {
                 Total Amount:
               </Typography>
               <Typography variant="h5" color="primary" sx={{ fontWeight: 600 }}>
-                KES {Number(orderDetails.totalAmount).toFixed(2)}
+                KES {orderDetails.totalAmount ? Number(orderDetails.totalAmount).toFixed(2) : '0.00'}
               </Typography>
             </Box>
           </Box>
@@ -299,13 +535,37 @@ const OrderTracking = ({ order }) => {
         {orderDetails.paymentType && (
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Payment: {orderDetails.paymentType === 'pay_now' ? 'Paid' : 'Pay on Delivery'}
+              Payment: {orderDetails.paymentStatus === 'paid' ? 'Paid' : orderDetails.paymentType === 'pay_now' ? 'Unpaid' : 'Pay on Delivery'}
             </Typography>
             {orderDetails.paymentMethod && (
               <Typography variant="body2" color="text.secondary">
                 Method: {orderDetails.paymentMethod === 'mobile_money' ? 'Mobile Money' : 'Card'}
               </Typography>
             )}
+          </Box>
+        )}
+
+        {/* Make Payment Button - Show for unpaid orders with pay_now payment type */}
+        {orderDetails.paymentStatus !== 'paid' && orderDetails.paymentType === 'pay_now' && orderDetails.status !== 'cancelled' && (
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+            <Button
+              variant="contained"
+              size="large"
+              startIcon={<Payment />}
+              onClick={handleOpenPaymentDialog}
+              sx={{
+                backgroundColor: '#00E0B8',
+                color: '#0D0D0D',
+                fontWeight: 600,
+                px: 4,
+                py: 1.5,
+                '&:hover': {
+                  backgroundColor: '#00C4A3'
+                }
+              }}
+            >
+              Make Payment
+            </Button>
           </Box>
         )}
 
@@ -326,6 +586,116 @@ const OrderTracking = ({ order }) => {
           Back to Home
         </Button>
       </Box>
+
+      {/* Payment Dialog */}
+      <Dialog 
+        open={paymentDialogOpen} 
+        onClose={handleClosePaymentDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Make Payment - Order #{orderDetails.id}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            Total Amount: KES {orderDetails.totalAmount ? Number(orderDetails.totalAmount).toFixed(2) : '0.00'}
+          </Typography>
+
+          {/* Payment Method Selection */}
+          <Box sx={{ mb: 3 }}>
+            <Tabs
+              value={paymentMethod}
+              onChange={handlePaymentMethodChange}
+              sx={{
+                mb: 2,
+                '& .MuiTab-root': {
+                  minWidth: '50%'
+                }
+              }}
+            >
+              <Tab 
+                icon={<PhoneAndroid />} 
+                iconPosition="start"
+                label="Mobile Money" 
+                value="mobile_money"
+                sx={{ textTransform: 'none' }}
+              />
+              <Tab 
+                icon={<CreditCard />} 
+                iconPosition="start"
+                label="Card" 
+                value="card"
+                sx={{ textTransform: 'none' }}
+              />
+            </Tabs>
+          </Box>
+
+          {/* Mobile Money Payment Form */}
+          {paymentMethod === 'mobile_money' && (
+            <Box>
+              <TextField
+                label="Phone Number *"
+                value={paymentPhone}
+                onChange={(e) => setPaymentPhone(e.target.value)}
+                fullWidth
+                placeholder="0712345678"
+                margin="normal"
+                disabled={processingPayment}
+                helperText="Enter your Safaricom phone number to receive payment prompt"
+              />
+            </Box>
+          )}
+
+          {/* Card Payment Info */}
+          {paymentMethod === 'card' && (
+            <Box>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                You will be redirected to PesaPal to complete your card payment securely.
+              </Alert>
+            </Box>
+          )}
+
+          {paymentSuccess && paymentMethod === 'mobile_money' && (
+            <Alert severity="success" sx={{ mt: 2 }}>
+              Payment request sent. Please check your phone to enter your M-Pesa PIN.
+            </Alert>
+          )}
+          {paymentError && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {paymentError}
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClosePaymentDialog} disabled={processingPayment}>
+            Cancel
+          </Button>
+          <Button
+            onClick={paymentMethod === 'mobile_money' ? handleInitiateMobileMoneyPayment : handleInitiateCardPayment}
+            variant="contained"
+            disabled={processingPayment || (paymentMethod === 'mobile_money' && !paymentPhone)}
+            sx={{
+              backgroundColor: '#00E0B8',
+              color: '#0D0D0D',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              }
+            }}
+          >
+            {processingPayment ? (
+              <>
+                <CircularProgress size={16} sx={{ mr: 1 }} />
+                Processing...
+              </>
+            ) : paymentMethod === 'mobile_money' ? (
+              'Send Payment Prompt'
+            ) : (
+              'Proceed to Card Payment'
+            )}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

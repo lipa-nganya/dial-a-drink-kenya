@@ -52,6 +52,8 @@ const AdminOverview = () => {
   const [latestOrders, setLatestOrders] = useState([]);
   const [topInventoryItems, setTopInventoryItems] = useState([]);
   const [latestTransactions, setLatestTransactions] = useState([]);
+  const [todayCompletedOrders, setTodayCompletedOrders] = useState([]);
+  const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
   const navigate = useNavigate();
   const { fetchPendingOrdersCount, setIsAuthenticated } = useAdmin();
 
@@ -91,6 +93,7 @@ const AdminOverview = () => {
     fetchLatestOrders();
     fetchTopInventoryItems();
     fetchLatestTransactions();
+    fetchTodayCompletedOrders();
 
     return () => {
       newSocket.close();
@@ -137,6 +140,48 @@ const AdminOverview = () => {
     } catch (error) {
       console.error('Error fetching latest transactions:', error);
       setLatestTransactions([]);
+    }
+  };
+
+  const fetchTodayCompletedOrders = async () => {
+    try {
+      setLoadingTodayOrders(true);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      // Fetch all orders and filter on frontend
+      const response = await api.get('/admin/orders');
+      
+      const orders = response.data || [];
+      
+      // Filter to only completed/delivered orders that were completed today
+      const completedOrders = orders.filter(order => {
+        const isCompleted = order.status === 'completed' || order.status === 'delivered';
+        if (!isCompleted) return false;
+        
+        // Check if order was completed today (use updatedAt as completion time)
+        const completedAt = new Date(order.updatedAt || order.createdAt);
+        completedAt.setHours(0, 0, 0, 0);
+        const isToday = completedAt.getTime() === today.getTime();
+        
+        return isToday;
+      });
+      
+      // Sort by completion time (most recent first)
+      completedOrders.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+        return timeB - timeA;
+      });
+      
+      setTodayCompletedOrders(completedOrders);
+    } catch (error) {
+      console.error('Error fetching today completed orders:', error);
+      setTodayCompletedOrders([]);
+    } finally {
+      setLoadingTodayOrders(false);
     }
   };
 
@@ -324,8 +369,119 @@ const AdminOverview = () => {
     }
   ];
  
+  // Get today's date and day
+  const today = new Date();
+  const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
+  const dateString = today.toLocaleDateString('en-US', { 
+    year: 'numeric', 
+    month: 'long', 
+    day: 'numeric' 
+  });
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
+      {/* Quick Panel */}
+      <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, mb: 4 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+            <Box>
+              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700, mb: 0.5 }}>
+                {dayName}
+              </Typography>
+              <Typography variant="body1" sx={{ color: colors.textSecondary }}>
+                {dateString}
+              </Typography>
+            </Box>
+            <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+              {todayCompletedOrders.length} {todayCompletedOrders.length === 1 ? 'Order' : 'Orders'} Completed Today
+            </Typography>
+          </Box>
+
+          {loadingTodayOrders ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : todayCompletedOrders.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                No orders completed today
+              </Typography>
+            </Box>
+          ) : (
+            <TableContainer component={Paper} sx={{ backgroundColor: isDarkMode ? '#1a1a1a' : '#FFFFFF' }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order #</TableCell>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Customer</TableCell>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Amount</TableCell>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Status</TableCell>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Completed At</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {todayCompletedOrders.map((order) => {
+                    const statusChip = getOrderStatusChipProps(order.status);
+                    const isPOS = order.isPOS || order.deliveryAddress === 'In-Store Purchase';
+
+                    return (
+                      <TableRow 
+                        key={order.id}
+                        sx={{
+                          backgroundColor: isPOS ? 'rgba(156, 39, 176, 0.08)' : 'transparent',
+                          '&:hover': {
+                            backgroundColor: isPOS ? 'rgba(156, 39, 176, 0.12)' : 'rgba(0, 224, 184, 0.05)',
+                            cursor: 'pointer'
+                          }
+                        }}
+                        onClick={() => navigate(`/orders?orderId=${order.id}`)}
+                      >
+                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                          #{order.orderNumber || order.id}
+                          {isPOS && (
+                            <Chip
+                              label="POS"
+                              size="small"
+                              sx={{
+                                ml: 1,
+                                backgroundColor: '#9C27B0',
+                                color: '#FFFFFF',
+                                fontWeight: 700,
+                                fontSize: '0.65rem',
+                                height: '20px'
+                              }}
+                            />
+                          )}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {order.customerName || 'Guest'}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }} align="right">
+                          KES {Number(order.totalAmount || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </TableCell>
+                        <TableCell align="right">
+                          <Chip
+                            size="small"
+                            {...statusChip}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textSecondary }} align="right">
+                          {new Date(order.updatedAt || order.createdAt).toLocaleTimeString('en-US', { 
+                            hour: '2-digit', 
+                            minute: '2-digit',
+                            hour12: true
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </CardContent>
+      </Card>
+
       {dashboardSections.map((section) => (
         <Box key={section.title} sx={{ mb: 6 }}>
           <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, mb: 2 }}>
