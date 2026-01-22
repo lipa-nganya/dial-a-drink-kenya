@@ -58,7 +58,6 @@ const MyOrders = () => {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [pesapalRedirectUrl, setPesapalRedirectUrl] = useState(null);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
@@ -356,7 +355,6 @@ const MyOrders = () => {
     setPaymentMethod('mobile_money');
     setPaymentError('');
     setPaymentSuccess(false);
-    setPesapalRedirectUrl(null);
     setPaymentDialogOpen(true);
   };
 
@@ -367,7 +365,6 @@ const MyOrders = () => {
     setPaymentError('');
     setPaymentSuccess(false);
     setProcessingPayment(false);
-    setPesapalRedirectUrl(null);
   };
 
   const handlePaymentMethodChange = (event, newValue) => {
@@ -459,7 +456,6 @@ const MyOrders = () => {
       });
 
       if (paymentResponse.data.success && paymentResponse.data.redirectUrl) {
-        setPesapalRedirectUrl(paymentResponse.data.redirectUrl);
         setPaymentError('');
         setProcessingPayment(false);
         // Redirect to PesaPal payment page

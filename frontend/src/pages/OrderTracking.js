@@ -14,9 +14,6 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   Tabs,
   Tab
 } from '@mui/material';
@@ -59,7 +56,6 @@ const OrderTracking = ({ order: orderProp }) => {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
-  const [pesapalRedirectUrl, setPesapalRedirectUrl] = useState(null);
 
   useEffect(() => {
     const trackingToken = searchParams.get('token');
@@ -255,7 +251,6 @@ const OrderTracking = ({ order: orderProp }) => {
     setPaymentMethod('mobile_money');
     setPaymentError('');
     setPaymentSuccess(false);
-    setPesapalRedirectUrl(null);
     setPaymentDialogOpen(true);
   };
 
@@ -265,7 +260,6 @@ const OrderTracking = ({ order: orderProp }) => {
     setPaymentError('');
     setPaymentSuccess(false);
     setProcessingPayment(false);
-    setPesapalRedirectUrl(null);
   };
 
   const handleInitiateMobileMoneyPayment = async () => {
@@ -337,7 +331,6 @@ const OrderTracking = ({ order: orderProp }) => {
       });
 
       if (paymentResponse.data.success && paymentResponse.data.redirectUrl) {
-        setPesapalRedirectUrl(paymentResponse.data.redirectUrl);
         setPaymentError('');
         setProcessingPayment(false);
         // Redirect to PesaPal payment page

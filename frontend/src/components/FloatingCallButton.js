@@ -1,10 +1,8 @@
 import React from 'react';
 import { Fab, Tooltip, useMediaQuery, useTheme as useMUITheme } from '@mui/material';
 import { Phone } from '@mui/icons-material';
-import { useTheme } from '../contexts/ThemeContext';
 
 const FloatingCallButton = () => {
-  const { colors } = useTheme();
   const muiTheme = useMUITheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const phoneNumber = '+254723688108'; // Format: +254723688108 (no spaces for tel: link)

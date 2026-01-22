@@ -281,7 +281,6 @@ const Home = () => {
               transform: isScrolled ? 'translateX(-50%)' : 'none',
               zIndex: isScrolled ? 100 : 'auto',
               width: isScrolled ? '90%' : '100%',
-              maxWidth: isScrolled ? '480px' : '480px',
               backgroundColor: isScrolled ? '#FFFFFF' : 'transparent',
               boxShadow: isScrolled ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
               borderRadius: isScrolled ? 2 : 0,
