@@ -20,6 +20,8 @@ import com.dialadrink.driver.data.model.UpdateOrderStatusRequest
 import com.dialadrink.driver.databinding.ActivityOrderDetailBinding
 import com.dialadrink.driver.services.SocketService
 import com.dialadrink.driver.utils.SharedPrefs
+import com.google.gson.Gson
+import com.google.gson.JsonObject
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.NumberFormat
@@ -660,10 +662,19 @@ class OrderDetailActivity : AppCompatActivity() {
                     
                     loadOrderDetails() // Reload to show updated status
                 } else {
-                    Toast.makeText(this@OrderDetailActivity, "Failed to update status", Toast.LENGTH_SHORT).show()
+                    val errorBody = response.errorBody()?.string()
+                    val errorMessage = try {
+                        val errorJson = errorBody?.let { com.google.gson.Gson().fromJson(it, com.google.gson.JsonObject::class.java) }
+                        errorJson?.get("error")?.asString ?: errorJson?.get("message")?.asString ?: "Failed to update status"
+                    } catch (e: Exception) {
+                        errorBody ?: "Failed to update status (${response.code()})"
+                    }
+                    Log.e(TAG, "❌ Failed to update order status: ${response.code()} - $errorMessage")
+                    Toast.makeText(this@OrderDetailActivity, errorMessage, Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                Log.e(TAG, "❌ Error updating order status", e)
+                Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 binding.loadingProgress.visibility = View.GONE
             }
@@ -695,10 +706,19 @@ class OrderDetailActivity : AppCompatActivity() {
                     Toast.makeText(this@OrderDetailActivity, "Status updated", Toast.LENGTH_SHORT).show()
                     loadOrderDetails() // Reload to show updated status
                 } else {
-                    Toast.makeText(this@OrderDetailActivity, "Failed to update status", Toast.LENGTH_SHORT).show()
+                    val errorBody = response.errorBody()?.string()
+                    val errorMessage = try {
+                        val errorJson = errorBody?.let { Gson().fromJson(it, JsonObject::class.java) }
+                        errorJson?.get("error")?.asString ?: errorJson?.get("message")?.asString ?: "Failed to update status"
+                    } catch (e: Exception) {
+                        errorBody ?: "Failed to update status (${response.code()})"
+                    }
+                    Log.e(TAG, "❌ Failed to update order status: ${response.code()} - $errorMessage")
+                    Toast.makeText(this@OrderDetailActivity, errorMessage, Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                Log.e(TAG, "❌ Error updating order status", e)
+                Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_LONG).show()
             } finally {
                 binding.loadingProgress.visibility = View.GONE
             }
