@@ -1414,7 +1414,7 @@ router.put('/:id', async (req, res) => {
       }
       updateData.creditLimit = parsedLimit;
     }
-    if (cashAtHand !== undefined) {
+    if (cashAtHand !== undefined && cashAtHand !== null && cashAtHand !== '') {
       const parsedCash = parseFloat(cashAtHand);
       if (isNaN(parsedCash) || parsedCash < 0) {
         return sendError(res, 'Cash at hand must be a non-negative number');

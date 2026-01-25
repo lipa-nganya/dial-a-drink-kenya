@@ -104,16 +104,34 @@ class PhoneNumberActivity : AppCompatActivity() {
                             startActivity(intent)
                             return@launch
                         } else {
-                            android.util.Log.d("PhoneNumberActivity", "❌ Driver not found in database (body is null)")
+                            // Driver not found (success: false or data is null) - proceed to OTP flow
+                            android.util.Log.d("PhoneNumberActivity", "❌ Driver not found in database (success: ${apiResponse?.success}, data: ${driver != null})")
+                            // Continue to OTP flow below
                         }
                     } else {
                         val errorBody = driverResponse.errorBody()?.string()
-                        android.util.Log.e("PhoneNumberActivity", "❌ Driver check failed: ${driverResponse.code()} - ${driverResponse.message()}")
+                        val statusCode = driverResponse.code()
+                        android.util.Log.e("PhoneNumberActivity", "❌ Driver check failed: $statusCode - ${driverResponse.message()}")
                         android.util.Log.e("PhoneNumberActivity", "Error body: $errorBody")
                         
                         // If 404, driver doesn't exist - proceed to OTP flow
-                        if (driverResponse.code() == 404) {
+                        if (statusCode == 404) {
                             android.util.Log.d("PhoneNumberActivity", "📱 Driver not found (404) - proceeding to OTP flow")
+                            // Continue to OTP flow below
+                        } else if (statusCode >= 500) {
+                            // Server error (500+) - show error and don't proceed
+                            android.util.Log.e("PhoneNumberActivity", "❌ Server error ($statusCode) - backend may be down or database unavailable")
+                            showError("Service temporarily unavailable. Please try again in a moment.")
+                            return@launch
+                        } else if (errorBody != null && (errorBody.contains("ngrok") || errorBody.contains("ERR_NGROK"))) {
+                            // ngrok error page detected - show error
+                            android.util.Log.e("PhoneNumberActivity", "❌ ngrok error detected in response")
+                            showError("Connection error. Please check your internet connection and try again.")
+                            return@launch
+                        } else {
+                            // Other client errors (400-499 except 404) - proceed to OTP flow
+                            android.util.Log.d("PhoneNumberActivity", "⚠️ Client error ($statusCode) - proceeding to OTP flow")
+                            // Continue to OTP flow below
                         }
                     }
                 } else {

@@ -86,12 +86,20 @@ class PinSetupActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
+                // Clean phone number (remove non-digits) to ensure consistent format
+                val cleanedPhone = phone.replace(Regex("[^0-9]"), "")
+                android.util.Log.d("PinSetupActivity", "🔐 Setting up PIN for phone: $cleanedPhone")
+                
                 val response = ApiClient.getApiService().setupPin(
-                    phone,
+                    cleanedPhone,
                     SetupPinRequest(pin)
                 )
                 
+                android.util.Log.d("PinSetupActivity", "📡 PIN setup response - Success: ${response.isSuccessful}, Code: ${response.code()}")
+                
                 if (response.isSuccessful && response.body()?.success == true) {
+                    android.util.Log.d("PinSetupActivity", "✅ PIN setup successful")
+                    
                     // Mark as logged in
                     SharedPrefs.setLoggedIn(this@PinSetupActivity, true)
                     
@@ -107,9 +115,12 @@ class PinSetupActivity : AppCompatActivity() {
                     startActivity(intent)
                     finish()
                 } else {
-                    showError(response.body()?.error ?: "Failed to setup PIN")
+                    val errorMsg = response.body()?.error ?: "Failed to setup PIN"
+                    android.util.Log.e("PinSetupActivity", "❌ PIN setup failed: $errorMsg")
+                    showError(errorMsg)
                 }
             } catch (e: Exception) {
+                android.util.Log.e("PinSetupActivity", "❌ PIN setup error: ${e.message}", e)
                 showError("Network error: ${e.message}")
             } finally {
                 binding.loadingProgress.visibility = View.GONE

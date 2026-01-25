@@ -24,13 +24,20 @@ const resolveApiBaseUrl = () => {
     return { url: DEFAULT_PRODUCTION_API_BASE, source: 'cloud-run-dev-default' };
   }
 
-  // Netlify production deployments (thewolfgang.tech)
-  // CRITICAL: Always use production backend for Netlify, ignore REACT_APP_API_URL
-  // This prevents incorrect localhost URLs from Netlify environment variables
-  const isNetlifyProd = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
-  if (isNetlifyProd) {
-    // Force production URL - ignore any REACT_APP_API_URL that might be set incorrectly
-    return { url: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api', source: 'netlify-prod-forced' };
+  // Netlify deployments
+  // Distinguish between development and production Netlify sites
+  const isNetlify = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
+  if (isNetlify) {
+    // Development site: dialadrink.thewolfgang.tech (uses dev backend on project 910510650031)
+    // Production site: drinksdeliverykenya.com (uses production backend)
+    const isDevSite = hostname.includes('dialadrink.thewolfgang.tech') || hostname.includes('dialadrink-admin.thewolfgang.tech');
+    if (isDevSite) {
+      // Use development backend
+      return { url: DEFAULT_PRODUCTION_API_BASE, source: 'netlify-dev' };
+    } else {
+      // Production Netlify site - use production backend
+      return { url: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api', source: 'netlify-prod-forced' };
+    }
   }
 
   // Other managed hosts (onrender.com, etc.)

@@ -87,6 +87,10 @@ class PinLoginActivity : AppCompatActivity() {
             return
         }
         
+        // Clean phone number (remove non-digits) to ensure consistent format
+        val cleanedPhone = phone.replace(Regex("[^0-9]"), "")
+        android.util.Log.d("PinLoginActivity", "🔐 Verifying PIN for phone: $cleanedPhone")
+        
         binding.loadingProgress.visibility = View.VISIBLE
         binding.loginButton.isEnabled = false
         binding.errorText.visibility = View.GONE
@@ -94,9 +98,11 @@ class PinLoginActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val response = ApiClient.getApiService().verifyPin(
-                    phone,
+                    cleanedPhone,
                     VerifyPinRequest(pin)
                 )
+                
+                android.util.Log.d("PinLoginActivity", "📡 PIN verification response - Success: ${response.isSuccessful}, Code: ${response.code()}")
                 
                 if (response.isSuccessful && response.body()?.success == true) {
                     // Mark as logged in
