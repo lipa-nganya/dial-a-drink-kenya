@@ -40,11 +40,29 @@ const getCallbackUrl = () => {
     return callbackUrl;
   }
   
-  // Priority 3: Check if we're in production or Cloud Run (cloud-dev)
-  const { isProduction } = require('../utils/envDetection');
-  if (isProduction()) {
+  // Priority 3: Check if we're in Cloud Run and determine which instance
+  const { isProduction, isCloudRun } = require('../utils/envDetection');
+  if (isCloudRun()) {
+    // Determine which Cloud Run instance we're on based on GCP project
+    const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT;
+    
+    // Dev backend: project 910510650031 or drink-suite
+    if (gcpProject === '910510650031' || gcpProject === 'drink-suite') {
+      callbackUrl = 'https://deliveryos-backend-910510650031.us-central1.run.app/api/mpesa/callback';
+      console.log(`✅ Using dev backend callback URL: ${callbackUrl}`);
+      return callbackUrl;
+    }
+    
+    // Production backend: dialadrink-production project
+    if (gcpProject === 'dialadrink-production' || isProduction()) {
+      callbackUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api/mpesa/callback';
+      console.log(`✅ Using production callback URL: ${callbackUrl}`);
+      return callbackUrl;
+    }
+    
+    // Fallback: try to detect from service URL or use production
     callbackUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api/mpesa/callback';
-    console.log(`✅ Using production callback URL: ${callbackUrl}`);
+    console.log(`⚠️  Could not determine Cloud Run instance, using production callback URL: ${callbackUrl}`);
     return callbackUrl;
   }
   
