@@ -24,10 +24,14 @@ const resolveApiBaseUrl = () => {
     return { url: DEFAULT_PRODUCTION_API_BASE, source: 'cloud-run-dev-default' };
   }
 
-  // Production sites (Netlify or other hosting)
-  const isProductionSite = hostname.includes('ruakadrinksdelivery.co.ke') || 
-                          hostname.includes('drinksdeliverykenya.com');
-  if (isProductionSite) {
+  // Production sites (check FIRST before other checks)
+  // These are production customer-facing sites that should use the new production backend
+  if (hostname === 'ruakadrinksdelivery.co.ke' || 
+      hostname === 'www.ruakadrinksdelivery.co.ke' ||
+      hostname.includes('ruakadrinksdelivery.co.ke') ||
+      hostname === 'drinksdeliverykenya.com' ||
+      hostname === 'www.drinksdeliverykenya.com' ||
+      hostname.includes('drinksdeliverykenya.com')) {
     // Production sites - use production backend
     return { url: 'https://deliveryos-backend-805803410802.us-central1.run.app/api', source: 'production-site' };
   }
