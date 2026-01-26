@@ -14,7 +14,7 @@ export const getBackendUrl = () => {
   }
   
   // Production backend URL (used for all hosted environments)
-  return 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+  return 'https://deliveryos-backend-805803410802.us-central1.run.app';
 };
 
 /**

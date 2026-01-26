@@ -137,7 +137,7 @@ async function getAccessToken() {
 const getIPNCallbackUrl = () => {
   // CRITICAL: Always use production IPN URL since PesaPal only allows IPN configuration
   // in the production credentials section, even when using sandbox credentials
-  const PRODUCTION_IPN_URL = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api/pesapal/ipn';
+  const PRODUCTION_IPN_URL = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/pesapal/ipn';
   
   // Priority 1: If PESAPAL_IPN_CALLBACK_URL is explicitly set, use it (for testing/override)
   let callbackUrl = process.env.PESAPAL_IPN_CALLBACK_URL;

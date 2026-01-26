@@ -55,13 +55,13 @@ const getCallbackUrl = () => {
     
     // Production backend: dialadrink-production project
     if (gcpProject === 'dialadrink-production' || isProduction()) {
-      callbackUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api/mpesa/callback';
+      callbackUrl = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/mpesa/callback';
       console.log(`✅ Using production callback URL: ${callbackUrl}`);
       return callbackUrl;
     }
     
     // Fallback: try to detect from service URL or use production
-    callbackUrl = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api/mpesa/callback';
+    callbackUrl = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/mpesa/callback';
     console.log(`⚠️  Could not determine Cloud Run instance, using production callback URL: ${callbackUrl}`);
     return callbackUrl;
   }
