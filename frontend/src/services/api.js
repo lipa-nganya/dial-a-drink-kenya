@@ -24,12 +24,19 @@ const resolveApiBaseUrl = () => {
     return { url: DEFAULT_PRODUCTION_API_BASE, source: 'cloud-run-dev-default' };
   }
 
+  // Production sites (Netlify or other hosting)
+  const isProductionSite = hostname.includes('ruakadrinksdelivery.co.ke') || 
+                          hostname.includes('drinksdeliverykenya.com');
+  if (isProductionSite) {
+    // Production sites - use production backend
+    return { url: 'https://deliveryos-backend-805803410802.us-central1.run.app/api', source: 'production-site' };
+  }
+
   // Netlify deployments
   // Distinguish between development and production Netlify sites
   const isNetlify = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
   if (isNetlify) {
     // Development site: dialadrink.thewolfgang.tech (uses dev backend on project 910510650031)
-    // Production site: drinksdeliverykenya.com (uses production backend)
     const isDevSite = hostname.includes('dialadrink.thewolfgang.tech') || hostname.includes('dialadrink-admin.thewolfgang.tech');
     if (isDevSite) {
       // Use development backend

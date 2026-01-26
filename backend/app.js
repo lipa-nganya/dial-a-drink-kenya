@@ -51,6 +51,11 @@ const allowedOrigins = [
   // Netlify production URLs
   'https://dialadrink-admin.thewolfgang.tech',
   'https://dialadrink.thewolfgang.tech',
+  // Production customer sites
+  'https://ruakadrinksdelivery.co.ke',
+  'https://www.ruakadrinksdelivery.co.ke',
+  'https://drinksdeliverykenya.com',
+  'https://www.drinksdeliverykenya.com',
   // Netlify preview URLs (wildcard pattern)
   'https://*.netlify.app'
 ].filter(Boolean);

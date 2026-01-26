@@ -142,7 +142,12 @@ async function loadFullApplication() {
             'https://thewolfgang.tech',
             // Netlify Production Domains
             'https://dialadrink.thewolfgang.tech',
-            'https://dialadrink-admin.thewolfgang.tech'
+            'https://dialadrink-admin.thewolfgang.tech',
+            // Production customer sites
+            'https://ruakadrinksdelivery.co.ke',
+            'https://www.ruakadrinksdelivery.co.ke',
+            'https://drinksdeliverykenya.com',
+            'https://www.drinksdeliverykenya.com'
           ];
           
           // Check exact match
