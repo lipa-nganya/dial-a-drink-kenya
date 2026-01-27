@@ -1,4 +1,5 @@
 [build]
+  base = "admin-frontend"
   publish = "build"
   command = "npm install && npm run build"
 
@@ -7,11 +8,7 @@
   to = "/index.html"
   status = 200
 
-# Prevent search engine indexing
-# Note: This applies to all domains on this site
-# If you need staging-only indexing prevention, consider using Netlify branch deploys
 [[headers]]
   for = "/*"
   [headers.values]
     X-Robots-Tag = "noindex, nofollow"
-
