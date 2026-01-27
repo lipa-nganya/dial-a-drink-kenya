@@ -39,6 +39,8 @@ const allowedOrigins = [
   'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
   // DeliveryOS backend service URL (dialadrink-production project)
   'https://deliveryos-backend-805803410802.us-central1.run.app',
+  // DeliveryOS development backend service URL
+  'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app',
   // Note: Frontends are on Netlify, not Cloud Run
   // Customer: https://dialadrink.thewolfgang.tech
   // Admin: https://dialadrink-admin.thewolfgang.tech
