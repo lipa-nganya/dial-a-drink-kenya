@@ -1,5 +1,5 @@
-# Cloud Build configuration for Production Backend
-# This file deploys to deliveryos-production-backend from main branch
+# Cloud Build configuration for Development Backend
+# This file deploys to deliveryos-development-backend from develop branch
 
 steps:
   # Build the container image
@@ -23,13 +23,13 @@ steps:
       - 'push'
       - 'gcr.io/$PROJECT_ID/deliveryos-backend:latest'
 
-  # Deploy to production backend service
+  # Deploy to development backend service
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'deliveryos-production-backend'
+      - 'deliveryos-development-backend'
       - '--image'
       - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
       - '--region'
@@ -42,11 +42,10 @@ steps:
       - '--timeout'
       - '300'
       - '--add-cloudsql-instances'
-      - 'dialadrink-production:us-central1:dialadrink-db-prod'
+      - 'dialadrink-production:us-central1:dialadrink-db-dev'
       - '--update-env-vars'
-      - 'NODE_ENV=production'
-      # Note: DATABASE_URL and other sensitive env vars should be set manually
-      # or via Secret Manager to preserve them across deployments
+      - 'NODE_ENV=development,FRONTEND_URL=https://dialadrink.thewolfgang.tech,ADMIN_URL=https://dialadrink-admin.thewolfgang.tech,HOST=0.0.0.0'
+      # Note: DATABASE_URL should be set manually or via Secret Manager
 
 images:
   - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'

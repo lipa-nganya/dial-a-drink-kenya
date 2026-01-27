@@ -29,11 +29,11 @@ const resolveApiBaseUrl = () => {
   const isNetlify = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
   if (isNetlify) {
     // Development sites: dialadrink.thewolfgang.tech and dialadrink-admin.thewolfgang.tech
-    // These should use the NEW production backend (dialadrink-production project)
+    // These should use the development backend
     const isDevSite = hostname.includes('dialadrink.thewolfgang.tech') || hostname.includes('dialadrink-admin.thewolfgang.tech');
     if (isDevSite) {
-      // Use new production backend (migrated to dialadrink-production project)
-      return { url: 'https://deliveryos-backend-805803410802.us-central1.run.app/api', source: 'netlify-dev' };
+      // Use development backend (deployed from develop branch)
+      return { url: 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api', source: 'netlify-dev' };
     } else {
       // Production Netlify site - use production backend
       return { url: 'https://deliveryos-backend-805803410802.us-central1.run.app/api', source: 'netlify-prod-forced' };

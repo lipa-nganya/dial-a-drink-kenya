@@ -40,11 +40,12 @@ const resolveApiBaseUrl = () => {
   // Distinguish between development and production Netlify sites
   const isNetlify = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
   if (isNetlify) {
-    // Development site: dialadrink.thewolfgang.tech (uses dev backend on project 910510650031)
+    // Development sites: dialadrink.thewolfgang.tech and dialadrink-admin.thewolfgang.tech
+    // These should use the development backend
     const isDevSite = hostname.includes('dialadrink.thewolfgang.tech') || hostname.includes('dialadrink-admin.thewolfgang.tech');
     if (isDevSite) {
-      // Use development backend
-      return { url: DEFAULT_PRODUCTION_API_BASE, source: 'netlify-dev' };
+      // Use development backend (deployed from develop branch)
+      return { url: 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api', source: 'netlify-dev' };
     } else {
       // Production Netlify site - use production backend
       return { url: 'https://deliveryos-backend-805803410802.us-central1.run.app/api', source: 'netlify-prod-forced' };

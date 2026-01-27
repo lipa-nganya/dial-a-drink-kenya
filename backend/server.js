@@ -47,9 +47,11 @@ const server = http.createServer(minimalApp);
 
 // Start server IMMEDIATELY - before loading anything else
 // Use 127.0.0.1 for local development (avoid IPv6 issues), 0.0.0.0 for production/Cloud Run
-// Default to 127.0.0.1 unless explicitly set to production
+// Check if we're in Cloud Run (has PORT env var and K_SERVICE or GOOGLE_CLOUD_PROJECT)
+const isCloudRun = !!process.env.K_SERVICE || !!process.env.GOOGLE_CLOUD_PROJECT;
 const isProduction = process.env.NODE_ENV === 'production';
-const HOST = process.env.HOST || (isProduction ? '0.0.0.0' : '127.0.0.1');
+// Always use 0.0.0.0 in Cloud Run, otherwise use 127.0.0.1 for local dev
+const HOST = process.env.HOST || (isCloudRun || isProduction ? '0.0.0.0' : '127.0.0.1');
 console.log(`📡 Starting server on ${HOST}:${PORT}...`);
 console.log(`🔧 Environment: NODE_ENV=${process.env.NODE_ENV || 'undefined'}, isProduction=${isProduction}`);
 server.listen(PORT, HOST, () => {

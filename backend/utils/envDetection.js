@@ -62,13 +62,21 @@ function getEnvironment() {
  * This matches the keys in config.js
  */
 function getDatabaseConfigName() {
-  // CRITICAL: If NODE_ENV is explicitly set to 'development', always use development config
-  // This prevents local from accidentally using production database
-  if (process.env.NODE_ENV === 'development') {
-    return 'development';
+  // CRITICAL: If we're in Cloud Run, always use cloud-dev or production config (not development)
+  // This ensures DATABASE_URL is used instead of localhost fallback
+  if (isCloudRun()) {
+    // If DATABASE_URL is set, use cloud-dev config (works for both dev and prod Cloud Run)
+    if (process.env.DATABASE_URL) {
+      return process.env.NODE_ENV === 'production' ? 'production' : 'cloud-dev';
+    }
+    // Fallback to production config if DATABASE_URL not set
+    return 'production';
   }
   
-  const env = getEnvironment();
+  // If NODE_ENV is explicitly set to 'development' and we're local, use development config
+  if (process.env.NODE_ENV === 'development' && isLocal()) {
+    return 'development';
+  }
   
   // If DATABASE_URL is set and we're in production/cloud, use cloud-dev config
   if (process.env.DATABASE_URL && isProduction()) {
