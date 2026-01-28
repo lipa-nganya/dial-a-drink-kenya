@@ -73,6 +73,17 @@ function getDatabaseConfigName() {
     return 'production';
   }
 
+  // For any non-Cloud Run environment, if a DATABASE_URL is present,
+  // prefer cloud-dev config so we never fall back to localhost when a URL is configured.
+  if (process.env.DATABASE_URL) {
+    return 'cloud-dev';
+  }
+
+  // If NODE_ENV is explicitly set to 'production', use production config
+  if (process.env.NODE_ENV === 'production') {
+    return 'production';
+  }
+
   // If NODE_ENV is explicitly set to 'development' and we're local, use development config
   if (process.env.NODE_ENV === 'development' && isLocal()) {
     return 'development';
@@ -81,11 +92,6 @@ function getDatabaseConfigName() {
   // If DATABASE_URL is set and we're in production/cloud, use cloud-dev config
   if (process.env.DATABASE_URL && isProduction()) {
     return 'cloud-dev';
-  }
-
-  // If NODE_ENV is explicitly set to 'production', use production config
-  if (process.env.NODE_ENV === 'production') {
-    return 'production';
   }
 
   // Default to development for local (when NODE_ENV is not set or is undefined)

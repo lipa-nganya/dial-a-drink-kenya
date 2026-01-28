@@ -82,6 +82,10 @@ class RejectedSubmissionsFragment : Fragment() {
     }
     
     private fun displaySubmissions(submissions: List<CashSubmission>) {
+        // Hide table, show container
+        binding.root.findViewById<View>(R.id.tableContainer)?.visibility = View.GONE
+        binding.transactionsContainer.visibility = View.VISIBLE
+        
         val container = binding.transactionsContainer
         container.removeAllViews()
         

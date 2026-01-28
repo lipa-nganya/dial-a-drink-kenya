@@ -26,15 +26,18 @@ const resolveApiBaseUrl = () => {
   }
 
   // Production sites (check FIRST before other checks)
-  // These are production customer-facing sites that should use the new production backend
+  // These are production customer-facing sites that should use the production backend
   if (hostname === 'ruakadrinksdelivery.co.ke' || 
       hostname === 'www.ruakadrinksdelivery.co.ke' ||
       hostname.includes('ruakadrinksdelivery.co.ke') ||
       hostname === 'drinksdeliverykenya.com' ||
       hostname === 'www.drinksdeliverykenya.com' ||
       hostname.includes('drinksdeliverykenya.com')) {
-    // Production sites - use production backend
-    return { url: 'https://deliveryos-backend-805803410802.us-central1.run.app/api', source: 'production-site' };
+    // Production sites - use the production backend service
+    return {
+      url: 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api',
+      source: 'production-site'
+    };
   }
 
   // Netlify deployments

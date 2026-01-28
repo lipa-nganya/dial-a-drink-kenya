@@ -142,6 +142,7 @@ app.use('/api/inventory', require('./routes/inventory')); // Inventory managemen
 // Register admin notifications BEFORE /api/admin to ensure it matches first
 app.use('/api/admin/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/admin', require('./routes/admin-missing-images'));
 app.use('/api/shop-agents', require('./routes/shopAgents'));
 app.use('/api/countdown', require('./routes/countdown'));
 app.use('/api/settings', require('./routes/settings'));

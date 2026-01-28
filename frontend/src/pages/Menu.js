@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -9,10 +9,8 @@ import {
   Button,
   Chip,
   Pagination,
-  Fab,
-  Tooltip
 } from '@mui/material';
-import { Search, Star, ExpandMore, ExpandLess } from '@mui/icons-material';
+import { Search, Star } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
@@ -30,11 +28,7 @@ const Menu = () => {
   const [selectedSubcategory, setSelectedSubcategory] = useState(0);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [categoriesExpanded, setCategoriesExpanded] = useState(true);
-  const isScrolledRef = useRef(false);
-  const manuallyExpandedRef = useRef(false);
-  const manualExpandTimeRef = useRef(0);
-  const scrollTimeoutRef = useRef(null);
+  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
   
   const itemsPerPage = 16; // 4 rows × 4 columns
 
@@ -42,85 +36,18 @@ const Menu = () => {
     fetchData();
   }, []);
 
-  // Handle scroll detection for mobile category collapse
+  // Scroll detection for collapsing categories (same as Home page)
   useEffect(() => {
-    let ticking = false;
-        
     const handleScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          const scrollPosition = window.scrollY || window.pageYOffset;
-          const isMobile = window.innerWidth < 600;
-          
-          
-          // Only apply on mobile
-          if (isMobile) {
-            // If manually expanded, completely ignore scroll events - keep categories visible
-            if (manuallyExpandedRef.current) {
-              // Clear any pending collapse timeouts
-              if (scrollTimeoutRef.current) {
-                clearTimeout(scrollTimeoutRef.current);
-                scrollTimeoutRef.current = null;
-              }
-              ticking = false;
-              return; // Exit immediately - don't process scroll, keep categories visible
-            }
-            
-            // Clear any pending collapse timeout if not manually expanded
-            if (scrollTimeoutRef.current) {
-              clearTimeout(scrollTimeoutRef.current);
-              scrollTimeoutRef.current = null;
-            }
-            
-            // Auto-collapse when scrolling down past 50px (only if NOT manually expanded)
-            if (scrollPosition > 50 && !manuallyExpandedRef.current) {
-              setCategoriesExpanded(prev => {
-                if (prev) {
-                  isScrolledRef.current = true;
-                  return false;
-                }
-                return prev;
-              });
-            } 
-            // Expand when scrolling back to top (only if NOT manually expanded)
-            else if (scrollPosition <= 50 && !manuallyExpandedRef.current) {
-              setCategoriesExpanded(prev => {
-                if (!prev && isScrolledRef.current) {
-                  isScrolledRef.current = false;
-                  return true;
-                }
-                return prev;
-              });
-            }
-          }
-          
-          ticking = false;
-        });
-        ticking = true;
-      }
+      const scrollY = window.scrollY || window.pageYOffset;
+      const shouldCollapse = scrollY > 200; // Collapse after 200px scroll
+      
+      setCategoriesCollapsed(shouldCollapse);
     };
 
-    // Also handle resize to reset on desktop
-    const handleResize = () => {
-      if (window.innerWidth >= 600) {
-        setCategoriesExpanded(true);
-        isScrolledRef.current = false;
-        manuallyExpandedRef.current = false;
-        manualExpandTimeRef.current = 0;
-      }
-    };
-    
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleResize);
-    
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleResize);
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []); // Empty deps - use refs for state
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     // Read category and subcategory from URL query parameters
@@ -316,10 +243,18 @@ const Menu = () => {
           top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
           zIndex: 99, // Lower than AppBar (which is typically 1100)
           backgroundColor: colors.background,
-          pt: 1,
-          pb: 1,
-          mb: 2,
-          borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
+          pt: categoriesCollapsed ? 0 : 1,
+          pb: categoriesCollapsed ? 0 : 1,
+          mb: categoriesCollapsed ? 0 : 2,
+          borderBottom: categoriesCollapsed ? 'none' : `1px solid rgba(0, 0, 0, 0.1)`,
+          transition: 'all 0.3s ease-in-out',
+          transform: categoriesCollapsed ? 'translateY(-100%)' : 'translateY(0)',
+          opacity: categoriesCollapsed ? 0 : 1,
+          maxHeight: categoriesCollapsed ? 0 : 'none',
+          height: categoriesCollapsed ? 0 : 'auto',
+          overflow: categoriesCollapsed ? 'hidden' : 'visible',
+          visibility: categoriesCollapsed ? 'hidden' : 'visible',
+          pointerEvents: categoriesCollapsed ? 'none' : 'auto'
         }}
       >
 
@@ -334,27 +269,7 @@ const Menu = () => {
               xl: 'repeat(6, 1fr)'
             },
             gap: 1,
-            width: '100%',
-            maxHeight: { 
-              xs: categoriesExpanded ? '1000px' : '0px', 
-              sm: 'none' 
-            },
-            overflow: { 
-              xs: 'hidden', 
-              sm: 'visible' 
-            },
-            opacity: { 
-              xs: categoriesExpanded ? 1 : 0, 
-              sm: 1 
-            },
-            transition: { 
-              xs: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out, transform 0.3s ease-in-out',
-              sm: 'none'
-            },
-            transform: { 
-              xs: categoriesExpanded ? 'translateY(0)' : 'translateY(-10px)', 
-              sm: 'translateY(0)' 
-            }
+            width: '100%'
           }}
         >
           <Button
@@ -456,13 +371,7 @@ const Menu = () => {
             mt: 2, 
             display: 'flex', 
             flexWrap: 'wrap', 
-            gap: 1,
-            maxHeight: { xs: categoriesExpanded ? '200px' : '0px', sm: 'none' },
-            overflow: { xs: 'hidden', sm: 'visible' },
-            opacity: { xs: categoriesExpanded ? 1 : 0, sm: 1 },
-            transition: 'max-height 0.3s ease-in-out, opacity 0.3s ease-in-out',
-            transform: { xs: categoriesExpanded ? 'translateY(0)' : 'translateY(-10px)', sm: 'translateY(0)' },
-            transitionProperty: { xs: 'max-height, opacity, transform', sm: 'none' }
+            gap: 1
           }}>
             <Chip
               label="All"
@@ -563,60 +472,6 @@ const Menu = () => {
       </Box>
       </Container>
 
-      {/* Floating Categories Toggle Button - Mobile Only */}
-      <Tooltip title={categoriesExpanded ? "Hide Categories" : "Show Categories"} placement="left">
-        <Fab
-          color="primary"
-          aria-label="toggle categories"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const scrollPosition = window.scrollY || window.pageYOffset;
-            const newExpandedState = !categoriesExpanded;
-            
-            // Clear any pending scroll timeout before toggling
-            if (scrollTimeoutRef.current) {
-              clearTimeout(scrollTimeoutRef.current);
-              scrollTimeoutRef.current = null;
-            }
-            
-            // Update refs and state
-            if (newExpandedState) {
-              // Expanding: mark as manually expanded if scrolled, so it won't auto-collapse
-              if (scrollPosition > 50) {
-                manuallyExpandedRef.current = true;
-              } else {
-                // At top, reset manual expand flag
-                manuallyExpandedRef.current = false;
-                isScrolledRef.current = false;
-              }
-              setCategoriesExpanded(true);
-            } else {
-              // Collapsing: user wants to hide, clear manual expand flag
-              manuallyExpandedRef.current = false;
-              manualExpandTimeRef.current = 0;
-              setCategoriesExpanded(false);
-            }
-          }}
-          sx={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-            display: { xs: 'flex', sm: 'none' }, // Only show on mobile
-            backgroundColor: colors.accent || colors.primary,
-            color: colors.accentText || '#ffffff',
-            zIndex: 1000,
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-            '&:hover': {
-              backgroundColor: colors.accent || colors.primary,
-              opacity: 0.9,
-              boxShadow: '0 6px 16px rgba(0, 0, 0, 0.2)',
-            },
-          }}
-        >
-          {categoriesExpanded ? <ExpandLess /> : <ExpandMore />}
-        </Fab>
-      </Tooltip>
     </Box>
   );
 };

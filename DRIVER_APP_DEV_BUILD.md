@@ -1,5 +1,17 @@
 # 📱 Driver App Dev Build - Deployment Instructions
 
+## 🌿 Branch Information
+
+**Development builds** should be built from the **`develop`** branch:
+- Uses development API: `https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api`
+- Package ID: `com.dialadrink.driver.dev`
+- Build variant: `developmentDebug` or `developmentRelease`
+
+**Production builds** should be built from the **`main`** branch:
+- Uses production API: (Production backend URL)
+- Package ID: `com.dialadrink.driver`
+- Build variant: `productionRelease`
+
 ## ✅ Changes Committed
 
 All changes have been pushed to GitHub:

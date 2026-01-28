@@ -40,10 +40,14 @@ try {
       });
     } else {
       console.log('✅ Initializing Sequelize with DATABASE_URL...');
+      // Some connection strings include ?sslmode=require which can conflict with
+      // our explicit SSL settings. Strip that query parameter and rely on
+      // dialectOptions.ssl (which we force to rejectUnauthorized: false).
+      const sanitizedUrl = databaseUrl.replace(/\?sslmode=require/, '');
       // Preserve SSL settings from config - Sequelize URL parsing can override them
       const sslConfig = dbConfig.dialectOptions?.ssl;
       const baseDialectOptions = dbConfig.dialectOptions || {};
-      sequelize = new Sequelize(databaseUrl, {
+      sequelize = new Sequelize(sanitizedUrl, {
         ...dbConfig,
         pool: {
           max: 10,

@@ -8,18 +8,42 @@ import androidx.lifecycle.lifecycleScope
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.databinding.ActivityCashAtHandBinding
+import com.dialadrink.driver.ui.auth.PinVerificationDialog
 import com.dialadrink.driver.utils.SharedPrefs
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.launch
 
 class CashAtHandActivity : AppCompatActivity() {
     private lateinit var binding: ActivityCashAtHandBinding
+    private var isContentVisible = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCashAtHandBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Check PIN verification first
+        if (!SharedPrefs.isPinVerified(this)) {
+            showPinVerification()
+        } else {
+            initializeContent()
+        }
+    }
+    
+    private fun showPinVerification() {
+        val dialog = PinVerificationDialog()
+        dialog.setOnVerifiedListener {
+            initializeContent()
+        }
+        dialog.setOnCancelledListener {
+            finish()
+        }
+        dialog.show(supportFragmentManager, "PinVerificationDialog")
+    }
+    
+    private fun initializeContent() {
+        isContentVisible = true
+        binding.root.visibility = android.view.View.VISIBLE
         setupToolbar()
         setupSwipeRefresh()
         setupMainTabs()
@@ -36,9 +60,19 @@ class CashAtHandActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        // Refresh tabs when returning to the screen to ensure pending submissions are updated
-        refreshTabs()
-        loadCashAtHand()
+        
+        // Check PIN verification again if content is visible
+        if (isContentVisible && !SharedPrefs.isPinVerified(this)) {
+            // PIN verification expired, show dialog again
+            showPinVerification()
+            // Hide content until PIN is verified
+            binding.root.visibility = android.view.View.GONE
+            isContentVisible = false
+        } else if (isContentVisible) {
+            // Refresh tabs when returning to the screen to ensure pending submissions are updated
+            refreshTabs()
+            loadCashAtHand()
+        }
     }
 
     private fun setupToolbar() {

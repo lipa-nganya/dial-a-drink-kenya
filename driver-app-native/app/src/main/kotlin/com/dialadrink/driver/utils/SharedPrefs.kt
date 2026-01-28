@@ -107,5 +107,32 @@ object SharedPrefs {
         val prefs = getPrefs(context)
         prefs.edit().remove(KEY_CACHED_ORDERS).apply()
     }
+    
+    // PIN Verification (session-based, expires after 5 minutes)
+    fun setPinVerified(context: Context, verified: Boolean) {
+        val prefs = getPrefs(context)
+        val editor = prefs.edit()
+        editor.putBoolean("pin_verified", verified)
+        if (verified) {
+            // Store timestamp when PIN was verified (5 minutes = 300000 ms)
+            editor.putLong("pin_verified_timestamp", System.currentTimeMillis())
+        } else {
+            editor.remove("pin_verified_timestamp")
+        }
+        editor.apply()
+    }
+    
+    fun isPinVerified(context: Context): Boolean {
+        val prefs = getPrefs(context)
+        val verified = prefs.getBoolean("pin_verified", false)
+        if (!verified) return false
+        
+        // Check if verification is still valid (within 5 minutes)
+        val timestamp = prefs.getLong("pin_verified_timestamp", 0)
+        val currentTime = System.currentTimeMillis()
+        val fiveMinutes = 5 * 60 * 1000L // 5 minutes in milliseconds
+        
+        return (currentTime - timestamp) < fiveMinutes
+    }
 }
 

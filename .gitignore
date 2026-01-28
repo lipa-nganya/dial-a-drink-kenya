@@ -110,3 +110,11 @@ PESAPAL_IPN_CALLBACK_URL=https://your-backend-url/api/pesapal/ipn  # Optional, a
 PESAPAL_REDIRECT_URL=https://your-frontend-url  # Optional, auto-detectedarchived/**/*.backup
 archived/**/google-services.json*
 DDDriver
+
+# Production configuration (contains sensitive data)
+production-config.env
+production-config.env.bak
+
+# Netlify credentials (if stored locally)
+.netlify/
+netlify.toml.local

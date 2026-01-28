@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.TableLayout
+import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.Fragment
@@ -13,7 +15,6 @@ import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.CashAtHandResponse
 import com.dialadrink.driver.databinding.FragmentWalletTransactionsBinding
 import com.dialadrink.driver.utils.SharedPrefs
-import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -23,7 +24,7 @@ class CashTransactionsFragment : Fragment() {
     private var _binding: FragmentWalletTransactionsBinding? = null
     private val binding get() = _binding!!
     
-    private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).apply {
+    private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("Africa/Nairobi")
     }
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
@@ -80,10 +81,29 @@ class CashTransactionsFragment : Fragment() {
     }
     
     private fun displayTransactions(data: CashAtHandResponse) {
-        val container = binding.transactionsContainer
-        container.removeAllViews()
+        // Hide container, show table and balance card
+        binding.transactionsContainer.visibility = View.GONE
+        val tableContainer = binding.root.findViewById<View>(R.id.tableContainer)
+        tableContainer?.visibility = View.VISIBLE
         
-        val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+        // Show balance card
+        val balanceCard = binding.root.findViewById<View>(R.id.balanceCard)
+        balanceCard?.visibility = View.VISIBLE
+        
+        val tableLayout = binding.transactionsTable
+        tableLayout.removeAllViews()
+        
+        val formatter = NumberFormat.getNumberInstance(Locale("en", "KE")).apply {
+            minimumFractionDigits = 0
+            maximumFractionDigits = 0
+        }
+        
+        // Display current balance at the top
+        val currentBalanceText = binding.root.findViewById<TextView>(R.id.currentBalanceText)
+        if (currentBalanceText != null) {
+            val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+            currentBalanceText.text = currencyFormatter.format(data.totalCashAtHand)
+        }
         
         if (data.entries.isEmpty()) {
             binding.emptyStateText.visibility = View.VISIBLE
@@ -92,57 +112,119 @@ class CashTransactionsFragment : Fragment() {
         
         binding.emptyStateText.visibility = View.GONE
         
-        data.entries.forEach { entry ->
-            val cardView = LayoutInflater.from(requireContext()).inflate(
-                R.layout.item_cash_entry,
-                container,
-                false
-            )
-            val card = cardView as MaterialCardView
-            
-            val descriptionText = card.findViewById<TextView>(R.id.descriptionText)
-            val customerNameText = card.findViewById<TextView>(R.id.customerNameText)
-            val amountText = card.findViewById<TextView>(R.id.amountText)
-            val dateText = card.findViewById<TextView>(R.id.dateText)
-            val receiptNumberText = card.findViewById<TextView>(R.id.receiptNumberText)
-            
-            descriptionText.text = entry.description
-            
-            if (entry.type == "cash_received") {
-                if (entry.customerName != null) {
-                    customerNameText.text = entry.customerName
-                    customerNameText.visibility = View.VISIBLE
-                } else {
-                    customerNameText.visibility = View.GONE
-                }
-                amountText.text = "+${formatter.format(entry.amount)}"
-                amountText.setTextColor(requireContext().getColor(R.color.accent))
-            } else {
-                customerNameText.visibility = View.GONE
-                amountText.text = "-${formatter.format(entry.amount)}"
-                amountText.setTextColor(requireContext().getColor(android.R.color.holo_red_light))
-            }
-            
+        // Sort entries by date ascending (oldest first) for balance sheet format
+        val sortedEntries = data.entries.sortedBy { entry ->
             try {
                 val date = try {
                     apiDateFormat.parse(entry.date)
                 } catch (e: Exception) {
                     apiDateFormat2.parse(entry.date)
                 }
-                dateText.text = date?.let { dateFormat.format(it) } ?: entry.date
+                date?.time ?: 0L
             } catch (e: Exception) {
-                dateText.text = entry.date
+                0L
             }
-            
-            if (!entry.receiptNumber.isNullOrEmpty()) {
-                receiptNumberText.text = "Receipt: ${entry.receiptNumber}"
-                receiptNumberText.visibility = View.VISIBLE
-            } else {
-                receiptNumberText.visibility = View.GONE
-            }
-            
-            container.addView(card)
         }
+        
+        // Calculate initial balance (balance before first transaction)
+        // Work backwards from current balance
+        var initialBalance = data.totalCashAtHand
+        sortedEntries.reversed().forEach { entry ->
+            if (entry.type == "cash_received") {
+                initialBalance -= entry.amount
+            } else {
+                initialBalance += entry.amount
+            }
+        }
+        
+        // Now calculate running balance forward from initial balance
+        var runningBalance = initialBalance
+        
+        sortedEntries.forEach { entry ->
+            val row = LayoutInflater.from(requireContext()).inflate(
+                R.layout.item_cash_transaction_row,
+                tableLayout,
+                false
+            ) as TableRow
+            
+            val deliveryAddressText = row.findViewById<TextView>(R.id.deliveryAddressText)
+            val dateText = row.findViewById<TextView>(R.id.dateText)
+            val debitText = row.findViewById<TextView>(R.id.debitText)
+            val creditText = row.findViewById<TextView>(R.id.creditText)
+            val balanceText = row.findViewById<TextView>(R.id.balanceText)
+            
+            // Extract delivery address from description
+            // Description format might be: "Cash received for Order #123 - [Address]" or similar
+            val deliveryAddress = extractDeliveryAddress(entry.description, entry.customerName)
+            deliveryAddressText.text = deliveryAddress
+            
+            // Format date as YYYY-MM-DD
+            try {
+                val date = try {
+                    apiDateFormat.parse(entry.date)
+                } catch (e: Exception) {
+                    apiDateFormat2.parse(entry.date)
+                }
+                dateText.text = date?.let { dateFormat.format(it) } ?: entry.date.substring(0, 10).takeIf { entry.date.length >= 10 } ?: entry.date
+            } catch (e: Exception) {
+                // Try to extract date part if full date string
+                dateText.text = entry.date.substring(0, 10).takeIf { entry.date.length >= 10 } ?: entry.date
+            }
+            
+            // Set debit/credit amounts
+            if (entry.type == "cash_received") {
+                // Cash received = Debit (increases balance)
+                debitText.text = formatter.format(entry.amount)
+                creditText.text = "0"
+                runningBalance += entry.amount
+            } else {
+                // Cash sent = Credit (decreases balance)
+                debitText.text = "0"
+                creditText.text = formatter.format(entry.amount)
+                runningBalance -= entry.amount
+            }
+            
+            // Display balance after this transaction
+            balanceText.text = formatter.format(runningBalance)
+            
+            tableLayout.addView(row)
+        }
+    }
+    
+    private fun extractDeliveryAddress(description: String, customerName: String?): String {
+        // Try to extract address from description
+        // Common patterns:
+        // - "Cash received for Order #123 - [Address]"
+        // - "Cash received - [Address]"
+        // - Description might already be the address
+        
+        // If description contains " - ", take the part after it
+        val parts = description.split(" - ")
+        if (parts.size > 1) {
+            return parts.last().trim()
+        }
+        
+        // If description contains "Order #", try to extract address
+        val orderIndex = description.indexOf("Order #")
+        if (orderIndex != -1) {
+            val afterOrder = description.substring(orderIndex)
+            val dashIndex = afterOrder.indexOf(" - ")
+            if (dashIndex != -1) {
+                return afterOrder.substring(dashIndex + 3).trim()
+            }
+        }
+        
+        // If customer name is available and description is generic, use description
+        if (customerName != null && (description.contains("Cash received") || description.contains("Cash sent"))) {
+            return description.replace("Cash received for ", "")
+                .replace("Cash received - ", "")
+                .replace("Cash sent for ", "")
+                .replace("Cash sent - ", "")
+                .trim()
+        }
+        
+        // Fallback to description or customer name
+        return description.ifEmpty { customerName ?: "N/A" }
     }
     
     override fun onDestroyView() {
