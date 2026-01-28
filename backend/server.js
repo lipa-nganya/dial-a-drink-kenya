@@ -137,6 +137,7 @@ async function loadFullApplication() {
             'https://deliveryos-backend-910510650031.us-central1.run.app',
             'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
             'https://deliveryos-backend-805803410802.us-central1.run.app',
+            'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app',
             // Note: Frontends are on Netlify, not Cloud Run
             // Customer: https://dialadrink.thewolfgang.tech (already in Netlify URLs below)
             // Admin: https://dialadrink-admin.thewolfgang.tech (already in Netlify URLs below)

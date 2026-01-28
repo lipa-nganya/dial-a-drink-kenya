@@ -39,6 +39,8 @@ const allowedOrigins = [
   'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
   // DeliveryOS backend service URL (dialadrink-production project)
   'https://deliveryos-backend-805803410802.us-central1.run.app',
+  // DeliveryOS development backend service URL
+  'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app',
   // Note: Frontends are on Netlify, not Cloud Run
   // Customer: https://dialadrink.thewolfgang.tech
   // Admin: https://dialadrink-admin.thewolfgang.tech
@@ -140,6 +142,7 @@ app.use('/api/inventory', require('./routes/inventory')); // Inventory managemen
 // Register admin notifications BEFORE /api/admin to ensure it matches first
 app.use('/api/admin/notifications', require('./routes/notifications'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/admin', require('./routes/admin-missing-images'));
 app.use('/api/shop-agents', require('./routes/shopAgents'));
 app.use('/api/countdown', require('./routes/countdown'));
 app.use('/api/settings', require('./routes/settings'));

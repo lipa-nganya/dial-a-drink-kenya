@@ -1,7 +1,10 @@
 import axios from 'axios';
 
 const DEFAULT_LOCAL_API_BASE = 'http://localhost:5001/api';
-const DEFAULT_PRODUCTION_API_BASE = process.env.REACT_APP_PRODUCTION_API_BASE || 'https://deliveryos-backend-805803410802.us-central1.run.app/api';
+const DEFAULT_DEV_API_BASE = 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api';
+const DEFAULT_PRODUCTION_API_BASE =
+  process.env.REACT_APP_PRODUCTION_API_BASE ||
+  'https://deliveryos-production-backend-805803410802.us-central1.run.app/api';
 
 const resolveApiBaseUrl = () => {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
@@ -28,16 +31,19 @@ const resolveApiBaseUrl = () => {
   // Distinguish between development and production Netlify sites
   const isNetlify = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
   if (isNetlify) {
-    // Development sites: dialadrink.thewolfgang.tech and dialadrink-admin.thewolfgang.tech
-    // These should use the development backend
-    const isDevSite = hostname.includes('dialadrink.thewolfgang.tech') || hostname.includes('dialadrink-admin.thewolfgang.tech');
+    // Development site: dialadrink.thewolfgang.tech or dialadrink-admin.thewolfgang.tech (uses dev backend)
+    const isDevSite =
+      hostname.includes('dialadrink.thewolfgang.tech') ||
+      hostname.includes('dialadrink-admin.thewolfgang.tech');
     if (isDevSite) {
-      // Use development backend (deployed from develop branch)
-      return { url: 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api', source: 'netlify-dev' };
-    } else {
-      // Production Netlify site - use production backend
-      return { url: 'https://deliveryos-backend-805803410802.us-central1.run.app/api', source: 'netlify-prod-forced' };
+      // Use development backend
+      return { url: DEFAULT_DEV_API_BASE, source: 'netlify-dev' };
     }
+    // Production Netlify sites (e.g. dial-a-drink-admin.netlify.app) use production backend
+    return {
+      url: DEFAULT_PRODUCTION_API_BASE,
+      source: 'netlify-prod-forced',
+    };
   }
 
   // Other managed hosts (onrender.com, etc.)
