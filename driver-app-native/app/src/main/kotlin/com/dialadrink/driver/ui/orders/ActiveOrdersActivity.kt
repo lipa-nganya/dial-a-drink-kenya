@@ -53,11 +53,19 @@ class ActiveOrdersActivity : AppCompatActivity() {
         
         // Check if we were opened after accepting an order
         val orderId = intent.getIntExtra("orderId", -1)
-        if (orderId != -1) {
-            Log.d(TAG, "📦 Opened after accepting order #$orderId - forcing refresh after delay")
-            // Add a small delay to ensure backend has updated the order status
+        val acceptedOrderId = intent.getIntExtra("acceptedOrderId", -1)
+        val targetOrderId = if (orderId != -1) orderId else acceptedOrderId
+        
+        if (targetOrderId != -1) {
+            Log.d(TAG, "📦 Opened after accepting order #$targetOrderId - forcing refresh after delay")
+            // Clear cache first to ensure we get fresh data
             lifecycleScope.launch {
-                delay(500) // 500ms delay to let backend update
+                OrderRepository.clearCache(this@ActiveOrdersActivity)
+                // Add a delay to ensure backend has updated the order status
+                delay(1000) // Increased to 1 second to let backend update
+                refreshOrdersFromRepository(forceRefresh = true)
+                // Also refresh again after another delay to catch any eventual consistency issues
+                delay(2000)
                 refreshOrdersFromRepository(forceRefresh = true)
             }
         } else {
@@ -78,7 +86,21 @@ class ActiveOrdersActivity : AppCompatActivity() {
         // Refresh orders when activity resumes (e.g., returning from accepting an order from pending screen)
         // Always refresh to ensure we have the latest data, especially after accepting an order
         if (!isLoading) {
-            refreshOrdersFromRepository()
+            val orderId = intent.getIntExtra("orderId", -1)
+            val acceptedOrderId = intent.getIntExtra("acceptedOrderId", -1)
+            val targetOrderId = if (orderId != -1) orderId else acceptedOrderId
+            
+            if (targetOrderId != -1) {
+                // If returning from accepting an order, force refresh
+                Log.d(TAG, "✅ Resumed after accepting order #$targetOrderId, forcing refresh...")
+                lifecycleScope.launch {
+                    delay(500) // Small delay to ensure backend has updated order status
+                    refreshOrdersFromRepository(forceRefresh = true)
+                }
+            } else {
+                // Normal resume, refresh if needed
+                refreshOrdersFromRepository()
+            }
         }
     }
     

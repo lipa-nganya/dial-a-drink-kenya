@@ -288,6 +288,7 @@ class PendingOrdersActivity : AppCompatActivity() {
                         val intent = Intent(this@PendingOrdersActivity, ActiveOrdersActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
                             putExtra("orderId", order.id) // Pass order ID so ActiveOrdersActivity can highlight it
+                            putExtra("acceptedOrderId", order.id) // Also pass as acceptedOrderId for compatibility
                         }
                         startActivity(intent)
                         finish() // Close pending orders screen

@@ -247,6 +247,7 @@ class OrderAcceptanceActivity : AppCompatActivity() {
                         val intent = Intent(this@OrderAcceptanceActivity, ActiveOrdersActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
                             putExtra("orderId", orderId) // Pass order ID so ActiveOrdersActivity can highlight it
+                            putExtra("acceptedOrderId", orderId) // Also pass as acceptedOrderId for compatibility
                         }
                         startActivity(intent)
                         finish()

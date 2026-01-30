@@ -11,6 +11,7 @@ import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -288,12 +289,17 @@ object OrderRepository {
                 return Pair(false, apiResponse.error ?: "Unknown error")
             }
             
-            // Success - clear cache and refresh
+            // Success - clear cache aggressively and refresh
             clearCache(context)
             // Refresh active orders in background after accepting
             if (accepted) {
                 repositoryScope.launch {
                     try {
+                        // Wait a bit for backend to update
+                        delay(500)
+                        refreshActiveOrders(context)
+                        // Refresh again after another delay to catch eventual consistency
+                        delay(2000)
                         refreshActiveOrders(context)
                     } catch (e: Exception) {
                         // Ignore errors in background refresh
