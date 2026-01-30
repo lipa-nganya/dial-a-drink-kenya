@@ -804,8 +804,10 @@ const MyOrders = () => {
                           Download Receipt
                         </Button>
                       )}
-                      {/* Make Payment Button for Unpaid Orders */}
-                      {order.paymentStatus !== 'paid' && order.paymentType === 'pay_now' && order.status !== 'cancelled' && (
+                      {/* Make Payment Button for Unpaid Orders - Show for both pay_now and pay_on_delivery */}
+                      {order.paymentStatus !== 'paid' && 
+                       (order.paymentType === 'pay_now' || order.paymentType === 'pay_on_delivery') && 
+                       order.status !== 'cancelled' && (
                         <Button
                           component="div"
                           variant="contained"
@@ -826,7 +828,7 @@ const MyOrders = () => {
                             }
                           }}
                         >
-                          Make Payment
+                          {order.paymentType === 'pay_on_delivery' ? 'Pay Now' : 'Make Payment'}
                         </Button>
                       )}
                     </Box>
@@ -856,7 +858,15 @@ const MyOrders = () => {
                 {order.paymentType && (
                   <Box sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                      Payment: {order.paymentStatus === 'paid' ? 'Paid' : order.paymentType === 'pay_now' ? 'Unpaid' : 'Pay on Delivery'}
+                      Payment: {order.paymentStatus === 'paid' 
+                        ? 'Paid' 
+                        : order.paymentType === 'pay_now' 
+                          ? 'Unpaid' 
+                          : order.paymentType === 'pay_on_delivery'
+                            ? order.paymentStatus === 'unpaid' 
+                              ? 'Pay on Delivery (Unpaid)' 
+                              : 'Pay on Delivery'
+                            : 'Pending'}
                     </Typography>
                   </Box>
                 )}
