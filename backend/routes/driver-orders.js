@@ -585,10 +585,11 @@ router.get('/:driverId', async (req, res) => {
       
       // For active orders (when status filter includes active statuses), also require driverAccepted = true
       // This ensures only accepted orders show in active list, regardless of status
-      const activeStatuses = ['pending', 'confirmed', 'out_for_delivery'];
+      const activeStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery'];
       const isActiveQuery = statuses.some(s => activeStatuses.includes(s));
       
       console.log(`🔍 [ACTIVE ORDERS] Status filter: ${status}, isActiveQuery: ${isActiveQuery}, statuses:`, statuses);
+      console.log(`🔍 [ACTIVE ORDERS] DriverId: ${driverId}, Requested statuses:`, statuses);
       
       if (isActiveQuery) {
         // Active orders: require driverAccepted = true and exclude cancelled/completed
@@ -596,11 +597,13 @@ router.get('/:driverId', async (req, res) => {
         // Filter out cancelled/completed from the statuses array before using Op.in
         const filteredStatuses = statuses.filter(s => !['cancelled', 'completed'].includes(s));
         whereClause.status = { [Op.in]: filteredStatuses };
+        console.log(`🔍 [ACTIVE ORDERS] Active query detected - requiring driverAccepted=true`);
         console.log(`🔍 [ACTIVE ORDERS] Filtered statuses:`, filteredStatuses);
-        console.log(`🔍 [ACTIVE ORDERS] Where clause:`, JSON.stringify(whereClause, null, 2));
+        console.log(`🔍 [ACTIVE ORDERS] Final where clause:`, JSON.stringify(whereClause, null, 2));
       } else {
         // Non-active orders: just filter by status
         whereClause.status = { [Op.in]: statuses };
+        console.log(`🔍 [ACTIVE ORDERS] Non-active query - no driverAccepted filter`);
       }
     }
 
@@ -661,6 +664,16 @@ router.get('/:driverId', async (req, res) => {
     });
     const dbQueryTime = Date.now() - dbQueryStartTime;
     console.log(`🔍 [ACTIVE ORDERS] Query completed in ${dbQueryTime}ms, found ${orders.length} orders`);
+    
+    // Log each order's key fields for debugging
+    if (orders.length > 0) {
+      console.log(`🔍 [ACTIVE ORDERS] Orders found:`);
+      orders.forEach(order => {
+        console.log(`   - Order #${order.id}: status=${order.status}, driverId=${order.driverId}, driverAccepted=${order.driverAccepted}`);
+      });
+    } else {
+      console.log(`⚠️ [ACTIVE ORDERS] No orders found with whereClause:`, JSON.stringify(finalWhereClause, null, 2));
+    }
     
     // Map items to orderItems for compatibility and add credit limit status
     const mappingStartTime = Date.now();
