@@ -106,12 +106,20 @@ router.post('/:orderId/respond', async (req, res) => {
         }
       }
 
-      // If accepted, only update driverAccepted - do NOT change order status
-      // Order status should only be changed by admin or when customer pays
+      // If accepted, update driverAccepted and set status to 'confirmed' if it's still 'pending'
+      // This ensures the order moves from pending to active state and appears in active orders
+      const newStatus = order.status === 'pending' ? 'confirmed' : order.status;
       await order.update({ 
-        driverAccepted: accepted
+        driverAccepted: accepted,
+        // When driver accepts, set status to 'confirmed' if it's still 'pending'
+        // This ensures the order moves from pending to active state
+        status: newStatus
       });
-      console.log(`✅ Order #${order.id} accepted by driver ${driverId} - driverAccepted set to true (status remains '${oldStatus}')`);
+      
+      // Reload order to ensure instance has latest data
+      await order.reload();
+      
+      console.log(`✅ Order #${order.id} accepted by driver ${driverId} - driverAccepted=${order.driverAccepted}, status=${order.status} (was ${oldStatus})`);
       
       // Update driver's lastActivity when accepting/rejecting orders
       const driver = await db.Driver.findByPk(driverId);
@@ -199,15 +207,17 @@ router.post('/:orderId/respond', async (req, res) => {
         
         // Emit to driver's room for real-time updates (when order is accepted, it should appear in active orders)
         if (accepted && driverId) {
-          io.to(`driver-${driverId}`).emit('order-status-updated', {
+          const socketEventData = {
             orderId: order.id,
             status: fullOrder.status,
             paymentStatus: fullOrder.paymentStatus,
-            driverAccepted: fullOrder.driverAccepted,
+            driverAccepted: true, // Explicitly set to true for accepted orders
             order: fullOrder,
             triggeredByDriverResponse: true
-          });
-          console.log(`📡 Emitted order-status-updated to driver-${driverId} for accepted order #${order.id}`);
+          };
+          io.to(`driver-${driverId}`).emit('order-status-updated', socketEventData);
+          console.log(`📡 [SOCKET] Emitted order-status-updated to driver-${driverId} for accepted order #${order.id}`);
+          console.log(`📡 [SOCKET] Event data: orderId=${socketEventData.orderId}, status=${socketEventData.status}, driverAccepted=${socketEventData.driverAccepted}, triggeredByDriverResponse=${socketEventData.triggeredByDriverResponse}`);
         }
         
         // Emit order-status-updated event for real-time updates (secondary event)
