@@ -116,6 +116,14 @@ const Orders = () => {
   const [newDeliveryFee, setNewDeliveryFee] = useState('');
   const [updatingDeliveryFee, setUpdatingDeliveryFee] = useState(false);
   
+  // Payment dialog state
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [selectedOrderForPayment, setSelectedOrderForPayment] = useState(null);
+  const [paymentPhone, setPaymentPhone] = useState('');
+  const [processingPayment, setProcessingPayment] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  
   // Route Optimisation state
   const [activeTab, setActiveTab] = useState(0);
   const [orderTab, setOrderTab] = useState('all'); // 'all', 'completed', 'pending', 'unassigned', 'confirmed', 'cancelled', 'cancellation-requests'
@@ -843,6 +851,104 @@ const Orders = () => {
     } catch (error) {
       console.error('Error updating payment status:', error);
       setError(error.response?.data?.error || error.message);
+    }
+  };
+
+  // Phone number formatting and validation
+  const formatMpesaPhoneNumber = (phone) => {
+    if (!phone) return '';
+    
+    // Remove all non-digit characters
+    let cleaned = phone.replace(/\D/g, '');
+    
+    // If starts with 0, replace with 254
+    if (cleaned.startsWith('0')) {
+      cleaned = '254' + cleaned.substring(1);
+    } else if (!cleaned.startsWith('254')) {
+      // If doesn't start with 254 and is 9 digits, add 254
+      if (cleaned.length === 9 && cleaned.startsWith('7')) {
+        cleaned = '254' + cleaned;
+      }
+    }
+    
+    return cleaned;
+  };
+
+  const validateSafaricomPhone = (phone) => {
+    const cleaned = phone.replace(/\D/g, '');
+    return cleaned.length >= 9 && (cleaned.startsWith('07') || cleaned.startsWith('2547') || (cleaned.startsWith('7') && cleaned.length === 9));
+  };
+
+  const handleOpenPaymentDialog = (order) => {
+    setSelectedOrderForPayment(order);
+    // Prepopulate with order's customer phone, but allow admin to change it
+    const phoneNumber = order.customerPhone && order.customerPhone !== 'POS' ? order.customerPhone : '';
+    setPaymentPhone(phoneNumber);
+    setPaymentError('');
+    setPaymentSuccess(false);
+    setPaymentDialogOpen(true);
+  };
+
+  const handleClosePaymentDialog = () => {
+    setPaymentDialogOpen(false);
+    setSelectedOrderForPayment(null);
+    setPaymentPhone('');
+    setPaymentError('');
+    setPaymentSuccess(false);
+    setProcessingPayment(false);
+  };
+
+  const handleInitiateMobileMoneyPayment = async () => {
+    if (!paymentPhone || !validateSafaricomPhone(paymentPhone)) {
+      setPaymentError('Please enter a valid Safaricom phone number (e.g., 0712345678)');
+      return;
+    }
+
+    if (!selectedOrderForPayment) {
+      setPaymentError('Order not found');
+      return;
+    }
+
+    setProcessingPayment(true);
+    setPaymentError('');
+
+    try {
+      const formattedPhone = formatMpesaPhoneNumber(paymentPhone);
+      
+      console.log('Admin initiating M-Pesa STK Push for order:', {
+        phoneNumber: formattedPhone,
+        amount: selectedOrderForPayment.totalAmount,
+        orderId: selectedOrderForPayment.id
+      });
+      
+      const paymentResponse = await api.post('/mpesa/stk-push', {
+        phoneNumber: formattedPhone,
+        amount: parseFloat(selectedOrderForPayment.totalAmount),
+        orderId: selectedOrderForPayment.id,
+        accountReference: `ORDER-${selectedOrderForPayment.id}`
+      });
+
+      if (paymentResponse.data.success) {
+        setPaymentError('');
+        setPaymentSuccess(true);
+        setProcessingPayment(false);
+        // Refresh orders after a short delay to get updated payment status
+        setTimeout(() => {
+          fetchOrders();
+          handleClosePaymentDialog();
+        }, 2000);
+      } else {
+        setPaymentError(paymentResponse.data.error || paymentResponse.data.message || 'Failed to initiate payment. Please try again.');
+        setProcessingPayment(false);
+      }
+    } catch (paymentError) {
+      console.error('Payment error:', paymentError);
+      const errorMessage = paymentError.response?.data?.error || 
+                          paymentError.response?.data?.message || 
+                          paymentError.message || 
+                          'Failed to initiate payment. Please try again.';
+      setPaymentError(errorMessage);
+      setProcessingPayment(false);
     }
   };
 
@@ -2373,18 +2479,15 @@ const Orders = () => {
                             </Button>
                           </Box>
                         )}
-                        {order.paymentStatus === 'unpaid' && order.paymentType === 'pay_on_delivery' && (
+                        {order.paymentStatus !== 'paid' && order.status !== 'cancelled' && (
                           <Button
                             variant="contained"
                             size="small"
                             color="primary"
-                            startIcon={<Assignment />}
-                            onClick={async () => {
-                              const customerPhone = order.customerPhone || 'N/A';
-                              const customerName = order.customerName || 'N/A';
-                              if (window.confirm(`Send payment prompt to customer for Order #${order.id}?\n\nCustomer: ${customerName}\nPhone: ${customerPhone}\nAmount: KES ${parseFloat(order.totalAmount || 0).toFixed(2)}`)) {
-                                await handlePromptPayment(order.id, order.customerPhone);
-                              }
+                            startIcon={<Payment />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenPaymentDialog(order);
                             }}
                             sx={{ mt: 1, mr: 1 }}
                           >
@@ -3111,106 +3214,24 @@ const Orders = () => {
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           {selectedOrderForDetail && 
-           selectedOrderForDetail.paymentMethod === 'mobile_money' && 
-           selectedOrderForDetail.paymentStatus === 'unpaid' && 
-           selectedOrderForDetail.customerPhone && 
-           selectedOrderForDetail.customerPhone !== 'POS' && (
+           selectedOrderForDetail.paymentStatus !== 'paid' && 
+           selectedOrderForDetail.status !== 'cancelled' && (
             <Button
               variant="contained"
-              startIcon={promptingPayment ? <CircularProgress size={16} /> : <Payment />}
-              onClick={async () => {
-                if (!selectedOrderForDetail.customerPhone || selectedOrderForDetail.customerPhone === 'POS') {
-                  alert('Customer phone number is required to prompt for payment');
-                  return;
-                }
-
-                setPromptingPayment(true);
-                try {
-                  // Include customerPhone in request body if it exists and is not 'POS'
-                  const promptPayload = selectedOrderForDetail.customerPhone && selectedOrderForDetail.customerPhone !== 'POS' 
-                    ? { customerPhone: selectedOrderForDetail.customerPhone }
-                    : {};
-                  const promptResponse = await api.post(`/admin/orders/${selectedOrderForDetail.id}/prompt-payment`, promptPayload);
-                  
-                  const checkoutRequestID = promptResponse.data.checkoutRequestID || promptResponse.data.CheckoutRequestID;
-                  if (promptResponse.data.success || checkoutRequestID) {
-                    alert('Payment request sent to customer. Waiting for payment confirmation...');
-                    
-                    // Start polling for payment status
-                    const interval = setInterval(async () => {
-                      try {
-                        const statusResponse = await api.get(`/mpesa/poll-transaction/${checkoutRequestID}`);
-                        
-                        if (statusResponse.data.success && statusResponse.data.status === 'completed' && statusResponse.data.receiptNumber) {
-                          // Payment completed!
-                          alert(`Payment received! Transaction code: ${statusResponse.data.receiptNumber}`);
-                          setPromptingPayment(false);
-                          clearInterval(interval);
-                          setPaymentPollingInterval(null);
-                          
-                          // Refresh orders to show updated payment status
-                          await fetchOrders();
-                          
-                          // Update selected order detail
-                          try {
-                            const updatedOrderResponse = await api.get(`/admin/orders`);
-                            const updatedOrder = updatedOrderResponse.data.find(o => o.id === selectedOrderForDetail.id);
-                            if (updatedOrder) {
-                              setSelectedOrderForDetail(updatedOrder);
-                            }
-                          } catch (fetchError) {
-                            console.error('Error fetching updated order:', fetchError);
-                          }
-                        } else if (statusResponse.data.status === 'failed' || statusResponse.data.status === 'cancelled') {
-                          alert(statusResponse.data.message || 'Payment was cancelled or failed');
-                          setPromptingPayment(false);
-                          clearInterval(interval);
-                          setPaymentPollingInterval(null);
-                        }
-                      } catch (pollError) {
-                        console.error('Error polling payment status:', pollError);
-                        // Continue polling on error
-                      }
-                    }, 3000); // Poll every 3 seconds
-                    
-                    setPaymentPollingInterval(interval);
-                    
-                    // Stop polling after 5 minutes
-                    setTimeout(() => {
-                      if (interval) {
-                        clearInterval(interval);
-                        setPaymentPollingInterval(null);
-                        if (promptingPayment) {
-                          setPromptingPayment(false);
-                          alert('Payment timeout. Please check payment status manually.');
-                        }
-                      }
-                    }, 300000); // 5 minutes
-                  } else {
-                    alert(promptResponse.data.error || 'Failed to initiate payment request');
-                    setPromptingPayment(false);
-                  }
-                } catch (error) {
-                  console.error('Error prompting payment:', error);
-                  alert(error.response?.data?.error || error.message || 'Failed to prompt customer for payment');
-                  setPromptingPayment(false);
-                }
+              startIcon={<Payment />}
+              onClick={() => {
+                handleOpenPaymentDialog(selectedOrderForDetail);
               }}
-              disabled={promptingPayment}
               sx={{
                 backgroundColor: colors.accentText,
                 color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
                 mr: 1,
                 '&:hover': {
                   backgroundColor: '#00C4A3'
-                },
-                '&:disabled': {
-                  backgroundColor: colors.border,
-                  color: colors.textSecondary
                 }
               }}
             >
-              {promptingPayment ? 'Prompting...' : 'Prompt Payment'}
+              Prompt Payment
             </Button>
           )}
           <Button 
@@ -3370,6 +3391,97 @@ const Orders = () => {
             }}
           >
             {updatingDeliveryFee ? 'Updating...' : 'Update Delivery Fee'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Payment Dialog */}
+      <Dialog
+        open={paymentDialogOpen}
+        onClose={handleClosePaymentDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Prompt Payment
+        </DialogTitle>
+        <DialogContent>
+          {selectedOrderForPayment && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Order #:</strong> {selectedOrderForPayment.id}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Customer: {selectedOrderForPayment.customerName || 'N/A'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Amount: <strong>KES {parseFloat(selectedOrderForPayment.totalAmount || 0).toFixed(2)}</strong>
+              </Typography>
+              <TextField
+                autoFocus
+                fullWidth
+                label="Phone Number"
+                type="tel"
+                value={paymentPhone}
+                onChange={(e) => {
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 12);
+                  setPaymentPhone(value);
+                  setPaymentError('');
+                }}
+                placeholder="0712345678"
+                InputProps={{
+                  startAdornment: <InputAdornment position="start"><Phone /></InputAdornment>
+                }}
+                helperText={selectedOrderForPayment.customerPhone && selectedOrderForPayment.customerPhone !== 'POS' 
+                  ? `Order phone: ${selectedOrderForPayment.customerPhone}` 
+                  : 'Enter customer phone number'}
+                sx={{ mt: 2, mb: 2 }}
+              />
+              {paymentSuccess && (
+                <Alert severity="success" sx={{ mt: 2 }}>
+                  Payment request sent. Please check the customer's phone to enter their M-Pesa PIN.
+                </Alert>
+              )}
+              {paymentError && (
+                <Alert severity="error" sx={{ mt: 2 }} onClose={() => setPaymentError('')}>
+                  {paymentError}
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={handleClosePaymentDialog}
+            disabled={processingPayment}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleInitiateMobileMoneyPayment}
+            variant="contained"
+            disabled={processingPayment || !paymentPhone || !validateSafaricomPhone(paymentPhone)}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              },
+              '&:disabled': {
+                backgroundColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {processingPayment ? (
+              <>
+                <CircularProgress size={16} sx={{ mr: 1 }} />
+                Processing...
+              </>
+            ) : (
+              'Send Payment Prompt'
+            )}
           </Button>
         </DialogActions>
       </Dialog>
