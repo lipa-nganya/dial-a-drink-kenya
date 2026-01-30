@@ -87,16 +87,15 @@ def getLocalApiBaseUrl() {
     // Default to dev backend URL if no local URL is provided
     def apiUrl = project.findProperty('LOCAL_API_BASE_URL') 
         ?: project.findProperty('API_BASE_URL') 
-        ?: 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api'
+        ?: 'https://deliveryos-development-backend-805803410802.us-central1.run.app'
     return apiUrl
 }
 
 def getDevApiBaseUrl() {
     // Development API URL (GCP) - can be overridden via gradle.properties
-    // Default to development backend (deployed from develop branch)
     def apiUrl = project.findProperty('DEV_API_BASE_URL') 
         ?: project.findProperty('API_BASE_URL') 
-        ?: 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api'
+        ?: 'https://deliveryos-development-backend-805803410802.us-central1.run.app'
     return apiUrl
 }
 
@@ -104,7 +103,7 @@ def getProdApiBaseUrl() {
     // Production API URL (GCP) - can be overridden via gradle.properties
     def apiUrl = project.findProperty('PROD_API_BASE_URL') 
         ?: project.findProperty('API_BASE_URL') 
-        ?: 'https://deliveryos-backend-805803410802.us-central1.run.app'
+        ?: 'https://deliveryos-production-backend-805803410802.us-central1.run.app'
     return apiUrl
 }
 
