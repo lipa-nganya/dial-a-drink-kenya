@@ -136,10 +136,13 @@ const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
       <SetPin
         customer={verifiedCustomer}
         onSuccess={(customerData) => {
+          console.log('SetPin onSuccess called with:', customerData);
           // If callback provided, call it instead of navigating
           if (onLoginSuccess) {
+            console.log('Calling onLoginSuccess callback');
             onLoginSuccess(customerData);
           } else {
+            console.log('Navigating to /orders');
             navigate('/orders');
           }
         }}

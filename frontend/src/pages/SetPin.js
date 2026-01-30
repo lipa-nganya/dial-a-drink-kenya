@@ -44,6 +44,7 @@ const SetPin = ({ customer, onSuccess }) => {
 
     try {
       const phone = customer.phone || customer.username;
+      console.log('Setting PIN for customer:', { customerId: customer.id, phone });
 
       const response = await api.post('/auth/set-pin', {
         customerId: customer.id,
@@ -52,7 +53,9 @@ const SetPin = ({ customer, onSuccess }) => {
         confirmPin
       });
 
-      if (response.data.success) {
+      console.log('Set PIN response:', response.data);
+
+      if (response.data && response.data.success) {
         const customerData = {
           id: customer.id,
           email: customer.email || null,
@@ -62,23 +65,38 @@ const SetPin = ({ customer, onSuccess }) => {
           loggedInAt: new Date().toISOString()
         };
 
+        console.log('PIN set successfully, saving customer data:', customerData);
+
         localStorage.setItem('customerOrder', JSON.stringify(customerData));
         localStorage.setItem('customerLoggedIn', 'true');
 
         login(customerData);
 
-        if (onSuccess) {
-          onSuccess(customerData);
-        } else {
-          navigate('/orders');
-        }
+        console.log('Customer logged in, calling onSuccess callback');
+
+        // Use setTimeout to ensure state updates complete before navigation
+        setTimeout(() => {
+          if (onSuccess) {
+            console.log('Calling onSuccess with customerData');
+            onSuccess(customerData);
+          } else {
+            console.log('No onSuccess callback, navigating to /orders');
+            navigate('/orders');
+          }
+        }, 100);
       } else {
-        setError(response.data.error || 'Failed to set PIN. Please try again.');
+        const errorMsg = response.data?.error || response.data?.message || 'Failed to set PIN. Please try again.';
+        console.error('Set PIN failed:', errorMsg);
+        setError(errorMsg);
+        setLoading(false);
       }
     } catch (err) {
       console.error('Set PIN error:', err);
-      setError(err.response?.data?.error || 'Failed to set PIN. Please try again.');
-    } finally {
+      const errorMessage = err.response?.data?.error || 
+                          err.response?.data?.message || 
+                          'Failed to set PIN. Please try again.';
+      console.error('Error message:', errorMessage);
+      setError(errorMessage);
       setLoading(false);
     }
   };
