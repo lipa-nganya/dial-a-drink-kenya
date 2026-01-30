@@ -23,6 +23,7 @@ import com.dialadrink.driver.utils.SharedPrefs
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -50,9 +51,20 @@ class ActiveOrdersActivity : AppCompatActivity() {
         setupSocketConnection()
         setupBroadcastReceiver()
         
-        // Load orders from repository (cached first, then fetch if needed)
-        // This is non-blocking - UI renders immediately
-        loadOrdersFromRepository()
+        // Check if we were opened after accepting an order
+        val orderId = intent.getIntExtra("orderId", -1)
+        if (orderId != -1) {
+            Log.d(TAG, "📦 Opened after accepting order #$orderId - forcing refresh after delay")
+            // Add a small delay to ensure backend has updated the order status
+            lifecycleScope.launch {
+                delay(500) // 500ms delay to let backend update
+                refreshOrdersFromRepository(forceRefresh = true)
+            }
+        } else {
+            // Load orders from repository (cached first, then fetch if needed)
+            // This is non-blocking - UI renders immediately
+            loadOrdersFromRepository()
+        }
     }
     
     override fun onResume() {

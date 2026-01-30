@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.UpdateOrderStatusRequest
@@ -235,10 +236,17 @@ class OrderAcceptanceActivity : AppCompatActivity() {
                             "Order #$orderId accepted successfully",
                             Toast.LENGTH_SHORT
                         ).show()
-                        // Navigate to dashboard instead of just finishing
-                        val intent = Intent(this@OrderAcceptanceActivity, com.dialadrink.driver.ui.dashboard.DashboardActivity::class.java).apply {
+                        
+                        // Send broadcast to notify active orders screen to refresh
+                        val broadcastIntent = Intent("com.dialadrink.driver.ORDER_ACCEPTED").apply {
+                            putExtra("orderId", orderId)
+                        }
+                        LocalBroadcastManager.getInstance(this@OrderAcceptanceActivity).sendBroadcast(broadcastIntent)
+                        
+                        // Navigate to Active Orders screen to show the accepted order
+                        val intent = Intent(this@OrderAcceptanceActivity, ActiveOrdersActivity::class.java).apply {
                             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
-                            putExtra("refreshOrders", true)
+                            putExtra("orderId", orderId) // Pass order ID so ActiveOrdersActivity can highlight it
                         }
                         startActivity(intent)
                         finish()

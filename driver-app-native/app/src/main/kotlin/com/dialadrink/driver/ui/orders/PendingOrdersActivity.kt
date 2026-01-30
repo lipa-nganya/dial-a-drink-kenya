@@ -278,40 +278,19 @@ class PendingOrdersActivity : AppCompatActivity() {
                             Toast.LENGTH_SHORT
                         ).show()
                         
-                        // Immediately remove the accepted order from the displayed list
-                        // Find and remove the card view for this order
-                        for (i in binding.ordersContainer.childCount - 1 downTo 0) {
-                            val child = binding.ordersContainer.getChildAt(i)
-                            if (child is MaterialCardView) {
-                                // Check if this card is for the accepted order
-                                val cardBinding = ItemPendingOrderBinding.bind(child)
-                                val orderNumberText = cardBinding.orderNumberText.text.toString()
-                                if (orderNumberText.contains("Order #${order.id}")) {
-                                    binding.ordersContainer.removeViewAt(i)
-                                    break
-                                }
-                            }
-                        }
-                        
-                        // If no more order cards, show empty state
-                        val hasOrderCards = (0 until binding.ordersContainer.childCount).any { i ->
-                            binding.ordersContainer.getChildAt(i) is MaterialCardView
-                        }
-                        if (!hasOrderCards) {
-                            showEmptyState("No pending orders")
-                        }
-                        
                         // Send broadcast to notify active orders screen to refresh
-                        val intent = Intent("com.dialadrink.driver.ORDER_ACCEPTED").apply {
+                        val broadcastIntent = Intent("com.dialadrink.driver.ORDER_ACCEPTED").apply {
                             putExtra("orderId", order.id)
                         }
-                        LocalBroadcastManager.getInstance(this@PendingOrdersActivity).sendBroadcast(intent)
+                        LocalBroadcastManager.getInstance(this@PendingOrdersActivity).sendBroadcast(broadcastIntent)
                         
-                        // Refresh in background to sync with server (non-blocking)
-                        lifecycleScope.launch {
-                            delay(500) // Small delay to let UI update first
-                            refreshOrdersFromRepository()
+                        // Navigate to Active Orders screen to show the accepted order
+                        val intent = Intent(this@PendingOrdersActivity, ActiveOrdersActivity::class.java).apply {
+                            flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+                            putExtra("orderId", order.id) // Pass order ID so ActiveOrdersActivity can highlight it
                         }
+                        startActivity(intent)
+                        finish() // Close pending orders screen
                     } else {
                         showError(errorMessage ?: "Failed to accept order. Please try again.")
                     }
