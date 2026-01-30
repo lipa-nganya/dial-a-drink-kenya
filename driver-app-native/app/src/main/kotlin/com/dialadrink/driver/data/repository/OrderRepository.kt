@@ -146,6 +146,24 @@ object OrderRepository {
                 it.status != "cancelled"
             }
             
+            // Log filtering details for debugging
+            Log.d(TAG, "🔍 [REFRESH ACTIVE ORDERS] Filtering: ${allOrders.size} total orders")
+            Log.d(TAG, "🔍 [REFRESH ACTIVE ORDERS] Orders with driverAccepted=true: ${allOrders.count { it.driverAccepted == true }}")
+            Log.d(TAG, "🔍 [REFRESH ACTIVE ORDERS] Filtered to ${activeOrders.size} active orders")
+            if (activeOrders.size < allOrders.count { it.driverAccepted == true }) {
+                val excluded = allOrders.filter { 
+                    it.driverAccepted == true && 
+                    (it.status == "completed" || it.status == "cancelled")
+                }
+                if (excluded.isNotEmpty()) {
+                    Log.w(TAG, "⚠️ [REFRESH ACTIVE ORDERS] Excluded ${excluded.size} orders with driverAccepted=true but status=${excluded.map { "${it.id}:${it.status}" }.joinToString(", ")}")
+                }
+            }
+            // Log all orders with driverAccepted=true for debugging
+            allOrders.filter { it.driverAccepted == true }.forEach { order ->
+                Log.d(TAG, "📦 [REFRESH ACTIVE ORDERS] Order #${order.id}: status=${order.status}, driverAccepted=${order.driverAccepted}, included=${activeOrders.any { it.id == order.id }}")
+            }
+            
             // Cache all orders in memory and disk (for pending orders to use)
             OrderCache.setCachedOrders(allOrders)
             SharedPrefs.saveCachedOrders(context, allOrders)

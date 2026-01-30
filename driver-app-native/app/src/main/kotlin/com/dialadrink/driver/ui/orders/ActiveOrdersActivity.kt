@@ -155,7 +155,25 @@ class ActiveOrdersActivity : AppCompatActivity() {
                     val updatedOrderId = orderData.optInt("orderId", orderData.optInt("id", -1))
                     val status = orderData.optString("status", "")
                     val paymentStatus = orderData.optString("paymentStatus", "")
-                    Log.d(TAG, "📦 [SOCKET] Order status updated via socket: Order #$updatedOrderId -> $status, Payment: $paymentStatus")
+                    val driverAccepted = orderData.optBoolean("driverAccepted", false)
+                    val triggeredByDriverResponse = orderData.optBoolean("triggeredByDriverResponse", false)
+                    
+                    Log.d(TAG, "📦 [SOCKET] Order status updated via socket: Order #$updatedOrderId -> $status, Payment: $paymentStatus, driverAccepted: $driverAccepted, triggeredByDriverResponse: $triggeredByDriverResponse")
+                    
+                    // If this was triggered by driver accepting the order, ALWAYS refresh
+                    // This ensures the newly accepted order appears in active orders
+                    if (triggeredByDriverResponse && driverAccepted) {
+                        Log.d(TAG, "✅✅✅ [SOCKET] Order #$updatedOrderId was just accepted by driver - forcing refresh to show in active orders")
+                        runOnUiThread {
+                            // Clear cache first to ensure fresh data
+                            lifecycleScope.launch {
+                                OrderRepository.clearCache(this@ActiveOrdersActivity)
+                                delay(300) // Small delay to ensure backend has updated
+                                refreshOrdersFromRepository(forceRefresh = true)
+                            }
+                        }
+                        return@connect
+                    }
                     
                     // Check if this order is in our current list
                     val orderInList = currentOrders.any { it.id == updatedOrderId }
@@ -169,10 +187,22 @@ class ActiveOrdersActivity : AppCompatActivity() {
                         }
                     } else {
                         // Order not in list - might have been removed or is new
-                        // Refresh to sync with server
-                        Log.d(TAG, "⚠️ [SOCKET] Order #$updatedOrderId not in current list, refreshing...")
-                        runOnUiThread {
-                            refreshOrdersFromRepository(forceRefresh = true)
+                        // If driverAccepted is true, this might be a newly accepted order - refresh to show it
+                        if (driverAccepted) {
+                            Log.d(TAG, "⚠️ [SOCKET] Order #$updatedOrderId not in current list but driverAccepted=true - refreshing to show newly accepted order...")
+                            runOnUiThread {
+                                lifecycleScope.launch {
+                                    OrderRepository.clearCache(this@ActiveOrdersActivity)
+                                    delay(300)
+                                    refreshOrdersFromRepository(forceRefresh = true)
+                                }
+                            }
+                        } else {
+                            // Just refresh normally
+                            Log.d(TAG, "⚠️ [SOCKET] Order #$updatedOrderId not in current list, refreshing...")
+                            runOnUiThread {
+                                refreshOrdersFromRepository(forceRefresh = true)
+                            }
                         }
                     }
                 } catch (e: Exception) {
