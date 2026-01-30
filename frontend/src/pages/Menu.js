@@ -8,7 +8,7 @@ import {
   InputAdornment,
   Button,
   Chip,
-  Pagination,
+  CircularProgress,
 } from '@mui/material';
 import { Search, Star } from '@mui/icons-material';
 import { useSearchParams } from 'react-router-dom';
@@ -27,27 +27,55 @@ const Menu = () => {
   const [selectedCategory, setSelectedCategory] = useState(0);
   const [selectedSubcategory, setSelectedSubcategory] = useState(0);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [displayedDrinks, setDisplayedDrinks] = useState([]);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  const itemsPerPage = 16; // 4 rows × 4 columns
+  const itemsPerLoad = 20; // Number of items to load each time
+  const [itemsToShow, setItemsToShow] = useState(itemsPerLoad);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Scroll detection for collapsing categories (same as Home page)
+  // Scroll detection for collapsing categories and infinite scroll
   useEffect(() => {
+    let ticking = false;
+    
     const handleScroll = () => {
-      const scrollY = window.scrollY || window.pageYOffset;
-      const shouldCollapse = scrollY > 200; // Collapse after 200px scroll
-      
-      setCategoriesCollapsed(shouldCollapse);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const scrollY = window.scrollY || window.pageYOffset;
+          const shouldCollapse = scrollY > 200; // Collapse after 200px scroll
+          
+          setCategoriesCollapsed(shouldCollapse);
+
+          // Infinite scroll: Load more when near bottom
+          const windowHeight = window.innerHeight;
+          const documentHeight = document.documentElement.scrollHeight;
+          const scrollTop = window.scrollY || document.documentElement.scrollTop;
+          
+          // Load more when user is within 400px of bottom
+          if (scrollTop + windowHeight >= documentHeight - 400 && !isLoadingMore) {
+            if (itemsToShow < filteredDrinks.length) {
+              setIsLoadingMore(true);
+              // Simulate slight delay for smooth loading
+              setTimeout(() => {
+                setItemsToShow(prev => Math.min(prev + itemsPerLoad, filteredDrinks.length));
+                setIsLoadingMore(false);
+              }, 200);
+            }
+          }
+          
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
 
-    window.addEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
+  }, [filteredDrinks.length, itemsToShow, isLoadingMore]);
 
   useEffect(() => {
     // Read category and subcategory from URL query parameters
@@ -93,10 +121,17 @@ const Menu = () => {
     filterDrinks();
   }, [drinks, searchTerm, selectedCategory, selectedSubcategory]);
 
-  // Reset pagination when category or search changes
+  // Reset displayed items when filters change
   useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCategory, searchTerm]);
+    setItemsToShow(itemsPerLoad);
+    // Scroll to top smoothly when category/search changes
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, [selectedCategory, selectedSubcategory, searchTerm]);
+
+  // Update displayed drinks when filtered drinks or itemsToShow changes
+  useEffect(() => {
+    setDisplayedDrinks(filteredDrinks.slice(0, itemsToShow));
+  }, [filteredDrinks, itemsToShow]);
 
   const fetchData = async () => {
     try {
@@ -199,20 +234,9 @@ const Menu = () => {
     setSearchParams(params);
   };
 
-  const handlePageChange = (event, value) => {
-    setCurrentPage(value);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  
-  // Calculate pagination for filtered drinks
-  const totalPages = Math.ceil(filteredDrinks.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedDrinks = filteredDrinks.slice(startIndex, endIndex);
-
   return (
-    <Box sx={{ backgroundColor: colors.background, minHeight: '100vh' }}>
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Box sx={{ backgroundColor: colors.background, minHeight: '100vh', overflow: 'visible', position: 'relative' }}>
+      <Container maxWidth="lg" sx={{ py: 4, overflow: 'visible', position: 'relative' }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Our Menu
         </Typography>
@@ -452,19 +476,24 @@ const Menu = () => {
               gap: { xs: 1, sm: 2 },
               width: '100%'
             }}>
-              {paginatedDrinks.map((drink) => (
+              {displayedDrinks.map((drink) => (
                 <DrinkCard key={drink.id} drink={drink} />
               ))}
             </Box>
-            {totalPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                <Pagination
-                  count={totalPages}
-                  page={currentPage}
-                  onChange={handlePageChange}
-                  color="primary"
-                  size="large"
-                />
+            
+            {/* Loading indicator for infinite scroll */}
+            {isLoadingMore && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 3 }}>
+                <CircularProgress size={40} />
+              </Box>
+            )}
+            
+            {/* Show message when all items are loaded */}
+            {!isLoadingMore && itemsToShow >= filteredDrinks.length && filteredDrinks.length > itemsPerLoad && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 3 }}>
+                <Typography variant="body2" color="text.secondary">
+                  All {filteredDrinks.length} items loaded
+                </Typography>
               </Box>
             )}
           </>
