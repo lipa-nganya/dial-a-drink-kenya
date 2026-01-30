@@ -25,8 +25,12 @@ object ApiClient {
     
     
     fun init(context: Context) {
-        android.util.Log.d("ApiClient", "🔧 Initializing API client with base URL: $baseUrl")
-        android.util.Log.d("ApiClient", "🔧 Full API base URL will be: $baseUrl/api/")
+        android.util.Log.e("ApiClient", "═══════════════════════════════════════════════════════")
+        android.util.Log.e("ApiClient", "🔧 INITIALIZING API CLIENT")
+        android.util.Log.e("ApiClient", "🔧 BuildConfig.API_BASE_URL: $baseUrl")
+        android.util.Log.e("ApiClient", "🔧 BuildConfig.BUILD_TYPE: ${BuildConfig.BUILD_TYPE}")
+        android.util.Log.e("ApiClient", "🔧 Full API base URL will be: $baseUrl/api/")
+        android.util.Log.e("ApiClient", "═══════════════════════════════════════════════════════")
         val loggingInterceptor = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.HEADERS // Changed from BODY to avoid consuming response body
         }

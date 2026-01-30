@@ -48,7 +48,9 @@ android {
             resValue "string", "app_name", "Dial A Drink Driver"
             
             // Production API URL (GCP - can be overridden via gradle.properties)
-            buildConfigField "String", "API_BASE_URL", "\"${getProdApiBaseUrl()}\""
+            def prodApiUrl = getProdApiBaseUrl()
+            println "🔧 [PRODUCTION BUILD] Setting API_BASE_URL to: ${prodApiUrl}"
+            buildConfigField "String", "API_BASE_URL", "\"${prodApiUrl}\""
             buildConfigField "String", "BUILD_TYPE", "\"production\""
         }
     }
@@ -62,8 +64,11 @@ android {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // For production release, you should configure proper signing
-            // signingConfig signingConfigs.release
+            // Use debug signing config for release builds (allows builds without creating a keystore)
+            // NOTE: For production distribution, you should create a proper release keystore:
+            // keytool -genkey -v -keystore driver-release.keystore -alias driver -keyalg RSA -keysize 2048 -validity 10000
+            // Then configure signingConfigs.release with the keystore details
+            signingConfig signingConfigs.debug
         }
     }
     
@@ -86,25 +91,29 @@ def getLocalApiBaseUrl() {
     // Local API URL (ngrok) - can be overridden via gradle.properties
     // Default to dev backend URL if no local URL is provided
     def apiUrl = project.findProperty('LOCAL_API_BASE_URL') 
-        ?: project.findProperty('API_BASE_URL') 
         ?: 'https://deliveryos-development-backend-805803410802.us-central1.run.app'
-    return apiUrl
+    // Remove /api suffix if present (ApiClient.kt adds it)
+    return apiUrl.replace('/api', '').replace('/api/', '')
 }
 
 def getDevApiBaseUrl() {
     // Development API URL (GCP) - can be overridden via gradle.properties
     def apiUrl = project.findProperty('DEV_API_BASE_URL') 
-        ?: project.findProperty('API_BASE_URL') 
         ?: 'https://deliveryos-development-backend-805803410802.us-central1.run.app'
-    return apiUrl
+    // Remove /api suffix if present (ApiClient.kt adds it)
+    return apiUrl.replace('/api', '').replace('/api/', '')
 }
 
 def getProdApiBaseUrl() {
     // Production API URL (GCP) - can be overridden via gradle.properties
+    // Only check PROD_API_BASE_URL to prevent API_BASE_URL from overriding production
     def apiUrl = project.findProperty('PROD_API_BASE_URL') 
-        ?: project.findProperty('API_BASE_URL') 
         ?: 'https://deliveryos-production-backend-805803410802.us-central1.run.app'
-    return apiUrl
+    // Remove /api suffix if present (ApiClient.kt adds it)
+    def cleanedUrl = apiUrl.replace('/api', '').replace('/api/', '')
+    println "🔧 [getProdApiBaseUrl] PROD_API_BASE_URL property: ${project.findProperty('PROD_API_BASE_URL')}"
+    println "🔧 [getProdApiBaseUrl] Final URL: ${cleanedUrl}"
+    return cleanedUrl
 }
 
 dependencies {

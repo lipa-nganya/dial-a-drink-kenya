@@ -78,8 +78,19 @@ class PhoneNumberActivity : AppCompatActivity() {
                 // If this is a PIN reset request, always send OTP (skip driver existence check)
                 if (!isResetPin) {
                     // First, check if driver exists in database
-                    android.util.Log.d("PhoneNumberActivity", "🔍 Checking if driver exists for phone: $formattedPhone")
-                    android.util.Log.d("PhoneNumberActivity", "🌐 API Base URL: ${com.dialadrink.driver.BuildConfig.API_BASE_URL}")
+                    android.util.Log.e("PhoneNumberActivity", "═══════════════════════════════════════════════════════")
+                    android.util.Log.e("PhoneNumberActivity", "🔍 Checking if driver exists for phone: $formattedPhone")
+                    android.util.Log.e("PhoneNumberActivity", "🌐 BuildConfig.API_BASE_URL: ${com.dialadrink.driver.BuildConfig.API_BASE_URL}")
+                    android.util.Log.e("PhoneNumberActivity", "🌐 BuildConfig.BUILD_TYPE: ${com.dialadrink.driver.BuildConfig.BUILD_TYPE}")
+                    android.util.Log.e("PhoneNumberActivity", "🌐 Expected Production: https://deliveryos-production-backend-805803410802.us-central1.run.app")
+                    android.util.Log.e("PhoneNumberActivity", "🌐 Expected Dev: https://deliveryos-development-backend-805803410802.us-central1.run.app")
+                    val isProduction = com.dialadrink.driver.BuildConfig.API_BASE_URL.contains("production-backend")
+                    android.util.Log.e("PhoneNumberActivity", "⚠️ IS PRODUCTION BACKEND: $isProduction")
+                    if (!isProduction) {
+                        android.util.Log.e("PhoneNumberActivity", "❌❌❌ WRONG BACKEND! App is using: ${com.dialadrink.driver.BuildConfig.API_BASE_URL}")
+                        android.util.Log.e("PhoneNumberActivity", "❌❌❌ Build variant may be wrong! Should be: productionRelease")
+                    }
+                    android.util.Log.e("PhoneNumberActivity", "═══════════════════════════════════════════════════════")
                     
                     val driverResponse = ApiClient.getApiService().getDriverByPhone(formattedPhone)
                     
@@ -91,18 +102,27 @@ class PhoneNumberActivity : AppCompatActivity() {
                         android.util.Log.d("PhoneNumberActivity", "📦 Response body: $apiResponse")
                         
                         if (driver != null && apiResponse?.success == true) {
-                            // Driver exists - go to PIN login
+                            // Driver exists - check if they have a PIN
                             android.util.Log.d("PhoneNumberActivity", "✅ Driver found: ${driver.name} (ID: ${driver.id})")
+                            val hasPin = driver.hasPin ?: false
+                            android.util.Log.d("PhoneNumberActivity", "🔐 Driver has PIN: $hasPin")
                             
                             SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
                             SharedPrefs.saveDriverId(this@PhoneNumberActivity, driver.id)
                             SharedPrefs.saveDriverName(this@PhoneNumberActivity, driver.name)
                             
-                            // Navigate to PIN login
-                            val intent = Intent(this@PhoneNumberActivity, PinLoginActivity::class.java)
-                            intent.putExtra("phone", formattedPhone)
-                            startActivity(intent)
-                            return@launch
+                            if (hasPin) {
+                                // Driver has PIN - go to PIN login
+                                android.util.Log.d("PhoneNumberActivity", "🔐 Navigating to PIN login")
+                                val intent = Intent(this@PhoneNumberActivity, PinLoginActivity::class.java)
+                                intent.putExtra("phone", formattedPhone)
+                                startActivity(intent)
+                                return@launch
+                            } else {
+                                // Driver exists but no PIN - proceed to OTP flow to set up PIN
+                                android.util.Log.d("PhoneNumberActivity", "📱 Driver has no PIN - proceeding to OTP flow")
+                                // Continue to OTP flow below
+                            }
                         } else {
                             // Driver not found (success: false or data is null) - proceed to OTP flow
                             android.util.Log.d("PhoneNumberActivity", "❌ Driver not found in database (success: ${apiResponse?.success}, data: ${driver != null})")
