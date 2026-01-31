@@ -106,6 +106,7 @@ const Orders = () => {
   const [newOrderDialogOpen, setNewOrderDialogOpen] = useState(false);
   const [orderDetailDialogOpen, setOrderDetailDialogOpen] = useState(false);
   const [selectedOrderForDetail, setSelectedOrderForDetail] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [promptingPayment, setPromptingPayment] = useState(false);
   const [paymentPollingInterval, setPaymentPollingInterval] = useState(null);
   const [editPriceDialogOpen, setEditPriceDialogOpen] = useState(false);
@@ -952,6 +953,7 @@ const Orders = () => {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const handlePromptPayment = async (orderId, customerPhone = null) => {
     try {
       setLoading(true);
