@@ -25,7 +25,8 @@ import {
   AccountBalance,
   ChevronLeft,
   Psychology,
-  AttachMoney
+  AttachMoney,
+  Map
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
@@ -64,7 +65,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
     { path: '/admin/customers', label: 'Customers', icon: People },
     { path: '/drivers', label: 'Riders', icon: LocalShipping },
     { path: '/branches', label: 'Branches', icon: Store },
-    // { path: '/territories', label: 'Territories', icon: Map }, // Hidden
+    { path: '/territories', label: 'Territories', icon: Map },
     { path: '/copilot', label: 'Copilot', icon: Psychology },
     ...(isEasterEggActive ? [{ path: '/save-the-fishes', label: 'Save the Fishes', icon: LocalFlorist }] : []),
     { path: '/settings', label: 'Settings', icon: SettingsIcon }

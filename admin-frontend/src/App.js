@@ -18,7 +18,7 @@ import Transactions from './pages/Transactions';
 import OrderNotifications from './pages/OrderNotifications';
 import Drivers from './pages/Drivers';
 import Branches from './pages/Branches';
-// import Territories from './pages/Territories'; // Hidden
+import Territories from './pages/Territories';
 import QuickActions from './pages/QuickActions';
 import OrdersWithoutDriver from './pages/OrdersWithoutDriver';
 import PendingOrders from './pages/PendingOrders';
@@ -297,8 +297,7 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
-              {/* Territories route hidden */}
-              {/* <Route
+              <Route
                 path="/territories"
                 element={
                   <PrivateRoute>
@@ -307,7 +306,7 @@ function AppContent() {
                     </AdminLayout>
                   </PrivateRoute>
                 }
-              /> */}
+              />}
               <Route
                 path="/quick-actions"
                 element={
