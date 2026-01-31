@@ -94,12 +94,35 @@ app.use((req, res, next) => {
       if (origin.includes('thewolfgang.tech')) {
         console.log(`🔒 [CORS] Headers set for origin: ${origin}`);
       }
+    } else {
+      // Log when origin is blocked for debugging
+      console.log(`🚫 [CORS] Origin blocked: ${origin}`);
     }
   }
   
   // Handle preflight OPTIONS requests
   if (req.method === 'OPTIONS') {
-    console.log(`🔒 [CORS] OPTIONS preflight for origin: ${origin || 'none'}`);
+    const origin = req.headers.origin || 'none';
+    console.log(`🔒 [CORS] OPTIONS preflight for origin: ${origin}, path: ${req.path}`);
+    // Ensure headers are set before responding to OPTIONS
+    if (origin && origin !== 'none') {
+      const isAllowed = 
+        allowedOrigins.includes(origin) ||
+        origin.includes('.netlify.app') ||
+        origin.includes('.thewolfgang.tech') ||
+        origin.includes('.ruakadrinksdelivery.co.ke') ||
+        origin.includes('.run.app') ||
+        origin === 'https://thewolfgang.tech';
+      
+      if (isAllowed) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Max-Age', '86400');
+        console.log(`🔒 [CORS] OPTIONS headers set for origin: ${origin}`);
+      }
+    }
     return res.status(204).end();
   }
   
