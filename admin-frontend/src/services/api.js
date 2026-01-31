@@ -69,9 +69,10 @@ const resolveApiBaseUrl = () => {
   }
 
   // Fallback: Use REACT_APP_API_URL if set (for other hosted environments)
-  // But only if NOT running locally (already handled above)
+  // But only if NOT running locally and NOT a production site (already handled above)
+  // IMPORTANT: Production sites should NEVER use REACT_APP_API_URL - they must use production backend
   const explicitUrl = process.env.REACT_APP_API_URL;
-  if (explicitUrl) {
+  if (explicitUrl && !isProductionSite) {
     return { url: explicitUrl, source: 'env-explicit' };
   }
 
