@@ -150,7 +150,10 @@ async function loadFullApplication() {
             'https://ruakadrinksdelivery.co.ke',
             'https://www.ruakadrinksdelivery.co.ke',
             'https://drinksdeliverykenya.com',
-            'https://www.drinksdeliverykenya.com'
+            'https://www.drinksdeliverykenya.com',
+            // Admin production sites
+            'https://admin.ruakadrinksdelivery.co.ke',
+            'https://www.admin.ruakadrinksdelivery.co.ke'
           ];
           
           // Check exact match
@@ -160,6 +163,11 @@ async function loadFullApplication() {
           
           // Check for thewolfgang.tech domains (more permissive - matches any subdomain or root)
           if (origin.includes('.thewolfgang.tech') || origin === 'https://thewolfgang.tech') {
+            return callback(null, true);
+          }
+          
+          // Check ruakadrinksdelivery.co.ke subdomains
+          if (origin.includes('.ruakadrinksdelivery.co.ke')) {
             return callback(null, true);
           }
           

@@ -58,6 +58,9 @@ const allowedOrigins = [
   'https://www.ruakadrinksdelivery.co.ke',
   'https://drinksdeliverykenya.com',
   'https://www.drinksdeliverykenya.com',
+  // Admin production sites
+  'https://admin.ruakadrinksdelivery.co.ke',
+  'https://www.admin.ruakadrinksdelivery.co.ke',
   // Netlify preview URLs (wildcard pattern)
   'https://*.netlify.app'
 ].filter(Boolean);
@@ -75,6 +78,7 @@ app.use((req, res, next) => {
       allowedOrigins.includes(origin) ||
       origin.includes('.netlify.app') ||
       origin.includes('.thewolfgang.tech') ||
+      origin.includes('.ruakadrinksdelivery.co.ke') ||
       origin === 'https://thewolfgang.tech';
     
     if (isAllowed) {
