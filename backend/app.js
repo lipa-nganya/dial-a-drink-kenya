@@ -79,6 +79,7 @@ app.use((req, res, next) => {
       origin.includes('.netlify.app') ||
       origin.includes('.thewolfgang.tech') ||
       origin.includes('.ruakadrinksdelivery.co.ke') ||
+      origin.includes('.run.app') || // Cloud Run services (e.g., deliveryos-admin-frontend-*.run.app)
       origin === 'https://thewolfgang.tech';
     
     if (isAllowed) {
