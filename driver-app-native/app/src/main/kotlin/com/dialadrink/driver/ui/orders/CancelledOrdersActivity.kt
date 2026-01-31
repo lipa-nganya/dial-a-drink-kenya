@@ -221,7 +221,8 @@ class CancelledOrdersActivity : AppCompatActivity() {
         cardBinding.statusText.text = order.status.replace("_", " ").uppercase()
 
         cardBinding.customerNameText.text = order.customerName ?: "Customer"
-        cardBinding.addressText.text = order.deliveryAddress ?: "Address not provided"
+        // Hide customer location for cancelled orders
+        cardBinding.addressText.visibility = View.GONE
         cardBinding.amountText.text = "KES ${String.format("%.2f", order.totalAmount)}"
 
         if (order.createdAt != null) {
