@@ -44,7 +44,7 @@ steps:
       - '--add-cloudsql-instances'
       - 'dialadrink-production:us-central1:dialadrink-db-prod'
       - '--update-env-vars'
-      - 'NODE_ENV=production'
+      - 'NODE_ENV=production,FRONTEND_URL=https://ruakadrinksdelivery.co.ke,ADMIN_URL=https://admin.ruakadrinksdelivery.co.ke,HOST=0.0.0.0'
       # Note: DATABASE_URL and other sensitive env vars should be set manually
       # or via Secret Manager to preserve them across deployments
 
