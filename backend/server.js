@@ -171,6 +171,11 @@ async function loadFullApplication() {
             return callback(null, true);
           }
           
+          // Check Cloud Run service URLs (e.g., deliveryos-admin-frontend-*.run.app)
+          if (origin.includes('.run.app')) {
+            return callback(null, true);
+          }
+          
           // Check netlify.app subdomains
           if (origin.includes('.netlify.app')) {
             return callback(null, true);
