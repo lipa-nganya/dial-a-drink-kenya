@@ -27,6 +27,18 @@ const resolveApiBaseUrl = () => {
     return { url: DEFAULT_PRODUCTION_API_BASE, source: 'cloud-run-dev-default' };
   }
 
+  // Production sites (ruakadrinksdelivery.co.ke, drinksdeliverykenya.com)
+  const isProductionSite = 
+    hostname.includes('ruakadrinksdelivery.co.ke') ||
+    hostname.includes('drinksdeliverykenya.com');
+  if (isProductionSite) {
+    // Production sites always use production backend
+    return {
+      url: DEFAULT_PRODUCTION_API_BASE,
+      source: 'production-site',
+    };
+  }
+
   // Netlify deployments
   // Distinguish between development and production Netlify sites
   const isNetlify = hostname.includes('thewolfgang.tech') || hostname.includes('netlify.app');
