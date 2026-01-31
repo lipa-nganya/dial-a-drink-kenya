@@ -346,8 +346,8 @@ class DashboardActivity : AppCompatActivity() {
     }
     
     private fun toggleShift() {
-        val driverId = SharedPrefs.getDriverId(this) ?: run {
-            Toast.makeText(this, "Driver ID not found", Toast.LENGTH_SHORT).show()
+        val driverPhone = SharedPrefs.getDriverPhone(this) ?: run {
+            Toast.makeText(this, "Driver phone not found. Please log in again.", Toast.LENGTH_SHORT).show()
             return
         }
         
@@ -355,11 +355,39 @@ class DashboardActivity : AppCompatActivity() {
         val newStatus = if (currentShiftStatus == "active") "offline" else "active"
         
         // Update status on backend first (don't update UI optimistically)
+        // First fetch the current driver info to get the correct driver ID
         lifecycleScope.launch {
             try {
                 if (!ApiClient.isInitialized()) {
                     ApiClient.init(this@DashboardActivity)
                 }
+                
+                // Fetch driver by phone to get the current driver ID dynamically
+                val driverResponse = ApiClient.getApiService().getDriverByPhone(driverPhone)
+                if (!driverResponse.isSuccessful || driverResponse.body()?.success != true) {
+                    Toast.makeText(
+                        this@DashboardActivity,
+                        "Failed to fetch driver info. Please try again.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
+                
+                val driver = driverResponse.body()!!.data
+                if (driver == null) {
+                    Toast.makeText(
+                        this@DashboardActivity,
+                        "Driver not found. Please log in again.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    return@launch
+                }
+                
+                val driverId = driver.id
+                android.util.Log.d("DashboardActivity", "🔄 Toggling shift for driver ID: $driverId (phone: $driverPhone)")
+                
+                // Update the stored driver ID in case it changed
+                SharedPrefs.saveDriverId(this@DashboardActivity, driverId)
                 
                 val updateResponse = ApiClient.getApiService().updateDriverStatus(
                     driverId,

@@ -91,6 +91,12 @@ object OrderRepository {
             
             val allOrders = apiResponse.data
             
+            // Log ALL orders received from API for debugging
+            Log.d(TAG, "📥 [GET ACTIVE ORDERS] Received ${allOrders.size} orders from API")
+            allOrders.forEach { order ->
+                Log.d(TAG, "   📦 Order #${order.id}: status='${order.status}', driverId=${order.driverId}, driverAccepted=${order.driverAccepted}")
+            }
+            
             // Cache all orders
             OrderCache.setCachedOrders(allOrders)
             SharedPrefs.saveCachedOrders(context, allOrders)
@@ -101,6 +107,8 @@ object OrderRepository {
                 it.status != "completed" && 
                 it.status != "cancelled"
             }
+            
+            Log.d(TAG, "🔍 [GET ACTIVE ORDERS] Filtered to ${activeOrders.size} active orders from ${allOrders.size} total")
             
             // Update state flow with filtered active orders
             _activeOrders.value = activeOrders
@@ -122,28 +130,47 @@ object OrderRepository {
             ensureApiClientInitialized(context)
             
             val activeStatuses = "pending,confirmed,preparing,out_for_delivery"
+            Log.d(TAG, "🌐 [REFRESH ACTIVE ORDERS] Making API call: GET /api/driver-orders/$driverId?status=$activeStatuses&summary=true")
             val response = ApiClient.getApiService().getDriverOrdersDirect(
                 driverId,
                 activeStatuses,
                 summary = true
             )
             
+            Log.d(TAG, "📡 [REFRESH ACTIVE ORDERS] API response: code=${response.code()}, isSuccessful=${response.isSuccessful}")
+            
             if (!response.isSuccessful || response.body() == null) {
+                Log.e(TAG, "❌ [REFRESH ACTIVE ORDERS] API call failed: code=${response.code()}, body=${response.body()}")
                 return emptyList()
             }
             
             val apiResponse = response.body()!!
+            Log.d(TAG, "📦 [REFRESH ACTIVE ORDERS] API response: success=${apiResponse.success}, data=${if (apiResponse.data != null) "${apiResponse.data.size} orders" else "null"}")
+            
             if (apiResponse.success != true || apiResponse.data == null) {
+                Log.e(TAG, "❌ [REFRESH ACTIVE ORDERS] API response invalid: success=${apiResponse.success}, error=${apiResponse.error}")
                 return emptyList()
             }
             
             val allOrders = apiResponse.data
             
+            // Log ALL orders received from API for debugging
+            Log.d(TAG, "📥 [REFRESH ACTIVE ORDERS] Received ${allOrders.size} orders from API")
+            allOrders.forEach { order ->
+                Log.d(TAG, "   📦 Order #${order.id}: status='${order.status}', driverId=${order.driverId}, driverAccepted=${order.driverAccepted} (type: ${order.driverAccepted?.javaClass?.simpleName ?: "null"})")
+            }
+            
             // Filter for active orders: driverAccepted == true and not completed/cancelled
             val activeOrders = allOrders.filter { 
-                it.driverAccepted == true && 
-                it.status != "completed" && 
-                it.status != "cancelled"
+                val matches = it.driverAccepted == true && 
+                    it.status != "completed" && 
+                    it.status != "cancelled"
+                if (!matches && it.driverAccepted == true) {
+                    Log.w(TAG, "   ⚠️ Order #${it.id} excluded: driverAccepted=true but status='${it.status}' (completed/cancelled check)")
+                } else if (!matches && it.status != "completed" && it.status != "cancelled") {
+                    Log.w(TAG, "   ⚠️ Order #${it.id} excluded: status='${it.status}' but driverAccepted=${it.driverAccepted}")
+                }
+                matches
             }
             
             // Log filtering details for debugging
