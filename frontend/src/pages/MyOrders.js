@@ -804,9 +804,8 @@ const MyOrders = () => {
                           Download Receipt
                         </Button>
                       )}
-                      {/* Make Payment Button for Unpaid Orders - Show for both pay_now and pay_on_delivery */}
+                      {/* Make Payment Button for Unpaid Orders - Show for all unpaid orders */}
                       {order.paymentStatus !== 'paid' && 
-                       (order.paymentType === 'pay_now' || order.paymentType === 'pay_on_delivery') && 
                        order.status !== 'cancelled' && (
                         <Button
                           component="div"
@@ -828,7 +827,7 @@ const MyOrders = () => {
                             }
                           }}
                         >
-                          {order.paymentType === 'pay_on_delivery' ? 'Pay Now' : 'Make Payment'}
+                          Make Payment
                         </Button>
                       )}
                     </Box>
