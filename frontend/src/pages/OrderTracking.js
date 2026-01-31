@@ -29,7 +29,10 @@ import {
   AttachMoney,
   Payment,
   CreditCard,
-  PhoneAndroid
+  PhoneAndroid,
+  Receipt,
+  Restaurant,
+  Inventory
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
@@ -219,6 +222,105 @@ const OrderTracking = ({ order: orderProp }) => {
     }
   };
 
+  // Get timeline steps based on order status
+  const getTimelineSteps = () => {
+    const steps = [];
+    const status = orderDetails.status;
+    const paymentStatus = orderDetails.paymentStatus;
+    const paymentType = orderDetails.paymentType;
+    const createdAt = orderDetails.createdAt;
+    const paymentConfirmedAt = orderDetails.paymentConfirmedAt;
+    const confirmedAt = orderDetails.confirmedAt;
+    const outForDeliveryAt = orderDetails.outForDeliveryAt;
+    const deliveredAt = orderDetails.deliveredAt;
+
+    // Helper to format time
+    const formatTime = (dateString) => {
+      if (!dateString) return '';
+      try {
+        const date = new Date(dateString);
+        return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+      } catch {
+        return '';
+      }
+    };
+
+    // Determine if payment step should be shown
+    const needsPayment = paymentType === 'pay_now';
+    const paymentPaid = paymentStatus === 'paid';
+
+    // Step 1: Order Placed (always shown, always completed unless cancelled)
+    const orderPlacedCompleted = status !== 'cancelled';
+    steps.push({
+      id: 'order_placed',
+      title: 'Order Placed',
+      description: `Order#${orderDetails.id} from ${orderDetails.branch?.name || 'Dial A Drink'}.`,
+      icon: <Receipt />,
+      completed: orderPlacedCompleted,
+      isCurrent: false,
+      timestamp: formatTime(createdAt) || 'N/A'
+    });
+
+    // Step 2: Payment Confirmed (only if payment is required)
+    if (needsPayment) {
+      steps.push({
+        id: 'payment_confirmed',
+        title: 'Payment Confirmed',
+        description: paymentPaid ? 'Payment received successfully.' : 'Awaiting confirmation...',
+        icon: <Payment />,
+        completed: paymentPaid,
+        isCurrent: !paymentPaid && status !== 'cancelled',
+        timestamp: formatTime(paymentConfirmedAt) || (paymentPaid ? formatTime(createdAt) : '')
+      });
+    }
+
+    // Step 3: Order Processed / Confirmed (only shown if order is confirmed or beyond)
+    const orderProcessed = status === 'confirmed' || status === 'out_for_delivery' || status === 'delivered' || status === 'completed';
+    if (orderProcessed || (needsPayment && paymentPaid)) {
+      steps.push({
+        id: 'order_processed',
+        title: 'Order Processed',
+        description: 'We are preparing your order.',
+        icon: <Restaurant />,
+        completed: orderProcessed,
+        isCurrent: status === 'confirmed' && (!needsPayment || paymentPaid),
+        timestamp: formatTime(confirmedAt) || (orderProcessed ? formatTime(createdAt) : '')
+      });
+    }
+
+    // Step 4: Ready to Pickup / Out for Delivery
+    const isOutForDelivery = status === 'out_for_delivery';
+    const isDelivered = status === 'delivered' || status === 'completed';
+    if (isOutForDelivery || isDelivered) {
+      steps.push({
+        id: 'ready_to_pickup',
+        title: 'Out for Delivery',
+        description: orderDetails.driver 
+          ? `Order#${orderDetails.id} from ${orderDetails.branch?.name || 'Dial A Drink'}.`
+          : 'Your order is on the way.',
+        icon: <LocalShipping />,
+        completed: isDelivered,
+        isCurrent: isOutForDelivery,
+        timestamp: formatTime(outForDeliveryAt) || (isOutForDelivery ? 'N/A' : '')
+      });
+    }
+
+    // Step 5: Delivered (if delivered)
+    if (isDelivered) {
+      steps.push({
+        id: 'delivered',
+        title: 'Delivered',
+        description: 'Your order has been delivered.',
+        icon: <CheckCircle />,
+        completed: true,
+        isCurrent: false,
+        timestamp: formatTime(deliveredAt) || 'N/A'
+      });
+    }
+
+    return steps;
+  };
+
   // Payment helper functions
   const formatMpesaPhoneNumber = (phone) => {
     if (!phone) return '';
@@ -395,6 +497,153 @@ const OrderTracking = ({ order: orderProp }) => {
             color={getStatusColor(orderDetails.status)}
             sx={{ fontWeight: 'bold' }}
           />
+        </Box>
+
+        <Divider sx={{ my: 3 }} />
+
+        {/* Order Timeline */}
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h6" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
+            Order Status
+          </Typography>
+          <Box sx={{ position: 'relative', pl: 5 }}>
+            {/* Vertical dotted line */}
+            <Box
+              sx={{
+                position: 'absolute',
+                left: '20px',
+                top: 0,
+                bottom: 0,
+                width: '2px',
+                borderLeft: '2px dashed #E0E0E0',
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  left: '-1px',
+                  top: 0,
+                  width: '2px',
+                  borderLeft: '2px dashed #4CAF50',
+                  height: (() => {
+                    const steps = getTimelineSteps();
+                    const completedCount = steps.filter(s => s.completed || s.isCurrent).length;
+                    const totalSteps = steps.length;
+                    if (totalSteps === 0) return '0%';
+                    // Calculate height based on completed steps
+                    const stepHeight = 100 / totalSteps;
+                    return `${Math.min(completedCount * stepHeight, 100)}%`;
+                  })()
+                }
+              }}
+            />
+            
+            {getTimelineSteps().map((step, index) => {
+              const isLast = index === getTimelineSteps().length - 1;
+              const stepColor = step.completed ? '#4CAF50' : step.isCurrent ? '#4CAF50' : '#9E9E9E';
+              const stepBg = step.isCurrent ? '#4CAF50' : step.completed ? '#E8F5E9' : '#F5F5F5';
+              const iconColor = step.completed || step.isCurrent ? '#4CAF50' : '#9E9E9E';
+              
+              return (
+                <Box
+                  key={step.id}
+                  sx={{
+                    position: 'relative',
+                    mb: isLast ? 0 : 4,
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: 2
+                  }}
+                >
+                  {/* Status indicator circle */}
+                  <Box
+                    sx={{
+                      position: 'absolute',
+                      left: '-36px',
+                      top: '2px',
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: '50%',
+                      backgroundColor: stepBg,
+                      border: step.isCurrent ? `2px solid ${stepColor}` : 'none',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      zIndex: 1,
+                      boxShadow: step.isCurrent ? `0 0 0 4px ${stepBg}` : 'none'
+                    }}
+                  >
+                    {step.completed ? (
+                      <CheckCircle sx={{ color: '#4CAF50', fontSize: '24px' }} />
+                    ) : step.isCurrent ? (
+                      <Box
+                        sx={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '50%',
+                          backgroundColor: '#4CAF50'
+                        }}
+                      />
+                    ) : (
+                      <Box
+                        sx={{
+                          width: '12px',
+                          height: '12px',
+                          borderRadius: '50%',
+                          backgroundColor: '#9E9E9E'
+                        }}
+                      />
+                    )}
+                  </Box>
+
+                  {/* Step content */}
+                  <Box sx={{ flex: 1, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+                      <Box
+                        sx={{
+                          color: iconColor,
+                          display: 'flex',
+                          alignItems: 'center',
+                          opacity: step.completed || step.isCurrent ? 1 : 0.6
+                        }}
+                      >
+                        {React.cloneElement(step.icon, { sx: { fontSize: '20px' } })}
+                      </Box>
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 600,
+                          color: '#424242',
+                          fontSize: '1rem',
+                          flex: 1
+                        }}
+                      >
+                        {step.title}
+                      </Typography>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          color: '#757575',
+                          fontSize: '0.875rem',
+                          fontWeight: 500
+                        }}
+                      >
+                        {step.timestamp}
+                      </Typography>
+                    </Box>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: '#757575',
+                        fontSize: '0.875rem',
+                        ml: 4.5
+                      }}
+                    >
+                      {step.description}
+                    </Typography>
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
         </Box>
 
         <Divider sx={{ my: 3 }} />
