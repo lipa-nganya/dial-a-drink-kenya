@@ -502,42 +502,41 @@ const OrderTracking = ({ order: orderProp }) => {
         <Divider sx={{ my: 3 }} />
 
         {/* Order Timeline */}
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
-            Order Status
-          </Typography>
-          <Box sx={{ position: 'relative', pl: 5 }}>
-            {/* Vertical dotted line */}
-            <Box
-              sx={{
-                position: 'absolute',
-                left: '20px',
-                top: 0,
-                bottom: 0,
-                width: '2px',
-                borderLeft: '2px dashed #E0E0E0',
-                '&::before': {
-                  content: '""',
-                  position: 'absolute',
-                  left: '-1px',
-                  top: 0,
-                  width: '2px',
-                  borderLeft: '2px dashed #4CAF50',
-                  height: (() => {
-                    const steps = getTimelineSteps();
-                    const completedCount = steps.filter(s => s.completed || s.isCurrent).length;
-                    const totalSteps = steps.length;
-                    if (totalSteps === 0) return '0%';
-                    // Calculate height based on completed steps
-                    const stepHeight = 100 / totalSteps;
-                    return `${Math.min(completedCount * stepHeight, 100)}%`;
-                  })()
-                }
-              }}
-            />
-            
-            {getTimelineSteps().map((step, index) => {
-              const isLast = index === getTimelineSteps().length - 1;
+        {(() => {
+          const timelineSteps = getTimelineSteps();
+          const completedCount = timelineSteps.filter(s => s.completed || s.isCurrent).length;
+          const totalSteps = timelineSteps.length;
+          const progressHeight = totalSteps === 0 ? '0%' : `${Math.min((completedCount / totalSteps) * 100, 100)}%`;
+          
+          return (
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" gutterBottom sx={{ mb: 3, fontWeight: 600 }}>
+                Order Status
+              </Typography>
+              <Box sx={{ position: 'relative', pl: 5 }}>
+                {/* Vertical dotted line */}
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    left: '20px',
+                    top: 0,
+                    bottom: 0,
+                    width: '2px',
+                    borderLeft: '2px dashed #E0E0E0',
+                    '&::before': {
+                      content: '""',
+                      position: 'absolute',
+                      left: '-1px',
+                      top: 0,
+                      width: '2px',
+                      borderLeft: '2px dashed #4CAF50',
+                      height: progressHeight
+                    }
+                  }}
+                />
+                
+                {timelineSteps.map((step, index) => {
+                  const isLast = index === timelineSteps.length - 1;
               const stepColor = step.completed ? '#4CAF50' : step.isCurrent ? '#4CAF50' : '#9E9E9E';
               const stepBg = step.isCurrent ? '#4CAF50' : step.completed ? '#E8F5E9' : '#F5F5F5';
               const iconColor = step.completed || step.isCurrent ? '#4CAF50' : '#9E9E9E';
@@ -643,8 +642,10 @@ const OrderTracking = ({ order: orderProp }) => {
                 </Box>
               );
             })}
-          </Box>
-        </Box>
+              </Box>
+            </Box>
+          );
+        })()}
 
         <Divider sx={{ my: 3 }} />
 
