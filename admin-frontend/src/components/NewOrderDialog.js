@@ -1279,6 +1279,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     setSelectedCustomer(null);
                     setCustomerSearch('');
                     setDeliveryStatus('completed');
+                    setSelectedDriver(''); // Clear driver assignment for walk-in orders
                   } else {
                     setSelectedBranch('');
                     setDeliveryLocation('');
@@ -2030,31 +2031,33 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             />
           )}
 
-          {/* Driver Selection - Always visible on mobile */}
-          <FormControl 
-            fullWidth
-            sx={{
-              display: { xs: 'block', sm: 'none' }, // Only show on mobile
-              width: '100%' // Ensure full width like Payment Status
-            }}
-          >
-            <InputLabel>Assign Driver</InputLabel>
-            <Select
-              value={selectedDriver}
-              label="Assign Driver"
+          {/* Driver Selection - Always visible on mobile, hidden for walk-in orders */}
+          {!isWalkIn && (
+            <FormControl 
+              fullWidth
               sx={{
-                width: '100%' // Match Payment Status width
+                display: { xs: 'block', sm: 'none' }, // Only show on mobile
+                width: '100%' // Ensure full width like Payment Status
               }}
-              onChange={(e) => setSelectedDriver(e.target.value)}
             >
-              <MenuItem value="">None</MenuItem>
-              {drivers.map((driver) => (
-                <MenuItem key={driver.id} value={driver.id}>
-                  {driver.name} - {driver.phoneNumber}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+              <InputLabel>Assign Driver</InputLabel>
+              <Select
+                value={selectedDriver}
+                label="Assign Driver"
+                sx={{
+                  width: '100%' // Match Payment Status width
+                }}
+                onChange={(e) => setSelectedDriver(e.target.value)}
+              >
+                <MenuItem value="">None</MenuItem>
+                {drivers.map((driver) => (
+                  <MenuItem key={driver.id} value={driver.id}>
+                    {driver.name} - {driver.phoneNumber}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
 
           {/* Delivery Status */}
           <FormControl fullWidth>
@@ -2083,8 +2086,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             </Select>
           </FormControl>
 
-          {/* Driver Selection (only if delivered) - Desktop only */}
-          {deliveryStatus === 'delivered' && (
+          {/* Driver Selection (only if delivered) - Desktop only, hidden for walk-in orders */}
+          {deliveryStatus === 'delivered' && !isWalkIn && (
             <FormControl 
               fullWidth
               sx={{
