@@ -413,7 +413,8 @@ async function initiateB2C(phoneNumber, amount, remarks = 'Driver withdrawal', o
       }
       
       if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
-        callbackUrl = 'https://dialadrink-backend-910510650031.us-central1.run.app/api/mpesa/b2c-callback';
+        // Use production backend URL
+        callbackUrl = 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api/mpesa/b2c-callback';
         console.log(`✅ Using production B2C callback URL: ${callbackUrl}`);
         return callbackUrl;
       }

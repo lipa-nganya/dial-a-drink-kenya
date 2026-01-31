@@ -133,7 +133,7 @@ async function loadFullApplication() {
             'https://dialadrink-admin-p6bkgryxqa-uc.a.run.app',
             'https://dialadrink-customer-910510650031.us-central1.run.app',
             'https://dialadrink-admin-910510650031.us-central1.run.app',
-            'https://dialadrink-backend-910510650031.us-central1.run.app',
+            // Note: dialadrink-backend-910510650031 is deprecated - use deliveryos-production-backend or deliveryos-development-backend
             'https://deliveryos-backend-910510650031.us-central1.run.app',
             'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
             'https://deliveryos-backend-805803410802.us-central1.run.app',

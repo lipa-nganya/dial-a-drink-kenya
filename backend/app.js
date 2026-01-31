@@ -34,7 +34,7 @@ const allowedOrigins = [
   // New service URLs - numeric format (Cloud Run can use either)
   'https://dialadrink-customer-910510650031.us-central1.run.app',
   'https://dialadrink-admin-910510650031.us-central1.run.app',
-  'https://dialadrink-backend-910510650031.us-central1.run.app',
+  // Note: dialadrink-backend-910510650031 is deprecated - use deliveryos-production-backend or deliveryos-development-backend
   // DeliveryOS backend service URLs (dev environment)
   'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app',
   // DeliveryOS backend service URL (dialadrink-production project)

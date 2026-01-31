@@ -6,7 +6,7 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
-ARG REACT_APP_API_URL=https://dialadrink-backend-910510650031.us-central1.run.app/api
+ARG REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}
 RUN npm run build
 
