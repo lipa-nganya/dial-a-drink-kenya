@@ -583,9 +583,15 @@ router.get('/:driverId', async (req, res) => {
         statuses = [status];
       }
       
+      // Valid enum values for order status (from Order model)
+      const validStatuses = ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'];
+      
+      // Filter out invalid enum values (e.g., 'preparing' which is not in the database enum)
+      statuses = statuses.filter(s => validStatuses.includes(s));
+      
       // For active orders (when status filter includes active statuses), also require driverAccepted = true
       // This ensures only accepted orders show in active list, regardless of status
-      const activeStatuses = ['pending', 'confirmed', 'preparing', 'out_for_delivery'];
+      const activeStatuses = ['pending', 'confirmed', 'out_for_delivery'];
       const isActiveQuery = statuses.some(s => activeStatuses.includes(s));
       
       console.log(`🔍 [ACTIVE ORDERS] Status filter: ${status}, isActiveQuery: ${isActiveQuery}, statuses:`, statuses);
@@ -601,7 +607,7 @@ router.get('/:driverId', async (req, res) => {
         console.log(`🔍 [ACTIVE ORDERS] Filtered statuses:`, filteredStatuses);
         console.log(`🔍 [ACTIVE ORDERS] Final where clause:`, JSON.stringify(whereClause, null, 2));
       } else {
-        // Non-active orders: just filter by status
+        // Non-active orders: just filter by status (already filtered for valid enum values)
         whereClause.status = { [Op.in]: statuses };
         console.log(`🔍 [ACTIVE ORDERS] Non-active query - no driverAccepted filter`);
       }

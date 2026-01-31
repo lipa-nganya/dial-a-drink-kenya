@@ -31,8 +31,8 @@ import {
   CreditCard,
   PhoneAndroid,
   Receipt,
-  Restaurant,
-  Inventory
+  Inventory,
+  ShoppingBag
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
@@ -248,9 +248,12 @@ const OrderTracking = ({ order: orderProp }) => {
     // Determine if payment step should be shown
     const needsPayment = paymentType === 'pay_now';
     const paymentPaid = paymentStatus === 'paid';
-
-    // Step 1: Order Placed (always shown, always completed unless cancelled)
     const orderPlacedCompleted = status !== 'cancelled';
+    const orderProcessed = status === 'confirmed' || status === 'out_for_delivery' || status === 'delivered' || status === 'completed';
+    const isOutForDelivery = status === 'out_for_delivery';
+    const isDelivered = status === 'delivered' || status === 'completed';
+
+    // Step 1: Order Placed (always shown)
     steps.push({
       id: 'order_placed',
       title: 'Order Placed',
@@ -261,62 +264,59 @@ const OrderTracking = ({ order: orderProp }) => {
       timestamp: formatTime(createdAt) || 'N/A'
     });
 
-    // Step 2: Payment Confirmed (only if payment is required)
-    if (needsPayment) {
-      steps.push({
-        id: 'payment_confirmed',
-        title: 'Payment Confirmed',
-        description: paymentPaid ? 'Payment received successfully.' : 'Awaiting confirmation...',
-        icon: <Payment />,
-        completed: paymentPaid,
-        isCurrent: !paymentPaid && status !== 'cancelled',
-        timestamp: formatTime(paymentConfirmedAt) || (paymentPaid ? formatTime(createdAt) : '')
-      });
-    }
+    // Step 2: Payment (always shown)
+    const paymentStepCompleted = paymentPaid;
+    const paymentStepCurrent = !paymentPaid && status !== 'cancelled';
+    steps.push({
+      id: 'payment',
+      title: 'Payment',
+      description: paymentPaid 
+        ? 'Payment received successfully.' 
+        : paymentType === 'pay_on_delivery'
+        ? 'Payment will be collected on delivery.'
+        : 'Complete your payment to proceed.',
+      icon: <Payment />,
+      completed: paymentStepCompleted,
+      isCurrent: paymentStepCurrent,
+      timestamp: formatTime(paymentConfirmedAt) || (paymentPaid ? formatTime(createdAt) : ''),
+      showPayButton: !paymentPaid && status !== 'cancelled'
+    });
 
-    // Step 3: Order Processed / Confirmed (only shown if order is confirmed or beyond)
-    const orderProcessed = status === 'confirmed' || status === 'out_for_delivery' || status === 'delivered' || status === 'completed';
-    if (orderProcessed || (needsPayment && paymentPaid)) {
-      steps.push({
-        id: 'order_processed',
-        title: 'Order Processed',
-        description: 'We are preparing your order.',
-        icon: <Restaurant />,
-        completed: orderProcessed,
-        isCurrent: status === 'confirmed' && (!needsPayment || paymentPaid),
-        timestamp: formatTime(confirmedAt) || (orderProcessed ? formatTime(createdAt) : '')
-      });
-    }
+    // Step 3: Order Processed (always shown)
+    steps.push({
+      id: 'order_processed',
+      title: 'Order Processed',
+      description: 'We are preparing your order.',
+      icon: <ShoppingBag />,
+      completed: orderProcessed,
+      isCurrent: status === 'confirmed' && (!needsPayment || paymentPaid),
+      timestamp: formatTime(confirmedAt) || (orderProcessed ? formatTime(createdAt) : '')
+    });
 
-    // Step 4: Ready to Pickup / Out for Delivery
-    const isOutForDelivery = status === 'out_for_delivery';
-    const isDelivered = status === 'delivered' || status === 'completed';
-    if (isOutForDelivery || isDelivered) {
-      steps.push({
-        id: 'ready_to_pickup',
-        title: 'Out for Delivery',
-        description: orderDetails.driver 
-          ? `Order#${orderDetails.id} from ${orderDetails.branch?.name || 'Dial A Drink'}.`
-          : 'Your order is on the way.',
-        icon: <LocalShipping />,
-        completed: isDelivered,
-        isCurrent: isOutForDelivery,
-        timestamp: formatTime(outForDeliveryAt) || (isOutForDelivery ? 'N/A' : '')
-      });
-    }
+    // Step 4: Out for Delivery (always shown)
+    const driverDescription = orderDetails.driver?.phoneNumber 
+      ? `Driver: ${orderDetails.driver.phoneNumber}`
+      : 'Driver details will be displayed here';
+    steps.push({
+      id: 'out_for_delivery',
+      title: 'Out for Delivery',
+      description: driverDescription,
+      icon: <LocalShipping />,
+      completed: isDelivered,
+      isCurrent: isOutForDelivery,
+      timestamp: formatTime(outForDeliveryAt) || (isOutForDelivery ? 'N/A' : '')
+    });
 
-    // Step 5: Delivered (if delivered)
-    if (isDelivered) {
-      steps.push({
-        id: 'delivered',
-        title: 'Delivered',
-        description: 'Your order has been delivered.',
-        icon: <CheckCircle />,
-        completed: true,
-        isCurrent: false,
-        timestamp: formatTime(deliveredAt) || 'N/A'
-      });
-    }
+    // Step 5: Delivered (always shown)
+    steps.push({
+      id: 'delivered',
+      title: 'Delivered',
+      description: 'Your order has been delivered.',
+      icon: <CheckCircle />,
+      completed: isDelivered,
+      isCurrent: false,
+      timestamp: formatTime(deliveredAt) || 'N/A'
+    });
 
     return steps;
   };
@@ -537,6 +537,7 @@ const OrderTracking = ({ order: orderProp }) => {
                 
                 {timelineSteps.map((step, index) => {
                   const isLast = index === timelineSteps.length - 1;
+<<<<<<< HEAD
               const stepColor = step.completed ? '#4CAF50' : step.isCurrent ? '#4CAF50' : '#9E9E9E';
               const stepBg = step.isCurrent ? '#4CAF50' : step.completed ? '#E8F5E9' : '#F5F5F5';
               const iconColor = step.completed || step.isCurrent ? '#4CAF50' : '#9E9E9E';
@@ -642,6 +643,133 @@ const OrderTracking = ({ order: orderProp }) => {
                 </Box>
               );
             })}
+=======
+                  const stepColor = step.completed ? '#4CAF50' : step.isCurrent ? '#4CAF50' : '#9E9E9E';
+                  const stepBg = step.isCurrent ? '#4CAF50' : step.completed ? '#E8F5E9' : '#F5F5F5';
+                  const iconColor = step.completed || step.isCurrent ? '#4CAF50' : '#9E9E9E';
+                  
+                  return (
+                    <Box
+                      key={step.id}
+                      sx={{
+                        position: 'relative',
+                        mb: isLast ? 0 : 4,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 2
+                      }}
+                    >
+                      {/* Status indicator circle */}
+                      <Box
+                        sx={{
+                          position: 'absolute',
+                          left: '-36px',
+                          top: '2px',
+                          width: '20px',
+                          height: '20px',
+                          borderRadius: '50%',
+                          backgroundColor: step.completed ? '#E8F5E9' : step.isCurrent ? '#4CAF50' : '#F5F5F5',
+                          border: step.completed ? 'none' : `2px solid ${stepColor}`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          zIndex: 1
+                        }}
+                      >
+                        {step.completed ? (
+                          <CheckCircle sx={{ color: '#4CAF50', fontSize: '14px' }} />
+                        ) : (
+                          <Box
+                            sx={{
+                              width: '8px',
+                              height: '8px',
+                              borderRadius: '50%',
+                              backgroundColor: step.isCurrent ? '#FFFFFF' : stepColor
+                            }}
+                          />
+                        )}
+                      </Box>
+
+                      {/* Step content */}
+                      <Box sx={{ flex: 1, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5, textAlign: 'left' }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
+                          <Box
+                            sx={{
+                              color: iconColor,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: '24px',
+                              height: '24px',
+                              opacity: step.completed || step.isCurrent ? 1 : 0.6,
+                              flexShrink: 0
+                            }}
+                          >
+                            {React.cloneElement(step.icon, { sx: { fontSize: '20px' } })}
+                          </Box>
+                          <Typography
+                            variant="h6"
+                            sx={{
+                              fontWeight: 600,
+                              color: '#424242',
+                              fontSize: '1rem',
+                              flex: 1,
+                              textAlign: 'left'
+                            }}
+                          >
+                            {step.title}
+                          </Typography>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: '#757575',
+                              fontSize: '0.875rem',
+                              fontWeight: 500,
+                              textAlign: 'right',
+                              flexShrink: 0
+                            }}
+                          >
+                            {step.timestamp}
+                          </Typography>
+                        </Box>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: '#757575',
+                            fontSize: '0.875rem',
+                            ml: 4.5,
+                            textAlign: 'left'
+                          }}
+                        >
+                          {step.description}
+                        </Typography>
+                        {/* Pay Now Button for Payment step */}
+                        {step.showPayButton && (
+                          <Box sx={{ ml: 4.5, mt: 1 }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              startIcon={<Payment />}
+                              onClick={handleOpenPaymentDialog}
+                              sx={{
+                                backgroundColor: '#00E0B8',
+                                color: '#0D0D0D',
+                                fontWeight: 600,
+                                textTransform: 'none',
+                                '&:hover': {
+                                  backgroundColor: '#00C4A3'
+                                }
+                              }}
+                            >
+                              Pay Now
+                            </Button>
+                          </Box>
+                        )}
+                      </Box>
+                    </Box>
+                  );
+                })}
+>>>>>>> main
               </Box>
             </Box>
           );
@@ -788,8 +916,8 @@ const OrderTracking = ({ order: orderProp }) => {
           </Box>
         )}
 
-        {/* Make Payment Button - Show for unpaid orders with pay_now payment type */}
-        {orderDetails.paymentStatus !== 'paid' && orderDetails.paymentType === 'pay_now' && orderDetails.status !== 'cancelled' && (
+        {/* Make Payment Button - Show for all unpaid orders */}
+        {orderDetails.paymentStatus !== 'paid' && orderDetails.status !== 'cancelled' && (
           <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
             <Button
               variant="contained"
