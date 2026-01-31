@@ -1447,6 +1447,37 @@ router.post('/find-all', async (req, res) => {
       if (phone) {
         console.log(`   Order customerPhone values:`, orders.map(o => ({ id: o.id, phone: o.customerPhone })));
         
+        // Rebuild phone variants for missing order debugging
+        const cleanedPhoneForDebug = phone.replace(/\D/g, '');
+        const normalizedPhoneForDebug = cleanedPhoneForDebug.startsWith('254') && cleanedPhoneForDebug.length === 12
+          ? cleanedPhoneForDebug
+          : cleanedPhoneForDebug.startsWith('0') && cleanedPhoneForDebug.length === 10
+          ? `254${cleanedPhoneForDebug.slice(1)}`
+          : cleanedPhoneForDebug.length === 9 && cleanedPhoneForDebug.startsWith('7')
+          ? `254${cleanedPhoneForDebug}`
+          : cleanedPhoneForDebug;
+        
+        const phoneVariantsForDebug = new Set();
+        phoneVariantsForDebug.add(cleanedPhoneForDebug);
+        phoneVariantsForDebug.add(normalizedPhoneForDebug);
+        
+        if (cleanedPhoneForDebug.startsWith('254')) {
+          phoneVariantsForDebug.add('0' + cleanedPhoneForDebug.slice(3));
+          phoneVariantsForDebug.add(cleanedPhoneForDebug.slice(3));
+        }
+        if (cleanedPhoneForDebug.startsWith('0') && cleanedPhoneForDebug.length === 10) {
+          phoneVariantsForDebug.add(`254${cleanedPhoneForDebug.slice(1)}`);
+          phoneVariantsForDebug.add(cleanedPhoneForDebug.slice(1));
+        }
+        if (cleanedPhoneForDebug.length === 9 && cleanedPhoneForDebug.startsWith('7')) {
+          phoneVariantsForDebug.add(`0${cleanedPhoneForDebug}`);
+          phoneVariantsForDebug.add(`254${cleanedPhoneForDebug}`);
+        }
+        const uniqueVariantsForDebug = Array.from(phoneVariantsForDebug).filter(Boolean);
+        const corePhoneDigitsForDebug = cleanedPhoneForDebug.length >= 9 
+          ? cleanedPhoneForDebug.slice(-9)
+          : cleanedPhoneForDebug;
+        
         // Check if specific orders are missing
         const missingOrderIds = [293, 304];
         const foundMissing = missingOrderIds.filter(id => orderIds.includes(id));
@@ -1470,16 +1501,43 @@ router.post('/find-all', async (req, res) => {
             console.log(`   Order ${missingOrder.id}:`);
             console.log(`     Stored phone: "${missingOrder.customerPhone}" (cleaned: "${missingPhone}")`);
             console.log(`     Search phone: "${phone}" (cleaned: "${searchPhone}")`);
-            console.log(`     Search variants: ${uniqueVariants.join(', ')}`);
-            console.log(`     Core digits match: ${missingPhone.includes(corePhoneDigits) || corePhoneDigits.includes(missingPhone) ? '✅ YES' : '❌ NO'}`);
-            console.log(`     Any variant match: ${uniqueVariants.some(v => missingPhone.includes(v) || v.includes(missingPhone)) ? '✅ YES' : '❌ NO'}`);
+            console.log(`     Search variants: ${uniqueVariantsForDebug.join(', ')}`);
+            console.log(`     Core digits match: ${missingPhone.includes(corePhoneDigitsForDebug) || corePhoneDigitsForDebug.includes(missingPhone) ? '✅ YES' : '❌ NO'}`);
+            console.log(`     Any variant match: ${uniqueVariantsForDebug.some(v => missingPhone.includes(v) || v.includes(missingPhone)) ? '✅ YES' : '❌ NO'}`);
           });
         }
       }
     } else {
       console.log(`   ⚠️  No orders found. Check if phone number format matches stored format.`);
       if (phone) {
-        console.log(`   Searched with variants: ${uniqueVariants.join(', ')}`);
+        // Rebuild phone variants for logging
+        const cleanedPhoneForLog = phone.replace(/\D/g, '');
+        const normalizedPhoneForLog = cleanedPhoneForLog.startsWith('254') && cleanedPhoneForLog.length === 12
+          ? cleanedPhoneForLog
+          : cleanedPhoneForLog.startsWith('0') && cleanedPhoneForLog.length === 10
+          ? `254${cleanedPhoneForLog.slice(1)}`
+          : cleanedPhoneForLog.length === 9 && cleanedPhoneForLog.startsWith('7')
+          ? `254${cleanedPhoneForLog}`
+          : cleanedPhoneForLog;
+        
+        const phoneVariantsForLog = new Set();
+        phoneVariantsForLog.add(cleanedPhoneForLog);
+        phoneVariantsForLog.add(normalizedPhoneForLog);
+        
+        if (cleanedPhoneForLog.startsWith('254')) {
+          phoneVariantsForLog.add('0' + cleanedPhoneForLog.slice(3));
+          phoneVariantsForLog.add(cleanedPhoneForLog.slice(3));
+        }
+        if (cleanedPhoneForLog.startsWith('0') && cleanedPhoneForLog.length === 10) {
+          phoneVariantsForLog.add(`254${cleanedPhoneForLog.slice(1)}`);
+          phoneVariantsForLog.add(cleanedPhoneForLog.slice(1));
+        }
+        if (cleanedPhoneForLog.length === 9 && cleanedPhoneForLog.startsWith('7')) {
+          phoneVariantsForLog.add(`0${cleanedPhoneForLog}`);
+          phoneVariantsForLog.add(`254${cleanedPhoneForLog}`);
+        }
+        const uniqueVariantsForLog = Array.from(phoneVariantsForLog).filter(Boolean);
+        console.log(`   Searched with variants: ${uniqueVariantsForLog.join(', ')}`);
       }
     }
 
