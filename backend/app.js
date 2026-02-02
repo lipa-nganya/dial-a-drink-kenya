@@ -72,66 +72,55 @@ const allowedOrigins = [
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   
-  // Check if origin should be allowed (same logic as corsOptions)
-  if (origin) {
-    const isAllowed = 
-      allowedOrigins.includes(origin) ||
-      origin.includes('.netlify.app') ||
-      origin.includes('.thewolfgang.tech') ||
-      origin.includes('.ruakadrinksdelivery.co.ke') ||
-      origin.includes('.drinksdeliverykenya.com') ||
-      origin.includes('.run.app') || // Cloud Run services (e.g., deliveryos-admin-frontend-*.run.app)
-      origin === 'https://thewolfgang.tech';
+  // Helper function to check if origin is allowed
+  const isOriginAllowed = (originToCheck) => {
+    if (!originToCheck) return false;
+    return (
+      allowedOrigins.includes(originToCheck) ||
+      originToCheck.includes('.netlify.app') ||
+      originToCheck.includes('.thewolfgang.tech') ||
+      originToCheck.includes('.ruakadrinksdelivery.co.ke') ||
+      originToCheck.includes('.drinksdeliverykenya.com') ||
+      originToCheck.includes('.run.app') || // Cloud Run services (e.g., deliveryos-admin-frontend-*.run.app)
+      originToCheck === 'https://thewolfgang.tech'
+    );
+  };
+  
+  // Handle preflight OPTIONS requests FIRST
+  if (req.method === 'OPTIONS') {
+    console.log(`🔒 [CORS] OPTIONS preflight for origin: ${origin || 'none'}, path: ${req.path}`);
     
-    if (isAllowed) {
-      // Explicitly set CORS headers FIRST
+    if (origin && isOriginAllowed(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
       res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
-      
-      // Log for debugging (always log for thewolfgang.tech)
-      if (origin.includes('thewolfgang.tech')) {
-        console.log(`🔒 [CORS] Headers set for origin: ${origin}`);
-      }
+      res.setHeader('Access-Control-Max-Age', '86400');
+      console.log(`🔒 [CORS] OPTIONS headers set for origin: ${origin}`);
+      return res.status(204).end();
     } else {
-      // Log when origin is blocked for debugging
-      console.log(`🚫 [CORS] Origin blocked: ${origin}`);
+      console.warn(`🚫 [CORS] OPTIONS preflight blocked for origin: ${origin || 'none'}`);
+      // Still return 204, but without CORS headers
+      return res.status(204).end();
     }
   }
   
-  // Handle preflight OPTIONS requests
-  if (req.method === 'OPTIONS') {
-    const origin = req.headers.origin || 'none';
-    console.log(`🔒 [CORS] OPTIONS preflight for origin: ${origin}, path: ${req.path}`);
+  // For all other requests, set CORS headers if origin is allowed
+  if (origin && isOriginAllowed(origin)) {
+    // Explicitly set CORS headers FIRST
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
     
-    // Check if origin should be allowed (same logic as above)
-    let isAllowed = false;
-    if (origin && origin !== 'none') {
-      isAllowed = 
-        allowedOrigins.includes(origin) ||
-        origin.includes('.netlify.app') ||
-        origin.includes('.thewolfgang.tech') ||
-        origin.includes('.ruakadrinksdelivery.co.ke') ||
-        origin.includes('.drinksdeliverykenya.com') ||
-        origin.includes('.run.app') ||
-        origin === 'https://thewolfgang.tech';
-      
-      if (isAllowed) {
-        res.setHeader('Access-Control-Allow-Origin', origin);
-        res.setHeader('Access-Control-Allow-Credentials', 'true');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-        res.setHeader('Access-Control-Max-Age', '86400');
-        console.log(`🔒 [CORS] OPTIONS headers set for origin: ${origin}`);
-      } else {
-        console.warn(`🚫 [CORS] OPTIONS preflight blocked for origin: ${origin}`);
-      }
+    // Log for debugging (always log for thewolfgang.tech)
+    if (origin.includes('thewolfgang.tech')) {
+      console.log(`🔒 [CORS] Headers set for origin: ${origin}, path: ${req.path}`);
     }
-    
-    // Always return 204 for OPTIONS, but headers are only set if allowed
-    return res.status(204).end();
+  } else if (origin) {
+    // Log when origin is blocked for debugging
+    console.log(`🚫 [CORS] Origin blocked: ${origin}, path: ${req.path}`);
   }
   
   next();
