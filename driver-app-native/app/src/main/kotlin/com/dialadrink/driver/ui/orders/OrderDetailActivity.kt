@@ -7,6 +7,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -16,8 +17,10 @@ import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.ConfirmCashPaymentRequest
 import com.dialadrink.driver.data.model.InitiatePaymentRequest
 import com.dialadrink.driver.data.model.Order
+import com.dialadrink.driver.data.model.OrderPaymentStkPushRequest
 import com.dialadrink.driver.data.model.UpdateOrderStatusRequest
 import com.dialadrink.driver.databinding.ActivityOrderDetailBinding
+import android.view.LayoutInflater
 import com.dialadrink.driver.services.SocketService
 import com.dialadrink.driver.utils.SharedPrefs
 import com.google.gson.Gson
@@ -306,10 +309,18 @@ class OrderDetailActivity : AppCompatActivity() {
                         status != "cancelled" && 
                         order.cancellationRequested != true
         
+        // Show "Send Cash Submission" for completed, paid Pay on Delivery (cash) orders so driver can remit via M-Pesa.
+        // Use inclusive checks so button shows even if API omits paymentType/paymentMethod (e.g. null treated as eligible).
+        val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
+        val isCashPayment = order.paymentMethod == null || order.paymentMethod.lowercase() == "cash"
+        val isCompletedAndPaid = status == "completed" && (order.paymentStatus?.lowercase() == "paid")
+        val showSubmitCash = isCompletedAndPaid && isPayOnDelivery && isCashPayment
+        
         binding.outForDeliveryButton.visibility = if (showOutForDelivery) View.VISIBLE else View.GONE
         binding.deliveredButton.visibility = if (showDelivered) View.VISIBLE else View.GONE
         binding.receivedCashButton.visibility = if (showReceivedCash) View.VISIBLE else View.GONE
         binding.cancelOrderButton.visibility = if (canCancel) View.VISIBLE else View.GONE
+        binding.submitCashButton.visibility = if (showSubmitCash) View.VISIBLE else View.GONE
         
         // Show cancellation status if requested
         if (order.cancellationRequested == true) {
@@ -523,6 +534,7 @@ class OrderDetailActivity : AppCompatActivity() {
         binding.deliveredButton.setOnClickListener { updateStatus("delivered") }
         binding.receivedCashButton.setOnClickListener { showPaymentOptions() }
         binding.cancelOrderButton.setOnClickListener { showCancelOrderDialog() }
+        binding.submitCashButton.setOnClickListener { showOrderPaymentSubmitDialog() }
     }
     
     private fun showCancelOrderDialog() {
@@ -588,6 +600,149 @@ class OrderDetailActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Toast.makeText(this, "Unable to make call", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    private fun showOrderPaymentSubmitDialog() {
+        val driverId = SharedPrefs.getDriverId(this) ?: run {
+            Toast.makeText(this, "Driver ID not found", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val driverPhone = SharedPrefs.getDriverPhone(this) ?: ""
+        binding.loadingProgress.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val ordersResponse = ApiClient.getApiService().getOrdersForOrderPayment(driverId)
+                if (!ordersResponse.isSuccessful || ordersResponse.body()?.success != true) {
+                    runOnUiThread {
+                        binding.loadingProgress.visibility = View.GONE
+                        Toast.makeText(this@OrderDetailActivity, "Could not load order payment details", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
+                }
+                val orders = ordersResponse.body()?.data?.orders ?: emptyList()
+                val orderPayment = orders.find { it.orderId == orderId }
+                runOnUiThread {
+                    binding.loadingProgress.visibility = View.GONE
+                    if (orderPayment == null) {
+                        Toast.makeText(this@OrderDetailActivity, "This order is not eligible or already submitted", Toast.LENGTH_LONG).show()
+                        return@runOnUiThread
+                    }
+                    val dialogView = LayoutInflater.from(this@OrderDetailActivity).inflate(R.layout.dialog_order_payment_submit, null)
+                    val amountEdit = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.amountEditText)
+                    val phoneEdit = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.phoneEditText)
+                    val breakdownText = dialogView.findViewById<TextView>(R.id.amountBreakdownText)
+                    amountEdit.setText(String.format("%.2f", orderPayment.totalToSubmit))
+                    phoneEdit.setText(driverPhone)
+                    breakdownText.text = getString(
+                        R.string.order_payment_breakdown,
+                        String.format("%.2f", orderPayment.itemsTotal),
+                        String.format("%.2f", orderPayment.savings),
+                        String.format("%.2f", orderPayment.totalToSubmit)
+                    )
+                    val dialog = AlertDialog.Builder(this@OrderDetailActivity, R.style.Theme_DialADrinkDriver_AlertDialog)
+                        .setView(dialogView)
+                        .setCancelable(true)
+                        .create()
+                    dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.dialogCancelButton).setOnClickListener { dialog.dismiss() }
+                    dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.dialogSubmitButton).setOnClickListener {
+                        val phone = phoneEdit.text.toString().trim()
+                        if (phone.isEmpty()) {
+                            Toast.makeText(this@OrderDetailActivity, "Enter Safaricom number", Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        dialog.dismiss()
+                        submitOrderPaymentStkPush(driverId, orderPayment.totalToSubmit, phone)
+                    }
+                    dialog.show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading order payment", e)
+                runOnUiThread {
+                    binding.loadingProgress.visibility = View.GONE
+                    Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun submitOrderPaymentStkPush(driverId: Int, amount: Double, phoneNumber: String) {
+        binding.loadingProgress.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.getApiService().orderPaymentStkPush(
+                    driverId,
+                    OrderPaymentStkPushRequest(orderId = orderId, phoneNumber = phoneNumber)
+                )
+                runOnUiThread { binding.loadingProgress.visibility = View.GONE }
+                if (!response.isSuccessful || response.body()?.success != true) {
+                    val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Failed to send M-Pesa prompt"
+                    runOnUiThread { Toast.makeText(this@OrderDetailActivity, errorMsg, Toast.LENGTH_LONG).show() }
+                    return@launch
+                }
+                val checkoutRequestID = response.body()?.data?.checkoutRequestID
+                runOnUiThread {
+                    Toast.makeText(this@OrderDetailActivity, "Enter your M-Pesa PIN on your phone", Toast.LENGTH_LONG).show()
+                }
+                if (!checkoutRequestID.isNullOrBlank()) {
+                    pollOrderPaymentResult(checkoutRequestID)
+                } else {
+                    runOnUiThread {
+                        loadOrderDetails()
+                        Toast.makeText(this@OrderDetailActivity, "Payment initiated. Check your phone for M-Pesa prompt.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Order payment STK push error", e)
+                runOnUiThread {
+                    binding.loadingProgress.visibility = View.GONE
+                    Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun pollOrderPaymentResult(checkoutRequestID: String) {
+        var pollCount = 0
+        val maxPolls = 40
+        val handler = Handler(Looper.getMainLooper())
+        fun poll() {
+            pollCount++
+            lifecycleScope.launch {
+                try {
+                    val response = ApiClient.getApiService().pollMpesaTransaction(checkoutRequestID)
+                    val status = response.body()?.status
+                    val paymentStatus = response.body()?.paymentStatus
+                    if (status == "completed" || paymentStatus == "paid") {
+                        handler.removeCallbacksAndMessages(null)
+                        runOnUiThread {
+                            loadOrderDetails()
+                            Toast.makeText(this@OrderDetailActivity, "Order payment submitted successfully", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
+                    }
+                    if (pollCount >= maxPolls) {
+                        handler.removeCallbacksAndMessages(null)
+                        runOnUiThread {
+                            loadOrderDetails()
+                            Toast.makeText(this@OrderDetailActivity, "Payment status unknown. Check your wallet or try again.", Toast.LENGTH_LONG).show()
+                        }
+                        return@launch
+                    }
+                    handler.postDelayed({ poll() }, 3000)
+                } catch (e: Exception) {
+                    if (pollCount >= maxPolls) {
+                        handler.removeCallbacksAndMessages(null)
+                        runOnUiThread {
+                            loadOrderDetails()
+                            Toast.makeText(this@OrderDetailActivity, "Payment check failed. Refresh to see status.", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        handler.postDelayed({ poll() }, 3000)
+                    }
+                }
+            }
+        }
+        handler.postDelayed({ poll() }, 3000)
     }
     
     private fun navigateToLocation(address: String, latitude: Double?, longitude: Double?) {

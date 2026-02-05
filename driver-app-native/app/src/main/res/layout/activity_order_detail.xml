@@ -334,6 +334,20 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/deliveredButton" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/submitCashButton"
+            android:layout_width="0dp"
+            android:layout_height="56dp"
+            android:layout_marginTop="24dp"
+            android:text="Send Cash Submission"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:backgroundTint="#4CAF50"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/statusBadge"
+            android:visibility="gone" />
+
         <ProgressBar
             android:id="@+id/loadingProgress"
             android:layout_width="wrap_content"
