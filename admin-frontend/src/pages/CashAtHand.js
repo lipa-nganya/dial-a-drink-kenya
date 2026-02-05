@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -78,13 +78,72 @@ const CashAtHand = () => {
   const [rejectSubmission, setRejectSubmission] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  const fetchCashAtHand = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await api.get('/admin/cash-at-hand');
+      
+      if (response.data.success) {
+        setCashAtHand(response.data.cashAtHand || 0);
+        setBreakdown(response.data.breakdown || {});
+        const allSubmissions = response.data.submissions || [];
+        
+        // Check for new pending submissions before updating state
+        setSubmissions(prevSubmissions => {
+          const previousPendingCount = prevSubmissions.filter(s => s.status === 'pending').length;
+          const newPendingCount = allSubmissions.filter(s => s.status === 'pending').length;
+          
+          if (newPendingCount > previousPendingCount && previousPendingCount > 0) {
+            // Play notification sound for new pending submissions
+            try {
+              const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+              if (audioContext.state === 'suspended') {
+                audioContext.resume();
+              }
+              const oscillator = audioContext.createOscillator();
+              const gainNode = audioContext.createGain();
+              oscillator.connect(gainNode);
+              gainNode.connect(audioContext.destination);
+              oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+              oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.05);
+              gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+              oscillator.start(audioContext.currentTime);
+              oscillator.stop(audioContext.currentTime + 0.3);
+            } catch (error) {
+              console.warn('Could not play notification sound:', error);
+            }
+          }
+          
+          return allSubmissions;
+        });
+        
+        setPosOrders(response.data.posOrders || []);
+        
+        // Update pending submissions count in context
+        if (fetchPendingSubmissionsCount) {
+          fetchPendingSubmissionsCount();
+        }
+      } else {
+        setError(response.data.error || 'Failed to load cash at hand data');
+      }
+    } catch (error) {
+      console.error('Error fetching cash at hand:', error);
+      setError(error.response?.data?.error || error.message || 'Failed to load cash at hand data');
+    } finally {
+      setLoading(false);
+    }
+  }, [fetchPendingSubmissionsCount]);
+
   useEffect(() => {
     fetchCashAtHand();
     // Fetch pending submissions count on mount
     if (fetchPendingSubmissionsCount) {
       fetchPendingSubmissionsCount();
     }
-  }, [fetchPendingSubmissionsCount]);
+  }, [fetchCashAtHand, fetchPendingSubmissionsCount]);
 
   const fetchOrdersForSelection = async () => {
     try {
@@ -196,60 +255,6 @@ const CashAtHand = () => {
     }
   };
 
-  const fetchCashAtHand = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const response = await api.get('/admin/cash-at-hand');
-      
-      if (response.data.success) {
-        setCashAtHand(response.data.cashAtHand || 0);
-        setBreakdown(response.data.breakdown || {});
-        const allSubmissions = response.data.submissions || [];
-        setSubmissions(allSubmissions);
-        setPosOrders(response.data.posOrders || []);
-        
-        // Check for new pending submissions and play sound if count increased
-        const previousPendingCount = submissions.filter(s => s.status === 'pending').length;
-        const newPendingCount = allSubmissions.filter(s => s.status === 'pending').length;
-        
-        if (newPendingCount > previousPendingCount && previousPendingCount > 0) {
-          // Play notification sound for new pending submissions
-          try {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioContext.state === 'suspended') {
-              audioContext.resume();
-            }
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
-            oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.05);
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
-            oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.3);
-          } catch (error) {
-            console.warn('Could not play notification sound:', error);
-          }
-        }
-        
-        // Update pending submissions count in context
-        if (fetchPendingSubmissionsCount) {
-          fetchPendingSubmissionsCount();
-        }
-      } else {
-        setError(response.data.error || 'Failed to load cash at hand data');
-      }
-    } catch (error) {
-      console.error('Error fetching cash at hand:', error);
-      setError(error.response?.data?.error || error.message || 'Failed to load cash at hand data');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const getApproveRejectEndpoint = (item) => {
     const id = item.id;
