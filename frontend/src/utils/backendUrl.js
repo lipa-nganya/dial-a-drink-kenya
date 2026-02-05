@@ -13,7 +13,21 @@ export const getBackendUrl = () => {
     return 'http://localhost:5001';
   }
   
-  // Production backend URL (used for all hosted environments)
+  // Production sites (ruakadrinksdelivery.co.ke, drinksdeliverykenya.com)
+  const isProductionSite = 
+    hostname.includes('ruakadrinksdelivery.co.ke') ||
+    hostname.includes('drinksdeliverykenya.com');
+  if (isProductionSite) {
+    return 'https://deliveryos-production-backend-805803410802.us-central1.run.app';
+  }
+  
+  // Development sites (thewolfgang.tech)
+  const isDevSite = hostname.includes('thewolfgang.tech');
+  if (isDevSite) {
+    return 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+  }
+  
+  // Fallback: Production backend URL (used for other hosted environments)
   return 'https://deliveryos-production-backend-805803410802.us-central1.run.app';
 };
 
