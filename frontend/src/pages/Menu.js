@@ -40,6 +40,7 @@ const Menu = () => {
   }, []);
 
   // Scroll detection: fix search only, collapse categories (categories hide after 200px scroll)
+  // Updated: 2026-02-05 - Ensure categories menu hiding works correctly
   useEffect(() => {
     let ticking = false;
     
