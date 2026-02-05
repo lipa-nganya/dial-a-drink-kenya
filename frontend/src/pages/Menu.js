@@ -39,7 +39,7 @@ const Menu = () => {
     fetchData();
   }, []);
 
-  // Scroll detection: fix search only, collapse categories
+  // Scroll detection: fix search only, collapse categories (categories hide after 200px scroll)
   useEffect(() => {
     let ticking = false;
     
