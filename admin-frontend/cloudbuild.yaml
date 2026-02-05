@@ -1,8 +1,8 @@
-# Cloud Build configuration for Admin Frontend
-# This file enables automatic deployments from GitHub to Cloud Run
+# Cloud Build configuration for Admin Frontend - Production
+# This file enables automatic deployments from GitHub main branch to Cloud Run
 
 steps:
-  # Build the container image
+  # Build the container image with production backend URL
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
@@ -25,7 +25,7 @@ steps:
       - 'push'
       - 'gcr.io/$PROJECT_ID/deliveryos-admin:latest'
 
-  # Deploy container image to Cloud Run
+  # Deploy container image to Cloud Run (production)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
