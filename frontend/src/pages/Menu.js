@@ -255,7 +255,6 @@ const Menu = () => {
           transform: isScrolled ? 'translateX(-50%)' : 'none',
           zIndex: isScrolled ? 100 : 'auto',
           width: isScrolled ? 'calc(100% - 32px)' : '100%',
-          maxWidth: 500,
           backgroundColor: isScrolled ? colors.background : 'transparent',
           boxShadow: isScrolled ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
           borderRadius: isScrolled ? 2 : 0,
