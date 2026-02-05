@@ -31,7 +31,6 @@ import {
   CreditCard,
   PhoneAndroid,
   Receipt,
-  Inventory,
   ShoppingBag
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
@@ -541,7 +540,6 @@ const OrderTracking = ({ order: orderProp }) => {
                 {timelineSteps.map((step, index) => {
                   const isLast = index === timelineSteps.length - 1;
                   const stepColor = step.completed ? '#4CAF50' : step.isCurrent ? '#4CAF50' : '#9E9E9E';
-                  const stepBg = step.isCurrent ? '#4CAF50' : step.completed ? '#E8F5E9' : '#F5F5F5';
                   const iconColor = step.completed || step.isCurrent ? '#4CAF50' : '#9E9E9E';
                   
                   return (
