@@ -18,9 +18,17 @@ BACKEND_SERVICE="deliveryos-backend"
 PESAPAL_CONSUMER_KEY="UDLDp9yShy4g0aLPNhT+2kZSX3L+KdsF"
 PESAPAL_CONSUMER_SECRET="XeRwDyreZTPde0H3AWlIiStXZD8="
 
+# M-Pesa Sandbox Credentials (Dev)
+MPESA_ENVIRONMENT="sandbox"
+MPESA_CONSUMER_KEY="FHZFIBqOrkVQRROotlEhiit3LWycwhsg2GgIxeS1BaE46Ecf"
+MPESA_CONSUMER_SECRET="BDosKnRkJOXzY2oIeAMp12g5mQHxjkPCA1k5drdUmrqsd2A9W3APkmgx5ThkLjws"
+MPESA_SHORTCODE="174379"
+MPESA_PASSKEY="bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
+
 # Backend URL (maintain existing)
 BACKEND_URL="https://deliveryos-backend-p6bkgryxqa-uc.a.run.app"
 BACKEND_API_URL="${BACKEND_URL}/api"
+MPESA_CALLBACK_URL="${BACKEND_URL}/api/mpesa/callback"
 
 # Frontend URLs (Netlify production)
 CUSTOMER_FRONTEND_URL="https://dialadrink.thewolfgang.tech"
@@ -81,14 +89,14 @@ echo "   FRONTEND_URL: $FRONTEND_URL_VALUE (preserved for CORS)"
 echo "   ADMIN_URL: $ADMIN_URL_VALUE (preserved for CORS)"
 echo ""
 
-# Deploy with PesaPal credentials and preserve existing env vars (especially FRONTEND_URL and ADMIN_URL for CORS)
+# Deploy with PesaPal and M-Pesa credentials and preserve existing env vars (especially FRONTEND_URL and ADMIN_URL for CORS)
 # CRITICAL: Always include FRONTEND_URL and ADMIN_URL to prevent CORS issues after deployment
 echo "🚀 Deploying to Cloud Run..."
 gcloud run deploy $BACKEND_SERVICE \
   --image gcr.io/$PROJECT_ID/$BACKEND_SERVICE \
   --platform managed \
   --allow-unauthenticated \
-  --update-env-vars "NODE_ENV=production,PESAPAL_CONSUMER_KEY=$PESAPAL_CONSUMER_KEY,PESAPAL_CONSUMER_SECRET=$PESAPAL_CONSUMER_SECRET,PESAPAL_ENVIRONMENT=sandbox,CUSTOMER_FRONTEND_URL=$CUSTOMER_FRONTEND_URL,FRONTEND_URL=$FRONTEND_URL_VALUE,ADMIN_URL=$ADMIN_URL_VALUE" \
+  --update-env-vars "NODE_ENV=production,PESAPAL_CONSUMER_KEY=$PESAPAL_CONSUMER_KEY,PESAPAL_CONSUMER_SECRET=$PESAPAL_CONSUMER_SECRET,PESAPAL_ENVIRONMENT=sandbox,CUSTOMER_FRONTEND_URL=$CUSTOMER_FRONTEND_URL,FRONTEND_URL=$FRONTEND_URL_VALUE,ADMIN_URL=$ADMIN_URL_VALUE,MPESA_ENVIRONMENT=$MPESA_ENVIRONMENT,MPESA_CONSUMER_KEY=$MPESA_CONSUMER_KEY,MPESA_CONSUMER_SECRET=$MPESA_CONSUMER_SECRET,MPESA_SHORTCODE=$MPESA_SHORTCODE,MPESA_PASSKEY=$MPESA_PASSKEY,MPESA_CALLBACK_URL=$MPESA_CALLBACK_URL" \
   --memory 512Mi \
   --timeout 300 \
   --add-cloudsql-instances "$PROJECT_ID:$REGION:drink-suite-db"
