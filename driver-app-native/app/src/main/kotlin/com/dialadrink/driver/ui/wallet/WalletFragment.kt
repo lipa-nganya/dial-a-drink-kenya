@@ -184,21 +184,18 @@ class WalletFragment : Fragment() {
         }
         
         val dialogView = layoutInflater.inflate(R.layout.dialog_withdraw_savings, null)
+        val amountInputLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.amountInputLayout)
         val amountEditText = dialogView.findViewById<EditText>(R.id.amountEditText)
-        val phoneEditText = dialogView.findViewById<EditText>(R.id.phoneEditText)
-        
-        phoneEditText.setText(driverPhone)
-        amountEditText.hint = "Max: KES ${String.format("%.2f", currentBalance)}"
+        amountInputLayout?.hint = "Amount (KES) — max ${String.format("%.0f", currentBalance)}"
         
         AlertDialog.Builder(requireContext(), R.style.Theme_DialADrinkDriver_AlertDialog)
             .setTitle("Withdraw Wallet Balance")
             .setView(dialogView)
             .setPositiveButton("Withdraw") { _, _ ->
-                val amountText = amountEditText.text.toString()
-                val phoneText = phoneEditText.text.toString()
+                val amountText = amountEditText.text.toString().trim()
                 
-                if (amountText.isBlank() || phoneText.isBlank()) {
-                    Toast.makeText(requireContext(), "Please enter amount and phone number", Toast.LENGTH_SHORT).show()
+                if (amountText.isBlank()) {
+                    Toast.makeText(requireContext(), "Please enter amount", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
                 
@@ -213,7 +210,7 @@ class WalletFragment : Fragment() {
                     return@setPositiveButton
                 }
                 
-                withdrawWallet(driverId, amount, phoneText)
+                withdrawWallet(driverId, amount, driverPhone.ifBlank { "" })
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -309,38 +306,34 @@ class WalletFragment : Fragment() {
         val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
         val wallet = data.wallet
         
-        // Display total wallet balance (Tips + 50% Delivery Fee for pay_now orders)
-        // This is the wallet.balance field
+        // Display total wallet balance (50% Delivery Fee for Pay Now orders)
         val totalBalance = wallet.availableBalance ?: wallet.balance
         binding.balanceText.text = formatter.format(totalBalance)
         
         // Enable/disable withdraw button based on balance
         binding.withdrawButton.isEnabled = totalBalance > 0
         
-        // Load and display wallet transactions (Tips + Delivery Payments only)
+        // Load and display wallet transactions (delivery payments only; no tips)
         loadTransactions(data)
     }
     
     private fun loadTransactions(data: DriverWalletResponse) {
         allTransactions.clear()
         
-        // Add tips (these are wallet credits)
-        data.recentTips?.forEach { tx ->
-            allTransactions.add(WalletTransactionItem(
-                type = "Tip",
-                amount = tx.amount,
-                description = tx.customerName ?: "Order #${tx.orderNumber}",
-                date = tx.date,
-                isPositive = true
-            ))
-        }
-        
-        // Add delivery payments (50% delivery fee for pay_now orders - these are wallet credits)
+        // Wallet: 50% delivery fee from Pay Now orders only (no tips)
+        val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
         data.recentDeliveryPayments?.forEach { tx ->
+            val orderInfo = buildString {
+                append("Order #${tx.orderNumber ?: tx.orderId ?: ""}")
+                tx.orderLocation?.takeIf { it.isNotBlank() }?.let { loc ->
+                    append(" · $loc")
+                }
+                append(" · Delivery fee (50% to wallet): ${formatter.format(tx.amount)}")
+            }
             allTransactions.add(WalletTransactionItem(
-                type = "Delivery Pay",
+                type = "Wallet",
                 amount = tx.amount,
-                description = tx.customerName ?: "Order #${tx.orderNumber}",
+                description = orderInfo,
                 date = tx.date,
                 isPositive = true
             ))

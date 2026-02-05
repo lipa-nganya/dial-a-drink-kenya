@@ -43,19 +43,39 @@ const Home = () => {
     fetchBrandFocusDrinks();
   }, []);
 
-  // Scroll detection for collapsing categories and fixing search
+  // Scroll detection for collapsing categories and fixing search (throttled to avoid stutter)
   useEffect(() => {
+    let rafId = null;
+    let lastScrollY = -1;
+    let lastShouldFix = null;
+    let lastShouldCollapse = null;
+
     const handleScroll = () => {
       const scrollY = window.scrollY || window.pageYOffset;
-      const shouldCollapse = scrollY > 200; // Collapse after 200px scroll
-      const shouldFixSearch = scrollY > 100; // Fix search after 100px scroll
-      
-      setIsScrolled(shouldFixSearch);
-      setCategoriesCollapsed(shouldCollapse);
+      if (scrollY === lastScrollY) return;
+      lastScrollY = scrollY;
+      const shouldCollapse = scrollY > 200;
+      const shouldFixSearch = scrollY > 100;
+
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (lastShouldFix !== shouldFixSearch) {
+          lastShouldFix = shouldFixSearch;
+          setIsScrolled(shouldFixSearch);
+        }
+        if (lastShouldCollapse !== shouldCollapse) {
+          lastShouldCollapse = shouldCollapse;
+          setCategoriesCollapsed(shouldCollapse);
+        }
+      });
     };
 
-    window.addEventListener('scroll', handleScroll);
-    return () => window.removeEventListener('scroll', handleScroll);
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // Fetch subcategories when category changes
@@ -206,13 +226,21 @@ const Home = () => {
   });
 
   return (
-    <Box sx={{ backgroundColor: colors.background, minHeight: '100vh' }}>
+    <Box
+      sx={{
+        backgroundColor: colors.background,
+        minHeight: '100vh',
+        overflow: 'visible',
+        overflowX: 'hidden'
+      }}
+    >
       {/* Hero Section */}
       <Box
         sx={{
           backgroundColor: colors.background,
           color: colors.textPrimary,
-          textAlign: 'center'
+          textAlign: 'center',
+          overflow: 'visible'
         }}
       >
         <Container maxWidth="lg">
@@ -369,22 +397,20 @@ const Home = () => {
             </Box>
           )}
 
-          {/* Categories Section - Hidden on scroll */}
+          {/* Categories Section - Hidden on scroll (no transform when collapsed to avoid scroll lock) */}
           <Box 
             sx={{ 
               position: 'sticky',
-              top: isScrolled ? { xs: '120px', sm: '128px' } : { xs: '56px', sm: '64px' }, // Adjust top when search is fixed
-              zIndex: 99, // Lower than AppBar (which is typically 1100)
+              top: isScrolled ? { xs: '120px', sm: '128px' } : { xs: '56px', sm: '64px' },
+              zIndex: 99,
               backgroundColor: colors.background,
               pt: categoriesCollapsed ? 0 : 1,
               pb: categoriesCollapsed ? 0 : 1,
               mb: categoriesCollapsed ? 0 : 2,
               borderBottom: categoriesCollapsed ? 'none' : `1px solid rgba(0, 0, 0, 0.1)`,
-              transition: 'all 0.3s ease-in-out',
-              transform: categoriesCollapsed ? 'translateY(-100%)' : 'translateY(0)',
+              transition: 'opacity 0.2s ease, max-height 0.2s ease',
               opacity: categoriesCollapsed ? 0 : 1,
               maxHeight: categoriesCollapsed ? 0 : 'none',
-              height: categoriesCollapsed ? 0 : 'auto',
               overflow: 'hidden',
               visibility: categoriesCollapsed ? 'hidden' : 'visible',
               pointerEvents: categoriesCollapsed ? 'none' : 'auto'

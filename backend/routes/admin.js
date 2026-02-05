@@ -4,7 +4,7 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
-const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+const { creditWalletsOnDeliveryCompletion, repairSavingsForOrder, repairPayNowCashAtHandOnly } = require('../utils/walletCredits');
 const mpesaService = require('../services/mpesa');
 const pushNotifications = require('../services/pushNotifications');
 const jwt = require('jsonwebtoken');
@@ -17,6 +17,14 @@ const {
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 const ADMIN_TOKEN_TTL = process.env.ADMIN_TOKEN_TTL || '12h';
+
+// Debug: log admin requests that look like order PATCH (e.g. territory)
+router.use((req, res, next) => {
+  if (req.method === 'PATCH' && req.path.includes('orders') && req.path.includes('territory')) {
+    console.log('[admin router] PATCH orders/.../territory:', req.method, req.path, req.baseUrl);
+  }
+  next();
+});
 
 const verifyAdmin = (req, res, next) => {
   const authHeader = req.headers.authorization || req.headers.Authorization;
@@ -1172,6 +1180,12 @@ router.get('/orders', verifyAdmin, async (req, res) => {
         as: 'driver',
         required: false,
         attributes: ['id', 'name', 'phoneNumber', 'status']
+      },
+      {
+        model: db.Territory,
+        as: 'territory',
+        required: false,
+        attributes: ['id', 'name']
       }
     ];
     
@@ -1211,6 +1225,56 @@ router.get('/orders', verifyAdmin, async (req, res) => {
         : (error.message || 'Failed to fetch orders');
       res.status(500).json({ error: errorMessage });
     }
+  }
+});
+
+/**
+ * Update order territory - FIRST PATCH /orders/... route so it always matches
+ * PATCH /api/admin/orders/:orderId/territory
+ */
+router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
+  console.log('🔍 [PATCH TERRITORY] Route hit:', req.method, req.path, req.params);
+  try {
+    const { orderId } = req.params;
+    const { territoryId } = req.body;
+
+    const order = await db.Order.findByPk(orderId);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const newTerritoryId = territoryId === '' || territoryId === null || territoryId === undefined ? null : parseInt(territoryId);
+
+    if (newTerritoryId !== null && isNaN(newTerritoryId)) {
+      return res.status(400).json({ error: 'Invalid territory ID' });
+    }
+
+    if (newTerritoryId !== null) {
+      const territory = await db.Territory.findByPk(newTerritoryId);
+      if (!territory) {
+        return res.status(404).json({ error: 'Territory not found' });
+      }
+    }
+
+    await order.update({ territoryId: newTerritoryId });
+
+    await order.reload({
+      include: [
+        { model: db.Territory, as: 'territory', required: false, attributes: ['id', 'name'] }
+      ]
+    });
+
+    const orderData = order.toJSON();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to('admin').emit('order-updated', { orderId: order.id, order: orderData });
+    }
+
+    res.json(orderData);
+  } catch (error) {
+    console.error('Error updating order territory:', error);
+    res.status(500).json({ error: 'Failed to update order territory' });
   }
 });
 
@@ -1946,17 +2010,9 @@ router.post('/orders/:id/prompt-payment', verifyAdmin, async (req, res) => {
           tipAmount
         } = await getOrderFinancialBreakdown(order.id);
 
-        const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-        ]);
-
-        const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
-        const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-        const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
-          ? Math.min(deliveryFee, configuredDriverPayAmount)
-          : 0;
-        const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
+        // Merchant no longer gets any delivery fee - 100% goes to driver
+        const driverPayAmount = order.driverId ? deliveryFee : 0;
+        const merchantDeliveryAmount = 0;
 
         const baseTransactionPayload = {
           orderId: order.id,
@@ -1997,36 +2053,8 @@ router.post('/orders/:id/prompt-payment', verifyAdmin, async (req, res) => {
           console.log(`✅ Payment transaction created for admin-initiated payment on Order #${order.id} (transaction #${paymentTransaction.id})`);
         }
 
-        const deliveryNote = driverPayAmount > 0
-          ? `Delivery fee portion for Order #${id}. Merchant share: KES ${merchantDeliveryAmount.toFixed(2)}. Driver payout KES ${driverPayAmount.toFixed(2)} pending.`
-          : `Delivery fee portion for Order #${id}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
-
-        let deliveryTransaction = await db.Transaction.findOne({
-          where: {
-            orderId: order.id,
-            transactionType: 'delivery_pay',
-            status: { [Op.ne]: 'completed' }
-          },
-          order: [['createdAt', 'DESC']]
-        });
-
-        if (deliveryTransaction) {
-          await deliveryTransaction.update({
-            ...baseTransactionPayload,
-            transactionType: 'delivery_pay',
-            amount: merchantDeliveryAmount,
-            notes: deliveryNote
-          });
-          console.log(`✅ Delivery fee transaction updated for Order #${id} (transaction #${deliveryTransaction.id})`);
-        } else {
-          deliveryTransaction = await db.Transaction.create({
-            ...baseTransactionPayload,
-            transactionType: 'delivery_pay',
-            amount: merchantDeliveryAmount,
-            notes: deliveryNote
-          });
-          console.log(`✅ Delivery fee transaction created for Order #${id} (transaction #${deliveryTransaction.id})`);
-        }
+        // No merchant delivery fee transaction - merchant gets 0% of delivery fee
+        // Driver delivery transaction is created by creditWalletsOnDeliveryCompletion on delivery completion
       } catch (transactionError) {
         console.error('❌ Error preparing admin-initiated transactions:', transactionError);
         // Don't fail the STK push if transaction creation fails - log it but continue
@@ -2051,6 +2079,37 @@ router.post('/orders/:id/prompt-payment', verifyAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error prompting payment:', error);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Repair missing savings credit for a completed Pay Now order (e.g. Order 347)
+// POST /api/admin/orders/:orderId/repair-savings
+router.post('/orders/:orderId/repair-savings', verifyAdmin, async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.orderId, 10);
+    if (!Number.isInteger(orderId) || orderId < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid orderId' });
+    }
+    const result = await repairSavingsForOrder(orderId);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Error repairing savings for order:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/admin/orders/:orderId/repair-cash-at-hand — apply missing Pay Now cash-at-hand reduction (50% delivery fee)
+router.post('/orders/:orderId/repair-cash-at-hand', verifyAdmin, async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.orderId, 10);
+    if (!Number.isInteger(orderId) || orderId < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid orderId' });
+    }
+    const result = await repairPayNowCashAtHandOnly(orderId);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Error repairing cash at hand for order:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -4678,10 +4737,11 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
     // Cash at hand = Cash from POS orders + Cash from drivers - Cash spent by admin
     const cashAtHand = Math.max(0, cashFromPOS + cashFromDrivers - cashSpent);
 
-    // Get all submissions (for display)
+    // Get all submissions (for display): include pending (so any admin can approve) plus approved/rejected tied to this admin
     const allSubmissions = await db.CashSubmission.findAll({
       where: {
         [Op.or]: [
+          { status: 'pending' }, // All pending submissions so any admin can see and approve
           { approvedBy: adminId, driverId: { [Op.ne]: null } }, // Driver submissions approved by this admin
           { adminId: adminId, driverId: null } // Admin submissions created by this admin
         ]

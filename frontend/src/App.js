@@ -190,12 +190,27 @@ function AppContent() {
   return (
     <MUIThemeProvider theme={muiTheme}>
       <CssBaseline />
-      <div className="App" style={{ backgroundColor: '#FFFFFF', minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <div
+        className="App"
+        style={{
+          backgroundColor: '#FFFFFF',
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         {isAdminRoute && !isAdminLogin && <AdminHeader />}
         {!isAdminRoute && <Header />}
         {!isAdminRoute && <FloatingHelpButton />}
         {!isAdminRoute && <FloatingCallButton />}
-        <Box component="main" sx={{ flexGrow: 1 }}>
+        <Box
+          component="main"
+          sx={{
+            flex: '1 0 auto',
+            // Reserve space for fixed header on desktop (64px); mobile uses sticky so no offset
+            pt: { xs: 0, md: '64px' },
+          }}
+        >
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />

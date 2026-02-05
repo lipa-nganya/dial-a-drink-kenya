@@ -391,24 +391,25 @@ class CompletedOrdersActivity : AppCompatActivity() {
         orders.forEach { order ->
             val orderDate = parseOrderDate(order.createdAt) ?: return@forEach
 
-            val orderAmount = order.totalAmount ?: 0.0
+            // Use delivery fee only for earnings (not order cost)
+            val deliveryFee = order.deliveryFee ?: 0.0
 
             // Count and sum for today
             if (orderDate >= todayStart.time) {
                 ordersToday++
-                earningsToday += orderAmount
+                earningsToday += deliveryFee
             }
 
             // Count and sum for this week
             if (orderDate >= weekStart.time) {
                 ordersWeek++
-                earningsWeek += orderAmount
+                earningsWeek += deliveryFee
             }
 
             // Count and sum for this month
             if (orderDate >= monthStart.time) {
                 ordersMonth++
-                earningsMonth += orderAmount
+                earningsMonth += deliveryFee
             }
         }
 

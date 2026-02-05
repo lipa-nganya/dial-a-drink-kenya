@@ -1,0 +1,17 @@
+# Exclude common files but keep images
+node_modules/
+npm-debug.log
+.git/
+.env
+coverage/
+logs/
+tmp/
+.DS_Store
+*.log
+
+# IMPORTANT: Explicitly include public/images directory
+# Do NOT exclude public/images - we need these!
+!public/
+!public/images/
+!public/images/products/
+!public/images/products/**

@@ -110,22 +110,19 @@ class WalletTransactionsFragment : Fragment() {
         val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
         val allTransactions = mutableListOf<WalletTransactionItem>()
         
-        // Combine all transaction types
-        data.recentTips?.forEach { tx ->
-            allTransactions.add(WalletTransactionItem(
-                type = "Tip",
-                amount = tx.amount,
-                description = tx.customerName ?: "Order #${tx.orderNumber}",
-                date = tx.date,
-                isPositive = true
-            ))
-        }
-        
+        // Wallet: 50% delivery fee from Pay Now orders only (no tips)
         data.recentDeliveryPayments?.forEach { tx ->
+            val orderInfo = buildString {
+                append("Order #${tx.orderNumber ?: tx.orderId ?: ""}")
+                tx.orderLocation?.takeIf { it.isNotBlank() }?.let { loc ->
+                    append(" · $loc")
+                }
+                append(" · Delivery fee (50% to wallet): ${formatter.format(tx.amount)}")
+            }
             allTransactions.add(WalletTransactionItem(
-                type = "Delivery Pay",
+                type = "Wallet",
                 amount = tx.amount,
-                description = tx.customerName ?: "Order #${tx.orderNumber}",
+                description = orderInfo,
                 date = tx.date,
                 isPositive = true
             ))

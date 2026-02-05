@@ -31,9 +31,11 @@ class CashAtHandFormFragment : Fragment() {
     private val binding get() = _binding!!
     
     private var selectedSubmissionType: String? = null
-    private val submissionTypes = listOf("Purchases", "Cash", "General Expense", "Payment to Office")
-    private val accountTypes = listOf("mpesa", "till", "bank", "paybill", "pdq")
-    private val submissionItems = mutableListOf<PurchaseItem>() // Store multiple items for all submission types
+    private val submissionTypes = listOf("Purchases", "Cash", "General Expense", "Payment to Office", "Order Payment")
+    private val accountTypes = listOf("cash", "mpesa", "till", "bank", "paybill", "pdq")
+    private val submissionItems = mutableListOf<PurchaseItem>()
+    private var ordersForOrderPayment = listOf<com.dialadrink.driver.data.model.OrderForOrderPayment>()
+    private var selectedOrderPaymentOrder: com.dialadrink.driver.data.model.OrderForOrderPayment? = null // Store multiple items for all submission types
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -126,7 +128,11 @@ class CashAtHandFormFragment : Fragment() {
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
                     if (data != null) {
-                        updateTotalCash(data.totalCashAtHand ?: 0.0)
+                        updateCashDisplay(
+                            actualCashAtHand = data.totalCashAtHand ?: 0.0,
+                            pendingCashAtHand = data.pendingCashAtHand,
+                            pendingSubmissionsTotal = data.pendingSubmissionsTotal
+                        )
                     }
                 }
             } catch (e: Exception) {
@@ -135,9 +141,29 @@ class CashAtHandFormFragment : Fragment() {
         }
     }
     
+    /**
+     * Updates the cash at hand card. Shows Actual cash at hand always; when there are pending
+     * submissions, also shows Pending cash at hand (value if those submissions were approved).
+     */
+    fun updateCashDisplay(
+        actualCashAtHand: Double,
+        pendingCashAtHand: Double? = null,
+        pendingSubmissionsTotal: Double? = null
+    ) {
+        val currencyFormat = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("en", "KE"))
+        binding.totalCashText.text = currencyFormat.format(actualCashAtHand).replace("KES", "KES")
+        val hasPending = (pendingSubmissionsTotal != null && pendingSubmissionsTotal > 0) ||
+            (pendingCashAtHand != null)
+        if (hasPending && pendingCashAtHand != null) {
+            binding.pendingCashAtHandSection.visibility = View.VISIBLE
+            binding.pendingCashAtHandText.text = currencyFormat.format(pendingCashAtHand).replace("KES", "KES")
+        } else {
+            binding.pendingCashAtHandSection.visibility = View.GONE
+        }
+    }
+    
     fun updateTotalCash(totalCash: Double) {
-        val formatted = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("en", "KE")).format(totalCash)
-        binding.totalCashText.text = formatted.replace("KES", "KES")
+        updateCashDisplay(actualCashAtHand = totalCash)
     }
     
     fun refresh() {
@@ -174,6 +200,7 @@ class CashAtHandFormFragment : Fragment() {
                     1 -> "cash"
                     2 -> "general_expense"
                     3 -> "payment_to_office"
+                    4 -> "order_payment"
                     else -> null
                 }
                 updateDynamicFields()
@@ -203,19 +230,20 @@ class CashAtHandFormFragment : Fragment() {
     
     private fun updateDynamicFields() {
         binding.supplierLayout.visibility = View.GONE
-        binding.itemLayout.visibility = View.VISIBLE // Show item/price for all types
-        binding.priceLayout.visibility = View.VISIBLE // Show item/price for all types
+        binding.itemLayout.visibility = View.VISIBLE
+        binding.priceLayout.visibility = View.VISIBLE
         binding.deliveryLocationLayout.visibility = View.GONE
         binding.recipientNameLayout.visibility = View.GONE
         binding.natureLayout.visibility = View.GONE
         binding.accountTypeLayout.visibility = View.GONE
+        binding.orderPaymentOrderLayout.visibility = View.GONE
         
         binding.dynamicFieldsContainer.visibility = View.VISIBLE
-        
-        // Clear items when type changes
         submissionItems.clear()
         binding.itemEditText.text?.clear()
         binding.priceEditText.text?.clear()
+        selectedOrderPaymentOrder = null
+        binding.amountEditText.text?.clear()
         
         when (selectedSubmissionType) {
             "purchases" -> {
@@ -228,14 +256,12 @@ class CashAtHandFormFragment : Fragment() {
             "cash" -> {
                 binding.itemLayout.hint = "Item/Description"
                 binding.priceLayout.hint = "Amount (KES)"
-                // Keep recipientName for backward compatibility, but items array is primary
                 binding.recipientNameLayout.visibility = View.VISIBLE
                 binding.addItemButton.visibility = View.VISIBLE
             }
             "general_expense" -> {
                 binding.itemLayout.hint = "Expense Item"
                 binding.priceLayout.hint = "Amount (KES)"
-                // Keep nature for backward compatibility, but items array is primary
                 binding.natureLayout.visibility = View.VISIBLE
                 binding.addItemButton.visibility = View.VISIBLE
             }
@@ -245,16 +271,50 @@ class CashAtHandFormFragment : Fragment() {
                 binding.accountTypeLayout.visibility = View.VISIBLE
                 binding.addItemButton.visibility = View.VISIBLE
             }
+            "order_payment" -> {
+                binding.itemLayout.visibility = View.GONE
+                binding.priceLayout.visibility = View.GONE
+                binding.addItemButton.visibility = View.GONE
+                binding.orderPaymentOrderLayout.visibility = View.VISIBLE
+                loadOrdersForOrderPayment()
+            }
             else -> {
                 binding.dynamicFieldsContainer.visibility = View.GONE
                 binding.addItemButton.visibility = View.GONE
             }
         }
         
-        // Update items list display
         updateItemsListDisplay()
-        
         applyFieldColors()
+    }
+    
+    private fun loadOrdersForOrderPayment() {
+        val driverId = SharedPrefs.getDriverId(requireContext()) ?: return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.getApiService().getOrdersForOrderPayment(driverId)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val list = response.body()?.data?.orders ?: emptyList()
+                    ordersForOrderPayment = list
+                    val labels = list.map { o ->
+                        "Order #${o.orderId} - ${o.customerName} - KES ${String.format("%.2f", o.totalToSubmit)} (Order: ${String.format("%.2f", o.itemsTotal)} + Savings: ${String.format("%.2f", o.savings)})"
+                    }
+                    (binding.orderPaymentOrderLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
+                        val adapter = ArrayAdapter(requireContext(), R.layout.item_dropdown_dark, labels)
+                        autoComplete.setAdapter(adapter)
+                        autoComplete.setOnItemClickListener { _, _, position, _ ->
+                            selectedOrderPaymentOrder = ordersForOrderPayment.getOrNull(position)
+                            selectedOrderPaymentOrder?.let { o ->
+                                binding.amountEditText.setText(String.format("%.2f", o.totalToSubmit))
+                            }
+                        }
+                        autoComplete.setText("", false)
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("CashAtHandForm", "Load orders for order payment failed", e)
+            }
+        }
     }
     
     private fun setupSubmitButton() {
@@ -437,7 +497,6 @@ class CashAtHandFormFragment : Fragment() {
                     return
                 }
                 
-                // Payment to office can have items array OR single amount
                 if (items.isEmpty()) {
                     val amountText = binding.amountEditText.text.toString().trim()
                     if (amountText.isEmpty()) {
@@ -461,6 +520,15 @@ class CashAtHandFormFragment : Fragment() {
                     Pair(totalAmount, detailsMap)
                 }
             }
+            "order_payment" -> {
+                val order = selectedOrderPaymentOrder
+                if (order == null) {
+                    binding.errorText.text = "Please select an order"
+                    binding.errorText.visibility = View.VISIBLE
+                    return
+                }
+                Pair(order.totalToSubmit, mapOf("orderId" to order.orderId))
+            }
             else -> {
                 binding.errorText.text = "Invalid submission type"
                 binding.errorText.visibility = View.VISIBLE
@@ -474,12 +542,14 @@ class CashAtHandFormFragment : Fragment() {
         
         lifecycleScope.launch {
             try {
+                val orderIdParam = if (selectedSubmissionType == "order_payment") selectedOrderPaymentOrder?.orderId else null
                 val response = ApiClient.getApiService().createCashSubmission(
                     driverId,
                     CreateCashSubmissionRequest(
                         submissionType = selectedSubmissionType!!,
                         amount = amount,
-                        details = details
+                        details = details,
+                        orderId = orderIdParam
                     )
                 )
                 
@@ -524,9 +594,11 @@ class CashAtHandFormFragment : Fragment() {
         binding.recipientNameEditText.text?.clear()
         binding.natureEditText.text?.clear()
         binding.accountTypeLayout.editText?.text?.clear()
+        binding.orderPaymentOrderLayout.editText?.text?.clear()
         binding.amountEditText.text?.clear()
         binding.errorText.visibility = View.GONE
         selectedSubmissionType = null
+        selectedOrderPaymentOrder = null
         submissionItems.clear()
         binding.dynamicFieldsContainer.visibility = View.GONE
         binding.addItemButton.visibility = View.GONE

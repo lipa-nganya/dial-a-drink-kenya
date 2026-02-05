@@ -46,11 +46,19 @@
                     android:textStyle="bold" />
 
                 <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="50% of delivery fee (Pay Now: M-Pesa/Pesapal)"
+                    android:textColor="@color/text_secondary_dark"
+                    android:textSize="12sp" />
+
+                <TextView
                     android:id="@+id/dailyLimitNote"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="You can withdraw up to KES 1,000 per day"
+                    android:text="Max KES 1,000 per day. Withdrawing reduces your cash at hand by the amount withdrawn."
                     android:textColor="@color/text_secondary_dark"
                     android:textSize="12sp"
                     android:background="@drawable/info_background"
@@ -81,6 +89,148 @@
             android:textStyle="bold"
             app:backgroundTint="@color/accent"
             app:cornerRadius="8dp" />
+
+        <!-- Tabs for Savings Transactions and Logs -->
+        <com.google.android.material.tabs.TabLayout
+            android:id="@+id/savingsTabs"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:tabMode="fixed"
+            app:tabGravity="fill"
+            app:tabTextColor="@color/text_secondary_dark"
+            app:tabSelectedTextColor="@color/accent"
+            app:tabIndicatorColor="@color/accent" />
+
+        <!-- Savings Transactions Tab Content -->
+        <LinearLayout
+            android:id="@+id/savingsTransactionsContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="visible">
+
+            <LinearLayout
+                android:id="@+id/savingsCreditsContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/savingsEmptyText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="No savings transactions yet"
+                android:textColor="@color/text_secondary_dark"
+                android:textSize="14sp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Logs Tab Content -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/logsTableContainer"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone"
+            app:cardBackgroundColor="@color/paper_dark"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="2dp"
+            app:strokeWidth="1dp"
+            app:strokeColor="@color/border_dark">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <!-- Table Header -->
+                <TableRow
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@color/accent"
+                    android:padding="12dp"
+                    android:minHeight="40dp">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="2"
+                        android:text="Description"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:paddingEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="Date"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="start"
+                        android:paddingEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="DBT"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="end"
+                        android:paddingEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="CRT"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="end"
+                        android:paddingEnd="8dp" />
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="BLC"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="end" />
+
+                </TableRow>
+
+                <!-- Table Body -->
+                <TableLayout
+                    android:id="@+id/logsTable"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:stretchColumns="*"
+                    android:shrinkColumns="*" />
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            android:id="@+id/logsEmptyText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:text="No logs yet"
+            android:textColor="@color/text_secondary_dark"
+            android:textSize="14sp"
+            android:visibility="gone" />
 
         <ProgressBar
             android:id="@+id/loadingProgress"

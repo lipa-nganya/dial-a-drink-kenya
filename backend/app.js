@@ -135,8 +135,39 @@ console.log('✅ CORS middleware applied (cors package + explicit headers fallba
 // CRITICAL: Compression must come AFTER CORS to avoid interfering with headers
 app.use(compression());
 
+// CRITICAL: Capture M-Pesa callback body BEFORE express.json() so we never lose it
+// M-Pesa POSTs to /api/mpesa/callback; we read the raw stream and store for parsing
+app.use((req, res, next) => {
+  const isMpesaCallback = req.method === 'POST' && (req.originalUrl === '/api/mpesa/callback' || req.originalUrl?.startsWith('/api/mpesa/callback'));
+  if (!isMpesaCallback) return next();
+  console.log('📥 M-Pesa callback request detected, capturing raw body...');
+  const chunks = [];
+  req.on('data', (chunk) => chunks.push(chunk));
+  req.on('end', () => {
+    const raw = chunks.length ? Buffer.concat(chunks).toString('utf8') : '';
+    req._rawMpesaCallbackBody = raw;
+    try {
+      req._parsedMpesaCallbackBody = (raw && raw.trim()) ? JSON.parse(raw) : null;
+    } catch (e) {
+      req._parsedMpesaCallbackBody = null;
+    }
+    console.log('📥 M-Pesa callback body captured:', raw.length, 'bytes', req._parsedMpesaCallbackBody ? '(parsed OK)' : '(parse failed or empty)');
+    next();
+  });
+  req.on('error', (err) => { console.error('❌ M-Pesa callback body read error:', err); next(err); });
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Restore M-Pesa callback body so the route sees it (express.json() would get empty stream)
+app.use((req, res, next) => {
+  if (req._parsedMpesaCallbackBody !== undefined) {
+    req.body = req._parsedMpesaCallbackBody != null ? req._parsedMpesaCallbackBody : (req.body || {});
+    delete req._parsedMpesaCallbackBody;
+  }
+  next();
+});
 
 // Global request timeout middleware - prevent requests from hanging indefinitely
 app.use((req, res, next) => {

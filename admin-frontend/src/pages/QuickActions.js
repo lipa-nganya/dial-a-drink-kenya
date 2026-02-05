@@ -32,7 +32,6 @@ import {
 import {
   Add,
   LocalShipping,
-  PendingActions,
   CheckCircle,
   Close,
   ArrowBack
@@ -73,25 +72,11 @@ const QuickActions = () => {
       icon: <LocalShipping />,
       name: 'Orders Without Driver',
       action: () => {
-        // Navigate to mobile-specific page on mobile, regular page on desktop
         const isMobile = window.innerWidth < 960;
         if (isMobile) {
           navigate('/orders/without-driver');
         } else {
           navigate('/orders?filter=no-driver');
-        }
-      }
-    },
-    {
-      icon: <PendingActions />,
-      name: 'Pending Orders',
-      action: () => {
-        // Navigate to mobile-specific page on mobile, regular page on desktop
-        const isMobile = window.innerWidth < 960;
-        if (isMobile) {
-          navigate('/orders/pending');
-        } else {
-          navigate('/orders?filter=pending');
         }
       }
     },
@@ -385,52 +370,94 @@ const QuickActions = () => {
           </CardContent>
         </Card>
 
-        <List sx={{ 
-          backgroundColor: colors.paper, 
-          borderRadius: 2, 
-          overflow: 'hidden',
-          width: { xs: '90%', sm: '100%' } // 10% narrower on mobile
-        }}>
-          {actions.map((action, index) => (
-            <React.Fragment key={action.name}>
-              <ListItem disablePadding>
-                <ListItemButton
-                  onClick={() => handleAction(action.action)}
+        <Box
+          sx={{
+            width: { xs: '90%', sm: '100%' },
+            maxWidth: 480,
+            mx: 'auto',
+            aspectRatio: '1',
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gridTemplateRows: '1fr 1fr',
+            gap: 2,
+          }}
+        >
+          {actions.map((action) => (
+            <Box
+              key={action.name}
+              sx={{
+                minWidth: 0,
+                minHeight: 0,
+                display: 'flex',
+              }}
+            >
+              <Card
+                component="button"
+                type="button"
+                onClick={() => handleAction(action.action)}
+                sx={{
+                  width: '100%',
+                  height: '100%',
+                  minHeight: 0,
+                  minWidth: 0,
+                  boxSizing: 'border-box',
+                  borderRadius: 3,
+                  backgroundColor: colors.paper,
+                  border: '1px solid',
+                  borderColor: colors.border,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1.5,
+                  p: 2,
+                  cursor: 'pointer',
+                  textAlign: 'center',
+                  boxShadow: 'none',
+                  transition: 'background-color 0.2s, border-color 0.2s, box-shadow 0.2s',
+                  '&:hover': {
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 224, 184, 0.08)',
+                    borderColor: colors.accentText,
+                    boxShadow: isDarkMode ? '0 4px 12px rgba(0, 224, 184, 0.15)' : '0 4px 12px rgba(0, 0, 0, 0.08)',
+                  },
+                  '&:active': {
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.18)' : 'rgba(0, 224, 184, 0.12)',
+                  },
+                }}
+              >
+                <Box
                   sx={{
-                    py: { xs: 1.8, sm: 2 }, // 10% smaller on mobile (2 * 0.9 = 1.8)
-                    '&:hover': {
-                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.05)',
-                    }
+                    color: colors.accentText,
+                    flexShrink: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    '& svg': {
+                      fontSize: { xs: '2.25rem', sm: '2.5rem' },
+                    },
                   }}
                 >
-                  <ListItemIcon sx={{ 
-                    color: colors.accentText, 
-                    minWidth: { xs: 36, sm: 40 }, // 10% smaller on mobile (40 * 0.9 = 36)
-                    '& svg': {
-                      fontSize: { xs: '1.8rem', sm: '2rem' } // 10% smaller on mobile (2rem * 0.9 = 1.8rem)
-                    }
-                  }}>
-                    {action.icon}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={
-                      <Typography 
-                        variant="body1" 
-                        sx={{ 
-                          fontWeight: 500,
-                          fontSize: { xs: '0.9rem', sm: '1rem' } // 10% smaller on mobile (1rem * 0.9 = 0.9rem)
-                        }}
-                      >
-                        {action.name}
-                      </Typography>
-                    }
-                  />
-                </ListItemButton>
-              </ListItem>
-              {index < actions.length - 1 && <Divider />}
-            </React.Fragment>
+                  {action.icon}
+                </Box>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontWeight: 600,
+                    color: colors.textPrimary,
+                    fontSize: { xs: '0.8rem', sm: '0.875rem' },
+                    lineHeight: 1.3,
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    whiteSpace: 'normal',
+                    width: '100%',
+                  }}
+                >
+                  {action.name}
+                </Typography>
+              </Card>
+            </Box>
           ))}
-        </List>
+        </Box>
       </Box>
 
       {/* New Order Dialog */}

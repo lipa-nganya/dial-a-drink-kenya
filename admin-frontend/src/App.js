@@ -30,7 +30,6 @@ import Customers from './pages/Customers';
 import Payables from './pages/Payables';
 import Copilot from './pages/Copilot';
 import SalesDateDetails from './pages/copilot/SalesDateDetails';
-import RiderDetails from './pages/copilot/RiderDetails';
 import RiderDetailsPage from './pages/RiderDetails';
 import CashAtHand from './pages/CashAtHand';
 import ResupplyCart from './pages/ResupplyCart';
@@ -395,7 +394,7 @@ function AppContent() {
                 element={
                   <PrivateRoute>
                     <AdminLayout>
-                      <RiderDetails />
+                      <RiderDetailsPage />
                     </AdminLayout>
                   </PrivateRoute>
                 }

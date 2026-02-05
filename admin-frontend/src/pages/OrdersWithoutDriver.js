@@ -22,12 +22,16 @@ import {
 import {
   ArrowBack,
   Edit,
-  LocalShipping
+  LocalShipping,
+  LocationOn,
+  Phone as PhoneIcon,
+  ShoppingCart,
+  ExpandMore,
+  ExpandLess
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
-import { getOrderStatusChipProps } from '../utils/chipStyles';
 
 const OrdersWithoutDriver = () => {
   const { isDarkMode, colors } = useTheme();
@@ -40,6 +44,7 @@ const OrdersWithoutDriver = () => {
   const [selectedDriverId, setSelectedDriverId] = useState('');
   const [drivers, setDrivers] = useState([]);
   const [updating, setUpdating] = useState(false);
+  const [expandedOrderId, setExpandedOrderId] = useState(null);
 
   useEffect(() => {
     fetchOrders();
@@ -127,8 +132,19 @@ const OrdersWithoutDriver = () => {
     }
   };
 
-  const getStatusChipProps = (status) => {
-    return getOrderStatusChipProps(status, isDarkMode);
+  const getPaymentStatusColor = (paymentStatus) => {
+    if (paymentStatus === 'paid') return 'success';
+    if (paymentStatus === 'unpaid') return 'error';
+    return 'default';
+  };
+
+  const toggleItemsExpand = (orderId) => {
+    setExpandedOrderId((prev) => (prev === orderId ? null : orderId));
+  };
+
+  const getOrderItems = (order) => {
+    const items = order.orderItems || order.items || [];
+    return Array.isArray(items) ? items : [];
   };
 
   return (
@@ -267,7 +283,7 @@ const OrdersWithoutDriver = () => {
                   </Typography>
                 </Box>
 
-                {/* Order Status - Full Row */}
+                {/* Delivery location - Full Row */}
                 <Box sx={{ mb: 1.5 }}>
                   <Typography 
                     variant="caption" 
@@ -278,13 +294,76 @@ const OrdersWithoutDriver = () => {
                       letterSpacing: '0.5px'
                     }}
                   >
-                    Order Status
+                    Delivery location
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: colors.textPrimary,
+                      fontSize: '0.95rem',
+                      mt: 0.5,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: 0.5
+                    }}
+                  >
+                    <LocationOn sx={{ fontSize: '1rem', mt: 0.25, flexShrink: 0 }} />
+                    {order.deliveryAddress || '—'}
+                  </Typography>
+                </Box>
+
+                {/* Customer phone - Full Row */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      color: colors.textSecondary,
+                      fontSize: '0.75rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}
+                  >
+                    Customer phone
+                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    component="a"
+                    href={order.customerPhone ? `tel:${order.customerPhone}` : undefined}
+                    sx={{ 
+                      color: colors.accentText,
+                      fontSize: '0.95rem',
+                      mt: 0.5,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      textDecoration: 'none',
+                      '&:hover': { textDecoration: 'underline' }
+                    }}
+                  >
+                    <PhoneIcon sx={{ fontSize: '1rem' }} />
+                    {order.customerPhone || '—'}
+                  </Typography>
+                </Box>
+
+                {/* Payment status - Full Row */}
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      color: colors.textSecondary,
+                      fontSize: '0.75rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}
+                  >
+                    Payment status
                   </Typography>
                   <Box sx={{ mt: 0.5 }}>
                     <Chip
-                      label={order.status || 'pending'}
+                      label={order.paymentStatus || '—'}
                       size="small"
-                      {...getStatusChipProps(order.status)}
+                      color={getPaymentStatusColor(order.paymentStatus)}
+                      sx={{ textTransform: 'capitalize' }}
                     />
                   </Box>
                 </Box>
@@ -316,6 +395,48 @@ const OrdersWithoutDriver = () => {
                     <LocalShipping sx={{ fontSize: '1.2rem' }} />
                     {order.driver?.name || 'No driver assigned'}
                   </Typography>
+                </Box>
+
+                {/* View items - expand or button */}
+                <Box sx={{ mb: 2 }}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    fullWidth
+                    startIcon={<ShoppingCart />}
+                    endIcon={expandedOrderId === order.id ? <ExpandLess /> : <ExpandMore />}
+                    onClick={() => toggleItemsExpand(order.id)}
+                    sx={{
+                      borderColor: colors.border,
+                      color: colors.textPrimary,
+                      fontSize: '0.85rem',
+                      textTransform: 'none',
+                      '&:hover': {
+                        borderColor: colors.accentText,
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.08)' : 'rgba(0, 224, 184, 0.06)'
+                      }
+                    }}
+                  >
+                    View items ({getOrderItems(order).length})
+                  </Button>
+                  {expandedOrderId === order.id && (
+                    <Box sx={{ mt: 1.5, pl: 1, borderLeft: `2px solid ${colors.border}` }}>
+                      {getOrderItems(order).length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">No items.</Typography>
+                      ) : (
+                        getOrderItems(order).map((item, idx) => (
+                          <Box key={item.id || idx} sx={{ py: 0.5, display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                            <Typography variant="body2" sx={{ color: colors.textPrimary }}>
+                              {item.drink?.name || 'Item'} × {item.quantity || 0}
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                              KES {Number(item.price || 0).toFixed(2)}
+                            </Typography>
+                          </Box>
+                        ))
+                      )}
+                    </Box>
+                  )}
                 </Box>
 
                 {/* Update Button - Full Row */}

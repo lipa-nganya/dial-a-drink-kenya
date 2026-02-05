@@ -15,6 +15,7 @@ export const useAdmin = () => {
 
 export const AdminProvider = ({ children }) => {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  const [pendingSubmissionsCount, setPendingSubmissionsCount] = useState(0);
   const [socket, setSocket] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
@@ -166,6 +167,32 @@ export const AdminProvider = ({ children }) => {
     }
   };
 
+  // Fetch pending cash submissions count (from drivers)
+  const fetchPendingSubmissionsCount = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        return;
+      }
+      const response = await api.get('/driver-wallet/admin/cash-submissions/all');
+      const allSubmissions = response.data?.data?.submissions || response.data?.submissions || [];
+      // Count all pending submissions (driver and admin) that need approval
+      const pendingCount = allSubmissions.filter(s => s.status === 'pending');
+      const previousCount = pendingSubmissionsCount;
+      const newCount = pendingCount.length;
+      setPendingSubmissionsCount(newCount);
+      
+      // Play notification sound if count increased
+      if (newCount > previousCount && previousCount > 0) {
+        playNotificationSound();
+      }
+    } catch (error) {
+      if (error.response?.status !== 401) {
+        console.error('Error fetching pending submissions count:', error);
+      }
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
     if (!token || !isAuthenticated) return;
@@ -222,16 +249,25 @@ export const AdminProvider = ({ children }) => {
       );
     });
 
+    // Listen for new cash submissions from drivers
+    newSocket.on('cash-submission-created', (data) => {
+      console.log('New cash submission received:', data);
+      playNotificationSound();
+      fetchPendingSubmissionsCount();
+    });
+
     setSocket(newSocket);
 
-    // Fetch initial pending orders count
+    // Fetch initial pending orders count and submissions count
     fetchPendingOrdersCount();
+    fetchPendingSubmissionsCount();
 
-    // Poll for pending orders count every 30 seconds as backup
+    // Poll for pending orders count and submissions count every 30 seconds as backup
     const pollInterval = setInterval(() => {
       // Check token still exists before polling
       if (localStorage.getItem('adminToken')) {
         fetchPendingOrdersCount();
+        fetchPendingSubmissionsCount();
       } else {
         clearInterval(pollInterval);
       }
@@ -270,6 +306,8 @@ export const AdminProvider = ({ children }) => {
     <AdminContext.Provider value={{ 
       pendingOrdersCount, 
       fetchPendingOrdersCount,
+      pendingSubmissionsCount,
+      fetchPendingSubmissionsCount,
       isAuthenticated,
       setIsAuthenticated,
       logout,

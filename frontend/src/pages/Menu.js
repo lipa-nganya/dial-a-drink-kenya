@@ -29,16 +29,17 @@ const Menu = () => {
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [displayedDrinks, setDisplayedDrinks] = useState([]);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  const itemsPerLoad = 20; // Number of items to load each time
+  const itemsPerLoad = 20; // Number of items to display each time
   const [itemsToShow, setItemsToShow] = useState(itemsPerLoad);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  // Scroll detection for collapsing categories and infinite scroll
+  // Scroll detection: fix search only, collapse categories
   useEffect(() => {
     let ticking = false;
     
@@ -46,8 +47,10 @@ const Menu = () => {
       if (!ticking) {
         window.requestAnimationFrame(() => {
           const scrollY = window.scrollY || window.pageYOffset;
-          const shouldCollapse = scrollY > 200; // Collapse after 200px scroll
+          const shouldFixSearch = scrollY > 100;
+          const shouldCollapse = scrollY > 200; // Categories disappear after 200px scroll
           
+          setIsScrolled(shouldFixSearch);
           setCategoriesCollapsed(shouldCollapse);
 
           // Infinite scroll: Load more when near bottom
@@ -59,11 +62,11 @@ const Menu = () => {
           if (scrollTop + windowHeight >= documentHeight - 400 && !isLoadingMore) {
             if (itemsToShow < filteredDrinks.length) {
               setIsLoadingMore(true);
-              // Simulate slight delay for smooth loading
+              // Small delay for smooth loading animation
               setTimeout(() => {
                 setItemsToShow(prev => Math.min(prev + itemsPerLoad, filteredDrinks.length));
                 setIsLoadingMore(false);
-              }, 200);
+              }, 150);
             }
           }
           
@@ -241,8 +244,24 @@ const Menu = () => {
           Our Menu
         </Typography>
 
-      {/* Search Bar */}
-      <Box sx={{ mb: 2 }}>
+      {/* Search Bar - fixed when scrolling; only this stays visible */}
+      <Box
+        sx={{
+          mb: 2,
+          maxWidth: 500,
+          position: isScrolled ? 'fixed' : 'relative',
+          top: isScrolled ? { xs: '56px', sm: '64px' } : 'auto',
+          left: isScrolled ? '50%' : 'auto',
+          transform: isScrolled ? 'translateX(-50%)' : 'none',
+          zIndex: isScrolled ? 100 : 'auto',
+          width: isScrolled ? 'calc(100% - 32px)' : '100%',
+          maxWidth: 500,
+          backgroundColor: isScrolled ? colors.background : 'transparent',
+          boxShadow: isScrolled ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
+          borderRadius: isScrolled ? 2 : 0,
+          transition: 'all 0.2s ease',
+        }}
+      >
         <TextField
           fullWidth
           placeholder="Search..."
@@ -256,27 +275,24 @@ const Menu = () => {
               </InputAdornment>
             ),
           }}
-          sx={{ maxWidth: 500 }}
         />
       </Box>
 
-      {/* Category Buttons - Sticky */}
+      {/* Spacer to prevent content jump when search is fixed */}
+      {isScrolled && <Box sx={{ height: 56, mb: 2 }} />}
+
+      {/* Category Buttons - disappear when user scrolls (not sticky) */}
       <Box 
         sx={{ 
-          position: 'sticky',
-          top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
-          zIndex: 99, // Lower than AppBar (which is typically 1100)
-          backgroundColor: colors.background,
+          position: 'relative',
           pt: categoriesCollapsed ? 0 : 1,
           pb: categoriesCollapsed ? 0 : 1,
           mb: categoriesCollapsed ? 0 : 2,
           borderBottom: categoriesCollapsed ? 'none' : `1px solid rgba(0, 0, 0, 0.1)`,
-          transition: 'all 0.3s ease-in-out',
-          transform: categoriesCollapsed ? 'translateY(-100%)' : 'translateY(0)',
+          transition: 'opacity 0.2s ease, max-height 0.2s ease',
           opacity: categoriesCollapsed ? 0 : 1,
           maxHeight: categoriesCollapsed ? 0 : 'none',
-          height: categoriesCollapsed ? 0 : 'auto',
-          overflow: categoriesCollapsed ? 'hidden' : 'visible',
+          overflow: 'hidden',
           visibility: categoriesCollapsed ? 'hidden' : 'visible',
           pointerEvents: categoriesCollapsed ? 'none' : 'auto'
         }}

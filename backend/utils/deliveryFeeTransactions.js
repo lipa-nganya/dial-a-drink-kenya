@@ -180,31 +180,10 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
   const configuredDriverPay = toNumeric(driverPayAmountSetting?.value);
   const configuredDriverPayPercentage = toNumeric(driverPayPercentageSetting?.value);
 
-  // CRITICAL: If driver pay is disabled, driverPayAmount must be 0 (full delivery fee goes to merchant)
-  let driverPayAmount = 0;
-  
-  if (driverPayEnabled) {
-    if (isPercentageMode) {
-      // Percentage mode: calculate driver pay as percentage of delivery fee
-      const percentage = configuredDriverPayPercentage > 0 ? configuredDriverPayPercentage : 30; // default 30%
-      driverPayAmount = deliveryFeeAmount * (percentage / 100);
-      driverPayAmount = Math.min(driverPayAmount, deliveryFeeAmount); // Ensure it doesn't exceed delivery fee
-    } else {
-      // Amount mode: use fixed amount
-      driverPayAmount = toNumeric(orderModel.driverPayAmount);
-
-      if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPay > 0) {
-        driverPayAmount = Math.min(deliveryFeeAmount, configuredDriverPay);
-      }
-
-      if (driverPayAmount > deliveryFeeAmount) {
-        driverPayAmount = deliveryFeeAmount;
-      }
-    }
-  }
-  // If driverPayEnabled is false, driverPayAmount stays 0
-
-  const merchantAmount = Math.max(deliveryFeeAmount - driverPayAmount, 0);
+  // Merchant no longer gets any delivery fee - 100% goes to driver
+  // Pay Now: 50% driver savings, 50% driver wallet. Pay on Delivery: 50% savings, 50% + order total to cash at hand.
+  const driverPayAmount = driverId ? deliveryFeeAmount : 0; // Full delivery fee to driver when driver assigned
+  const merchantAmount = 0; // No merchant cut of delivery fee
 
   const deliveryTransactions = await db.Transaction.findAll({
     where: { orderId, transactionType: 'delivery_pay' },

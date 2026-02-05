@@ -25,6 +25,7 @@ import com.dialadrink.driver.services.SocketService
 import com.dialadrink.driver.utils.SharedPrefs
 import com.google.gson.Gson
 import com.google.gson.JsonObject
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.text.NumberFormat
@@ -42,6 +43,8 @@ class OrderDetailActivity : AppCompatActivity() {
     private var pollingHandler: Handler? = null
     private var pollingRunnable: Runnable? = null
     private val POLLING_INTERVAL_MS = 5000L // Poll every 5 seconds
+    /** True when this order already has an order-payment cash submission (pending or completed). */
+    private var orderPaymentAlreadySubmitted: Boolean = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -134,48 +137,50 @@ class OrderDetailActivity : AppCompatActivity() {
                 }
             },
             onPaymentConfirmed = { paymentData ->
-                try {
-                    val paymentOrderId = paymentData.optInt("orderId", -1)
-                    val paymentStatus = paymentData.optString("paymentStatus", "")
-                    
-                    Log.d(TAG, "💰 Payment confirmed via socket: Order #$paymentOrderId, Status: $paymentStatus")
-                    
-                    if (paymentOrderId == orderId) {
-                        // Payment confirmed for this order - update UI immediately
-                        // Get payment status from event (should be "paid")
-                        val eventPaymentStatus = paymentStatus.ifEmpty { 
-                            paymentData.optString("paymentStatus", "paid") 
+                runOnUiThread {
+                    try {
+                        val paymentOrderId = paymentData.optInt("orderId", -1)
+                        val paymentStatus = paymentData.optString("paymentStatus", "")
+                        
+                        Log.d(TAG, "💰 Payment confirmed via socket: Order #$paymentOrderId, Status: $paymentStatus")
+                        
+                        if (paymentOrderId == orderId) {
+                            // Payment confirmed for this order - update UI immediately
+                            // Get payment status from event (should be "paid")
+                            val eventPaymentStatus = paymentStatus.ifEmpty { 
+                                paymentData.optString("paymentStatus", "paid") 
+                            }
+                            val eventStatus = paymentData.optString("status", currentOrder?.status ?: "pending")
+                            
+                            Log.d(TAG, "💰 Payment confirmed - Order #$orderId, paymentStatus: $eventPaymentStatus, status: $eventStatus")
+                            
+                            // First, update payment status in current order if available
+                            currentOrder?.let { order ->
+                                val updatedOrder = order.copy(
+                                    paymentStatus = eventPaymentStatus.ifEmpty { "paid" },
+                                    status = eventStatus,
+                                    transactionCode = paymentData.optString("receiptNumber", order.transactionCode)
+                                )
+                                currentOrder = updatedOrder
+                                displayOrder(updatedOrder)
+                                Log.d(TAG, "✅ Updated order UI immediately for Order #$orderId: paymentStatus → ${updatedOrder.paymentStatus}, status → ${updatedOrder.status}")
+                            } ?: run {
+                                // No current order, reload from API
+                                Log.d(TAG, "⚠️ No current order, reloading from API")
+                                loadOrderDetails()
+                            }
+                            
+                            // Also reload from API after a short delay to ensure we have the latest data
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                Log.d(TAG, "✅ Reloading order details for Order #$orderId to get latest data")
+                                loadOrderDetails()
+                            }, 500) // Small delay to allow immediate UI update first
                         }
-                        val eventStatus = paymentData.optString("status", currentOrder?.status ?: "pending")
-                        
-                        Log.d(TAG, "💰 Payment confirmed - Order #$orderId, paymentStatus: $eventPaymentStatus, status: $eventStatus")
-                        
-                        // First, update payment status in current order if available
-                        currentOrder?.let { order ->
-                            val updatedOrder = order.copy(
-                                paymentStatus = eventPaymentStatus.ifEmpty { "paid" },
-                                status = eventStatus,
-                                transactionCode = paymentData.optString("receiptNumber", order.transactionCode)
-                            )
-                            currentOrder = updatedOrder
-                            displayOrder(updatedOrder)
-                            Log.d(TAG, "✅ Updated order UI immediately for Order #$orderId: paymentStatus → ${updatedOrder.paymentStatus}, status → ${updatedOrder.status}")
-                        } ?: run {
-                            // No current order, reload from API
-                            Log.d(TAG, "⚠️ No current order, reloading from API")
-                            loadOrderDetails()
-                        }
-                        
-                        // Also reload from API after a short delay to ensure we have the latest data
-                        Handler(Looper.getMainLooper()).postDelayed({
-                            Log.d(TAG, "✅ Reloading order details for Order #$orderId to get latest data")
-                            loadOrderDetails()
-                        }, 500) // Small delay to allow immediate UI update first
+                    } catch (e: Exception) {
+                        Log.e(TAG, "❌ Error handling payment-confirmed event", e)
+                        // Still reload on error to ensure UI is up to date
+                        loadOrderDetails()
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "❌ Error handling payment-confirmed event", e)
-                    // Still reload on error to ensure UI is up to date
-                    loadOrderDetails()
                 }
             }
         )
@@ -198,9 +203,32 @@ class OrderDetailActivity : AppCompatActivity() {
                     val branchInfo = order.branch?.let { "id=${it.id}, name=${it.name}" } ?: "null"
                     Log.d(TAG, "Order loaded: id=${order.id}, branch=$branchInfo, status=${order.status}")
                     displayOrder(order)
+                    // If this order shows "Send Cash Submission", check if already submitted (not in orders-for-order-payment)
+                    val isDone = order.status.lowercase() in listOf("completed", "delivered")
+                    val isPaid = order.paymentStatus?.lowercase() == "paid" || order.paymentStatus.isNullOrBlank()
+                    val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
+                    val isCashPayment = order.paymentMethod == null || order.paymentMethod.lowercase() == "cash"
+                    if (isDone && isPaid && isPayOnDelivery && isCashPayment) {
+                        try {
+                            val driverId = SharedPrefs.getDriverId(this@OrderDetailActivity) ?: -1
+                            if (driverId != -1) {
+                                val ordersResp = ApiClient.getApiService().getOrdersForOrderPayment(driverId)
+                                if (ordersResp.isSuccessful && ordersResp.body()?.success == true) {
+                                    val orderIds = ordersResp.body()?.data?.orders?.map { it.orderId } ?: emptyList()
+                                    orderPaymentAlreadySubmitted = orderId !in orderIds
+                                    Log.d(TAG, "Order payment already submitted for order $orderId: $orderPaymentAlreadySubmitted (eligible orderIds: $orderIds)")
+                                }
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Could not check orders-for-order-payment", e)
+                        }
+                        runOnUiThread { updateButtonVisibility(order) }
+                    }
                 } else {
                     Toast.makeText(this@OrderDetailActivity, "Failed to load order", Toast.LENGTH_SHORT).show()
                 }
+            } catch (e: CancellationException) {
+                // Expected when activity is destroyed or scope cancelled; no toast
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading order details", e)
                 Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -236,7 +264,7 @@ class OrderDetailActivity : AppCompatActivity() {
             cornerRadius = 12f * resources.displayMetrics.density
         }
         binding.paymentStatusBadge.background = paymentDrawable
-        binding.paymentStatusText.text = order.paymentStatus.uppercase()
+        binding.paymentStatusText.text = order.paymentStatus?.uppercase() ?: "UNKNOWN"
         
         // Display order items
         val itemsText = order.items.joinToString("\n") { item ->
@@ -277,8 +305,8 @@ class OrderDetailActivity : AppCompatActivity() {
             binding.navigateToCustomerButton.visibility = View.VISIBLE
         }
         
-        // Hide customer location (address) when cancellation requested or order is cancelled
-        if (order.cancellationRequested == true || status == "cancelled") {
+        // Hide customer location (address) when completed, delivered, cancellation requested, or cancelled
+        if (order.cancellationRequested == true || status == "cancelled" || status == "completed" || status == "delivered") {
             binding.addressText.visibility = View.GONE
         } else {
             binding.addressText.visibility = View.VISIBLE
@@ -309,18 +337,25 @@ class OrderDetailActivity : AppCompatActivity() {
                         status != "cancelled" && 
                         order.cancellationRequested != true
         
-        // Show "Send Cash Submission" for completed, paid Pay on Delivery (cash) orders so driver can remit via M-Pesa.
-        // Use inclusive checks so button shows even if API omits paymentType/paymentMethod (e.g. null treated as eligible).
+        // Show "Send Cash Submission" for completed/delivered, paid Pay on Delivery (cash) orders so driver can remit via M-Pesa.
+        // Use inclusive checks: show for completed OR delivered (backend may return either), treat null/blank paymentStatus as paid for pay-on-delivery.
         val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
         val isCashPayment = order.paymentMethod == null || order.paymentMethod.lowercase() == "cash"
-        val isCompletedAndPaid = status == "completed" && (order.paymentStatus?.lowercase() == "paid")
-        val showSubmitCash = isCompletedAndPaid && isPayOnDelivery && isCashPayment
+        val isDone = status == "completed" || status == "delivered"
+        val isPaid = order.paymentStatus?.lowercase() == "paid" || order.paymentStatus.isNullOrBlank()
+        val showSubmitCash = isDone && isPaid && isPayOnDelivery && isCashPayment
+        
+        Log.d(TAG, "Submit cash button: status=$status, paymentStatus=${order.paymentStatus}, paymentType=${order.paymentType}, paymentMethod=${order.paymentMethod} -> showSubmitCash=$showSubmitCash (isDone=$isDone, isPaid=$isPaid, isPayOnDelivery=$isPayOnDelivery, isCashPayment=$isCashPayment)")
         
         binding.outForDeliveryButton.visibility = if (showOutForDelivery) View.VISIBLE else View.GONE
         binding.deliveredButton.visibility = if (showDelivered) View.VISIBLE else View.GONE
         binding.receivedCashButton.visibility = if (showReceivedCash) View.VISIBLE else View.GONE
         binding.cancelOrderButton.visibility = if (canCancel) View.VISIBLE else View.GONE
         binding.submitCashButton.visibility = if (showSubmitCash) View.VISIBLE else View.GONE
+        if (showSubmitCash) {
+            binding.submitCashButton.isEnabled = !orderPaymentAlreadySubmitted
+            binding.submitCashButton.alpha = if (orderPaymentAlreadySubmitted) 0.5f else 1.0f
+        }
         
         // Show cancellation status if requested
         if (order.cancellationRequested == true) {
@@ -714,7 +749,9 @@ class OrderDetailActivity : AppCompatActivity() {
                     val paymentStatus = response.body()?.paymentStatus
                     if (status == "completed" || paymentStatus == "paid") {
                         handler.removeCallbacksAndMessages(null)
+                        orderPaymentAlreadySubmitted = true
                         runOnUiThread {
+                            currentOrder?.let { updateButtonVisibility(it) }
                             loadOrderDetails()
                             Toast.makeText(this@OrderDetailActivity, "Order payment submitted successfully", Toast.LENGTH_LONG).show()
                         }

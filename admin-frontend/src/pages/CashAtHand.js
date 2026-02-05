@@ -28,7 +28,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Autocomplete
+  Autocomplete,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import {
   AttachMoney,
@@ -36,7 +38,9 @@ import {
   LocalShipping,
   TrendingUp,
   TrendingDown,
-  Add
+  Add,
+  CheckCircle,
+  Cancel
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
@@ -56,6 +60,7 @@ const CashAtHand = () => {
   const [submissions, setSubmissions] = useState([]);
   const [posOrders, setPosOrders] = useState([]);
   const [activeTab, setActiveTab] = useState(0);
+  const { fetchPendingSubmissionsCount } = useAdmin();
   const [mySubmissionsTab, setMySubmissionsTab] = useState('pending');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -68,10 +73,18 @@ const CashAtHand = () => {
   });
   const [availableOrders, setAvailableOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [actionSubmissionId, setActionSubmissionId] = useState(null);
+  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
+  const [rejectSubmission, setRejectSubmission] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   useEffect(() => {
     fetchCashAtHand();
-  }, []);
+    // Fetch pending submissions count on mount
+    if (fetchPendingSubmissionsCount) {
+      fetchPendingSubmissionsCount();
+    }
+  }, [fetchPendingSubmissionsCount]);
 
   const fetchOrdersForSelection = async () => {
     try {
@@ -193,8 +206,40 @@ const CashAtHand = () => {
       if (response.data.success) {
         setCashAtHand(response.data.cashAtHand || 0);
         setBreakdown(response.data.breakdown || {});
-        setSubmissions(response.data.submissions || []);
+        const allSubmissions = response.data.submissions || [];
+        setSubmissions(allSubmissions);
         setPosOrders(response.data.posOrders || []);
+        
+        // Check for new pending submissions and play sound if count increased
+        const previousPendingCount = submissions.filter(s => s.status === 'pending').length;
+        const newPendingCount = allSubmissions.filter(s => s.status === 'pending').length;
+        
+        if (newPendingCount > previousPendingCount && previousPendingCount > 0) {
+          // Play notification sound for new pending submissions
+          try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            if (audioContext.state === 'suspended') {
+              audioContext.resume();
+            }
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.05);
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+          } catch (error) {
+            console.warn('Could not play notification sound:', error);
+          }
+        }
+        
+        // Update pending submissions count in context
+        if (fetchPendingSubmissionsCount) {
+          fetchPendingSubmissionsCount();
+        }
       } else {
         setError(response.data.error || 'Failed to load cash at hand data');
       }
@@ -203,6 +248,60 @@ const CashAtHand = () => {
       setError(error.response?.data?.error || error.message || 'Failed to load cash at hand data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const getApproveRejectEndpoint = (item) => {
+    const id = item.id;
+    if (item.driver?.id) {
+      return { base: 'driver-wallet', driverId: item.driver.id, id };
+    }
+    return { base: 'driver-wallet/admin/cash-submissions', id, isAdmin: true };
+  };
+
+  const handleApprove = async (item) => {
+    const { base, driverId, id, isAdmin } = getApproveRejectEndpoint(item);
+    setActionSubmissionId(id);
+    try {
+      const url = isAdmin
+        ? `/${base}/${id}/approve`
+        : `/${base}/${driverId}/cash-submissions/${id}/approve`;
+      await api.post(url);
+      await fetchCashAtHand();
+      if (fetchPendingSubmissionsCount) fetchPendingSubmissionsCount();
+    } catch (err) {
+      console.error('Error approving submission:', err);
+      alert(err.response?.data?.error || err.message || 'Failed to approve');
+    } finally {
+      setActionSubmissionId(null);
+    }
+  };
+
+  const handleRejectClick = (item) => {
+    setRejectSubmission(item);
+    setRejectReason('');
+    setRejectDialogOpen(true);
+  };
+
+  const handleRejectConfirm = async () => {
+    if (!rejectSubmission) return;
+    const { base, driverId, id, isAdmin } = getApproveRejectEndpoint(rejectSubmission);
+    setActionSubmissionId(id);
+    try {
+      const url = isAdmin
+        ? `/${base}/${id}/reject`
+        : `/${base}/${driverId}/cash-submissions/${id}/reject`;
+      await api.post(url, { rejectionReason: rejectReason || undefined });
+      setRejectDialogOpen(false);
+      setRejectSubmission(null);
+      setRejectReason('');
+      await fetchCashAtHand();
+      if (fetchPendingSubmissionsCount) fetchPendingSubmissionsCount();
+    } catch (err) {
+      console.error('Error rejecting submission:', err);
+      alert(err.response?.data?.error || err.message || 'Failed to reject');
+    } finally {
+      setActionSubmissionId(null);
     }
   };
 
@@ -226,7 +325,8 @@ const CashAtHand = () => {
       cash: 'Cash',
       general_expense: 'General Expense',
       payment_to_office: 'Payment to Office',
-      walk_in_sale: 'Walk-in Sale'
+      walk_in_sale: 'Walk-in Sale',
+      order_payment: 'Order Payment'
     };
     return labels[type] || type;
   };
@@ -243,6 +343,11 @@ const CashAtHand = () => {
         return 'default';
     }
   };
+
+  const getPendingSubmissions = useMemo(() => {
+    // All pending submissions (driver and admin) so any admin can approve
+    return submissions.filter(s => s.status === 'pending');
+  }, [submissions]);
 
   const getMySubmissions = useMemo(() => {
     if (!user?.id) return [];
@@ -276,9 +381,12 @@ const CashAtHand = () => {
       // Show all submissions
       return submissions;
     } else if (activeTab === 1) {
+      // Show pending submissions from drivers
+      return getPendingSubmissions;
+    } else if (activeTab === 2) {
       // Show my submissions (admin cash submissions)
       return getMySubmissions;
-    } else if (activeTab === 2) {
+    } else if (activeTab === 3) {
       // Show POS orders
       return posOrders.map(order => ({
         id: `pos-${order.id}`,
@@ -290,7 +398,7 @@ const CashAtHand = () => {
       }));
     }
     return [];
-  }, [activeTab, submissions, getMySubmissions, posOrders]);
+  }, [activeTab, submissions, getPendingSubmissions, getMySubmissions, posOrders]);
 
   const paginatedData = useMemo(() => {
     return displayData.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
@@ -415,13 +523,14 @@ const CashAtHand = () => {
           }}
         >
           <Tab label={`All Submissions (${submissions.length})`} />
+          <Tab label={`Pending Submissions (${getPendingSubmissions.length})`} />
           <Tab label={`My Submissions (${getMySubmissions.length})`} />
           <Tab label={`POS Orders (${posOrders.length})`} />
         </Tabs>
       </Paper>
 
       {/* My Submissions Sub-Tabs */}
-      {activeTab === 1 && (
+      {activeTab === 2 && (
         <Paper sx={{ backgroundColor: colors.paper, mb: 2 }}>
           <Tabs
             value={mySubmissionsTab}
@@ -460,13 +569,14 @@ const CashAtHand = () => {
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
                   </>
-                ) : (
+                  ) : (
                   <>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Type</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Source</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Status</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Actions</TableCell>
                   </>
                 )}
               </TableRow>
@@ -475,7 +585,7 @@ const CashAtHand = () => {
               {paginatedData.length === 0 ? (
                 <TableRow>
                   <TableCell 
-                    colSpan={activeTab === 2 ? 4 : 5} 
+                    colSpan={activeTab === 3 ? 4 : 6} 
                     sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}
                   >
                     No data found
@@ -483,7 +593,7 @@ const CashAtHand = () => {
                 </TableRow>
               ) : (
                 paginatedData.map((item) => {
-                  if (activeTab === 2) {
+                  if (activeTab === 3) {
                     // POS orders
                     return (
                       <TableRow key={item.id} hover>
@@ -501,7 +611,7 @@ const CashAtHand = () => {
                         </TableCell>
                       </TableRow>
                     );
-                  } else if (activeTab === 0 || activeTab === 1) {
+                  } else if (activeTab === 0 || activeTab === 1 || activeTab === 2) {
                     // Cash submissions
                     const isFromDriver = item.driver !== null;
                     const isAdminSubmission = item.admin !== null;
@@ -542,6 +652,43 @@ const CashAtHand = () => {
                         </TableCell>
                         <TableCell sx={{ color: colors.textSecondary }}>
                           {formatDate(item.approvedAt || item.createdAt)}
+                        </TableCell>
+                        <TableCell align="right">
+                          {item.status === 'pending' ? (
+                            <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                              <Tooltip title="Approve">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="primary"
+                                    onClick={() => handleApprove(item)}
+                                    disabled={actionSubmissionId !== null}
+                                    sx={{ color: colors.accentText }}
+                                  >
+                                    {actionSubmissionId === item.id ? (
+                                      <CircularProgress size={20} />
+                                    ) : (
+                                      <CheckCircle fontSize="small" />
+                                    )}
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                              <Tooltip title="Reject">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={() => handleRejectClick(item)}
+                                    disabled={actionSubmissionId !== null}
+                                  >
+                                    <Cancel fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </Box>
+                          ) : (
+                            '—'
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -804,6 +951,64 @@ const CashAtHand = () => {
             }}
           >
             Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Reject Cash Submission Dialog */}
+      <Dialog
+        open={rejectDialogOpen}
+        onClose={() => {
+          if (!actionSubmissionId) {
+            setRejectDialogOpen(false);
+            setRejectSubmission(null);
+            setRejectReason('');
+          }
+        }}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Reject Cash Submission
+        </DialogTitle>
+        <DialogContent>
+          {rejectSubmission && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Reject submission of {formatCurrency(rejectSubmission.amount)} from{' '}
+                {rejectSubmission.driver?.name || rejectSubmission.admin?.name || rejectSubmission.admin?.username || 'Unknown'}?
+              </Typography>
+              <TextField
+                label="Reason (optional)"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                fullWidth
+                multiline
+                rows={2}
+                placeholder="e.g. Missing documentation"
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button
+            onClick={() => {
+              setRejectDialogOpen(false);
+              setRejectSubmission(null);
+              setRejectReason('');
+            }}
+            disabled={!!actionSubmissionId}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleRejectConfirm}
+            color="error"
+            variant="contained"
+            disabled={!!actionSubmissionId}
+          >
+            {actionSubmissionId === rejectSubmission?.id ? <CircularProgress size={24} /> : 'Reject'}
           </Button>
         </DialogActions>
       </Dialog>

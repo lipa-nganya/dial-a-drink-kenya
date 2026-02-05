@@ -1,5 +1,7 @@
 package com.dialadrink.driver.services
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.dialadrink.driver.BuildConfig
 import io.socket.client.IO
@@ -110,11 +112,14 @@ object SocketService {
                     val orderData = args[0] as? JSONObject
                     if (orderData != null) {
                         Log.d(TAG, "📦 Calling ${orderAssignedCallbacks.size} order-assigned callbacks")
-                        orderAssignedCallbacks.forEach { callback ->
-                            try {
-                                callback(orderData)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "❌ Error in order-assigned callback", e)
+                        val data = orderData
+                        Handler(Looper.getMainLooper()).post {
+                            orderAssignedCallbacks.forEach { callback ->
+                                try {
+                                    callback(data)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error in order-assigned callback", e)
+                                }
                             }
                         }
                     } else {
@@ -132,11 +137,14 @@ object SocketService {
                     val orderData = args[0] as? JSONObject
                     if (orderData != null) {
                         Log.d(TAG, "📦 Calling ${orderStatusUpdatedCallbacks.size} order-status-updated callbacks")
-                        orderStatusUpdatedCallbacks.forEach { callback ->
-                            try {
-                                callback(orderData)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "❌ Error in order-status-updated callback", e)
+                        val data = orderData
+                        Handler(Looper.getMainLooper()).post {
+                            orderStatusUpdatedCallbacks.forEach { callback ->
+                                try {
+                                    callback(data)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error in order-status-updated callback", e)
+                                }
                             }
                         }
                     } else {
@@ -154,11 +162,14 @@ object SocketService {
                     val paymentData = args[0] as? JSONObject
                     if (paymentData != null) {
                         Log.d(TAG, "💰 Calling ${paymentConfirmedCallbacks.size} payment-confirmed callbacks")
-                        paymentConfirmedCallbacks.forEach { callback ->
-                            try {
-                                callback(paymentData)
-                            } catch (e: Exception) {
-                                Log.e(TAG, "❌ Error in payment-confirmed callback", e)
+                        val data = paymentData
+                        Handler(Looper.getMainLooper()).post {
+                            paymentConfirmedCallbacks.forEach { callback ->
+                                try {
+                                    callback(data)
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "❌ Error in payment-confirmed callback", e)
+                                }
                             }
                         }
                     } else {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -61,7 +61,8 @@ import {
   KeyboardArrowDown,
   AutoAwesome,
   Phone,
-  Payment
+  Payment,
+  CheckCircle
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -91,6 +92,7 @@ const Orders = () => {
   const [customFilter, setCustomFilter] = useState(null);
   const [drivers, setDrivers] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [territories, setTerritories] = useState([]);
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
   const [branchDialogOpen, setBranchDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
@@ -109,6 +111,10 @@ const Orders = () => {
   // eslint-disable-next-line no-unused-vars
   const [promptingPayment, setPromptingPayment] = useState(false);
   const [paymentPollingInterval, setPaymentPollingInterval] = useState(null);
+  
+  // Payment failure dialog state
+  const [paymentFailureDialogOpen, setPaymentFailureDialogOpen] = useState(false);
+  const [paymentFailureData, setPaymentFailureData] = useState(null);
   const [editPriceDialogOpen, setEditPriceDialogOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [newPrice, setNewPrice] = useState('');
@@ -116,6 +122,16 @@ const Orders = () => {
   const [editDeliveryFeeDialogOpen, setEditDeliveryFeeDialogOpen] = useState(false);
   const [newDeliveryFee, setNewDeliveryFee] = useState('');
   const [updatingDeliveryFee, setUpdatingDeliveryFee] = useState(false);
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState('');
+  const [updatingTerritory, setUpdatingTerritory] = useState(false);
+  const [applyingTerritoryFee, setApplyingTerritoryFee] = useState(false);
+  const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ deliveryFee: false, territory: false });
+  const updatedFeeTimeoutRef = useRef(null);
+  const updatedTerritoryTimeoutRef = useRef(null);
+  const [adminDeliveryFees, setAdminDeliveryFees] = useState({
+    deliveryFeeWithAlcohol: 50,
+    deliveryFeeWithoutAlcohol: 30
+  });
   
   // Payment dialog state
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -174,8 +190,41 @@ const Orders = () => {
     fetchOrders();
     fetchDrivers();
     fetchBranches();
+    fetchTerritories();
+    fetchAdminDeliveryFees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (updatedFeeTimeoutRef.current) clearTimeout(updatedFeeTimeoutRef.current);
+      if (updatedTerritoryTimeoutRef.current) clearTimeout(updatedTerritoryTimeoutRef.current);
+    };
+  }, []);
+
+  const fetchTerritories = async () => {
+    try {
+      const response = await api.get('/territories');
+      setTerritories(response.data || []);
+    } catch (error) {
+      console.error('Error fetching territories:', error);
+    }
+  };
+
+  const fetchAdminDeliveryFees = async () => {
+    try {
+      const [withRes, withoutRes] = await Promise.all([
+        api.get('/settings/deliveryFeeWithAlcohol').catch(() => ({ data: { value: '50' } })),
+        api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: { value: '30' } }))
+      ]);
+      setAdminDeliveryFees({
+        deliveryFeeWithAlcohol: parseFloat(withRes.data?.value || '50'),
+        deliveryFeeWithoutAlcohol: parseFloat(withoutRes.data?.value || '30')
+      });
+    } catch (error) {
+      console.error('Error fetching admin delivery fees:', error);
+    }
+  };
 
   const fetchBranches = async () => {
     try {
@@ -456,6 +505,38 @@ const Orders = () => {
         });
       } else {
         await fetchOrders();
+      }
+    });
+
+    socket.on('payment-failed', async (data) => {
+      console.log('❌ Payment failed for order:', data);
+      if (data.orderId) {
+        // Show payment failure dialog
+        setPaymentFailureData({
+          orderId: data.orderId,
+          errorType: data.errorType || 'failed',
+          errorMessage: data.errorMessage || 'Payment failed',
+          resultCode: data.resultCode,
+          resultDesc: data.resultDesc
+        });
+        setPaymentFailureDialogOpen(true);
+        
+        // Update order status in state
+        setOrders(prevOrders => {
+          const updated = prevOrders.map(order => {
+            if (order.id === data.orderId) {
+              return {
+                ...order,
+                paymentStatus: 'unpaid',
+                status: order.status === 'pending' ? 'pending' : order.status
+              };
+            }
+            return order;
+          });
+          const sorted = sortOrdersByStatus(updated);
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          return sorted;
+        });
       }
     });
 
@@ -1032,16 +1113,26 @@ const Orders = () => {
       console.log('🔍 [FRONTEND] Delivery fee update response:', response.data);
 
       if (response.data.success) {
-        // Update the order detail with the new data
-        setSelectedOrderForDetail(response.data.order);
-        
+        const { order, breakdown } = response.data;
+        // Update the order detail with the new data and breakdown so UI shows updated fee and total
+        setSelectedOrderForDetail(prev => ({
+          ...(order || prev),
+          deliveryFee: breakdown?.deliveryFee ?? order?.deliveryFee ?? prev.deliveryFee,
+          totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? prev.totalAmount,
+          itemsTotal: breakdown?.itemsTotal ?? order?.itemsTotal ?? prev.itemsTotal
+        }));
         // Refresh the orders list to reflect the change
         await fetchOrders();
-        
-        // Close the dialog
+        // Close the edit dialog
         setEditDeliveryFeeDialogOpen(false);
         setNewDeliveryFee('');
-        
+        // Show green checkmark for updated delivery fee
+        if (updatedFeeTimeoutRef.current) clearTimeout(updatedFeeTimeoutRef.current);
+        setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, deliveryFee: true }));
+        updatedFeeTimeoutRef.current = setTimeout(() => {
+          setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, deliveryFee: false }));
+          updatedFeeTimeoutRef.current = null;
+        }, 4000);
         alert('Delivery fee updated successfully');
       } else {
         alert(response.data.error || 'Failed to update delivery fee');
@@ -1055,6 +1146,68 @@ const Orders = () => {
       alert(`Error: ${errorMessage} (Status: ${error.response?.status || 'N/A'})`);
     } finally {
       setUpdatingDeliveryFee(false);
+    }
+  };
+
+  const handleUpdateOrderTerritory = async () => {
+    if (!selectedOrderForDetail) return;
+    const territoryId = selectedTerritoryId === '' ? null : parseInt(selectedTerritoryId, 10);
+    if (territoryId !== null && isNaN(territoryId)) return;
+    setUpdatingTerritory(true);
+    try {
+      const response = await api.patch(`/admin/orders/${selectedOrderForDetail.id}/territory`, { territoryId });
+      const updatedOrder = response.data;
+      const territory = territoryId ? territories.find(t => t.id === territoryId) : null;
+      setSelectedOrderForDetail(prev => ({ ...prev, territoryId: updatedOrder.territoryId, territory: territory ? { id: territory.id, name: territory.name } : null }));
+      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, territoryId: updatedOrder.territoryId, territory: territory ? { id: territory.id, name: territory.name } : null } : o));
+      setFilteredOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, territoryId: updatedOrder.territoryId, territory: territory ? { id: territory.id, name: territory.name } : null } : o));
+      if (response.data) {
+        if (updatedTerritoryTimeoutRef.current) clearTimeout(updatedTerritoryTimeoutRef.current);
+        setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, territory: true }));
+        updatedTerritoryTimeoutRef.current = setTimeout(() => {
+          setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, territory: false }));
+          updatedTerritoryTimeoutRef.current = null;
+        }, 4000);
+      }
+    } catch (error) {
+      console.error('Error updating order territory:', error);
+      alert(error.response?.data?.error || error.message || 'Failed to update territory');
+    } finally {
+      setUpdatingTerritory(false);
+    }
+  };
+
+  const handleApplyTerritoryDeliveryFee = async (fee) => {
+    if (!selectedOrderForDetail) return;
+    if (selectedOrderForDetail.status === 'completed' || selectedOrderForDetail.status === 'cancelled' || selectedOrderForDetail.paymentStatus === 'paid') {
+      alert('Cannot change delivery fee for completed, cancelled, or paid orders.');
+      return;
+    }
+    setApplyingTerritoryFee(true);
+    try {
+      const response = await api.patch(`/admin/orders/${selectedOrderForDetail.id}/delivery-fee`, { deliveryFee: fee });
+      if (response.data?.success && response.data?.breakdown) {
+        const { breakdown } = response.data;
+        setSelectedOrderForDetail(prev => ({
+          ...prev,
+          deliveryFee: breakdown.deliveryFee,
+          totalAmount: breakdown.totalAmount,
+          itemsTotal: breakdown.itemsTotal
+        }));
+        setOrders(prev => prev.map(o => o.id === selectedOrderForDetail.id ? { ...o, totalAmount: breakdown.totalAmount, deliveryFee: breakdown.deliveryFee } : o));
+        setFilteredOrders(prev => prev.map(o => o.id === selectedOrderForDetail.id ? { ...o, totalAmount: breakdown.totalAmount, deliveryFee: breakdown.deliveryFee } : o));
+        if (updatedFeeTimeoutRef.current) clearTimeout(updatedFeeTimeoutRef.current);
+        setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, deliveryFee: true }));
+        updatedFeeTimeoutRef.current = setTimeout(() => {
+          setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, deliveryFee: false }));
+          updatedFeeTimeoutRef.current = null;
+        }, 4000);
+      }
+    } catch (error) {
+      console.error('Error applying territory delivery fee:', error);
+      alert(error.response?.data?.error || error.message || 'Failed to update delivery fee');
+    } finally {
+      setApplyingTerritoryFee(false);
     }
   };
 
@@ -2167,6 +2320,7 @@ const Orders = () => {
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Total Amount</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Payment Status</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Territory</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Driver</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
@@ -2203,6 +2357,8 @@ const Orders = () => {
                       }
                       
                       setSelectedOrderForDetail(orderWithBreakdown);
+                      setSelectedTerritoryId(orderWithBreakdown.territoryId ?? orderWithBreakdown.territory?.id ?? '');
+                      setRecentlyUpdatedInOrderDetail({ deliveryFee: false, territory: false });
                       setOrderDetailDialogOpen(true);
                     }}
                     sx={{
@@ -2319,6 +2475,19 @@ const Orders = () => {
                           />
                         )}
                       </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={order.territory?.name || 'No territory'}
+                        size="small"
+                        sx={{
+                          backgroundColor: '#9e9e9e',
+                          color: '#fff',
+                          fontWeight: 500,
+                          borderRadius: '16px',
+                          '& .MuiChip-label': { px: 1.25 }
+                        }}
+                      />
                     </TableCell>
                     <TableCell>
                       {order.driverId && order.driver ? (
@@ -2930,9 +3099,145 @@ const Orders = () => {
                         <strong>Delivery Address:</strong> {selectedOrderForDetail.deliveryAddress}
                       </Typography>
                     )}
+                    <Typography variant="body1">
+                      <strong>Delivery Notes:</strong> {selectedOrderForDetail.notes?.trim() ? selectedOrderForDetail.notes : '—'}
+                    </Typography>
                   </Box>
                 </CardContent>
               </Card>
+
+              {/* Delivery fee (includes territory and set-fee options) */}
+              {selectedOrderForDetail && selectedOrderForDetail.deliveryFee !== undefined && (
+                <Card sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
+                      Delivery fee
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Typography variant="body2" sx={{ color: colors.textPrimary }}>
+                          <strong>Current delivery fee:</strong> KES {Number(selectedOrderForDetail.deliveryFee ?? 0).toFixed(2)}
+                        </Typography>
+                        {recentlyUpdatedInOrderDetail.deliveryFee && (
+                          <CheckCircle sx={{ color: '#2e7d32', fontSize: 20 }} aria-label="Updated" />
+                        )}
+                        {selectedOrderForDetail.status !== 'completed' && selectedOrderForDetail.status !== 'cancelled' && selectedOrderForDetail.paymentStatus !== 'paid' && (
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              setNewDeliveryFee(Number(selectedOrderForDetail.deliveryFee ?? 0).toFixed(2));
+                              setEditDeliveryFeeDialogOpen(true);
+                            }}
+                            sx={{ color: colors.accentText }}
+                            aria-label="Edit delivery fee"
+                          >
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        )}
+                        <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block', width: '100%' }}>
+                          Fee set when order was placed (admin or customer). Click edit to change.
+                        </Typography>
+                      </Box>
+
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                        <FormControl size="small" sx={{ minWidth: 220 }}>
+                          <InputLabel>Territory</InputLabel>
+                          <Select
+                            value={selectedTerritoryId}
+                            label="Territory"
+                            onChange={(e) => setSelectedTerritoryId(e.target.value)}
+                            sx={{ fontSize: '0.95rem' }}
+                          >
+                            <MenuItem value="">
+                              <em>No territory</em>
+                            </MenuItem>
+                            {territories.map((t) => (
+                              <MenuItem key={t.id} value={t.id}>
+                                {t.name}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                        <Button
+                          variant="contained"
+                          size="small"
+                          onClick={handleUpdateOrderTerritory}
+                          disabled={updatingTerritory}
+                          sx={{
+                            backgroundColor: colors.accentText,
+                            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                            '&:hover': { backgroundColor: '#00C4A3' }
+                          }}
+                        >
+                          {updatingTerritory ? <CircularProgress size={20} /> : 'Save'}
+                        </Button>
+                        <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          {selectedOrderForDetail.territory?.name || 'No territory assigned'}
+                          {recentlyUpdatedInOrderDetail.territory && (
+                            <CheckCircle sx={{ color: '#2e7d32', fontSize: 18 }} aria-label="Updated" />
+                          )}
+                        </Typography>
+                      </Box>
+
+                      {(() => {
+                        const tid = selectedTerritoryId === '' ? (selectedOrderForDetail.territoryId ?? selectedOrderForDetail.territory?.id) : selectedTerritoryId;
+                        const hasTerritory = tid != null && tid !== '';
+                        const territoryForFee = hasTerritory ? territories.find(t => Number(t.id) === Number(tid)) : null;
+                        const feeCBD = territoryForFee ? Number(territoryForFee.deliveryFromCBD ?? 0) : null;
+                        const feeRuaka = territoryForFee ? Number(territoryForFee.deliveryFromRuaka ?? 0) : null;
+                        if (!hasTerritory || (selectedOrderForDetail.status === 'completed' || selectedOrderForDetail.status === 'cancelled' || selectedOrderForDetail.paymentStatus === 'paid')) return null;
+                        return (
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                            <Typography variant="subtitle2" sx={{ width: '100%', color: colors.textPrimary }}>
+                              Set delivery fee to:
+                            </Typography>
+                            {feeCBD != null && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleApplyTerritoryDeliveryFee(feeCBD)}
+                                disabled={applyingTerritoryFee}
+                                sx={{ fontSize: '0.8rem' }}
+                              >
+                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – CBD (KES ${feeCBD.toFixed(2)})`}
+                              </Button>
+                            )}
+                            {feeRuaka != null && (
+                              <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={() => handleApplyTerritoryDeliveryFee(feeRuaka)}
+                                disabled={applyingTerritoryFee}
+                                sx={{ fontSize: '0.8rem' }}
+                              >
+                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – Ruaka (KES ${feeRuaka.toFixed(2)})`}
+                              </Button>
+                            )}
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => handleApplyTerritoryDeliveryFee(adminDeliveryFees.deliveryFeeWithAlcohol)}
+                              disabled={applyingTerritoryFee}
+                              sx={{ fontSize: '0.8rem' }}
+                            >
+                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – With alcohol (KES ${Number(adminDeliveryFees.deliveryFeeWithAlcohol).toFixed(2)})`}
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => handleApplyTerritoryDeliveryFee(adminDeliveryFees.deliveryFeeWithoutAlcohol)}
+                              disabled={applyingTerritoryFee}
+                              sx={{ fontSize: '0.8rem' }}
+                            >
+                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – Without alcohol (KES ${Number(adminDeliveryFees.deliveryFeeWithoutAlcohol).toFixed(2)})`}
+                            </Button>
+                          </Box>
+                        );
+                      })()}
+                    </Box>
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Order Items */}
               <Card sx={{ mb: 2 }}>
@@ -2989,41 +3294,6 @@ const Orders = () => {
                   )}
                 </CardContent>
               </Card>
-
-              {/* Delivery Fee */}
-              {selectedOrderForDetail && selectedOrderForDetail.deliveryFee !== undefined && (
-                <Card sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
-                      Delivery Fee
-                    </Typography>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="body1">
-                        <strong>Amount:</strong>
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
-                          KES {Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2)}
-                        </Typography>
-                        {selectedOrderForDetail.status !== 'completed' && 
-                         selectedOrderForDetail.status !== 'cancelled' && 
-                         selectedOrderForDetail.paymentStatus !== 'paid' && (
-                          <IconButton
-                            size="small"
-                            onClick={() => {
-                              setNewDeliveryFee(Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2));
-                              setEditDeliveryFeeDialogOpen(true);
-                            }}
-                            sx={{ color: colors.accentText }}
-                          >
-                            <Edit fontSize="small" />
-                          </IconButton>
-                        )}
-                      </Box>
-                    </Box>
-                  </CardContent>
-                </Card>
-              )}
 
               {/* Order Summary */}
               <Card sx={{ mb: 2 }}>
@@ -3393,6 +3663,83 @@ const Orders = () => {
             }}
           >
             {updatingDeliveryFee ? 'Updating...' : 'Update Delivery Fee'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Payment Failure Dialog */}
+      <Dialog
+        open={paymentFailureDialogOpen}
+        onClose={() => {
+          setPaymentFailureDialogOpen(false);
+          setPaymentFailureData(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.error, fontWeight: 700 }}>
+          Payment Failed
+        </DialogTitle>
+        <DialogContent>
+          {paymentFailureData && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                <strong>Order #:</strong> {paymentFailureData.orderId}
+              </Typography>
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {paymentFailureData.errorMessage}
+              </Alert>
+              <Typography variant="body2" color="text.secondary">
+                {paymentFailureData.errorType === 'wrong_pin' && 
+                  'The customer entered an incorrect PIN. Please ask them to try again.'}
+                {paymentFailureData.errorType === 'insufficient_balance' && 
+                  'The customer has insufficient balance. Please ask them to top up their M-Pesa account.'}
+                {paymentFailureData.errorType === 'timeout' && 
+                  'The payment request timed out. The customer did not complete the payment in time.'}
+                {!['wrong_pin', 'insufficient_balance', 'timeout'].includes(paymentFailureData.errorType) && 
+                  'The payment could not be processed. Please try again or contact the customer.'}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setPaymentFailureDialogOpen(false);
+              setPaymentFailureData(null);
+            }}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={async () => {
+              if (paymentFailureData) {
+                // Get the order to find customer phone
+                const order = orders.find(o => o.id === paymentFailureData.orderId);
+                const customerPhone = order?.customerPhone && order.customerPhone !== 'POS' 
+                  ? order.customerPhone 
+                  : null;
+                
+                // Close dialog first
+                setPaymentFailureDialogOpen(false);
+                const orderId = paymentFailureData.orderId;
+                setPaymentFailureData(null);
+                
+                // Retry payment prompt
+                await handlePromptPayment(orderId, customerPhone);
+              }
+            }}
+            variant="contained"
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              }
+            }}
+          >
+            Retry
           </Button>
         </DialogActions>
       </Dialog>

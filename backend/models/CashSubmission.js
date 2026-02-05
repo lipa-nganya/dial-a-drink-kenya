@@ -23,7 +23,7 @@ module.exports = (sequelize, DataTypes) => {
       comment: 'Admin who created the submission (for admin cash submissions)'
     },
     submissionType: {
-      type: DataTypes.ENUM('purchases', 'cash', 'general_expense', 'payment_to_office', 'walk_in_sale'),
+      type: DataTypes.ENUM('purchases', 'cash', 'general_expense', 'payment_to_office', 'walk_in_sale', 'order_payment'),
       allowNull: false,
       comment: 'Type of cash submission'
     },

@@ -20,6 +20,9 @@
     <string name="wallet">Wallet</string>
     <string name="profile">Profile</string>
     
+    <!-- Order payment (cash submission) -->
+    <string name="order_payment_breakdown">Order cost: KES %1$s + 50%% delivery fee (savings): KES %2$s = KES %3$s</string>
+    
     <!-- Common -->
     <string name="loading">Loading…</string>
     <string name="error">Error</string>

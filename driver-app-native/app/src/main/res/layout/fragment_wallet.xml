@@ -57,7 +57,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="Tips + 50% Delivery Fee (Online Orders)"
+                        android:text="50% Delivery Fee (Pay Now orders)"
                         android:textColor="@color/text_secondary_dark"
                         android:textSize="12sp" />
 
@@ -70,12 +70,20 @@
                 android:id="@+id/withdrawButton"
                 android:layout_width="match_parent"
                 android:layout_height="56dp"
-                android:layout_marginBottom="24dp"
+                android:layout_marginBottom="8dp"
                 android:text="Withdraw to M-Pesa"
                 android:textSize="16sp"
                 android:textStyle="bold"
                 app:backgroundTint="@color/accent"
                 app:cornerRadius="8dp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="24dp"
+                android:text="Withdrawing reduces your cash at hand by the amount withdrawn."
+                android:textColor="@color/text_secondary_dark"
+                android:textSize="12sp" />
 
             <!-- Wallet Transactions Title -->
             <TextView

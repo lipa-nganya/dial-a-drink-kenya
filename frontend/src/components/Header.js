@@ -231,7 +231,16 @@ const Header = () => {
 
   return (
     <>
-      <AppBar position="sticky" sx={{ backgroundColor: colors.paper, boxShadow: `0 2px 8px rgba(0, 0, 0, 0.1)` }}>
+      <AppBar
+        position={isMobile ? 'sticky' : 'fixed'}
+        sx={{
+          backgroundColor: colors.paper,
+          boxShadow: `0 2px 8px rgba(0, 0, 0, 0.1)`,
+          top: 0,
+          left: 0,
+          right: 0
+        }}
+      >
         <Toolbar>
           {isMobile && (
             <IconButton

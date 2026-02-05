@@ -72,12 +72,9 @@ class MyWalletActivity : AppCompatActivity() {
         val adapter = WalletPagerAdapter(this)
         binding.viewPager.adapter = adapter
         
+        binding.tabLayout.visibility = android.view.View.GONE
         TabLayoutMediator(binding.tabLayout, binding.viewPager) { tab, position ->
-            tab.text = when (position) {
-                0 -> "My Wallet"
-                1 -> "Savings"
-                else -> ""
-            }
+            tab.text = if (position == 0) "Savings" else ""
         }.attach()
     }
 }
