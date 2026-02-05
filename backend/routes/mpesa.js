@@ -127,36 +127,9 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   const deliveryFee = isPOSOrder ? 0 : (parseFloat(breakdown.deliveryFee) || 0);
   const tipAmountNumeric = isPOSOrder ? 0 : (parseFloat(breakdown.tipAmount) || 0);
 
-  const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-    db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-    db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-  ]);
-
-  const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
-  const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-  
-  // POS orders don't have drivers or delivery fees
-  let driverPayAmount = 0;
-  let merchantDeliveryAmount = 0;
-  
-  if (!isPOSOrder) {
-    // CRITICAL: Use same calculation logic as ensureDeliveryFeeSplit to avoid mismatches
-    // First check orderInstance.driverPayAmount, then fall back to configuredDriverPayAmount
-    if (driverPaySettingEnabled && orderInstance.driverId) {
-      driverPayAmount = parseFloat(orderInstance.driverPayAmount || '0');
-      
-      if ((!driverPayAmount || driverPayAmount < 0.009) && configuredDriverPayAmount > 0) {
-        driverPayAmount = Math.min(deliveryFee, configuredDriverPayAmount);
-      }
-      
-      if (driverPayAmount > deliveryFee) {
-        driverPayAmount = deliveryFee;
-      }
-    }
-    // If driverPayEnabled is false or no driver, driverPayAmount stays 0
-    
-    merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
-  }
+  // Merchant no longer gets any delivery fee - 100% goes to driver (50% savings, 50% wallet for Pay Now)
+  const driverPayAmount = !isPOSOrder && orderInstance.driverId ? deliveryFee : 0;
+  const merchantDeliveryAmount = 0;
 
   let normalizedReceipt = receiptNumber || paymentTransaction.receiptNumber;
   const paymentProvider = paymentTransaction.paymentProvider || 'mpesa';
@@ -554,6 +527,136 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   }
 };
 
+/**
+ * Process order payment submission (Send Cash Submission) when M-Pesa confirms payment.
+ * Shared by callback and poll-transaction so cash at hand and savings are logged even if callback is missed.
+ */
+const processOrderPaymentSubmission = async (cashSettlementTransaction, { receiptNumber, transactionDate, phoneNumber }) => {
+  const notes = cashSettlementTransaction.notes || '';
+  if (notes.indexOf('order_payment_submission') === -1 || !cashSettlementTransaction.orderId) {
+    return null;
+  }
+  const orderId = cashSettlementTransaction.orderId;
+  const driverId = cashSettlementTransaction.driverId;
+  const submissionAmount = parseFloat(cashSettlementTransaction.amount) || 0;
+
+  // Idempotency: if already processed (e.g. by callback and poll both), just update the settlement transaction and return
+  const existing = await db.sequelize.query(
+    `SELECT cs.id FROM cash_submissions cs
+     INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+     WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')
+     LIMIT 1`,
+    { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId, orderId } }
+  ).catch(() => []);
+  if (existing && existing.length > 0) {
+    console.log(`   [processOrderPaymentSubmission] Order #${orderId} already has cash submission, updating settlement transaction only`);
+    await cashSettlementTransaction.update({
+      status: 'completed',
+      paymentStatus: 'paid',
+      receiptNumber: receiptNumber || null,
+      transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+      phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
+      notes: `Order payment #${orderId} via M-Pesa - Receipt: ${receiptNumber || 'N/A'}`
+    });
+    return { submission: null, receiptNumber };
+  }
+
+  let breakdown;
+  try {
+    breakdown = await getOrderFinancialBreakdown(orderId);
+  } catch (breakdownErr) {
+    console.error(`   [processOrderPaymentSubmission] getOrderFinancialBreakdown failed for Order #${orderId}:`, breakdownErr.message);
+    const order = await db.Order.findByPk(orderId, { attributes: ['id', 'totalAmount'] });
+    const totalAmount = order ? parseFloat(order.totalAmount || 0) : 0;
+    breakdown = { itemsTotal: totalAmount, deliveryFee: 0 };
+  }
+  const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+  const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+  const driverSavingsCreditAmount = deliveryFee * 0.5;
+  const merchantCreditAmount = itemsTotal;
+
+  const submission = await db.CashSubmission.create({
+    driverId,
+    submissionType: 'order_payment',
+    amount: submissionAmount,
+    details: { orderId },
+    status: 'approved',
+    approvedAt: new Date()
+  });
+  await db.sequelize.query(
+    `INSERT INTO cash_submission_orders ("cashSubmissionId", "orderId", "createdAt", "updatedAt") VALUES (:id, :orderId, NOW(), NOW())`,
+    { replacements: { id: submission.id, orderId } }
+  );
+
+  const driver = await db.Driver.findByPk(driverId);
+  if (driver) {
+    const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+    const newCashAtHand = currentCashAtHand - submissionAmount;
+    await driver.update({ cashAtHand: newCashAtHand });
+    console.log(`   [processOrderPaymentSubmission] Driver cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (order payment #${orderId})`);
+  }
+
+  let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+  if (!adminWallet) {
+    adminWallet = await db.AdminWallet.create({ id: 1, balance: 0, totalRevenue: 0, totalOrders: 0, cashAtHand: 0 });
+  }
+  await adminWallet.update({
+    balance: parseFloat(adminWallet.balance) + merchantCreditAmount,
+    totalRevenue: parseFloat(adminWallet.totalRevenue) + merchantCreditAmount,
+    cashAtHand: parseFloat(adminWallet.cashAtHand || 0) + submissionAmount
+  });
+
+  if (driverSavingsCreditAmount > 0.009 && driverId) {
+    let driverWallet = await db.DriverWallet.findOne({ where: { driverId } });
+    if (!driverWallet) {
+      driverWallet = await db.DriverWallet.create({
+        driverId, balance: 0, totalTipsReceived: 0, totalTipsCount: 0, totalDeliveryPay: 0, totalDeliveryPayCount: 0, savings: 0
+      });
+    }
+    await driverWallet.update({ savings: parseFloat(driverWallet.savings || 0) + driverSavingsCreditAmount });
+    await db.Transaction.create({
+      orderId,
+      transactionType: 'savings_credit',
+      paymentMethod: 'mobile_money',
+      paymentProvider: 'order_payment_submission',
+      amount: driverSavingsCreditAmount,
+      status: 'completed',
+      paymentStatus: 'paid',
+      driverId,
+      driverWalletId: driverWallet.id,
+      notes: `Savings credit from Order Payment submission - 50% delivery fee for Order #${orderId} (KES ${driverSavingsCreditAmount.toFixed(2)})`
+    });
+  }
+
+  await db.Transaction.create({
+    orderId,
+    driverId,
+    transactionType: 'cash_submission',
+    paymentMethod: 'mobile_money',
+    paymentProvider: 'order_payment_submission',
+    amount: submissionAmount,
+    status: 'completed',
+    paymentStatus: 'paid',
+    receiptNumber: receiptNumber || `CASH-SUB-${submission.id}`,
+    phoneNumber: phoneNumber || driver?.phoneNumber,
+    transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+    notes: `Cash submission (order payment) approved - Order #${orderId}`
+  });
+
+  // Store as negative so it appears in cash-at-hand "cash sent" list (driver-wallet filters amount < 0)
+  await cashSettlementTransaction.update({
+    amount: -Math.abs(submissionAmount),
+    status: 'completed',
+    paymentStatus: 'paid',
+    receiptNumber: receiptNumber || null,
+    transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+    phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
+    notes: `Order payment #${orderId} via M-Pesa - Receipt: ${receiptNumber || 'N/A'}`
+  });
+  console.log(`✅✅✅ Order payment submission for Order #${orderId} processed successfully (cash at hand + savings logged)`);
+  return { submission, receiptNumber };
+};
+
 // Helper function to calculate delivery fee (same as in orders.js)
 const calculateDeliveryFee = async (orderId) => {
   try {
@@ -819,17 +922,9 @@ router.post('/stk-push', async (req, res) => {
       // POS orders don't have delivery fees, so skip delivery fee transaction creation
       const effectiveDeliveryFee = isPOSOrder ? 0 : deliveryFee;
 
-      const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-        db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-        db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-      ]);
-
-      const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
-      const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-      const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0 && !isPOSOrder
-        ? Math.min(effectiveDeliveryFee, configuredDriverPayAmount)
-        : 0;
-      const merchantDeliveryAmount = isPOSOrder ? 0 : Math.max(effectiveDeliveryFee - driverPayAmount, 0);
+      // Merchant no longer gets any delivery fee - 100% goes to driver
+      const driverPayAmount = !isPOSOrder && order.driverId ? effectiveDeliveryFee : 0;
+      const merchantDeliveryAmount = 0;
 
       const baseTransactionPayload = {
           orderId: order.id,
@@ -1091,18 +1186,19 @@ router.post('/stk-push', async (req, res) => {
  */
 /**
  * Get callback URL configuration (for debugging)
+ * Uses async resolution so ngrok URL is shown when auto-detected from ngrok API.
  */
 router.get('/callback-url', async (req, res) => {
   try {
     const mpesaService = require('../services/mpesa');
-    const callbackUrl = mpesaService.getMpesaCallbackUrl();
+    const callbackUrl = await mpesaService.getCallbackUrlAsync();
     
     res.json({
       callbackUrl: callbackUrl,
       environment: process.env.NODE_ENV || 'development',
       ngrokUrl: process.env.NGROK_URL || 'not set',
       mpesaCallbackUrl: process.env.MPESA_CALLBACK_URL || 'not set',
-      message: 'Callback URL configuration'
+      message: 'Callback URL configuration (used for M-Pesa receipt via callback)'
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to get callback URL', message: error.message });
@@ -1203,26 +1299,34 @@ router.post('/callback', async (req, res) => {
       console.log('Request Method:', req.method);
       console.log('Request URL:', req.url);
       
-      const callbackData = req.body;
+      // Use body (restored from captured raw) or try parsing raw if body empty
+      let callbackData = req.body;
+      const rawBody = req._rawMpesaCallbackBody;
+      if ((!callbackData || (typeof callbackData === 'object' && Object.keys(callbackData).length === 0)) && rawBody && rawBody.trim()) {
+        try {
+          callbackData = JSON.parse(rawBody);
+          req.body = callbackData;
+        } catch (e) {
+          console.error('   Fallback JSON.parse(raw) failed:', e.message);
+        }
+      }
       
       // CRITICAL: Log the RAW request body first to see exactly what M-Pesa sends
       console.log('═══════════════════════════════════════════════════════');
       console.log('📞 RAW CALLBACK DATA FROM M-PESA:');
-      console.log('   Request body type:', typeof req.body);
-      console.log('   Request body keys:', Object.keys(req.body || {}));
-      console.log('   Full raw body:', JSON.stringify(req.body, null, 2));
+      console.log('   Request body type:', typeof callbackData);
+      console.log('   Request body keys:', callbackData ? Object.keys(callbackData) : []);
+      console.log('   Full body:', JSON.stringify(callbackData, null, 2));
+      if (rawBody) console.log('   Raw body length:', rawBody.length, 'bytes');
       console.log('   Content-Type:', req.headers['content-type']);
       console.log('═══════════════════════════════════════════════════════');
       
       // CRITICAL: Check if body is empty or malformed
       if (!callbackData || (typeof callbackData === 'object' && Object.keys(callbackData).length === 0)) {
         console.error('❌❌❌ CRITICAL: Callback body is empty or undefined!');
-        console.error('   This might indicate a request body parsing issue.');
         console.error('   Body type:', typeof callbackData);
-        console.error('   Body value:', callbackData);
+        console.error('   Raw body (first 500 chars):', (rawBody || '').slice(0, 500));
         console.error('   Headers:', JSON.stringify(req.headers, null, 2));
-        console.error('   Raw body:', req.body);
-        console.error('   This callback will NOT be processed!');
         return; // Exit early if no body data
       }
 
@@ -1329,7 +1433,77 @@ router.post('/callback', async (req, res) => {
           as: 'order'
         }]
       });
-      
+
+      // CRITICAL: If this is a cash_settlement (driver order payment or cash remittance), handle it here.
+      // Do NOT use its orderId to run customer payment flow - that would mis-route driver callbacks.
+      if (transaction && transaction.transactionType === 'cash_settlement') {
+        const cashSettlementTransaction = transaction;
+        console.log(`✅ Found cash_settlement transaction #${cashSettlementTransaction.id} for CheckoutRequestID: ${checkoutRequestID} - handling as driver callback`);
+        if (resultCode === 0) {
+          const callbackMetadata = stkCallback.CallbackMetadata || {};
+          const items = callbackMetadata.Item || [];
+          const receiptNumber = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
+          const transactionDate = items.find(item => item.Name === 'TransactionDate')?.Value;
+          const phoneNumber = items.find(item => item.Name === 'PhoneNumber')?.Value;
+          const notes = cashSettlementTransaction.notes || '';
+          if (notes.indexOf('order_payment_submission') !== -1 && cashSettlementTransaction.orderId) {
+            try {
+              const result = await processOrderPaymentSubmission(cashSettlementTransaction, {
+                receiptNumber,
+                transactionDate,
+                phoneNumber
+              });
+              if (result) return;
+            } catch (orderPayErr) {
+              console.error(`❌ Error processing order payment submission:`, orderPayErr);
+              await cashSettlementTransaction.update({
+                status: 'failed',
+                paymentStatus: 'failed',
+                notes: `Order payment processing failed: ${orderPayErr.message}`
+              });
+              return;
+            }
+          }
+          // Generic cash settlement (driver remittance, no order)
+          if (receiptNumber) {
+            await cashSettlementTransaction.update({
+              status: 'completed',
+              paymentStatus: 'paid',
+              receiptNumber: receiptNumber,
+              transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+              phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
+              notes: `Cash remittance to business via M-Pesa: KES ${Math.abs(parseFloat(cashSettlementTransaction.amount)).toFixed(2)} - Receipt: ${receiptNumber}`
+            });
+            try {
+              let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
+              if (!adminWallet) {
+                adminWallet = await db.AdminWallet.create({
+                  id: 1,
+                  balance: 0,
+                  totalRevenue: 0,
+                  totalOrders: 0
+                });
+              }
+              const settlementAmount = Math.abs(parseFloat(cashSettlementTransaction.amount));
+              await adminWallet.update({
+                balance: parseFloat(adminWallet.balance || 0) + settlementAmount,
+                totalRevenue: parseFloat(adminWallet.totalRevenue || 0) + settlementAmount
+              });
+            } catch (walletError) {
+              console.error(`❌ Error crediting admin wallet for cash settlement:`, walletError);
+            }
+            console.log(`✅✅✅ Cash settlement #${cashSettlementTransaction.id} processed successfully!`);
+          }
+        } else {
+          await cashSettlementTransaction.update({
+            status: 'failed',
+            paymentStatus: 'failed',
+            notes: `M-Pesa payment failed: ResultCode ${resultCode}`
+          });
+        }
+        return; // Done - do not fall through to customer payment path
+      }
+
       if (transaction && transaction.order) {
         order = transaction.order;
         console.log(`✅ Found order #${order.id} via transaction lookup`);
@@ -2052,17 +2226,30 @@ router.post('/callback', async (req, res) => {
             `M-Pesa Payment Failed: ${errorMessage}`
         });
         
-        // Emit socket event to notify driver about payment failure
+        // Emit socket event to notify driver and admin about payment failure
         const io = req.app.get('io');
-        if (io && order.driverId) {
-          io.to(`driver-${order.driverId}`).emit('payment-failed', {
+        if (io) {
+          // Notify driver if assigned
+          if (order.driverId) {
+            io.to(`driver-${order.driverId}`).emit('payment-failed', {
+              orderId: order.id,
+              errorType: errorType,
+              errorMessage: errorMessage,
+              resultCode: resultCode,
+              resultDesc: resultDesc
+            });
+            console.log(`📡 Emitted payment-failed event to driver-${order.driverId} for Order #${order.id}`);
+          }
+          
+          // Always notify admin (for admin-triggered STK pushes)
+          io.to('admin').emit('payment-failed', {
             orderId: order.id,
             errorType: errorType,
             errorMessage: errorMessage,
             resultCode: resultCode,
             resultDesc: resultDesc
           });
-          console.log(`📡 Emitted payment-failed event to driver-${order.driverId} for Order #${order.id}`);
+          console.log(`📡 Emitted payment-failed event to admin room for Order #${order.id}`);
         }
       }
       } else {
@@ -2197,23 +2384,39 @@ router.post('/callback', async (req, res) => {
           console.log(`✅ Found cash_settlement transaction #${cashSettlementTransaction.id} for CheckoutRequestID: ${checkoutRequestID}`);
           
           if (resultCode === 0) {
-            // Payment successful
             const callbackMetadata = stkCallback.CallbackMetadata || {};
             const items = callbackMetadata.Item || [];
-            
             const receiptNumber = items.find(item => item.Name === 'MpesaReceiptNumber')?.Value;
-            const amount = items.find(item => item.Name === 'Amount')?.Value;
             const transactionDate = items.find(item => item.Name === 'TransactionDate')?.Value;
             const phoneNumber = items.find(item => item.Name === 'PhoneNumber')?.Value;
 
+            // Order payment submission (Pay on Delivery: driver remits order cost + 50% via M-Pesa)
+            const notes = cashSettlementTransaction.notes || '';
+            if (notes.indexOf('order_payment_submission') !== -1 && cashSettlementTransaction.orderId) {
+              try {
+                const result = await processOrderPaymentSubmission(cashSettlementTransaction, {
+                  receiptNumber,
+                  transactionDate,
+                  phoneNumber
+                });
+                if (result) return;
+              } catch (orderPayErr) {
+                console.error(`❌ Error processing order payment submission:`, orderPayErr);
+                await cashSettlementTransaction.update({
+                  status: 'failed',
+                  paymentStatus: 'failed',
+                  notes: `Order payment processing failed: ${orderPayErr.message}`
+                });
+                return;
+              }
+            }
+
+            // Generic cash settlement (driver remittance, no order)
             console.log(`💰 Cash settlement payment details from callback:`);
             console.log(`   Receipt: ${receiptNumber || 'N/A'}`);
-            console.log(`   Amount: ${amount || 'N/A'}`);
             console.log(`   Phone: ${phoneNumber || 'N/A'}`);
-            console.log(`   Transaction Date: ${transactionDate || 'N/A'}`);
 
             if (receiptNumber) {
-              // Update transaction with receipt number and mark as completed
               await cashSettlementTransaction.update({
                 status: 'completed',
                 paymentStatus: 'paid',
@@ -2223,7 +2426,6 @@ router.post('/callback', async (req, res) => {
                 notes: `Cash remittance to business via M-Pesa: KES ${Math.abs(parseFloat(cashSettlementTransaction.amount)).toFixed(2)} - Receipt: ${receiptNumber}`
               });
 
-              // Credit admin wallet
               try {
                 let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
                 if (!adminWallet) {
@@ -2234,30 +2436,19 @@ router.post('/callback', async (req, res) => {
                     totalOrders: 0
                   });
                 }
-
                 const settlementAmount = Math.abs(parseFloat(cashSettlementTransaction.amount));
                 const oldBalance = parseFloat(adminWallet.balance) || 0;
                 const oldTotalRevenue = parseFloat(adminWallet.totalRevenue) || 0;
-
                 await adminWallet.update({
                   balance: oldBalance + settlementAmount,
                   totalRevenue: oldTotalRevenue + settlementAmount
                 });
-
-                console.log(`✅ Credited admin wallet for cash settlement #${cashSettlementTransaction.id}:`);
-                console.log(`   Amount: KES ${settlementAmount.toFixed(2)}`);
-                console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(adminWallet.balance).toFixed(2)}`);
-                console.log(`   Total revenue: ${oldTotalRevenue.toFixed(2)} → ${parseFloat(adminWallet.totalRevenue).toFixed(2)}`);
+                console.log(`✅ Credited admin wallet for cash settlement #${cashSettlementTransaction.id}: KES ${settlementAmount.toFixed(2)}`);
               } catch (walletError) {
                 console.error(`❌ Error crediting admin wallet for cash settlement:`, walletError);
-                // Don't fail the transaction update if wallet credit fails
               }
-
               console.log(`✅✅✅ Cash settlement #${cashSettlementTransaction.id} processed successfully!`);
-              console.log(`   Driver ID: ${cashSettlementTransaction.driverId}`);
-              console.log(`   Amount: KES ${Math.abs(parseFloat(cashSettlementTransaction.amount)).toFixed(2)}`);
-              console.log(`   Receipt: ${receiptNumber}`);
-              return; // Exit early since we processed the cash settlement
+              return;
             } else {
               console.error(`❌ Cash settlement callback missing receipt number`);
             }
@@ -2326,6 +2517,28 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
     
     if (!checkoutRequestID) {
       return res.status(400).json({ error: 'CheckoutRequestID is required' });
+    }
+
+    // If this is an order_payment_submission (cash_settlement), check DB first - callback may have already run
+    const cashSettlement = await db.Transaction.findOne({
+      where: { checkoutRequestID, transactionType: 'cash_settlement' }
+    });
+    if (cashSettlement && cashSettlement.status === 'completed') {
+      return res.json({
+        success: true,
+        status: 'completed',
+        paymentStatus: 'paid',
+        receiptNumber: cashSettlement.receiptNumber,
+        message: 'Order payment already confirmed'
+      });
+    }
+    if (cashSettlement && cashSettlement.status === 'failed') {
+      return res.json({
+        success: false,
+        status: 'failed',
+        paymentStatus: 'failed',
+        message: cashSettlement.notes || 'Payment failed'
+      });
     }
     
     console.log(`🔍 Polling M-Pesa API for transaction status: ${checkoutRequestID}`);
@@ -2441,6 +2654,38 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
     
     // If M-Pesa confirms payment completion (ResultCode 0 with receipt), update our database
     if (isCompleted) {
+      const receiptNumber = receiptFromMetadata || receiptFromResponse || null;
+      const transactionDateItem = items.find(item => (item.Name || item.name) === 'TransactionDate');
+      const phoneItem = items.find(item => (item.Name || item.name) === 'PhoneNumber');
+      const transactionDate = transactionDateItem?.Value || transactionDateItem?.value;
+      const phoneNumber = phoneItem?.Value || phoneItem?.value;
+
+      // Order payment submission (Send Cash Submission): driver app polls after PIN; callback may not reach backend
+      const cashSettlement = await db.Transaction.findOne({
+        where: { checkoutRequestID, transactionType: 'cash_settlement' }
+      });
+      if (cashSettlement && cashSettlement.notes && cashSettlement.notes.indexOf('order_payment_submission') !== -1 && cashSettlement.orderId) {
+        try {
+          const result = await processOrderPaymentSubmission(cashSettlement, {
+            receiptNumber,
+            transactionDate,
+            phoneNumber
+          });
+          if (result) {
+            console.log(`✅ Order payment submission processed via poll for Order #${cashSettlement.orderId}`);
+            return res.json({
+              success: true,
+              status: 'completed',
+              paymentStatus: 'paid',
+              receiptNumber: result.receiptNumber,
+              message: 'Order payment submitted successfully (cash at hand and savings updated)'
+            });
+          }
+        } catch (pollOrderPayErr) {
+          console.error(`❌ Poll: Error processing order payment submission:`, pollOrderPayErr);
+        }
+      }
+
       const transaction = await db.Transaction.findOne({
         where: { checkoutRequestID, transactionType: 'payment' },
         include: [{
@@ -2450,7 +2695,6 @@ router.get('/poll-transaction/:checkoutRequestID', async (req, res) => {
       });
       
       if (transaction) {
-        const receiptNumber = receiptFromMetadata || receiptFromResponse || null;
         const context = 'M-Pesa query confirmation';
 
         const finalizeResult = await finalizeOrderPayment({
@@ -3394,6 +3638,147 @@ router.post('/b2c-callback', (req, res) => {
     console.error('❌ Unhandled error in B2C callback processing:', error);
     console.error('Error stack:', error.stack);
   });
+});
+
+/**
+ * Check whether we received M-Pesa callback for an order payment (Send Cash Submission).
+ * GET /api/mpesa/order-payment-status/:orderId
+ */
+router.get('/order-payment-status/:orderId', async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.orderId, 10);
+    if (!orderId || orderId < 1) {
+      return res.status(400).json({ success: false, error: 'Valid orderId required' });
+    }
+    const tx = await db.Transaction.findOne({
+      where: { orderId, transactionType: 'cash_settlement' },
+      attributes: ['id', 'status', 'receiptNumber', 'checkoutRequestID', 'amount', 'notes', 'createdAt']
+    });
+    const isOrderPayment = tx && tx.notes && (tx.notes.indexOf('order_payment_submission') !== -1 || (tx.notes.indexOf('Order payment #') !== -1 && tx.notes.indexOf('via M-Pesa') !== -1));
+    const [submission] = await db.sequelize.query(
+      `SELECT cs.id, cs.status, cs.amount FROM cash_submissions cs
+       INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+       WHERE cso."orderId" = :orderId AND cs."submissionType" = 'order_payment' LIMIT 1`,
+      { type: db.sequelize.QueryTypes.SELECT, replacements: { orderId } }
+    ).catch(() => []);
+    const callbackReceived = !!(tx && tx.status === 'completed' && tx.receiptNumber);
+    let message = 'No order-payment cash_settlement found for this order.';
+    if (tx && !isOrderPayment) message = 'Transaction found but not an order payment submission.';
+    else if (tx && isOrderPayment) {
+      if (tx.status === 'completed' && tx.receiptNumber) message = 'Callback received; receipt saved. Cash submission and savings should be created.';
+      else message = 'Callback not received (or not processed). Transaction still pending, no receipt.';
+    }
+    return res.json({
+      success: true,
+      orderId,
+      callbackReceived,
+      transaction: tx ? { id: tx.id, status: tx.status, receiptNumber: tx.receiptNumber, checkoutRequestID: tx.checkoutRequestID, createdAt: tx.createdAt } : null,
+      cashSubmission: submission || null,
+      message
+    });
+  } catch (err) {
+    console.error('Order payment status error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * Repair order payment: create CashSubmission + cash at hand + savings when M-Pesa completed
+ * but processOrderPaymentSubmission was never run (e.g. callback missed, poll had no receipt).
+ * Tries: (1) completed cash_settlement with receipt, (2) pending cash_settlement - fetch receipt from M-Pesa.
+ * GET /api/mpesa/repair-order-payment/:orderId
+ */
+router.get('/repair-order-payment/:orderId', async (req, res) => {
+  try {
+    const orderId = parseInt(req.params.orderId, 10);
+    if (!orderId || orderId < 1) {
+      return res.status(400).json({ success: false, error: 'Valid orderId required' });
+    }
+
+    const isOrderPaymentNotes = (notes) => {
+      if (!notes) return false;
+      return notes.indexOf('order_payment_submission') !== -1 ||
+        (notes.indexOf('Order payment #') !== -1 && notes.indexOf('via M-Pesa') !== -1);
+    };
+
+    let cashSettlement = await db.Transaction.findOne({
+      where: {
+        orderId,
+        transactionType: 'cash_settlement',
+        status: 'completed',
+        receiptNumber: { [Op.ne]: null }
+      }
+    });
+    if (cashSettlement && !isOrderPaymentNotes(cashSettlement.notes)) {
+      cashSettlement = null;
+    }
+    if (!cashSettlement) {
+      cashSettlement = await db.Transaction.findOne({
+        where: {
+          orderId,
+          transactionType: 'cash_settlement',
+          notes: { [Op.like]: '%order_payment_submission%' }
+        }
+      });
+      if (cashSettlement && cashSettlement.status === 'pending' && cashSettlement.checkoutRequestID) {
+        const mpesaStatus = await mpesaService.checkTransactionStatus(cashSettlement.checkoutRequestID).catch(() => null);
+        const callbackMetadata = mpesaStatus?.CallbackMetadata;
+        const items = callbackMetadata?.Item || callbackMetadata?.item || [];
+        const receiptItem = items.find(item => (item.Name || item.name) === 'MpesaReceiptNumber');
+        const receiptFromMetadata = receiptItem?.Value || receiptItem?.value;
+        const receiptFromResponse = mpesaStatus?.ReceiptNumber || mpesaStatus?.receiptNumber;
+        const receiptNumber = receiptFromMetadata || receiptFromResponse;
+        const transactionDateItem = items.find(item => (item.Name || item.name) === 'TransactionDate');
+        const phoneItem = items.find(item => (item.Name || item.name) === 'PhoneNumber');
+        const transactionDate = transactionDateItem?.Value || transactionDateItem?.value;
+        const phoneNumber = phoneItem?.Value || phoneItem?.value;
+        if (receiptNumber && mpesaStatus?.ResultCode === 0) {
+          cashSettlement.receiptNumber = receiptNumber;
+          cashSettlement.transactionDate = transactionDate ? new Date(transactionDate) : new Date();
+          cashSettlement.phoneNumber = phoneNumber || cashSettlement.phoneNumber;
+        } else {
+          return res.status(404).json({
+            success: false,
+            error: 'Order payment transaction still pending or M-Pesa returned no receipt. Try again after driver completed M-Pesa.'
+          });
+        }
+      } else if (!cashSettlement || !isOrderPaymentNotes(cashSettlement.notes)) {
+        return res.status(404).json({
+          success: false,
+          error: 'No order-payment cash_settlement found for this order'
+        });
+      }
+    }
+
+    const existing = await db.sequelize.query(
+      `SELECT cs.id FROM cash_submissions cs
+       INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+       WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')
+       LIMIT 1`,
+      { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId: cashSettlement.driverId, orderId } }
+    ).catch(() => []);
+    if (existing && existing.length > 0) {
+      return res.json({ success: true, alreadyProcessed: true, message: 'Order payment already has cash submission' });
+    }
+
+    const result = await processOrderPaymentSubmission(cashSettlement, {
+      receiptNumber: cashSettlement.receiptNumber,
+      transactionDate: cashSettlement.transactionDate ? (cashSettlement.transactionDate instanceof Date ? cashSettlement.transactionDate.toISOString() : cashSettlement.transactionDate) : null,
+      phoneNumber: cashSettlement.phoneNumber
+    });
+    if (result) {
+      return res.json({
+        success: true,
+        repaired: true,
+        message: 'Order payment submission created (cash at hand and savings updated)',
+        receiptNumber: result.receiptNumber
+      });
+    }
+    return res.status(500).json({ success: false, error: 'processOrderPaymentSubmission returned no result' });
+  } catch (err) {
+    console.error('Repair order payment error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 module.exports = router;

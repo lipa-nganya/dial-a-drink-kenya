@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const axios = require('axios');
 
 // M-Pesa Production credentials (must be set via environment variables)
 const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
@@ -18,7 +19,10 @@ const validateMpesaCredentials = () => {
   }
   return true;
 };
-// Determine callback URL based on environment
+// Cached callback URL when resolved from ngrok API (avoids hitting ngrok on every STK push)
+let cachedNgrokCallbackUrl = null;
+
+// Determine callback URL based on environment (sync - use when env is already set)
 const getCallbackUrl = () => {
   let callbackUrl = process.env.MPESA_CALLBACK_URL;
   
@@ -35,9 +39,14 @@ const getCallbackUrl = () => {
   // Priority 2: Check for ngrok URL in environment (common ngrok env var)
   const ngrokUrl = process.env.NGROK_URL;
   if (ngrokUrl) {
-    callbackUrl = `${ngrokUrl}/api/mpesa/callback`;
+    callbackUrl = `${ngrokUrl.replace(/\/$/, '')}/api/mpesa/callback`;
     console.log(`✅ Using ngrok URL for callbacks: ${callbackUrl}`);
     return callbackUrl;
+  }
+  
+  // If we previously resolved from ngrok API, use cache
+  if (cachedNgrokCallbackUrl) {
+    return cachedNgrokCallbackUrl;
   }
   
   // Priority 3: Check if we're in Cloud Run and determine which instance
@@ -66,11 +75,42 @@ const getCallbackUrl = () => {
     return callbackUrl;
   }
   
-  // Local development: NO FALLBACK - require explicit configuration
-  throw new Error('❌ No callback URL configured for local development. Please set MPESA_CALLBACK_URL in .env file to your ngrok URL (e.g., https://your-ngrok-url.ngrok-free.dev/api/mpesa/callback)');
+  // Local development: will be resolved async by getCallbackUrlAsync (ngrok API)
+  throw new Error('❌ No callback URL configured. Set MPESA_CALLBACK_URL or NGROK_URL in .env, or ensure ngrok is running (http://localhost:4040).');
 };
 
-// Get callback URL function - call at runtime to ensure environment is loaded
+/**
+ * Resolve callback URL (async). For local dev without env set, fetches ngrok URL from ngrok API.
+ * Use this when initiating STK push so M-Pesa receives the receipt via callback.
+ */
+async function getCallbackUrlAsync() {
+  try {
+    return getCallbackUrl();
+  } catch (e) {
+    // Only try ngrok API when running locally and sync resolution failed
+    const { isCloudRun } = require('../utils/envDetection');
+    if (isCloudRun()) throw e;
+  }
+
+  try {
+    const { data } = await axios.get('http://127.0.0.1:4040/api/tunnels', { timeout: 3000 });
+    const tunnels = data.tunnels || [];
+    const httpsTunnel = tunnels.find(t => t.public_url && t.public_url.startsWith('https://'));
+    const publicUrl = httpsTunnel?.public_url || tunnels[0]?.public_url;
+    if (!publicUrl) throw new Error('No ngrok tunnel URL in response');
+    const base = publicUrl.replace(/\/$/, '');
+    cachedNgrokCallbackUrl = `${base}/api/mpesa/callback`;
+    console.log(`✅ Using ngrok URL for M-Pesa callback (from ngrok API): ${cachedNgrokCallbackUrl}`);
+    return cachedNgrokCallbackUrl;
+  } catch (err) {
+    console.error('❌ Could not get ngrok URL for M-Pesa callback:', err.message);
+    throw new Error(
+      '❌ No callback URL for local development. Either: (1) Set NGROK_URL or MPESA_CALLBACK_URL in .env to your ngrok URL (e.g. https://xxx.ngrok-free.dev), or (2) Start ngrok (ngrok http 5001) and ensure it is running at http://localhost:4040.'
+    );
+  }
+}
+
+// Get callback URL function - call at runtime to ensure environment is loaded (sync)
 const getMpesaCallbackUrl = () => getCallbackUrl();
 
 const MPESA_ENVIRONMENT = process.env.MPESA_ENVIRONMENT || 'production'; // Default to production
@@ -230,8 +270,8 @@ async function initiateSTKPush(phoneNumber, amount, accountReference, transactio
     const token = await getAccessToken();
     const { password, timestamp } = generatePassword();
 
-    // Get callback URL at runtime
-    const callbackUrl = getMpesaCallbackUrl();
+    // Get callback URL at runtime (async so we can resolve ngrok from API when env not set)
+    const callbackUrl = await getCallbackUrlAsync();
     
     const payload = {
       BusinessShortCode: MPESA_SHORTCODE,
@@ -516,6 +556,7 @@ module.exports = {
   checkTransactionStatus,
   formatPhoneNumber,
   getMpesaCallbackUrl,
+  getCallbackUrlAsync,
   initiateB2C
 };
 

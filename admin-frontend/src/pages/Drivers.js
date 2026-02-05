@@ -1077,11 +1077,11 @@ const Drivers = () => {
                       </Typography>
                     </Tooltip>
                   </TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <IconButton
                         size="small"
-                        onClick={() => toggleOtpVisibility(driver.id)}
+                        onClick={(e) => { e.stopPropagation(); toggleOtpVisibility(driver.id); }}
                         sx={{ color: colors.accentText }}
                         title={showOtps[driver.id] ? "Hide OTP" : "Show OTP"}
                       >
@@ -1111,13 +1111,13 @@ const Drivers = () => {
                       )}
                     </Box>
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <Tooltip title={driver.pushToken ? "Test Push Notification" : "No push token - driver app not connected"}>
                         <span>
                           <IconButton
                             size="small"
-                            onClick={() => handleTestPush(driver)}
+                            onClick={(e) => { e.stopPropagation(); handleTestPush(driver); }}
                             disabled={testingPush === driver.id || !driver.pushToken}
                             sx={{ 
                               color: driver.pushToken ? colors.accentText : 'text.disabled',
@@ -1132,18 +1132,6 @@ const Drivers = () => {
                           </IconButton>
                         </span>
                       </Tooltip>
-                    <Tooltip title="View Details">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/drivers/${driver.id}`);
-                        }}
-                        sx={{ color: colors.accentText }}
-                      >
-                        <LocalShipping />
-                      </IconButton>
-                    </Tooltip>
                     <Tooltip title="Invite via WhatsApp">
                       <IconButton
                         size="small"

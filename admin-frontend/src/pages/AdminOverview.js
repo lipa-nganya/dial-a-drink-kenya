@@ -34,6 +34,7 @@ import { api } from '../services/api';
 import io from 'socket.io-client';
 import { useAdmin } from '../contexts/AdminContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { useMobileView } from '../contexts/MobileViewContext';
 import { getBackendUrl } from '../utils/backendUrl';
 import {
   getOrderStatusChipProps,
@@ -44,6 +45,7 @@ import {
 
 const AdminOverview = () => {
   const { isDarkMode, colors } = useTheme();
+  const { isMobileDevice } = useMobileView();
   const [stats, setStats] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -494,7 +496,7 @@ const AdminOverview = () => {
             alignItems="stretch"
             sx={{ mb: 3 }}
           >
-            {section.cards.map((card) => {
+            {section.cards.filter((card) => !(isMobileDevice && card.key === 'pendingOrders')).map((card) => {
               const displayValue = card.formatter ? card.formatter(card.value) : formatNumber(card.value);
               return (
                 <Grid key={card.key} item xs={12} sm={6} md={4} lg={2} sx={{ display: 'flex' }}>

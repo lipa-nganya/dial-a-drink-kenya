@@ -336,14 +336,18 @@ class OrderAcceptanceActivity : AppCompatActivity() {
     }
     
     private fun stopSoundAndVibration() {
-        // Stop vibration
+        // Stop vibration (null-safe: runnable may already be cleared or never set)
         vibrator?.cancel()
-        vibrationHandler?.removeCallbacks(vibrationRunnable!!)
+        vibrationRunnable?.let { runnable ->
+            vibrationHandler?.removeCallbacks(runnable)
+        }
         vibrationRunnable = null
-        
-        // Stop sound
-        mediaPlayer?.stop()
-        mediaPlayer?.release()
+
+        // Stop sound (wrap in try/catch in case player is already released/invalid state)
+        try {
+            mediaPlayer?.takeIf { it.isPlaying }?.stop()
+            mediaPlayer?.release()
+        } catch (_: Exception) { /* already stopped/released */ }
         mediaPlayer = null
     }
     

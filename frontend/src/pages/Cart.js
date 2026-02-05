@@ -44,7 +44,6 @@ const Cart = () => {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [tipAmount, setTipAmount] = useState(0);
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
     deliveryFeeMode: 'fixed',
@@ -366,9 +365,6 @@ const Cart = () => {
     message += `\n*Order Summary:*\n`;
     message += `Subtotal: KES ${getTotalPrice().toFixed(2)}\n`;
     message += `Delivery Fee: KES ${deliveryFee.toFixed(2)}\n`;
-    if (tipAmount > 0) {
-      message += `Tip: KES ${tipAmount.toFixed(2)}\n`;
-    }
     message += `*Total: KES ${totalAmount.toFixed(2)}*\n\n`;
     message += `*Payment Method:* ${paymentType === 'pay_now' ? 'Pay Now' : 'Pay on Delivery'}`;
     if (paymentType === 'pay_now' && paymentMethod) {
@@ -484,8 +480,7 @@ const Cart = () => {
         paymentType,
         paymentMethod,
         mobileMoneyProvider,
-        mpesaPhoneNumber,
-        tipAmount
+        mpesaPhoneNumber
       });
 
       // Build complete address
@@ -523,7 +518,7 @@ const Cart = () => {
         notes: customerInfo.notes,
         paymentType: paymentType,
         paymentMethod: paymentType === 'pay_now' ? paymentMethod : null,
-        tipAmount: tipAmount || 0,
+        tipAmount: 0,
         items: items.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
@@ -940,76 +935,10 @@ const Cart = () => {
                 <Typography>KES {Math.ceil(deliveryFee)}</Typography>
               </Box>
               
-              {/* Tip Section */}
-              <Box sx={{ mb: 2, mt: 2 }}>
-                <Typography variant="body2" gutterBottom sx={{ fontWeight: 500 }}>
-                  Tip Rider (Optional)
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                  {[50, 100, 200, 500].map((amount) => (
-                    <Button
-                      key={amount}
-                      variant={tipAmount === amount ? 'contained' : 'outlined'}
-                      size="small"
-                      onClick={() => setTipAmount(amount)}
-                      sx={{
-                        minWidth: 'auto',
-                        flex: 1,
-                        fontSize: '0.75rem',
-                        ...(tipAmount === amount && {
-                          backgroundColor: '#00E0B8',
-                          color: '#0D0D0D',
-                          '&:hover': {
-                            backgroundColor: '#00C4A3'
-                          }
-                        })
-                      }}
-                    >
-                      KES {amount}
-                    </Button>
-                  ))}
-                  <Button
-                    variant={tipAmount !== 0 && ![50, 100, 200, 500].includes(tipAmount) ? 'contained' : 'outlined'}
-                    size="small"
-                    onClick={() => {
-                      const customAmount = prompt('Enter custom tip amount (KES):');
-                      if (customAmount && !isNaN(customAmount) && parseFloat(customAmount) >= 0) {
-                        setTipAmount(parseFloat(customAmount));
-                      }
-                    }}
-                    sx={{
-                      minWidth: 'auto',
-                      flex: 1,
-                      fontSize: '0.75rem',
-                      ...(tipAmount !== 0 && ![50, 100, 200, 500].includes(tipAmount) && {
-                        backgroundColor: '#00E0B8',
-                        color: '#0D0D0D',
-                        '&:hover': {
-                          backgroundColor: '#00C4A3'
-                        }
-                      })
-                    }}
-                  >
-                    Custom
-                  </Button>
-                </Box>
-                {tipAmount > 0 && (
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                    <Typography variant="body2" color="text.secondary">Tip:</Typography>
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>KES {tipAmount.toFixed(2)}</Typography>
-                  </Box>
-                )}
-                {tipAmount > 0 && (
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', fontStyle: 'italic', mt: 0.5 }}>
-                    💡 The driver will receive the full tip and will only be notified after delivery.
-                  </Typography>
-                )}
-              </Box>
-              
               <Divider sx={{ my: 1 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="h6">Total:</Typography>
-                <Typography variant="h6">KES {(getTotalPrice() + deliveryFee + tipAmount).toFixed(2)}</Typography>
+                <Typography variant="h6">KES {(getTotalPrice() + deliveryFee).toFixed(2)}</Typography>
               </Box>
             </Box>
 
@@ -1300,7 +1229,7 @@ const Cart = () => {
                     Total Amount to Pay:
                   </Typography>
                   <Typography variant="h6" color="primary" fontWeight="bold">
-                    KES {(getTotalPrice() + deliveryFee + tipAmount).toFixed(2)}
+                    KES {(getTotalPrice() + deliveryFee).toFixed(2)}
                   </Typography>
                 </Box>
               </Box>
@@ -1326,7 +1255,7 @@ const Cart = () => {
                       Total Amount to Pay:
                     </Typography>
                     <Typography variant="h6" color="primary" fontWeight="bold" sx={{ mb: 2 }}>
-                      KES {(getTotalPrice() + deliveryFee + tipAmount).toFixed(2)}
+                      KES {(getTotalPrice() + deliveryFee).toFixed(2)}
                     </Typography>
                     {isProcessingPayment ? (
                       <Box sx={{ mt: 2 }}>

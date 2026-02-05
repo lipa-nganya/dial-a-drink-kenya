@@ -86,6 +86,7 @@ data class Order(
     val paymentStatus: String,
     val totalAmount: Double,
     val tipAmount: Double = 0.0,
+    val deliveryFee: Double = 0.0,
     val items: List<OrderItem> = emptyList(),
     val driverId: Int? = null,
     val driverAccepted: Boolean? = null,
@@ -171,6 +172,7 @@ data class DriverWalletResponse(
     val savingsWithdrawal: SavingsWithdrawalInfo? = null,
     val recentTips: List<WalletTransaction>? = null,
     val recentDeliveryPayments: List<WalletTransaction>? = null,
+    val recentSavingsCredits: List<WalletTransaction>? = null,
     val cashSettlements: List<WalletTransaction>? = null,
     val recentWithdrawals: List<WalletWithdrawal>? = null
 )
@@ -197,7 +199,12 @@ data class SavingsWithdrawalInfo(
 
 data class WithdrawSavingsRequest(
     val amount: Double,
-    val phoneNumber: String
+    val phoneNumber: String? = null  // Optional; when null, record-only (no M-Pesa)
+)
+
+/** Request body for savings withdrawal (amount only, no phone). */
+data class WithdrawSavingsAmountOnlyRequest(
+    val amount: Double
 )
 
 data class WithdrawSavingsResponse(
@@ -235,6 +242,7 @@ data class WalletTransaction(
     val transactionType: String? = null,
     val orderId: Int? = null,
     val orderNumber: Int? = null,
+    val orderLocation: String? = null,
     val customerName: String? = null,
     val status: String? = null,
     val date: String,
@@ -255,7 +263,9 @@ data class WalletWithdrawal(
 // Cash At Hand Models
 data class CashAtHandResponse(
     val totalCashAtHand: Double,
-    val entries: List<CashAtHandEntry>
+    val entries: List<CashAtHandEntry>,
+    @SerializedName("pendingSubmissionsTotal") val pendingSubmissionsTotal: Double? = null,
+    @SerializedName("pendingCashAtHand") val pendingCashAtHand: Double? = null
 )
 
 data class CashAtHandEntry(
@@ -316,10 +326,44 @@ data class Admin(
     val name: String? = null
 )
 
+data class OrderForOrderPayment(
+    val orderId: Int,
+    val customerName: String,
+    val itemsTotal: Double,
+    val deliveryFee: Double,
+    val savings: Double,
+    val totalToSubmit: Double,
+    val createdAt: String? = null
+)
+
+data class OrdersForOrderPaymentResponse(
+    val orders: List<OrderForOrderPayment>
+)
+
+data class OrderPaymentStkPushRequest(
+    val orderId: Int,
+    val phoneNumber: String? = null
+)
+
+data class OrderPaymentStkPushResponse(
+    val checkoutRequestID: String? = null,
+    val orderId: Int? = null,
+    val amount: Double? = null,
+    val message: String? = null
+)
+
+data class MpesaPollResponse(
+    val success: Boolean? = null,
+    val status: String? = null,
+    val paymentStatus: String? = null,
+    val receiptNumber: String? = null
+)
+
 data class CreateCashSubmissionRequest(
     val submissionType: String,
     val amount: Double,
-    val details: Map<String, Any>
+    val details: Map<String, Any>,
+    val orderId: Int? = null
 )
 
 data class UpdateCashSubmissionRequest(

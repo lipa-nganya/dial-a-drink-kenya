@@ -150,6 +150,10 @@ class RejectedSubmissionsFragment : Fragment() {
                 val accountType = submission.details?.get("accountType")?.toString() ?: "Unknown"
                 "Payment to office: $accountType"
             }
+            "order_payment" -> {
+                val orderId = submission.details?.get("orderId")?.toString() ?: ""
+                if (orderId.isNotEmpty()) "Order Payment: Order #$orderId" else "Order Payment"
+            }
             else -> "Cash Submission"
         }
     }

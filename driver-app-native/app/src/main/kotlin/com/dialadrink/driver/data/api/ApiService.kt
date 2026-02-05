@@ -123,6 +123,12 @@ interface ApiService {
         @Path("driverId") driverId: Int,
         @Body request: WithdrawSavingsRequest
     ): Response<ApiResponse<WithdrawSavingsResponse>>
+
+    @POST("driver-wallet/{driverId}/withdraw-savings")
+    suspend fun withdrawSavingsAmountOnly(
+        @Path("driverId") driverId: Int,
+        @Body request: WithdrawSavingsAmountOnlyRequest
+    ): Response<ApiResponse<WithdrawSavingsResponse>>
     
     @POST("driver-wallet/{driverId}/withdraw")
     suspend fun withdrawWallet(
@@ -147,6 +153,22 @@ interface ApiService {
         @Body request: CreateCashSubmissionRequest
     ): Response<ApiResponse<CashSubmission>>
     
+    @GET("driver-wallet/{driverId}/orders-for-order-payment")
+    suspend fun getOrdersForOrderPayment(
+        @Path("driverId") driverId: Int
+    ): Response<ApiResponse<OrdersForOrderPaymentResponse>>
+
+    @POST("driver-wallet/{driverId}/order-payment-stk-push")
+    suspend fun orderPaymentStkPush(
+        @Path("driverId") driverId: Int,
+        @Body request: OrderPaymentStkPushRequest
+    ): Response<ApiResponse<OrderPaymentStkPushResponse>>
+
+    @GET("mpesa/poll-transaction/{checkoutRequestID}")
+    suspend fun pollMpesaTransaction(
+        @Path("checkoutRequestID") checkoutRequestID: String
+    ): Response<MpesaPollResponse>
+
     @GET("driver-wallet/{driverId}/cash-submissions")
     suspend fun getCashSubmissions(
         @Path("driverId") driverId: Int,

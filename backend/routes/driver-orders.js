@@ -539,6 +539,15 @@ router.get('/:driverId/pending', async (req, res) => {
           pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
         };
         
+        // Add delivery fee for earnings calculation
+        try {
+          const breakdown = await getOrderFinancialBreakdown(orderData.id);
+          orderData.deliveryFee = breakdown.deliveryFee || 0;
+        } catch (breakdownError) {
+          console.warn(`Could not fetch delivery fee breakdown for order ${orderData.id}:`, breakdownError.message);
+          orderData.deliveryFee = 0;
+        }
+        
         return orderData;
       }));
     }
@@ -715,7 +724,7 @@ router.get('/:driverId', async (req, res) => {
           pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
         };
         
-        // For completed orders, include payment transaction data
+        // For completed orders, include payment transaction data and delivery fee
         if (orderData.status === 'completed' && orderData.paymentStatus === 'paid') {
           try {
             const paymentTransaction = await db.Transaction.findOne({
@@ -733,9 +742,33 @@ router.get('/:driverId', async (req, res) => {
               result.transactionCode = txData.receiptNumber;
               result.transactionDate = txData.transactionDate;
             }
+            
+            // Get delivery fee for earnings calculation
+            try {
+              const breakdown = await getOrderFinancialBreakdown(orderData.id);
+              result.deliveryFee = breakdown.deliveryFee || 0;
+            } catch (breakdownError) {
+              console.warn(`Could not fetch delivery fee breakdown for order ${orderData.id}:`, breakdownError.message);
+              result.deliveryFee = 0;
+            }
           } catch (txError) {
             // If transaction lookup fails, continue without transaction data
             console.warn(`Could not fetch transaction for order ${orderData.id}:`, txError.message);
+            // Still try to get delivery fee even if transaction lookup fails
+            try {
+              const breakdown = await getOrderFinancialBreakdown(orderData.id);
+              result.deliveryFee = breakdown.deliveryFee || 0;
+            } catch (breakdownError) {
+              result.deliveryFee = 0;
+            }
+          }
+        } else {
+          // For non-completed orders, still include delivery fee if available
+          try {
+            const breakdown = await getOrderFinancialBreakdown(orderData.id);
+            result.deliveryFee = breakdown.deliveryFee || 0;
+          } catch (breakdownError) {
+            result.deliveryFee = 0;
           }
         }
         
@@ -758,6 +791,15 @@ router.get('/:driverId', async (req, res) => {
           creditLimit: creditCheck.creditLimit,
           pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
         };
+        
+        // Add delivery fee for earnings calculation
+        try {
+          const breakdown = await getOrderFinancialBreakdown(orderData.id);
+          orderData.deliveryFee = breakdown.deliveryFee || 0;
+        } catch (breakdownError) {
+          console.warn(`Could not fetch delivery fee breakdown for order ${orderData.id}:`, breakdownError.message);
+          orderData.deliveryFee = 0;
+        }
         
         return orderData;
       }));
@@ -835,7 +877,7 @@ router.patch('/:orderId/status', async (req, res) => {
 
     // Check credit limit - driver can update orders if:
     // 1. Cash at hand is within limit, OR
-    // 2. Cash at hand exceeds limit BUT has pending cash submissions (which will reduce cash at hand when approved)
+    // 2. Cash at hand exceeds limit BUT has pending cash submissions (which already reduced cash at hand when created)
     const creditCheck = await checkDriverCreditLimit(parseInt(driverId), true);
     console.log(`🔍 [Credit Limit Check] Order #${orderId}, Driver ${driverId}:`, {
       cashAtHand: creditCheck.cashAtHand,
@@ -846,6 +888,43 @@ router.patch('/:orderId/status', async (req, res) => {
       canUpdateOrders: creditCheck.canUpdateOrders
     });
     
+    // Special check for "out_for_delivery" status: notify driver if cash at hand exceeds limit
+    if (status === 'out_for_delivery' && creditCheck.exceeded) {
+      console.log(`⚠️ [Cash At Hand Limit] Order #${orderId}: Driver ${driverId} attempting to update to 'out_for_delivery' with cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeding limit (KES ${creditCheck.creditLimit.toFixed(2)})`);
+      
+      // Send push notification to driver
+      const driver = await db.Driver.findByPk(driverId);
+      if (driver && driver.pushToken) {
+        try {
+          const pushNotifications = require('../services/pushNotifications');
+          const message = {
+            sound: 'default',
+            title: '⚠️ Cash At Hand Limit Exceeded',
+            body: `Your cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds your limit (KES ${creditCheck.creditLimit.toFixed(2)}). Please submit cash at hand to continue with deliveries.`,
+            data: {
+              type: 'cash_at_hand_limit_exceeded',
+              driverId: String(driverId),
+              cashAtHand: String(creditCheck.cashAtHand),
+              creditLimit: String(creditCheck.creditLimit),
+              channelId: 'cash-at-hand'
+            },
+            priority: 'high',
+            badge: 1,
+            channelId: 'cash-at-hand'
+          };
+          await pushNotifications.sendFCMNotification(driver.pushToken, message);
+          console.log(`📤 Push notification sent to driver ${driver.name} about cash at hand limit`);
+        } catch (pushError) {
+          console.error(`❌ Error sending push notification:`, pushError);
+        }
+      }
+      
+      // Still allow the update, but notify the driver
+      // The error message will inform them to submit cash at hand
+      return sendError(res, `Cannot update order to "Out for delivery": Your cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds your limit of KES ${creditCheck.creditLimit.toFixed(2)}. Please submit cash at hand to continue with deliveries.`, 403);
+    }
+    
+    // For other statuses, use the normal credit check
     if (!creditCheck.canUpdateOrders) {
       console.log(`❌ [Credit Limit Blocked] Order #${orderId} update blocked for driver ${driverId}: Cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds limit (KES ${creditCheck.creditLimit.toFixed(2)})`);
       return sendError(res, `Cannot update order: Credit limit exceeded. Your cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds your credit limit of KES ${creditCheck.creditLimit.toFixed(2)}. Please make cash submissions and wait for approval before updating orders.`, 403);
@@ -1116,17 +1195,9 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
           tipAmount
         } = await getOrderFinancialBreakdown(order.id);
 
-        const [driverPayEnabledSetting, driverPayAmountSetting] = await Promise.all([
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-          db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null)
-        ]);
-
-        const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
-        const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-        const driverPayAmount = driverPaySettingEnabled && order.driverId && configuredDriverPayAmount > 0
-          ? Math.min(deliveryFee, configuredDriverPayAmount)
-          : 0;
-        const merchantDeliveryAmount = Math.max(deliveryFee - driverPayAmount, 0);
+        // Merchant no longer gets any delivery fee - 100% goes to driver
+        const driverPayAmount = order.driverId ? deliveryFee : 0;
+        const merchantDeliveryAmount = 0;
 
         const baseTransactionPayload = {
           orderId: order.id,
@@ -1167,36 +1238,8 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
           console.log(`✅ Payment transaction created for driver-initiated payment on Order #${order.id} (transaction #${paymentTransaction.id})`);
         }
 
-        const deliveryNote = driverPayAmount > 0
-          ? `Delivery fee portion for Order #${orderId}. Merchant share: KES ${merchantDeliveryAmount.toFixed(2)}. Driver payout KES ${driverPayAmount.toFixed(2)} pending.`
-          : `Delivery fee portion for Order #${orderId}. Amount: KES ${deliveryFee.toFixed(2)}. Included in same M-Pesa payment.`;
-
-        let deliveryTransaction = await db.Transaction.findOne({
-          where: {
-            orderId: order.id,
-            transactionType: 'delivery_pay',
-            status: { [Op.ne]: 'completed' }
-          },
-          order: [['createdAt', 'DESC']]
-        });
-
-        if (deliveryTransaction) {
-          await deliveryTransaction.update({
-            ...baseTransactionPayload,
-            transactionType: 'delivery_pay',
-            amount: merchantDeliveryAmount,
-            notes: deliveryNote
-          });
-          console.log(`✅ Delivery fee transaction updated for Order #${orderId} (transaction #${deliveryTransaction.id})`);
-        } else {
-          deliveryTransaction = await db.Transaction.create({
-            ...baseTransactionPayload,
-            transactionType: 'delivery_pay',
-            amount: merchantDeliveryAmount,
-            notes: deliveryNote
-          });
-          console.log(`✅ Delivery fee transaction created for Order #${orderId} (transaction #${deliveryTransaction.id})`);
-        }
+        // No merchant delivery fee transaction - merchant gets 0% of delivery fee
+        // Driver delivery transaction is created by creditWalletsOnDeliveryCompletion on delivery completion
 
         // CRITICAL: DO NOT create driver delivery transactions here!
         // Driver delivery transactions should ONLY be created by creditWalletsOnDeliveryCompletion
@@ -1389,78 +1432,9 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     const { itemsTotal, deliveryFee, tipAmount } = await getOrderFinancialBreakdown(order.id);
     const totalAmount = parseFloat(order.totalAmount) || 0;
 
-    const [driverPayEnabledSetting, driverPayModeSetting, driverPayAmountSetting, driverPayPercentageSetting] = await Promise.all([
-      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryEnabled' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryMode' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryAmount' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'driverPayPerDeliveryPercentage' } }).catch(() => null)
-    ]);
-
-    const driverPaySettingEnabled = driverPayEnabledSetting?.value === 'true';
-    const driverPayMode = driverPayModeSetting?.value || 'amount';
-    const isPercentageMode = driverPayMode === 'percentage';
-    const configuredDriverPayAmount = parseFloat(driverPayAmountSetting?.value || '0');
-    const configuredDriverPayPercentage = parseFloat(driverPayPercentageSetting?.value || '30');
-    
-    let driverPayAmount = 0;
-    if (driverPaySettingEnabled && order.driverId) {
-      if (isPercentageMode) {
-        // Percentage mode: calculate driver pay as percentage of delivery fee
-        const deliveryFeeAmount = parseFloat(deliveryFee) || 0;
-        driverPayAmount = deliveryFeeAmount * (configuredDriverPayPercentage / 100);
-        driverPayAmount = Math.min(driverPayAmount, deliveryFeeAmount);
-      } else {
-        // Amount mode: use fixed amount
-        driverPayAmount = configuredDriverPayAmount > 0
-          ? Math.min(parseFloat(deliveryFee) || 0, configuredDriverPayAmount)
-          : 0;
-      }
-    }
-    const merchantDeliveryAmount = Math.max((parseFloat(deliveryFee) || 0) - driverPayAmount, 0);
-
-    if (merchantDeliveryAmount > 0.01) {
-      let deliveryTransaction = await db.Transaction.findOne({
-        where: {
-          orderId: order.id,
-          transactionType: 'delivery_pay'
-        },
-        order: [['createdAt', 'DESC']]
-      });
-
-      const deliveryNote = driverPayAmount > 0
-        ? `Delivery fee marked as paid via ${methodLabel} confirmation by driver #${driverId}. Driver payout KES ${driverPayAmount.toFixed(2)} deducted.`
-        : `Delivery fee marked as paid via ${methodLabel} confirmation by driver #${driverId}.`;
-
-      if (deliveryTransaction) {
-        await deliveryTransaction.update({
-          paymentMethod,
-          paymentProvider,
-          status: 'completed',
-          paymentStatus: 'paid',
-          receiptNumber: deliveryTransaction.receiptNumber || normalizedReceipt,
-          transactionDate: now,
-          driverId: null,
-          driverWalletId: null,
-          notes: deliveryTransaction.notes ? `${deliveryTransaction.notes}\n${deliveryNote}` : deliveryNote,
-          amount: merchantDeliveryAmount
-        });
-      } else {
-        await db.Transaction.create({
-          orderId: order.id,
-          transactionType: 'delivery_pay',
-          paymentMethod,
-          paymentProvider,
-          amount: merchantDeliveryAmount,
-          status: 'completed',
-          paymentStatus: 'paid',
-          receiptNumber: normalizedReceipt,
-          transactionDate: now,
-          driverId: null,
-          driverWalletId: null,
-          notes: deliveryNote
-        });
-      }
-    }
+    // Merchant no longer gets any delivery fee - 100% goes to driver
+    const deliveryFeeAmount = parseFloat(deliveryFee) || 0;
+    const driverPayAmount = order.driverId ? deliveryFeeAmount : 0;
 
     if (driverPayAmount > 0.01 && order.driverId) {
       let driverDeliveryTransaction = await db.Transaction.findOne({

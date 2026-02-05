@@ -1,0 +1,487 @@
+[
+  {
+    "name": "1Default",
+    "deliveryFromCBD": "0.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Bahati",
+    "deliveryFromCBD": "2000.00",
+    "deliveryFromRuaka": "1500.00"
+  },
+  {
+    "name": "Banana",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "250.00"
+  },
+  {
+    "name": "Buruburu Phase 1",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Buruburu Phase 2",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Buruburu Phase 3",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Buruburu Phase 4",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Buruburu Phase 5",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "CBD",
+    "deliveryFromCBD": "200.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Dagorreti",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Donholm",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Eastleigh",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Embakasi",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Gachie",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "300.00"
+  },
+  {
+    "name": "Gigiri UNEP",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "250.00"
+  },
+  {
+    "name": "Githurai 44",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Githurai 45",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Hatheru",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Imara Daima",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Industrial Area",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "James Gichuru",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Jamhuri",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Jogoo Road",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Juanco Ngong",
+    "deliveryFromCBD": "1000.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kahawa Sukari",
+    "deliveryFromCBD": "800.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kahawa Wendani",
+    "deliveryFromCBD": "800.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kamulu",
+    "deliveryFromCBD": "2000.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kamwene",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kangemi",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Karen",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kariobangi",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Karuri",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "150.00"
+  },
+  {
+    "name": "Kasarani",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kawangware",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kiambere Road",
+    "deliveryFromCBD": "250.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kikuyu",
+    "deliveryFromCBD": "800.00",
+    "deliveryFromRuaka": "600.00"
+  },
+  {
+    "name": "Kileleshwa",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kilimani",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Kinoo",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "600.00"
+  },
+  {
+    "name": "Kitisuru",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Langata",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Loresho",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Lower Lavington / Ole Odume",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Madaraka",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Mbagathi Way",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Mirema",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Mlolongo",
+    "deliveryFromCBD": "800.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Muchatha",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "100.00"
+  },
+  {
+    "name": "Muhuri  road",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Muthaiga North",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Mwiki",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Nairobi West",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Naivasha Road",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Ndenderu",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "200.00"
+  },
+  {
+    "name": "Ndumbuini",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Ngara",
+    "deliveryFromCBD": "250.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Ngong Road Lenana",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Ngong road",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Ngumo",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Nyari Gachie",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "300.00"
+  },
+  {
+    "name": "Nyayo  Estate",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Pangani",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Parklands",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Peponi Road",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Prestige Ngong Road",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "R 1",
+    "deliveryFromCBD": "100.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Racecourse",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Redhill Road",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Riara Road",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Riruta",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Riverside",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Rongai",
+    "deliveryFromCBD": "1000.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Roysambu",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Runda",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "300.00"
+  },
+  {
+    "name": "South B",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "South C",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Spring Valley",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Thika Rd Upto GSU",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Thika Rd Upto TRM",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Thindigua / kiambu road",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "350.00"
+  },
+  {
+    "name": "Uhuru Park",
+    "deliveryFromCBD": "250.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Umoja",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Upper Lavington",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Upper Mombasa road",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Upperhill /Statehouse Road",
+    "deliveryFromCBD": "250.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Upto Muthaiga Mini Market",
+    "deliveryFromCBD": "400.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Uthiru",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Waiyaki way",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Walk In",
+    "deliveryFromCBD": "0.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Walk_in Client",
+    "deliveryFromCBD": "0.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Wangige",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "500.00"
+  },
+  {
+    "name": "Wanyee",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Westlands",
+    "deliveryFromCBD": "300.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "Zimmerman",
+    "deliveryFromCBD": "500.00",
+    "deliveryFromRuaka": "0.00"
+  },
+  {
+    "name": "kinoo",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "600.00"
+  },
+  {
+    "name": "lower kabete",
+    "deliveryFromCBD": "600.00",
+    "deliveryFromRuaka": "500.00"
+  },
+  {
+    "name": "syokimau",
+    "deliveryFromCBD": "700.00",
+    "deliveryFromRuaka": "0.00"
+  }
+]

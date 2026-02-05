@@ -112,8 +112,8 @@ class CashTransactionsFragment : Fragment() {
         
         binding.emptyStateText.visibility = View.GONE
         
-        // Sort entries by date ascending (oldest first) for balance sheet format
-        val sortedEntries = data.entries.sortedBy { entry ->
+        // Sort entries by date descending (newest first) - latest transactions at top
+        val sortedEntries = data.entries.sortedByDescending { entry ->
             try {
                 val date = try {
                     apiDateFormat.parse(entry.date)
@@ -126,19 +126,9 @@ class CashTransactionsFragment : Fragment() {
             }
         }
         
-        // Calculate initial balance (balance before first transaction)
-        // Work backwards from current balance
-        var initialBalance = data.totalCashAtHand
-        sortedEntries.reversed().forEach { entry ->
-            if (entry.type == "cash_received") {
-                initialBalance -= entry.amount
-            } else {
-                initialBalance += entry.amount
-            }
-        }
-        
-        // Now calculate running balance forward from initial balance
-        var runningBalance = initialBalance
+        // Calculate running balance backwards from current total (since we're displaying newest first)
+        // Start with current balance - this is the balance after the newest transaction
+        var balanceAfter = data.totalCashAtHand
         
         sortedEntries.forEach { entry ->
             val row = LayoutInflater.from(requireContext()).inflate(
@@ -171,21 +161,26 @@ class CashTransactionsFragment : Fragment() {
                 dateText.text = entry.date.substring(0, 10).takeIf { entry.date.length >= 10 } ?: entry.date
             }
             
-            // Set debit/credit amounts
+            // Set debit/credit amounts and calculate balance
+            // balanceAfter is the balance after this transaction
+            // We need to calculate balance before to move to the next (older) transaction
             if (entry.type == "cash_received") {
                 // Cash received = Debit (increases balance)
+                // Balance before = balance after - amount
                 debitText.text = formatter.format(entry.amount)
                 creditText.text = "0"
-                runningBalance += entry.amount
+                balanceText.text = formatter.format(balanceAfter)
+                // Move to balance before this transaction for next iteration
+                balanceAfter -= entry.amount
             } else {
                 // Cash sent = Credit (decreases balance)
+                // Balance before = balance after + amount
                 debitText.text = "0"
                 creditText.text = formatter.format(entry.amount)
-                runningBalance -= entry.amount
+                balanceText.text = formatter.format(balanceAfter)
+                // Move to balance before this transaction for next iteration
+                balanceAfter += entry.amount
             }
-            
-            // Display balance after this transaction
-            balanceText.text = formatter.format(runningBalance)
             
             tableLayout.addView(row)
         }

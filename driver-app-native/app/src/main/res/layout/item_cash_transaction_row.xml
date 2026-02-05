@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TableRow xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?android:attr/selectableItemBackground"
+    android:padding="12dp"
+    android:minHeight="48dp">
+
+    <TextView
+        android:id="@+id/deliveryAddressText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:text="Delivery Address"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:paddingEnd="8dp" />
+
+    <TextView
+        android:id="@+id/dateText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="2026-01-12"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="start"
+        android:paddingEnd="8dp" />
+
+    <TextView
+        android:id="@+id/debitText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="0"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="end"
+        android:paddingEnd="8dp" />
+
+    <TextView
+        android:id="@+id/creditText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="0"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="end"
+        android:paddingEnd="8dp" />
+
+    <TextView
+        android:id="@+id/balanceText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="0"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="end"
+        android:textStyle="bold" />
+
+</TableRow>

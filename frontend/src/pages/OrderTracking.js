@@ -60,33 +60,36 @@ const OrderTracking = ({ order: orderProp }) => {
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
+  // On load or when user navigates back to this page: only refresh order data from API. Never auto-open payment dialog or retry payment.
   useEffect(() => {
     const trackingToken = searchParams.get('token');
-    
-    if (initialOrder) {
-      // If order is passed but doesn't have items loaded, fetch full details
-      if (!initialOrder.items || initialOrder.items.length === 0 || !initialOrder.items[0]?.drink) {
-        console.log('[OrderTracking] Order passed but missing items/drink details, fetching full order...');
-        fetchOrder(initialOrder.id);
-      } else {
-        setOrderDetails(initialOrder);
-        setLoading(false);
-      }
-    } else if (trackingToken) {
-      // Fetch order by tracking token from URL
+
+    if (trackingToken) {
       fetchOrderByToken(trackingToken);
-    } else {
-      // Try to get order from localStorage
-      const savedOrder = localStorage.getItem('customerOrder');
-      if (savedOrder) {
-        const { orderId } = JSON.parse(savedOrder);
-        fetchOrder(orderId);
-      } else {
-        setError('No order found. Please use the tracking link from your SMS or log in again.');
-        setLoading(false);
-      }
+      return;
     }
-  }, [initialOrder, searchParams]);
+
+    const orderIdFromStateOrProp = initialOrder?.id;
+    const savedOrder = !orderIdFromStateOrProp && typeof localStorage !== 'undefined' ? localStorage.getItem('customerOrder') : null;
+    const orderIdFromStorage = savedOrder ? (() => {
+      try {
+        const parsed = JSON.parse(savedOrder);
+        return parsed?.orderId ?? null;
+      } catch {
+        return null;
+      }
+    })() : null;
+    const orderId = orderIdFromStateOrProp || orderIdFromStorage;
+
+    if (orderId) {
+      // Always fetch latest order from API (reload or back button: just refresh screen, no payment retry)
+      fetchOrder(orderId);
+      return;
+    }
+
+    setError('No order found. Please use the tracking link from your SMS or log in again.');
+    setLoading(false);
+  }, [initialOrder?.id, searchParams]);
 
   // Set up Socket.IO for real-time order status updates
   useEffect(() => {
@@ -537,113 +540,6 @@ const OrderTracking = ({ order: orderProp }) => {
                 
                 {timelineSteps.map((step, index) => {
                   const isLast = index === timelineSteps.length - 1;
-<<<<<<< HEAD
-              const stepColor = step.completed ? '#4CAF50' : step.isCurrent ? '#4CAF50' : '#9E9E9E';
-              const stepBg = step.isCurrent ? '#4CAF50' : step.completed ? '#E8F5E9' : '#F5F5F5';
-              const iconColor = step.completed || step.isCurrent ? '#4CAF50' : '#9E9E9E';
-              
-              return (
-                <Box
-                  key={step.id}
-                  sx={{
-                    position: 'relative',
-                    mb: isLast ? 0 : 4,
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    gap: 2
-                  }}
-                >
-                  {/* Status indicator circle */}
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      left: '-36px',
-                      top: '2px',
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      backgroundColor: stepBg,
-                      border: step.isCurrent ? `2px solid ${stepColor}` : 'none',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      zIndex: 1,
-                      boxShadow: step.isCurrent ? `0 0 0 4px ${stepBg}` : 'none'
-                    }}
-                  >
-                    {step.completed ? (
-                      <CheckCircle sx={{ color: '#4CAF50', fontSize: '24px' }} />
-                    ) : step.isCurrent ? (
-                      <Box
-                        sx={{
-                          width: '16px',
-                          height: '16px',
-                          borderRadius: '50%',
-                          backgroundColor: '#4CAF50'
-                        }}
-                      />
-                    ) : (
-                      <Box
-                        sx={{
-                          width: '12px',
-                          height: '12px',
-                          borderRadius: '50%',
-                          backgroundColor: '#9E9E9E'
-                        }}
-                      />
-                    )}
-                  </Box>
-
-                  {/* Step content */}
-                  <Box sx={{ flex: 1, pt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
-                      <Box
-                        sx={{
-                          color: iconColor,
-                          display: 'flex',
-                          alignItems: 'center',
-                          opacity: step.completed || step.isCurrent ? 1 : 0.6
-                        }}
-                      >
-                        {React.cloneElement(step.icon, { sx: { fontSize: '20px' } })}
-                      </Box>
-                      <Typography
-                        variant="h6"
-                        sx={{
-                          fontWeight: 600,
-                          color: '#424242',
-                          fontSize: '1rem',
-                          flex: 1
-                        }}
-                      >
-                        {step.title}
-                      </Typography>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: '#757575',
-                          fontSize: '0.875rem',
-                          fontWeight: 500
-                        }}
-                      >
-                        {step.timestamp}
-                      </Typography>
-                    </Box>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: '#757575',
-                        fontSize: '0.875rem',
-                        ml: 4.5
-                      }}
-                    >
-                      {step.description}
-                    </Typography>
-                  </Box>
-                </Box>
-              );
-            })}
-=======
                   const stepColor = step.completed ? '#4CAF50' : step.isCurrent ? '#4CAF50' : '#9E9E9E';
                   const stepBg = step.isCurrent ? '#4CAF50' : step.completed ? '#E8F5E9' : '#F5F5F5';
                   const iconColor = step.completed || step.isCurrent ? '#4CAF50' : '#9E9E9E';
@@ -769,7 +665,6 @@ const OrderTracking = ({ order: orderProp }) => {
                     </Box>
                   );
                 })}
->>>>>>> main
               </Box>
             </Box>
           );

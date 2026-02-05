@@ -4,92 +4,104 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
+const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 
 /**
  * Get cash at hand data for driver
  * GET /api/driver-wallet/:driverId/cash-at-hand
  * IMPORTANT: This route must be defined BEFORE /:driverId to avoid route conflicts
  * 
- * Cash at hand = (Total cash received from pay_on_delivery orders where customer paid cash)
- *                - (Delivery fee portion that belongs to driver for each order)
- *                - (Cash remitted to business)
+ * No wallet. Cash at hand = (Pay on Delivery cash: 50% delivery fee + order total per order)
+ *               - (Pay Now: 50% delivery fee per order) - approved submissions - settlements.
  */
 router.get('/:driverId/cash-at-hand', async (req, res) => {
   try {
     const { driverId } = req.params;
 
-    // Get driver to access cashAtHand field (source of truth)
     const driver = await db.Driver.findByPk(driverId);
     if (!driver) {
       return sendError(res, 'Driver not found', 404);
     }
 
-    // Use driver's cashAtHand field as the source of truth
-    // This field is maintained when cash submissions are approved/rejected
-    // CRITICAL: Always use the database value to match admin panel display
-    // If it's 0/null, calculate and update it, but always return the calculated value for consistency
     let totalCashAtHand = parseFloat(driver.cashAtHand || 0);
 
-    // Get all cash collected from pay_on_delivery orders where customer paid cash
+    // Pay on Delivery (cash): cash at hand += 50% delivery fee + order total per order
     const cashOrders = await db.Order.findAll({
       where: {
         driverId: driverId,
         paymentType: 'pay_on_delivery',
-        paymentMethod: 'cash', // Only orders where customer paid cash
+        paymentMethod: 'cash',
         paymentStatus: 'paid',
-        status: {
-          [Op.in]: ['delivered', 'completed']
-        }
+        status: { [Op.in]: ['delivered', 'completed'] }
       },
-      attributes: ['id', 'customerName', 'totalAmount', 'driverPayAmount', 'createdAt', 'status'],
+      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status'],
       order: [['createdAt', 'DESC']]
     });
 
-    // Get all cash settlement transactions where driver remits cash to company
-    // These are negative amounts (cash going from driver to business)
+    let cashCollected = 0;
+    for (const order of cashOrders) {
+      try {
+        const breakdown = await getOrderFinancialBreakdown(order.id);
+        cashCollected += (breakdown.itemsTotal || 0) + (breakdown.deliveryFee || 0) * 0.5;
+      } catch (e) {
+        console.warn(`Cash at hand: could not get breakdown for order ${order.id}:`, e.message);
+      }
+    }
+
+    // Pay Now (M-Pesa/Pesapal): cash at hand -= 50% delivery fee per order
+    const payNowOrders = await db.Order.findAll({
+      where: {
+        driverId: driverId,
+        paymentType: 'pay_now',
+        paymentStatus: 'paid',
+        status: { [Op.in]: ['delivered', 'completed'] }
+      },
+      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    let cashDeductionPayNow = 0;
+    for (const order of payNowOrders) {
+      try {
+        const breakdown = await getOrderFinancialBreakdown(order.id);
+        cashDeductionPayNow += (breakdown.deliveryFee || 0) * 0.5;
+      } catch (e) {
+        console.warn(`Cash at hand: could not get breakdown for pay_now order ${order.id}:`, e.message);
+      }
+    }
+
     const cashSettlements = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'cash_settlement',
-        status: 'completed',
-        amount: {
-          [Op.lt]: 0 // Only negative amounts (cash remitted)
-        }
+        status: { [Op.in]: ['completed', 'pending'] }, // Include pending for savings withdrawals
+        amount: { [Op.lt]: 0 }
       },
-      attributes: ['id', 'amount', 'createdAt', 'notes', 'receiptNumber'],
+      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider'],
       order: [['createdAt', 'DESC']]
     });
+    const orderIdsWithSettlementFromTx = new Set((cashSettlements || []).map(tx => tx.orderId).filter(Boolean));
 
-    // Get all approved cash submissions (these reduce cash at hand)
     const approvedCashSubmissions = await db.CashSubmission.findAll({
-      where: {
-        driverId: driverId,
-        status: 'approved'
-      },
+      where: { driverId: driverId, status: 'approved' },
       attributes: ['id', 'amount', 'createdAt', 'submissionType', 'details'],
       order: [['createdAt', 'DESC']]
     });
 
-    // Calculate actual cash at hand from transactions (for verification and sync)
-    // For each order: totalAmount - driverPayAmount (delivery fee portion that belongs to driver)
-    const cashCollected = cashOrders.reduce((sum, order) => {
-      const totalAmount = parseFloat(order.totalAmount) || 0;
-      const driverPayAmount = parseFloat(order.driverPayAmount) || 0;
-      // Cash at hand = cash received minus the delivery fee portion that belongs to driver
-      return sum + (totalAmount - driverPayAmount);
+    const pendingCashSubmissions = await db.CashSubmission.findAll({
+      where: { driverId: driverId, status: 'pending' },
+      attributes: ['id', 'amount']
+    });
+    const pendingSubmissionsTotal = pendingCashSubmissions.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0);
+
+    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+    // Include approved submissions; for order_payment, skip if already counted via cash_settlement (negative amount)
+    const approvedSubmissionsTotal = approvedCashSubmissions.reduce((sum, s) => {
+      if (s.submissionType === 'order_payment' && s.details?.orderId != null && orderIdsWithSettlementFromTx.has(s.details.orderId)) return sum;
+      return sum + parseFloat(s.amount || 0);
     }, 0);
 
-    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => {
-      return sum + (parseFloat(tx.amount) || 0);
-    }, 0));
-
-    // Subtract approved cash submissions (these have been deducted from driver's cash)
-    const approvedSubmissionsTotal = approvedCashSubmissions.reduce((sum, submission) => {
-      return sum + parseFloat(submission.amount || 0);
-    }, 0);
-
-    // Allow negative cash at hand - drivers can go into negative balance (credit)
-    const calculatedCashAtHand = cashCollected - cashRemitted - approvedSubmissionsTotal;
+    const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal;
 
     // CRITICAL: ALWAYS sync the database value with calculated value to ensure consistency
     // This ensures both admin and driver app show the same value from the database
@@ -104,7 +116,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       // Reload driver to ensure we have the updated value
       await driver.reload();
       totalCashAtHand = parseFloat(driver.cashAtHand || 0);
-      console.log(`🔄 [Cash At Hand Sync] Driver ${driverId}: Updated cashAtHand from ${oldValue} to ${calculatedCashAtHand} (DB now: ${totalCashAtHand}, calculated: ${calculatedCashAtHand}, cashCollected: ${cashCollected}, cashRemitted: ${cashRemitted}, approvedSubmissions: ${approvedSubmissionsTotal})`);
+      console.log(`🔄 [Cash At Hand Sync] Driver ${driverId}: Updated cashAtHand from ${oldValue} to ${calculatedCashAtHand} (cashCollected: ${cashCollected}, payNowDeduction: ${cashDeductionPayNow}, cashRemitted: ${cashRemitted}, approvedSubmissions: ${approvedSubmissionsTotal})`);
     } else {
       // Values match, but always use calculated value to ensure consistency
       // This ensures both endpoints return the exact same value
@@ -115,36 +127,55 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     // Format entries for response
     const entries = [];
 
-    // Add cash order entries
-    cashOrders.forEach(order => {
-      const totalAmount = parseFloat(order.totalAmount) || 0;
-      const driverPayAmount = parseFloat(order.driverPayAmount) || 0;
-      const cashReceived = totalAmount - driverPayAmount;
-      
+    // Add cash order entries (50% delivery fee + order total per Pay on Delivery cash order)
+    for (const order of cashOrders) {
+      let amount = 0;
+      try {
+        const breakdown = await getOrderFinancialBreakdown(order.id);
+        amount = (breakdown.itemsTotal || 0) + (breakdown.deliveryFee || 0) * 0.5;
+      } catch (e) {}
       entries.push({
         type: 'cash_received',
         orderId: order.id,
         customerName: order.customerName,
-        amount: cashReceived, // Cash received after subtracting driver's delivery fee portion
+        amount,
         date: order.createdAt,
-        description: `Cash received for Order #${order.id}`
+        description: `Cash received for Order #${order.id} (50% delivery fee + order total)`
       });
-    });
+    }
 
-    // Add cash settlement entries (remittances to business)
+    // Add cash settlement entries (remittances to business and savings withdrawals)
     cashSettlements.forEach(tx => {
+      // Check if this is a savings withdrawal by paymentProvider
+      // Savings withdrawals have paymentProvider = 'savings_withdrawal_record' or 'mpesa' with notes containing 'Savings withdrawal'
+      const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' || 
+                                  (tx.paymentProvider === 'mpesa' && tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal'))) ||
+                                  (tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal')));
+      
+      let description;
+      
+      // Always format savings withdrawals with the proper format
+      if (isSavingsWithdrawal) {
+        description = `Savings withdrawal`;
+      } else {
+        // For other cash settlements, use the notes or default description
+        description = tx.notes || `Cash remitted to business`;
+      }
+      
       entries.push({
         type: 'cash_sent',
         transactionId: tx.id,
         amount: Math.abs(parseFloat(tx.amount) || 0), // Make positive for display
-        date: tx.createdAt,
-        description: tx.notes || `Cash remitted to business`,
+        date: tx.transactionDate || tx.createdAt,
+        description: description,
         receiptNumber: tx.receiptNumber
       });
     });
 
     // Add approved cash submission entries (these reduce cash at hand)
+    // Skip order_payment when already shown as cash_sent from cash_settlement (negative amount)
     approvedCashSubmissions.forEach(submission => {
+      if (submission.submissionType === 'order_payment' && submission.details?.orderId != null && orderIdsWithSettlementFromTx.has(submission.details.orderId)) return;
       const submissionType = submission.submissionType;
       let description = 'Cash submission';
       if (submissionType === 'purchases' && submission.details?.supplier) {
@@ -161,6 +192,8 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         description = `Expense: ${submission.details.nature}`;
       } else if (submissionType === 'payment_to_office' && submission.details?.accountType) {
         description = `Payment to office: ${submission.details.accountType}`;
+      } else if (submissionType === 'order_payment' && (submission.details?.orderId != null)) {
+        description = `Order payment #${submission.details.orderId}`;
       }
 
       entries.push({
@@ -172,18 +205,187 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       });
     });
 
+    // Add delivery_fee_debit transactions (Pay Now orders - 50% delivery fee reduction)
+    const deliveryFeeDebits = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'delivery_fee_debit',
+        status: 'completed',
+        paymentStatus: 'paid'
+      },
+      include: [
+        { model: db.Order, as: 'order', attributes: ['id', 'customerName'], required: false }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    deliveryFeeDebits.forEach(tx => {
+      const amount = Math.abs(parseFloat(tx.amount || 0)); // Make positive for display
+      const description = tx.notes || (tx.order ? `50% delivery fee order ${tx.order.id}` : '50% delivery fee');
+      entries.push({
+        type: 'cash_sent', // This is a credit entry (money going out, reducing cash at hand)
+        transactionId: tx.id,
+        orderId: tx.orderId,
+        customerName: tx.order?.customerName || null,
+        amount: amount,
+        date: tx.transactionDate || tx.createdAt,
+        description: description,
+        receiptNumber: tx.receiptNumber
+      });
+    });
+
     // Sort entries by date (newest first)
     entries.sort((a, b) => new Date(b.date) - new Date(a.date));
 
     // CRITICAL: Return the synced database value to ensure consistency
     // This value matches what's stored in drivers.cashAtHand and what admin panel shows
-    sendSuccess(res, {
-      totalCashAtHand: totalCashAtHand, // Synced database value from drivers.cashAtHand
+    // Actual cash at hand = totalCashAtHand (value before pending submissions are approved)
+    // Pending cash at hand = totalCashAtHand - sum(pending submission amounts) — value after all pending submissions are approved
+    const payload = {
+      totalCashAtHand: totalCashAtHand, // Synced database value from drivers.cashAtHand (Actual cash at hand)
       cashAtHand: totalCashAtHand, // Alias for consistency (some clients might use this field)
       entries: entries
-    });
+    };
+    if (pendingSubmissionsTotal > 0) {
+      payload.pendingSubmissionsTotal = pendingSubmissionsTotal;
+      payload.pendingCashAtHand = totalCashAtHand - pendingSubmissionsTotal;
+    }
+    sendSuccess(res, payload);
   } catch (error) {
     console.error('Error fetching cash at hand:', error);
+    sendError(res, error.message, 500);
+  }
+});
+
+/**
+ * Initiate M-Pesa STK push for Pay on Delivery order payment (driver submits order cost + 50% savings via M-Pesa)
+ * POST /api/driver-wallet/:driverId/order-payment-stk-push
+ * Body: { orderId, phoneNumber } - phoneNumber optional (defaults to driver's phone), can be edited by driver
+ */
+router.post('/:driverId/order-payment-stk-push', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const { orderId: bodyOrderId, phoneNumber: bodyPhone } = req.body;
+    const orderId = bodyOrderId != null ? parseInt(bodyOrderId, 10) : null;
+
+    if (!orderId || orderId < 1) {
+      return sendError(res, 'orderId is required', 400);
+    }
+
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return sendError(res, 'Driver not found', 404);
+    }
+
+    const order = await db.Order.findOne({
+      where: {
+        id: orderId,
+        driverId: parseInt(driverId, 10),
+        status: 'completed',
+        paymentStatus: 'paid',
+        paymentType: 'pay_on_delivery',
+        paymentMethod: 'cash'
+      }
+    });
+    if (!order) {
+      return sendError(res, 'Order not found or not eligible for order payment submission', 404);
+    }
+
+    const existingLinks = await db.sequelize.query(
+      `SELECT cs.id FROM cash_submissions cs
+       INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+       WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')`,
+      { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId: parseInt(driverId, 10), orderId } }
+    ).catch(() => []);
+    if (existingLinks && existingLinks.length > 0) {
+      return sendError(res, 'This order has already been submitted for order payment', 400);
+    }
+
+    const breakdown = await getOrderFinancialBreakdown(orderId);
+    const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+    const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+    const savings = deliveryFee * 0.5;
+    const submitAmount = itemsTotal + savings;
+
+    if (submitAmount < 0.01) {
+      return sendError(res, 'Order amount is too small', 400);
+    }
+
+    let phoneNumber = (bodyPhone && String(bodyPhone).trim()) || driver.phoneNumber;
+    if (!phoneNumber) {
+      return sendError(res, 'Phone number is required', 400);
+    }
+    const cleanedPhone = String(phoneNumber).replace(/\D/g, '');
+    let formattedPhone = cleanedPhone;
+    if (cleanedPhone.startsWith('0')) {
+      formattedPhone = '254' + cleanedPhone.substring(1);
+    } else if (!cleanedPhone.startsWith('254')) {
+      formattedPhone = '254' + cleanedPhone;
+    }
+
+    let wallet = await db.DriverWallet.findOne({ where: { driverId } });
+    if (!wallet) {
+      wallet = await db.DriverWallet.create({
+        driverId,
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      });
+    }
+
+    const accountReference = `ORDER-PAY-${orderId}`;
+    const transactionDesc = `Order payment #${orderId} - KES ${submitAmount.toFixed(2)}`;
+
+    let stkResponse;
+    try {
+      stkResponse = await mpesaService.initiateSTKPush(
+        formattedPhone,
+        submitAmount,
+        accountReference,
+        transactionDesc
+      );
+    } catch (mpesaError) {
+      console.error('Error initiating M-Pesa STK Push for order payment:', mpesaError);
+      return sendError(res, `Failed to initiate M-Pesa payment: ${mpesaError.message}`, 500);
+    }
+
+    const isSuccess = stkResponse.success !== undefined ? stkResponse.success : (stkResponse.ResponseCode === '0' || stkResponse.ResponseCode === 0);
+    const checkoutRequestID = stkResponse.checkoutRequestID || stkResponse.CheckoutRequestID;
+
+    if (!isSuccess && !checkoutRequestID) {
+      const errMsg = stkResponse.errorMessage || stkResponse.CustomerMessage || stkResponse.error || 'STK push failed';
+      return sendError(res, errMsg, 400);
+    }
+
+    const pendingTransaction = await db.Transaction.create({
+      orderId: orderId,
+      driverId: parseInt(driverId, 10),
+      driverWalletId: wallet.id,
+      transactionType: 'cash_settlement',
+      paymentMethod: 'mobile_money',
+      paymentProvider: 'mpesa',
+      amount: submitAmount,
+      status: 'pending',
+      paymentStatus: 'pending',
+      phoneNumber: formattedPhone,
+      checkoutRequestID: checkoutRequestID || null,
+      merchantRequestID: stkResponse.merchantRequestID || stkResponse.MerchantRequestID || null,
+      notes: `order_payment_submission|orderId=${orderId}|driverId=${driverId}|amount=${submitAmount.toFixed(2)}`
+    });
+
+    console.log(`✅ Order payment STK push initiated for Order #${orderId}, CheckoutRequestID: ${checkoutRequestID}`);
+
+    sendSuccess(res, {
+      checkoutRequestID: checkoutRequestID,
+      orderId: orderId,
+      amount: submitAmount,
+      message: 'Enter your M-Pesa PIN on your phone to complete the payment.'
+    }, 'M-Pesa prompt sent');
+  } catch (error) {
+    console.error('Error initiating order payment STK push:', error);
     sendError(res, error.message, 500);
   }
 });
@@ -393,27 +595,11 @@ router.get('/:driverId', async (req, res) => {
       });
     }
 
-    // Get tip transactions for this driver
-    const tipTransactions = await db.Transaction.findAll({
+    // Get driver savings_credit transactions (50% of delivery fee credited to savings)
+    const savingsCreditTransactions = await db.Transaction.findAll({
       where: {
         driverId: driverId,
-        transactionType: 'tip',
-        status: 'completed'
-      },
-      include: [{
-        model: db.Order,
-        as: 'order',
-        attributes: ['id', 'customerName', 'createdAt', 'status']
-      }],
-      order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 tips
-    });
-
-    // Get driver pay transactions (only the per-delivery payouts configured in admin)
-    const driverDeliveryTransactions = await db.Transaction.findAll({
-      where: {
-        driverId: driverId,
-        transactionType: 'delivery_pay',
+        transactionType: 'savings_credit',
         driverWalletId: {
           [Op.not]: null
         },
@@ -422,10 +608,10 @@ router.get('/:driverId', async (req, res) => {
       include: [{
         model: db.Order,
         as: 'order',
-        attributes: ['id', 'customerName', 'createdAt', 'status']
+        attributes: ['id', 'customerName', 'deliveryAddress', 'createdAt', 'status']
       }],
       order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 delivery payments
+      limit: 50 // Last 50 savings credits
     });
 
     // Get cash settlement debits (driver remits collected cash)
@@ -444,27 +630,9 @@ router.get('/:driverId', async (req, res) => {
       limit: 50 // Last 50 settlements
     });
 
-    // Calculate amount on hold (tips for orders that are not completed)
-    let amountOnHold = 0;
-    tipTransactions.forEach(tx => {
-      if (tx.order && tx.order.status !== 'completed') {
-        amountOnHold += parseFloat(tx.amount) || 0;
-      }
-    });
-
-    // Calculate available balance (total balance minus amount on hold)
-    const totalBalance = parseFloat(wallet.balance) || 0;
-    const availableBalance = Math.max(0, totalBalance - amountOnHold);
-
-    // Get withdrawal transactions for this driver
-    const withdrawalTransactions = await db.Transaction.findAll({
-      where: {
-        driverId: driverId,
-        transactionType: 'withdrawal'
-      },
-      order: [['createdAt', 'DESC']],
-      limit: 20 // Last 20 withdrawals
-    });
+    // No wallet: balance and withdrawals are not used. Only savings.
+    const totalBalance = 0;
+    const availableBalance = 0;
 
     // Get savings amount from wallet
     const savings = parseFloat(wallet.savings || 0);
@@ -502,14 +670,9 @@ router.get('/:driverId', async (req, res) => {
       wallet: {
         id: wallet.id,
         driverId: wallet.driverId,
-        balance: totalBalance, // Total balance (includes amount on hold)
-        availableBalance: availableBalance, // Available balance (excludes amount on hold)
-        amountOnHold: amountOnHold, // Amount on hold (tips for non-completed orders)
-        savings: savings, // Driver savings (withheld delivery fees)
-        totalTipsReceived: parseFloat(wallet.totalTipsReceived) || 0,
-              totalTipsCount: wallet.totalTipsCount || 0,
-              totalDeliveryPay: parseFloat(wallet.totalDeliveryPay) || 0,
-              totalDeliveryPayCount: wallet.totalDeliveryPayCount || 0
+        balance: totalBalance,
+        availableBalance: availableBalance,
+        savings: savings
       },
       savingsWithdrawal: {
         dailyLimit: dailyLimit,
@@ -517,12 +680,14 @@ router.get('/:driverId', async (req, res) => {
         remainingDailyLimit: remainingDailyLimit,
         canWithdraw: canWithdraw
       },
-      recentDeliveryPayments: driverDeliveryTransactions.map(tx => ({
+      recentDeliveryPayments: [], // No wallet
+      recentSavingsCredits: savingsCreditTransactions.map(tx => ({
         id: tx.id,
         amount: Math.abs(parseFloat(tx.amount)),
-        transactionType: tx.transactionType,
+        transactionType: 'savings_credit',
         orderId: tx.orderId,
         orderNumber: tx.order?.id,
+        orderLocation: tx.order?.deliveryAddress || null,
         customerName: tx.order?.customerName,
         status: tx.order?.status,
         date: tx.createdAt,
@@ -539,24 +704,24 @@ router.get('/:driverId', async (req, res) => {
         date: tx.createdAt,
         notes: tx.notes
       })),
-      recentTips: tipTransactions.map(tx => ({
+      recentTips: [],
+      recentWithdrawals: (await db.Transaction.findAll({
+        where: {
+          driverId: driverId,
+          transactionType: 'savings_withdrawal',
+          status: { [Op.in]: ['pending', 'completed'] }
+        },
+        order: [['createdAt', 'DESC']],
+        limit: 50
+      })).map(tx => ({
         id: tx.id,
-        amount: parseFloat(tx.amount),
-        orderId: tx.orderId,
-        orderNumber: tx.order?.id,
-        customerName: tx.order?.customerName,
-        date: tx.createdAt,
-        notes: tx.notes
-      })),
-      recentWithdrawals: withdrawalTransactions.map(tx => ({
-        id: tx.id,
-        amount: parseFloat(tx.amount),
+        amount: parseFloat(tx.amount || 0),
         phoneNumber: tx.phoneNumber,
         status: tx.status,
         paymentStatus: tx.paymentStatus,
         receiptNumber: tx.receiptNumber,
-        date: tx.createdAt,
-        notes: tx.notes
+        date: tx.transactionDate || tx.createdAt,
+        notes: tx.notes || `Savings withdrawal${tx.phoneNumber ? ` to ${tx.phoneNumber}` : ''}`
       }))
     });
   } catch (error) {
@@ -566,27 +731,24 @@ router.get('/:driverId', async (req, res) => {
 });
 
 /**
- * Withdraw savings to M-Pesa (B2C)
+ * Withdraw savings: amount only. Recorded as savings withdrawal + cash at hand credit (reduction).
+ * When phoneNumber is provided, can optionally initiate M-Pesa B2C; when omitted, record-only.
  * POST /api/driver-wallet/:driverId/withdraw-savings
  * Daily limit: 1000 KES per day
  */
 router.post('/:driverId/withdraw-savings', async (req, res) => {
   try {
     const { driverId } = req.params;
-    const { amount, phoneNumber } = req.body;
+    const amount = req.body?.amount;
+    const phoneNumber = req.body?.phoneNumber; // Optional. When missing/null/empty, record-only (no M-Pesa).
 
     if (!amount || parseFloat(amount) <= 0) {
       return sendError(res, 'Invalid withdrawal amount', 400);
     }
 
-    if (!phoneNumber) {
-      return sendError(res, 'Phone number is required', 400);
-    }
-
     const withdrawalAmount = parseFloat(amount);
-    const dailyLimit = 1000; // 1000 KES per day
+    const dailyLimit = 1000;
 
-    // Get wallet to check savings
     let wallet = await db.DriverWallet.findOne({ where: { driverId: driverId } });
     if (!wallet) {
       wallet = await db.DriverWallet.create({
@@ -601,129 +763,111 @@ router.post('/:driverId/withdraw-savings', async (req, res) => {
     }
 
     const currentSavings = parseFloat(wallet.savings || 0);
-
     if (withdrawalAmount > currentSavings) {
       return sendError(res, `Insufficient savings. Available: KES ${currentSavings.toFixed(2)}`, 400);
     }
 
-    // Check daily limit
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
-
     const todayWithdrawals = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'savings_withdrawal',
-        status: {
-          [Op.in]: ['pending', 'completed']
-        },
-        createdAt: {
-          [Op.gte]: today,
-          [Op.lt]: tomorrow
-        }
+        status: { [Op.in]: ['pending', 'completed'] },
+        createdAt: { [Op.gte]: today, [Op.lt]: tomorrow }
       },
       attributes: ['amount']
     });
-
-    const todayWithdrawn = todayWithdrawals.reduce((sum, tx) => {
-      return sum + (parseFloat(tx.amount) || 0);
-    }, 0);
-
+    const todayWithdrawn = todayWithdrawals.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
     const remainingLimit = dailyLimit - todayWithdrawn;
-
     if (withdrawalAmount > remainingLimit) {
-      return sendError(res, `Daily withdrawal limit exceeded. You can withdraw up to KES ${remainingLimit.toFixed(2)} today (KES ${todayWithdrawn.toFixed(2)} already withdrawn, limit: KES ${dailyLimit.toFixed(2)}/day)`, 400);
+      return sendError(res, `Daily withdrawal limit exceeded. You can withdraw up to KES ${remainingLimit.toFixed(2)} today (limit: KES ${dailyLimit.toFixed(2)}/day)`, 400);
     }
 
-    // Format phone number
-    const cleanedPhone = phoneNumber.replace(/\D/g, '');
-    let formattedPhone = cleanedPhone;
-    if (cleanedPhone.startsWith('0')) {
-      formattedPhone = '254' + cleanedPhone.substring(1);
-    } else if (!cleanedPhone.startsWith('254')) {
-      formattedPhone = '254' + cleanedPhone;
-    }
+    const doRecordOnly = !phoneNumber || String(phoneNumber).trim() === '';
+    const formattedPhone = doRecordOnly ? null : (() => {
+      const cleaned = String(phoneNumber).replace(/\D/g, '');
+      if (cleaned.startsWith('0')) return '254' + cleaned.substring(1);
+      if (!cleaned.startsWith('254')) return '254' + cleaned;
+      return cleaned;
+    })();
 
-    // Create savings withdrawal transaction
     const withdrawalTransaction = await db.Transaction.create({
       orderId: null,
       driverId: driverId,
       driverWalletId: wallet.id,
       transactionType: 'savings_withdrawal',
-      paymentMethod: 'mobile_money',
-      paymentProvider: 'mpesa',
+      paymentMethod: doRecordOnly ? 'cash' : 'mobile_money',
+      paymentProvider: doRecordOnly ? 'savings_withdrawal_record' : 'mpesa',
       amount: withdrawalAmount,
-      status: 'pending',
-      paymentStatus: 'pending',
+      status: doRecordOnly ? 'completed' : 'pending',
+      paymentStatus: doRecordOnly ? 'paid' : 'pending',
       phoneNumber: formattedPhone,
-      notes: `Savings withdrawal to ${formattedPhone}`
+      notes: doRecordOnly
+        ? `Savings withdrawal - KES ${withdrawalAmount.toFixed(2)}`
+        : `Savings withdrawal to ${formattedPhone}`
     });
 
-    // Update wallet savings (reserve the amount)
-    await wallet.update({
-      savings: currentSavings - withdrawalAmount
-    });
+    await wallet.update({ savings: currentSavings - withdrawalAmount });
 
-    // Initiate M-Pesa B2C payment
-    try {
-      const b2cResult = await mpesaService.initiateB2C(
-        formattedPhone,
-        withdrawalAmount,
-        `Savings withdrawal for driver #${driverId} - Transaction #${withdrawalTransaction.id}`,
-        'Savings Withdrawal'
-      );
-
-      if (b2cResult.success) {
-        // Update transaction with B2C details
-        await withdrawalTransaction.update({
-          checkoutRequestID: b2cResult.conversationID,
-          merchantRequestID: b2cResult.originatorConversationID,
-          notes: withdrawalTransaction.notes ?
-            `${withdrawalTransaction.notes}\nB2C initiated: ${b2cResult.responseDescription}` :
-            `B2C initiated: ${b2cResult.responseDescription}`
-        });
-
-        console.log(`✅ B2C payment initiated for savings withdrawal transaction #${withdrawalTransaction.id}`);
-      } else {
-        // B2C initiation failed - refund the savings
-        await wallet.update({
-          savings: currentSavings // Restore savings
-        });
-
-        await withdrawalTransaction.update({
-          status: 'failed',
-          paymentStatus: 'failed',
-          notes: withdrawalTransaction.notes ?
-            `${withdrawalTransaction.notes}\nB2C failed: ${b2cResult.responseDescription}` :
-            `B2C failed: ${b2cResult.responseDescription}`
-        });
-
-        throw new Error(b2cResult.responseDescription || 'Failed to initiate B2C payment');
-      }
-    } catch (b2cError) {
-      console.error('B2C initiation error:', b2cError);
-
-      // Refund savings on error
-      await wallet.update({
-        savings: currentSavings
+    const driver = await db.Driver.findByPk(driverId);
+    if (driver) {
+      const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+      const newCashAtHand = currentCashAtHand - withdrawalAmount;
+      await driver.update({ cashAtHand: newCashAtHand });
+      console.log(`   Driver ${driverId} cash at hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (savings withdrawal -${withdrawalAmount.toFixed(2)})`);
+      
+      // Create cash at hand transaction log entry for savings withdrawal
+      await db.Transaction.create({
+        orderId: null,
+        driverId: driverId,
+        driverWalletId: wallet.id,
+        transactionType: 'cash_settlement', // Using cash_settlement type to show in cash at hand log
+        paymentMethod: doRecordOnly ? 'cash' : 'mobile_money',
+        paymentProvider: doRecordOnly ? 'savings_withdrawal_record' : 'mpesa',
+        amount: -withdrawalAmount, // Negative amount to show as credit (money going out)
+        status: withdrawalTransaction.status,
+        paymentStatus: withdrawalTransaction.paymentStatus,
+        phoneNumber: formattedPhone,
+        transactionDate: withdrawalTransaction.createdAt || new Date(),
+        notes: `Savings withdrawal - KES ${withdrawalAmount.toFixed(2)}`
       });
-
-      await withdrawalTransaction.update({
-        status: 'failed',
-        paymentStatus: 'failed',
-        notes: withdrawalTransaction.notes ?
-          `${withdrawalTransaction.notes}\nB2C error: ${b2cError.message}` :
-          `B2C error: ${b2cError.message}`
-      });
-
-      throw b2cError;
+      console.log(`✅ Created cash_settlement transaction for savings withdrawal: ${withdrawalAmount.toFixed(2)}, notes: "Savings withdrawal - KES ${withdrawalAmount.toFixed(2)}"`);
     }
 
-    // Reload wallet to get updated savings
-    await wallet.reload();
+    if (!doRecordOnly && formattedPhone) {
+      try {
+        const b2cResult = await mpesaService.initiateB2C(
+          formattedPhone,
+          withdrawalAmount,
+          `Savings withdrawal for driver #${driverId} - Transaction #${withdrawalTransaction.id}`,
+          'Savings Withdrawal'
+        );
+        if (b2cResult.success) {
+          await withdrawalTransaction.update({
+            checkoutRequestID: b2cResult.conversationID,
+            merchantRequestID: b2cResult.originatorConversationID,
+            notes: (withdrawalTransaction.notes || '') + '\nB2C initiated: ' + (b2cResult.responseDescription || '')
+          });
+          console.log(`✅ B2C payment initiated for savings withdrawal transaction #${withdrawalTransaction.id}`);
+        } else {
+          await wallet.update({ savings: currentSavings });
+          if (driver) await driver.update({ cashAtHand: parseFloat(driver.cashAtHand || 0) + withdrawalAmount });
+          await withdrawalTransaction.update({ status: 'failed', paymentStatus: 'failed' });
+          throw new Error(b2cResult.responseDescription || 'Failed to initiate B2C payment');
+        }
+      } catch (b2cError) {
+        console.error('B2C initiation error:', b2cError);
+        await wallet.update({ savings: currentSavings });
+        if (driver) await driver.update({ cashAtHand: parseFloat(driver.cashAtHand || 0) + withdrawalAmount });
+        await withdrawalTransaction.update({ status: 'failed', paymentStatus: 'failed' });
+        throw b2cError;
+      }
+    }
 
+    await wallet.reload();
     sendSuccess(res, {
       transaction: {
         id: withdrawalTransaction.id,
@@ -733,9 +877,11 @@ router.post('/:driverId/withdraw-savings', async (req, res) => {
         conversationID: withdrawalTransaction.checkoutRequestID
       },
       newSavings: parseFloat(wallet.savings),
-      remainingDailyLimit: remainingLimit - withdrawalAmount,
-      note: 'The withdrawal will be completed when M-Pesa processes the payment. You will be notified when it\'s completed.'
-    }, 'Savings withdrawal initiated successfully. Payment will be processed shortly.');
+      remainingDailyLimit: Math.max(0, remainingLimit - withdrawalAmount),
+      note: doRecordOnly
+        ? `Savings withdrawal of KES ${withdrawalAmount.toFixed(2)}. Your cash at hand has been reduced by this amount.`
+        : 'The withdrawal will be completed when M-Pesa processes the payment.'
+    }, doRecordOnly ? 'Savings withdrawal completed.' : 'Savings withdrawal initiated. Payment will be processed shortly.');
   } catch (error) {
     console.error('Error processing savings withdrawal:', error);
     sendError(res, error.message, 500);
@@ -837,6 +983,15 @@ router.post('/:driverId/withdraw', async (req, res) => {
     await wallet.update({
       balance: totalBalance - withdrawalAmount
     });
+
+    // Withdrawing from wallet reduces driver's cash at hand by the amount withdrawn
+    const driver = await db.Driver.findByPk(driverId);
+    if (driver) {
+      const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+      const newCashAtHand = Math.max(0, currentCashAtHand - withdrawalAmount);
+      await driver.update({ cashAtHand: newCashAtHand });
+      console.log(`   Driver ${driverId} cash at hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (withdrawal -${withdrawalAmount.toFixed(2)})`);
+    }
 
     // Initiate M-Pesa B2C payment
     try {

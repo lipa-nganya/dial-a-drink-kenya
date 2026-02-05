@@ -14,13 +14,22 @@
         <item name="android:windowFullscreen">true</item>
     </style>
     
-    <!-- Dark theme for AlertDialog -->
+    <!-- Dark theme for AlertDialog: visible text and green accent -->
     <style name="Theme.DialADrinkDriver.AlertDialog" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
         <item name="android:windowBackground">@color/paper_dark</item>
         <item name="android:textColorPrimary">@color/text_primary_dark</item>
-        <item name="android:textColorSecondary">@color/text_secondary_dark</item>
+        <item name="android:textColorSecondary">@color/text_primary_dark</item>
+        <item name="android:colorForeground">@color/text_primary_dark</item>
+        <item name="android:textColor">@color/text_primary_dark</item>
         <item name="colorPrimary">@color/accent</item>
         <item name="colorAccent">@color/accent</item>
+        <item name="materialButtonStyle">@style/Widget.DialADrinkDriver.AlertDialog.Button</item>
+        <item name="android:alertDialogTheme">@style/Theme.DialADrinkDriver.AlertDialog</item>
+        <item name="alertDialogTheme">@style/Theme.DialADrinkDriver.AlertDialog</item>
+    </style>
+    <style name="Widget.DialADrinkDriver.AlertDialog.Button" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">@color/accent</item>
+        <item name="background">@drawable/button_border_green</item>
     </style>
     
     <!-- Dark theme for DatePickerDialog -->

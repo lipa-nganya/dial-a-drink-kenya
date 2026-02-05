@@ -263,6 +263,12 @@ if (Admin && Order) {
   Admin.hasMany(Order, { foreignKey: 'adminId', as: 'servicedOrders' });
 }
 
+// Territory-Order associations
+if (Territory && Order) {
+  Order.belongsTo(Territory, { foreignKey: 'territoryId', as: 'territory' });
+  Territory.hasMany(Order, { foreignKey: 'territoryId', as: 'orders' });
+}
+
 db.Category = Category;
 db.SubCategory = SubCategory;
 db.Brand = Brand;

@@ -11,7 +11,7 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <!-- Total Cash At Hand Card -->
+        <!-- Actual Cash At Hand Card -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -31,7 +31,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Total Cash At Hand"
+                    android:text="Actual Cash At Hand"
                     android:textColor="@color/text_secondary_dark"
                     android:textSize="14sp" />
 
@@ -45,6 +45,42 @@
                     android:textSize="32sp"
                     android:textStyle="bold" />
 
+                <!-- Pending Cash At Hand (shown when there are pending submissions) -->
+                <LinearLayout
+                    android:id="@+id/pendingCashAtHandSection"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="vertical"
+                    android:visibility="gone"
+                    android:paddingTop="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Pending Cash At Hand"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="14sp" />
+
+                    <TextView
+                        android:id="@+id/pendingCashAtHandText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="KES 0.00"
+                        android:textColor="@color/accent"
+                        android:textSize="24sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:id="@+id/pendingCashAtHandHint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="If pending submissions are approved"
+                        android:textColor="@color/text_secondary_dark"
+                        android:textSize="12sp" />
+                </LinearLayout>
             </LinearLayout>
 
         </com.google.android.material.card.MaterialCardView>
@@ -302,6 +338,36 @@
                             android:inputType="textMultiLine"
                         android:textColor="#FFFFFF"
                         android:textColorHint="#FFFFFF"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
+                    <!-- Order Payment: Select Order -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/orderPaymentOrderLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Select Order"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                        app:endIconMode="dropdown_menu">
+
+                        <AutoCompleteTextView
+                            android:id="@+id/orderPaymentOrderSpinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none"
+                            android:textColor="#FFFFFF"
+                            android:textColorHint="#FFFFFF"
                             android:minHeight="56dp"
                             android:padding="16dp"
                             android:textSize="16sp" />

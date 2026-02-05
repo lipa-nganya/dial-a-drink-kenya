@@ -180,3 +180,68 @@ After deployment, verify:
 - [ ] Payment status updates in real-time (admin & driver)
 - [ ] Orders pagination works on My Orders page
 - [ ] PesaPal IPN callbacks are received (check backend logs)
+
+---
+
+## 🔒 CORS Preflight Request Fix - February 2nd, 2026
+
+### Issue
+CORS errors occurring on development site (`dialadrink.thewolfgang.tech`) after every deployment. Browser console showed:
+```
+Access to XMLHttpRequest at 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/orders/find-all' 
+from origin 'https://dialadrink.thewolfgang.tech' has been blocked by CORS policy: 
+Response to preflight request doesn't pass access control check: 
+No 'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+### Root Cause
+The CORS middleware in `backend/app.js` had a logic issue:
+1. OPTIONS preflight requests were being handled AFTER the origin check
+2. The origin checking logic wasn't correctly identifying `https://dialadrink.thewolfgang.tech` as an allowed origin
+3. When OPTIONS requests failed the origin check, no CORS headers were set before the response ended
+
+### Solution
+Refactored the CORS middleware to:
+1. **Handle OPTIONS requests FIRST** - Before any other origin checks
+2. **Created `isOriginAllowed()` helper function** - Centralizes origin checking logic for consistency
+3. **Improved logging** - Added detailed logging for debugging CORS issues, especially for `.thewolfgang.tech` domains
+4. **Ensured headers are set correctly** - Headers are now set before response ends for all allowed origins
+
+### Backend Changes
+- **Updated**: `backend/app.js` (lines 72-127)
+  - Refactored CORS middleware to handle OPTIONS preflight requests first
+  - Created `isOriginAllowed()` helper function
+  - Improved error handling and logging
+
+### Deployment
+- **Commit**: `a4a14af` - "Fix CORS middleware: Handle OPTIONS preflight requests correctly for thewolfgang.tech domains"
+- **Branch**: `develop`
+- **Deployed to**: Development backend (`deliveryos-development-backend`)
+- **Status**: ✅ Verified working
+
+### Verification
+Test OPTIONS preflight request:
+```bash
+curl -k -X OPTIONS \
+  -H "Origin: https://dialadrink.thewolfgang.tech" \
+  -H "Access-Control-Request-Method: POST" \
+  -H "Access-Control-Request-Headers: Content-Type" \
+  -i https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/orders/find-all
+```
+
+**Expected Response Headers**:
+```
+HTTP/2 204
+access-control-allow-origin: https://dialadrink.thewolfgang.tech
+access-control-allow-credentials: true
+access-control-allow-methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+access-control-allow-headers: Content-Type, Authorization
+access-control-max-age: 86400
+```
+
+### Testing Checklist
+After deployment, verify:
+- [ ] No CORS errors in browser console on `https://dialadrink.thewolfgang.tech/orders`
+- [ ] API calls work from development frontend
+- [ ] OPTIONS preflight requests return proper CORS headers
+- [ ] Check backend logs for CORS debug messages (should see `🔒 [CORS] OPTIONS headers set for origin`)

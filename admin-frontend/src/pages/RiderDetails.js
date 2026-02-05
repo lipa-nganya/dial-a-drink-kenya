@@ -1,11 +1,13 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
   Paper,
-  Tabs,
-  Tab,
+  Chip,
+  IconButton,
+  CircularProgress,
+  Alert,
   Table,
   TableBody,
   TableCell,
@@ -13,23 +15,9 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Chip,
-  Button,
-  IconButton,
-  CircularProgress,
-  Alert,
-  Card,
-  CardContent,
-  Grid,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions
+  Tabs,
+  Tab,
+  Grid
 } from '@mui/material';
 import {
   ArrowBack,
@@ -37,203 +25,219 @@ import {
   Phone,
   Email,
   Person,
-  Download
+  Assignment
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
-import { getOrderStatusChipProps, getPaymentStatusChipProps } from '../utils/chipStyles';
 
 const RiderDetails = () => {
   const { riderId } = useParams();
   const navigate = useNavigate();
   const { isDarkMode, colors } = useTheme();
+  
   const [rider, setRider] = useState(null);
-  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState(0);
-  
-  // Pagination state
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  
-  // Date filter state
-  const [dateRange, setDateRange] = useState('all');
-  const [customStartDate, setCustomStartDate] = useState('');
-  const [customEndDate, setCustomEndDate] = useState('');
-  
-  // Export dialog state
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
+  const [orders, setOrders] = useState([]);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersPage, setOrdersPage] = useState(0);
+  const [ordersRowsPerPage, setOrdersRowsPerPage] = useState(10);
+  const [savingsBalance, setSavingsBalance] = useState(null);
+  const [savingsLoading, setSavingsLoading] = useState(false);
+  const [transactionTab, setTransactionTab] = useState('orders'); // 'orders', 'cash-at-hand', 'savings'
+  const [cashAtHandData, setCashAtHandData] = useState(null);
+  const [cashAtHandLoading, setCashAtHandLoading] = useState(false);
+  const [cashAtHandAmount, setCashAtHandAmount] = useState(null);
+  const [savingsData, setSavingsData] = useState(null);
+  const [savingsTransactionsLoading, setSavingsTransactionsLoading] = useState(false);
 
+  // Fetch rider details
   useEffect(() => {
-    fetchRiderDetails();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const fetchRider = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const response = await api.get(`/drivers/${riderId}`);
+        
+        // Backend returns { success: true, data: driver } via sendSuccess
+        let riderData = null;
+        if (response?.data?.success && response.data.data) {
+          riderData = response.data.data;
+        } else if (response?.data?.data) {
+          riderData = response.data.data;
+        } else if (response?.data) {
+          riderData = response.data;
+        }
+        
+        if (!riderData) {
+          throw new Error('Driver not found');
+        }
+        
+        setRider(riderData);
+      } catch (err) {
+        console.error('Error fetching rider:', err);
+        setError('Failed to load rider details: ' + (err.response?.data?.error || err.message));
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    if (riderId) {
+      fetchRider();
+    }
   }, [riderId]);
 
+  // Fetch orders assigned to this rider (all, regardless of acceptance)
   useEffect(() => {
-    if (activeTab === 1) {
-      fetchOrders();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, dateRange, customStartDate, customEndDate]);
-
-  const getDateRange = (range) => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
-    let startDate, endDate;
-    
-    if (range === 'custom' && customStartDate && customEndDate) {
-      startDate = new Date(customStartDate);
-      startDate.setHours(0, 0, 0, 0);
-      endDate = new Date(customEndDate);
-      endDate.setHours(23, 59, 59, 999);
-    } else {
-      switch (range) {
-        case 'today':
-          startDate = new Date(today);
-          startDate.setHours(0, 0, 0, 0);
-          endDate = new Date(now);
-          break;
-        case 'last7days':
-          endDate = new Date(today);
-          startDate = new Date(today);
-          startDate.setDate(startDate.getDate() - 7);
-          break;
-        case 'last30days':
-          endDate = new Date(today);
-          startDate = new Date(today);
-          startDate.setDate(startDate.getDate() - 30);
-          break;
-        case 'last90days':
-          endDate = new Date(today);
-          startDate = new Date(today);
-          startDate.setDate(startDate.getDate() - 90);
-          break;
-        case 'thisMonth':
-          startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-          endDate = new Date(now);
-          break;
-        case 'lastMonth':
-          startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-          break;
-        default:
-          return { startDate: null, endDate: null };
+    const fetchOrders = async () => {
+      if (!riderId) return;
+      try {
+        setOrdersLoading(true);
+        const response = await api.get(`/driver-orders/${riderId}`, { params: { summary: 'true' } });
+        let list = [];
+        if (response?.data?.success && response.data.data) {
+          list = response.data.data;
+        } else if (response?.data?.data) {
+          list = response.data.data;
+        } else if (Array.isArray(response?.data)) {
+          list = response.data;
+        }
+        setOrders(Array.isArray(list) ? list : []);
+      } catch (err) {
+        console.error('Error fetching rider orders:', err);
+        setOrders([]);
+      } finally {
+        setOrdersLoading(false);
       }
-    }
-    
-    return { startDate, endDate };
-  };
+    };
+    fetchOrders();
+  }, [riderId]);
 
-  const fetchRiderDetails = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const riderResponse = await api.get(`/drivers/${riderId}`);
-      const riderData = riderResponse.data;
-
-      setRider(riderData);
-    } catch (error) {
-      console.error('Error fetching rider details:', error);
-      setError('Failed to load rider details');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const { startDate, endDate } = getDateRange(dateRange);
-      
-      // Build query params
-      const params = new URLSearchParams();
-      if (startDate && endDate) {
-        params.append('startDate', startDate.toISOString());
-        params.append('endDate', endDate.toISOString());
+  // Fetch savings balance
+  useEffect(() => {
+    const fetchSavingsBalance = async () => {
+      if (!riderId) return;
+      try {
+        setSavingsLoading(true);
+        const response = await api.get(`/driver-wallet/${riderId}`);
+        let walletData = null;
+        if (response?.data?.success && response.data.data) {
+          walletData = response.data.data;
+        } else if (response?.data?.data) {
+          walletData = response.data.data;
+        } else if (response?.data) {
+          walletData = response.data;
+        }
+        if (walletData?.wallet?.savings !== undefined) {
+          setSavingsBalance(parseFloat(walletData.wallet.savings || 0));
+        }
+      } catch (err) {
+        console.error('Error fetching savings balance:', err);
+        setSavingsBalance(0);
+      } finally {
+        setSavingsLoading(false);
       }
+    };
+    fetchSavingsBalance();
+  }, [riderId]);
 
-      // Fetch orders assigned to this rider
-      const ordersResponse = await api.get(`/driver-orders/${riderId}?${params.toString()}`);
-      const allOrders = ordersResponse.data?.orders || ordersResponse.data || [];
+  // Fetch cash at hand data (also fetch on mount to get the amount)
+  useEffect(() => {
+    const fetchCashAtHand = async () => {
+      if (!riderId) return;
+      try {
+        setCashAtHandLoading(true);
+        const response = await api.get(`/driver-wallet/${riderId}/cash-at-hand`);
+        let data = null;
+        if (response?.data?.success && response.data.data) {
+          data = response.data.data;
+        } else if (response?.data?.data) {
+          data = response.data.data;
+        } else if (response?.data) {
+          data = response.data;
+        }
+        setCashAtHandData(data);
+        // Update cash at hand amount from the API response
+        if (data?.totalCashAtHand !== undefined) {
+          setCashAtHandAmount(parseFloat(data.totalCashAtHand || 0));
+        }
+      } catch (err) {
+        console.error('Error fetching cash at hand:', err);
+        setCashAtHandData(null);
+        setCashAtHandAmount(null);
+      } finally {
+        setCashAtHandLoading(false);
+      }
+    };
+    fetchCashAtHand();
+  }, [riderId, transactionTab]);
 
-      setOrders(allOrders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-    } catch (error) {
-      console.error('Error fetching orders:', error);
-      setError('Failed to load orders');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredOrders = useMemo(() => {
-    return orders;
-  }, [orders]);
-
-  const paginatedOrders = useMemo(() => {
-    return filteredOrders.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
-  }, [filteredOrders, page, rowsPerPage]);
+  // Fetch savings transactions
+  useEffect(() => {
+    const fetchSavingsTransactions = async () => {
+      if (!riderId || transactionTab !== 'savings') return;
+      try {
+        setSavingsTransactionsLoading(true);
+        const response = await api.get(`/driver-wallet/${riderId}`);
+        let data = null;
+        if (response?.data?.success && response.data.data) {
+          data = response.data.data;
+        } else if (response?.data?.data) {
+          data = response.data.data;
+        } else if (response?.data) {
+          data = response.data;
+        }
+        setSavingsData(data);
+      } catch (err) {
+        console.error('Error fetching savings transactions:', err);
+        setSavingsData(null);
+      } finally {
+        setSavingsTransactionsLoading(false);
+      }
+    };
+    fetchSavingsTransactions();
+  }, [riderId, transactionTab]);
 
   const formatCurrency = (amount) => {
     return `KES ${Number(amount || 0).toFixed(2)}`;
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+  const driverResponseLabel = (driverAccepted) => {
+    if (driverAccepted === true) return 'Accepted';
+    if (driverAccepted === false) return 'Rejected';
+    return 'Pending';
   };
 
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      // Create CSV content
-      const headers = ['Order ID', 'Customer Name', 'Customer Phone', 'Amount', 'Status', 'Payment Status', 'Date'];
-      const rows = filteredOrders.map(order => [
-        order.id,
-        order.customerName || 'N/A',
-        order.customerPhone || 'N/A',
-        order.totalAmount || 0,
-        order.status || 'N/A',
-        order.paymentStatus || 'N/A',
-        formatDate(order.createdAt)
-      ]);
-
-      const csvContent = [
-        headers.join(','),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-      ].join('\n');
-
-      // Create blob and download
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const link = document.createElement('a');
-      const url = URL.createObjectURL(blob);
-      link.setAttribute('href', url);
-      link.setAttribute('download', `rider-${rider?.name || riderId}-orders-${new Date().toISOString().split('T')[0]}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      setExportDialogOpen(false);
-    } catch (error) {
-      console.error('Error exporting orders:', error);
-      alert('Failed to export orders');
-    } finally {
-      setExporting(false);
-    }
+  const driverResponseColor = (driverAccepted) => {
+    if (driverAccepted === true) return 'success';
+    if (driverAccepted === false) return 'error';
+    return 'default';
   };
 
-  if (loading && !rider) {
+  const paymentStatusColor = (paymentStatus) => {
+    if (paymentStatus === 'paid') return 'success';
+    if (paymentStatus === 'unpaid') return 'error';
+    return 'default';
+  };
+
+  const paginatedOrders = orders.slice(
+    ordersPage * ordersRowsPerPage,
+    ordersPage * ordersRowsPerPage + ordersRowsPerPage
+  );
+
+  // Reset to first page when orders list changes (e.g. different rider)
+  useEffect(() => {
+    const maxPage = Math.max(0, Math.ceil(orders.length / ordersRowsPerPage) - 1);
+    if (ordersPage > maxPage) setOrdersPage(0);
+  }, [orders.length, ordersRowsPerPage, ordersPage]);
+
+  const handleOrdersPageChange = (_, newPage) => setOrdersPage(newPage);
+  const handleOrdersRowsPerPageChange = (e) => {
+    setOrdersRowsPerPage(parseInt(e.target.value, 10));
+    setOrdersPage(0);
+  };
+
+  if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
         <CircularProgress />
@@ -241,7 +245,7 @@ const RiderDetails = () => {
     );
   }
 
-  if (error && !rider) {
+  if (error) {
     return (
       <Box>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
@@ -273,319 +277,435 @@ const RiderDetails = () => {
         </IconButton>
         <Box>
           <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-            {rider.name} - Details
-          </Typography>
-          <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5 }}>
-            {rider.phoneNumber} • {rider.email || 'No email'}
+            {rider?.name || 'Rider'} - Details
           </Typography>
         </Box>
       </Box>
 
-      <Paper sx={{ backgroundColor: colors.paper, mb: 3 }}>
-        <Tabs
-          value={activeTab}
-          onChange={(e, newValue) => setActiveTab(newValue)}
-          sx={{
-            borderBottom: `1px solid ${colors.border}`,
-            '& .MuiTab-root': {
-              color: colors.textSecondary,
-              fontWeight: 600,
-              '&.Mui-selected': {
-                color: colors.accentText
-              }
-            }
-          }}
-        >
-          <Tab label="Profile" />
-          <Tab label="Orders" />
-        </Tabs>
-      </Paper>
-
-      {activeTab === 0 && (
+      <Paper sx={{ backgroundColor: colors.paper, p: 3 }}>
         <Grid container spacing={3}>
+          {/* Left Column: Personal Info */}
           <Grid item xs={12} md={6}>
-            <Card sx={{ backgroundColor: colors.paper }}>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
-                  Personal Information
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Person sx={{ color: colors.accentText }} />
+                <Typography variant="body1" component="div">
+                  <strong>Name:</strong> {rider?.name || 'N/A'}
                 </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Person sx={{ color: colors.accentText }} />
-                    <Typography variant="body1">
-                      <strong>Name:</strong> {rider.name}
-                    </Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Phone sx={{ color: colors.accentText }} />
-                    <Typography variant="body1">
-                      <strong>Phone:</strong> {rider.phoneNumber}
-                    </Typography>
-                  </Box>
-                  {rider.email && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Email sx={{ color: colors.accentText }} />
-                      <Typography variant="body1">
-                        <strong>Email:</strong> {rider.email}
-                      </Typography>
-                    </Box>
-                  )}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <LocalShipping sx={{ color: colors.accentText }} />
-                    <Typography variant="body1">
-                      <strong>Status:</strong> 
-                      <Chip
-                        label={rider.status || 'offline'}
-                        size="small"
-                        sx={{
-                          ml: 1,
-                          backgroundColor: rider.status === 'online' ? colors.accentText : colors.textSecondary,
-                          color: isDarkMode ? '#0D0D0D' : '#FFFFFF'
-                        }}
-                      />
-                    </Typography>
-                  </Box>
+              </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Phone sx={{ color: colors.accentText }} />
+                <Typography variant="body1" component="div">
+                  <strong>Phone:</strong> {rider?.phoneNumber || 'N/A'}
+                </Typography>
+              </Box>
+              {rider?.email && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Email sx={{ color: colors.accentText }} />
+                  <Typography variant="body1" component="div">
+                    <strong>Email:</strong> {rider.email}
+                  </Typography>
                 </Box>
-              </CardContent>
-            </Card>
+              )}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LocalShipping sx={{ color: colors.accentText }} />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="body1" component="span">
+                    <strong>Status:</strong>
+                  </Typography>
+                  <Chip
+                    label={rider?.status || 'offline'}
+                    size="small"
+                    sx={{
+                      backgroundColor: rider?.status === 'online' ? colors.accentText : colors.textSecondary,
+                      color: isDarkMode ? '#0D0D0D' : '#FFFFFF'
+                    }}
+                  />
+                </Box>
+              </Box>
+            </Box>
           </Grid>
+
+          {/* Right Column: Financial Info */}
           <Grid item xs={12} md={6}>
-            <Card sx={{ backgroundColor: colors.paper }}>
-              <CardContent>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
-                  Financial Information
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {/* Financial Info Row */}
+              <Box sx={{ display: 'flex', flexDirection: 'row', gap: 3, flexWrap: 'wrap' }}>
+                {rider?.creditLimit !== undefined && (
                   <Box>
                     <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
                       Credit Limit
                     </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                      {formatCurrency(rider.creditLimit || 0)}
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                      {formatCurrency(rider.creditLimit)}
                     </Typography>
                   </Box>
+                )}
+                {cashAtHandAmount !== null ? (
                   <Box>
                     <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
                       Cash at Hand
                     </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                      {formatCurrency(rider.cashAtHand || 0)}
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                      {formatCurrency(cashAtHandAmount)}
                     </Typography>
                   </Box>
-                  {rider.driverPayAmount && (
-                    <Box>
-                      <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
-                        Total Earnings
-                      </Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 600, color: colors.accentText }}>
-                        {formatCurrency(rider.driverPayAmount)}
-                      </Typography>
-                    </Box>
-                  )}
+                ) : rider?.cashAtHand !== undefined && (
+                  <Box>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Cash at Hand
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                      {formatCurrency(rider.cashAtHand)}
+                    </Typography>
+                  </Box>
+                )}
+                {savingsLoading ? (
+                  <Box>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Savings Balance
+                    </Typography>
+                    <CircularProgress size={20} />
+                  </Box>
+                ) : savingsBalance !== null && (
+                  <Box>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                      Savings Balance
+                    </Typography>
+                    <Typography variant="body1" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                      {formatCurrency(savingsBalance)}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+              {rider?.driverPayAmount && (
+                <Box>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                    Total Earnings
+                  </Typography>
+                  <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
+                    {formatCurrency(rider.driverPayAmount)}
+                  </Typography>
                 </Box>
-              </CardContent>
-            </Card>
+              )}
+            </Box>
           </Grid>
         </Grid>
+      </Paper>
+
+      {/* Transaction Tabs: Orders, Cash at Hand, Savings */}
+      <Paper sx={{ mb: 3, backgroundColor: colors.paper }}>
+        <Tabs
+          value={transactionTab}
+          onChange={(event, newValue) => {
+            setTransactionTab(newValue);
+            setOrdersPage(0);
+          }}
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: 48,
+              color: colors.textSecondary,
+              fontSize: '0.95rem',
+              '&.Mui-selected': {
+                color: colors.accentText,
+                fontWeight: 600
+              }
+            },
+            '& .MuiTabs-indicator': {
+              backgroundColor: colors.accentText,
+              height: 3
+            }
+          }}
+        >
+          <Tab label="Orders" value="orders" />
+          <Tab label="Cash at Hand" value="cash-at-hand" />
+          <Tab label="Savings" value="savings" />
+        </Tabs>
+      </Paper>
+
+      {/* Orders Tab */}
+      {transactionTab === 'orders' && (
+        <>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.textPrimary, display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Assignment sx={{ color: colors.accentText }} />
+            Orders assigned to {rider?.name || 'this rider'}
+          </Typography>
+          <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
+        {ordersLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Customer name</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Delivery address</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order number</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order status</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Payment status</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Driver response</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {orders.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                      No orders assigned to this rider.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedOrders.map((order) => (
+                    <TableRow key={order.id} hover>
+                      <TableCell sx={{ color: colors.textPrimary }}>{order.customerName || '—'}</TableCell>
+                      <TableCell sx={{ color: colors.textPrimary, maxWidth: 280 }}>{order.deliveryAddress || '—'}</TableCell>
+                      <TableCell sx={{ color: colors.textPrimary, fontWeight: 500 }}>#{order.id}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={order.status || '—'}
+                          size="small"
+                          sx={{ textTransform: 'capitalize', fontWeight: 500 }}
+                          color={order.status === 'completed' ? 'success' : order.status === 'cancelled' ? 'error' : 'default'}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={order.paymentStatus || '—'}
+                          size="small"
+                          sx={{ textTransform: 'capitalize', fontWeight: 500 }}
+                          color={paymentStatusColor(order.paymentStatus)}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={driverResponseLabel(order.driverAccepted)}
+                          size="small"
+                          color={driverResponseColor(order.driverAccepted)}
+                          sx={{ fontWeight: 500 }}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+            {orders.length > 0 && (
+              <TablePagination
+                component="div"
+                count={orders.length}
+                page={ordersPage}
+                onPageChange={handleOrdersPageChange}
+                rowsPerPage={ordersRowsPerPage}
+                onRowsPerPageChange={handleOrdersRowsPerPageChange}
+                rowsPerPageOptions={[5, 10, 25, 50]}
+                sx={{ color: colors.textPrimary, borderTop: 1, borderColor: 'divider' }}
+              />
+            )}
+          </>
+        )}
+      </TableContainer>
+      </>
       )}
 
-      {activeTab === 1 && (
+      {/* Cash at Hand Transaction Logs */}
+      {transactionTab === 'cash-at-hand' && (
         <Box>
-          {/* Date Filters and Export */}
-          <Paper sx={{ backgroundColor: colors.paper, p: 2, mb: 2 }}>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-              <FormControl size="small" sx={{ minWidth: 150 }}>
-                <InputLabel>Date Range</InputLabel>
-                <Select
-                  value={dateRange}
-                  label="Date Range"
-                  onChange={(e) => {
-                    setDateRange(e.target.value);
-                    setPage(0);
-                  }}
-                >
-                  <MenuItem value="all">All Time</MenuItem>
-                  <MenuItem value="today">Today</MenuItem>
-                  <MenuItem value="last7days">Last 7 Days</MenuItem>
-                  <MenuItem value="last30days">Last 30 Days</MenuItem>
-                  <MenuItem value="last90days">Last 90 Days</MenuItem>
-                  <MenuItem value="thisMonth">This Month</MenuItem>
-                  <MenuItem value="lastMonth">Last Month</MenuItem>
-                  <MenuItem value="custom">Custom Range</MenuItem>
-                </Select>
-              </FormControl>
-              
-              {dateRange === 'custom' && (
-                <>
-                  <TextField
-                    size="small"
-                    label="Start Date"
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => {
-                      setCustomStartDate(e.target.value);
-                      setPage(0);
-                    }}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ minWidth: 150 }}
-                  />
-                  <TextField
-                    size="small"
-                    label="End Date"
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => {
-                      setCustomEndDate(e.target.value);
-                      setPage(0);
-                    }}
-                    InputLabelProps={{ shrink: true }}
-                    sx={{ minWidth: 150 }}
-                  />
-                </>
-              )}
-              
-              <Box sx={{ flexGrow: 1 }} />
-              
-              <Button
-                variant="contained"
-                startIcon={<Download />}
-                onClick={() => setExportDialogOpen(true)}
-                sx={{
-                  backgroundColor: colors.accentText,
-                  color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                  '&:hover': {
-                    backgroundColor: '#00C4A3'
-                  }
-                }}
-              >
-                Export
-              </Button>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.textPrimary }}>
+            Cash at Hand Transactions
+          </Typography>
+          {cashAtHandLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
             </Box>
-          </Paper>
-
-          {/* Orders Table */}
-          <Paper sx={{ backgroundColor: colors.paper }}>
-            <Box sx={{ p: 2, borderBottom: `1px solid ${colors.border}` }}>
-              <Typography variant="h6" sx={{ color: colors.textPrimary }}>
-                Orders ({filteredOrders.length})
+          ) : !cashAtHandData || !cashAtHandData.entries || cashAtHandData.entries.length === 0 ? (
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="h6" color="text.secondary">
+                No cash at hand transactions found
               </Typography>
-            </Box>
-            {loading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                <CircularProgress />
-              </Box>
-            ) : (
-              <>
-                <TableContainer>
-                  <Table>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order ID</TableCell>
-                        <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Customer</TableCell>
-                        <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
-                        <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Status</TableCell>
-                        <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Payment</TableCell>
-                        <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {paginatedOrders.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
-                            No orders found
+            </Paper>
+          ) : (
+            <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Description</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Debit</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Credit</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Balance</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(() => {
+                    // Sort entries by date descending (newest first)
+                    const sortedEntries = [...(cashAtHandData.entries || [])].sort((a, b) => {
+                      const dateA = new Date(a.date);
+                      const dateB = new Date(b.date);
+                      return dateB - dateA;
+                    });
+                    
+                    // Calculate running balance backwards from current total
+                    let balanceAfter = parseFloat(cashAtHandData.totalCashAtHand || 0);
+                    
+                    return sortedEntries.map((entry, index) => {
+                      const isCredit = entry.type === 'cash_received';
+                      const amount = parseFloat(entry.amount || 0);
+                      
+                      // Current balance is the balance after this transaction
+                      const currentBalance = balanceAfter;
+                      
+                      // Move to balance before this transaction for next iteration
+                      if (isCredit) {
+                        balanceAfter -= amount;
+                      } else {
+                        balanceAfter += amount;
+                      }
+                      
+                      return (
+                        <TableRow key={index} hover>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {new Date(entry.date).toLocaleDateString('en-KE', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {entry.description || entry.customerName || 'N/A'}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                            {isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                            {!isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                            KES {currentBalance.toFixed(2)}
                           </TableCell>
                         </TableRow>
-                      ) : (
-                        paginatedOrders.map((order) => {
-                          const statusProps = getOrderStatusChipProps(order.status);
-                          const paymentProps = getPaymentStatusChipProps(order.paymentStatus, order.status);
-
-                          return (
-                            <TableRow key={order.id} hover>
-                              <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                                #{order.id}
-                              </TableCell>
-                              <TableCell sx={{ color: colors.textPrimary }}>
-                                {order.customerName || 'Guest'}
-                              </TableCell>
-                              <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                                {formatCurrency(order.totalAmount)}
-                              </TableCell>
-                              <TableCell>
-                                <Chip
-                                  label={statusProps.label}
-                                  icon={statusProps.icon}
-                                  color={statusProps.color}
-                                  size="small"
-                                />
-                              </TableCell>
-                              <TableCell>
-                                {paymentProps && (
-                                  <Chip
-                                    label={paymentProps.label}
-                                    icon={paymentProps.icon}
-                                    color={paymentProps.color}
-                                    size="small"
-                                  />
-                                )}
-                              </TableCell>
-                              <TableCell sx={{ color: colors.textSecondary }}>
-                                {formatDate(order.createdAt)}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
-                <TablePagination
-                  component="div"
-                  count={filteredOrders.length}
-                  page={page}
-                  onPageChange={(event, newPage) => setPage(newPage)}
-                  rowsPerPage={rowsPerPage}
-                  onRowsPerPageChange={(event) => {
-                    setRowsPerPage(parseInt(event.target.value, 10));
-                    setPage(0);
-                  }}
-                  rowsPerPageOptions={[10, 25, 50, 100]}
-                  sx={{
-                    borderTop: `1px solid ${colors.border}`,
-                    '& .MuiTablePagination-toolbar': {
-                      color: colors.textPrimary
-                    }
-                  }}
-                />
-              </>
-            )}
-          </Paper>
+                      );
+                    });
+                  })()}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </Box>
       )}
 
-      {/* Export Confirmation Dialog */}
-      <Dialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)}>
-        <DialogTitle>Export Orders</DialogTitle>
-        <DialogContent>
-          <Typography>
-            Export {filteredOrders.length} order(s) to CSV?
+      {/* Savings Transaction Logs */}
+      {transactionTab === 'savings' && (
+        <Box>
+          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.textPrimary }}>
+            Savings Transactions
           </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setExportDialogOpen(false)}>Cancel</Button>
-          <Button
-            onClick={handleExport}
-            variant="contained"
-            disabled={exporting}
-            sx={{
-              backgroundColor: colors.accentText,
-              color: isDarkMode ? '#0D0D0D' : '#FFFFFF'
-            }}
-          >
-            {exporting ? 'Exporting...' : 'Export'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+          {savingsTransactionsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : !savingsData ? (
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="h6" color="text.secondary">
+                No savings data found
+              </Typography>
+            </Paper>
+          ) : (
+            <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Description</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Debit</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Credit</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Balance</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {(() => {
+                    // Get all transactions (credits and withdrawals)
+                    const credits = savingsData.recentSavingsCredits || [];
+                    const withdrawals = savingsData.recentWithdrawals || [];
+                    
+                    // Combine and sort by date (newest first)
+                    const allTransactions = [];
+                    credits.forEach(tx => {
+                      allTransactions.push({ type: 'credit', ...tx });
+                    });
+                    withdrawals.forEach(wd => {
+                      allTransactions.push({ type: 'withdrawal', ...wd });
+                    });
+                    
+                    const sortedTransactions = allTransactions.sort((a, b) => {
+                      const dateA = new Date(a.date || a.createdAt);
+                      const dateB = new Date(b.date || b.createdAt);
+                      return dateB - dateA;
+                    });
+                    
+                    if (sortedTransactions.length === 0) {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                            No savings transactions found
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
+                    
+                    // Calculate running balance backwards from current savings
+                    const currentSavings = parseFloat(savingsData.wallet?.savings || 0);
+                    let balanceAfter = currentSavings;
+                    
+                    return sortedTransactions.map((tx, index) => {
+                      const isCredit = tx.type === 'credit';
+                      const amount = parseFloat(tx.amount || 0);
+                      
+                      // Current balance is the balance after this transaction
+                      const currentBalance = balanceAfter;
+                      
+                      // Move to balance before this transaction for next iteration
+                      if (isCredit) {
+                        balanceAfter -= amount;
+                      } else {
+                        balanceAfter += amount;
+                      }
+                      
+                      const description = isCredit 
+                        ? (tx.notes || tx.orderLocation || tx.customerName || `Order #${tx.orderNumber || tx.orderId || 'N/A'}`)
+                        : (tx.notes || `Savings withdrawal - KES ${amount.toFixed(2)}`);
+                      
+                      return (
+                        <TableRow key={index} hover>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {new Date(tx.date || tx.createdAt).toLocaleDateString('en-KE', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric'
+                            })}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {description}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                            {isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                            {!isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                            KES {currentBalance.toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    });
+                  })()}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </Box>
+      )}
     </Box>
   );
 };

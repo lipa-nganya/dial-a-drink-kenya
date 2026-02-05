@@ -47,6 +47,44 @@
 3. **Missing Domains**: When adding new domains, add to BOTH development and production CORS configs
 4. **Deployment Order**: Deploy backend FIRST, then frontend (frontend needs backend to be ready)
 
+## Recent CORS Fixes
+
+### February 2nd, 2026 - CORS Preflight Request Fix
+
+**Issue**: CORS errors on development site (`dialadrink.thewolfgang.tech`) after deployments. OPTIONS preflight requests were not receiving CORS headers.
+
+**Root Cause**: 
+- CORS middleware was checking origin AFTER handling OPTIONS requests
+- Logic wasn't correctly identifying `https://dialadrink.thewolfgang.tech` as allowed origin
+- OPTIONS preflight requests weren't getting headers set before response ended
+
+**Fix Applied**:
+- Refactored CORS middleware in `backend/app.js` to handle OPTIONS requests FIRST
+- Created `isOriginAllowed()` helper function to centralize origin checking logic
+- Ensured CORS headers are set correctly for all allowed origins, including `.thewolfgang.tech` subdomains
+- Added better logging for debugging CORS issues
+
+**Files Changed**:
+- `backend/app.js` - CORS middleware refactoring (lines 72-127)
+
+**Deployment**:
+- Committed: `a4a14af` - "Fix CORS middleware: Handle OPTIONS preflight requests correctly for thewolfgang.tech domains"
+- Deployed to: Development backend (`deliveryos-development-backend`)
+- Status: ✅ Verified working via curl test - CORS headers correctly set
+
+**Verification**:
+```bash
+curl -k -X OPTIONS -H "Origin: https://dialadrink.thewolfgang.tech" \
+  -H "Access-Control-Request-Method: POST" \
+  -i https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/orders/find-all
+```
+
+**Result**: Returns proper CORS headers:
+- `access-control-allow-origin: https://dialadrink.thewolfgang.tech`
+- `access-control-allow-credentials: true`
+- `access-control-allow-methods: GET, POST, PUT, PATCH, DELETE, OPTIONS`
+- `access-control-allow-headers: Content-Type, Authorization`
+
 ## Quick Fix Commands
 
 ```bash

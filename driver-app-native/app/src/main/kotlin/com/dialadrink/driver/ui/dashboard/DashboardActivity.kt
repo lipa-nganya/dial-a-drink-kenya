@@ -61,6 +61,7 @@ class DashboardActivity : AppCompatActivity() {
             setupShiftToggle()
             setupSocketConnection()
             loadPendingOrdersCount()
+            loadInProgressOrdersCount()
             loadDriverStatus()
             
             // Preload critical data in background (non-blocking)
@@ -251,10 +252,24 @@ class DashboardActivity : AppCompatActivity() {
         }
     }
     
+    private fun loadInProgressOrdersCount() {
+        lifecycleScope.launch {
+            try {
+                val activeOrders = OrderRepository.getActiveOrders(this@DashboardActivity, forceRefresh = false)
+                val count = activeOrders.size
+                binding.inProgressCountText.text = count.toString()
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardActivity", "Error loading in-progress orders count: ${e.message}", e)
+            }
+        }
+    }
+    
     override fun onResume() {
         super.onResume()
         // Refresh pending orders count when returning to dashboard
         loadPendingOrdersCount()
+        // Refresh in-progress orders count when returning to dashboard
+        loadInProgressOrdersCount()
         // Refresh notifications count
         loadNotificationsCount()
         // Refresh driver status when returning to dashboard (but not immediately after an update)
@@ -302,9 +317,11 @@ class DashboardActivity : AppCompatActivity() {
             driverId = driverId,
             onOrderAssigned = {
                 loadPendingOrdersCount()
+                loadInProgressOrdersCount()
             },
             onOrderStatusUpdated = {
                 loadPendingOrdersCount()
+                loadInProgressOrdersCount()
             },
             onPaymentConfirmed = null
         )
