@@ -49,6 +49,8 @@ const ProductPage = () => {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
+    // Scroll to top when product ID changes (e.g., when clicking a related product)
+    window.scrollTo({ top: 0, behavior: 'smooth' });
     fetchProduct();
   }, [id]);
 
@@ -1119,12 +1121,12 @@ const ProductPage = () => {
           <Box sx={{ 
             display: 'grid',
             gridTemplateColumns: {
-              xs: '1fr',
+              xs: 'repeat(2, 1fr)',
               sm: 'repeat(2, 1fr)',
               md: 'repeat(3, 1fr)',
               lg: 'repeat(4, 1fr)'
             },
-            gap: 2,
+            gap: { xs: 1, sm: 2 },
             width: '100%'
           }}>
             {relatedProducts.map((relatedProduct) => (
