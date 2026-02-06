@@ -2634,7 +2634,7 @@ const Orders = () => {
                               }}
                               sx={{ flex: 1 }}
                             >
-                              Approve Cancellation
+                              Approve
                             </Button>
                             <Button
                               variant="contained"
