@@ -34,13 +34,6 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, initialIsStop = false }) => {
   const { isDarkMode, colors } = useTheme();
-  
-  // Check if running on local
-  const isLocal = typeof window !== 'undefined' && (
-    ['localhost', '127.0.0.1'].includes(window.location.hostname) || 
-    window.location.hostname.endsWith('.local') ||
-    /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(window.location.hostname)
-  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [customers, setCustomers] = useState([]);
@@ -393,9 +386,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     // For M-Pesa, allow creating order without transaction code (can prompt later)
     // Transaction code is optional - admin can prompt customer later
-
-    // Determine order status: completed for walk-in, confirmed for regular orders
-    const finalOrderStatus = isWalkIn ? 'completed' : 'confirmed';
 
     setLoading(true);
 
