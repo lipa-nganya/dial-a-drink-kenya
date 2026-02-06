@@ -819,6 +819,18 @@ router.post('/', async (req, res) => {
       console.error('Error sending notifications:', error);
     }
     
+    // Decrease inventory stock for orders created as completed and paid
+    if (completeOrder.status === 'completed' && completeOrder.paymentStatus === 'paid') {
+      try {
+        const { decreaseInventoryForOrder } = require('../utils/inventory');
+        await decreaseInventoryForOrder(completeOrder.id);
+        console.log(`📦 Inventory decreased for Order #${completeOrder.id} (order creation)`);
+      } catch (inventoryError) {
+        console.error(`❌ Error decreasing inventory for Order #${completeOrder.id}:`, inventoryError);
+        // Don't fail the order creation if inventory update fails
+      }
+    }
+    
     return res.status(201).json(completeOrder);
   } catch (error) {
     console.error('Error creating order:', error);
