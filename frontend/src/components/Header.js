@@ -15,7 +15,8 @@ import {
   useMediaQuery,
   useTheme as useMUITheme,
 } from '@mui/material';
-import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone } from '@mui/icons-material';
+import { ShoppingCart, LocalBar, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone, Close } from '@mui/icons-material';
+import { Divider } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -41,28 +42,71 @@ const Header = () => {
 
   const drawer = (
     <Box sx={{ 
-      width: 220, 
-      backgroundColor: colors.paper,
+      width: 280,
       height: '100%',
       minHeight: '100vh',
+      backgroundColor: colors.paper,
       color: colors.textPrimary,
+      display: 'flex',
+      flexDirection: 'column',
     }}>
-      <Toolbar sx={{ 
-        minHeight: '48px !important',
-        backgroundColor: colors.paper,
-        borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
+      {/* Elegant Header */}
+      <Box sx={{
+        background: `linear-gradient(135deg, ${colors.accent || '#20B2AA'} 0%, ${colors.accent || '#20B2AA'}dd 100%)`,
+        padding: 3,
+        color: '#fff',
+        position: 'relative',
+        overflow: 'hidden',
       }}>
-        <LocalBar sx={{ mr: 1, fontSize: '1.2rem', color: colors.textPrimary }} />
-        <Typography variant="subtitle1" component="div" sx={{ 
-          fontSize: '0.9rem',
-          color: colors.textPrimary
-        }}>
-          Dial a Drink Kenya
-        </Typography>
-      </Toolbar>
+        <Box sx={{
+          position: 'absolute',
+          top: -50,
+          right: -50,
+          width: 150,
+          height: 150,
+          borderRadius: '50%',
+          background: 'rgba(255, 255, 255, 0.1)',
+        }} />
+        <Box sx={{
+          position: 'absolute',
+          bottom: -30,
+          left: -30,
+          width: 100,
+          height: 100,
+          borderRadius: '50%',
+          background: 'rgba(255, 255, 255, 0.1)',
+        }} />
+        <Box sx={{ position: 'relative', zIndex: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+            <LocalBar sx={{ fontSize: '2rem', mr: 1.5 }} />
+            <Typography variant="h6" component="div" sx={{ 
+              fontWeight: 700,
+              fontSize: '1.25rem',
+              letterSpacing: '0.5px'
+            }}>
+              Dial a Drink
+            </Typography>
+          </Box>
+          <Typography variant="body2" sx={{ 
+            opacity: 0.9,
+            fontSize: '0.85rem',
+            ml: 5.5
+          }}>
+            Kenya
+          </Typography>
+        </Box>
+      </Box>
+
+      {/* Main Navigation */}
       <List sx={{ 
-        backgroundColor: colors.paper,
-        color: colors.textPrimary
+        flex: 1,
+        padding: 2,
+        '& .MuiListItem-root': {
+          borderRadius: 2,
+          marginBottom: 0.5,
+          paddingLeft: 2,
+          paddingRight: 2,
+        }
       }}>
         <ListItem 
           component="button" 
@@ -70,13 +114,24 @@ const Header = () => {
           sx={{ 
             backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            py: 1.5,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <Home sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <Home sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
-          <ListItemText primary="Home" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Home" 
+            primaryTypographyProps={{
+              fontSize: '1rem',
+              fontWeight: 500,
+            }}
+          />
         </ListItem>
         <ListItem 
           component="button" 
@@ -84,13 +139,24 @@ const Header = () => {
           sx={{ 
             backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            py: 1.5,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <Restaurant sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <Restaurant sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
-          <ListItemText primary="Menu" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Menu" 
+            primaryTypographyProps={{
+              fontSize: '1rem',
+              fontWeight: 500,
+            }}
+          />
         </ListItem>
         <ListItem 
           component="button" 
@@ -98,13 +164,24 @@ const Header = () => {
           sx={{ 
             backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            py: 1.5,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <LocalOffer sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <LocalOffer sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
-          <ListItemText primary="Offers" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Offers" 
+            primaryTypographyProps={{
+              fontSize: '1rem',
+              fontWeight: 500,
+            }}
+          />
         </ListItem>
         <ListItem 
           component="button" 
@@ -112,15 +189,26 @@ const Header = () => {
           sx={{ 
             backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            py: 1.5,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
+          <ListItemIcon sx={{ minWidth: 40 }}>
             <Badge badgeContent={getTotalItems()} color="secondary">
-              <ShoppingCart sx={{ color: colors.textPrimary }} />
+              <ShoppingCart sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
             </Badge>
           </ListItemIcon>
-          <ListItemText primary="Cart" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Cart" 
+            primaryTypographyProps={{
+              fontSize: '1rem',
+              fontWeight: 500,
+            }}
+          />
         </ListItem>
         <ListItem 
           component="button" 
@@ -130,14 +218,28 @@ const Header = () => {
           sx={{ 
             backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            py: 1.5,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <ShoppingCart sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <ShoppingCart sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
-          <ListItemText primary="My Orders" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="My Orders" 
+            primaryTypographyProps={{
+              fontSize: '1rem',
+              fontWeight: 500,
+            }}
+          />
         </ListItem>
+
+        <Divider sx={{ my: 2, opacity: 0.2 }} />
+
         {isLoggedIn ? (
           <ListItem 
             component="button" 
@@ -145,13 +247,24 @@ const Header = () => {
             sx={{ 
               backgroundColor: 'transparent',
               color: colors.textPrimary,
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+              py: 1.5,
+              transition: 'all 0.2s ease',
+              '&:hover': { 
+                backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+                transform: 'translateX(4px)',
+              }
             }}
           >
-            <ListItemIcon>
-              <Person sx={{ color: colors.textPrimary }} />
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <Person sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
             </ListItemIcon>
-            <ListItemText primary="Profile" sx={{ color: colors.textPrimary }} />
+            <ListItemText 
+              primary="Profile" 
+              primaryTypographyProps={{
+                fontSize: '1rem',
+                fontWeight: 500,
+              }}
+            />
           </ListItem>
         ) : (
           <ListItem 
@@ -160,28 +273,53 @@ const Header = () => {
             sx={{ 
               backgroundColor: 'transparent',
               color: colors.textPrimary,
-              '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+              py: 1.5,
+              transition: 'all 0.2s ease',
+              '&:hover': { 
+                backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+                transform: 'translateX(4px)',
+              }
             }}
           >
-            <ListItemIcon>
-              <Login sx={{ color: colors.textPrimary }} />
+            <ListItemIcon sx={{ minWidth: 40 }}>
+              <Login sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
             </ListItemIcon>
-            <ListItemText primary="Login" sx={{ color: colors.textPrimary }} />
+            <ListItemText 
+              primary="Login" 
+              primaryTypographyProps={{
+                fontSize: '1rem',
+                fontWeight: 500,
+              }}
+            />
           </ListItem>
         )}
+
+        <Divider sx={{ my: 2, opacity: 0.2 }} />
+
         <ListItem 
           component="button" 
           onClick={() => handleNavigation('/suggest-drink')}
           sx={{ 
             backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            py: 1.5,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <Lightbulb sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <Lightbulb sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
-          <ListItemText primary="Suggest a Drink" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Suggest a Drink" 
+            primaryTypographyProps={{
+              fontSize: '0.95rem',
+              fontWeight: 400,
+            }}
+          />
         </ListItem>
         <ListItem 
           component="button" 
@@ -189,41 +327,77 @@ const Header = () => {
           sx={{ 
             backgroundColor: 'transparent',
             color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            py: 1.5,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <ReportProblem sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <ReportProblem sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
-          <ListItemText primary="Report a Problem" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Report a Problem" 
+            primaryTypographyProps={{
+              fontSize: '0.95rem',
+              fontWeight: 400,
+            }}
+          />
         </ListItem>
+
+        <Divider sx={{ my: 2, opacity: 0.2 }} />
+
         <ListItem 
           component="button" 
           onClick={() => handleNavigation('/privacy-policy')}
           sx={{ 
             backgroundColor: 'transparent',
-            color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            color: colors.textSecondary || colors.textPrimary,
+            py: 1,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <PrivacyTip sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <PrivacyTip sx={{ color: colors.textSecondary || colors.textPrimary, fontSize: '1.25rem' }} />
           </ListItemIcon>
-          <ListItemText primary="Privacy Policy" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Privacy Policy" 
+            primaryTypographyProps={{
+              fontSize: '0.9rem',
+              fontWeight: 400,
+            }}
+          />
         </ListItem>
         <ListItem 
           component="button" 
           onClick={() => handleNavigation('/terms-of-service')}
           sx={{ 
             backgroundColor: 'transparent',
-            color: colors.textPrimary,
-            '&:hover': { backgroundColor: 'rgba(0, 0, 0, 0.05)' }
+            color: colors.textSecondary || colors.textPrimary,
+            py: 1,
+            transition: 'all 0.2s ease',
+            '&:hover': { 
+              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
+              transform: 'translateX(4px)',
+            }
           }}
         >
-          <ListItemIcon>
-            <Description sx={{ color: colors.textPrimary }} />
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <Description sx={{ color: colors.textSecondary || colors.textPrimary, fontSize: '1.25rem' }} />
           </ListItemIcon>
-          <ListItemText primary="Terms of Service" sx={{ color: colors.textPrimary }} />
+          <ListItemText 
+            primary="Terms of Service" 
+            primaryTypographyProps={{
+              fontSize: '0.9rem',
+              fontWeight: 400,
+            }}
+          />
         </ListItem>
       </List>
     </Box>
@@ -375,16 +549,23 @@ const Header = () => {
         onClose={handleDrawerToggle}
         ModalProps={{
           keepMounted: true,
+          BackdropProps: {
+            sx: {
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)',
+            }
+          }
         }}
         sx={{
           display: { xs: 'block', md: 'none' },
           '& .MuiDrawer-paper': { 
             boxSizing: 'border-box', 
-            width: 250,
+            width: 280,
             backgroundColor: colors.paper,
             color: colors.textPrimary,
             backgroundImage: 'none !important',
             background: colors.paper,
+            boxShadow: '4px 0 20px rgba(0, 0, 0, 0.15)',
           },
         }}
         PaperProps={{
