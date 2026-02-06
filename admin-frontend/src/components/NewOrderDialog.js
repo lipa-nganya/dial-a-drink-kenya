@@ -124,9 +124,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   }, [currentProduct]);
 
   useEffect(() => {
-    // Auto-set delivery status to completed when walk-in is enabled
+    // Auto-set delivery status: completed for walk-in, confirmed for regular orders
     if (isWalkIn) {
       setDeliveryStatus('completed');
+    } else {
+      setDeliveryStatus('confirmed');
     }
     // Update delivery location when branch is selected for walk-in
     if (isWalkIn && selectedBranch) {
@@ -392,13 +394,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     // For M-Pesa, allow creating order without transaction code (can prompt later)
     // Transaction code is optional - admin can prompt customer later
 
-    // Only require driver if status is delivered on desktop
-    // On mobile, driver can be assigned regardless of status
-    const isMobile = window.innerWidth < 600;
-    if (deliveryStatus === 'delivered' && !selectedDriver && !isMobile) {
-      setError('Please select a driver when delivery status is Delivered');
-      return;
-    }
+    // Determine order status: completed for walk-in, confirmed for regular orders
+    const finalOrderStatus = isWalkIn ? 'completed' : 'confirmed';
 
     setLoading(true);
 
@@ -511,7 +508,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       clearInterval(paymentPollingInterval);
       setPaymentPollingInterval(null);
     }
-    setDeliveryStatus('pending');
+    setDeliveryStatus('confirmed');
     setSelectedDriver('');
     setError('');
     onClose();
@@ -1309,7 +1306,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   } else {
                     setSelectedBranch('');
                     setDeliveryLocation('');
-                    setDeliveryStatus('pending');
+                    setDeliveryStatus('confirmed');
                   }
                 }}
                 sx={{
@@ -2064,75 +2061,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             />
           )}
 
-          {/* Driver Selection - Always visible on mobile, hidden for walk-in orders */}
+          {/* Assign Driver - Always visible for non-walk-in orders */}
           {!isWalkIn && (
-            <FormControl 
-              fullWidth
-              sx={{
-                display: { xs: 'block', sm: 'none' }, // Only show on mobile
-                width: '100%' // Ensure full width like Payment Status
-              }}
-            >
+            <FormControl fullWidth>
               <InputLabel>Assign Driver</InputLabel>
               <Select
                 value={selectedDriver}
                 label="Assign Driver"
-                sx={{
-                  width: '100%' // Match Payment Status width
-                }}
                 onChange={(e) => setSelectedDriver(e.target.value)}
               >
                 <MenuItem value="">None</MenuItem>
-                {drivers.map((driver) => (
-                  <MenuItem key={driver.id} value={driver.id}>
-                    {driver.name} - {driver.phoneNumber}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
-
-          {/* Delivery Status */}
-          <FormControl fullWidth>
-            <InputLabel>Delivery Status *</InputLabel>
-            <Select
-              value={deliveryStatus}
-              label="Delivery Status *"
-              onChange={(e) => {
-                setDeliveryStatus(e.target.value);
-                // Only clear driver on desktop when status is not delivered
-                if (e.target.value !== 'delivered') {
-                  // Don't clear driver on mobile - allow assignment regardless of status
-                  const isMobile = window.innerWidth < 600;
-                  if (!isMobile) {
-                    setSelectedDriver('');
-                  }
-                }
-              }}
-              disabled={isWalkIn}
-            >
-              <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="confirmed">Confirmed</MenuItem>
-              <MenuItem value="out_for_delivery">Out for Delivery</MenuItem>
-              <MenuItem value="delivered">Delivered</MenuItem>
-              <MenuItem value="completed">Completed</MenuItem>
-            </Select>
-          </FormControl>
-
-          {/* Driver Selection (only if delivered) - Desktop only, hidden for walk-in orders */}
-          {!isWalkIn && deliveryStatus === 'delivered' && (
-            <FormControl 
-              fullWidth
-              sx={{
-                display: { xs: 'none', sm: 'block' } // Only show on desktop
-              }}
-            >
-              <InputLabel>Driver *</InputLabel>
-              <Select
-                value={selectedDriver}
-                label="Driver *"
-                onChange={(e) => setSelectedDriver(e.target.value)}
-              >
                 {drivers.map((driver) => (
                   <MenuItem key={driver.id} value={driver.id}>
                     {driver.name} - {driver.phoneNumber}
