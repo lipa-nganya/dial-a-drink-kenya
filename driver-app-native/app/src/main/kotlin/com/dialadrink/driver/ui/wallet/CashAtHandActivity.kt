@@ -25,12 +25,8 @@ class CashAtHandActivity : AppCompatActivity() {
         // Hide content initially until PIN is verified
         binding.root.visibility = android.view.View.GONE
 
-        // Check PIN verification first
-        if (!SharedPrefs.isPinVerified(this)) {
-            showPinVerification()
-        } else {
-            initializeContent()
-        }
+        // Always require PIN verification for Cash at Hand screen
+        showPinVerification()
     }
     
     private fun showPinVerification() {
@@ -64,18 +60,19 @@ class CashAtHandActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         
-        // Check PIN verification again if content is visible
-        if (isContentVisible && !SharedPrefs.isPinVerified(this)) {
-            // PIN verification expired, show dialog again
-            showPinVerification()
-            // Hide content until PIN is verified
+        // Always require PIN verification when returning to this screen
+        if (isContentVisible) {
+            // Hide content and require PIN again
             binding.root.visibility = android.view.View.GONE
             isContentVisible = false
-        } else if (isContentVisible) {
-            // Refresh tabs when returning to the screen to ensure pending submissions are updated
-            refreshTabs()
-            loadCashAtHand()
+            showPinVerification()
         }
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Clear PIN verification when leaving the screen
+        SharedPrefs.setPinVerified(this, false)
     }
 
     private fun setupToolbar() {
