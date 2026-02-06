@@ -65,7 +65,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [paymentMethod, setPaymentMethod] = useState('');
   const [transactionCode, setTransactionCode] = useState('');
   const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
-  const [walkInCustomerName, setWalkInCustomerName] = useState('');
   const [promptingPayment, setPromptingPayment] = useState(false);
   const [, setPaymentCheckoutRequestID] = useState(null);
   const [paymentPollingInterval, setPaymentPollingInterval] = useState(null);
@@ -505,7 +504,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setPaymentMethod('');
     setTransactionCode('');
     setMpesaPhoneNumber('');
-    setWalkInCustomerName('');
     setPromptingPayment(false);
     setPaymentCheckoutRequestID(null);
     setPaymentSuccess(null);
@@ -606,9 +604,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         }
       }
 
-      // For walk-in orders, use the entered customer name if provided, otherwise use 'POS'; otherwise use customer name from selected customer
+      // For walk-in orders, always use 'POS' as customer name
       const customerNameForOrder = isWalkIn 
-        ? (walkInCustomerName.trim() || 'POS')
+        ? 'POS'
         : (finalCustomer?.customerName || finalCustomer?.name || '');
       
       const customerPhoneForOrder = isWalkIn 
@@ -877,9 +875,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         }
       }
 
-      // For walk-in orders, use the entered customer name if provided, otherwise use 'POS'
+      // For walk-in orders, always use 'POS' as customer name
       const customerNameForOrder = isWalkIn 
-        ? (walkInCustomerName.trim() || 'POS')
+        ? 'POS'
         : (finalCustomer?.customerName || finalCustomer?.name || '');
       
       const customerPhoneForOrder = isWalkIn 
@@ -1501,17 +1499,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             </FormControl>
           )}
 
-          {/* Customer Name - Only shown when walk-in is enabled, hidden on local */}
-          {isWalkIn && !isLocal && (
-            <TextField
-              fullWidth
-              label="Customer Name (Optional)"
-              value={walkInCustomerName}
-              onChange={(e) => setWalkInCustomerName(e.target.value)}
-              placeholder="Enter customer name (optional)"
-              helperText="Leave blank to use 'POS' as customer name"
-            />
-          )}
 
           {/* Delivery Location - Only shown when walk-in is disabled */}
           {!isWalkIn && (
