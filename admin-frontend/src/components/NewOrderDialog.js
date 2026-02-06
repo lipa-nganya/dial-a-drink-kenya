@@ -438,9 +438,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           quantity: item.quantity,
           selectedPrice: item.price
         })),
-        paymentType: paymentMethod === 'cash' ? 'pay_now' : (paymentMethod === 'mobile_money' ? 'pay_on_delivery' : (paymentMethod === 'card' ? 'pay_now' : 'pay_on_delivery')),
+        paymentType: paymentMethod === 'cash' ? 'pay_now' : (paymentMethod === 'pay_on_delivery' ? 'pay_on_delivery' : (paymentMethod === 'mobile_money' ? 'pay_on_delivery' : (paymentMethod === 'card' ? 'pay_now' : 'pay_on_delivery'))),
         paymentMethod: paymentMethod || null,
-        paymentStatus: (paymentMethod === 'mobile_money' && !transactionCode.trim()) ? 'unpaid' : (paymentMethod ? 'paid' : 'unpaid'),
+        paymentStatus: (paymentMethod === 'mobile_money' && !transactionCode.trim()) ? 'unpaid' : (paymentMethod === 'pay_on_delivery' ? 'unpaid' : (paymentMethod ? 'paid' : 'unpaid')),
         status: deliveryStatus,
         adminOrder: true,
         branchId: branchId,
@@ -1755,7 +1755,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 }
               }}
             >
-              <MenuItem value="cash">Cash</MenuItem>
+              <MenuItem value="cash">Cash Received</MenuItem>
+              <MenuItem value="pay_on_delivery">Pay on Delivery</MenuItem>
               <MenuItem value="mobile_money">Mpesa</MenuItem>
               <MenuItem value="card">Card</MenuItem>
             </Select>
