@@ -35,7 +35,9 @@ import {
   Autocomplete,
   ToggleButton,
   ToggleButtonGroup,
-  Menu
+  Menu,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import {
   ShoppingCart,
@@ -116,6 +118,10 @@ const Orders = () => {
   const [paymentFailureDialogOpen, setPaymentFailureDialogOpen] = useState(false);
   const [paymentFailureData, setPaymentFailureData] = useState(null);
   const [editPriceDialogOpen, setEditPriceDialogOpen] = useState(false);
+  
+  // Toast notification state
+  const [toastOpen, setToastOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const [editingItem, setEditingItem] = useState(null);
   const [newPrice, setNewPrice] = useState('');
   const [updatingPrice, setUpdatingPrice] = useState(false);
@@ -3841,12 +3847,45 @@ const Orders = () => {
       <NewOrderDialog
         open={newOrderDialogOpen}
         onClose={() => setNewOrderDialogOpen(false)}
-        onOrderCreated={(newOrder) => {
+        onOrderCreated={(orderResponse) => {
           // Refresh orders list
           fetchOrders();
           setNewOrderDialogOpen(false);
+          
+          // Check if it's a POS/walk-in order
+          const order = orderResponse?.order || orderResponse?.data?.order || orderResponse;
+          const isPOS = order?.customerPhone === 'POS' || order?.customerName === 'POS' || 
+                       order?.deliveryAddress?.includes('In-Store') || 
+                       order?.deliveryAddress?.includes('POS');
+          
+          if (isPOS && order?.id) {
+            // Show success toast
+            setToastMessage(`POS order #${order.orderNumber || order.id} created successfully!`);
+            setToastOpen(true);
+            
+            // Navigate to the order after a short delay to allow toast to show
+            setTimeout(() => {
+              navigate(`/orders?orderId=${order.id}`);
+            }, 500);
+          }
         }}
       />
+      
+      {/* Toast Notification */}
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={3000}
+        onClose={() => setToastOpen(false)}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setToastOpen(false)} 
+          severity="success" 
+          sx={{ width: '100%' }}
+        >
+          {toastMessage}
+        </Alert>
+      </Snackbar>
 
       {/* Route Optimisation Tab */}
       {activeTab === 1 && (
