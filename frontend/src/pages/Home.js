@@ -601,12 +601,12 @@ const Home = () => {
                   <Box sx={{ 
                     display: 'grid',
                     gridTemplateColumns: {
-                      xs: '1fr',
+                      xs: 'repeat(2, 1fr)',
                       sm: 'repeat(2, 1fr)',
                       md: 'repeat(3, 1fr)',
                       lg: 'repeat(4, 1fr)'
                     },
-                    gap: 2,
+                    gap: { xs: 1, sm: 2 },
                     width: '100%'
                   }}>
                     {popularDrinks.slice(0, 8).map((drink) => (
@@ -659,12 +659,12 @@ const Home = () => {
                     <Box sx={{ 
                       display: 'grid',
                       gridTemplateColumns: {
-                        xs: '1fr',
+                        xs: 'repeat(2, 1fr)',
                         sm: 'repeat(2, 1fr)',
                         md: 'repeat(3, 1fr)',
                         lg: 'repeat(4, 1fr)'
                       },
-                      gap: 2,
+                      gap: { xs: 1, sm: 2 },
                       width: '100%'
                     }}>
                       {sortedBrandFocusDrinks.slice(0, 8).map((drink) => (
