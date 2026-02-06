@@ -91,15 +91,16 @@ def getLocalApiBaseUrl() {
     // Local API URL (ngrok) - can be overridden via gradle.properties
     // Default to dev backend URL if no local URL is provided
     def apiUrl = project.findProperty('LOCAL_API_BASE_URL') 
-        ?: 'https://deliveryos-development-backend-805803410802.us-central1.run.app'
+        ?: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app'
     // Remove /api suffix if present (ApiClient.kt adds it)
     return apiUrl.replace('/api', '').replace('/api/', '')
 }
 
 def getDevApiBaseUrl() {
     // Development API URL (GCP) - can be overridden via gradle.properties
+    // Default to development backend (drink-suite project)
     def apiUrl = project.findProperty('DEV_API_BASE_URL') 
-        ?: 'https://deliveryos-development-backend-805803410802.us-central1.run.app'
+        ?: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app'
     // Remove /api suffix if present (ApiClient.kt adds it)
     return apiUrl.replace('/api', '').replace('/api/', '')
 }
