@@ -1145,7 +1145,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       }
 
       const customerNameForOrder = isWalkIn 
-        ? (walkInCustomerName.trim() || 'POS')
+        ? 'POS'
         : (finalCustomer?.customerName || finalCustomer?.name || '');
       
       const customerPhoneForOrder = isWalkIn 
