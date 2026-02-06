@@ -46,6 +46,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [customers, setCustomers] = useState([]);
   const [branches, setBranches] = useState([]);
   const [drivers, setDrivers] = useState([]);
+  const [territories, setTerritories] = useState([]);
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState('');
   const [productSuggestions, setProductSuggestions] = useState([]);
@@ -96,6 +97,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       fetchCustomers();
       fetchBranches();
       fetchDrivers();
+      fetchTerritories();
       fetchProducts();
       // Reset isStop based on initialIsStop prop
       setIsStop(initialIsStop);
@@ -168,6 +170,15 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       setDrivers(response.data || []);
     } catch (error) {
       console.error('Error fetching drivers:', error);
+    }
+  };
+
+  const fetchTerritories = async () => {
+    try {
+      const response = await api.get('/territories');
+      setTerritories(response.data || []);
+    } catch (error) {
+      console.error('Error fetching territories:', error);
     }
   };
 
@@ -422,6 +433,15 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         return;
       }
 
+      // Find "1Default" territory for walk-in orders
+      let defaultTerritoryId = null;
+      if (isWalkIn) {
+        const defaultTerritory = territories.find(t => t.name === '1Default' || t.name === '1 Default');
+        if (defaultTerritory) {
+          defaultTerritoryId = defaultTerritory.id;
+        }
+      }
+
       const orderData = {
         customerName: isWalkIn ? 'POS' : (finalCustomer.customerName || finalCustomer.name || ''),
         customerPhone: isWalkIn ? 'POS' : (paymentMethod === 'mobile_money' && mpesaPhoneNumber.trim() ? mpesaPhoneNumber.trim() : (finalCustomer.phone || '')),
@@ -439,6 +459,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         adminOrder: true,
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
+        territoryId: isWalkIn ? defaultTerritoryId : null,
         transactionCode: paymentMethod === 'mobile_money' && transactionCode ? transactionCode.trim() : null,
         isStop: isStop,
         stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null,
