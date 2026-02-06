@@ -22,6 +22,9 @@ class CashAtHandActivity : AppCompatActivity() {
         binding = ActivityCashAtHandBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Hide content initially until PIN is verified
+        binding.root.visibility = android.view.View.GONE
+
         // Check PIN verification first
         if (!SharedPrefs.isPinVerified(this)) {
             showPinVerification()
