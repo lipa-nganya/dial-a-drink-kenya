@@ -13,6 +13,8 @@ import com.google.android.material.tabs.TabLayoutMediator
 class MyWalletActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMyWalletBinding
     private var isContentVisible = false
+    private var pauseTimestamp: Long = 0
+    private val PIN_REQUIRED_AFTER_SECONDS = 10L // Require PIN if away for more than 10 seconds
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,7 +24,7 @@ class MyWalletActivity : AppCompatActivity() {
         // Hide content initially until PIN is verified
         binding.root.visibility = android.view.View.GONE
         
-        // Always require PIN verification for Savings screen
+        // Always require PIN verification for Savings screen on first open
         showPinVerification()
     }
     
@@ -57,19 +59,25 @@ class MyWalletActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         
-        // Always require PIN verification when returning to this screen
-        if (isContentVisible) {
-            // Hide content and require PIN again
-            binding.root.visibility = android.view.View.GONE
-            isContentVisible = false
-            showPinVerification()
+        // Check if PIN is required based on time away
+        if (isContentVisible && pauseTimestamp > 0) {
+            val timeAway = (System.currentTimeMillis() - pauseTimestamp) / 1000 // seconds
+            if (timeAway > PIN_REQUIRED_AFTER_SECONDS) {
+                // User was away for more than 10 seconds - require PIN
+                binding.root.visibility = android.view.View.GONE
+                isContentVisible = false
+                showPinVerification()
+            }
+            // If less than 10 seconds, keep content visible
         }
     }
     
     override fun onPause() {
         super.onPause()
-        // Clear PIN verification when leaving the screen
-        SharedPrefs.setPinVerified(this, false)
+        // Record when user left the screen
+        if (isContentVisible) {
+            pauseTimestamp = System.currentTimeMillis()
+        }
     }
     
     private fun setupViewPager() {
