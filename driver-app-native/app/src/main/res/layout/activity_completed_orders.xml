@@ -269,6 +269,7 @@
 
                         <!-- Today Earnings Card -->
                         <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/earningsTodayCard"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -316,6 +317,7 @@
 
                         <!-- Week Earnings Card -->
                         <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/earningsWeekCard"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -364,6 +366,7 @@
 
                         <!-- Month Earnings Card -->
                         <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/earningsMonthCard"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"

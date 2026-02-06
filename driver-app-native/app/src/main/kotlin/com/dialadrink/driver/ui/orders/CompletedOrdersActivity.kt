@@ -13,6 +13,8 @@ import com.dialadrink.driver.data.model.Order
 import com.dialadrink.driver.data.repository.OrderRepository
 import com.dialadrink.driver.databinding.ActivityCompletedOrdersBinding
 import com.dialadrink.driver.databinding.ItemActiveOrderBinding
+import com.dialadrink.driver.ui.auth.PinVerificationDialog
+import com.dialadrink.driver.utils.SharedPrefs
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +32,12 @@ class CompletedOrdersActivity : AppCompatActivity() {
     private var toDate: Date? = null
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+    
+    // Earnings visibility state
+    private var earningsVisible = false
+    private var earningsToday = 0.0
+    private var earningsWeek = 0.0
+    private var earningsMonth = 0.0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,7 +47,60 @@ class CompletedOrdersActivity : AppCompatActivity() {
         setupToolbar()
         setupSwipeRefresh()
         setupDatePickers()
+        setupEarningsCards()
         loadOrders()
+    }
+    
+    private fun setupEarningsCards() {
+        // Set click listeners on all earnings cards
+        binding.earningsTodayCard.setOnClickListener {
+            toggleEarningsVisibility()
+        }
+        binding.earningsWeekCard.setOnClickListener {
+            toggleEarningsVisibility()
+        }
+        binding.earningsMonthCard.setOnClickListener {
+            toggleEarningsVisibility()
+        }
+        
+        // Hide earnings by default
+        hideEarnings()
+    }
+    
+    private fun toggleEarningsVisibility() {
+        if (earningsVisible) {
+            // Hide earnings
+            hideEarnings()
+        } else {
+            // Show PIN dialog to reveal earnings
+            showPinVerificationDialog()
+        }
+    }
+    
+    private fun showPinVerificationDialog() {
+        val dialog = PinVerificationDialog()
+        dialog.setOnVerifiedListener {
+            // PIN verified - show earnings
+            showEarnings()
+        }
+        dialog.setOnCancelledListener {
+            // User cancelled - keep earnings hidden
+        }
+        dialog.show(supportFragmentManager, "PinVerificationDialog")
+    }
+    
+    private fun showEarnings() {
+        earningsVisible = true
+        binding.earningsTodayText.text = "KES ${String.format("%.2f", earningsToday)}"
+        binding.earningsWeekText.text = "KES ${String.format("%.2f", earningsWeek)}"
+        binding.earningsMonthText.text = "KES ${String.format("%.2f", earningsMonth)}"
+    }
+    
+    private fun hideEarnings() {
+        earningsVisible = false
+        binding.earningsTodayText.text = "••••"
+        binding.earningsWeekText.text = "••••"
+        binding.earningsMonthText.text = "••••"
     }
 
     private fun setupToolbar() {
@@ -413,13 +474,30 @@ class CompletedOrdersActivity : AppCompatActivity() {
             }
         }
 
+        // Store earnings values
+        this.earningsToday = earningsToday
+        this.earningsWeek = earningsWeek
+        this.earningsMonth = earningsMonth
+        
         // Update UI (labels are now in the card layout, only show values)
         binding.ordersTodayText.text = ordersToday.toString()
         binding.ordersWeekText.text = ordersWeek.toString()
         binding.ordersMonthText.text = ordersMonth.toString()
-        binding.earningsTodayText.text = "KES ${String.format("%.2f", earningsToday)}"
-        binding.earningsWeekText.text = "KES ${String.format("%.2f", earningsWeek)}"
-        binding.earningsMonthText.text = "KES ${String.format("%.2f", earningsMonth)}"
+        
+        // Update earnings display based on visibility state
+        if (earningsVisible) {
+            showEarnings()
+        } else {
+            hideEarnings()
+        }
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Auto-hide earnings when navigating away
+        if (earningsVisible) {
+            hideEarnings()
+        }
     }
 
     private fun parseOrderDate(dateString: String?): Date? {
