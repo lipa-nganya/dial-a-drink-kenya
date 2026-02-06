@@ -2015,23 +2015,25 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             />
           )}
 
-          {/* Send SMS to Customer Checkbox */}
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={sendSmsToCustomer}
-                onChange={(e) => setSendSmsToCustomer(e.target.checked)}
-                sx={{
-                  color: colors.accentText,
-                  '&.Mui-checked': {
-                    color: colors.accentText
-                  }
-                }}
-              />
-            }
-            label="Send SMS notification to customer"
-            sx={{ color: colors.textPrimary }}
-          />
+          {/* Send SMS to Customer Checkbox - Hidden for walk-in orders */}
+          {!isWalkIn && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={sendSmsToCustomer}
+                  onChange={(e) => setSendSmsToCustomer(e.target.checked)}
+                  sx={{
+                    color: colors.accentText,
+                    '&.Mui-checked': {
+                      color: colors.accentText
+                    }
+                  }}
+                />
+              }
+              label="Send SMS notification to customer"
+              sx={{ color: colors.textPrimary }}
+            />
+          )}
 
           {/* Stop Deduction Amount - Only shown when stop is enabled */}
           {isStop && (
