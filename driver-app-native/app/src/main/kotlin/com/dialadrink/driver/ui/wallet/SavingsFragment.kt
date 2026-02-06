@@ -463,9 +463,9 @@ class SavingsFragment : Fragment() {
                         dateText.text = creditTx.date.substring(0, 10).takeIf { creditTx.date.length >= 10 } ?: creditTx.date
                     }
                     
-                    // Credit transaction (money in) = Debit column
-                    debitText.text = formatter.format(creditTx.amount)
-                    creditText.text = "0"
+                    // Credit transaction (money in, increases savings) = Credit column
+                    debitText.text = "0"
+                    creditText.text = formatter.format(creditTx.amount)
                     balanceText.text = formatter.format(balanceAfter)
                     // Balance before this transaction = balance after - amount
                     balanceAfter -= creditTx.amount
@@ -481,9 +481,9 @@ class SavingsFragment : Fragment() {
                         dateText.text = withdrawalTx.date.substring(0, 10).takeIf { withdrawalTx.date.length >= 10 } ?: withdrawalTx.date
                     }
                     
-                    // Withdrawal transaction (money out) = Credit column
-                    debitText.text = "0"
-                    creditText.text = formatter.format(withdrawalTx.amount)
+                    // Withdrawal transaction (money out, decreases savings) = Debit column
+                    debitText.text = formatter.format(withdrawalTx.amount)
+                    creditText.text = "0"
                     balanceText.text = formatter.format(balanceAfter)
                     // Balance before this transaction = balance after + amount
                     balanceAfter += withdrawalTx.amount
