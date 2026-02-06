@@ -330,7 +330,11 @@ class OrderDetailActivity : AppCompatActivity() {
         // Hide "out for delivery" button when cancellation requested or order is cancelled
         val showOutForDelivery = status == "confirmed" && order.cancellationRequested != true && status != "cancelled"
         val showDelivered = status == "out_for_delivery"
-        val showReceivedCash = status == "out_for_delivery" && order.paymentStatus.lowercase() != "paid"
+        // Only show "Received Cash" button for pay_on_delivery orders that are not yet paid
+        val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
+        val showReceivedCash = status == "out_for_delivery" && 
+                               order.paymentStatus.lowercase() != "paid" && 
+                               isPayOnDelivery
         
         // Show cancel button for confirmed or out_for_delivery orders, but not if already cancelled or cancellation requested
         val canCancel = (status == "confirmed" || status == "out_for_delivery") && 
@@ -339,7 +343,7 @@ class OrderDetailActivity : AppCompatActivity() {
         
         // Show "Send Cash Submission" for completed/delivered, paid Pay on Delivery (cash) orders so driver can remit via M-Pesa.
         // Use inclusive checks: show for completed OR delivered (backend may return either), treat null/blank paymentStatus as paid for pay-on-delivery.
-        val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
+        // Note: isPayOnDelivery is already defined above, reuse it
         val isCashPayment = order.paymentMethod == null || order.paymentMethod.lowercase() == "cash"
         val isDone = status == "completed" || status == "delivered"
         val isPaid = order.paymentStatus?.lowercase() == "paid" || order.paymentStatus.isNullOrBlank()
@@ -925,6 +929,13 @@ class OrderDetailActivity : AppCompatActivity() {
         }
         
         currentOrder?.let { order ->
+            // Only show payment options for pay_on_delivery orders
+            val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
+            if (!isPayOnDelivery) {
+                Toast.makeText(this, "This order was already paid by the customer. Payment confirmation is not needed.", Toast.LENGTH_LONG).show()
+                return
+            }
+            
             AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog)
                 .setTitle("Payment Options")
                 .setMessage("How would you like to process payment?")
@@ -940,6 +951,13 @@ class OrderDetailActivity : AppCompatActivity() {
     }
     
     private fun initiateMpesaPayment(order: Order) {
+        // Validate this is a pay_on_delivery order
+        val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
+        if (!isPayOnDelivery) {
+            Toast.makeText(this, "This order was already paid by the customer. Cannot initiate payment.", Toast.LENGTH_LONG).show()
+            return
+        }
+        
         val driverId = SharedPrefs.getDriverId(this) ?: run {
             Toast.makeText(this, "Driver ID not found", Toast.LENGTH_SHORT).show()
             return
@@ -976,6 +994,15 @@ class OrderDetailActivity : AppCompatActivity() {
     }
     
     private fun confirmCashPayment() {
+        // Validate this is a pay_on_delivery order
+        currentOrder?.let { order ->
+            val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
+            if (!isPayOnDelivery) {
+                Toast.makeText(this, "This order was already paid by the customer. Cannot confirm cash payment.", Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+        
         val driverId = SharedPrefs.getDriverId(this) ?: run {
             Toast.makeText(this, "Driver ID not found", Toast.LENGTH_SHORT).show()
             return
