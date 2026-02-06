@@ -2087,7 +2087,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           </FormControl>
 
           {/* Driver Selection (only if delivered) - Desktop only, hidden for walk-in orders */}
-          {deliveryStatus === 'delivered' && !isWalkIn && (
+          {!isWalkIn && deliveryStatus === 'delivered' && (
             <FormControl 
               fullWidth
               sx={{
