@@ -688,10 +688,10 @@ const RiderDetails = () => {
                             {description}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                            {!isCredit ? `KES ${amount.toFixed(2)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {!isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                            {isCredit ? `KES ${amount.toFixed(2)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                             KES {currentBalance.toFixed(2)}
