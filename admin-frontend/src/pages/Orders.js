@@ -36,8 +36,7 @@ import {
   ToggleButton,
   ToggleButtonGroup,
   Menu,
-  Snackbar,
-  Alert
+  Snackbar
 } from '@mui/material';
 import {
   ShoppingCart,
