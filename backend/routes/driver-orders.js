@@ -1122,17 +1122,31 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
     }
 
     // Check if order is pay on delivery
+    console.log(`🔍 [initiate-payment] Order #${orderId} validation:`, {
+      paymentType: order.paymentType,
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      driverId: order.driverId,
+      requestedDriverId: driverId
+    });
+
     if (order.paymentType !== 'pay_on_delivery') {
-      return sendError(res, 'Order is not pay on delivery', 400);
+      const errorMsg = `Order is not pay on delivery (paymentType: ${order.paymentType})`;
+      console.error(`❌ [initiate-payment] ${errorMsg}`);
+      return sendError(res, errorMsg, 400);
     }
 
     // Check if already paid
     if (order.paymentStatus === 'paid') {
-      return sendError(res, 'Order is already paid', 400);
+      const errorMsg = `Order is already paid (paymentStatus: ${order.paymentStatus})`;
+      console.error(`❌ [initiate-payment] ${errorMsg}`);
+      return sendError(res, errorMsg, 400);
     }
 
     if (!['out_for_delivery'].includes(order.status)) {
-      return sendError(res, 'Order must be marked as On the Way before sending a payment prompt.', 400);
+      const errorMsg = `Order must be marked as On the Way before sending a payment prompt. Current status: ${order.status}`;
+      console.error(`❌ [initiate-payment] ${errorMsg}`);
+      return sendError(res, errorMsg, 400);
     }
 
     // Format phone number
@@ -1322,12 +1336,25 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       return sendError(res, 'Not authorized', 403);
     }
 
+    console.log(`🔍 [confirm-cash-payment] Order #${orderId} validation:`, {
+      paymentType: order.paymentType,
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      driverId: order.driverId,
+      requestedDriverId: driverId,
+      method: method
+    });
+
     if (order.paymentType !== 'pay_on_delivery') {
-      return sendError(res, 'Order is not pay on delivery', 400);
+      const errorMsg = `Order is not pay on delivery (paymentType: ${order.paymentType})`;
+      console.error(`❌ [confirm-cash-payment] ${errorMsg}`);
+      return sendError(res, errorMsg, 400);
     }
 
     if (order.paymentStatus === 'paid') {
-      return sendError(res, 'Order payment is already marked as paid', 400);
+      const errorMsg = `Order payment is already marked as paid (paymentStatus: ${order.paymentStatus})`;
+      console.error(`❌ [confirm-cash-payment] ${errorMsg}`);
+      return sendError(res, errorMsg, 400);
     }
 
     const now = new Date();
