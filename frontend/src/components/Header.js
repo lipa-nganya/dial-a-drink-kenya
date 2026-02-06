@@ -77,22 +77,13 @@ const Header = () => {
           background: 'rgba(255, 255, 255, 0.1)',
         }} />
         <Box sx={{ position: 'relative', zIndex: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-            <LocalBar sx={{ fontSize: '2rem', mr: 1.5 }} />
-            <Typography variant="h6" component="div" sx={{ 
-              fontWeight: 700,
-              fontSize: '1.25rem',
-              letterSpacing: '0.5px'
-            }}>
-              Dial a Drink
-            </Typography>
-          </Box>
-          <Typography variant="body2" sx={{ 
-            opacity: 0.9,
-            fontSize: '0.85rem',
-            ml: 5.5
+          <Typography variant="h6" component="div" sx={{ 
+            fontWeight: 600,
+            fontSize: '1.25rem',
+            letterSpacing: '0.5px',
+            whiteSpace: 'nowrap'
           }}>
-            Kenya
+            Dial a Drink Kenya
           </Typography>
         </Box>
       </Box>
@@ -103,9 +94,10 @@ const Header = () => {
         padding: 2,
         '& .MuiListItem-root': {
           borderRadius: 2,
-          marginBottom: 0.5,
+          marginBottom: 1,
           paddingLeft: 2,
           paddingRight: 2,
+          minHeight: 48,
         }
       }}>
         <ListItem 
