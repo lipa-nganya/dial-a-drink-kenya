@@ -50,42 +50,21 @@ const Header = () => {
       display: 'flex',
       flexDirection: 'column',
     }}>
-      {/* Elegant Header */}
+      {/* Header */}
       <Box sx={{
-        background: `linear-gradient(135deg, ${colors.accent || '#20B2AA'} 0%, ${colors.accent || '#20B2AA'}dd 100%)`,
         padding: 3,
-        color: '#fff',
-        position: 'relative',
-        overflow: 'hidden',
+        paddingBottom: 2,
+        borderBottom: `1px solid ${colors.textSecondary ? `${colors.textSecondary}20` : 'rgba(0, 0, 0, 0.1)'}`,
       }}>
-        <Box sx={{
-          position: 'absolute',
-          top: -50,
-          right: -50,
-          width: 150,
-          height: 150,
-          borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.1)',
-        }} />
-        <Box sx={{
-          position: 'absolute',
-          bottom: -30,
-          left: -30,
-          width: 100,
-          height: 100,
-          borderRadius: '50%',
-          background: 'rgba(255, 255, 255, 0.1)',
-        }} />
-        <Box sx={{ position: 'relative', zIndex: 1 }}>
-          <Typography variant="h6" component="div" sx={{ 
-            fontWeight: 600,
-            fontSize: '1.25rem',
-            letterSpacing: '0.5px',
-            whiteSpace: 'nowrap'
-          }}>
-            Dial a Drink Kenya
-          </Typography>
-        </Box>
+        <Typography variant="h6" component="div" sx={{ 
+          fontWeight: 600,
+          fontSize: '1.25rem',
+          letterSpacing: '0.5px',
+          whiteSpace: 'nowrap',
+          color: colors.textPrimary,
+        }}>
+          Dial a Drink Kenya
+        </Typography>
       </Box>
 
       {/* Main Navigation */}
@@ -98,6 +77,8 @@ const Header = () => {
           paddingLeft: 2,
           paddingRight: 2,
           minHeight: 48,
+          border: 'none',
+          boxShadow: 'none',
         }
       }}>
         <ListItem 
