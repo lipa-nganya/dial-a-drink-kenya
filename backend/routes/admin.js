@@ -1831,23 +1831,36 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
     // when the order is marked as completed, not when payment status is updated.
     // This prevents crediting wallets before delivery is completed.
     // If order is marked as completed (or becomes completed) and payment is paid, credit wallets
-    if (finalStatus === 'completed' && paymentStatus === 'paid' && order.driverId) {
-      try {
-        const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
-        await creditWalletsOnDeliveryCompletion(order.id, req);
-        console.log(`✅ Wallets credited for Order #${order.id} on payment status update (order completed)`);
-      } catch (walletError) {
-        console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
-        // Don't fail the payment status update if wallet crediting fails
+    if (finalStatus === 'completed' && paymentStatus === 'paid') {
+      // Credit wallets if driver is assigned
+      if (order.driverId) {
+        try {
+          const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+          await creditWalletsOnDeliveryCompletion(order.id, req);
+          console.log(`✅ Wallets credited for Order #${order.id} on payment status update (order completed)`);
+        } catch (walletError) {
+          console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
+          // Don't fail the payment status update if wallet crediting fails
+        }
+        
+        // Update driver status if they have no more active orders
+        try {
+          const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
+          await updateDriverStatusIfNoActiveOrders(order.driverId);
+        } catch (driverStatusError) {
+          console.error(`❌ Error updating driver status for Order #${order.id}:`, driverStatusError);
+          // Don't fail the payment status update if driver status update fails
+        }
       }
       
-      // Update driver status if they have no more active orders
+      // Decrease inventory stock for completed orders
       try {
-        const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
-        await updateDriverStatusIfNoActiveOrders(order.driverId);
-      } catch (driverStatusError) {
-        console.error(`❌ Error updating driver status for Order #${order.id}:`, driverStatusError);
-        // Don't fail the payment status update if driver status update fails
+        const { decreaseInventoryForOrder } = require('../utils/inventory');
+        await decreaseInventoryForOrder(order.id);
+        console.log(`📦 Inventory decreased for Order #${order.id} (payment status update)`);
+      } catch (inventoryError) {
+        console.error(`❌ Error decreasing inventory for Order #${order.id}:`, inventoryError);
+        // Don't fail the payment status update if inventory update fails
       }
     }
 
