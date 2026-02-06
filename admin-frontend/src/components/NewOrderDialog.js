@@ -1545,18 +1545,34 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     placeholder="Type product name..."
                   />
                 )}
-                renderOption={(props, option) => (
-                  <li {...props}>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {option.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        KES {Math.round(parseFloat(option.price || 0))}
-                      </Typography>
-                    </Box>
-                  </li>
-                )}
+                renderOption={(props, option) => {
+                  const stock = option.stock !== undefined && option.stock !== null ? option.stock : 0;
+                  const stockColor = stock > 0 ? '#2196F3' : '#F44336';
+                  return (
+                    <li {...props}>
+                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Box>
+                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                            {option.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            KES {Math.round(parseFloat(option.price || 0))}
+                          </Typography>
+                        </Box>
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            color: stockColor,
+                            fontWeight: 600,
+                            ml: 2
+                          }}
+                        >
+                          Stock: {stock}
+                        </Typography>
+                      </Box>
+                    </li>
+                  );
+                }}
               />
               {/* Unit Price Display */}
               {currentProduct && (
