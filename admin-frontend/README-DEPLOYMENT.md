@@ -6,9 +6,9 @@ The admin frontend has separate deployment configurations for development and pr
 
 ### Development Deployment
 
-**Backend URL**: `https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api`  
-**Project**: `drink-suite`  
-**Database**: `drink-suite-db` / `dialadrink`
+**Backend URL**: `https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api`  
+**Project**: `dialadrink-production`  
+**Database**: `dialadrink-db-dev` / `dialadrink`
 
 **Configuration File**: `admin-frontend/cloudbuild-dev.yaml`
 
@@ -40,7 +40,7 @@ The admin frontend has separate deployment configurations for development and pr
 The admin frontend automatically detects which backend to use based on the hostname:
 
 - **Local**: `localhost` → `http://localhost:5001/api`
-- **Development**: `*.thewolfgang.tech` → `https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api`
+- **Development**: `*.thewolfgang.tech` → `https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api`
 - **Production**: `ruakadrinksdelivery.co.ke` or `drinksdeliverykenya.com` → Production backend
 
 This is handled in:
