@@ -290,6 +290,277 @@ const findLatestOtpForPhone = async (phone) => {
   });
 };
 
+// Check if phone exists as both driver and admin
+// GET /api/admin/check-phone/:phone
+router.get('/check-phone/:phone', async (req, res) => {
+  try {
+    const { phone } = req.params;
+    
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number is required'
+      });
+    }
+    
+    // Normalize phone number
+    let cleanedPhone = phone.replace(/\D/g, '');
+    let formattedPhone = cleanedPhone;
+    if (cleanedPhone.startsWith('0')) {
+      formattedPhone = '254' + cleanedPhone.substring(1);
+    } else if (!cleanedPhone.startsWith('254')) {
+      formattedPhone = '254' + cleanedPhone;
+    }
+    
+    const phoneVariations = [
+      formattedPhone,
+      cleanedPhone,
+      formattedPhone.replace(/^254/, '0'),
+      formattedPhone.replace(/^254/, '')
+    ];
+    
+    // Check for driver
+    const driver = await db.Driver.findOne({
+      where: {
+        phoneNumber: {
+          [Op.in]: phoneVariations
+        }
+      }
+    });
+    
+    // Check for admin (admin, manager, super_admin roles)
+    const admin = await db.Admin.findOne({
+      where: {
+        mobileNumber: {
+          [Op.in]: phoneVariations
+        },
+        role: {
+          [Op.in]: ['admin', 'manager', 'super_admin']
+        }
+      },
+      attributes: ['id', 'username', 'hasSetPin', 'mobileNumber']
+    });
+    
+    return res.json({
+      success: true,
+      data: {
+        isDriver: !!driver,
+        isAdmin: !!admin,
+        driver: driver ? { id: driver.id, name: driver.name } : null,
+        admin: admin ? { 
+          id: admin.id, 
+          username: admin.username,
+          hasPin: admin.hasSetPin || false
+        } : null
+      }
+    });
+  } catch (error) {
+    console.error('Error checking phone:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to check phone number'
+    });
+  }
+});
+
+// Set PIN for admin (after OTP verification)
+// POST /api/admin/phone/:phone/set-pin
+router.post('/phone/:phone/set-pin', async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const { pin } = req.body;
+    
+    if (!pin || pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        error: 'PIN must be exactly 4 digits'
+      });
+    }
+    
+    // Normalize phone number
+    let cleanedPhone = phone.replace(/\D/g, '');
+    let formattedPhone = cleanedPhone;
+    if (cleanedPhone.startsWith('0')) {
+      formattedPhone = '254' + cleanedPhone.substring(1);
+    } else if (!cleanedPhone.startsWith('254')) {
+      formattedPhone = '254' + cleanedPhone;
+    }
+    
+    const phoneVariations = [
+      formattedPhone,
+      cleanedPhone,
+      formattedPhone.replace(/^254/, '0'),
+      formattedPhone.replace(/^254/, '')
+    ];
+    
+    // Find admin by phone number
+    const admin = await db.Admin.findOne({
+      where: {
+        mobileNumber: {
+          [Op.in]: phoneVariations
+        },
+        role: {
+          [Op.in]: ['admin', 'manager', 'super_admin']
+        }
+      }
+    });
+    
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        error: 'Admin not found for this phone number'
+      });
+    }
+    
+    // Verify OTP was used (check for valid unused OTP)
+    // cleanedPhone and phoneVariations already defined above
+    
+    const otpRecord = await db.Otp.findOne({
+      where: {
+        phoneNumber: {
+          [Op.in]: phoneVariations
+        },
+        isUsed: false
+      },
+      order: [['createdAt', 'DESC']]
+    });
+    
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        error: 'No valid OTP found. Please verify OTP first.'
+      });
+    }
+    
+    // Hash the PIN before storing
+    const saltRounds = 10;
+    const pinHash = await bcrypt.hash(pin, saltRounds);
+    
+    // Update admin with hashed PIN
+    await admin.update({
+      pinHash: pinHash,
+      hasSetPin: true
+    });
+    
+    // Mark OTP as used
+    await otpRecord.update({ isUsed: true });
+    
+    console.log(`✅ PIN set for admin: ${admin.username} (${admin.mobileNumber})`);
+    
+    return res.json({
+      success: true,
+      message: 'PIN set successfully'
+    });
+  } catch (error) {
+    console.error('Error setting admin PIN:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to set PIN'
+    });
+  }
+});
+
+// Admin mobile login route (phone + PIN) - MUST be before router.use(verifyAdmin)
+router.post('/auth/mobile-login', async (req, res) => {
+  try {
+    const { phone, pin } = req.body;
+
+    if (!phone || !pin) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number and PIN are required'
+      });
+    }
+
+    if (pin.length !== 4 || !/^\d{4}$/.test(pin)) {
+      return res.status(400).json({
+        success: false,
+        error: 'PIN must be exactly 4 digits'
+      });
+    }
+
+    // Normalize phone number
+    let cleanedPhone = phone.replace(/\D/g, '');
+    let formattedPhone = cleanedPhone;
+    if (cleanedPhone.startsWith('0')) {
+      formattedPhone = '254' + cleanedPhone.substring(1);
+    } else if (!cleanedPhone.startsWith('254')) {
+      formattedPhone = '254' + cleanedPhone;
+    }
+
+    // Find admin by mobile number
+    const admin = await db.Admin.findOne({
+      where: {
+        mobileNumber: {
+          [Op.in]: [formattedPhone, phone.trim(), formattedPhone.replace(/^254/, '0')]
+        }
+      }
+    });
+
+    if (!admin) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid phone number or PIN'
+      });
+    }
+
+    // Check if PIN is set
+    if (!admin.hasSetPin || !admin.pinHash) {
+      return res.status(401).json({
+        success: false,
+        error: 'PIN not set. Please set your PIN first.'
+      });
+    }
+
+    // Verify PIN
+    const isPinValid = await bcrypt.compare(pin, admin.pinHash);
+
+    if (!isPinValid) {
+      return res.status(401).json({
+        success: false,
+        error: 'Invalid phone number or PIN'
+      });
+    }
+
+    // Generate JWT token
+    const tokenPayload = {
+      id: admin.id,
+      username: admin.username,
+      role: admin.role || 'admin'
+    };
+
+    const token = jwt.sign(tokenPayload, JWT_SECRET, {
+      expiresIn: ADMIN_TOKEN_TTL
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        success: true,
+        message: 'Login successful',
+        token,
+        user: {
+          id: admin.id,
+          username: admin.username,
+          email: admin.email,
+          mobileNumber: admin.mobileNumber,
+          role: admin.role || 'admin',
+          name: admin.name
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Admin mobile login error:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to log in. Please try again.',
+      ...(process.env.NODE_ENV === 'development' && {
+        details: error.message
+      })
+    });
+  }
+});
+
 // Admin login route - MUST be before router.use(verifyAdmin)
 router.post('/auth/login', async (req, res) => {
   try {
@@ -407,6 +678,8 @@ router.get('/stats', async (req, res) => {
     const totalOrders = await db.Order.count();
 
     // Get pending orders count
+    // Include all orders with status 'pending' (regardless of driver assignment or acceptance)
+    // Also include 'confirmed' orders
     const pendingOrders = await db.Order.count({
       where: {
         status: {
@@ -571,7 +844,7 @@ router.get('/transactions', async (req, res) => {
           attributes: [
             'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
             'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-            'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+            'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
           ]
         }]
       },
@@ -1123,6 +1396,382 @@ router.get('/save-the-fishes', async (req, res) => {
   }
 });
 
+// Get all in-progress orders (admin) - orders that are ongoing (not pending, cancelled, or completed)
+router.get('/orders/in-progress', verifyAdmin, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    const { summary } = req.query;
+    
+    // Get all orders that are ongoing:
+    // - status is NOT 'pending', 'cancelled', or 'completed'
+    // - This includes: 'confirmed', 'out_for_delivery', 'delivered', 'pos_order'
+    const whereClause = {
+      status: {
+        [Op.notIn]: ['pending', 'cancelled', 'completed']
+      }
+    };
+    
+    // Build includes - for summary mode, exclude all nested objects to shrink payload
+    const includes = [];
+    
+    if (summary !== 'true') {
+      // Full mode: include items and drinks (for detail view)
+      includes.push(
+        {
+          model: db.OrderItem,
+          as: 'items',
+          required: false,
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price'],
+          include: [
+            {
+              model: db.Drink,
+              as: 'drink',
+              required: false,
+              attributes: ['id', 'name', 'price', 'capacity', 'purchasePrice']
+            }
+          ]
+        },
+        {
+          model: db.Territory,
+          as: 'territory',
+          required: false,
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          required: false,
+          attributes: ['id', 'name', 'phoneNumber', 'status']
+        }
+      );
+    }
+    
+    const orders = await db.Order.findAll({
+      where: whereClause,
+      include: includes,
+      order: [['createdAt', 'DESC']],
+      limit: 200
+    });
+    
+    // Map items to orderItems for compatibility
+    const ordersWithMappedItems = orders.map(order => {
+      const orderData = order.toJSON();
+      if (orderData.items) {
+        orderData.orderItems = orderData.items;
+      }
+      return orderData;
+    });
+    
+    res.json({
+      success: true,
+      data: ordersWithMappedItems
+    });
+  } catch (error) {
+    console.error('Error fetching in-progress orders:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch in-progress orders' 
+    });
+  }
+});
+
+// Get all pending orders (admin) - regardless of rider assignment
+router.get('/orders/pending', verifyAdmin, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    const { summary } = req.query;
+    
+    // Get all orders with status 'pending' or 'confirmed' that are not cancelled or completed
+    // This includes orders with or without riders assigned
+    const whereClause = {
+      status: {
+        [Op.in]: ['pending', 'confirmed']
+      }
+    };
+    
+    // Build includes - for summary mode, exclude all nested objects to shrink payload
+    const includes = [];
+    
+    if (summary !== 'true') {
+      // Full mode: include items and drinks (for detail view)
+      includes.push(
+        {
+          model: db.OrderItem,
+          as: 'items',
+          required: false,
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price'],
+          include: [
+            {
+              model: db.Drink,
+              as: 'drink',
+              required: false,
+              attributes: ['id', 'name', 'price', 'capacity', 'purchasePrice']
+            }
+          ]
+        },
+        {
+          model: db.Territory,
+          as: 'territory',
+          required: false,
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          required: false,
+          attributes: ['id', 'name', 'phoneNumber', 'status']
+        }
+      );
+    }
+    
+    const orders = await db.Order.findAll({
+      where: whereClause,
+      include: includes,
+      order: [['createdAt', 'DESC']],
+      limit: 200
+    });
+    
+    // Map items to orderItems for compatibility
+    const ordersWithMappedItems = orders.map(order => {
+      const orderData = order.toJSON();
+      if (orderData.items) {
+        orderData.orderItems = orderData.items;
+      }
+      return orderData;
+    });
+    
+    res.json({
+      success: true,
+      data: ordersWithMappedItems
+    });
+  } catch (error) {
+    console.error('Error fetching pending orders:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch pending orders' 
+    });
+  }
+});
+
+// Get all drivers with completed orders (for admin completed screen)
+router.get('/drivers/completed', verifyAdmin, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    
+    // Get all drivers who have completed orders
+    const drivers = await db.Driver.findAll({
+      attributes: ['id', 'name', 'phoneNumber'],
+      include: [{
+        model: db.Order,
+        as: 'orders',
+        required: true,
+        where: {
+          status: 'completed',
+          driverAccepted: true
+        },
+        attributes: ['id']
+      }],
+      group: ['Driver.id'],
+      order: [['name', 'ASC']]
+    });
+    
+    // Map to simple format
+    const driversList = drivers.map(driver => ({
+      id: driver.id,
+      name: driver.name,
+      phoneNumber: driver.phoneNumber
+    }));
+    
+    res.json({
+      success: true,
+      data: driversList
+    });
+  } catch (error) {
+    console.error('Error fetching drivers with completed orders:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch drivers' 
+    });
+  }
+});
+
+// Get transactions for a specific driver (admin)
+router.get('/drivers/:driverId/transactions', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    console.log(`📊 [Admin] Fetching transactions for driver ID: ${driverId}`);
+    const { Op } = require('sequelize');
+    const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+    
+    // Get all payment transactions for orders completed by this driver
+    // Payment transactions are linked to orders, not directly to drivers
+    const transactions = await db.Transaction.findAll({
+      where: {
+        transactionType: 'payment',
+        paymentStatus: 'paid',
+        status: 'completed'
+      },
+      include: [{
+        model: db.Order,
+        as: 'order',
+        required: true,
+        where: {
+          driverId: parseInt(driverId),
+          status: 'completed'
+        },
+        attributes: ['id', 'deliveryAddress', 'createdAt', 'totalAmount', 'tipAmount']
+      }],
+      order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']],
+      limit: 500
+    });
+    
+    console.log(`📊 [Admin] Found ${transactions.length} transactions for driver ${driverId}`);
+    
+    // Map transactions with delivery fee and order amount
+    const transactionsWithDetails = await Promise.all(transactions.map(async (tx) => {
+      const txData = tx.toJSON();
+      const order = txData.order;
+      
+      // Get delivery fee for this order
+      let deliveryFee = 0;
+      try {
+        const breakdown = await getOrderFinancialBreakdown(order.id);
+        deliveryFee = breakdown.deliveryFee || 0;
+      } catch (e) {
+        console.warn(`Could not fetch delivery fee for order ${order.id}:`, e.message);
+      }
+      
+      // Use order totalAmount as the value (order amount), not transaction amount
+      const orderAmount = parseFloat(order.totalAmount || 0);
+      
+      return {
+        id: txData.id,
+        orderId: order.id,
+        date: txData.transactionDate || order.createdAt || txData.createdAt,
+        location: order.deliveryAddress || 'N/A',
+        paymentMethod: txData.paymentMethod || 'N/A',
+        amount: orderAmount, // Order total amount (Value column)
+        deliveryFee: deliveryFee // Delivery fee (Fee column)
+      };
+    }));
+    
+    // Sort by date descending (latest first) - ensure proper ordering
+    transactionsWithDetails.sort((a, b) => {
+      const dateA = new Date(a.date || 0);
+      const dateB = new Date(b.date || 0);
+      return dateB.getTime() - dateA.getTime(); // Descending (newest first)
+    });
+    
+    console.log(`📊 [Admin] Returning ${transactionsWithDetails.length} transactions for driver ${driverId}`);
+    res.json({
+      success: true,
+      data: transactionsWithDetails
+    });
+  } catch (error) {
+    console.error(`❌ [Admin] Error fetching driver transactions for driver ${req.params.driverId}:`, error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to fetch transactions' 
+    });
+  }
+});
+
+// Get unassigned orders (for assign rider screen)
+router.get('/orders/unassigned', verifyAdmin, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    
+    // Get all orders that are not completed but have no rider assigned:
+    // - status is NOT 'completed' and NOT 'cancelled'
+    // - AND either:
+    //   - driverId is null (no driver assigned), OR
+    //   - driverId is not null but driverAccepted is null or false (driver assigned but not accepted)
+    const orders = await db.Order.findAll({
+      where: {
+        status: {
+          [Op.notIn]: ['completed', 'cancelled']
+        },
+        [Op.or]: [
+          { driverId: null },
+          { 
+            driverId: { [Op.ne]: null },
+            [Op.or]: [
+              { driverAccepted: null },
+              { driverAccepted: false }
+            ]
+          }
+        ]
+      },
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          required: false,
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price'],
+          include: [
+            {
+              model: db.Drink,
+              as: 'drink',
+              required: false,
+              attributes: ['id', 'name', 'price', 'capacity', 'purchasePrice']
+            }
+          ]
+        },
+        {
+          model: db.Territory,
+          as: 'territory',
+          required: false,
+          attributes: ['id', 'name']
+        },
+        {
+          model: db.Driver,
+          as: 'driver',
+          required: false,
+          attributes: ['id', 'name', 'phoneNumber', 'status']
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: 100
+    });
+
+    // Get driver order counts (orders in progress per driver)
+    const allDrivers = await db.Driver.findAll({
+      attributes: ['id', 'name', 'phoneNumber']
+    });
+    
+    const driverOrderCounts = {};
+    for (const driver of allDrivers) {
+      const inProgressCount = await db.Order.count({
+        where: {
+          driverId: driver.id,
+          status: {
+            [Op.notIn]: ['completed', 'cancelled']
+          },
+          driverAccepted: true
+        }
+      });
+      driverOrderCounts[driver.id] = inProgressCount;
+    }
+
+    // Map items to orderItems for compatibility
+    const ordersWithMappedItems = orders.map(order => {
+      const orderData = order.toJSON();
+      if (orderData.items) {
+        orderData.orderItems = orderData.items;
+      }
+      return orderData;
+    });
+
+    res.json({
+      orders: ordersWithMappedItems,
+      driverOrderCounts: driverOrderCounts
+    });
+  } catch (error) {
+    console.error('Error fetching unassigned orders:', error);
+    res.status(500).json({ error: 'Failed to fetch unassigned orders' });
+  }
+});
+
 // Get all orders (admin)
 router.get('/orders', verifyAdmin, async (req, res) => {
   try {
@@ -1164,7 +1813,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
             attributes: [
               'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
               'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
             ]
           }
         ]
@@ -2977,6 +3626,145 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// Get single admin user by ID
+// GET /api/admin/users/:id
+router.get('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const admin = await db.Admin.findByPk(id);
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+    
+    return res.json(buildAdminUserResponse(admin));
+  } catch (error) {
+    console.error('Error fetching admin user:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch admin user' });
+  }
+});
+
+// Update admin user
+// PUT /api/admin/users/:id
+router.put('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username, email, role, name, mobileNumber } = req.body;
+
+    const admin = await db.Admin.findByPk(id);
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    // Check which columns exist in the admins table
+    let hasNameColumn = false;
+    let hasMobileNumberColumn = false;
+    try {
+      const [existingColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'admins' ORDER BY column_name"
+      );
+      const columnNames = new Set(existingColumns.map(col => col.column_name.toLowerCase()));
+      hasNameColumn = columnNames.has('name');
+      hasMobileNumberColumn = columnNames.has('mobilenumber');
+    } catch (schemaError) {
+      console.warn('⚠️ Could not query information_schema for admins table:', schemaError.message);
+    }
+
+    // Build update object with only existing fields
+    const updateData = {};
+    
+    if (username !== undefined) {
+      // Check if username is already taken by another user
+      const existingUser = await db.Admin.findOne({
+        where: {
+          username,
+          id: { [Op.ne]: id }
+        }
+      });
+      if (existingUser) {
+        return res.status(400).json({ error: 'Username already taken' });
+      }
+      updateData.username = username;
+    }
+
+    if (email !== undefined) {
+      // Check if email is already taken by another user
+      const existingUser = await db.Admin.findOne({
+        where: {
+          email,
+          id: { [Op.ne]: id }
+        }
+      });
+      if (existingUser) {
+        return res.status(400).json({ error: 'Email already taken' });
+      }
+      updateData.email = email;
+    }
+
+    if (role !== undefined) {
+      updateData.role = role;
+    }
+
+    if (hasNameColumn && name !== undefined) {
+      updateData.name = name;
+    }
+
+    if (hasMobileNumberColumn && mobileNumber !== undefined) {
+      updateData.mobileNumber = mobileNumber;
+    }
+
+    await admin.update(updateData);
+
+    return res.json(buildAdminUserResponse(admin));
+  } catch (error) {
+    console.error('Error updating admin user:', error);
+    return res.status(500).json({ error: error.message || 'Failed to update admin user' });
+  }
+});
+
+// Get OTPs for admin phone number
+// GET /api/admin/users/:id/otps
+router.get('/users/:id/otps', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const admin = await db.Admin.findByPk(id);
+    if (!admin) {
+      return res.status(404).json({ error: 'Admin user not found' });
+    }
+
+    if (!admin.mobileNumber) {
+      return res.json({
+        hasOtp: false,
+        message: 'No phone number set for this admin user'
+      });
+    }
+
+    const otp = await findLatestOtpForPhone(admin.mobileNumber);
+    if (!otp) {
+      return res.json({
+        hasOtp: false,
+        message: 'No active OTP found for this admin phone number'
+      });
+    }
+
+    const isExpired = otp.expiresAt ? new Date() > new Date(otp.expiresAt) : false;
+
+    return res.json({
+      hasOtp: true,
+      otpCode: otp.otpCode,
+      expiresAt: otp.expiresAt,
+      isExpired,
+      createdAt: otp.createdAt,
+      attempts: otp.attempts,
+      isUsed: otp.isUsed
+    });
+  } catch (error) {
+    console.error('Error fetching admin OTP:', error);
+    return res.status(500).json({ error: error.message || 'Failed to fetch OTP' });
+  }
+});
+
 // Create new admin user (invite)
 router.post('/users', async (req, res) => {
   try {
@@ -4148,7 +4936,7 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
     const recentlySoldDrinks = await db.OrderItem.findAll({
       attributes: [
         'drinkId',
-        [db.sequelize.fn('MAX', db.sequelize.col('Order.updatedAt')), 'lastSoldDate']
+        [db.sequelize.fn('MAX', db.sequelize.col('order.updatedAt')), 'lastSoldDate']
       ],
       include: [{
         model: db.Order,
@@ -4162,7 +4950,7 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
         },
         required: true
       }],
-      group: ['OrderItem.drinkId'],
+      group: [db.sequelize.col('OrderItem.drinkId')],
       raw: true
     });
 
@@ -4170,7 +4958,7 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
     const allLastSales = await db.OrderItem.findAll({
       attributes: [
         'drinkId',
-        [db.sequelize.fn('MAX', db.sequelize.col('Order.updatedAt')), 'lastSoldDate']
+        [db.sequelize.fn('MAX', db.sequelize.col('order.updatedAt')), 'lastSoldDate']
       ],
       include: [{
         model: db.Order,
@@ -4181,7 +4969,7 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
         },
         required: true
       }],
-      group: ['OrderItem.drinkId'],
+      group: [db.sequelize.col('OrderItem.drinkId')],
       raw: true
     });
 
@@ -5211,5 +5999,197 @@ router.post('/driver-location-alert', async (req, res) => {
   }
 });
 
+/**
+ * Request payment from driver (M-Pesa STK Push)
+ * POST /api/admin/drivers/:driverId/request-payment
+ */
+router.post('/drivers/:driverId/request-payment', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const { amount, type } = req.body; // type: 'mpesa' or 'reminder'
+    
+    if (!amount || parseFloat(amount) <= 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Amount must be greater than 0' 
+      });
+    }
+    
+    if (!type || !['mpesa', 'reminder'].includes(type)) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Type must be either "mpesa" or "reminder"' 
+      });
+    }
+    
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Driver not found' 
+      });
+    }
+    
+    const requestAmount = parseFloat(amount);
+    const adminId = req.admin.id;
+    
+    if (type === 'mpesa') {
+      // Send M-Pesa STK Push prompt
+      if (!driver.phoneNumber) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Driver phone number is required for M-Pesa prompt' 
+        });
+      }
+      
+      // Format phone number (remove leading 0, add 254)
+      let formattedPhone = driver.phoneNumber.trim();
+      if (formattedPhone.startsWith('0')) {
+        formattedPhone = '254' + formattedPhone.substring(1);
+      } else if (!formattedPhone.startsWith('254')) {
+        formattedPhone = '254' + formattedPhone;
+      }
+      
+      const accountReference = `PAYMENT-REQ-${driverId}-${Date.now()}`;
+      const transactionDesc = `Payment request from admin - KES ${requestAmount.toFixed(2)}`;
+      
+      const stkResult = await mpesaService.initiateSTKPush(
+        formattedPhone,
+        requestAmount,
+        accountReference,
+        transactionDesc
+      );
+      
+      if (stkResult.success) {
+        // Update driver's cash at hand (can go negative)
+        const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+        const newCashAtHand = currentCashAtHand - requestAmount; // Subtract requested amount
+        await driver.update({
+          cashAtHand: newCashAtHand,
+          lastActivity: new Date()
+        });
+        console.log(`💰 Updated driver ${driverId} cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (payment request: -${requestAmount.toFixed(2)})`);
+        
+        // Create cash_settlement transaction (negative amount = money going out from driver)
+        const cashSettlementTransaction = await db.Transaction.create({
+          orderId: null,
+          driverId: parseInt(driverId),
+          driverWalletId: null,
+          transactionType: 'cash_settlement',
+          paymentMethod: 'mobile_money',
+          paymentProvider: 'mpesa',
+          amount: -requestAmount, // Negative amount (money going out)
+          status: 'pending', // Will be updated to 'completed' when M-Pesa callback confirms payment
+          paymentStatus: 'pending',
+          checkoutRequestID: stkResult.checkoutRequestID || null,
+          merchantRequestID: stkResult.merchantRequestID || null,
+          phoneNumber: formattedPhone,
+          notes: `Payment request from admin - M-Pesa STK Push initiated. Amount: KES ${requestAmount.toFixed(2)}`,
+          transactionDate: new Date()
+        });
+        console.log(`✅ Created cash_settlement transaction #${cashSettlementTransaction.id} for payment request: -KES ${requestAmount.toFixed(2)}`);
+        
+        // Create notification record
+        const notification = await db.Notification.create({
+          title: 'Payment Request',
+          preview: `M-Pesa prompt sent for KES ${requestAmount.toFixed(2)}`,
+          message: `Admin has requested payment of KES ${requestAmount.toFixed(2)}. Please complete the M-Pesa prompt on your phone.`,
+          sentBy: adminId,
+          sentAt: new Date()
+        });
+        
+        // Send push notification
+        if (driver.pushToken) {
+          try {
+            const pushMessage = {
+              sound: 'default',
+              title: 'Payment Request',
+              body: `M-Pesa prompt sent for KES ${requestAmount.toFixed(2)}`,
+              data: {
+                type: 'payment-request',
+                notificationId: notification.id,
+                amount: requestAmount.toString(),
+                checkoutRequestID: stkResult.checkoutRequestID || null
+              },
+              priority: 'high',
+              badge: 1,
+              channelId: 'notifications'
+            };
+            
+            await pushNotifications.sendFCMNotification(driver.pushToken, pushMessage);
+          } catch (pushError) {
+            console.error(`Error sending push notification for payment request:`, pushError);
+            // Don't fail the request if push fails
+          }
+        }
+        
+        res.json({
+          success: true,
+          message: 'M-Pesa prompt sent successfully',
+          checkoutRequestID: stkResult.checkoutRequestID,
+          notificationId: notification.id,
+          transactionId: cashSettlementTransaction.id,
+          newCashAtHand: newCashAtHand
+        });
+      } else {
+        res.status(500).json({ 
+          success: false,
+          error: 'Failed to send M-Pesa prompt',
+          details: stkResult.error || stkResult.responseDescription
+        });
+      }
+    } else if (type === 'reminder') {
+      // Send reminder (push notification + in-app notification)
+      const notification = await db.Notification.create({
+        title: 'Payment Reminder',
+        preview: `Please remit KES ${requestAmount.toFixed(2)}`,
+        message: `This is a reminder to remit KES ${requestAmount.toFixed(2)} to the office. Please submit your cash at hand.`,
+        sentBy: adminId,
+        sentAt: new Date()
+      });
+      
+      // Send push notification
+      let pushSent = false;
+      if (driver.pushToken) {
+        try {
+          const pushMessage = {
+            sound: 'default',
+            title: 'Payment Reminder',
+            body: `Please remit KES ${requestAmount.toFixed(2)}`,
+            data: {
+              type: 'payment-reminder',
+              notificationId: notification.id,
+              amount: requestAmount.toString()
+            },
+            priority: 'high',
+            badge: 1,
+            channelId: 'notifications'
+          };
+          
+          const pushResult = await pushNotifications.sendFCMNotification(driver.pushToken, pushMessage);
+          pushSent = pushResult.success;
+        } catch (pushError) {
+          console.error(`Error sending push notification for payment reminder:`, pushError);
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: 'Payment reminder sent',
+        notificationId: notification.id,
+        pushSent: pushSent
+      });
+    }
+  } catch (error) {
+    console.error('Error requesting payment from driver:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to request payment',
+      details: error.message 
+    });
+  }
+});
+
+// Export router and verifyAdmin middleware for use in other routes
 module.exports = router;
 module.exports.verifyAdmin = verifyAdmin;

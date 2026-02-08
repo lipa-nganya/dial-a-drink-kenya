@@ -33,6 +33,8 @@ class CashAtHandFormFragment : Fragment() {
     private var selectedSubmissionType: String? = null
     private val submissionTypes = listOf("Purchases", "Cash", "General Expense", "Payment to Office", "Order Payment")
     private val accountTypes = listOf("cash", "mpesa", "till", "bank", "paybill", "pdq")
+    private val paymentTypes = listOf("Cash", "Mpesa")
+    private var selectedPaymentType: String? = null
     private val submissionItems = mutableListOf<PurchaseItem>()
     private var ordersForOrderPayment = listOf<com.dialadrink.driver.data.model.OrderForOrderPayment>()
     private var selectedOrderPaymentOrder: com.dialadrink.driver.data.model.OrderForOrderPayment? = null // Store multiple items for all submission types
@@ -51,6 +53,7 @@ class CashAtHandFormFragment : Fragment() {
         
         setupSubmissionTypeDropdown()
         setupAccountTypeDropdown()
+        setupPaymentTypeDropdown()
         setupSubmitButton()
         setupAmountInput()
         setupAddItemButton()
@@ -228,6 +231,34 @@ class CashAtHandFormFragment : Fragment() {
         }
     }
     
+    private fun setupPaymentTypeDropdown() {
+        val adapter = ArrayAdapter(requireContext(), R.layout.item_dropdown_dark, paymentTypes)
+        (binding.paymentTypeLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
+            autoComplete.setAdapter(adapter)
+            
+            val drawable = android.graphics.drawable.ColorDrawable(resources.getColor(R.color.paper_dark, null))
+            autoComplete.setDropDownBackgroundDrawable(drawable)
+            
+            autoComplete.setTextColor(Color.parseColor("#FFFFFF"))
+            autoComplete.setHintTextColor(Color.parseColor("#B0B0B0"))
+            
+            // Apply green border using helper function
+            applyGreenBorderToLayout(binding.paymentTypeLayout)
+            
+            binding.paymentTypeLayout.defaultHintTextColor = android.content.res.ColorStateList.valueOf(
+                Color.parseColor("#FFFFFF")
+            )
+            
+            autoComplete.setOnItemClickListener { _, _, position, _ ->
+                selectedPaymentType = when (position) {
+                    0 -> "cash"
+                    1 -> "mpesa"
+                    else -> null
+                }
+            }
+        }
+    }
+    
     private fun updateDynamicFields() {
         binding.supplierLayout.visibility = View.GONE
         binding.itemLayout.visibility = View.VISIBLE
@@ -384,6 +415,12 @@ class CashAtHandFormFragment : Fragment() {
             return
         }
         
+        if (selectedPaymentType == null) {
+            binding.errorText.text = "Please select a payment type"
+            binding.errorText.visibility = View.VISIBLE
+            return
+        }
+        
         val driverId = SharedPrefs.getDriverId(requireContext()) ?: return
         
         // Calculate amount and build details based on submission type
@@ -418,7 +455,8 @@ class CashAtHandFormFragment : Fragment() {
                 val detailsMap = mutableMapOf<String, Any>(
                     "supplier" to supplier,
                     "items" to items,
-                    "deliveryLocation" to location
+                    "deliveryLocation" to location,
+                    "paymentType" to (selectedPaymentType ?: "cash")
                 )
                 
                 Pair(totalAmount, detailsMap)
@@ -444,10 +482,10 @@ class CashAtHandFormFragment : Fragment() {
                         binding.errorText.visibility = View.VISIBLE
                         return
                     }
-                    Pair(calculatedAmount, mapOf("recipientName" to recipient))
+                    Pair(calculatedAmount, mapOf("recipientName" to recipient, "paymentType" to (selectedPaymentType ?: "cash")))
                 } else {
                     val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-                    val detailsMap = mutableMapOf<String, Any>("items" to items)
+                    val detailsMap = mutableMapOf<String, Any>("items" to items, "paymentType" to (selectedPaymentType ?: "cash"))
                     // Include recipientName if provided (backward compatibility)
                     val recipient = binding.recipientNameEditText.text.toString().trim()
                     if (recipient.isNotEmpty()) {
@@ -477,10 +515,10 @@ class CashAtHandFormFragment : Fragment() {
                         binding.errorText.visibility = View.VISIBLE
                         return
                     }
-                    Pair(calculatedAmount, mapOf("nature" to nature))
+                    Pair(calculatedAmount, mapOf("nature" to nature, "paymentType" to (selectedPaymentType ?: "cash")))
                 } else {
                     val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-                    val detailsMap = mutableMapOf<String, Any>("items" to items)
+                    val detailsMap = mutableMapOf<String, Any>("items" to items, "paymentType" to (selectedPaymentType ?: "cash"))
                     // Include nature if provided (backward compatibility)
                     val nature = binding.natureEditText.text.toString().trim()
                     if (nature.isNotEmpty()) {
@@ -510,12 +548,13 @@ class CashAtHandFormFragment : Fragment() {
                         binding.errorText.visibility = View.VISIBLE
                         return
                     }
-                    Pair(calculatedAmount, mapOf("accountType" to accountType))
+                    Pair(calculatedAmount, mapOf("accountType" to accountType, "paymentType" to (selectedPaymentType ?: "cash")))
                 } else {
                     val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
                     val detailsMap = mutableMapOf<String, Any>(
                         "accountType" to accountType,
-                        "items" to items
+                        "items" to items,
+                        "paymentType" to (selectedPaymentType ?: "cash")
                     )
                     Pair(totalAmount, detailsMap)
                 }
@@ -527,7 +566,7 @@ class CashAtHandFormFragment : Fragment() {
                     binding.errorText.visibility = View.VISIBLE
                     return
                 }
-                Pair(order.totalToSubmit, mapOf("orderId" to order.orderId))
+                Pair(order.totalToSubmit, mapOf("orderId" to order.orderId, "paymentType" to (selectedPaymentType ?: "cash")))
             }
             else -> {
                 binding.errorText.text = "Invalid submission type"
@@ -595,9 +634,11 @@ class CashAtHandFormFragment : Fragment() {
         binding.natureEditText.text?.clear()
         binding.accountTypeLayout.editText?.text?.clear()
         binding.orderPaymentOrderLayout.editText?.text?.clear()
+        binding.paymentTypeLayout.editText?.text?.clear()
         binding.amountEditText.text?.clear()
         binding.errorText.visibility = View.GONE
         selectedSubmissionType = null
+        selectedPaymentType = null
         selectedOrderPaymentOrder = null
         submissionItems.clear()
         binding.dynamicFieldsContainer.visibility = View.GONE

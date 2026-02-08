@@ -208,16 +208,63 @@ router.post('/send-otp', async (req, res) => {
       }
     }
     
-    // Generate OTP - 4 digits for drivers and shop agents, 6 digits for customers
-    const isDriver = forceDriver || (!!driver && !forceCustomer && !forceShopAgent);
-    const isShopAgent = forceShopAgent || (!!shopAgent && !forceCustomer && !forceDriver);
-    const otpCode = (isDriver || isShopAgent) ? generateDriverOTP() : generateOTP();
+    // Check if this is an admin phone number (for admin mobile app)
+    const forceAdmin = normalizedContext === 'admin';
+    let admin = null;
+    if (!forceCustomer && !forceDriver && !forceShopAgent) {
+      // Try multiple phone number formats to find admin
+      const phoneVariations = [
+        cleanedPhone,
+        cleanedPhone.replace(/^254/, '0'),
+        cleanedPhone.replace(/^254/, ''),
+        `+${cleanedPhone}`
+      ];
+      
+      admin = await db.Admin.findOne({
+        where: {
+          mobileNumber: {
+            [db.Sequelize.Op.in]: phoneVariations
+          },
+          role: {
+            [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
+          }
+        }
+      });
+      
+      if (admin) {
+        console.log(`📱 Admin found: ${admin.username} (${admin.mobileNumber}), role: ${admin.role}`);
+        
+        // If admin found and PIN is already set, reject OTP request
+        // OTP should only be sent for PIN setup or PIN reset
+        if (admin.hasSetPin) {
+          const isResetRequest = req.body.resetPin === true || req.body.reset === true;
+          
+          if (!isResetRequest) {
+            return res.status(400).json({
+              success: false,
+              error: 'PIN already set. Please use PIN login instead.',
+              hasPin: true,
+              shouldUsePinLogin: true
+            });
+          }
+          
+          // If it's a reset request, allow OTP to be sent
+          console.log(`🔄 PIN reset requested for admin: ${admin.username} (${admin.mobileNumber})`);
+        }
+      }
+    }
+    
+    // Generate OTP - 4 digits for drivers, shop agents, and admins; 6 digits for customers
+    const isDriver = forceDriver || (!!driver && !forceCustomer && !forceShopAgent && !admin);
+    const isShopAgent = forceShopAgent || (!!shopAgent && !forceCustomer && !forceDriver && !admin);
+    const isAdmin = forceAdmin || (!!admin && !forceCustomer && !forceDriver && !forceShopAgent);
+    const otpCode = (isDriver || isShopAgent || isAdmin) ? generateDriverOTP() : generateOTP();
     const expiresAt = new Date(Date.now() + 3 * 60 * 60 * 1000); // 3 hours from now
     
     // Check if this is a PIN reset request (for any user type)
     const isResetRequest = req.body.resetPin === true || req.body.reset === true;
     
-    const userType = isShopAgent ? 'Shop Agent' : (isDriver ? 'Driver' : 'Customer');
+    const userType = isAdmin ? 'Admin' : (isShopAgent ? 'Shop Agent' : (isDriver ? 'Driver' : 'Customer'));
     const actionType = isResetRequest ? 'PIN reset' : 'login';
     console.log(`📱 ${userType} OTP generated for ${actionType}: ${otpCode.length} digits`);
     if (driver) {
@@ -225,6 +272,9 @@ router.post('/send-otp', async (req, res) => {
     }
     if (shopAgent) {
       console.log(`📱 Shop Agent found: ${shopAgent.name} (${shopAgent.mobileNumber})`);
+    }
+    if (admin) {
+      console.log(`📱 Admin found: ${admin.username} (${admin.mobileNumber})`);
     }
     if (isResetRequest) {
       console.log(`🔄 PIN reset requested - OTP will be sent via SMS`);
@@ -496,13 +546,32 @@ router.post('/verify-otp', async (req, res) => {
       });
       isShopAgent = !!shopAgent;
     }
+    
+    // Check if this is an admin (for admin mobile app)
+    const phoneVariations = Array.from(candidatePhones);
+    const admin = await db.Admin.findOne({
+      where: {
+        mobileNumber: {
+          [db.Sequelize.Op.in]: phoneVariations
+        },
+        role: {
+          [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
+        }
+      }
+    });
+    const isAdmin = !!admin && !isShopAgent;
 
-    // Only mark OTP as used if NOT a shop agent
-    // Shop agents will have OTP marked as used when PIN is set
-    if (!isShopAgent) {
+    // Only mark OTP as used if NOT a shop agent or admin
+    // Shop agents and admins will have OTP marked as used when PIN is set
+    if (!isShopAgent && !isAdmin) {
       await otpRecord.update({ isUsed: true });
     } else {
-      console.log(`📱 Shop agent OTP verified - will be marked as used when PIN is set`);
+      if (isShopAgent) {
+        console.log(`📱 Shop agent OTP verified - will be marked as used when PIN is set`);
+      }
+      if (isAdmin) {
+        console.log(`📱 Admin OTP verified - will be marked as used when PIN is set`);
+      }
     }
 
     // Check if this is a driver phone number FIRST
@@ -521,7 +590,25 @@ router.post('/verify-otp', async (req, res) => {
       });
     }
     
-    const isDriver = forceDriver || (!!driver && !forceCustomer);
+    const isDriver = forceDriver || (!!driver && !forceCustomer && !isAdmin);
+    
+    // If this is an admin, return admin response
+    if (isAdmin) {
+      if (admin) {
+        console.log(`✅ Admin OTP verified for: ${admin.username} (${admin.mobileNumber})`);
+      }
+      return res.json({
+        success: true,
+        isAdmin: true,
+        admin: {
+          id: admin?.id || null,
+          username: admin?.username || null,
+          mobileNumber: admin?.mobileNumber || cleanedPhone,
+          role: admin?.role || null,
+          hasPin: admin?.hasSetPin || false
+        }
+      });
+    }
     
     // If this is a driver, return simple success response
     if (isDriver) {

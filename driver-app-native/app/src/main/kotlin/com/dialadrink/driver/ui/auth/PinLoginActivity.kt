@@ -17,13 +17,16 @@ import kotlinx.coroutines.launch
 class PinLoginActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPinLoginBinding
     private var phone: String = ""
+    private var userType: String = "driver" // "driver" or "admin"
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityPinLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
-        phone = intent.getStringExtra("phone") ?: SharedPrefs.getDriverPhone(this) ?: ""
+        phone = intent.getStringExtra("phone") ?: (SharedPrefs.getDriverPhone(this) ?: SharedPrefs.getAdminPhone(this) ?: "")
+        userType = intent.getStringExtra("userType") ?: (if (SharedPrefs.isAdminLoggedIn(this)) "admin" else "driver")
+        
         if (phone.isEmpty()) {
             finish()
             return

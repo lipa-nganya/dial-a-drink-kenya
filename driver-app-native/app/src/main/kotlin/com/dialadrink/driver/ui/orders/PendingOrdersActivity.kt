@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.ColorStateList
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
@@ -11,6 +13,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
@@ -39,15 +42,22 @@ class PendingOrdersActivity : AppCompatActivity() {
         }
     }
     
+    private var isAdminMode = false
+    
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityPendingOrdersBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
+        // Check if accessed from admin context
+        isAdminMode = SharedPrefs.isAdminLoggedIn(this)
+        
         setupToolbar()
         setupSwipeRefresh()
-        setupSocketConnection()
-        setupBroadcastReceiver()
+        if (!isAdminMode) {
+            setupSocketConnection()
+            setupBroadcastReceiver()
+        }
         loadOrdersFromRepository()
     }
     
@@ -62,8 +72,10 @@ class PendingOrdersActivity : AppCompatActivity() {
     
     override fun onDestroy() {
         super.onDestroy()
-        SocketService.disconnect()
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(orderAssignedReceiver)
+        if (!isAdminMode) {
+            SocketService.disconnect()
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(orderAssignedReceiver)
+        }
     }
     
     private fun setupBroadcastReceiver() {
@@ -111,22 +123,37 @@ class PendingOrdersActivity : AppCompatActivity() {
             var orders = emptyList<Order>()
             try {
                 orders = withTimeoutOrNull(10000) {
-                    OrderRepository.getPendingOrders(this@PendingOrdersActivity, forceRefresh = false)
+                    try {
+                        if (isAdminMode) {
+                            OrderRepository.getAdminPendingOrders(this@PendingOrdersActivity, forceRefresh = false)
+                        } else {
+                            OrderRepository.getPendingOrders(this@PendingOrdersActivity, forceRefresh = false)
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error fetching orders: ${e.message}", e)
+                        emptyList()
+                    }
                 } ?: emptyList()
             } catch (e: CancellationException) {
+                Log.d(TAG, "Order loading cancelled")
                 // Ignore
             } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error loading orders: ${e.message}", e)
                 orders = emptyList()
             } finally {
                 isLoading = false
-                withContext(Dispatchers.Main) {
-                    binding.loadingProgress.visibility = View.GONE
-                    binding.swipeRefresh.isRefreshing = false
-                    if (orders.isEmpty()) {
-                        showEmptyState("No pending orders")
-                    } else {
-                        displayOrders(orders)
+                try {
+                    withContext(Dispatchers.Main) {
+                        binding.loadingProgress.visibility = View.GONE
+                        binding.swipeRefresh.isRefreshing = false
+                        if (orders.isEmpty()) {
+                            showEmptyState("No pending orders")
+                        } else {
+                            displayOrders(orders)
+                        }
                     }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error updating UI: ${e.message}", e)
                 }
             }
         }
@@ -147,7 +174,11 @@ class PendingOrdersActivity : AppCompatActivity() {
             try {
                 Log.d(TAG, "🔄 Starting refresh of pending orders...")
                 orders = withTimeoutOrNull(15000) { // Increased timeout to 15 seconds
-                    OrderRepository.getPendingOrders(this@PendingOrdersActivity, forceRefresh = true)
+                    if (isAdminMode) {
+                        OrderRepository.getAdminPendingOrders(this@PendingOrdersActivity, forceRefresh = true)
+                    } else {
+                        OrderRepository.getPendingOrders(this@PendingOrdersActivity, forceRefresh = true)
+                    }
                 } ?: run {
                     Log.w(TAG, "⏱️ Timeout while fetching pending orders")
                     emptyList()
@@ -188,7 +219,8 @@ class PendingOrdersActivity : AppCompatActivity() {
         binding.emptyStateText.visibility = View.GONE
         removeOrderCards()
         orders.forEach { order ->
-            binding.ordersContainer.addView(createOrderCard(order))
+            val card = createOrderCard(order)
+            binding.ordersContainer.addView(card)
         }
     }
     
@@ -205,29 +237,107 @@ class PendingOrdersActivity : AppCompatActivity() {
     }
     
     private fun createOrderCard(order: Order): View {
-        val cardBinding = ItemPendingOrderBinding.inflate(LayoutInflater.from(this))
-        val card = cardBinding.root as MaterialCardView
-        
-        // Order number
-        cardBinding.orderNumberText.text = "Order #${order.id}"
-        
-        // Customer name
-        cardBinding.customerNameText.text = order.customerName ?: "Customer"
-        
-        // Location (delivery address)
-        cardBinding.locationText.text = order.deliveryAddress ?: "Address not provided"
-        
-        // Accept button
-        cardBinding.acceptButton.setOnClickListener {
-            showAcceptConfirmation(order)
+        try {
+            val cardBinding = ItemPendingOrderBinding.inflate(LayoutInflater.from(this), binding.ordersContainer, false)
+            val card = cardBinding.root as MaterialCardView
+            
+            // Order number
+            cardBinding.orderNumberText.text = "Order #${order.id ?: "N/A"}"
+            
+            // Customer name
+            cardBinding.customerNameText.text = order.customerName ?: "Customer"
+            
+            // Location (delivery address)
+            cardBinding.locationText.text = order.deliveryAddress ?: "Address not provided"
+            
+            // Driver assignment status (only show in admin mode)
+            if (isAdminMode) {
+                cardBinding.driverLabel.visibility = View.VISIBLE
+                cardBinding.driverStatusText.visibility = View.VISIBLE
+                
+                val driverStatus = when {
+                    order.driverId == null -> "No driver assigned"
+                    order.driverAccepted == true -> {
+                        val driverName = order.driver?.name ?: "Driver #${order.driverId}"
+                        "Assigned to: $driverName (Accepted)"
+                    }
+                    order.driverAccepted == false -> {
+                        val driverName = order.driver?.name ?: "Driver #${order.driverId}"
+                        "Assigned to: $driverName (Rejected)"
+                    }
+                    else -> {
+                        val driverName = order.driver?.name ?: "Driver #${order.driverId}"
+                        "Assigned to: $driverName (Pending acceptance)"
+                    }
+                }
+                cardBinding.driverStatusText.text = driverStatus
+            } else {
+                cardBinding.driverLabel.visibility = View.GONE
+                cardBinding.driverStatusText.visibility = View.GONE
+            }
+            
+            // Calculate and display profit/loss (only in admin mode)
+            if (isAdminMode) {
+                try {
+                    val profitLoss = calculateProfitLoss(order)
+                    if (profitLoss != null) {
+                        cardBinding.profitLossLabel.visibility = View.VISIBLE
+                        cardBinding.profitLossChip.visibility = View.VISIBLE
+                        val profitAmount = Math.abs(profitLoss)
+                        if (profitLoss >= 0) {
+                            cardBinding.profitLossChip.text = "PROFIT +KES ${String.format("%.2f", profitAmount)}"
+                            cardBinding.profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#4caf50")) // Green
+                        } else {
+                            cardBinding.profitLossChip.text = "LOSS -KES ${String.format("%.2f", profitAmount)}"
+                            cardBinding.profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#f44336")) // Red
+                        }
+                    } else {
+                        cardBinding.profitLossLabel.visibility = View.GONE
+                        cardBinding.profitLossChip.visibility = View.GONE
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error displaying profit/loss: ${e.message}", e)
+                    cardBinding.profitLossLabel.visibility = View.GONE
+                    cardBinding.profitLossChip.visibility = View.GONE
+                }
+            } else {
+                cardBinding.profitLossLabel.visibility = View.GONE
+                cardBinding.profitLossChip.visibility = View.GONE
+            }
+            
+            // In admin mode, hide accept/reject buttons (admin can't accept/reject orders)
+            if (isAdminMode) {
+                cardBinding.acceptButton.visibility = View.GONE
+                cardBinding.rejectButton.visibility = View.GONE
+            } else {
+                // Accept button
+                cardBinding.acceptButton.setOnClickListener {
+                    showAcceptConfirmation(order)
+                }
+                
+                // Reject button
+                cardBinding.rejectButton.setOnClickListener {
+                    showRejectConfirmation(order)
+                }
+            }
+            
+            return card
+        } catch (e: Exception) {
+            Log.e(TAG, "Error creating order card: ${e.message}", e)
+            // Return a simple error card instead of crashing
+            val errorCard = MaterialCardView(this)
+            errorCard.layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply {
+                setMargins(32, 16, 32, 16)
+            }
+            val errorText = android.widget.TextView(this)
+            errorText.text = "Error loading order #${order.id ?: "N/A"}"
+            errorText.setPadding(32, 32, 32, 32)
+            errorCard.addView(errorText)
+            return errorCard
         }
-        
-        // Reject button
-        cardBinding.rejectButton.setOnClickListener {
-            showRejectConfirmation(order)
-        }
-        
-        return card
     }
     
     private fun showAcceptConfirmation(order: Order) {
@@ -366,6 +476,61 @@ class PendingOrdersActivity : AppCompatActivity() {
             .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
+    }
+    
+    private fun calculateProfitLoss(order: Order): Double? {
+        try {
+            val totalAmount = order.totalAmount ?: 0.0
+            val deliveryFee = order.deliveryFee ?: 0.0
+            val orderItems = order.items ?: emptyList()
+            
+            Log.d(TAG, "💰 Calculating profit/loss for Order #${order.id}: totalAmount=$totalAmount, deliveryFee=$deliveryFee, itemsCount=${orderItems.size}")
+            
+            if (orderItems.isEmpty()) {
+                Log.d(TAG, "⚠️ Order #${order.id} has no items, cannot calculate profit/loss")
+                return null
+            }
+            
+            var totalPurchaseCost = 0.0
+            var hasPurchasePrice = false
+            
+            orderItems.forEach { item ->
+                try {
+                    val drink = item.drink
+                    if (drink != null) {
+                        Log.d(TAG, "  📦 Item: ${drink.name}, purchasePrice=${drink.purchasePrice}, quantity=${item.quantity}")
+                        if (drink.purchasePrice != null) {
+                            val purchasePrice = drink.purchasePrice
+                            if (purchasePrice >= 0) {
+                                val quantity = item.quantity ?: 0
+                                totalPurchaseCost += purchasePrice * quantity
+                                hasPurchasePrice = true
+                                Log.d(TAG, "    ✅ Added to cost: ${purchasePrice * quantity}")
+                            }
+                        } else {
+                            Log.d(TAG, "    ⚠️ No purchase price for ${drink.name}")
+                        }
+                    } else {
+                        Log.d(TAG, "    ⚠️ Item has no drink data")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error calculating purchase cost for item: ${e.message}")
+                }
+            }
+            
+            // Only return profit/loss if at least one item has a purchase price
+            return if (hasPurchasePrice) {
+                val profit = totalAmount - totalPurchaseCost - deliveryFee
+                Log.d(TAG, "✅ Order #${order.id} profit/loss: $profit (totalAmount=$totalAmount - purchaseCost=$totalPurchaseCost - deliveryFee=$deliveryFee)")
+                profit
+            } else {
+                Log.d(TAG, "⚠️ Order #${order.id} has no items with purchase price, cannot calculate profit/loss")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating profit/loss: ${e.message}", e)
+            return null
+        }
     }
 }
 

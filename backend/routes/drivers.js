@@ -1276,10 +1276,11 @@ router.get('/', async (req, res) => {
       return driverData;
     }));
     
-    res.json(driversWithCreditStatus);
+    // Use sendSuccess to wrap response in ApiResponse format
+    sendSuccess(res, driversWithCreditStatus);
   } catch (error) {
     console.error('Error fetching drivers:', error);
-    res.status(500).json({ error: error.message || 'Failed to fetch drivers' });
+    sendError(res, error.message || 'Failed to fetch drivers', 500);
   }
 });
 

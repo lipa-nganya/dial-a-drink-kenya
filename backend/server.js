@@ -26,6 +26,60 @@ const PORT = process.env.PORT || 5001;
 
 // Create minimal app with health check endpoint
 const minimalApp = express();
+
+// CORS middleware for minimal app (before routes)
+const allowedOrigins = [
+  'http://localhost:3000', // Customer local
+  'http://localhost:3001', // Admin local
+  'http://localhost:3002', // Shop agent / consoles local
+  'http://localhost:3003', // Zeus local
+  'http://localhost:8080', // Wolfgang website (local dev)
+  process.env.FRONTEND_URL,
+  process.env.ADMIN_URL,
+  process.env.ZEUS_URL,
+  process.env.SHOP_AGENT_URL,
+].filter(Boolean);
+
+minimalApp.use((req, res, next) => {
+  const origin = req.headers.origin;
+  
+  const isOriginAllowed = (originToCheck) => {
+    if (!originToCheck) return false;
+    return (
+      allowedOrigins.includes(originToCheck) ||
+      originToCheck.includes('.netlify.app') ||
+      originToCheck.includes('.thewolfgang.tech') ||
+      originToCheck.includes('.ruakadrinksdelivery.co.ke') ||
+      originToCheck.includes('.drinksdeliverykenya.com') ||
+      originToCheck.includes('.run.app') ||
+      originToCheck === 'https://thewolfgang.tech'
+    );
+  };
+  
+  // Handle preflight OPTIONS requests
+  if (req.method === 'OPTIONS') {
+    if (origin && isOriginAllowed(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '86400');
+      return res.status(204).end();
+    }
+    return res.status(204).end();
+  }
+  
+  // For all other requests, set CORS headers if origin is allowed
+  if (origin && isOriginAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  }
+  
+  next();
+});
+
 minimalApp.use(express.json());
 
 // Health check endpoint - MUST work immediately
@@ -82,9 +136,12 @@ async function loadFullApplication() {
     // Load the full Express app
     const app = require('./app');
     
-    // Replace minimal app with full app
+    // CRITICAL: Properly replace the request handler
+    // Remove all existing request listeners
     server.removeAllListeners('request');
+    // Attach the full Express app as the request handler
     server.on('request', app);
+    console.log('✅ Full Express app attached to server');
     
     // Load models with error handling
     let db, seedData;

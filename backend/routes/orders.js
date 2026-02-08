@@ -221,7 +221,8 @@ router.post('/', async (req, res) => {
       paymentStatus,
       isStop,
       stopDeductionAmount,
-      sendSmsToCustomer
+      sendSmsToCustomer,
+      deliveryFee: providedDeliveryFee
     } = req.body;
     
     console.log('🔍 DESTRUCTURED paymentMethod:', paymentMethod);
@@ -461,11 +462,16 @@ router.post('/', async (req, res) => {
       let deliveryFee = 0;
       let deliveryDistance = null;
       
-      if (!isWalkInOrder) {
-        // Only calculate delivery fee for non-walk-in orders
+      // For admin orders, if deliveryFee is explicitly provided, use it instead of recalculating
+      if (adminOrder && providedDeliveryFee != null && providedDeliveryFee !== undefined) {
+        deliveryFee = parseFloat(providedDeliveryFee) || 0;
+        console.log(`✅ Admin order: Using provided delivery fee from mobile app: KES ${deliveryFee}`);
+      } else if (!isWalkInOrder) {
+        // Only calculate delivery fee for non-walk-in orders if not provided
         const feeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
         deliveryFee = feeResult.fee || 0;
         deliveryDistance = feeResult.distance || null;
+        console.log(`📦 Calculated delivery fee: KES ${deliveryFee}`);
       } else {
         console.log(`🛍️  Walk-in order detected (customerName: ${customerName}, deliveryAddress: ${deliveryAddress}). Skipping delivery fee calculation.`);
       }
@@ -527,7 +533,12 @@ router.post('/', async (req, res) => {
         notes: (() => {
           let noteParts = [];
           if (notes) noteParts.push(notes);
-          if (!isWalkInOrder && deliveryFee > 0) noteParts.push(`Delivery Fee: KES ${deliveryFee.toFixed(2)}`);
+          if (!isWalkInOrder && deliveryFee > 0) {
+            const deliveryFeeNote = adminOrder && providedDeliveryFee != null 
+              ? `Delivery Fee: KES ${deliveryFee.toFixed(2)} (set via Admin Mobile App)`
+              : `Delivery Fee: KES ${deliveryFee.toFixed(2)}`;
+            noteParts.push(deliveryFeeNote);
+          }
           if (tip > 0) noteParts.push(`Tip: KES ${tip.toFixed(2)}`);
           return noteParts.join('\n') || null;
         })(),

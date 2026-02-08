@@ -66,13 +66,17 @@ class UnwrappingJsonConverterFactory(
                 (bytes[0].toInt() and 0xFF) == 0x1f && 
                 (bytes[1].toInt() and 0xFF) == 0x8b
             
-            var raw = if (isGzip) {
-                // Decompress gzip
-                val gzipStream = java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes))
-                gzipStream.bufferedReader(Charsets.UTF_8).use { it.readText() }.trim()
-            } else {
-                // Not compressed, read as UTF-8 string
-                String(bytes, Charsets.UTF_8).trim()
+            var raw = try {
+                if (isGzip) {
+                    // Decompress gzip
+                    val gzipStream = java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes))
+                    gzipStream.bufferedReader(Charsets.UTF_8).use { it.readText() }.trim()
+                } else {
+                    // Not compressed, read as UTF-8 string
+                    String(bytes, Charsets.UTF_8).trim()
+                }
+            } catch (e: Exception) {
+                throw IOException("Failed to decode response body: ${e.message}", e)
             }
 
             // First, try to detect if the response is a stringified JSON
@@ -105,28 +109,50 @@ class UnwrappingJsonConverterFactory(
                 }
             }
 
+            // Validate raw string before parsing
+            if (raw.isEmpty()) {
+                throw IOException("Empty response body")
+            }
+            
             // Now try to parse the unwrapped JSON
             val reader = JsonReader(StringReader(raw))
             reader.isLenient = true
             return try {
                 adapter.read(reader) ?: throw IOException("Failed to parse JSON")
             } catch (e: Exception) {
+                // Close the reader before trying alternative parsing
+                try {
+                    reader.close()
+                } catch (closeException: Exception) {
+                    // Ignore close errors
+                }
+                
                 // If parsing fails, check if raw is still a stringified JSON
                 // This can happen if the response is double-stringified
-                if (raw.startsWith("\"") && raw.endsWith("\"")) {
+                if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length > 2) {
                     try {
                         // Try parsing as string first, then parse that string as JSON
                         val stringValue = gson.fromJson(raw, String::class.java)
-                        val reader2 = JsonReader(StringReader(stringValue))
-                        reader2.isLenient = true
-                        return adapter.read(reader2) ?: throw IOException("Failed to parse unwrapped JSON")
+                        if (stringValue != null && stringValue.isNotEmpty()) {
+                            val reader2 = JsonReader(StringReader(stringValue))
+                            reader2.isLenient = true
+                            try {
+                                return adapter.read(reader2) ?: throw IOException("Failed to parse unwrapped JSON")
+                            } finally {
+                                reader2.close()
+                            }
+                        }
                     } catch (e2: Exception) {
-                        throw IOException("Failed to parse JSON after unwrapping. Raw starts with: ${raw.take(200)}", e2)
+                        throw IOException("Failed to parse JSON after unwrapping. Raw length: ${raw.length}, starts with: ${raw.take(200)}", e2)
                     }
                 }
-                throw IOException("Failed to parse JSON. Raw starts with: ${raw.take(200)}", e)
+                throw IOException("Failed to parse JSON. Raw length: ${raw.length}, starts with: ${raw.take(200)}. Error: ${e.message}", e)
             } finally {
-                reader.close()
+                try {
+                    reader.close()
+                } catch (closeException: Exception) {
+                    // Ignore close errors - reader may already be closed
+                }
             }
         }
     }

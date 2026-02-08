@@ -26,6 +26,11 @@
         android:theme="@style/Theme.DialADrinkDriver"
         tools:targetApi="31">
         
+        <!-- Google Places API Key -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyBYs413EeQVcChjlgrOMFd7U2dy60xiirk" />
+        
         <activity
             android:name=".ui.auth.PhoneNumberActivity"
             android:exported="true"
@@ -52,6 +57,39 @@
             android:exported="false" />
         
         <activity
+            android:name=".ui.auth.UserTypeSelectionActivity"
+            android:parentActivityName=".ui.auth.PhoneNumberActivity"
+            android:exported="false" />
+        
+        <activity
+            android:name=".ui.admin.AdminLoginActivity"
+            android:parentActivityName=".ui.auth.PhoneNumberActivity"
+            android:exported="false" />
+        
+        <activity
+            android:name=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.AssignRiderActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.pos.PosProductListActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.pos.PosCartActivity"
+            android:parentActivityName=".ui.pos.PosProductListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
             android:name=".ui.main.MainActivity"
             android:exported="false"
             android:launchMode="singleTop" />
@@ -74,8 +112,32 @@
             android:theme="@style/Theme.DialADrinkDriver" />
         
         <activity
+            android:name=".ui.orders.InProgressOrdersActivity"
+            android:parentActivityName=".ui.dashboard.DashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
             android:name=".ui.orders.CompletedOrdersActivity"
             android:parentActivityName=".ui.dashboard.DashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.CompletedDriversActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.DriverTransactionsActivity"
+            android:parentActivityName=".ui.admin.CompletedDriversActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.RequestPaymentActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
             android:exported="false"
             android:theme="@style/Theme.DialADrinkDriver" />
         

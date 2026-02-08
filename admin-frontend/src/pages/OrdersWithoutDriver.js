@@ -75,9 +75,12 @@ const OrdersWithoutDriver = () => {
   const fetchDrivers = async () => {
     try {
       const response = await api.get('/drivers');
-      setDrivers(response.data || []);
+      // Backend returns { success: true, data: [...] }
+      const driversData = response.data?.data || response.data || [];
+      setDrivers(Array.isArray(driversData) ? driversData : []);
     } catch (err) {
       console.error('Error fetching drivers:', err);
+      setDrivers([]); // Ensure drivers is always an array
     }
   };
 

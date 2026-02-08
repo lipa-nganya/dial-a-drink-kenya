@@ -1,3 +1,9 @@
 firebase-service-account.json
-firebase-service-account.json
-firebase-service-account.json
+.env
+.env.bak
+.env.*.bak
+*.env.bak
+.env.backup
+.env.local.bak
+.env.local.bak2
+*.backup

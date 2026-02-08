@@ -9,8 +9,11 @@ interface ApiService {
     @POST("auth/send-otp")
     suspend fun sendOtp(@Body request: SendOtpRequest): Response<ApiResponse<OtpResponse>>
     
+    @POST("auth/verify-otp")
+    suspend fun verifyOtp(@Body request: VerifyOtpRequestWithPhone): Response<ApiResponse<VerifyOtpResponse>>
+    
     @POST("drivers/phone/{phone}/verify-otp")
-    suspend fun verifyOtp(
+    suspend fun verifyOtpDriver(
         @Path("phone") phone: String,
         @Body request: VerifyOtpRequest
     ): Response<ApiResponse<VerifyOtpResponse>>
@@ -38,6 +41,21 @@ interface ApiService {
     
     @POST("drivers/phone/{phone}/setup-pin")
     suspend fun setupPin(
+        @Path("phone") phone: String,
+        @Body request: SetupPinRequest
+    ): Response<ApiResponse<SetupPinResponse>>
+    
+    // Admin mobile login
+    @POST("admin/auth/mobile-login")
+    suspend fun adminMobileLogin(@Body request: AdminMobileLoginRequest): Response<ApiResponse<AdminMobileLoginResponse>>
+    
+    // Check if phone exists as both driver and admin
+    @GET("admin/check-phone/{phone}")
+    suspend fun checkPhoneForUserTypes(@Path("phone") phone: String): Response<ApiResponse<PhoneCheckResponse>>
+    
+    // Admin PIN setup
+    @POST("admin/phone/{phone}/set-pin")
+    suspend fun setupAdminPin(
         @Path("phone") phone: String,
         @Body request: SetupPinRequest
     ): Response<ApiResponse<SetupPinResponse>>
@@ -193,5 +211,96 @@ interface ApiService {
         @Path("driverId") driverId: Int,
         @Path("notificationId") notificationId: Int
     ): Response<ApiResponse<Unit>>
-}
+    
+    // POS endpoints
+    @GET("pos/drinks")
+    suspend fun getPosDrinks(
+        @Query("search") search: String? = null,
+        @Query("limit") limit: Int = 10,
+        @Query("offset") offset: Int = 0
+    ): Response<PosProductsResponse>
+    
+    @GET("pos/customer/{phoneNumber}")
+    suspend fun getPosCustomer(@Path("phoneNumber") phoneNumber: String): Response<ApiResponse<PosCustomer>>
+    
+    @GET("pos/customers/search")
+    suspend fun searchCustomers(@Query("q") query: String): Response<ApiResponse<List<PosCustomer>>>
 
+    @POST("pos/customer")
+    suspend fun createPosCustomer(@Body request: CreatePosCustomerRequest): Response<ApiResponse<PosCustomer>>
+    
+    @GET("territories")
+    suspend fun getTerritories(): Response<List<Territory>>
+    
+    @POST("pos/order/cash")
+    suspend fun createPosOrder(@Body request: CreatePosOrderRequest): Response<ApiResponse<Order>>
+    
+    @POST("orders")
+    suspend fun createOrder(@Body request: CreateOrderRequest): Response<ApiResponse<Order>>
+    
+    // Places API endpoints (for cost-saving address autocomplete)
+    @POST("places/autocomplete")
+    suspend fun getAddressSuggestions(@Body request: PlacesAutocompleteRequest): Response<PlacesAutocompleteResponse>
+    
+    @POST("places/save")
+    suspend fun saveAddress(@Body request: SaveAddressRequest): Response<ApiResponse<SavedAddress>>
+    
+    @GET("places/details/{placeId}")
+    suspend fun getPlaceDetails(@Path("placeId") placeId: String): Response<PlaceDetails>
+    
+    // Admin endpoints for assign rider
+    @GET("admin/orders/unassigned")
+    suspend fun getUnassignedOrders(): Response<UnassignedOrdersResponse>
+    
+    @GET("admin/orders/pending")
+    suspend fun getAdminPendingOrders(
+        @Query("summary") summary: Boolean? = null
+    ): Response<ApiResponse<List<Order>>>
+    
+    @GET("admin/orders/in-progress")
+    suspend fun getAdminInProgressOrders(
+        @Query("summary") summary: Boolean? = null
+    ): Response<ApiResponse<List<Order>>>
+    
+    @GET("admin/drivers/completed")
+    suspend fun getCompletedDrivers(): Response<ApiResponse<List<Driver>>>
+    
+    @GET("admin/drivers/{driverId}/transactions")
+    suspend fun getDriverTransactions(
+        @Path("driverId") driverId: Int
+    ): Response<ApiResponse<List<DriverTransaction>>>
+    
+    @POST("admin/drivers/{driverId}/request-payment")
+    suspend fun requestPaymentFromDriver(
+        @Path("driverId") driverId: Int,
+        @Body request: RequestPaymentRequest
+    ): Response<ApiResponse<RequestPaymentResponse>>
+    
+    @GET("drivers")
+    suspend fun getDrivers(): Response<ApiResponse<List<Driver>>>
+    
+    @PATCH("admin/orders/{orderId}/driver")
+    suspend fun assignDriverToOrder(
+        @Path("orderId") orderId: Int,
+        @Body request: AssignDriverRequest
+    ): Response<ApiResponse<Order>>
+    
+    @PATCH("admin/orders/{orderId}/delivery-fee")
+    suspend fun updateOrderDeliveryFee(
+        @Path("orderId") orderId: Int,
+        @Body request: UpdateDeliveryFeeRequest
+    ): Response<ApiResponse<Order>>
+    
+    @PATCH("admin/orders/{orderId}/items/{itemId}/price")
+    suspend fun updateOrderItemPrice(
+        @Path("orderId") orderId: Int,
+        @Path("itemId") itemId: Int,
+        @Body request: UpdateItemPriceRequest
+    ): Response<ApiResponse<Order>>
+    
+    @PATCH("admin/orders/{orderId}/status")
+    suspend fun updateAdminOrderStatus(
+        @Path("orderId") orderId: Int,
+        @Body request: UpdateOrderStatusRequest
+    ): Response<ApiResponse<Order>>
+}

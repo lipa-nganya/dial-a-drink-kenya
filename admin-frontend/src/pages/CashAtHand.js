@@ -577,6 +577,7 @@ const CashAtHand = () => {
                   ) : (
                   <>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Type</TableCell>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Payment Type</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Source</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Status</TableCell>
@@ -590,7 +591,7 @@ const CashAtHand = () => {
               {paginatedData.length === 0 ? (
                 <TableRow>
                   <TableCell 
-                    colSpan={activeTab === 3 ? 4 : 6} 
+                    colSpan={activeTab === 3 ? 4 : 7} 
                     sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}
                   >
                     No data found
@@ -625,6 +626,17 @@ const CashAtHand = () => {
                       <TableRow key={item.id} hover>
                         <TableCell sx={{ color: colors.textPrimary }}>
                           {getSubmissionTypeLabel(item.submissionType)}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          <Chip
+                            label={item.details?.paymentType === 'mpesa' ? 'Mpesa' : 'Cash'}
+                            size="small"
+                            color={item.details?.paymentType === 'mpesa' ? 'primary' : 'default'}
+                            sx={{
+                              fontWeight: 600,
+                              backgroundColor: item.details?.paymentType === 'mpesa' ? '#2196F3' : undefined
+                            }}
+                          />
                         </TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>
                           {isFromDriver ? (

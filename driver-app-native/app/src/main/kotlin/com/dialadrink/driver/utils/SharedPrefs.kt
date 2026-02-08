@@ -53,6 +53,19 @@ object SharedPrefs {
         getPrefs(context).edit().clear().apply()
     }
     
+    // Admin info
+    fun saveAdminToken(context: Context, token: String) {
+        getPrefs(context).edit().putString("admin_token", token).apply()
+    }
+    
+    fun getAdminToken(context: Context): String? {
+        return getPrefs(context).getString("admin_token", null)
+    }
+    
+    fun clearAdminToken(context: Context) {
+        getPrefs(context).edit().remove("admin_token").apply()
+    }
+    
     // OTA Update tracking
     fun getOtaCount(context: Context): Int {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -133,6 +146,48 @@ object SharedPrefs {
         val fiveMinutes = 5 * 60 * 1000L // 5 minutes in milliseconds
         
         return (currentTime - timestamp) < fiveMinutes
+    }
+    
+    // Admin info
+    fun saveAdminPhone(context: Context, phone: String) {
+        getPrefs(context).edit().putString("admin_phone", phone).apply()
+    }
+    
+    fun getAdminPhone(context: Context): String? {
+        return getPrefs(context).getString("admin_phone", null)
+    }
+    
+    fun saveAdminId(context: Context, adminId: Int) {
+        getPrefs(context).edit().putInt("admin_id", adminId).apply()
+    }
+    
+    fun getAdminId(context: Context): Int? {
+        val id = getPrefs(context).getInt("admin_id", -1)
+        return if (id == -1) null else id
+    }
+    
+    fun saveAdminUsername(context: Context, username: String) {
+        getPrefs(context).edit().putString("admin_username", username).apply()
+    }
+    
+    fun getAdminUsername(context: Context): String? {
+        return getPrefs(context).getString("admin_username", null)
+    }
+    
+    fun setAdminLoggedIn(context: Context, loggedIn: Boolean) {
+        getPrefs(context).edit().putBoolean("admin_logged_in", loggedIn).apply()
+    }
+    
+    fun isAdminLoggedIn(context: Context): Boolean {
+        return getPrefs(context).getBoolean("admin_logged_in", false)
+    }
+    
+    fun getUserType(context: Context): String {
+        return when {
+            isAdminLoggedIn(context) -> "admin"
+            isLoggedIn(context) -> "driver"
+            else -> "none"
+        }
     }
 }
 

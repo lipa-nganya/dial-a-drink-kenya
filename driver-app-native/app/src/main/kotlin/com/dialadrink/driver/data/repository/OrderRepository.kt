@@ -218,6 +218,78 @@ object OrderRepository {
     }
     
     /**
+     * Get admin pending orders (all pending orders regardless of rider assignment)
+     * Uses the admin pending orders endpoint
+     */
+    suspend fun getAdminPendingOrders(
+        context: Context,
+        forceRefresh: Boolean = false
+    ): List<Order> {
+        return try {
+            ensureApiClientInitialized(context)
+            
+            // Pass summary = false to get full order data including items and purchasePrice for profit/loss calculation
+            val response = ApiClient.getApiService().getAdminPendingOrders(
+                summary = false
+            )
+            
+            if (!response.isSuccessful || response.body() == null) {
+                Log.w(TAG, "❌ Failed to fetch admin pending orders: ${response.code()}")
+                return emptyList()
+            }
+            
+            val apiResponse = response.body()!!
+            if (apiResponse.success != true || apiResponse.data == null) {
+                Log.w(TAG, "❌ Admin pending orders API returned error: ${apiResponse.error}")
+                return emptyList()
+            }
+            
+            val pendingOrders = apiResponse.data
+            Log.d(TAG, "✅ Fetched ${pendingOrders.size} admin pending orders")
+            pendingOrders
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error fetching admin pending orders", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Get admin in-progress orders (all orders accepted by drivers and being processed)
+     * Uses the admin in-progress orders endpoint
+     */
+    suspend fun getAdminInProgressOrders(
+        context: Context,
+        forceRefresh: Boolean = false
+    ): List<Order> {
+        return try {
+            ensureApiClientInitialized(context)
+            
+            // Pass summary = false to get full order data including items and purchasePrice for profit/loss calculation
+            val response = ApiClient.getApiService().getAdminInProgressOrders(
+                summary = false
+            )
+            
+            if (!response.isSuccessful || response.body() == null) {
+                Log.w(TAG, "❌ Failed to fetch admin in-progress orders: ${response.code()}")
+                return emptyList()
+            }
+            
+            val apiResponse = response.body()!!
+            if (apiResponse.success != true || apiResponse.data == null) {
+                Log.w(TAG, "❌ Admin in-progress orders API returned error: ${apiResponse.error}")
+                return emptyList()
+            }
+            
+            val inProgressOrders = apiResponse.data
+            Log.d(TAG, "✅ Fetched ${inProgressOrders.size} admin in-progress orders")
+            inProgressOrders
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error fetching admin in-progress orders", e)
+            emptyList()
+        }
+    }
+    
+    /**
      * Get pending orders (assigned to driver but not yet accepted/rejected)
      * Uses the dedicated pending orders endpoint
      */

@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 class PinSetupActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPinSetupBinding
     private var phone: String = ""
+    private var userType: String = "driver" // "driver" or "admin"
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -24,6 +25,8 @@ class PinSetupActivity : AppCompatActivity() {
         setContentView(binding.root)
         
         phone = intent.getStringExtra("phone") ?: ""
+        userType = intent.getStringExtra("userType") ?: "driver"
+        
         if (phone.isEmpty()) {
             finish()
             return
@@ -88,31 +91,50 @@ class PinSetupActivity : AppCompatActivity() {
             try {
                 // Clean phone number (remove non-digits) to ensure consistent format
                 val cleanedPhone = phone.replace(Regex("[^0-9]"), "")
-                android.util.Log.d("PinSetupActivity", "🔐 Setting up PIN for phone: $cleanedPhone")
+                android.util.Log.d("PinSetupActivity", "🔐 Setting up PIN for $userType phone: $cleanedPhone")
                 
-                val response = ApiClient.getApiService().setupPin(
-                    cleanedPhone,
-                    SetupPinRequest(pin)
-                )
+                val response = if (userType == "admin") {
+                    // Admin PIN setup
+                    ApiClient.getApiService().setupAdminPin(
+                        cleanedPhone,
+                        SetupPinRequest(pin)
+                    )
+                } else {
+                    // Driver PIN setup
+                    ApiClient.getApiService().setupPin(
+                        cleanedPhone,
+                        SetupPinRequest(pin)
+                    )
+                }
                 
                 android.util.Log.d("PinSetupActivity", "📡 PIN setup response - Success: ${response.isSuccessful}, Code: ${response.code()}")
                 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    android.util.Log.d("PinSetupActivity", "✅ PIN setup successful")
+                    android.util.Log.d("PinSetupActivity", "✅ PIN setup successful for $userType")
                     
-                    // Mark as logged in
-                    SharedPrefs.setLoggedIn(this@PinSetupActivity, true)
-                    
-                    // Register for push notifications
-                    val driverId = SharedPrefs.getDriverId(this@PinSetupActivity)
-                    if (driverId != null) {
-                        FcmService.registerPushToken(this@PinSetupActivity, driverId)
+                    if (userType == "admin") {
+                        // Mark admin as logged in
+                        SharedPrefs.setAdminLoggedIn(this@PinSetupActivity, true)
+                        
+                        // Navigate to admin dashboard
+                        val intent = Intent(this@PinSetupActivity, com.dialadrink.driver.ui.admin.AdminDashboardActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
+                    } else {
+                        // Mark driver as logged in
+                        SharedPrefs.setLoggedIn(this@PinSetupActivity, true)
+                        
+                        // Register for push notifications
+                        val driverId = SharedPrefs.getDriverId(this@PinSetupActivity)
+                        if (driverId != null) {
+                            FcmService.registerPushToken(this@PinSetupActivity, driverId)
+                        }
+                        
+                        // Navigate to driver dashboard
+                        val intent = Intent(this@PinSetupActivity, DashboardActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
                     }
-                    
-                    // Navigate to dashboard
-                    val intent = Intent(this@PinSetupActivity, DashboardActivity::class.java)
-                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                    startActivity(intent)
                     finish()
                 } else {
                     val errorMsg = response.body()?.error ?: "Failed to setup PIN"

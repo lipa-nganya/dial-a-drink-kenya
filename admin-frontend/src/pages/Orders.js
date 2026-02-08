@@ -243,9 +243,12 @@ const Orders = () => {
   const fetchDrivers = async () => {
     try {
       const response = await api.get('/drivers');
-      setDrivers(response.data || []);
+      // Backend returns { success: true, data: [...] }
+      const driversData = response.data?.data || response.data || [];
+      setDrivers(Array.isArray(driversData) ? driversData : []);
     } catch (error) {
       console.error('Error fetching drivers:', error);
+      setDrivers([]); // Ensure drivers is always an array
     }
   };
 
@@ -1340,8 +1343,9 @@ const Orders = () => {
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
       
-      const fetchedRiders = ridersResponse.data || [];
-      setAllRiders(fetchedRiders);
+      // Backend returns { success: true, data: [...] }
+      const fetchedRiders = ridersResponse.data?.data || ridersResponse.data || [];
+      setAllRiders(Array.isArray(fetchedRiders) ? fetchedRiders : []);
       const allOrders = ordersResponse.data || [];
       
       // Store rider locations
@@ -2353,12 +2357,16 @@ const Orders = () => {
                         ) || 0;
                         
                         // Calculate deliveryFee: totalAmount - tipAmount - itemsTotal
+                        // Only calculate if deliveryFee is truly undefined, not if it's 0
                         const tipAmount = parseFloat(orderWithBreakdown.tipAmount || 0);
                         const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
-                        const deliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
+                        const calculatedDeliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
                         
                         orderWithBreakdown.itemsTotal = Number(itemsTotal.toFixed(2));
-                        orderWithBreakdown.deliveryFee = Number(deliveryFee.toFixed(2));
+                        // Only set deliveryFee if it's undefined, preserve existing value if it exists (even if 0)
+                        if (orderWithBreakdown.deliveryFee === undefined) {
+                          orderWithBreakdown.deliveryFee = Number(calculatedDeliveryFee.toFixed(2));
+                        }
                       }
                       
                       setSelectedOrderForDetail(orderWithBreakdown);
@@ -2404,12 +2412,59 @@ const Orders = () => {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366', fontSize: '1rem' }}>
-                        KES {Number(order.totalAmount).toFixed(2)}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                        {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
-                      </Typography>
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366', fontSize: '1rem' }}>
+                          KES {Number(order.totalAmount).toFixed(2)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                          {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
+                        </Typography>
+                        {(() => {
+                          // Calculate profit/loss
+                          const totalAmount = parseFloat(order.totalAmount) || 0;
+                          const deliveryFee = parseFloat(order.deliveryFee) || 0;
+                          const orderItems = order.items || order.orderItems || [];
+                          
+                          let totalPurchaseCost = 0;
+                          orderItems.forEach(item => {
+                            if (item.drink && item.drink.purchasePrice !== null && item.drink.purchasePrice !== undefined) {
+                              const purchasePriceRaw = item.drink.purchasePrice;
+                              const strValue = String(purchasePriceRaw).trim();
+                              if (strValue !== '' && strValue !== 'null' && strValue !== 'undefined') {
+                                const purchasePrice = parseFloat(strValue);
+                                if (!isNaN(purchasePrice) && isFinite(purchasePrice) && purchasePrice >= 0) {
+                                  const quantity = parseInt(item.quantity) || 0;
+                                  totalPurchaseCost += purchasePrice * quantity;
+                                }
+                              }
+                            }
+                          });
+                          
+                          const profit = totalAmount - totalPurchaseCost - deliveryFee;
+                          
+                          if (totalPurchaseCost > 0) {
+                            const profitAmount = Math.abs(profit);
+                            const profitLabel = profit >= 0 
+                              ? `PROFIT +KES ${profitAmount.toFixed(2)}`
+                              : `LOSS -KES ${profitAmount.toFixed(2)}`;
+                            return (
+                              <Chip
+                                label={profitLabel}
+                                size="small"
+                                sx={{
+                                  mt: 0.5,
+                                  backgroundColor: profit >= 0 ? '#4caf50' : '#f44336',
+                                  color: '#ffffff',
+                                  fontWeight: 600,
+                                  fontSize: '0.7rem',
+                                  height: '20px'
+                                }}
+                              />
+                            );
+                          }
+                          return null;
+                        })()}
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
@@ -3553,7 +3608,6 @@ const Orders = () => {
               <TextField
                 autoFocus
                 fullWidth
-                label="New Price"
                 type="number"
                 value={newPrice}
                 onChange={(e) => setNewPrice(e.target.value)}
@@ -3967,9 +4021,7 @@ const Orders = () => {
                     multiple
                     options={allRiders}
                     getOptionLabel={(option) => {
-                      const status = option.status || 'offline';
-                      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
-                      return `${option.name} (${option.phoneNumber}) - ${statusLabel}`;
+                      return `${option.name} (${option.phoneNumber})`;
                     }}
                     value={selectedRiders}
                     onChange={(event, newValue) => {

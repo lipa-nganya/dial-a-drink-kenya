@@ -38,14 +38,23 @@ object ApiClient {
         val client = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
             .addInterceptor { chain ->
-                val request = chain.request().newBuilder()
+                val requestBuilder = chain.request().newBuilder()
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Accept", "application/json")
                     .addHeader("Accept-Encoding", "gzip, deflate")
                     .addHeader("ngrok-skip-browser-warning", "true")
                     .addHeader("User-Agent", "DialADrink-Driver-Android")
-                    .build()
-                chain.proceed(request)
+                
+                // Add admin token if available (for admin API calls)
+                val adminToken = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(context)
+                if (adminToken != null && adminToken.isNotEmpty()) {
+                    requestBuilder.addHeader("Authorization", "Bearer $adminToken")
+                    android.util.Log.d("ApiClient", "✅ Added Authorization header with admin token")
+                } else {
+                    android.util.Log.w("ApiClient", "⚠️ No admin token available - request may fail with 401")
+                }
+                
+                chain.proceed(requestBuilder.build())
             }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

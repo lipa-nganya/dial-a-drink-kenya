@@ -178,6 +178,90 @@ router.get('/customer/:phoneNumber', async (req, res) => {
   }
 });
 
+/**
+ * Search customers by phone number (for autocomplete)
+ * GET /api/pos/customers/search?q=phoneNumber
+ */
+router.get('/customers/search', async (req, res) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.length < 3) {
+      return res.json({ success: true, data: [] });
+    }
+    
+    const variants = buildPhoneLookupVariants(q);
+    
+    if (variants.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+    
+    // Search in Customer table
+    const customerConditions = [];
+    variants.forEach(variant => {
+      customerConditions.push({ phone: { [Op.iLike]: `%${variant}%` } });
+    });
+    
+    const customers = await db.Customer.findAll({
+      where: {
+        [Op.or]: customerConditions
+      },
+      limit: 10,
+      attributes: ['id', 'customerName', 'username', 'phone', 'email'],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Also search in Orders table for recent customers
+    const orderConditions = [];
+    variants.forEach(variant => {
+      orderConditions.push({ customerPhone: { [Op.iLike]: `%${variant}%` } });
+    });
+    
+    const orders = await db.Order.findAll({
+      where: {
+        [Op.or]: orderConditions
+      },
+      limit: 20,
+      attributes: ['customerName', 'customerPhone', 'customerEmail'],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Combine and deduplicate results
+    const customerMap = new Map();
+    
+    // Add customers from Customer table
+    customers.forEach(customer => {
+      const phone = customer.phone;
+      if (phone && !customerMap.has(phone)) {
+        customerMap.set(phone, {
+          name: customer.customerName || customer.username || 'Unknown',
+          phone: phone,
+          email: customer.email || null
+        });
+      }
+    });
+    
+    // Add customers from Orders table (if not already in map)
+    orders.forEach(order => {
+      const phone = order.customerPhone;
+      if (phone && !customerMap.has(phone)) {
+        customerMap.set(phone, {
+          name: order.customerName || 'Unknown',
+          phone: phone,
+          email: order.customerEmail || null
+        });
+      }
+    });
+    
+    const results = Array.from(customerMap.values()).slice(0, 10);
+    
+    return res.json({ success: true, data: results });
+  } catch (error) {
+    console.error('❌ Error searching customers:', error);
+    res.status(500).json({ error: 'Failed to search customers', details: error.message });
+  }
+});
+
 // Get drink by barcode for POS
 router.get('/drinks/barcode/:barcode', async (req, res) => {
   try {
@@ -273,26 +357,53 @@ router.get('/drinks/barcode/:barcode', async (req, res) => {
   }
 });
 
-// Get all drinks for POS (with inventory info)
+// Get all drinks for POS (with inventory info) - supports pagination
 router.get('/drinks', async (req, res) => {
   try {
+    const limit = parseInt(req.query.limit) || 10; // Default to 10 items per page
+    const offset = parseInt(req.query.offset) || 0; // Default to start from beginning
+    const search = req.query.search?.trim() || '';
+    
+    // Build where clause
+    const whereClause = {
+      isAvailable: {
+        [Op.ne]: false // Include drinks where isAvailable is not explicitly false
+      }
+    };
+    
+    // Add search filter if provided
+    if (search && search.length > 0) {
+      whereClause[Op.or] = [
+        { name: { [Op.iLike]: `%${search}%` } },
+        { description: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+    
+    // Optimize: Fetch drinks immediately without waiting for count
+    // Fetch limit+1 to determine hasMore without needing a count query
     const drinks = await db.Drink.findAll({
-      where: {
-        isAvailable: {
-          [Op.ne]: false // Include drinks where isAvailable is not explicitly false
-        }
-      },
+      where: whereClause,
       include: [{
         model: db.Category,
         as: 'category',
         attributes: ['id', 'name'],
         required: false // Left join - include drinks even if category is missing
       }],
-      order: [['name', 'ASC']]
+      order: [['name', 'ASC']],
+      limit: limit + 1, // Fetch one extra to determine if there are more
+      offset: offset
     });
+    
+    // Get total count only if needed (for subsequent pages or if explicitly requested)
+    // Skip count on initial load (offset 0) to speed up response
+    const totalCount = offset > 0 ? await db.Drink.count({ where: whereClause }) : null;
 
+    // Determine if there are more products (if we fetched limit+1, we have more)
+    const hasMore = drinks.length > limit;
+    const productsToReturn = hasMore ? drinks.slice(0, limit) : drinks;
+    
     // Map drinks to ensure categoryId is included even if category association failed
-    const drinksWithCategory = drinks.map(drink => {
+    const drinksWithCategory = productsToReturn.map(drink => {
       const drinkData = drink.toJSON();
       // Ensure categoryId is present
       if (!drinkData.categoryId && drink.categoryId) {
@@ -301,7 +412,13 @@ router.get('/drinks', async (req, res) => {
       return drinkData;
     });
 
-    res.json(drinksWithCategory);
+    res.json({
+      products: drinksWithCategory,
+      total: totalCount || drinksWithCategory.length, // Use count if available, otherwise estimate
+      limit: limit,
+      offset: offset,
+      hasMore: hasMore
+    });
   } catch (error) {
     console.error('❌ Error fetching drinks for POS:', error);
     console.error('Error details:', {

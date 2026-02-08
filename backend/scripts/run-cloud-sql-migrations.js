@@ -306,6 +306,45 @@ async function addOrderAdminIdAndCancellationColumns() {
   }
 }
 
+async function addPurchasePriceToDrinks() {
+  try {
+    console.log('📦 Running migration: add-purchase-price-to-drinks');
+    console.log('   Add purchasePrice column to drinks table');
+    
+    // Check if column already exists
+    const [results] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drinks' 
+      AND column_name = 'purchasePrice'
+    `);
+    
+    if (results.length > 0) {
+      console.log('   ⏭️  purchasePrice column already exists in drinks table');
+      console.log('   ✅ Migration add-purchase-price-to-drinks completed (already exists)\n');
+      return true;
+    }
+    
+    // Add the column
+    await db.sequelize.query(`
+      ALTER TABLE drinks 
+      ADD COLUMN "purchasePrice" DECIMAL(10, 2) NULL
+    `);
+    
+    console.log('   ✅ purchasePrice column added to drinks table');
+    console.log('   ✅ Migration add-purchase-price-to-drinks completed\n');
+    return true;
+  } catch (error) {
+    if (error.message.includes('already exists') || error.message.includes('duplicate')) {
+      console.log('   ⏭️  purchasePrice column already exists, skipping...');
+      console.log('   ✅ Migration add-purchase-price-to-drinks completed (already exists)\n');
+      return true;
+    }
+    console.error('   ❌ Migration add-purchase-price-to-drinks failed:', error.message);
+    throw error;
+  }
+}
+
 async function runMigrations() {
   try {
     console.log('🚀 Starting Cloud SQL migrations...\n');
@@ -347,7 +386,8 @@ async function runMigrations() {
       { name: 'add-brands-table', fn: addBrandsTable },
       { name: 'add-brand-focus', fn: addBrandFocusColumn },
       { name: 'add-driver-location-columns', fn: addDriverLocationColumns },
-      { name: 'add-order-adminId-and-cancellation-columns', fn: addOrderAdminIdAndCancellationColumns }
+      { name: 'add-order-adminId-and-cancellation-columns', fn: addOrderAdminIdAndCancellationColumns },
+      { name: 'add-purchase-price-to-drinks', fn: addPurchasePriceToDrinks }
     ];
 
     let successCount = 0;

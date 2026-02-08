@@ -23,9 +23,18 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
         
-        // Check if logged in
-        if (!SharedPrefs.isLoggedIn(this)) {
+        // Check if logged in (driver or admin)
+        if (!SharedPrefs.isLoggedIn(this) && !SharedPrefs.isAdminLoggedIn(this)) {
             navigateToLogin()
+            return
+        }
+        
+        // If admin is logged in, navigate to admin dashboard
+        if (SharedPrefs.isAdminLoggedIn(this)) {
+            val intent = Intent(this, com.dialadrink.driver.ui.admin.AdminDashboardActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            startActivity(intent)
+            finish()
             return
         }
         

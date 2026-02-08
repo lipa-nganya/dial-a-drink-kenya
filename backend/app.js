@@ -2,7 +2,22 @@ const express = require('express');
 // const cors = require('cors'); // REMOVED - using explicit headers only
 const compression = require('compression');
 const path = require('path');
-const db = require('./models');
+
+// Load models with error handling - don't fail if models can't load
+let db;
+try {
+  db = require('./models');
+} catch (modelError) {
+  console.error('⚠️ Error loading models in app.js:', modelError.message);
+  console.warn('⚠️ App will continue but database operations will fail');
+  // Create a dummy db object to prevent crashes
+  db = {
+    sequelize: {
+      authenticate: () => Promise.reject(new Error('Models not loaded')),
+      sync: () => Promise.resolve()
+    }
+  };
+}
 
 const app = express();
 
@@ -96,10 +111,11 @@ app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Max-Age', '86400');
-      console.log(`🔒 [CORS] OPTIONS headers set for origin: ${origin}`);
+      console.log(`✅ [CORS] OPTIONS headers set for origin: ${origin}, path: ${req.path}`);
       return res.status(204).end();
     } else {
-      console.warn(`🚫 [CORS] OPTIONS preflight blocked for origin: ${origin || 'none'}`);
+      console.warn(`🚫 [CORS] OPTIONS preflight blocked for origin: ${origin || 'none'}, path: ${req.path}`);
+      console.warn(`   Allowed origins include: ${allowedOrigins.slice(0, 5).join(', ')}...`);
       // Still return 204, but without CORS headers
       return res.status(204).end();
     }
@@ -114,13 +130,14 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
     
-    // Log for debugging (always log for thewolfgang.tech)
-    if (origin.includes('thewolfgang.tech')) {
-      console.log(`🔒 [CORS] Headers set for origin: ${origin}, path: ${req.path}`);
+    // Log for debugging (always log for localhost and thewolfgang.tech)
+    if (origin.includes('localhost') || origin.includes('thewolfgang.tech')) {
+      console.log(`✅ [CORS] Headers set for origin: ${origin}, path: ${req.path}`);
     }
   } else if (origin) {
     // Log when origin is blocked for debugging
     console.log(`🚫 [CORS] Origin blocked: ${origin}, path: ${req.path}`);
+    console.log(`   Allowed origins include: ${allowedOrigins.slice(0, 5).join(', ')}...`);
   }
   
   next();

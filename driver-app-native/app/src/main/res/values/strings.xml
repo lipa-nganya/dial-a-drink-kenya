@@ -28,5 +28,8 @@
     <string name="error">Error</string>
     <string name="retry">Retry</string>
     <string name="logout">Logout</string>
+    
+    <!-- Google Places API Key -->
+    <string name="google_places_api_key">AIzaSyBYs413EeQVcChjlgrOMFd7U2dy60xiirk</string>
 </resources>
 

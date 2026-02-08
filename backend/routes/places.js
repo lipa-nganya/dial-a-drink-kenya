@@ -18,56 +18,18 @@ router.post('/autocomplete', async (req, res) => {
   try {
     const { input } = req.body;
 
-    if (!input || input.length < 2) {
+    // Changed from < 2 to < 1 to allow autocomplete on first letter
+    if (!input || input.length < 1) {
       return res.json({ suggestions: [] });
     }
 
     // Normalize input for searching
     const normalizedInput = input.toLowerCase().trim();
 
-    // Check Google API first - it's fast and comprehensive
-    // Database will be checked in parallel for exact/starts-with matches only
-    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY.trim() === '') {
-      console.error('⚠️  GOOGLE_MAPS_API_KEY is not configured in environment variables');
-      // Return empty suggestions instead of 500 error - allows manual typing
-      return res.json({ 
-        suggestions: [],
-        error: 'Google Maps API key not configured. Please configure GOOGLE_MAPS_API_KEY environment variable.',
-        fromDatabase: false,
-        hasGoogleResults: false
-      });
-    }
-
-    // Call Google API immediately (don't wait for database)
-    let googleSuggestions = [];
-    try {
-      const legacyUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_MAPS_API_KEY}&components=country:ke&types=geocode|establishment`;
-      
-      const legacyResponse = await fetch(legacyUrl);
-      
-      if (legacyResponse.ok) {
-        const legacyData = await legacyResponse.json();
-        
-        if (legacyData && legacyData.predictions) {
-          googleSuggestions = legacyData.predictions.map(pred => ({
-            placeId: pred.place_id,
-            description: pred.description,
-            structuredFormat: pred.structured_formatting,
-            fromDatabase: false
-          }));
-        }
-      }
-    } catch (googleError) {
-      console.error('Places API failed:', googleError.message);
-      // Continue even if Google fails - will check database
-    }
-
-    // Check database in parallel for exact/starts-with matches only (more strict than before)
-    // This prevents database from blocking Google results with broad partial matches
+    // Check database FIRST for cost savings - only call Google if no database results
     let savedAddresses = [];
     try {
-      // Only search for addresses that start with the input (strict match)
-      // This is much more restrictive than '%input%' and won't block Google
+      // Search for addresses that start with the input (strict match)
       savedAddresses = await db.SavedAddress.findAll({
         where: {
           address: {
@@ -75,7 +37,7 @@ router.post('/autocomplete', async (req, res) => {
           }
         },
         order: [['createdAt', 'DESC']],
-        limit: 3, // Fewer database results since we have Google too
+        limit: 5, // More results from database since we check it first
         attributes: ['id', 'address', 'placeId', 'formattedAddress', 'createdAt', 'updatedAt']
       });
     } catch (dbError) {
@@ -95,31 +57,9 @@ router.post('/autocomplete', async (req, res) => {
       fromDatabase: true
     }));
 
-    // Merge results: database matches first (if any), then Google results
-    // Remove duplicates based on description (case-insensitive)
-    const allSuggestions = [];
-    const seenDescriptions = new Set();
-
-    // Add database suggestions first (they're more relevant)
-    dbSuggestions.forEach(sugg => {
-      const desc = sugg.description.toLowerCase();
-      if (!seenDescriptions.has(desc)) {
-        seenDescriptions.add(desc);
-        allSuggestions.push(sugg);
-      }
-    });
-
-    // Add Google suggestions (they're comprehensive)
-    googleSuggestions.forEach(sugg => {
-      const desc = sugg.description.toLowerCase();
-      if (!seenDescriptions.has(desc)) {
-        seenDescriptions.add(desc);
-        allSuggestions.push(sugg);
-      }
-    });
-
-    // Update search count for matched database addresses (non-blocking)
-    if (savedAddresses.length > 0) {
+    // If we have database results, return them immediately (cost savings - no Google API call)
+    if (dbSuggestions.length > 0) {
+      // Update search count for matched database addresses (non-blocking)
       Promise.all(
         savedAddresses.map(async (addr) => {
           try {
@@ -144,12 +84,54 @@ router.post('/autocomplete', async (req, res) => {
       ).catch(() => {
         // Ignore - non-critical
       });
+
+      return res.json({ 
+        suggestions: dbSuggestions, 
+        fromDatabase: true,
+        hasGoogleResults: false
+      });
     }
 
-    // Return combined results (database first, then Google)
+    // Only call Google Places API if no database results found (cost savings)
+    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY.trim() === '') {
+      console.error('⚠️  GOOGLE_MAPS_API_KEY is not configured in environment variables');
+      // Return empty suggestions instead of 500 error - allows manual typing
+      return res.json({ 
+        suggestions: [],
+        error: 'Google Maps API key not configured. Please configure GOOGLE_MAPS_API_KEY environment variable.',
+        fromDatabase: false,
+        hasGoogleResults: false
+      });
+    }
+
+    // Call Google API only if database had no results
+    let googleSuggestions = [];
+    try {
+      const legacyUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_MAPS_API_KEY}&components=country:ke&types=geocode|establishment`;
+      
+      const legacyResponse = await fetch(legacyUrl);
+      
+      if (legacyResponse.ok) {
+        const legacyData = await legacyResponse.json();
+        
+        if (legacyData && legacyData.predictions) {
+          googleSuggestions = legacyData.predictions.map(pred => ({
+            placeId: pred.place_id,
+            description: pred.description,
+            structuredFormat: pred.structured_formatting,
+            fromDatabase: false
+          }));
+        }
+      }
+    } catch (googleError) {
+      console.error('Places API failed:', googleError.message);
+      // Return empty if Google fails
+    }
+
+    // Return Google results (database had no matches)
     return res.json({ 
-      suggestions: allSuggestions, 
-      fromDatabase: dbSuggestions.length > 0,
+      suggestions: googleSuggestions, 
+      fromDatabase: false,
       hasGoogleResults: googleSuggestions.length > 0
     });
   } catch (error) {

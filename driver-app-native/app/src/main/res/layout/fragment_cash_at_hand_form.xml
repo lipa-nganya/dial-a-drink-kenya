@@ -435,6 +435,36 @@
 
                 </com.google.android.material.textfield.TextInputLayout>
 
+                <!-- Payment Type Selection -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/paymentTypeLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:hint="Payment Type"
+                    app:boxBackgroundMode="outline"
+                    app:boxBackgroundColor="@color/paper_dark"
+                    app:boxStrokeColor="@color/form_field_border_light_green"
+                    app:hintTextColor="#FFFFFF"
+                    app:hintEnabled="true"
+                    app:boxStrokeWidth="2dp"
+                    app:boxStrokeWidthFocused="2dp"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                    app:endIconMode="dropdown_menu">
+
+                    <AutoCompleteTextView
+                        android:id="@+id/paymentTypeSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#FFFFFF"
+                        android:minHeight="56dp"
+                        android:padding="16dp"
+                        android:textSize="16sp" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
                 <TextView
                     android:id="@+id/errorText"
                     android:layout_width="match_parent"
