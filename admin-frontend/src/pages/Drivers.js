@@ -596,11 +596,14 @@ const Drivers = () => {
     try {
       setLoading(true);
       const response = await api.get('/drivers');
-      setDrivers(response.data);
+      // Backend returns { success: true, data: [...] }
+      const driversData = response.data?.data || response.data || [];
+      setDrivers(Array.isArray(driversData) ? driversData : []);
       setError('');
     } catch (err) {
       console.error('Error fetching drivers:', err);
       setError(err.response?.data?.error || 'Failed to load drivers');
+      setDrivers([]); // Ensure drivers is always an array
     } finally {
       setLoading(false);
     }
