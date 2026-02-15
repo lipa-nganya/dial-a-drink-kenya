@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
     private var retrofit: Retrofit? = null
+    private var applicationContext: Context? = null
     private val baseUrl = BuildConfig.API_BASE_URL
     
     // Single Gson instance app-wide
@@ -25,6 +26,10 @@ object ApiClient {
     
     
     fun init(context: Context) {
+        // Always use application context to avoid memory leaks and ensure consistency
+        val appContext = context.applicationContext
+        applicationContext = appContext
+        
         android.util.Log.e("ApiClient", "═══════════════════════════════════════════════════════")
         android.util.Log.e("ApiClient", "🔧 INITIALIZING API CLIENT")
         android.util.Log.e("ApiClient", "🔧 BuildConfig.API_BASE_URL: $baseUrl")
@@ -38,14 +43,25 @@ object ApiClient {
         val client = OkHttpClient.Builder()
             .addInterceptor(loggingInterceptor)
             .addInterceptor { chain ->
-                val request = chain.request().newBuilder()
+                val requestBuilder = chain.request().newBuilder()
                     .addHeader("Content-Type", "application/json")
                     .addHeader("Accept", "application/json")
                     .addHeader("Accept-Encoding", "gzip, deflate")
                     .addHeader("ngrok-skip-browser-warning", "true")
                     .addHeader("User-Agent", "DialADrink-Driver-Android")
-                    .build()
-                chain.proceed(request)
+                
+                // Add admin token if available (for admin API calls)
+                // Always use application context to get the latest token
+                val ctx = applicationContext ?: appContext
+                val adminToken = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(ctx)
+                if (adminToken != null && adminToken.isNotEmpty()) {
+                    requestBuilder.addHeader("Authorization", "Bearer $adminToken")
+                    android.util.Log.d("ApiClient", "✅ Added Authorization header with admin token (length: ${adminToken.length})")
+                } else {
+                    android.util.Log.w("ApiClient", "⚠️ No admin token available - request may fail with 401")
+                }
+                
+                chain.proceed(requestBuilder.build())
             }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -58,6 +74,15 @@ object ApiClient {
             .client(client)
             .addConverterFactory(UnwrappingJsonConverterFactory(gson))
             .build()
+    }
+    
+    /**
+     * Re-initialize the API client to pick up new authentication tokens.
+     * This should be called after login to ensure the interceptor has the latest token.
+     */
+    fun reinitialize(context: Context) {
+        android.util.Log.d("ApiClient", "🔄 Re-initializing API client to refresh authentication")
+        init(context)
     }
     
     fun getApiService(): ApiService {
