@@ -45,6 +45,41 @@
                 app:cornerRadius="12dp"
                 android:layout_marginBottom="16dp" />
 
+            <!-- Order Type Selection: Walk-in or Delivery -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/orderTypeLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:hintTextColor="@color/accent"
+                app:boxStrokeColor="@color/accent"
+                app:boxStrokeColorFocused="@color/accent"
+                app:boxStrokeWidth="2dp"
+                app:boxStrokeWidthFocused="2dp"
+                app:boxBackgroundColor="@color/paper_dark"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <androidx.appcompat.widget.AppCompatSpinner
+                    android:id="@+id/orderTypeSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="56dp"
+                    android:padding="16dp"
+                    android:textColor="#FFFFFF"
+                    android:backgroundTint="@color/accent" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Staff Purchase Checkbox (only visible for Walk-in) -->
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/staffPurchaseCheckbox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Staff Purchase"
+                android:textColor="@color/text_primary_dark"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
             <!-- Cart Items List -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/cartItemsRecyclerView"
@@ -58,11 +93,14 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintTextColor="#FFFFFF"
+                app:hintTextColor="@color/accent"
                 app:boxStrokeColor="@color/accent"
+                app:boxStrokeColorFocused="@color/accent"
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
+                app:endIconMode="dropdown_menu"
+                app:endIconTint="@color/accent"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                 <androidx.appcompat.widget.AppCompatAutoCompleteTextView
@@ -71,10 +109,13 @@
                     android:layout_height="wrap_content"
                     android:hint="Customer Phone Number"
                     android:inputType="phone"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#FFFFFF"
+                    android:textColor="@color/text_primary_dark"
+                    android:textColorHint="@color/text_secondary_dark"
+                    android:textSize="16sp"
                     android:minHeight="56dp"
                     android:padding="16dp"
+                    android:singleLine="true"
+                    android:ellipsize="end"
                     android:completionThreshold="3" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -93,40 +134,15 @@
                 android:layout_marginBottom="16dp"
                 android:visibility="gone" />
 
-            <!-- Delivery Address -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/deliveryAddressLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:hintTextColor="#FFFFFF"
-                app:boxStrokeColor="@color/accent"
-                app:boxStrokeWidth="2dp"
-                app:boxStrokeWidthFocused="2dp"
-                app:boxBackgroundColor="@color/paper_dark"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <androidx.appcompat.widget.AppCompatAutoCompleteTextView
-                    android:id="@+id/deliveryAddressEditText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Delivery Address"
-                    android:inputType="textPostalAddress"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#FFFFFF"
-                    android:minHeight="56dp"
-                    android:padding="16dp"
-                    android:completionThreshold="2" />
-            </com.google.android.material.textfield.TextInputLayout>
-
             <!-- Territory Dropdown -->
             <com.google.android.material.textfield.TextInputLayout
                 android:id="@+id/territoryLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintTextColor="#FFFFFF"
+                app:hintTextColor="@color/accent"
                 app:boxStrokeColor="@color/accent"
+                app:boxStrokeColorFocused="@color/accent"
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
@@ -138,12 +154,39 @@
                     android:layout_height="wrap_content"
                     android:hint="Select Territory"
                     android:inputType="none"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#FFFFFF"
+                    android:textColor="@color/text_primary_dark"
+                    android:textColorHint="@color/text_secondary_dark"
                     android:minHeight="56dp"
                     android:padding="16dp"
                     android:focusable="false"
                     android:clickable="true" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Delivery Address -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/deliveryAddressLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:hintTextColor="@color/accent"
+                app:boxStrokeColor="@color/accent"
+                app:boxStrokeColorFocused="@color/accent"
+                app:boxStrokeWidth="2dp"
+                app:boxStrokeWidthFocused="2dp"
+                app:boxBackgroundColor="@color/paper_dark"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <androidx.appcompat.widget.AppCompatAutoCompleteTextView
+                    android:id="@+id/deliveryAddressEditText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Delivery Address"
+                    android:inputType="textPostalAddress"
+                    android:textColor="@color/text_primary_dark"
+                    android:textColorHint="@color/text_secondary_dark"
+                    android:minHeight="56dp"
+                    android:padding="16dp"
+                    android:completionThreshold="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Payment Method -->
@@ -152,25 +195,22 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintTextColor="#FFFFFF"
+                app:hintTextColor="@color/accent"
                 app:boxStrokeColor="@color/accent"
+                app:boxStrokeColorFocused="@color/accent"
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/paymentMethodEditText"
+                <androidx.appcompat.widget.AppCompatSpinner
+                    android:id="@+id/paymentMethodSpinner"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Payment Method"
-                    android:inputType="none"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#FFFFFF"
                     android:minHeight="56dp"
                     android:padding="16dp"
-                    android:focusable="false"
-                    android:clickable="true" />
+                    android:textColor="@color/text_primary_dark"
+                    android:backgroundTint="@color/accent" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Delivery Fee -->
@@ -179,8 +219,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintTextColor="#FFFFFF"
+                app:hintTextColor="@color/accent"
                 app:boxStrokeColor="@color/accent"
+                app:boxStrokeColorFocused="@color/accent"
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
@@ -192,8 +233,8 @@
                     android:layout_height="wrap_content"
                     android:hint="Delivery Fee"
                     android:inputType="numberDecimal"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#FFFFFF"
+                    android:textColor="@color/text_primary_dark"
+                    android:textColorHint="@color/text_secondary_dark"
                     android:minHeight="56dp"
                     android:padding="16dp" />
             </com.google.android.material.textfield.TextInputLayout>

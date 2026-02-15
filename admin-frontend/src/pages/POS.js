@@ -400,9 +400,43 @@ const POS = () => {
                           placeholder="Enter customer phone number"
                           size="small"
                           fullWidth
+                          sx={{
+                            '& .MuiOutlinedInput-root': {
+                              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                              '& fieldset': { borderColor: colors.border },
+                              '&:hover fieldset': { borderColor: colors.accentText },
+                              '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                            },
+                            '& .MuiInputBase-input': {
+                              color: colors.textPrimary
+                            },
+                            '& .MuiInputLabel-root': {
+                              color: colors.textSecondary
+                            },
+                            '& .MuiInputLabel-root.Mui-focused': {
+                              color: colors.accentText
+                            }
+                          }}
                         />
                       )}
-                      sx={{ flex: 1 }}
+                      sx={{ 
+                        flex: 1,
+                        '& .MuiAutocomplete-popper': {
+                          '& .MuiPaper-root': {
+                            backgroundColor: colors.paper,
+                            border: `1px solid ${colors.border}`
+                          },
+                          '& .MuiAutocomplete-option': {
+                            color: colors.textPrimary,
+                            '&:hover': {
+                              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.04)'
+                            },
+                            '&[aria-selected="true"]': {
+                              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.2)' : 'rgba(0, 224, 184, 0.1)'
+                            }
+                          }
+                        }
+                      }}
                     />
                     {customerPhone && !selectedCustomer && (
                       <Button
@@ -431,7 +465,24 @@ const POS = () => {
                     onChange={(e) => setAccountId(e.target.value)}
                     placeholder="Account ID"
                     size="small"
-                    sx={{ width: 150 }}
+                    sx={{ 
+                      width: 150,
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
                   />
                 </TableCell>
                 <TableCell>
@@ -466,9 +517,15 @@ const POS = () => {
         }}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            backgroundColor: colors.paper,
+            border: `1px solid ${colors.border}`
+          }
+        }}
       >
-        <DialogTitle>Create New Customer</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>Create New Customer</DialogTitle>
+        <DialogContent sx={{ backgroundColor: colors.paper }}>
           <TextField
             fullWidth
             label="Phone Number *"
@@ -477,6 +534,23 @@ const POS = () => {
             margin="normal"
             placeholder="e.g., 0712345678"
             disabled={creatingCustomer}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accentText },
+                '&.Mui-focused fieldset': { borderColor: colors.accentText }
+              },
+              '& .MuiInputBase-input': {
+                color: colors.textPrimary
+              },
+              '& .MuiInputLabel-root': {
+                color: colors.textSecondary
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: colors.accentText
+              }
+            }}
           />
           <TextField
             fullWidth
@@ -486,6 +560,23 @@ const POS = () => {
             margin="normal"
             placeholder="Enter customer name"
             disabled={creatingCustomer}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accentText },
+                '&.Mui-focused fieldset': { borderColor: colors.accentText }
+              },
+              '& .MuiInputBase-input': {
+                color: colors.textPrimary
+              },
+              '& .MuiInputLabel-root': {
+                color: colors.textSecondary
+              },
+              '& .MuiInputLabel-root.Mui-focused': {
+                color: colors.accentText
+              }
+            }}
           />
           {error && (
             <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
@@ -553,9 +644,43 @@ const POS = () => {
                         placeholder="Search product..."
                         size="small"
                         fullWidth
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                            '& fieldset': { borderColor: colors.border },
+                            '&:hover fieldset': { borderColor: colors.accentText },
+                            '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                          },
+                          '& .MuiInputBase-input': {
+                            color: colors.textPrimary
+                          },
+                          '& .MuiInputLabel-root': {
+                            color: colors.textSecondary
+                          },
+                          '& .MuiInputLabel-root.Mui-focused': {
+                            color: colors.accentText
+                          }
+                        }}
                       />
                     )}
-                    sx={{ minWidth: 300 }}
+                    sx={{ 
+                      minWidth: 300,
+                      '& .MuiAutocomplete-popper': {
+                        '& .MuiPaper-root': {
+                          backgroundColor: colors.paper,
+                          border: `1px solid ${colors.border}`
+                        },
+                        '& .MuiAutocomplete-option': {
+                          color: colors.textPrimary,
+                          '&:hover': {
+                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.04)'
+                          },
+                          '&[aria-selected="true"]': {
+                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.2)' : 'rgba(0, 224, 184, 0.1)'
+                          }
+                        }
+                      }
+                    }}
                   />
                 </TableCell>
                 <TableCell>
@@ -565,7 +690,24 @@ const POS = () => {
                     onChange={(e) => setProductQty(e.target.value)}
                     size="small"
                     inputProps={{ min: 1 }}
-                    sx={{ width: 100 }}
+                    sx={{ 
+                      width: 100,
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
                   />
                 </TableCell>
                 <TableCell>
@@ -576,9 +718,26 @@ const POS = () => {
                     placeholder={selectedProduct?.price || '0.00'}
                     size="small"
                     InputProps={{
-                      startAdornment: <InputAdornment position="start">KES</InputAdornment>
+                      startAdornment: <InputAdornment position="start" sx={{ color: colors.textSecondary }}>KES</InputAdornment>
                     }}
-                    sx={{ width: 150 }}
+                    sx={{ 
+                      width: 150,
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
                   />
                 </TableCell>
                 <TableCell>
@@ -638,7 +797,24 @@ const POS = () => {
                           onChange={(e) => handleUpdateQuantity(index, parseInt(e.target.value) || 0)}
                           size="small"
                           inputProps={{ min: 1 }}
-                          sx={{ width: 80 }}
+                          sx={{ 
+                            width: 80,
+                            '& .MuiOutlinedInput-root': {
+                              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                              '& fieldset': { borderColor: colors.border },
+                              '&:hover fieldset': { borderColor: colors.accentText },
+                              '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                            },
+                            '& .MuiInputBase-input': {
+                              color: colors.textPrimary
+                            },
+                            '& .MuiInputLabel-root': {
+                              color: colors.textSecondary
+                            },
+                            '& .MuiInputLabel-root.Mui-focused': {
+                              color: colors.accentText
+                            }
+                          }}
                         />
                       </TableCell>
                       <TableCell>KES {item.subTotal.toFixed(2)}</TableCell>
