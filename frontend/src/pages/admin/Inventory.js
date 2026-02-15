@@ -38,6 +38,7 @@ import {
 import { api } from '../../services/api';
 import EditDrinkDialog from '../../components/EditDrinkDialog';
 import { getBackendUrl } from '../../utils/backendUrl';
+import { stripHtml } from '../../utils/stripHtml';
 
 const InventoryPage = () => {
   const [drinks, setDrinks] = useState([]);
@@ -617,13 +618,30 @@ const InventoryPage = () => {
                   }
                 }}
               >
-                <CardMedia
-                  component="img"
-                  height="120"
-                  image={getImageUrl(drink.image)}
-                  alt={drink.name}
-                  sx={{ objectFit: 'contain', p: 1, backgroundColor: '#fff' }}
-                />
+                <Box
+                  sx={{
+                    width: '100%',
+                    height: '180px',
+                    minHeight: '180px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    backgroundColor: '#fff',
+                    overflow: 'hidden'
+                  }}
+                >
+                  <CardMedia
+                    component="img"
+                    image={getImageUrl(drink.image)}
+                    alt={drink.name}
+                    sx={{ 
+                      objectFit: 'contain', 
+                      width: '100%',
+                      height: '100%',
+                      p: 1
+                    }}
+                  />
+                </Box>
                 <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#fff' }}>
                   {/* Status Label Above Name */}
                   <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center' }}>
@@ -665,7 +683,7 @@ const InventoryPage = () => {
                       variant="body2"
                       sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: '#000' }}
                     >
-                      {drink.description}
+                      {stripHtml(drink.description)}
                     </Typography>
                   )}
 

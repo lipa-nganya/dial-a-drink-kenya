@@ -28,6 +28,7 @@ import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
+import { stripHtml } from '../utils/stripHtml';
 import DrinkCard from '../components/DrinkCard';
 
 const ProductPage = () => {
@@ -216,7 +217,7 @@ const ProductPage = () => {
   const getAvailableCapacities = () => {
     if (!product) return [];
     return Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0 
-      ? product.capacityPricing.map(pricing => pricing.capacity)
+      ? product.capacityPricing.map(pricing => pricing.capacity || pricing.size)
       : Array.isArray(product.capacity) && product.capacity.length > 0 
       ? product.capacity 
       : [];
@@ -225,8 +226,8 @@ const ProductPage = () => {
   const getPriceForCapacity = (capacity) => {
     if (!product) return 0;
     if (Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0) {
-      const pricing = product.capacityPricing.find(p => p.capacity === capacity);
-      return pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(product.price) || 0;
+      const pricing = product.capacityPricing.find(p => String(p.capacity || p.size) === String(capacity));
+      return pricing ? parseFloat(pricing.currentPrice || pricing.price) || 0 : parseFloat(product.price) || 0;
     }
     return parseFloat(product.price) || 0;
   };
@@ -492,20 +493,18 @@ const ProductPage = () => {
     
     let description = '';
     
-    // Prefer detailed description from website if available
-    if (detailedDescription && detailedDescription.length > 0) {
+    // Use the full description from database (with HTML stripped) for "For More Information" section
+    // Show the complete content, not the cleaned/promotional-removed version
+    if (product.description && product.description.length > 0) {
+      console.log(`[ProductPage] Using full product description from database, length: ${product.description.length}`);
+      // Strip HTML but keep all the content (don't remove promotional text)
+      description = stripHtml(product.description);
+    } else if (detailedDescription && detailedDescription.length > 0) {
       console.log(`[ProductPage] Using detailed description, length: ${detailedDescription.length}`);
-      // Backend already cleaned it well, just do light refinement
       description = detailedDescription;
-      description = refineLanguage(description);
-    } else if (product.description && product.description.length > 0) {
-      console.log(`[ProductPage] Using product description from database, length: ${product.description.length}`);
-      // Fallback to product description from database
-      description = cleanProductDescription(product.description);
-      description = refineLanguage(description);
     }
     
-    // If no description or cleaned description is too short, generate a refined one
+    // If no description, generate a basic one
     if (!description || description.length < 30) {
       const productType = getProductType();
       const origin = product.origin || product.country || '';
@@ -578,34 +577,35 @@ const ProductPage = () => {
         {/* Product Image */}
         <Box sx={{ width: { xs: '100%', md: '33.333%' }, flexShrink: 0 }}>
           <Card sx={{ width: '100%' }}>
-            {imageUrl && !imageError ? (
-              <CardMedia
-                component="img"
-                image={imageUrl}
-                alt={product.name}
-                sx={{ 
-                  objectFit: 'contain', 
-                  p: 2, 
-                  backgroundColor: '#fff',
-                  height: '400px',
-                  width: '100%'
-                }}
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <Box
-                sx={{
-                  height: 400,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#fff',
-                  color: '#666'
-                }}
-              >
-                <LocalBar sx={{ fontSize: 80 }} />
-              </Box>
-            )}
+            <Box
+              sx={{
+                width: '100%',
+                height: '400px',
+                minHeight: '400px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#fff',
+                overflow: 'hidden'
+              }}
+            >
+              {imageUrl && !imageError ? (
+                <CardMedia
+                  component="img"
+                  image={imageUrl}
+                  alt={product.name}
+                  sx={{ 
+                    objectFit: 'contain', 
+                    width: '100%',
+                    height: '100%',
+                    p: 2
+                  }}
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <LocalBar sx={{ fontSize: 80, color: '#666' }} />
+              )}
+            </Box>
           </Card>
           
           {/* Add to Cart Button - Mobile Only (below image) */}
@@ -760,51 +760,87 @@ const ProductPage = () => {
                   value={selectedCapacity}
                   onChange={(e) => setSelectedCapacity(e.target.value)}
                 >
-                  {availableCapacities.map((capacity) => {
-                    const price = getPriceForCapacity(capacity);
-                    const originalPrice = getOriginalPriceForCapacity(capacity);
-                    const discount = originalPrice && originalPrice > price 
-                      ? Math.round(((originalPrice - price) / originalPrice) * 100)
-                      : 0;
-                    
-                    return (
-                      <FormControlLabel
-                        key={capacity}
-                        value={capacity}
-                        control={<Radio />}
-                        label={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                              {capacity}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {originalPrice && originalPrice > price && (
-                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                                  KES {originalPrice.toFixed(2)}
-                                </Typography>
-                              )}
-                              <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
-                                KES {price.toFixed(2)}
-                              </Typography>
-                              {discount > 0 && (
-                                <Chip label={`${discount}% OFF`} size="small" color="error" />
-                              )}
-                            </Box>
-                          </Box>
-                        }
-                        sx={{
-                          border: '1px solid',
-                          borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
-                          borderRadius: 1,
-                          p: 1.5,
-                          mb: 1,
-                          '&:hover': {
-                            borderColor: colors.accentText
+                  {Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0
+                    ? (() => {
+                        // Deduplicate by capacity, keeping the first occurrence
+                        const seen = new Set();
+                        const uniquePricing = product.capacityPricing.filter(pricing => {
+                          const capacity = pricing.capacity || pricing.size;
+                          if (seen.has(capacity)) {
+                            return false;
                           }
-                        }}
-                      />
-                    );
-                  })}
+                          seen.add(capacity);
+                          return true;
+                        });
+                        
+                        return uniquePricing.map((pricing, index) => {
+                          const capacity = pricing.capacity || pricing.size;
+                          const price = parseFloat(pricing.currentPrice || pricing.price) || 0;
+                          
+                          return (
+                            <FormControlLabel
+                              key={`${product.id}-${capacity}-${index}`}
+                              value={capacity}
+                            control={<Radio />}
+                            label={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                  {capacity}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
+                                    KES {price.toFixed(2)}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            }
+                            sx={{
+                              border: '1px solid',
+                              borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
+                              borderRadius: 1,
+                              p: 1.5,
+                              mb: 1,
+                              '&:hover': {
+                                borderColor: colors.accentText
+                              }
+                            }}
+                          />
+                          );
+                        });
+                      })()
+                    : availableCapacities.map((capacity, index) => {
+                        // Fallback for drinks with capacity array but no capacityPricing
+                        const price = getPriceForCapacity(capacity);
+                        return (
+                          <FormControlLabel
+                            key={`${product.id}-${capacity}-${index}`}
+                            value={capacity}
+                            control={<Radio />}
+                            label={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                  {capacity}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
+                                    KES {price.toFixed(2)}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            }
+                            sx={{
+                              border: '1px solid',
+                              borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
+                              borderRadius: 1,
+                              p: 1.5,
+                              mb: 1,
+                              '&:hover': {
+                                borderColor: colors.accentText
+                              }
+                            }}
+                          />
+                        );
+                      })}
                 </RadioGroup>
               </FormControl>
             ) : (
