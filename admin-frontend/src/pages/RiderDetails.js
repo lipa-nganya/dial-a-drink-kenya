@@ -32,8 +32,7 @@ import {
   Email,
   Person,
   Assignment,
-  Add,
-  AccountBalance
+  Add
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
