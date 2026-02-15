@@ -29,7 +29,6 @@ import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getBackendUrl } from '../utils/backendUrl';
 import { shareProduct } from '../utils/generateShareImage';
-import { stripHtml } from '../utils/stripHtml';
 
 const DrinkCard = ({ drink }) => {
   const navigate = useNavigate();
