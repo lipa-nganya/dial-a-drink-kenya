@@ -22,7 +22,8 @@ import {
   DialogActions,
   Tabs,
   Tab,
-  Grid
+  Grid,
+  TablePagination
 } from '@mui/material';
 import {
   People,
@@ -82,23 +83,55 @@ const Customers = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [detailTab, setDetailTab] = useState(0);
+  
+  // Pagination state
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [totalCustomers, setTotalCustomers] = useState(0);
 
   useEffect(() => {
     fetchCustomers();
-  }, []);
+  }, [page, rowsPerPage]);
 
   const fetchCustomers = async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get('/admin/customers');
-      setCustomers(response.data);
+      const response = await api.get('/admin/customers', {
+        params: {
+          page: page + 1, // Backend uses 1-based pagination
+          limit: rowsPerPage
+        }
+      });
+      
+      // Handle both paginated and non-paginated responses
+      if (response.data.customers && response.data.total !== undefined) {
+        // Paginated response
+        setCustomers(response.data.customers);
+        setTotalCustomers(response.data.total);
+      } else if (Array.isArray(response.data)) {
+        // Non-paginated response (fallback)
+        setCustomers(response.data);
+        setTotalCustomers(response.data.length);
+      } else {
+        setCustomers([]);
+        setTotalCustomers(0);
+      }
     } catch (err) {
       console.error('Error fetching customers:', err);
       setError(err.response?.data?.error || 'Failed to load customers');
     } finally {
       setLoading(false);
     }
+  };
+  
+  const handleChangePage = (event, newPage) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0); // Reset to first page when changing rows per page
   };
 
   const fetchCustomerDetails = async (customerId) => {
@@ -329,6 +362,36 @@ const Customers = () => {
               )}
             </TableBody>
           </Table>
+          <TablePagination
+            component="div"
+            count={totalCustomers}
+            page={page}
+            onPageChange={handleChangePage}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            sx={{
+              color: colors.textPrimary,
+              '& .MuiTablePagination-toolbar': {
+                color: colors.textPrimary
+              },
+              '& .MuiTablePagination-selectLabel': {
+                color: colors.textPrimary
+              },
+              '& .MuiTablePagination-displayedRows': {
+                color: colors.textPrimary
+              },
+              '& .MuiIconButton-root': {
+                color: colors.textPrimary,
+                '&.Mui-disabled': {
+                  color: colors.textSecondary
+                }
+              },
+              '& .MuiSelect-root': {
+                color: colors.textPrimary
+              }
+            }}
+          />
         </TableContainer>
       )}
 

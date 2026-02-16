@@ -4456,10 +4456,23 @@ router.get('/customers', async (req, res) => {
   try {
     await syncCustomersFromOrders();
 
+    // Pagination parameters
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 25;
+    const offset = (page - 1) * limit;
+
+    // Get total count for pagination
+    const totalCustomers = await db.Customer.count();
+
+    // Get paginated customers
     const customers = await db.Customer.findAll({
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      limit: limit,
+      offset: offset
     });
 
+    // Get all orders (we still need this for stats, but it's a one-time load)
+    // In the future, we could optimize this to only load orders for the current page's customers
     const orders = await db.Order.findAll({
       attributes: ['id', 'customerName', 'customerPhone', 'customerEmail', 'totalAmount', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'createdAt'],
       order: [['createdAt', 'DESC']]
@@ -4566,7 +4579,14 @@ router.get('/customers', async (req, res) => {
       }
     });
 
-    res.json(formatted);
+    // Return paginated response
+    res.json({
+      customers: formatted,
+      total: totalCustomers,
+      page: page,
+      limit: limit,
+      totalPages: Math.ceil(totalCustomers / limit)
+    });
   } catch (error) {
     console.error('Error fetching customers:', error?.stack || error);
     res.status(500).json({ error: 'Failed to fetch customers' });
