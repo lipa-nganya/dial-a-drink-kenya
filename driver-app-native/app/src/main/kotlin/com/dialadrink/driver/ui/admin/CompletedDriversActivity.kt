@@ -47,7 +47,7 @@ class CompletedDriversActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
-        supportActionBar?.title = "Riders List"
+        supportActionBar?.title = "Completed"
         
         binding.toolbar.setNavigationOnClickListener {
             finish()

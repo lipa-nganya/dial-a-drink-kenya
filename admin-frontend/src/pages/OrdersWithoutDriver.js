@@ -75,12 +75,20 @@ const OrdersWithoutDriver = () => {
   const fetchDrivers = async () => {
     try {
       const response = await api.get('/drivers');
-      // Backend returns { success: true, data: [...] }
-      const driversData = response.data?.data || response.data || [];
-      setDrivers(Array.isArray(driversData) ? driversData : []);
+      // Ensure response.data is an array
+      const driversData = response.data;
+      if (Array.isArray(driversData)) {
+        setDrivers(driversData);
+      } else if (driversData && Array.isArray(driversData.data)) {
+        // Handle wrapped response format
+        setDrivers(driversData.data);
+      } else {
+        console.warn('Drivers response is not an array:', driversData);
+        setDrivers([]);
+      }
     } catch (err) {
       console.error('Error fetching drivers:', err);
-      setDrivers([]); // Ensure drivers is always an array
+      setDrivers([]);
     }
   };
 

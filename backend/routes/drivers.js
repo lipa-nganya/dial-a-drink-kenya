@@ -1276,11 +1276,17 @@ router.get('/', async (req, res) => {
       return driverData;
     }));
     
-    // Use sendSuccess to wrap response in ApiResponse format
-    sendSuccess(res, driversWithCreditStatus);
+    // Return raw array for web dashboard compatibility
+    // Mobile app will handle unwrapping if needed via UnwrappingJsonConverterFactory
+    // Ensure we always return an array
+    if (!Array.isArray(driversWithCreditStatus)) {
+      console.error('⚠️ driversWithCreditStatus is not an array:', typeof driversWithCreditStatus);
+      return res.json([]);
+    }
+    res.json(driversWithCreditStatus);
   } catch (error) {
     console.error('Error fetching drivers:', error);
-    sendError(res, error.message || 'Failed to fetch drivers', 500);
+    res.status(500).json({ error: error.message || 'Failed to fetch drivers' });
   }
 });
 

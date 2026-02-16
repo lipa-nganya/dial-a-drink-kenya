@@ -99,9 +99,9 @@ def getLocalApiBaseUrl() {
 
 def getDevApiBaseUrl() {
     // Development API URL (GCP) - can be overridden via gradle.properties
-    // Default to development backend (dialadrink-production project)
+    // Default to development backend (drink-suite project)
     def apiUrl = project.findProperty('DEV_API_BASE_URL') 
-        ?: 'https://deliveryos-development-backend-805803410802.us-central1.run.app'
+        ?: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app'
     // Remove /api suffix if present (ApiClient.kt adds it)
     return apiUrl.replace('/api', '').replace('/api/', '')
 }
@@ -145,9 +145,6 @@ dependencies {
     
     // Location
     implementation 'com.google.android.gms:play-services-location:21.0.1'
-    
-    // Google Places API
-    implementation 'com.google.android.libraries.places:places:3.3.0'
     
     // Socket.io
     implementation 'io.socket:socket.io-client:2.1.0'

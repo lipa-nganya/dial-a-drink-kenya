@@ -243,12 +243,20 @@ const Orders = () => {
   const fetchDrivers = async () => {
     try {
       const response = await api.get('/drivers');
-      // Backend returns { success: true, data: [...] }
-      const driversData = response.data?.data || response.data || [];
-      setDrivers(Array.isArray(driversData) ? driversData : []);
+      // Ensure response.data is an array
+      const driversData = response.data;
+      if (Array.isArray(driversData)) {
+        setDrivers(driversData);
+      } else if (driversData && Array.isArray(driversData.data)) {
+        // Handle wrapped response format
+        setDrivers(driversData.data);
+      } else {
+        console.warn('Drivers response is not an array:', driversData);
+        setDrivers([]);
+      }
     } catch (error) {
       console.error('Error fetching drivers:', error);
-      setDrivers([]); // Ensure drivers is always an array
+      setDrivers([]);
     }
   };
 
@@ -1343,9 +1351,12 @@ const Orders = () => {
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
       
-      // Backend returns { success: true, data: [...] }
-      const fetchedRiders = ridersResponse.data?.data || ridersResponse.data || [];
-      setAllRiders(Array.isArray(fetchedRiders) ? fetchedRiders : []);
+      // Ensure ridersResponse.data is an array
+      const ridersData = ridersResponse.data;
+      const fetchedRiders = Array.isArray(ridersData) 
+        ? ridersData 
+        : (ridersData && Array.isArray(ridersData.data) ? ridersData.data : []);
+      setAllRiders(fetchedRiders);
       const allOrders = ordersResponse.data || [];
       
       // Store rider locations
@@ -2357,16 +2368,12 @@ const Orders = () => {
                         ) || 0;
                         
                         // Calculate deliveryFee: totalAmount - tipAmount - itemsTotal
-                        // Only calculate if deliveryFee is truly undefined, not if it's 0
                         const tipAmount = parseFloat(orderWithBreakdown.tipAmount || 0);
                         const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
-                        const calculatedDeliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
+                        const deliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
                         
                         orderWithBreakdown.itemsTotal = Number(itemsTotal.toFixed(2));
-                        // Only set deliveryFee if it's undefined, preserve existing value if it exists (even if 0)
-                        if (orderWithBreakdown.deliveryFee === undefined) {
-                          orderWithBreakdown.deliveryFee = Number(calculatedDeliveryFee.toFixed(2));
-                        }
+                        orderWithBreakdown.deliveryFee = Number(deliveryFee.toFixed(2));
                       }
                       
                       setSelectedOrderForDetail(orderWithBreakdown);
@@ -3608,6 +3615,7 @@ const Orders = () => {
               <TextField
                 autoFocus
                 fullWidth
+                label="New Price"
                 type="number"
                 value={newPrice}
                 onChange={(e) => setNewPrice(e.target.value)}
@@ -4021,7 +4029,9 @@ const Orders = () => {
                     multiple
                     options={allRiders}
                     getOptionLabel={(option) => {
-                      return `${option.name} (${option.phoneNumber})`;
+                      const status = option.status || 'offline';
+                      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+                      return `${option.name} (${option.phoneNumber}) - ${statusLabel}`;
                     }}
                     value={selectedRiders}
                     onChange={(event, newValue) => {

@@ -12,7 +12,6 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
     private var retrofit: Retrofit? = null
-    private var applicationContext: Context? = null
     private val baseUrl = BuildConfig.API_BASE_URL
     
     // Single Gson instance app-wide
@@ -26,10 +25,6 @@ object ApiClient {
     
     
     fun init(context: Context) {
-        // Always use application context to avoid memory leaks and ensure consistency
-        val appContext = context.applicationContext
-        applicationContext = appContext
-        
         android.util.Log.e("ApiClient", "═══════════════════════════════════════════════════════")
         android.util.Log.e("ApiClient", "🔧 INITIALIZING API CLIENT")
         android.util.Log.e("ApiClient", "🔧 BuildConfig.API_BASE_URL: $baseUrl")
@@ -51,12 +46,10 @@ object ApiClient {
                     .addHeader("User-Agent", "DialADrink-Driver-Android")
                 
                 // Add admin token if available (for admin API calls)
-                // Always use application context to get the latest token
-                val ctx = applicationContext ?: appContext
-                val adminToken = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(ctx)
+                val adminToken = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(context)
                 if (adminToken != null && adminToken.isNotEmpty()) {
                     requestBuilder.addHeader("Authorization", "Bearer $adminToken")
-                    android.util.Log.d("ApiClient", "✅ Added Authorization header with admin token (length: ${adminToken.length})")
+                    android.util.Log.d("ApiClient", "✅ Added Authorization header with admin token")
                 } else {
                     android.util.Log.w("ApiClient", "⚠️ No admin token available - request may fail with 401")
                 }
@@ -77,11 +70,10 @@ object ApiClient {
     }
     
     /**
-     * Re-initialize the API client to pick up new authentication tokens.
-     * This should be called after login to ensure the interceptor has the latest token.
+     * Re-initialize the API client (useful after login to pick up new authentication token)
      */
     fun reinitialize(context: Context) {
-        android.util.Log.d("ApiClient", "🔄 Re-initializing API client to refresh authentication")
+        android.util.Log.d("ApiClient", "🔄 Re-initializing API client with updated token")
         init(context)
     }
     

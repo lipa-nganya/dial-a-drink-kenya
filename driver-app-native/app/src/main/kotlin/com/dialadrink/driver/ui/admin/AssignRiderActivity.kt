@@ -190,6 +190,9 @@ class AssignRiderActivity : AppCompatActivity() {
     private fun showOrderDetailsDialog(order: Order) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_order_details, null)
         
+        // Set dark background for the dialog view
+        dialogView.setBackgroundColor(getColor(R.color.paper_dark))
+        
         // Populate order details
         dialogView.findViewById<android.widget.TextView>(R.id.orderNumberText).text = "Order #${order.id}"
         dialogView.findViewById<android.widget.TextView>(R.id.customerPhoneText).text = order.customerPhone
@@ -199,19 +202,56 @@ class AssignRiderActivity : AppCompatActivity() {
         dialogView.findViewById<android.widget.TextView>(R.id.orderDateText).text = order.createdAt ?: "N/A"
         
         // Setup rider dropdown with order counts
+        val riderSpinnerLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.riderSpinnerLayout)
         val riderSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.riderSpinner)
-        val driversWithCounts = drivers.map { driver ->
-            "${driver.name} (${driver.phoneNumber})"
+        
+        // Set hint to "Select Rider" in white
+        riderSpinnerLayout.hint = "Select Rider"
+        riderSpinnerLayout.defaultHintTextColor = android.content.res.ColorStateList.valueOf(getColor(R.color.text_primary_dark))
+        riderSpinnerLayout.boxStrokeColor = getColor(R.color.accent)
+        
+        // Apply green border
+        val strokeColorStateList = android.content.res.ColorStateList(
+            arrayOf(
+                intArrayOf(android.R.attr.state_focused),
+                intArrayOf(android.R.attr.state_enabled),
+                intArrayOf(-android.R.attr.state_enabled),
+                intArrayOf()
+            ),
+            intArrayOf(getColor(R.color.accent), getColor(R.color.accent), getColor(R.color.accent), getColor(R.color.accent))
+        )
+        try {
+            val setBoxStrokeColorStateListMethod = riderSpinnerLayout.javaClass.getMethod(
+                "setBoxStrokeColorStateList",
+                android.content.res.ColorStateList::class.java
+            )
+            setBoxStrokeColorStateListMethod.invoke(riderSpinnerLayout, strokeColorStateList)
+        } catch (e: Exception) {
+            riderSpinnerLayout.boxStrokeColor = getColor(R.color.accent)
         }
-        val adapter = android.widget.ArrayAdapter(this, android.R.layout.simple_spinner_item, driversWithCounts)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        
+        // Create adapter with "Select Rider" as first item
+        val driversWithCounts = mutableListOf<String>()
+        driversWithCounts.add("Select Rider")
+        driversWithCounts.addAll(drivers.map { driver ->
+            "${driver.name} (${driver.phoneNumber})"
+        })
+        
+        val adapter = android.widget.ArrayAdapter(this, R.layout.item_dropdown_dark, driversWithCounts)
+        adapter.setDropDownViewResource(R.layout.item_dropdown_dark)
         riderSpinner.adapter = adapter
         
-        // Set current driver if assigned
+        // Set spinner text color to white
+        riderSpinner.setSelection(0) // Default to "Select Rider"
+        
+        // Set spinner dropdown background to dark
+        riderSpinner.setPopupBackgroundDrawable(android.graphics.drawable.ColorDrawable(getColor(R.color.paper_dark)))
+        
+        // Set current driver if assigned (offset by 1 because "Select Rider" is at index 0)
         order.driverId?.let { driverId ->
             val driverIndex = drivers.indexOfFirst { it.id == driverId }
             if (driverIndex >= 0) {
-                riderSpinner.setSelection(driverIndex)
+                riderSpinner.setSelection(driverIndex + 1) // +1 because "Select Rider" is at index 0
             }
         }
         
@@ -235,7 +275,33 @@ class AssignRiderActivity : AppCompatActivity() {
         val subtotal = order.items?.sumOf { (it.price ?: 0.0) * (it.quantity ?: 0) } ?: 0.0
         
         // Setup delivery fee - calculate from order breakdown if deliveryFee is null or 0
+        val deliveryFeeLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.deliveryFeeLayout)
         val deliveryFeeEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.deliveryFeeEditText)
+        
+        // Apply green border to delivery fee field
+        val deliveryFeeStrokeColorStateList = android.content.res.ColorStateList(
+            arrayOf(
+                intArrayOf(android.R.attr.state_focused),
+                intArrayOf(android.R.attr.state_enabled),
+                intArrayOf(-android.R.attr.state_enabled),
+                intArrayOf()
+            ),
+            intArrayOf(getColor(R.color.accent), getColor(R.color.accent), getColor(R.color.accent), getColor(R.color.accent))
+        )
+        try {
+            val setBoxStrokeColorStateListMethod = deliveryFeeLayout.javaClass.getMethod(
+                "setBoxStrokeColorStateList",
+                android.content.res.ColorStateList::class.java
+            )
+            setBoxStrokeColorStateListMethod.invoke(deliveryFeeLayout, deliveryFeeStrokeColorStateList)
+        } catch (e: Exception) {
+            deliveryFeeLayout.boxStrokeColor = getColor(R.color.accent)
+        }
+        
+        // Set text color to white
+        deliveryFeeEditText.setTextColor(getColor(R.color.text_primary_dark))
+        deliveryFeeLayout.defaultHintTextColor = android.content.res.ColorStateList.valueOf(getColor(R.color.text_primary_dark))
+        
         val actualDeliveryFee = if (order.deliveryFee != null && order.deliveryFee!! > 0.0) {
             order.deliveryFee!!
         } else {
@@ -299,7 +365,7 @@ class AssignRiderActivity : AppCompatActivity() {
         val cancelButton = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.cancelOrderButton)
         val updateButton = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.updateOrderButton)
         
-        val dialog = AlertDialog.Builder(this)
+        val dialog = AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog)
             .setView(dialogView)
             .setTitle("Order Details")
             .setNegativeButton("Close", null)
@@ -311,7 +377,12 @@ class AssignRiderActivity : AppCompatActivity() {
         
         updateButton.setOnClickListener {
             val selectedDriverIndex = riderSpinner.selectedItemPosition
-            val selectedDriver = if (selectedDriverIndex >= 0 && selectedDriverIndex < drivers.size) drivers[selectedDriverIndex] else null
+            // Account for "Select Rider" at index 0, so actual driver index is selectedDriverIndex - 1
+            val selectedDriver = if (selectedDriverIndex > 0 && (selectedDriverIndex - 1) < drivers.size) {
+                drivers[selectedDriverIndex - 1]
+            } else {
+                null
+            }
             val newDeliveryFee = deliveryFeeEditText.text.toString().toDoubleOrNull() ?: order.deliveryFee ?: 0.0
             
             // Update item prices if changed
@@ -336,7 +407,7 @@ class AssignRiderActivity : AppCompatActivity() {
     }
     
     private fun showCancelOrderConfirmation(order: Order, parentDialog: AlertDialog) {
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog)
             .setTitle("Cancel Order")
             .setMessage("Are you sure you want to cancel Order #${order.id}?")
             .setPositiveButton("Cancel Order") { _, _ ->

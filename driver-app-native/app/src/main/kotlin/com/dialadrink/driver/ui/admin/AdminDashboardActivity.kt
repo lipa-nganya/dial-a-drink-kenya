@@ -2,6 +2,7 @@ package com.dialadrink.driver.ui.admin
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Toast
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 
 class AdminDashboardActivity : AppCompatActivity() {
     private lateinit var binding: ActivityAdminDashboardBinding
+    private val TAG = "AdminDashboard"
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,7 +80,13 @@ class AdminDashboardActivity : AppCompatActivity() {
             startActivity(intent)
         }
         
-        // Row 4: Switch to Driver App (full width)
+        // Row 4: Loans
+        binding.loansCard.setOnClickListener {
+            val intent = Intent(this, LoansActivity::class.java)
+            startActivity(intent)
+        }
+        
+        // Row 5: Switch to Driver App (full width)
         binding.switchToDriverCard.setOnClickListener {
             switchToDriverApp()
         }
@@ -89,8 +97,95 @@ class AdminDashboardActivity : AppCompatActivity() {
         return true
     }
     
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        // Style menu items after they're created
+        for (i in 0 until menu.size()) {
+            val menuItem = menu.getItem(i)
+            val actionView = menuItem.actionView
+            if (actionView != null) {
+                actionView.findViewById<android.widget.TextView>(android.R.id.text1)?.setTextColor(getColor(R.color.text_primary_dark))
+            }
+        }
+        return super.onPrepareOptionsMenu(menu)
+    }
+    
+    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
+        // Style the popup menu when it opens - use a more reliable approach
+        if (featureId == android.view.Window.FEATURE_OPTIONS_PANEL || featureId == 0) {
+            // Use post to ensure menu is fully rendered before styling
+            binding.root.post {
+                try {
+                    // Get the menu's popup window using reflection
+                    val menuField = menu.javaClass.getDeclaredField("mMenu")
+                    menuField.isAccessible = true
+                    val menuImpl = menuField.get(menu)
+                    
+                    // Try different field names for the popup
+                    val popupFieldNames = listOf("mPopup", "mActionPopup", "mOverflowPopup")
+                    for (fieldName in popupFieldNames) {
+                        try {
+                            val popupField = menuImpl.javaClass.getDeclaredField(fieldName)
+                            popupField.isAccessible = true
+                            val popup = popupField.get(menuImpl)
+                            
+                            // Set background using setBackgroundDrawable or setBackground
+                            try {
+                                val setBgMethod = popup.javaClass.getMethod("setBackgroundDrawable", android.graphics.drawable.Drawable::class.java)
+                                val backgroundDrawable = android.graphics.drawable.ColorDrawable(getColor(R.color.paper_dark))
+                                setBgMethod.invoke(popup, backgroundDrawable)
+                            } catch (e: NoSuchMethodException) {
+                                try {
+                                    val setBgMethod = popup.javaClass.getMethod("setBackground", android.graphics.drawable.Drawable::class.java)
+                                    val backgroundDrawable = android.graphics.drawable.ColorDrawable(getColor(R.color.paper_dark))
+                                    setBgMethod.invoke(popup, backgroundDrawable)
+                                } catch (e2: Exception) {
+                                    // Try to get the ListView and style it
+                                    try {
+                                        val listViewField = popup.javaClass.getDeclaredField("mDropDownList")
+                                        listViewField.isAccessible = true
+                                        val listView = listViewField.get(popup) as? android.widget.ListView
+                                        listView?.setBackgroundColor(getColor(R.color.paper_dark))
+                                    } catch (e3: Exception) {
+                                        Log.d(TAG, "Could not set popup background: ${e3.message}")
+                                    }
+                                }
+                            }
+                            
+                            // Set text color for menu items by finding ListView children
+                            try {
+                                val listViewField = popup.javaClass.getDeclaredField("mDropDownList")
+                                listViewField.isAccessible = true
+                                val listView = listViewField.get(popup) as? android.widget.ListView
+                                listView?.setDivider(null)
+                                
+                                // Style menu item text colors
+                                for (i in 0 until (listView?.childCount ?: 0)) {
+                                    val child = listView?.getChildAt(i)
+                                    child?.findViewById<android.widget.TextView>(android.R.id.text1)?.setTextColor(getColor(R.color.text_primary_dark))
+                                }
+                            } catch (e: Exception) {
+                                // Ignore
+                            }
+                            break
+                        } catch (e: NoSuchFieldException) {
+                            continue
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.d(TAG, "Could not style popup menu programmatically: ${e.message}")
+                }
+            }
+        }
+        return super.onMenuOpened(featureId, menu)
+    }
+    
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
+            R.id.menu_profile -> {
+                val intent = Intent(this, AdminProfileActivity::class.java)
+                startActivity(intent)
+                true
+            }
             R.id.menu_logout -> {
                 logout()
                 true

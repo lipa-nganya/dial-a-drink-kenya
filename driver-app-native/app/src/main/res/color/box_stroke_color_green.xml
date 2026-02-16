@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Default/unfocused state - green (this is the default item, should be first) -->
+    <item android:color="@color/accent" />
+    <!-- Focused state - green -->
+    <item android:state_focused="true" android:color="@color/accent" />
+</selector>

@@ -239,7 +239,12 @@ router.post('/', async (req, res) => {
       tipAmount
     }, null, 2));
     
-    if (!customerName || !customerPhone || !deliveryAddress || !Array.isArray(items) || items.length === 0) {
+    // Check if this is a walk-in order (deliveryAddress is "In-Store Purchase" or customerPhone is "POS")
+    const isWalkInOrder = deliveryAddress === 'In-Store Purchase' || customerPhone === 'POS' || 
+                         (adminOrder && customerPhone && customerPhone.trim() === 'POS');
+    
+    // For walk-in orders, customerPhone can be "POS" placeholder. For delivery orders, it's required.
+    if (!customerName || (!isWalkInOrder && !customerPhone) || !deliveryAddress || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required fields or empty cart' });
     }
 
@@ -520,7 +525,8 @@ router.post('/', async (req, res) => {
         return cleaned; // Return cleaned version
       };
       
-      const normalizedCustomerPhone = normalizePhoneForStorage(customerPhone);
+      // Only normalize phone if it exists (walk-in orders may have null phone)
+      const normalizedCustomerPhone = customerPhone ? normalizePhoneForStorage(customerPhone) : null;
       console.log(`📱 Phone normalization: "${customerPhone}" -> "${normalizedCustomerPhone}"`);
       
       const order = await db.Order.create({

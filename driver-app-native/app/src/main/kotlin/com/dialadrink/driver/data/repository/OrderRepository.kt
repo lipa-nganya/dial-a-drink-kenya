@@ -290,6 +290,90 @@ object OrderRepository {
     }
     
     /**
+     * Get admin completed orders (all orders with status 'completed' or 'delivered')
+     * Uses the admin orders endpoint and filters by status
+     */
+    suspend fun getAdminCompletedOrders(
+        context: Context,
+        fromDate: java.util.Date? = null,
+        toDate: java.util.Date? = null,
+        forceRefresh: Boolean = false
+    ): List<Order> {
+        return try {
+            ensureApiClientInitialized(context)
+            
+            val response = ApiClient.getApiService().getAdminOrders()
+            
+            if (!response.isSuccessful || response.body() == null) {
+                Log.w(TAG, "❌ Failed to fetch admin orders: ${response.code()}")
+                return emptyList()
+            }
+            
+            val allOrders = response.body()!!
+            
+            // Filter to only completed/delivered orders
+            var completedOrders = allOrders.filter { order ->
+                order.status == "completed" || order.status == "delivered"
+            }
+            
+            // Apply date filtering if provided
+            if (fromDate != null || toDate != null) {
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                completedOrders = completedOrders.filter { order ->
+                    val orderDate = parseOrderDate(order.updatedAt ?: order.createdAt)
+                    if (orderDate == null) return@filter false
+                    
+                    val fromCheck = fromDate == null || orderDate >= fromDate
+                    val toCheck = toDate == null || orderDate <= toDate
+                    fromCheck && toCheck
+                }
+            }
+            
+            // Sort by date descending (most recent first)
+            completedOrders = completedOrders.sortedByDescending { 
+                it.updatedAt ?: it.createdAt ?: ""
+            }
+            
+            Log.d(TAG, "✅ Fetched ${completedOrders.size} admin completed orders")
+            completedOrders
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error fetching admin completed orders", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Parse order date from string format
+     * Supports multiple date formats including UTC timestamps
+     */
+    private fun parseOrderDate(dateString: String?): java.util.Date? {
+        if (dateString == null) return null
+        
+        val utcTimeZone = java.util.TimeZone.getTimeZone("UTC")
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        )
+        
+        for (format in formats) {
+            try {
+                val parser = java.text.SimpleDateFormat(format, java.util.Locale.getDefault())
+                parser.timeZone = utcTimeZone
+                val date = parser.parse(dateString)
+                if (date != null) {
+                    return date
+                }
+            } catch (e: Exception) {
+                // Try next format
+            }
+        }
+        
+        return null
+    }
+    
+    /**
      * Get pending orders (assigned to driver but not yet accepted/rejected)
      * Uses the dedicated pending orders endpoint
      */

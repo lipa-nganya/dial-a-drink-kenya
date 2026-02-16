@@ -83,20 +83,34 @@ data class AdminUser(
 )
 
 data class PhoneCheckResponse(
-    val isDriver: Boolean,
-    val isAdmin: Boolean,
     val driver: DriverInfo?,
-    val admin: AdminInfo?
+    val admin: AdminInfo?,
+    val customer: CustomerInfo? = null
+) {
+    // Computed properties for backward compatibility
+    val isDriver: Boolean get() = driver != null
+    val isAdmin: Boolean get() = admin != null
+}
+
+data class CustomerInfo(
+    val id: Int,
+    val phone: String?,
+    val username: String?,
+    val hasPin: Boolean? = null
 )
 
 data class DriverInfo(
     val id: Int,
-    val name: String
+    val name: String,
+    val phoneNumber: String? = null,
+    val hasPin: Boolean? = null
 )
 
 data class AdminInfo(
     val id: Int,
-    val username: String,
+    val name: String? = null,
+    val mobileNumber: String? = null,
+    val username: String? = null,
     val hasPin: Boolean? = null
 )
 
@@ -147,6 +161,7 @@ data class Order(
     val driverAccepted: Boolean? = null,
     val driver: Driver? = null, // Driver object from backend
     val createdAt: String? = null,
+    val updatedAt: String? = null, // Order update timestamp
     val paymentType: String? = null, // "pay_now" or "pay_on_delivery"
     val paymentMethod: String? = null, // "card", "mobile_money", "cash"
     val branch: Branch? = null,
@@ -452,6 +467,9 @@ data class Notification(
     val readAt: String? = null
 )
 
+// Alias for push notifications (used in UI)
+typealias PushNotification = Notification
+
 // Custom deserializer for capacity field that handles both string and array
 class CapacityDeserializer : JsonDeserializer<List<String>?> {
     override fun deserialize(
@@ -564,6 +582,28 @@ data class PosCartItem(
     val purchasePrice: Double? = null // Purchase price for profit/loss calculation
 ) : Parcelable
 
+// Loan Models
+data class DriverWithLoanBalance(
+    val id: Int,
+    val name: String,
+    val phoneNumber: String,
+    val loanBalance: Double
+)
+
+data class DriverWithPenaltyBalance(
+    val id: Int,
+    val name: String,
+    val phoneNumber: String,
+    val penaltyBalance: Double
+)
+
+data class CreateLoanRequest(
+    val driverId: Int,
+    val amount: Double,
+    val reason: String,
+    val type: String? = null // "loan" or "penalty", defaults to "loan" if null
+)
+
 data class CreatePosOrderRequest(
     val customerName: String,
     val customerPhone: String,
@@ -579,12 +619,12 @@ data class CreatePosOrderRequest(
 
 data class CreateOrderRequest(
     val customerName: String,
-    val customerPhone: String,
+    val customerPhone: String? = null,
     val customerEmail: String? = null,
     val deliveryAddress: String,
     val items: List<PosOrderItem>,
     val paymentType: String = "pay_now",
-    val paymentMethod: String = "cash",
+    val paymentMethod: String? = null,
     val paymentStatus: String = "paid",
     val status: String = "pending",
     val adminOrder: Boolean = true,
@@ -617,6 +657,10 @@ data class DriverTransaction(
 data class RequestPaymentRequest(
     val amount: Double,
     val type: String // "mpesa" or "reminder"
+)
+
+data class PromptOrderPaymentRequest(
+    val customerPhone: String? = null
 )
 
 data class RequestPaymentResponse(

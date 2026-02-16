@@ -6,7 +6,6 @@ const { sendSuccess, sendError } = require('../utils/apiResponse');
 const pushNotifications = require('../services/pushNotifications');
 const { verifyAdmin } = require('./admin');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
-const mpesaService = require('../services/mpesa');
 
 // Admin routes - must be defined BEFORE driver routes to avoid route conflicts
 // Admin routes - require admin authentication
@@ -466,42 +465,6 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     });
 
     console.log(`✅ Cash submission created: ID ${submission.id}, Driver ${driver.name}, Type: ${submissionType}, Amount: ${submissionAmount}${isOrderPayment ? ' (auto-approved)' : ''}`);
-
-    // If payment type is Mpesa, initiate B2C payment
-    const paymentType = detailsForSubmission?.paymentType || details?.paymentType;
-    if (paymentType === 'mpesa' && driver.phoneNumber) {
-      try {
-        // Format phone number
-        let cleanedPhone = driver.phoneNumber.replace(/\D/g, '');
-        let formattedPhone = cleanedPhone;
-        if (cleanedPhone.startsWith('0')) {
-          formattedPhone = '254' + cleanedPhone.substring(1);
-        } else if (!cleanedPhone.startsWith('254')) {
-          formattedPhone = '254' + cleanedPhone;
-        }
-
-        const b2cResult = await mpesaService.initiateB2C(
-          formattedPhone,
-          submissionAmount,
-          `Cash submission #${submission.id} - ${submissionType} - KES ${submissionAmount.toFixed(2)}`,
-          'Cash Submission'
-        );
-
-        if (b2cResult.success) {
-          // Update submission details with B2C info
-          const updatedDetails = { ...detailsForSubmission };
-          updatedDetails.b2cConversationID = b2cResult.conversationID;
-          updatedDetails.b2cOriginatorConversationID = b2cResult.originatorConversationID;
-          await submission.update({ details: updatedDetails });
-          console.log(`✅ B2C payment initiated for cash submission #${submission.id}`);
-        } else {
-          console.warn(`⚠️ B2C initiation failed for cash submission #${submission.id}: ${b2cResult.responseDescription || 'Unknown error'}`);
-        }
-      } catch (b2cError) {
-        console.error(`❌ Error initiating B2C for cash submission #${submission.id}:`, b2cError);
-        // Don't fail the submission creation if B2C fails
-      }
-    }
 
     sendSuccess(res, submission, isOrderPayment ? 'Order payment submission created and auto-approved' : 'Cash submission created successfully');
   } catch (error) {

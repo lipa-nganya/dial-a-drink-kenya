@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const DEFAULT_LOCAL_API_BASE = 'http://localhost:5001/api';
-const DEFAULT_DEV_API_BASE = 'https://deliveryos-development-backend-805803410802.us-central1.run.app/api';
+const DEFAULT_DEV_API_BASE = 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api';
 const DEFAULT_PRODUCTION_API_BASE =
   process.env.REACT_APP_PRODUCTION_API_BASE ||
   'https://deliveryos-production-backend-805803410802.us-central1.run.app/api';

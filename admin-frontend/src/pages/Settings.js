@@ -209,8 +209,6 @@ const Settings = () => {
     mobileNumber: ''
   });
   const [userFormError, setUserFormError] = useState('');
-  const [editingUser, setEditingUser] = useState(null);
-  const [userOtps, setUserOtps] = useState({}); // Store OTPs by user ID
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
   // Calculate next loan deduction run time (runs every 15 minutes)
@@ -225,6 +223,7 @@ const Settings = () => {
     fetchAllData();
     fetchCurrentUser();
     fetchStockAlertSettings();
+    fetchLoanSettings();
     calculateNextDeductionTime();
     
     // Update next deduction time every minute
@@ -267,29 +266,14 @@ const Settings = () => {
     }
   };
 
-  const handleOpenUserDialog = (user = null) => {
-    if (user) {
-      // Editing existing user
-      setEditingUser(user);
-      setUserFormData({
-        username: user.username || '',
-        email: user.email || '',
-        role: user.role || 'manager',
-        name: user.name || '',
-        mobileNumber: user.mobileNumber || ''
-      });
-    } else {
-      // Creating new user
-      setEditingUser(null);
-      setUserFormData({ username: '', email: '', role: 'manager', name: '', mobileNumber: '' });
-    }
+  const handleOpenUserDialog = () => {
+    setUserFormData({ username: '', email: '', role: 'manager', name: '', mobileNumber: '' });
     setUserFormError('');
     setOpenUserDialog(true);
   };
 
   const handleCloseUserDialog = () => {
     setOpenUserDialog(false);
-    setEditingUser(null);
     setUserFormData({ username: '', email: '', role: 'manager', name: '', mobileNumber: '' });
     setUserFormError('');
   };
@@ -340,23 +324,16 @@ const Settings = () => {
         ? { role: userFormData.role, name: userFormData.name, mobileNumber: userFormData.mobileNumber }
         : userFormData;
       
-      if (editingUser) {
-        // Update existing user
-        await api.put(`/admin/users/${editingUser.id}`, payload);
-        setNotification({ message: 'User updated successfully!' });
-      } else {
-        // Create new user
-        await api.post('/admin/users', payload);
-        const successMessage = userFormData.role === 'shop_agent' 
-          ? 'Shop agent created successfully! Click the WhatsApp icon to send the invite.' 
-          : 'User created and invite email sent successfully!';
-        setNotification({ message: successMessage });
-      }
+      await api.post('/admin/users', payload);
+      const successMessage = userFormData.role === 'shop_agent' 
+        ? 'Shop agent created successfully! Click the WhatsApp icon to send the invite.' 
+        : 'User created and invite email sent successfully!';
+      setNotification({ message: successMessage });
       handleCloseUserDialog();
       fetchUsers();
     } catch (error) {
-      console.error('Error saving user:', error);
-      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || (editingUser ? 'Failed to update user' : 'Failed to create user');
+      console.error('Error creating user:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Failed to create user';
       const errorDetails = error.response?.data?.errors ? JSON.stringify(error.response.data.errors) : '';
       setUserFormError(errorMessage + (errorDetails ? `: ${errorDetails}` : ''));
     }
@@ -369,7 +346,6 @@ const Settings = () => {
         fetchNotifications(),
         fetchSmsSettings(),
         fetchDeliverySettings(),
-        fetchLoanSettings(),
         fetchCountdowns(),
         fetchHeroImage(),
         fetchBrandFocus(),
@@ -1103,10 +1079,8 @@ Welcome aboard! 🎉`;
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Name/Username</TableCell>
-                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Email</TableCell>
-                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Phone Number</TableCell>
+                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Email/Mobile</TableCell>
                       <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Role</TableCell>
-                      <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>OTP</TableCell>
                       <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Created</TableCell>
                       <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
                     </TableRow>
@@ -1118,10 +1092,7 @@ Welcome aboard! 🎉`;
                           {user.role === 'shop_agent' ? (user.name || user.username) : user.username}
                         </TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>
-                          {user.email || '—'}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textPrimary }}>
-                          {user.mobileNumber || '—'}
+                          {user.role === 'shop_agent' ? (user.mobileNumber || user.email) : user.email}
                         </TableCell>
                         <TableCell>
                           <Chip
@@ -1139,57 +1110,6 @@ Welcome aboard! 🎉`;
                           />
                         </TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>
-                          {user.mobileNumber && (user.role === 'admin' || user.role === 'manager' || user.role === 'super_admin') ? (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <IconButton
-                                size="small"
-                                onClick={async () => {
-                                  try {
-                                    const response = await api.get(`/admin/users/${user.id}/otps`);
-                                    if (response.data?.hasOtp) {
-                                      const otpInfo = response.data;
-                                      setUserOtps({
-                                        ...userOtps,
-                                        [user.id]: otpInfo
-                                      });
-                                      setNotification({
-                                        message: `OTP: ${otpInfo.otpCode}${otpInfo.isExpired ? ' (Expired)' : ''}${otpInfo.isUsed ? ' (Used)' : ''}`,
-                                        type: otpInfo.isExpired || otpInfo.isUsed ? 'warning' : 'info'
-                                      });
-                                    } else {
-                                      setNotification({
-                                        message: response.data?.message || 'No active OTP found',
-                                        type: 'info'
-                                      });
-                                    }
-                                  } catch (error) {
-                                    console.error('Error fetching OTP:', error);
-                                    setError(error.response?.data?.error || 'Failed to fetch OTP');
-                                  }
-                                }}
-                                sx={{
-                                  color: colors.accentText,
-                                  '&:hover': {
-                                    backgroundColor: 'rgba(0, 224, 184, 0.1)'
-                                  }
-                                }}
-                                title="Show OTP"
-                              >
-                                <Phone />
-                              </IconButton>
-                              {userOtps[user.id] && (
-                                <Chip
-                                  label={userOtps[user.id].otpCode}
-                                  size="small"
-                                  color={userOtps[user.id].isExpired || userOtps[user.id].isUsed ? 'default' : 'success'}
-                                />
-                              )}
-                            </Box>
-                          ) : (
-                            '—'
-                          )}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textPrimary }}>
                           {new Date(user.createdAt).toLocaleDateString('en-US', {
                             year: 'numeric',
                             month: 'short',
@@ -1197,19 +1117,6 @@ Welcome aboard! 🎉`;
                           })}
                         </TableCell>
                         <TableCell>
-                          <IconButton
-                            onClick={() => handleOpenUserDialog(user)}
-                            size="small"
-                            sx={{
-                              color: colors.accentText,
-                              '&:hover': {
-                                backgroundColor: 'rgba(0, 224, 184, 0.1)'
-                              }
-                            }}
-                            title="Edit User"
-                          >
-                            <Edit />
-                          </IconButton>
                           {user.role === 'shop_agent' && (
                             <IconButton
                               onClick={async () => {
@@ -1543,7 +1450,6 @@ Welcome aboard! 🎉`;
                           onClick={() => {
                             setShowDeliverySettings(false);
                             fetchDeliverySettings();
-        fetchLoanSettings();
                           }}
                           disabled={deliverySettingsLoading}
                           sx={{
@@ -3300,10 +3206,7 @@ Welcome aboard! 🎉`;
         }}
       >
         <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
-          {editingUser 
-            ? (userFormData.role === 'shop_agent' ? 'Edit Shop Agent' : 'Edit User')
-            : (userFormData.role === 'shop_agent' ? 'Add Shop Agent' : 'Invite New User')
-          }
+          {userFormData.role === 'shop_agent' ? 'Add Shop Agent' : 'Invite New User'}
         </DialogTitle>
         <DialogContent sx={{ backgroundColor: colors.paper }}>
           {userFormError && (
@@ -3345,7 +3248,6 @@ Welcome aboard! 🎉`;
               >
                 <MenuItem value="manager">Manager</MenuItem>
                 <MenuItem value="admin">Admin</MenuItem>
-                <MenuItem value="super_admin">Super Admin</MenuItem>
                 <MenuItem value="shop_agent">Shop Agent</MenuItem>
               </Select>
             </FormControl>
@@ -3462,39 +3364,10 @@ Welcome aboard! 🎉`;
                     }
                   }}
                   placeholder="user@example.com"
-                  helperText="Used for web app login"
                 />
-                <TextField
-                  label="Phone Number"
-                  fullWidth
-                  value={userFormData.mobileNumber}
-                  onChange={(e) => setUserFormData({ ...userFormData, mobileNumber: e.target.value })}
-                  sx={{ 
-                    mb: 2,
-                    '& .MuiOutlinedInput-root': {
-                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                      '& fieldset': { borderColor: colors.border },
-                      '&:hover fieldset': { borderColor: colors.accentText },
-                      '&.Mui-focused fieldset': { borderColor: colors.accentText }
-                    },
-                    '& .MuiInputBase-input': {
-                      color: colors.textPrimary
-                    },
-                    '& .MuiInputLabel-root': {
-                      color: colors.textSecondary
-                    },
-                    '& .MuiInputLabel-root.Mui-focused': {
-                      color: colors.accentText
-                    }
-                  }}
-                  placeholder="e.g., +254712345678"
-                  helperText="Used for mobile app login"
-                />
-                {!editingUser && (
-                  <Alert severity="info" sx={{ mt: 2 }}>
-                    An invite email will be sent to the user. They will need to set their password using the link in the email.
-                  </Alert>
-                )}
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  An invite email will be sent to the user. They will need to set their password using the link in the email.
+                </Alert>
               </>
             )}
           </Box>
@@ -3519,7 +3392,7 @@ Welcome aboard! 🎉`;
               }
             }}
           >
-            {editingUser ? 'Update' : (userFormData.role === 'shop_agent' ? 'Create Shop Agent' : 'Send Invite')}
+            {userFormData.role === 'shop_agent' ? 'Create Shop Agent' : 'Send Invite'}
           </Button>
         </DialogActions>
       </Dialog>

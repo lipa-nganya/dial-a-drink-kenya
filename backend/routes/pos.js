@@ -178,90 +178,6 @@ router.get('/customer/:phoneNumber', async (req, res) => {
   }
 });
 
-/**
- * Search customers by phone number (for autocomplete)
- * GET /api/pos/customers/search?q=phoneNumber
- */
-router.get('/customers/search', async (req, res) => {
-  try {
-    const { q } = req.query;
-    
-    if (!q || q.length < 3) {
-      return res.json({ success: true, data: [] });
-    }
-    
-    const variants = buildPhoneLookupVariants(q);
-    
-    if (variants.length === 0) {
-      return res.json({ success: true, data: [] });
-    }
-    
-    // Search in Customer table
-    const customerConditions = [];
-    variants.forEach(variant => {
-      customerConditions.push({ phone: { [Op.iLike]: `%${variant}%` } });
-    });
-    
-    const customers = await db.Customer.findAll({
-      where: {
-        [Op.or]: customerConditions
-      },
-      limit: 10,
-      attributes: ['id', 'customerName', 'username', 'phone', 'email'],
-      order: [['createdAt', 'DESC']]
-    });
-    
-    // Also search in Orders table for recent customers
-    const orderConditions = [];
-    variants.forEach(variant => {
-      orderConditions.push({ customerPhone: { [Op.iLike]: `%${variant}%` } });
-    });
-    
-    const orders = await db.Order.findAll({
-      where: {
-        [Op.or]: orderConditions
-      },
-      limit: 20,
-      attributes: ['customerName', 'customerPhone', 'customerEmail'],
-      order: [['createdAt', 'DESC']]
-    });
-    
-    // Combine and deduplicate results
-    const customerMap = new Map();
-    
-    // Add customers from Customer table
-    customers.forEach(customer => {
-      const phone = customer.phone;
-      if (phone && !customerMap.has(phone)) {
-        customerMap.set(phone, {
-          name: customer.customerName || customer.username || 'Unknown',
-          phone: phone,
-          email: customer.email || null
-        });
-      }
-    });
-    
-    // Add customers from Orders table (if not already in map)
-    orders.forEach(order => {
-      const phone = order.customerPhone;
-      if (phone && !customerMap.has(phone)) {
-        customerMap.set(phone, {
-          name: order.customerName || 'Unknown',
-          phone: phone,
-          email: order.customerEmail || null
-        });
-      }
-    });
-    
-    const results = Array.from(customerMap.values()).slice(0, 10);
-    
-    return res.json({ success: true, data: results });
-  } catch (error) {
-    console.error('❌ Error searching customers:', error);
-    res.status(500).json({ error: 'Failed to search customers', details: error.message });
-  }
-});
-
 // Get drink by barcode for POS
 router.get('/drinks/barcode/:barcode', async (req, res) => {
   try {
@@ -357,12 +273,10 @@ router.get('/drinks/barcode/:barcode', async (req, res) => {
   }
 });
 
-// Get all drinks for POS (with inventory info) - supports pagination
+// Get all drinks for POS (with inventory info)
 router.get('/drinks', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10; // Default to 10 items per page
-    const offset = parseInt(req.query.offset) || 0; // Default to start from beginning
-    const search = req.query.search?.trim() || '';
+    const { search, limit = 10, offset = 0 } = req.query;
     
     // Build where clause
     const whereClause = {
@@ -372,17 +286,23 @@ router.get('/drinks', async (req, res) => {
     };
     
     // Add search filter if provided
-    if (search && search.length > 0) {
+    if (search && search.trim()) {
       whereClause[Op.or] = [
-        { name: { [Op.iLike]: `%${search}%` } },
-        { description: { [Op.iLike]: `%${search}%` } }
+        { name: { [Op.like]: `%${search.trim()}%` } },
+        { barcode: { [Op.like]: `%${search.trim()}%` } }
       ];
     }
     
-    // Optimize: Fetch drinks immediately without waiting for count
-    // Fetch limit+1 to determine hasMore without needing a count query
+    // Get total count for pagination
+    const total = await db.Drink.count({ where: whereClause });
+    
+    // Get paginated drinks
+    const limitNum = parseInt(limit) || 10;
+    const offsetNum = parseInt(offset) || 0;
+    
     const drinks = await db.Drink.findAll({
       where: whereClause,
+      attributes: ['id', 'name', 'price', 'stock', 'barcode', 'capacity', 'purchasePrice', 'categoryId'],
       include: [{
         model: db.Category,
         as: 'category',
@@ -390,33 +310,33 @@ router.get('/drinks', async (req, res) => {
         required: false // Left join - include drinks even if category is missing
       }],
       order: [['name', 'ASC']],
-      limit: limit + 1, // Fetch one extra to determine if there are more
-      offset: offset
+      limit: limitNum,
+      offset: offsetNum
     });
-    
-    // Get total count only if needed (for subsequent pages or if explicitly requested)
-    // Skip count on initial load (offset 0) to speed up response
-    const totalCount = offset > 0 ? await db.Drink.count({ where: whereClause }) : null;
 
-    // Determine if there are more products (if we fetched limit+1, we have more)
-    const hasMore = drinks.length > limit;
-    const productsToReturn = hasMore ? drinks.slice(0, limit) : drinks;
-    
     // Map drinks to ensure categoryId is included even if category association failed
-    const drinksWithCategory = productsToReturn.map(drink => {
+    const drinksWithCategory = drinks.map(drink => {
       const drinkData = drink.toJSON();
       // Ensure categoryId is present
       if (!drinkData.categoryId && drink.categoryId) {
         drinkData.categoryId = drink.categoryId;
       }
+      // Ensure stock is a number (default to 0 if null/undefined)
+      if (drinkData.stock === null || drinkData.stock === undefined) {
+        drinkData.stock = 0;
+      }
       return drinkData;
     });
 
+    // Calculate hasMore
+    const hasMore = (offsetNum + drinksWithCategory.length) < total;
+
+    // Return response in the format expected by Android app
     res.json({
       products: drinksWithCategory,
-      total: totalCount || drinksWithCategory.length, // Use count if available, otherwise estimate
-      limit: limit,
-      offset: offset,
+      total: total,
+      limit: limitNum,
+      offset: offsetNum,
       hasMore: hasMore
     });
   } catch (error) {

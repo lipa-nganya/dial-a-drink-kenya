@@ -34,7 +34,7 @@ class UnwrappingJsonConverterFactory(
         retrofit: Retrofit
     ): Converter<ResponseBody, *>? {
         val adapter = gson.getAdapter(TypeToken.get(type))
-        return UnwrappingConverter(gson, adapter)
+        return UnwrappingConverter(gson, adapter, type)
     }
 
     private class RequestConverter(
@@ -52,7 +52,8 @@ class UnwrappingJsonConverterFactory(
 
     private class UnwrappingConverter(
         private val gson: Gson,
-        private val adapter: TypeAdapter<*>
+        private val adapter: TypeAdapter<*>,
+        private val type: Type
     ) : Converter<ResponseBody, Any> {
 
         @Throws(IOException::class)
@@ -66,17 +67,13 @@ class UnwrappingJsonConverterFactory(
                 (bytes[0].toInt() and 0xFF) == 0x1f && 
                 (bytes[1].toInt() and 0xFF) == 0x8b
             
-            var raw = try {
-                if (isGzip) {
-                    // Decompress gzip
-                    val gzipStream = java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes))
-                    gzipStream.bufferedReader(Charsets.UTF_8).use { it.readText() }.trim()
-                } else {
-                    // Not compressed, read as UTF-8 string
-                    String(bytes, Charsets.UTF_8).trim()
-                }
-            } catch (e: Exception) {
-                throw IOException("Failed to decode response body: ${e.message}", e)
+            var raw = if (isGzip) {
+                // Decompress gzip
+                val gzipStream = java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(bytes))
+                gzipStream.bufferedReader(Charsets.UTF_8).use { it.readText() }.trim()
+            } else {
+                // Not compressed, read as UTF-8 string
+                String(bytes, Charsets.UTF_8).trim()
             }
 
             // First, try to detect if the response is a stringified JSON
@@ -109,50 +106,44 @@ class UnwrappingJsonConverterFactory(
                 }
             }
 
-            // Validate raw string before parsing
-            if (raw.isEmpty()) {
-                throw IOException("Empty response body")
-            }
-            
             // Now try to parse the unwrapped JSON
             val reader = JsonReader(StringReader(raw))
             reader.isLenient = true
             return try {
                 adapter.read(reader) ?: throw IOException("Failed to parse JSON")
             } catch (e: Exception) {
-                // Close the reader before trying alternative parsing
+                // If parsing fails, check if the expected type is ApiResponse<T> and the response is a raw array
+                // In this case, we need to wrap the array in ApiResponse format
                 try {
-                    reader.close()
-                } catch (closeException: Exception) {
-                    // Ignore close errors
+                    val typeName = type.toString()
+                    if (typeName.contains("ApiResponse") && raw.trim().startsWith("[")) {
+                        // Response is a raw array but we expect ApiResponse<T>
+                        // Wrap it: {"success": true, "data": [...]}
+                        val wrappedJson = """{"success":true,"data":$raw}"""
+                        val wrappedReader = JsonReader(StringReader(wrappedJson))
+                        wrappedReader.isLenient = true
+                        return adapter.read(wrappedReader) ?: throw IOException("Failed to parse wrapped JSON")
+                    }
+                } catch (wrapException: Exception) {
+                    // If wrapping fails, continue with original error handling
                 }
                 
                 // If parsing fails, check if raw is still a stringified JSON
                 // This can happen if the response is double-stringified
-                if (raw.startsWith("\"") && raw.endsWith("\"") && raw.length > 2) {
+                if (raw.startsWith("\"") && raw.endsWith("\"")) {
                     try {
                         // Try parsing as string first, then parse that string as JSON
                         val stringValue = gson.fromJson(raw, String::class.java)
-                        if (stringValue != null && stringValue.isNotEmpty()) {
-                            val reader2 = JsonReader(StringReader(stringValue))
-                            reader2.isLenient = true
-                            try {
-                                return adapter.read(reader2) ?: throw IOException("Failed to parse unwrapped JSON")
-                            } finally {
-                                reader2.close()
-                            }
-                        }
+                        val reader2 = JsonReader(StringReader(stringValue))
+                        reader2.isLenient = true
+                        return adapter.read(reader2) ?: throw IOException("Failed to parse unwrapped JSON")
                     } catch (e2: Exception) {
-                        throw IOException("Failed to parse JSON after unwrapping. Raw length: ${raw.length}, starts with: ${raw.take(200)}", e2)
+                        throw IOException("Failed to parse JSON after unwrapping. Raw starts with: ${raw.take(200)}", e2)
                     }
                 }
-                throw IOException("Failed to parse JSON. Raw length: ${raw.length}, starts with: ${raw.take(200)}. Error: ${e.message}", e)
+                throw IOException("Failed to parse JSON. Raw starts with: ${raw.take(200)}", e)
             } finally {
-                try {
-                    reader.close()
-                } catch (closeException: Exception) {
-                    // Ignore close errors - reader may already be closed
-                }
+                reader.close()
             }
         }
     }

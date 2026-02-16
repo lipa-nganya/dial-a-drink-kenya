@@ -36,13 +36,12 @@ class PendingOrdersActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPendingOrdersBinding
     private val TAG = "PendingOrders"
     private var isLoading = false
+    private var isAdminMode = false
     private val orderAssignedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             refreshOrdersFromRepository()
         }
     }
-    
-    private var isAdminMode = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +86,7 @@ class PendingOrdersActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
+        supportActionBar?.title = if (isAdminMode) "Pending Orders" else "Pending Orders"
         
         binding.toolbar.setNavigationOnClickListener {
             finish()
@@ -101,6 +101,7 @@ class PendingOrdersActivity : AppCompatActivity() {
     }
     
     private fun setupSocketConnection() {
+        if (isAdminMode) return
         val driverId = SharedPrefs.getDriverId(this) ?: return
         
         SocketService.connect(
@@ -281,34 +282,59 @@ class PendingOrdersActivity : AppCompatActivity() {
                 try {
                     val profitLoss = calculateProfitLoss(order)
                     if (profitLoss != null) {
-                        cardBinding.profitLossLabel.visibility = View.VISIBLE
-                        cardBinding.profitLossChip.visibility = View.VISIBLE
-                        val profitAmount = Math.abs(profitLoss)
-                        if (profitLoss >= 0) {
-                            cardBinding.profitLossChip.text = "PROFIT +KES ${String.format("%.2f", profitAmount)}"
-                            cardBinding.profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#4caf50")) // Green
+                        // Find profit/loss views in the card
+                        val profitLossLabel = card.findViewById<android.widget.TextView>(R.id.profitLossLabel)
+                        val profitLossChip = card.findViewById<com.google.android.material.chip.Chip>(R.id.profitLossChip)
+                        
+                        if (profitLossLabel != null && profitLossChip != null) {
+                            profitLossLabel.visibility = View.VISIBLE
+                            profitLossChip.visibility = View.VISIBLE
+                            val profitAmount = Math.abs(profitLoss)
+                            if (profitLoss >= 0) {
+                                profitLossChip.text = "PROFIT +KES ${String.format("%.2f", profitAmount)}"
+                                profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#4caf50")) // Green
+                            } else {
+                                profitLossChip.text = "LOSS -KES ${String.format("%.2f", profitAmount)}"
+                                profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#f44336")) // Red
+                            }
                         } else {
-                            cardBinding.profitLossChip.text = "LOSS -KES ${String.format("%.2f", profitAmount)}"
-                            cardBinding.profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#f44336")) // Red
+                            Log.d(TAG, "Profit/loss views not found in layout")
                         }
                     } else {
-                        cardBinding.profitLossLabel.visibility = View.GONE
-                        cardBinding.profitLossChip.visibility = View.GONE
+                        // Hide profit/loss views if calculation returns null
+                        val profitLossLabel = card.findViewById<android.widget.TextView>(R.id.profitLossLabel)
+                        val profitLossChip = card.findViewById<com.google.android.material.chip.Chip>(R.id.profitLossChip)
+                        profitLossLabel?.visibility = View.GONE
+                        profitLossChip?.visibility = View.GONE
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error displaying profit/loss: ${e.message}", e)
-                    cardBinding.profitLossLabel.visibility = View.GONE
-                    cardBinding.profitLossChip.visibility = View.GONE
+                    // Hide profit/loss views on error
+                    val profitLossLabel = card.findViewById<android.widget.TextView>(R.id.profitLossLabel)
+                    val profitLossChip = card.findViewById<com.google.android.material.chip.Chip>(R.id.profitLossChip)
+                    profitLossLabel?.visibility = View.GONE
+                    profitLossChip?.visibility = View.GONE
                 }
             } else {
-                cardBinding.profitLossLabel.visibility = View.GONE
-                cardBinding.profitLossChip.visibility = View.GONE
+                // Hide profit/loss views in driver mode
+                val profitLossLabel = card.findViewById<android.widget.TextView>(R.id.profitLossLabel)
+                val profitLossChip = card.findViewById<com.google.android.material.chip.Chip>(R.id.profitLossChip)
+                profitLossLabel?.visibility = View.GONE
+                profitLossChip?.visibility = View.GONE
             }
             
             // In admin mode, hide accept/reject buttons (admin can't accept/reject orders)
             if (isAdminMode) {
                 cardBinding.acceptButton.visibility = View.GONE
                 cardBinding.rejectButton.visibility = View.GONE
+                cardBinding.actionButtons.visibility = View.GONE
+                
+                // Make card clickable to navigate to assign rider
+                card.setOnClickListener {
+                    val intent = Intent(this, com.dialadrink.driver.ui.admin.AssignRiderActivity::class.java)
+                    intent.putExtra("orderId", order.id)
+                    startActivity(intent)
+                }
             } else {
                 // Accept button
                 cardBinding.acceptButton.setOnClickListener {
@@ -337,6 +363,61 @@ class PendingOrdersActivity : AppCompatActivity() {
             errorText.setPadding(32, 32, 32, 32)
             errorCard.addView(errorText)
             return errorCard
+        }
+    }
+    
+    private fun calculateProfitLoss(order: Order): Double? {
+        try {
+            val totalAmount = order.totalAmount ?: 0.0
+            val deliveryFee = order.deliveryFee ?: 0.0
+            val orderItems = order.items ?: emptyList()
+            
+            Log.d(TAG, "💰 Calculating profit/loss for Order #${order.id}: totalAmount=$totalAmount, deliveryFee=$deliveryFee, itemsCount=${orderItems.size}")
+            
+            if (orderItems.isEmpty()) {
+                Log.d(TAG, "⚠️ Order #${order.id} has no items, cannot calculate profit/loss")
+                return null
+            }
+            
+            var totalPurchaseCost = 0.0
+            var hasPurchasePrice = false
+            
+            orderItems.forEach { item ->
+                try {
+                    val drink = item.drink
+                    if (drink != null) {
+                        Log.d(TAG, "  📦 Item: ${drink.name}, purchasePrice=${drink.purchasePrice}, quantity=${item.quantity}")
+                        if (drink.purchasePrice != null) {
+                            val purchasePrice = drink.purchasePrice
+                            if (purchasePrice >= 0) {
+                                val quantity = item.quantity ?: 0
+                                totalPurchaseCost += purchasePrice * quantity
+                                hasPurchasePrice = true
+                                Log.d(TAG, "    ✅ Added to cost: ${purchasePrice * quantity}")
+                            }
+                        } else {
+                            Log.d(TAG, "    ⚠️ No purchase price for ${drink.name}")
+                        }
+                    } else {
+                        Log.d(TAG, "    ⚠️ Item has no drink data")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error calculating purchase cost for item: ${e.message}")
+                }
+            }
+            
+            // Only return profit/loss if at least one item has a purchase price
+            return if (hasPurchasePrice) {
+                val profit = totalAmount - totalPurchaseCost - deliveryFee
+                Log.d(TAG, "✅ Order #${order.id} profit/loss: $profit (totalAmount=$totalAmount - purchaseCost=$totalPurchaseCost - deliveryFee=$deliveryFee)")
+                profit
+            } else {
+                Log.d(TAG, "⚠️ Order #${order.id} has no items with purchase price, cannot calculate profit/loss")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error calculating profit/loss: ${e.message}", e)
+            return null
         }
     }
     
@@ -476,61 +557,6 @@ class PendingOrdersActivity : AppCompatActivity() {
             .setMessage(message)
             .setPositiveButton("OK", null)
             .show()
-    }
-    
-    private fun calculateProfitLoss(order: Order): Double? {
-        try {
-            val totalAmount = order.totalAmount ?: 0.0
-            val deliveryFee = order.deliveryFee ?: 0.0
-            val orderItems = order.items ?: emptyList()
-            
-            Log.d(TAG, "💰 Calculating profit/loss for Order #${order.id}: totalAmount=$totalAmount, deliveryFee=$deliveryFee, itemsCount=${orderItems.size}")
-            
-            if (orderItems.isEmpty()) {
-                Log.d(TAG, "⚠️ Order #${order.id} has no items, cannot calculate profit/loss")
-                return null
-            }
-            
-            var totalPurchaseCost = 0.0
-            var hasPurchasePrice = false
-            
-            orderItems.forEach { item ->
-                try {
-                    val drink = item.drink
-                    if (drink != null) {
-                        Log.d(TAG, "  📦 Item: ${drink.name}, purchasePrice=${drink.purchasePrice}, quantity=${item.quantity}")
-                        if (drink.purchasePrice != null) {
-                            val purchasePrice = drink.purchasePrice
-                            if (purchasePrice >= 0) {
-                                val quantity = item.quantity ?: 0
-                                totalPurchaseCost += purchasePrice * quantity
-                                hasPurchasePrice = true
-                                Log.d(TAG, "    ✅ Added to cost: ${purchasePrice * quantity}")
-                            }
-                        } else {
-                            Log.d(TAG, "    ⚠️ No purchase price for ${drink.name}")
-                        }
-                    } else {
-                        Log.d(TAG, "    ⚠️ Item has no drink data")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error calculating purchase cost for item: ${e.message}")
-                }
-            }
-            
-            // Only return profit/loss if at least one item has a purchase price
-            return if (hasPurchasePrice) {
-                val profit = totalAmount - totalPurchaseCost - deliveryFee
-                Log.d(TAG, "✅ Order #${order.id} profit/loss: $profit (totalAmount=$totalAmount - purchaseCost=$totalPurchaseCost - deliveryFee=$deliveryFee)")
-                profit
-            } else {
-                Log.d(TAG, "⚠️ Order #${order.id} has no items with purchase price, cannot calculate profit/loss")
-                null
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error calculating profit/loss: ${e.message}", e)
-            return null
-        }
     }
 }
 

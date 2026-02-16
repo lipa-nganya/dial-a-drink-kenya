@@ -181,4 +181,3 @@ class OtpVerificationActivity : AppCompatActivity() {
         binding.errorText.visibility = View.VISIBLE
     }
 }
-

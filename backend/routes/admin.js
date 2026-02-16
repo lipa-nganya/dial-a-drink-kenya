@@ -5877,6 +5877,301 @@ router.post('/stops', verifyAdmin, async (req, res) => {
 });
 
 /**
+ * Create a loan
+ * POST /api/admin/loans
+ */
+router.post('/loans', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId, amount, reason, type = 'loan' } = req.body; // 'type' can be 'loan' or 'penalty'
+
+    if (!driverId || !amount || !reason) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'driverId, amount, and reason are required' 
+      });
+    }
+
+    const loanAmount = parseFloat(amount);
+    if (isNaN(loanAmount) || loanAmount <= 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Amount must be a positive number' 
+      });
+    }
+
+    // Check if driver exists
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Driver not found' 
+      });
+    }
+
+    let newRecord;
+    if (type === 'penalty') {
+      // Create penalty
+      newRecord = await db.Penalty.create({
+        driverId: parseInt(driverId),
+        amount: loanAmount,
+        balance: loanAmount, // Initial balance equals amount
+        reason: reason.trim(),
+        createdBy: req.admin.id
+      });
+      res.status(201).json({
+        success: true,
+        data: newRecord,
+        message: 'Penalty created successfully'
+      });
+    } else {
+      // Create loan (default)
+      newRecord = await db.Loan.create({
+        driverId: parseInt(driverId),
+        amount: loanAmount,
+        balance: loanAmount, // Initial balance equals amount
+        reason: reason.trim(),
+        status: 'active',
+        createdBy: req.admin.id
+      });
+      res.status(201).json({
+        success: true,
+        data: newRecord,
+        message: 'Loan created successfully'
+      });
+    }
+  } catch (error) {
+    console.error(`Error creating ${req.body.type || 'loan'}:`, error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || `Failed to create ${req.body.type || 'loan'}` 
+    });
+  }
+});
+
+/**
+ * Create a penalty (alias for POST /api/admin/loans with type=penalty)
+ * POST /api/admin/penalties
+ */
+router.post('/penalties', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId, amount, reason } = req.body;
+
+    if (!driverId || !amount || !reason) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'driverId, amount, and reason are required' 
+      });
+    }
+
+    const penaltyAmount = parseFloat(amount);
+    if (isNaN(penaltyAmount) || penaltyAmount <= 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Amount must be a positive number' 
+      });
+    }
+
+    // Check if driver exists
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Driver not found' 
+      });
+    }
+
+    // Create penalty
+    const newPenalty = await db.Penalty.create({
+      driverId: parseInt(driverId),
+      amount: penaltyAmount,
+      balance: penaltyAmount, // Initial balance equals amount
+      reason: reason.trim(),
+      createdBy: req.admin.id
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newPenalty,
+      message: 'Penalty created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating penalty:', error);
+    res.status(500).json({ 
+      success: false,
+      error: error.message || 'Failed to create penalty' 
+    });
+  }
+});
+
+/**
+ * Get driver loan balance (excluding penalties)
+ * GET /api/admin/drivers/:driverId/loan-balance
+ */
+router.get('/drivers/:driverId/loan-balance', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    
+    // Get all active loans for this driver
+    const loans = await db.Loan.findAll({
+      where: {
+        driverId: parseInt(driverId),
+        status: 'active'
+      }
+    });
+    
+    // Sum up the balances
+    const remainingLoanAmount = loans.reduce((sum, loan) => {
+      return sum + parseFloat(loan.balance || 0);
+    }, 0);
+    
+    const { sendSuccess } = require('../utils/apiResponse');
+    sendSuccess(res, {
+      remainingLoanAmount: remainingLoanAmount
+    });
+  } catch (error) {
+    console.error('Error fetching loan balance:', error);
+    const { sendError } = require('../utils/apiResponse');
+    sendError(res, error.message || 'Failed to fetch loan balance', 500);
+  }
+});
+
+/**
+ * Get driver penalty balance
+ * GET /api/admin/drivers/:driverId/penalty-balance
+ */
+router.get('/drivers/:driverId/penalty-balance', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    
+    // Get all penalties for this driver (penalties don't have status, they're all active until paid)
+    const penalties = await db.Penalty.findAll({
+      where: {
+        driverId: parseInt(driverId)
+      }
+    });
+    
+    // Sum up the balances
+    const remainingPenaltyBalance = penalties.reduce((sum, penalty) => {
+      return sum + parseFloat(penalty.balance || 0);
+    }, 0);
+    
+    const { sendSuccess } = require('../utils/apiResponse');
+    sendSuccess(res, {
+      remainingPenaltyBalance: remainingPenaltyBalance
+    });
+  } catch (error) {
+    console.error('Error fetching penalty balance:', error);
+    const { sendError } = require('../utils/apiResponse');
+    sendError(res, error.message || 'Failed to fetch penalty balance', 500);
+  }
+});
+
+/**
+ * Pay off penalty
+ * POST /api/admin/penalties/pay-off
+ */
+router.post('/penalties/pay-off', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId, paymentMethod, phoneNumber } = req.body;
+
+    if (!driverId || !paymentMethod) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'driverId and paymentMethod are required' 
+      });
+    }
+
+    // Check if driver exists
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ 
+        success: false,
+        error: 'Driver not found' 
+      });
+    }
+
+    // Get all penalties for this driver
+    const penalties = await db.Penalty.findAll({
+      where: {
+        driverId: parseInt(driverId)
+      }
+    });
+
+    // Calculate total penalty balance
+    const totalPenaltyBalance = penalties.reduce((sum, penalty) => {
+      return sum + parseFloat(penalty.balance || 0);
+    }, 0);
+
+    if (totalPenaltyBalance <= 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'No penalty balance to pay off' 
+      });
+    }
+
+    if (paymentMethod === 'cash') {
+      // Mark all penalties as paid (set balance to 0)
+      for (const penalty of penalties) {
+        if (parseFloat(penalty.balance || 0) > 0) {
+          await penalty.update({ balance: 0 });
+        }
+      }
+
+      const { sendSuccess } = require('../utils/apiResponse');
+      sendSuccess(res, {
+        message: 'Penalty paid off successfully (Cash Received)',
+        totalPaid: totalPenaltyBalance
+      });
+    } else if (paymentMethod === 'mpesa') {
+      if (!phoneNumber || !phoneNumber.trim()) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Phone number is required for M-Pesa payment' 
+        });
+      }
+
+      // Format phone number
+      const cleanedPhone = phoneNumber.replace(/\D/g, '');
+      let formattedPhone = cleanedPhone;
+      
+      if (cleanedPhone.startsWith('0')) {
+        formattedPhone = '254' + cleanedPhone.substring(1);
+      } else if (!cleanedPhone.startsWith('254')) {
+        formattedPhone = '254' + cleanedPhone;
+      }
+
+      // Initiate STK push for penalty payment
+      const stkResult = await mpesaService.initiateSTKPush(
+        formattedPhone,
+        totalPenaltyBalance,
+        null, // No order ID for penalty payment
+        `Penalty payment for driver #${driverId}`
+      );
+
+      if (stkResult.success) {
+        const { sendSuccess } = require('../utils/apiResponse');
+        sendSuccess(res, {
+          message: 'M-Pesa prompt sent successfully',
+          checkoutRequestID: stkResult.checkoutRequestID
+        });
+      } else {
+        const { sendError } = require('../utils/apiResponse');
+        sendError(res, stkResult.error || 'Failed to initiate M-Pesa payment', 500);
+      }
+    } else {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid payment method. Use "cash" or "mpesa"' 
+      });
+    }
+  } catch (error) {
+    console.error('Error paying off penalty:', error);
+    const { sendError } = require('../utils/apiResponse');
+    sendError(res, error.message || 'Failed to pay off penalty', 500);
+  }
+});
+
+/**
  * Update a stop
  * PATCH /api/admin/stops/:id
  */

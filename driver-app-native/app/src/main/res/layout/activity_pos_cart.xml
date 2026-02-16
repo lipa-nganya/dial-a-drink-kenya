@@ -97,8 +97,6 @@
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
-                app:endIconMode="dropdown_menu"
-                app:endIconTint="@color/accent"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
                 <androidx.appcompat.widget.AppCompatAutoCompleteTextView
@@ -107,13 +105,10 @@
                     android:layout_height="wrap_content"
                     android:hint="Customer Phone Number"
                     android:inputType="phone"
-                    android:textColor="@color/text_primary_dark"
+                    android:textColor="#FFFFFF"
                     android:textColorHint="#FFFFFF"
-                    android:textSize="16sp"
                     android:minHeight="56dp"
                     android:padding="16dp"
-                    android:singleLine="true"
-                    android:ellipsize="end"
                     android:completionThreshold="3" />
             </com.google.android.material.textfield.TextInputLayout>
 
@@ -131,33 +126,6 @@
                 android:textColor="@color/accent"
                 android:layout_marginBottom="16dp"
                 android:visibility="gone" />
-
-            <!-- Territory Dropdown -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/territoryLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:hintTextColor="#FFFFFF"
-                app:boxStrokeColor="@color/accent"
-                app:boxStrokeWidth="2dp"
-                app:boxStrokeWidthFocused="2dp"
-                app:boxBackgroundColor="@color/paper_dark"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/territoryEditText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="Select Territory"
-                    android:inputType="none"
-                    android:textColor="@color/text_primary_dark"
-                    android:textColorHint="#FFFFFF"
-                    android:minHeight="56dp"
-                    android:padding="16dp"
-                    android:focusable="false"
-                    android:clickable="true" />
-            </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Delivery Address -->
             <com.google.android.material.textfield.TextInputLayout
@@ -178,11 +146,38 @@
                     android:layout_height="wrap_content"
                     android:hint="Delivery Address"
                     android:inputType="textPostalAddress"
-                    android:textColor="@color/text_primary_dark"
+                    android:textColor="#FFFFFF"
                     android:textColorHint="#FFFFFF"
                     android:minHeight="56dp"
                     android:padding="16dp"
-                    android:completionThreshold="1" />
+                    android:completionThreshold="2" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Territory Dropdown -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/territoryLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:hintTextColor="#FFFFFF"
+                app:boxStrokeColor="@color/accent"
+                app:boxStrokeWidth="2dp"
+                app:boxStrokeWidthFocused="2dp"
+                app:boxBackgroundColor="@color/paper_dark"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/territoryEditText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Select Territory"
+                    android:inputType="none"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#FFFFFF"
+                    android:minHeight="56dp"
+                    android:padding="16dp"
+                    android:focusable="false"
+                    android:clickable="true" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Payment Method -->
@@ -227,7 +222,7 @@
                     android:layout_height="wrap_content"
                     android:hint="Delivery Fee"
                     android:inputType="numberDecimal"
-                    android:textColor="@color/text_primary_dark"
+                    android:textColor="#FFFFFF"
                     android:textColorHint="#FFFFFF"
                     android:minHeight="56dp"
                     android:padding="16dp" />

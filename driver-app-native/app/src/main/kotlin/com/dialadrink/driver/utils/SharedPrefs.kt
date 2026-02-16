@@ -3,6 +3,7 @@ package com.dialadrink.driver.utils
 import android.content.Context
 import android.content.SharedPreferences
 import com.dialadrink.driver.data.model.Order
+import com.dialadrink.driver.data.model.PushNotification
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
@@ -188,6 +189,143 @@ object SharedPrefs {
             isLoggedIn(context) -> "driver"
             else -> "none"
         }
+    }
+    
+    // Push Notifications
+    private const val KEY_PUSH_NOTIFICATIONS = "push_notifications"
+    
+    fun savePushNotifications(context: Context, notifications: List<PushNotification>) {
+        val prefs = getPrefs(context)
+        val json = gson.toJson(notifications)
+        prefs.edit().putString(KEY_PUSH_NOTIFICATIONS, json).apply()
+    }
+    
+    fun getPushNotifications(context: Context): List<PushNotification> {
+        val prefs = getPrefs(context)
+        val json = prefs.getString(KEY_PUSH_NOTIFICATIONS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<PushNotification>>() {}.type
+            gson.fromJson<List<PushNotification>>(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    fun addPushNotification(context: Context, notification: PushNotification) {
+        val notifications = getPushNotifications(context).toMutableList()
+        notifications.add(0, notification) // Add to beginning
+        // Keep only last 100 notifications
+        val trimmed = notifications.take(100)
+        savePushNotifications(context, trimmed)
+    }
+    
+    fun clearPushNotifications(context: Context) {
+        val prefs = getPrefs(context)
+        prefs.edit().remove(KEY_PUSH_NOTIFICATIONS).apply()
+    }
+    
+    // POS Cart persistence
+    private const val KEY_POS_CART = "pos_cart"
+    private const val KEY_POS_CART_CUSTOMER_PHONE = "pos_cart_customer_phone"
+    private const val KEY_POS_CART_DELIVERY_ADDRESS = "pos_cart_delivery_address"
+    private const val KEY_POS_CART_TERRITORY_ID = "pos_cart_territory_id"
+    private const val KEY_POS_CART_PAYMENT_METHOD = "pos_cart_payment_method"
+    private const val KEY_POS_CART_DELIVERY_FEE = "pos_cart_delivery_fee"
+    private const val KEY_POS_CART_ORDER_TYPE = "pos_cart_order_type"
+    
+    fun savePosCart(context: Context, cart: List<com.dialadrink.driver.data.model.PosCartItem>) {
+        val prefs = getPrefs(context)
+        val json = gson.toJson(cart)
+        prefs.edit().putString(KEY_POS_CART, json).apply()
+    }
+    
+    fun getPosCart(context: Context): List<com.dialadrink.driver.data.model.PosCartItem> {
+        val prefs = getPrefs(context)
+        val json = prefs.getString(KEY_POS_CART, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<com.dialadrink.driver.data.model.PosCartItem>>() {}.type
+            gson.fromJson<List<com.dialadrink.driver.data.model.PosCartItem>>(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    fun clearPosCart(context: Context) {
+        val prefs = getPrefs(context)
+        prefs.edit()
+            .remove(KEY_POS_CART)
+            .remove(KEY_POS_CART_CUSTOMER_PHONE)
+            .remove(KEY_POS_CART_DELIVERY_ADDRESS)
+            .remove(KEY_POS_CART_TERRITORY_ID)
+            .remove(KEY_POS_CART_PAYMENT_METHOD)
+            .remove(KEY_POS_CART_DELIVERY_FEE)
+            .remove(KEY_POS_CART_ORDER_TYPE)
+            .apply()
+    }
+    
+    fun savePosCartOrderType(context: Context, orderType: String?) {
+        val prefs = getPrefs(context)
+        if (orderType != null) {
+            prefs.edit().putString(KEY_POS_CART_ORDER_TYPE, orderType).apply()
+        } else {
+            prefs.edit().remove(KEY_POS_CART_ORDER_TYPE).apply()
+        }
+    }
+    
+    fun getPosCartOrderType(context: Context): String? {
+        return getPrefs(context).getString(KEY_POS_CART_ORDER_TYPE, null)
+    }
+    
+    fun savePosCartCustomerPhone(context: Context, phone: String) {
+        getPrefs(context).edit().putString(KEY_POS_CART_CUSTOMER_PHONE, phone).apply()
+    }
+    
+    fun getPosCartCustomerPhone(context: Context): String? {
+        return getPrefs(context).getString(KEY_POS_CART_CUSTOMER_PHONE, null)
+    }
+    
+    fun savePosCartDeliveryAddress(context: Context, address: String) {
+        getPrefs(context).edit().putString(KEY_POS_CART_DELIVERY_ADDRESS, address).apply()
+    }
+    
+    fun getPosCartDeliveryAddress(context: Context): String? {
+        return getPrefs(context).getString(KEY_POS_CART_DELIVERY_ADDRESS, null)
+    }
+    
+    fun savePosCartTerritoryId(context: Context, territoryId: Int?) {
+        val prefs = getPrefs(context)
+        if (territoryId != null) {
+            prefs.edit().putInt(KEY_POS_CART_TERRITORY_ID, territoryId).apply()
+        } else {
+            prefs.edit().remove(KEY_POS_CART_TERRITORY_ID).apply()
+        }
+    }
+    
+    fun getPosCartTerritoryId(context: Context): Int? {
+        val id = getPrefs(context).getInt(KEY_POS_CART_TERRITORY_ID, -1)
+        return if (id == -1) null else id
+    }
+    
+    fun savePosCartPaymentMethod(context: Context, paymentMethod: String?) {
+        val prefs = getPrefs(context)
+        if (paymentMethod != null) {
+            prefs.edit().putString(KEY_POS_CART_PAYMENT_METHOD, paymentMethod).apply()
+        } else {
+            prefs.edit().remove(KEY_POS_CART_PAYMENT_METHOD).apply()
+        }
+    }
+    
+    fun getPosCartPaymentMethod(context: Context): String? {
+        return getPrefs(context).getString(KEY_POS_CART_PAYMENT_METHOD, null)
+    }
+    
+    fun savePosCartDeliveryFee(context: Context, deliveryFee: Double) {
+        getPrefs(context).edit().putString(KEY_POS_CART_DELIVERY_FEE, deliveryFee.toString()).apply()
+    }
+    
+    fun getPosCartDeliveryFee(context: Context): Double? {
+        val feeStr = getPrefs(context).getString(KEY_POS_CART_DELIVERY_FEE, null)
+        return feeStr?.toDoubleOrNull()
     }
 }
 

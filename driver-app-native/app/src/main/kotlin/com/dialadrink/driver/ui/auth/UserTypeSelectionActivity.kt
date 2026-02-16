@@ -14,6 +14,8 @@ import kotlinx.coroutines.launch
 class UserTypeSelectionActivity : AppCompatActivity() {
     private lateinit var binding: ActivityUserTypeSelectionBinding
     private var phone: String = ""
+    private var driverHasPin: Boolean = false
+    private var adminHasPin: Boolean = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -26,11 +28,25 @@ class UserTypeSelectionActivity : AppCompatActivity() {
             return
         }
         
+        // Get PIN status from intent (if passed from PhoneNumberActivity)
+        driverHasPin = intent.getBooleanExtra("driverHasPin", false)
+        adminHasPin = intent.getBooleanExtra("adminHasPin", false)
+        
+        android.util.Log.d("UserTypeSelectionActivity", "📥 Received PIN status - driverHasPin: $driverHasPin, adminHasPin: $adminHasPin")
+        
         setupViews()
     }
     
     private fun setupViews() {
         binding.phoneText.text = "Phone: $phone"
+        
+        binding.changePhoneButton.setOnClickListener {
+            // Navigate back to phone number entry to change phone number
+            val intent = Intent(this, PhoneNumberActivity::class.java)
+            intent.flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK
+            startActivity(intent)
+            finish()
+        }
         
         binding.driverButton.setOnClickListener {
             // User selected driver - proceed with driver login flow
@@ -48,6 +64,22 @@ class UserTypeSelectionActivity : AppCompatActivity() {
     }
     
     private fun checkDriverAndProceed() {
+        android.util.Log.d("UserTypeSelectionActivity", "🔍 checkDriverAndProceed called - driverHasPin: $driverHasPin")
+        
+        // If we already know PIN status from PhoneNumberActivity, use it
+        if (driverHasPin) {
+            android.util.Log.d("UserTypeSelectionActivity", "🔐 Driver has PIN (from previous check) - navigating to PIN login")
+            val intent = Intent(this, PinLoginActivity::class.java)
+            intent.putExtra("phone", phone)
+            intent.putExtra("userType", "driver")
+            startActivity(intent)
+            finish()
+            return
+        }
+        
+        android.util.Log.d("UserTypeSelectionActivity", "⚠️ driverHasPin is false, will check via API")
+        
+        // Otherwise, check driver PIN status
         lifecycleScope.launch {
             try {
                 // Ensure ApiClient is initialized
@@ -156,6 +188,21 @@ class UserTypeSelectionActivity : AppCompatActivity() {
     }
     
     private fun checkAdminAndProceed() {
+        android.util.Log.d("UserTypeSelectionActivity", "🔍 checkAdminAndProceed called - adminHasPin: $adminHasPin")
+        
+        // If we already know PIN status from PhoneNumberActivity, use it
+        if (adminHasPin) {
+            android.util.Log.d("UserTypeSelectionActivity", "🔐 Admin has PIN (from previous check) - navigating to admin login")
+            val intent = Intent(this, com.dialadrink.driver.ui.admin.AdminLoginActivity::class.java)
+            intent.putExtra("phone", phone)
+            startActivity(intent)
+            finish()
+            return
+        }
+        
+        android.util.Log.d("UserTypeSelectionActivity", "⚠️ adminHasPin is false, will check via API")
+        
+        // Otherwise, check admin PIN status
         lifecycleScope.launch {
             try {
                 if (!ApiClient.isInitialized()) {
@@ -168,11 +215,11 @@ class UserTypeSelectionActivity : AppCompatActivity() {
                 if (phoneCheckResponse.isSuccessful && phoneCheckResponse.body()?.success == true) {
                     val phoneCheck = phoneCheckResponse.body()!!.data
                     val adminInfo = phoneCheck?.admin
-                    val adminHasPin = adminInfo?.hasPin ?: false
+                    val hasPin = adminInfo?.hasPin ?: false
                     
-                    android.util.Log.d("UserTypeSelectionActivity", "🔐 Admin PIN status: $adminHasPin")
+                    android.util.Log.d("UserTypeSelectionActivity", "🔐 Admin PIN status: $hasPin")
                     
-                    if (adminHasPin) {
+                    if (hasPin) {
                         // Admin has PIN - go to PIN login
                         android.util.Log.d("UserTypeSelectionActivity", "🔐 Admin has PIN - navigating to PIN login")
                         val intent = Intent(this@UserTypeSelectionActivity, com.dialadrink.driver.ui.admin.AdminLoginActivity::class.java)

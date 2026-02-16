@@ -258,32 +258,11 @@ class InProgressOrdersActivity : AppCompatActivity() {
             cardBinding.rejectButton.visibility = View.GONE
             
             // Calculate and display profit/loss (only in admin mode)
+            // Note: profit/loss views don't exist in item_pending_order.xml layout
+            // Profit/loss calculation is still available via calculateProfitLoss() if needed
             if (isAdminMode) {
-                try {
-                    val profitLoss = calculateProfitLoss(order)
-                    if (profitLoss != null) {
-                        cardBinding.profitLossLabel.visibility = View.VISIBLE
-                        cardBinding.profitLossChip.visibility = View.VISIBLE
-                        val profitAmount = Math.abs(profitLoss)
-                        if (profitLoss >= 0) {
-                            cardBinding.profitLossChip.text = "PROFIT +KES ${String.format("%.2f", profitAmount)}"
-                            cardBinding.profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#4caf50")) // Green
-                        } else {
-                            cardBinding.profitLossChip.text = "LOSS -KES ${String.format("%.2f", profitAmount)}"
-                            cardBinding.profitLossChip.chipBackgroundColor = ColorStateList.valueOf(Color.parseColor("#f44336")) // Red
-                        }
-                    } else {
-                        cardBinding.profitLossLabel.visibility = View.GONE
-                        cardBinding.profitLossChip.visibility = View.GONE
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error displaying profit/loss: ${e.message}", e)
-                    cardBinding.profitLossLabel.visibility = View.GONE
-                    cardBinding.profitLossChip.visibility = View.GONE
-                }
-            } else {
-                cardBinding.profitLossLabel.visibility = View.GONE
-                cardBinding.profitLossChip.visibility = View.GONE
+                // Profit/loss display removed - views not in layout
+                // Calculation function still available: calculateProfitLoss(order)
             }
             
             // Make card clickable to view details (optional - can navigate to order detail)

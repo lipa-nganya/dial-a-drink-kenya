@@ -49,7 +49,8 @@ interface ApiService {
     @POST("admin/auth/mobile-login")
     suspend fun adminMobileLogin(@Body request: AdminMobileLoginRequest): Response<ApiResponse<AdminMobileLoginResponse>>
     
-    // Check if phone exists as both driver and admin
+    // Check if phone exists as both driver and admin (public endpoint, no auth required)
+    // Using admin endpoint which is now public (moved before verifyAdmin middleware)
     @GET("admin/check-phone/{phone}")
     suspend fun checkPhoneForUserTypes(@Path("phone") phone: String): Response<ApiResponse<PhoneCheckResponse>>
     
@@ -262,6 +263,9 @@ interface ApiService {
         @Query("summary") summary: Boolean? = null
     ): Response<ApiResponse<List<Order>>>
     
+    @GET("admin/orders")
+    suspend fun getAdminOrders(): Response<List<Order>>
+    
     @GET("admin/drivers/completed")
     suspend fun getCompletedDrivers(): Response<ApiResponse<List<Driver>>>
     
@@ -278,6 +282,15 @@ interface ApiService {
     
     @GET("drivers")
     suspend fun getDrivers(): Response<ApiResponse<List<Driver>>>
+    
+    @GET("admin/drivers/loans")
+    suspend fun getDriversWithLoanBalances(): Response<ApiResponse<List<DriverWithLoanBalance>>>
+    
+    @GET("admin/drivers/penalties")
+    suspend fun getDriversWithPenaltyBalances(): Response<ApiResponse<List<DriverWithPenaltyBalance>>>
+    
+    @POST("admin/loans")
+    suspend fun createLoan(@Body request: CreateLoanRequest): Response<ApiResponse<Any>>
     
     @PATCH("admin/orders/{orderId}/driver")
     suspend fun assignDriverToOrder(
@@ -303,4 +316,10 @@ interface ApiService {
         @Path("orderId") orderId: Int,
         @Body request: UpdateOrderStatusRequest
     ): Response<ApiResponse<Order>>
+    
+    @POST("admin/orders/{orderId}/prompt-payment")
+    suspend fun promptOrderPayment(
+        @Path("orderId") orderId: Int,
+        @Body request: PromptOrderPaymentRequest? = null
+    ): Response<ApiResponse<Any>>
 }

@@ -96,9 +96,6 @@ class AdminLoginActivity : AppCompatActivity() {
                         if (loginResponse.token != null && loginResponse.token.isNotEmpty()) {
                             SharedPrefs.saveAdminToken(this@AdminLoginActivity, loginResponse.token)
                             android.util.Log.d("AdminLoginActivity", "✅ Admin token saved successfully")
-                            // Re-initialize API client to pick up the new token
-                            com.dialadrink.driver.data.api.ApiClient.reinitialize(this@AdminLoginActivity)
-                            android.util.Log.d("AdminLoginActivity", "✅ API client re-initialized with new token")
                         } else {
                             android.util.Log.e("AdminLoginActivity", "❌ Admin token is null or empty in login response")
                         }

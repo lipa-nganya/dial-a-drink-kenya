@@ -2390,26 +2390,9 @@ router.post('/callback', async (req, res) => {
             const transactionDate = items.find(item => item.Name === 'TransactionDate')?.Value;
             const phoneNumber = items.find(item => item.Name === 'PhoneNumber')?.Value;
 
-            // Payment request from admin (not order payment submission)
-            const notes = cashSettlementTransaction.notes || '';
-            if (notes.indexOf('Payment request from admin') !== -1) {
-              // Update transaction status to completed
-              await cashSettlementTransaction.update({
-                status: 'completed',
-                paymentStatus: 'paid',
-                receiptNumber: receiptNumber || null,
-                transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-                phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
-                notes: `${notes}\nM-Pesa payment confirmed. Receipt: ${receiptNumber || 'N/A'}`
-              });
-              
-              console.log(`✅ Payment request transaction #${cashSettlementTransaction.id} marked as completed. Receipt: ${receiptNumber || 'N/A'}`);
-              
-              // Cash at hand was already updated when request was made, so no need to update again
-              // Transaction is now complete
-            }
             // Order payment submission (Pay on Delivery: driver remits order cost + 50% via M-Pesa)
-            else if (notes.indexOf('order_payment_submission') !== -1 && cashSettlementTransaction.orderId) {
+            const notes = cashSettlementTransaction.notes || '';
+            if (notes.indexOf('order_payment_submission') !== -1 && cashSettlementTransaction.orderId) {
               try {
                 const result = await processOrderPaymentSubmission(cashSettlementTransaction, {
                   receiptNumber,
@@ -2472,27 +2455,10 @@ router.post('/callback', async (req, res) => {
           } else {
             // Payment failed
             console.error(`❌ Cash settlement payment failed. ResultCode: ${resultCode}`);
-            
-            // If this is a payment request from admin, restore driver's cash at hand
-            const notes = cashSettlementTransaction.notes || '';
-            if (notes.indexOf('Payment request from admin') !== -1 && cashSettlementTransaction.driverId) {
-              const driver = await db.Driver.findByPk(cashSettlementTransaction.driverId);
-              if (driver) {
-                const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-                const requestedAmount = Math.abs(parseFloat(cashSettlementTransaction.amount || 0));
-                const restoredCashAtHand = currentCashAtHand + requestedAmount; // Restore the deducted amount
-                await driver.update({
-                  cashAtHand: restoredCashAtHand,
-                  lastActivity: new Date()
-                });
-                console.log(`💰 Restored driver ${cashSettlementTransaction.driverId} cash at hand: ${currentCashAtHand.toFixed(2)} → ${restoredCashAtHand.toFixed(2)} (payment request failed)`);
-              }
-            }
-            
             await cashSettlementTransaction.update({
               status: 'failed',
               paymentStatus: 'failed',
-              notes: `M-Pesa payment failed: ResultCode ${resultCode}${notes.indexOf('Payment request from admin') !== -1 ? ' - Cash at hand restored' : ''}`
+              notes: `M-Pesa payment failed: ResultCode ${resultCode}`
             });
             return; // Exit early since we processed the callback (even though it failed)
           }

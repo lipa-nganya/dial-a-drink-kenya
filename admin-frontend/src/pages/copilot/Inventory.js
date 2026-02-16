@@ -144,6 +144,7 @@ const Inventory = () => {
         categoryId: categoryId // Required by backend
       };
       
+      // Only update purchase price if it was changed
       if (editPurchasePrice !== '' && editPurchasePrice !== null && editPurchasePrice !== undefined) {
         const parsedPurchasePrice = parseFloat(editPurchasePrice);
         if (!isNaN(parsedPurchasePrice) && parsedPurchasePrice >= 0) {
@@ -151,6 +152,7 @@ const Inventory = () => {
         }
       }
       
+      // Only update selling price if it was changed
       if (editSellingPrice !== '' && editSellingPrice !== null && editSellingPrice !== undefined) {
         const parsedSellingPrice = parseFloat(editSellingPrice);
         if (!isNaN(parsedSellingPrice) && parsedSellingPrice >= 0) {
@@ -160,26 +162,29 @@ const Inventory = () => {
       
       await api.put(`/admin/drinks/${item.id}`, updates);
       
-      // Refresh data
-      await fetchAnalytics();
-      await fetchZeroPurchasePriceItems();
-      
-      setSnackbar({ open: true, message: 'Prices updated successfully', severity: 'success' });
-      handleCancelEdit();
-    } catch (err) {
-      console.error('Error updating prices:', err);
       setSnackbar({ 
         open: true, 
-        message: err.response?.data?.error || 'Failed to update prices', 
+        message: 'Item updated successfully', 
+        severity: 'success' 
+      });
+      
+      // Refresh both analytics and zero price items
+      await Promise.all([
+        fetchAnalytics(),
+        fetchZeroPurchasePriceItems()
+      ]);
+      
+      handleCancelEdit();
+    } catch (err) {
+      console.error('Error saving item:', err);
+      setSnackbar({ 
+        open: true, 
+        message: err.response?.data?.error || 'Failed to update item', 
         severity: 'error' 
       });
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
   };
 
   if (loading) {
@@ -219,7 +224,7 @@ const Inventory = () => {
 
       {/* Stock Valuation Card */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={3}>
+        <Grid item xs={12} md={4}>
           <Card sx={{ backgroundColor: colors.paper, height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -238,7 +243,7 @@ const Inventory = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid item xs={12} md={4}>
           <Card sx={{ backgroundColor: colors.paper, height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -257,7 +262,7 @@ const Inventory = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid item xs={12} md={4}>
           <Card sx={{ backgroundColor: colors.paper, height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -276,7 +281,7 @@ const Inventory = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
+        <Grid item xs={12} md={4}>
           <Card sx={{ backgroundColor: colors.paper, height: '100%' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -601,13 +606,10 @@ const Inventory = () => {
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Purchase Price</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Selling Price</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Last Sold</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {analytics.slowMoving.items
-                    .slice(slowMovingPage * slowMovingRowsPerPage, slowMovingPage * slowMovingRowsPerPage + slowMovingRowsPerPage)
-                    .map((item) => (
+                  {analytics.slowMoving.items.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell sx={{ color: colors.textPrimary }}>{item.name}</TableCell>
                       <TableCell>
@@ -629,49 +631,11 @@ const Inventory = () => {
                       <TableCell align="right" sx={{ color: colors.textPrimary }}>
                         {item.stock}
                       </TableCell>
-                      <TableCell align="right">
-                        {editingItem === item.id ? (
-                          <TextField
-                            type="number"
-                            size="small"
-                            value={editPurchasePrice}
-                            onChange={(e) => setEditPurchasePrice(e.target.value)}
-                            sx={{ width: '100px' }}
-                            inputProps={{ min: 0, step: 0.01 }}
-                          />
-                        ) : (
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                            <Typography sx={{ color: colors.textPrimary }}>
-                              {formatCurrency(item.purchasePrice)}
-                            </Typography>
-                            <IconButton size="small" onClick={() => handleEditClick(item)}>
-                              <Edit fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        )}
+                      <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                        {formatCurrency(item.purchasePrice)}
                       </TableCell>
-                      <TableCell align="right">
-                        {editingItem === item.id ? (
-                          <TextField
-                            type="number"
-                            size="small"
-                            value={editSellingPrice}
-                            onChange={(e) => setEditSellingPrice(e.target.value)}
-                            sx={{ width: '100px' }}
-                            inputProps={{ min: 0, step: 0.01 }}
-                          />
-                        ) : (
-                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
-                            <Typography sx={{ color: colors.textPrimary }}>
-                              {formatCurrency(item.price || item.originalPrice)}
-                            </Typography>
-                            {editingItem !== item.id && (
-                              <IconButton size="small" onClick={() => handleEditClick(item)}>
-                                <Edit fontSize="small" />
-                              </IconButton>
-                            )}
-                          </Box>
-                        )}
+                      <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                        {formatCurrency(item.price || item.originalPrice)}
                       </TableCell>
                       <TableCell sx={{ color: colors.textSecondary }}>
                         {item.lastSoldDate
@@ -682,49 +646,11 @@ const Inventory = () => {
                             })
                           : 'Never'}
                       </TableCell>
-                      <TableCell align="right">
-                        {editingItem === item.id ? (
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <IconButton 
-                              size="small" 
-                              color="primary" 
-                              onClick={() => handleSave(item)}
-                              disabled={saving}
-                            >
-                              <Save fontSize="small" />
-                            </IconButton>
-                            <IconButton 
-                              size="small" 
-                              color="error" 
-                              onClick={handleCancelEdit}
-                              disabled={saving}
-                            >
-                              <Cancel fontSize="small" />
-                            </IconButton>
-                          </Box>
-                        ) : (
-                          <IconButton size="small" onClick={() => handleEditClick(item)}>
-                            <Edit fontSize="small" />
-                          </IconButton>
-                        )}
-                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </TableContainer>
-            <TablePagination
-              component="div"
-              count={analytics.slowMoving.items.length}
-              page={slowMovingPage}
-              onPageChange={(e, newPage) => setSlowMovingPage(newPage)}
-              rowsPerPage={slowMovingRowsPerPage}
-              onRowsPerPageChange={(e) => {
-                setSlowMovingRowsPerPage(parseInt(e.target.value, 10));
-                setSlowMovingPage(0);
-              }}
-              rowsPerPageOptions={[5, 10, 25, 50]}
-            />
           </CardContent>
         </Card>
       )}
@@ -747,7 +673,7 @@ const Inventory = () => {
       )}
 
       {analytics.slowMoving.items.length === 0 && (
-        <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
+        <Card sx={{ backgroundColor: colors.paper }}>
           <CardContent>
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <TrendingUp sx={{ fontSize: 64, color: colors.accentText, mb: 2 }} />
@@ -761,33 +687,15 @@ const Inventory = () => {
           </CardContent>
         </Card>
       )}
-
-      {/* Empty State for Zero Purchase Price Items */}
-      {!loadingZeroPrice && zeroPurchasePriceItems.length === 0 && (
-        <Card sx={{ backgroundColor: colors.paper }}>
-          <CardContent>
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <CheckCircle sx={{ fontSize: 64, color: colors.accentText, mb: 2 }} />
-              <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 1 }}>
-                All items have purchase prices!
-              </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                All inventory items have purchase prices set. Profit calculations are accurate.
-              </Typography>
-            </Box>
-          </CardContent>
-        </Card>
-      )}
-
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}
-        onClose={handleCloseSnackbar}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
         <Alert 
-          onClose={handleCloseSnackbar} 
-          severity={snackbar.severity} 
+          onClose={() => setSnackbar({ ...snackbar, open: false })} 
+          severity={snackbar.severity}
           sx={{ width: '100%' }}
         >
           {snackbar.message}
