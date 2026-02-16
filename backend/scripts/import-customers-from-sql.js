@@ -1,492 +1,266 @@
-require('dotenv').config({ path: '.env.local' });
-require('dotenv').config();
+/**
+ * Import customers from SQL dump file
+ * 
+ * This script:
+ * 1. Parses the SQL file to extract customer data
+ * 2. Normalizes phone numbers (0727893741 -> 254727893741)
+ * 3. Prevents duplicates based on normalized phone numbers
+ * 4. Allows blank customer names
+ * 5. Creates customers that can use OTP + PIN login
+ * 
+ * Usage:
+ *   NODE_ENV=production DATABASE_URL="..." node backend/scripts/import-customers-from-sql.js /path/to/dial\ a\ drink\ database.sql
+ */
 
+require('dotenv').config();
 const fs = require('fs');
 const path = require('path');
-const { Sequelize } = require('sequelize');
-const readline = require('readline');
+const db = require('../models');
 
-// Production DB config
-const PROD_DB_CONFIG = {
-  username: 'dialadrink_app',
-  password: 'E7A3IIa60hFD3bkGH1XAiryvB',
-  database: 'dialadrink_prod',
-  host: '35.223.10.1',
-  port: 5432,
-  dialect: 'postgres',
-  dialectOptions: {
-    ssl: {
-      require: true,
-      rejectUnauthorized: false
-    }
-  },
-  logging: false
-};
-
-const SQL_FILE = '/Users/maria/Documents/dial a drink database.sql';
-
-// Helper function to normalize phone numbers
-function normalizePhone(phone) {
-  if (!phone) return null;
-  
-  // Remove all non-digit characters
-  let cleaned = phone.replace(/\D/g, '');
-  
-  // Handle Kenyan phone numbers
-  if (cleaned.startsWith('0')) {
-    cleaned = '254' + cleaned.substring(1);
-  } else if (!cleaned.startsWith('254')) {
-    if (cleaned.length === 9) {
-      cleaned = '254' + cleaned;
-    } else if (cleaned.length === 10 && cleaned.startsWith('7')) {
-      cleaned = '254' + cleaned;
-    }
+// Phone normalization function (matches backend/routes/auth.js)
+function normalizeCustomerPhone(phone) {
+  if (!phone) {
+    return null;
   }
-  
-  // Validate length (should be 12 digits for 254XXXXXXXXX)
-  if (cleaned.length < 9 || cleaned.length > 15) {
+
+  // Remove all non-digits
+  const digits = phone.replace(/\D/g, '');
+  if (!digits) {
+    return null;
+  }
+
+  // Already in format 254XXXXXXXXX (12 digits)
+  if (digits.startsWith('254') && digits.length === 12) {
+    return digits;
+  }
+
+  // Format 0XXXXXXXXX (10 digits starting with 0)
+  if (digits.startsWith('0') && digits.length === 10) {
+    return `254${digits.slice(1)}`;
+  }
+
+  // Format 7XXXXXXXX (9 digits starting with 7)
+  if (digits.length === 9 && digits.startsWith('7')) {
+    return `254${digits}`;
+  }
+
+  // Other 9-digit numbers
+  if (digits.length === 9 && !digits.startsWith('7')) {
+    return digits;
+  }
+
+  // Return as-is if no pattern matches
+  return digits;
+}
+
+// Extract phone number from cus_number field (may contain extra data)
+function extractPhoneNumber(cusNumber) {
+  if (!cusNumber) {
     return null;
   }
   
-  return cleaned;
+  // Remove all non-digits and take the first valid phone number sequence
+  const digits = cusNumber.replace(/\D/g, '');
+  
+  // Try to find a valid Kenyan phone number pattern
+  // Look for 10-digit numbers starting with 0, or 9-digit numbers starting with 7
+  const patterns = [
+    /0\d{9}/,  // 0XXXXXXXXX (10 digits)
+    /7\d{8}/,  // 7XXXXXXXX (9 digits)
+    /254\d{9}/ // 254XXXXXXXXX (12 digits)
+  ];
+  
+  for (const pattern of patterns) {
+    const match = digits.match(pattern);
+    if (match) {
+      return match[0];
+    }
+  }
+  
+  // If no pattern matches, return first 9-12 digits
+  if (digits.length >= 9 && digits.length <= 12) {
+    return digits;
+  }
+  
+  return null;
 }
 
-// Helper function to validate email
-function isValidEmail(email) {
-  if (!email) return false;
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email.trim());
-}
-
-// Helper function to clean email
-function cleanEmail(email) {
-  if (!email) return null;
-  const cleaned = email.trim().toLowerCase();
-  return isValidEmail(cleaned) ? cleaned : null;
-}
-
-// Extract customers from SQL file
-async function extractCustomersFromSQL() {
-  console.log('📖 Extracting customers from SQL file...');
-  console.log(`   File: ${SQL_FILE}\n`);
-
-  const customers = new Map(); // Use Map to deduplicate by phone/email
+// Parse SQL INSERT statements for `customers` table
+function parseCustomersFromSQL(sqlContent) {
+  const customers = [];
   const seenPhones = new Set();
-  const seenEmails = new Set();
-  let lineCount = 0;
-  let insertCount = 0;
-
-  const fileStream = fs.createReadStream(SQL_FILE);
-  const rl = readline.createInterface({
-    input: fileStream,
-    crlfDelay: Infinity
-  });
-
-  let inCustomersInsert = false;
-  let inTecCustomersInsert = false;
-  let currentTable = null;
-
-  for await (const line of rl) {
-    lineCount++;
-    if (lineCount % 100000 === 0) {
-      process.stdout.write(`   Processed ${lineCount.toLocaleString()} lines...\r`);
-    }
-
-    // Detect INSERT INTO statements
-    if (line.match(/INSERT\s+INTO\s+`?customers`?\s*\(/i)) {
-      inCustomersInsert = true;
-      currentTable = 'customers';
-      insertCount++;
-    } else if (line.match(/INSERT\s+INTO\s+`?tec_customers`?\s*\(/i)) {
-      inTecCustomersInsert = true;
-      currentTable = 'tec_customers';
-      insertCount++;
-    }
-
-    // Parse VALUES from customers table (handle multi-line VALUES)
-    if (inCustomersInsert) {
-      // Match value tuples: (value1, value2, ...)
-      const valueMatches = line.matchAll(/\(([^)]+)\)/g);
-      for (const match of valueMatches) {
-        try {
-          const valueStr = match[1];
-          // Split by comma, but handle quoted strings with commas
-          const values = [];
-          let current = '';
-          let inQuotes = false;
-          let quoteChar = null;
-          
-          for (let i = 0; i < valueStr.length; i++) {
-            const char = valueStr[i];
-            if ((char === "'" || char === '"') && (i === 0 || valueStr[i-1] !== '\\')) {
-              if (!inQuotes) {
-                inQuotes = true;
-                quoteChar = char;
-              } else if (char === quoteChar) {
-                inQuotes = false;
-                quoteChar = null;
-              }
-              current += char;
-            } else if (char === ',' && !inQuotes) {
-              values.push(current.trim());
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          if (current) values.push(current.trim());
-
-          // Clean values
-          const cleanedValues = values.map(v => {
-            v = v.trim();
-            // Remove quotes
-            if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) {
-              v = v.slice(1, -1);
-            }
-            // Unescape
-            v = v.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-            return v;
-          });
-
-          if (cleanedValues.length >= 3) {
-            const id = parseInt(cleanedValues[0]) || null;
-            let cusNumber = cleanedValues[1] || null;
-            let customerName = cleanedValues[2] || null;
-            
-            // Extract phone from cus_number (might have format like "0708220769  1600")
-            if (cusNumber) {
-              // Take first part before space or non-digit
-              const phoneMatch = cusNumber.match(/^(\d{9,15})/);
-              if (phoneMatch) {
-                cusNumber = phoneMatch[1];
-              }
-            }
-            
-            const phone = normalizePhone(cusNumber);
-            const email = null; // customers table doesn't have email
-
-            // Use comment field as name if customer_name is empty
-            if (!customerName || customerName.length < 2) {
-              customerName = cleanedValues.length >= 7 ? cleanedValues[6] : null; // comment field
-            }
-
-            if (customerName && customerName.length > 1 && (phone || cusNumber)) {
-              const key = phone || cusNumber || `name_${id}`;
-              if (!customers.has(key)) {
-                customers.set(key, {
-                  id,
-                  customerName: customerName.trim(),
-                  phone,
-                  email: null,
-                  username: phone || cusNumber || `customer_${id}`,
-                  source: 'customers'
-                });
-                if (phone) seenPhones.add(phone);
-              }
-            }
-          }
-        } catch (parseError) {
-          // Skip malformed rows
-          continue;
-        }
+  
+  // Match INSERT INTO `customers` statements
+  const insertRegex = /INSERT INTO `customers`[^;]+;/gi;
+  const matches = sqlContent.match(insertRegex);
+  
+  if (!matches) {
+    console.log('⚠️  No INSERT INTO customers statements found');
+    return customers;
+  }
+  
+  console.log(`📊 Found ${matches.length} INSERT statements`);
+  
+  for (const insertStatement of matches) {
+    // Extract VALUES part - handle multi-line VALUES
+    const valuesMatch = insertStatement.match(/VALUES\s+([\s\S]+?);/i);
+    if (!valuesMatch) continue;
+    
+    const valuesString = valuesMatch[1];
+    
+    // Parse individual rows - handle multi-line VALUES
+    // Pattern: (id, 'cus_number', 'customer_name', territory_id, 'territory', delivery_fee, 'comment', 'created_date')
+    // Handle escaped quotes and multi-line values
+    const rowRegex = /\((\d+),\s*'((?:[^'\\]|\\.)*)',\s*'((?:[^'\\]|\\.)*)',\s*(\d+),\s*'((?:[^'\\]|\\.)*)',\s*([\d.]+),\s*'((?:[^'\\]|\\.)*)',\s*'((?:[^'\\]|\\.)*)'\)/g;
+    let rowMatch;
+    
+    while ((rowMatch = rowRegex.exec(valuesString)) !== null) {
+      const [, id, cusNumber, customerName, territoryId, territory, deliveryFee, comment, createdDate] = rowMatch;
+      
+      // Extract and normalize phone number
+      const rawPhone = extractPhoneNumber(cusNumber);
+      if (!rawPhone) {
+        // Skip silently for invalid phones (too many to log)
+        continue;
       }
-    }
-
-    // Parse VALUES from tec_customers table (handle multi-line VALUES)
-    if (inTecCustomersInsert) {
-      const valueMatches = line.matchAll(/\(([^)]+)\)/g);
-      for (const match of valueMatches) {
-        try {
-          const valueStr = match[1];
-          // Split by comma, but handle quoted strings with commas
-          const values = [];
-          let current = '';
-          let inQuotes = false;
-          let quoteChar = null;
-          
-          for (let i = 0; i < valueStr.length; i++) {
-            const char = valueStr[i];
-            if ((char === "'" || char === '"') && (i === 0 || valueStr[i-1] !== '\\')) {
-              if (!inQuotes) {
-                inQuotes = true;
-                quoteChar = char;
-              } else if (char === quoteChar) {
-                inQuotes = false;
-                quoteChar = null;
-              }
-              current += char;
-            } else if (char === ',' && !inQuotes) {
-              values.push(current.trim());
-              current = '';
-            } else {
-              current += char;
-            }
-          }
-          if (current) values.push(current.trim());
-
-          // Clean values
-          const cleanedValues = values.map(v => {
-            v = v.trim();
-            if ((v.startsWith("'") && v.endsWith("'")) || (v.startsWith('"') && v.endsWith('"'))) {
-              v = v.slice(1, -1);
-            }
-            v = v.replace(/\\'/g, "'").replace(/\\"/g, '"').replace(/\\\\/g, '\\');
-            return v;
-          });
-
-          if (cleanedValues.length >= 7) {
-            const id = parseInt(cleanedValues[0]) || null;
-            const name = cleanedValues[1] || null;
-            const cf1 = cleanedValues[2] || null;
-            const cf2 = cleanedValues[3] || null;
-            const phone = normalizePhone(cleanedValues[5] || cf1 || null);
-            const email = cleanEmail(cleanedValues[6] || cf2 || null);
-
-            if (name && name.length > 1 && (phone || email)) {
-              const key = phone || email || `tec_${id}`;
-              
-              // Skip if phone/email already exists
-              if (phone && seenPhones.has(phone)) continue;
-              if (email && seenEmails.has(email)) continue;
-
-              if (!customers.has(key)) {
-                customers.set(key, {
-                  id: `tec_${id}`,
-                  customerName: name.trim(),
-                  phone,
-                  email,
-                  username: phone || email || `tec_customer_${id}`,
-                  source: 'tec_customers'
-                });
-                if (phone) seenPhones.add(phone);
-                if (email) seenEmails.add(email);
-              }
-            }
-          }
-        } catch (parseError) {
-          // Skip malformed rows
-          continue;
-        }
+      
+      const normalizedPhone = normalizeCustomerPhone(rawPhone);
+      if (!normalizedPhone || normalizedPhone.length < 9) {
+        // Skip invalid normalized phones
+        continue;
       }
-    }
-
-    // End of INSERT statement
-    if (line.trim().endsWith(';')) {
-      inCustomersInsert = false;
-      inTecCustomersInsert = false;
-      currentTable = null;
+      
+      // Check for duplicates (normalized phone already seen)
+      if (seenPhones.has(normalizedPhone)) {
+        // Skip duplicate silently
+        continue;
+      }
+      
+      seenPhones.add(normalizedPhone);
+      
+      // Clean customer name (allow blank but trim whitespace)
+      const cleanName = customerName ? customerName.trim() : '';
+      
+      customers.push({
+        id: parseInt(id),
+        phone: normalizedPhone,
+        customerName: cleanName || null, // Allow null for blank names
+        username: normalizedPhone, // Username is same as phone
+        email: null,
+        password: null, // Will be set when customer sets PIN via OTP
+        hasSetPassword: false
+      });
     }
   }
-
-  console.log(`\n✅ Extracted ${customers.size} unique customers from ${insertCount} INSERT statements`);
-  console.log(`   Processed ${lineCount.toLocaleString()} total lines\n`);
-
-  return Array.from(customers.values());
+  
+  return customers;
 }
 
-// Clean and validate customers
-function cleanCustomers(customers) {
-  console.log('🧹 Cleaning customers...\n');
-
-  const cleaned = [];
-  const seenUsernames = new Set();
-  const seenPhones = new Set();
-  const seenEmails = new Set();
-  let duplicates = 0;
-  let invalid = 0;
-
-  for (const customer of customers) {
-    // Must have at least phone or email
-    if (!customer.phone && !customer.email) {
-      invalid++;
-      continue;
-    }
-
-    // Must have customer name
-    if (!customer.customerName || customer.customerName.trim().length < 2) {
-      invalid++;
-      continue;
-    }
-
-    // Generate username if not set
-    if (!customer.username) {
-      customer.username = customer.phone || customer.email || `customer_${Date.now()}`;
-    }
-
-    // Check for duplicates
-    const usernameKey = customer.username.toLowerCase();
-    const phoneKey = customer.phone ? customer.phone : null;
-    const emailKey = customer.email ? customer.email.toLowerCase() : null;
-
-    if (seenUsernames.has(usernameKey) || 
-        (phoneKey && seenPhones.has(phoneKey)) ||
-        (emailKey && seenEmails.has(emailKey))) {
-      duplicates++;
-      continue;
-    }
-
-    // Clean customer name
-    customer.customerName = customer.customerName.trim().substring(0, 200);
-
-    // Add to sets
-    seenUsernames.add(usernameKey);
-    if (phoneKey) seenPhones.add(phoneKey);
-    if (emailKey) seenEmails.add(emailKey);
-
-    cleaned.push({
-      customerName: customer.customerName,
-      phone: customer.phone,
-      email: customer.email,
-      username: customer.username,
-      password: null, // No password from old system
-      hasSetPassword: false
-    });
-  }
-
-  console.log(`✅ Cleaned customers:`);
-  console.log(`   Valid: ${cleaned.length}`);
-  console.log(`   Duplicates removed: ${duplicates}`);
-  console.log(`   Invalid removed: ${invalid}\n`);
-
-  return cleaned;
-}
-
-// Import customers to production
-async function importCustomersToProduction(customers) {
-  console.log('📥 Importing customers to production database...\n');
-
-  const prodSequelize = new Sequelize(PROD_DB_CONFIG);
-  const prodModels = require('../models');
-  prodModels.sequelize = prodSequelize;
-
-  // Retry connection with exponential backoff
-  let connected = false;
-  let retries = 3;
-  while (!connected && retries > 0) {
-    try {
-      await prodSequelize.authenticate();
-      console.log('✅ Connected to production database\n');
-      connected = true;
-    } catch (connError) {
-      retries--;
-      if (retries > 0) {
-        console.log(`⚠️  Connection failed, retrying... (${retries} attempts left)`);
-        await new Promise(resolve => setTimeout(resolve, 2000));
-      } else {
-        throw connError;
-      }
-    }
-  }
-
-  if (!connected) {
-    throw new Error('Failed to connect to production database after retries');
-  }
-
+async function importCustomers() {
   try {
-
+    const sqlFilePath = process.argv[2] || path.join(process.env.HOME || '', 'Documents', 'dial a drink database.sql');
+    
+    if (!fs.existsSync(sqlFilePath)) {
+      console.error(`❌ SQL file not found: ${sqlFilePath}`);
+      console.error('Usage: node import-customers-from-sql.js /path/to/dial\\ a\\ drink\\ database.sql');
+      process.exit(1);
+    }
+    
+    console.log(`📂 Reading SQL file: ${sqlFilePath}`);
+    console.log('⏳ This may take a while for large files...');
+    
+    const sqlContent = fs.readFileSync(sqlFilePath, 'utf8');
+    console.log(`✅ File read successfully (${(sqlContent.length / 1024 / 1024).toFixed(2)} MB)`);
+    
+    console.log('\n📊 Parsing customer data...');
+    const customers = parseCustomersFromSQL(sqlContent);
+    console.log(`✅ Parsed ${customers.length} unique customers`);
+    
+    if (customers.length === 0) {
+      console.log('⚠️  No customers to import');
+      process.exit(0);
+    }
+    
+    console.log('\n🔌 Connecting to database...');
+    await db.sequelize.authenticate();
+    console.log('✅ Database connection successful');
+    
+    console.log('\n📥 Importing customers...');
     let imported = 0;
     let skipped = 0;
     let errors = 0;
-
-    // Process in batches
+    
+    // Process in batches to avoid memory issues
     const batchSize = 100;
-    console.log(`   Processing in batches of ${batchSize}...\n`);
-
     for (let i = 0; i < customers.length; i += batchSize) {
       const batch = customers.slice(i, i + batchSize);
-      const transaction = await prodSequelize.transaction();
-
-      try {
-        for (const customerData of batch) {
-          try {
-            // Use upsert to handle conflicts
-            const [customer, created] = await prodModels.Customer.upsert(customerData, {
-              transaction,
-              conflictFields: ['username'], // Conflict on username
-              returning: true
-            });
-
-            if (created) {
+      
+      for (const customerData of batch) {
+        try {
+          // Check if customer already exists (by phone or username)
+          const existing = await db.Customer.findOne({
+            where: {
+              [db.Sequelize.Op.or]: [
+                { phone: customerData.phone },
+                { username: customerData.username }
+              ]
+            }
+          });
+          
+          if (existing) {
+            // Update existing customer if name is blank but we have a name
+            if (!existing.customerName && customerData.customerName) {
+              await existing.update({
+                customerName: customerData.customerName
+              });
+              console.log(`  ✓ Updated customer: ${customerData.phone} (${customerData.customerName || 'no name'})`);
               imported++;
             } else {
               skipped++;
             }
-          } catch (itemError) {
-            // Try to handle unique constraint on phone/email
-            if (itemError.name === 'SequelizeUniqueConstraintError') {
-              skipped++;
-            } else {
-              console.error(`   ⚠️  Error importing customer ${customerData.username}:`, itemError.message);
-              errors++;
-            }
+            continue;
           }
+          
+          // Create new customer
+          await db.Customer.create(customerData);
+          imported++;
+          
+          if (imported % 100 === 0) {
+            console.log(`  📊 Progress: ${imported} imported, ${skipped} skipped, ${errors} errors`);
+          }
+        } catch (error) {
+          errors++;
+          console.error(`  ❌ Error importing customer ${customerData.phone}:`, error.message);
         }
-
-        await transaction.commit();
-        const batchNum = Math.floor(i / batchSize) + 1;
-        const totalBatches = Math.ceil(customers.length / batchSize);
-        console.log(`   ✅ Batch ${batchNum}/${totalBatches}: ${imported} imported, ${skipped} skipped, ${errors} errors`);
-      } catch (batchError) {
-        await transaction.rollback();
-        console.error(`   ❌ Error in batch ${Math.floor(i / batchSize) + 1}:`, batchError.message);
-        skipped += batch.length;
       }
     }
-
-    console.log(`\n✅ Import complete!`);
+    
+    console.log('\n✅ Import completed!');
     console.log(`   Imported: ${imported}`);
-    console.log(`   Skipped (duplicates): ${skipped}`);
+    console.log(`   Skipped: ${skipped} (already exist)`);
     console.log(`   Errors: ${errors}`);
-    console.log(`   Total processed: ${customers.length}`);
-
+    
+    // Show sample of imported customers
+    const sample = await db.Customer.findAll({
+      limit: 5,
+      order: [['createdAt', 'DESC']],
+      attributes: ['id', 'phone', 'customerName', 'username', 'hasSetPassword']
+    });
+    
+    console.log('\n📋 Sample of imported customers:');
+    sample.forEach(c => {
+      console.log(`   - ${c.phone} | ${c.customerName || '(no name)'} | PIN set: ${c.hasSetPassword}`);
+    });
+    
+    await db.sequelize.close();
+    process.exit(0);
   } catch (error) {
-    console.error('❌ Import error:', error);
-    throw error;
-  } finally {
-    await prodSequelize.close();
-  }
-}
-
-// Main execution
-async function main() {
-  console.log('🚀 Importing Customers from SQL to Production Database');
-  console.log('======================================================\n');
-
-  try {
-    // Step 1: Extract customers
-    const rawCustomers = await extractCustomersFromSQL();
-
-    // Step 2: Clean customers
-    const cleanedCustomers = cleanCustomers(rawCustomers);
-
-    if (cleanedCustomers.length === 0) {
-      console.error('❌ No valid customers to import');
-      process.exit(1);
-    }
-
-    // Step 3: Save to JSON file first (backup)
-    const jsonFile = path.join(__dirname, 'customers-extracted.json');
-    fs.writeFileSync(jsonFile, JSON.stringify(cleanedCustomers, null, 2));
-    console.log(`💾 Saved ${cleanedCustomers.length} customers to: ${jsonFile}\n`);
-
-    // Step 4: Import to production (with error handling)
-    try {
-      await importCustomersToProduction(cleanedCustomers);
-    } catch (importError) {
-      console.error('\n⚠️  Import to production failed, but customers are saved to JSON file.');
-      console.error(`   You can retry the import later or import from: ${jsonFile}`);
-      throw importError;
-    }
-
-    console.log('\n✅ All done!');
-  } catch (error) {
-    console.error('❌ Fatal error:', error);
+    console.error('\n❌ Error:', error.message);
+    console.error(error);
+    await db.sequelize.close();
     process.exit(1);
   }
 }
 
-if (require.main === module) {
-  main();
-}
-
-module.exports = { extractCustomersFromSQL, cleanCustomers, importCustomersToProduction };
+// Run the import
+importCustomers();
