@@ -103,22 +103,5 @@
         app:layout_constraintTop_toBottomOf="@id/loadingProgress"
         android:layout_marginTop="16dp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/adminLoginButton"
-        android:layout_width="0dp"
-        android:layout_height="56dp"
-        android:text="Admin Login"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:textColor="@color/accent"
-        app:backgroundTint="@color/paper_dark"
-        app:strokeColor="@color/accent"
-        app:strokeWidth="2dp"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/errorText"
-        android:layout_marginTop="24dp" />
-
 </androidx.constraintlayout.widget.ConstraintLayout>
 
