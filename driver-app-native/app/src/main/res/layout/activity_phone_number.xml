@@ -28,7 +28,7 @@
         android:layout_height="wrap_content"
         android:hint="@string/phone_number"
         app:hintTextColor="#FFFFFF"
-        app:boxStrokeColor="@color/accent"
+        app:boxStrokeColor="@color/box_stroke_color_green"
         app:boxStrokeWidth="2dp"
         app:boxStrokeWidthFocused="2dp"
         app:boxBackgroundColor="@color/paper_dark"
@@ -63,6 +63,23 @@
         app:layout_constraintTop_toBottomOf="@id/phoneInputLayout"
         android:layout_marginTop="32dp" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/adminLoginButton"
+        android:layout_width="0dp"
+        android:layout_height="56dp"
+        android:text="Admin Login"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:textColor="@color/accent"
+        app:backgroundTint="@color/paper_dark"
+        app:strokeColor="@color/accent"
+        app:strokeWidth="2dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/sendOtpButton"
+        android:layout_marginTop="16dp"
+        android:visibility="gone" />
+
     <ProgressBar
         android:id="@+id/loadingProgress"
         android:layout_width="wrap_content"
@@ -70,7 +87,7 @@
         android:visibility="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/sendOtpButton"
+        app:layout_constraintTop_toBottomOf="@id/adminLoginButton"
         android:layout_marginTop="24dp" />
 
     <TextView

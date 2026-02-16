@@ -161,9 +161,20 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const fetchDrivers = async () => {
     try {
       const response = await api.get('/drivers');
-      setDrivers(response.data || []);
+      // Ensure response.data is an array
+      const driversData = response.data;
+      if (Array.isArray(driversData)) {
+        setDrivers(driversData);
+      } else if (driversData && Array.isArray(driversData.data)) {
+        // Handle wrapped response format
+        setDrivers(driversData.data);
+      } else {
+        console.warn('Drivers response is not an array:', driversData);
+        setDrivers([]);
+      }
     } catch (error) {
       console.error('Error fetching drivers:', error);
+      setDrivers([]);
     }
   };
 

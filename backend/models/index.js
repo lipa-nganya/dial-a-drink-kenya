@@ -123,6 +123,8 @@ const CashSubmission = require('./CashSubmission')(sequelize, Sequelize.DataType
 const Notification = require('./Notification')(sequelize, Sequelize.DataTypes);
 const NotificationRead = require('./NotificationRead')(sequelize, Sequelize.DataTypes);
 const InventoryCheck = require('./InventoryCheck')(sequelize, Sequelize.DataTypes);
+const Loan = require('./Loan')(sequelize, Sequelize.DataTypes);
+const Penalty = require('./Penalty')(sequelize, Sequelize.DataTypes);
 
 // Valkyrie models (conditionally loaded if they exist)
 let ValkyriePartner, ValkyriePartnerUser, ValkyriePartnerDriver, ValkyriePartnerOrder, PartnerGeofence;
@@ -296,6 +298,20 @@ db.CashSubmission = CashSubmission;
 db.Notification = Notification;
 db.NotificationRead = NotificationRead;
 db.InventoryCheck = InventoryCheck;
+db.Loan = Loan;
+db.Penalty = Penalty;
+
+// Loan and Penalty associations
+if (Loan && Driver) {
+  Loan.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasMany(Loan, { foreignKey: 'driverId', as: 'loans' });
+  Loan.belongsTo(Admin, { foreignKey: 'createdBy', as: 'creator' });
+}
+if (Penalty && Driver) {
+  Penalty.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
+  Driver.hasMany(Penalty, { foreignKey: 'driverId', as: 'penalties' });
+  Penalty.belongsTo(Admin, { foreignKey: 'createdBy', as: 'creator' });
+}
 
 // InventoryCheck associations
 if (InventoryCheck && Admin) {

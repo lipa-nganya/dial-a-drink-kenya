@@ -505,6 +505,20 @@ const Drivers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [notification, setNotification] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [loanDialogOpen, setLoanDialogOpen] = useState(false);
+  const [penaltyDialogOpen, setPenaltyDialogOpen] = useState(false);
+  const [loanFormData, setLoanFormData] = useState({
+    driverId: '',
+    amount: '',
+    reason: ''
+  });
+  const [penaltyFormData, setPenaltyFormData] = useState({
+    driverId: '',
+    amount: '',
+    reason: ''
+  });
+  const [creatingLoan, setCreatingLoan] = useState(false);
+  const [creatingPenalty, setCreatingPenalty] = useState(false);
 
   useEffect(() => {
     fetchDrivers();
@@ -596,11 +610,22 @@ const Drivers = () => {
     try {
       setLoading(true);
       const response = await api.get('/drivers');
-      setDrivers(response.data);
+      // Ensure response.data is an array
+      const driversData = response.data;
+      if (Array.isArray(driversData)) {
+        setDrivers(driversData);
+      } else if (driversData && Array.isArray(driversData.data)) {
+        // Handle wrapped response format
+        setDrivers(driversData.data);
+      } else {
+        console.warn('Drivers response is not an array:', driversData);
+        setDrivers([]);
+      }
       setError('');
     } catch (err) {
       console.error('Error fetching drivers:', err);
       setError(err.response?.data?.error || 'Failed to load drivers');
+      setDrivers([]);
     } finally {
       setLoading(false);
     }
@@ -836,7 +861,7 @@ const Drivers = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3, flexWrap: 'wrap', gap: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <LocalShipping sx={{ fontSize: 40, color: colors.accentText }} />
           <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>

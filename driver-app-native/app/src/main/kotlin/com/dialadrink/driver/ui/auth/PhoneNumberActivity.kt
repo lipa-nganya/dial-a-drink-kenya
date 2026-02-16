@@ -2,6 +2,8 @@ package com.dialadrink.driver.ui.auth
 
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -18,6 +20,8 @@ import kotlinx.coroutines.launch
 class PhoneNumberActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPhoneNumberBinding
     private var isResetPin: Boolean = false
+    private val phoneCheckHandler = Handler(Looper.getMainLooper())
+    private var phoneCheckRunnable: Runnable? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -27,7 +31,20 @@ class PhoneNumberActivity : AppCompatActivity() {
         // Check if this is a PIN reset request
         isResetPin = intent.getBooleanExtra("resetPin", false)
         
-        // Check if already logged in (but allow reset PIN flow)
+        // Check if admin is already logged in (but allow reset PIN flow)
+        if (!isResetPin && SharedPrefs.isAdminLoggedIn(this)) {
+            val adminToken = SharedPrefs.getAdminToken(this)
+            if (adminToken != null && adminToken.isNotEmpty()) {
+                // Admin is logged in, redirect to admin dashboard
+                val intent = Intent(this, com.dialadrink.driver.ui.admin.AdminDashboardActivity::class.java)
+                intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                startActivity(intent)
+                finish()
+                return
+            }
+        }
+        
+        // Check if driver is already logged in (but allow reset PIN flow)
         if (!isResetPin && SharedPrefs.isLoggedIn(this)) {
             val phone = SharedPrefs.getDriverPhone(this)
             if (phone != null) {
@@ -39,17 +56,60 @@ class PhoneNumberActivity : AppCompatActivity() {
         setupViews()
     }
     
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clean up handler to prevent memory leaks
+        phoneCheckRunnable?.let { phoneCheckHandler.removeCallbacks(it) }
+    }
+    
     private fun setupViews() {
+        // Set border color to green by default (unfocused state)
+        val accentColor = getColor(R.color.accent)
+        val whiteColor = getColor(android.R.color.white)
+        val strokeColorStateList = android.content.res.ColorStateList(
+            arrayOf(
+                intArrayOf(-android.R.attr.state_focused), // Unfocused state
+                intArrayOf(android.R.attr.state_focused)   // Focused state
+            ),
+            intArrayOf(accentColor, accentColor) // Both states use green
+        )
+        binding.phoneInputLayout.setBoxStrokeColorStateList(strokeColorStateList)
+        binding.phoneInputLayout.defaultHintTextColor = android.content.res.ColorStateList.valueOf(whiteColor)
+        
+        // Initially hide admin button
+        binding.adminLoginButton.visibility = View.GONE
+        
         binding.phoneEditText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 binding.errorText.visibility = View.GONE
+                // Cancel previous check
+                phoneCheckRunnable?.let { phoneCheckHandler.removeCallbacks(it) }
+                
+                // Debounce phone check (wait 500ms after user stops typing)
+                phoneCheckRunnable = Runnable {
+                    checkIfAdminExists()
+                }
+                phoneCheckHandler.postDelayed(phoneCheckRunnable!!, 500)
             }
         })
         
         binding.sendOtpButton.setOnClickListener {
             sendOtp()
+        }
+        
+        binding.adminLoginButton.setOnClickListener {
+            val phone = binding.phoneEditText.text.toString().trim()
+            if (phone.isEmpty()) {
+                showError("Please enter your phone number")
+                return@setOnClickListener
+            }
+            val formattedPhone = formatPhoneNumber(phone)
+            SharedPrefs.saveAdminPhone(this, formattedPhone)
+            val intent = Intent(this, com.dialadrink.driver.ui.admin.AdminLoginActivity::class.java)
+            intent.putExtra("phone", formattedPhone)
+            startActivity(intent)
         }
     }
     
@@ -75,84 +135,136 @@ class PhoneNumberActivity : AppCompatActivity() {
                     ApiClient.init(this@PhoneNumberActivity)
                 }
                 
-                // If this is a PIN reset request, always send OTP (skip driver existence check)
+                // If this is a PIN reset request, always send OTP (skip user existence check)
                 if (!isResetPin) {
-                    // First, check if driver exists in database
-                    android.util.Log.e("PhoneNumberActivity", "═══════════════════════════════════════════════════════")
-                    android.util.Log.e("PhoneNumberActivity", "🔍 Checking if driver exists for phone: $formattedPhone")
-                    android.util.Log.e("PhoneNumberActivity", "🌐 BuildConfig.API_BASE_URL: ${com.dialadrink.driver.BuildConfig.API_BASE_URL}")
-                    android.util.Log.e("PhoneNumberActivity", "🌐 BuildConfig.BUILD_TYPE: ${com.dialadrink.driver.BuildConfig.BUILD_TYPE}")
-                    android.util.Log.e("PhoneNumberActivity", "🌐 Expected Production: https://deliveryos-production-backend-805803410802.us-central1.run.app")
-                    android.util.Log.e("PhoneNumberActivity", "🌐 Expected Dev: https://deliveryos-development-backend-805803410802.us-central1.run.app")
-                    val isProduction = com.dialadrink.driver.BuildConfig.API_BASE_URL.contains("production-backend")
-                    android.util.Log.e("PhoneNumberActivity", "⚠️ IS PRODUCTION BACKEND: $isProduction")
-                    if (!isProduction) {
-                        android.util.Log.e("PhoneNumberActivity", "❌❌❌ WRONG BACKEND! App is using: ${com.dialadrink.driver.BuildConfig.API_BASE_URL}")
-                        android.util.Log.e("PhoneNumberActivity", "❌❌❌ Build variant may be wrong! Should be: productionRelease")
-                    }
-                    android.util.Log.e("PhoneNumberActivity", "═══════════════════════════════════════════════════════")
+                    // Check if phone exists as both driver and admin
+                    android.util.Log.d("PhoneNumberActivity", "🔍 Checking phone: $formattedPhone")
+                    val phoneCheckResponse = ApiClient.getApiService().checkPhoneForUserTypes(formattedPhone)
                     
-                    val driverResponse = ApiClient.getApiService().getDriverByPhone(formattedPhone)
+                    android.util.Log.d("PhoneNumberActivity", "📡 Phone check response - Success: ${phoneCheckResponse.isSuccessful}, Code: ${phoneCheckResponse.code()}")
                     
-                    android.util.Log.d("PhoneNumberActivity", "📡 Driver check response - Success: ${driverResponse.isSuccessful}, Code: ${driverResponse.code()}")
-                    
-                    if (driverResponse.isSuccessful) {
-                        val apiResponse = driverResponse.body()
-                        val driver = apiResponse?.data
-                        android.util.Log.d("PhoneNumberActivity", "📦 Response body: $apiResponse")
+                    if (phoneCheckResponse.isSuccessful && phoneCheckResponse.body()?.success == true) {
+                        val phoneCheck = phoneCheckResponse.body()!!.data
+                        val isDriver = phoneCheck?.isDriver ?: false
+                        val isAdmin = phoneCheck?.isAdmin ?: false
                         
-                        if (driver != null && apiResponse?.success == true) {
-                            // Driver exists - check if they have a PIN
-                            android.util.Log.d("PhoneNumberActivity", "✅ Driver found: ${driver.name} (ID: ${driver.id})")
-                            val hasPin = driver.hasPin ?: false
-                            android.util.Log.d("PhoneNumberActivity", "🔐 Driver has PIN: $hasPin")
+                        android.util.Log.d("PhoneNumberActivity", "📦 Phone check: isDriver=$isDriver, isAdmin=$isAdmin")
+                        android.util.Log.d("PhoneNumberActivity", "📦 Driver info: ${phoneCheck?.driver}")
+                        android.util.Log.d("PhoneNumberActivity", "📦 Admin info: ${phoneCheck?.admin}")
+                        
+                        if (isDriver && isAdmin) {
+                            // Phone exists as both - show user type selection
+                            android.util.Log.d("PhoneNumberActivity", "🔀 Phone exists as both driver and admin - showing selection")
                             
-                            SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
-                            SharedPrefs.saveDriverId(this@PhoneNumberActivity, driver.id)
-                            SharedPrefs.saveDriverName(this@PhoneNumberActivity, driver.name)
+                            // Get PIN status from phone check response
+                            val driverInfo = phoneCheck?.driver
+                            val adminInfo = phoneCheck?.admin
+                            val driverHasPin = driverInfo?.hasPin == true
+                            val adminHasPin = adminInfo?.hasPin == true
                             
-                            if (hasPin) {
-                                // Driver has PIN - go to PIN login
-                                android.util.Log.d("PhoneNumberActivity", "🔐 Navigating to PIN login")
+                            android.util.Log.d("PhoneNumberActivity", "🔐 Driver PIN: $driverHasPin, Admin PIN: $adminHasPin")
+                            
+                            // Save info
+                            if (driverInfo != null) {
+                                SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
+                                SharedPrefs.saveDriverId(this@PhoneNumberActivity, driverInfo.id)
+                                SharedPrefs.saveDriverName(this@PhoneNumberActivity, driverInfo.name)
+                            }
+                            if (adminInfo != null) {
+                                SharedPrefs.saveAdminPhone(this@PhoneNumberActivity, formattedPhone)
+                            }
+                            
+                            val intent = Intent(this@PhoneNumberActivity, UserTypeSelectionActivity::class.java)
+                            intent.putExtra("phone", formattedPhone)
+                            intent.putExtra("driverHasPin", driverHasPin)
+                            intent.putExtra("adminHasPin", adminHasPin)
+                            startActivity(intent)
+                            return@launch
+                        } else if (isDriver) {
+                            // Only driver - check if they have PIN
+                            val driverInfo = phoneCheck?.driver
+                            val driverHasPin = driverInfo?.hasPin == true
+                            
+                            android.util.Log.d("PhoneNumberActivity", "✅ Driver only - hasPin from check: $driverHasPin, driverInfo: $driverInfo")
+                            
+                            // Use PIN status from phone check response (most reliable)
+                            if (driverHasPin && driverInfo != null) {
+                                // Driver has PIN - go directly to PIN login
+                                android.util.Log.d("PhoneNumberActivity", "🔐 Driver has PIN (from check) - navigating to PIN login")
+                                SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
+                                SharedPrefs.saveDriverId(this@PhoneNumberActivity, driverInfo.id)
+                                SharedPrefs.saveDriverName(this@PhoneNumberActivity, driverInfo.name)
+                                
                                 val intent = Intent(this@PhoneNumberActivity, PinLoginActivity::class.java)
                                 intent.putExtra("phone", formattedPhone)
                                 startActivity(intent)
                                 return@launch
-                            } else {
-                                // Driver exists but no PIN - proceed to OTP flow to set up PIN
-                                android.util.Log.d("PhoneNumberActivity", "📱 Driver has no PIN - proceeding to OTP flow")
-                                // Continue to OTP flow below
                             }
+                            
+                            // If phone check didn't return PIN status, check via getDriverByPhone
+                            if (driverInfo?.hasPin == null) {
+                                android.util.Log.d("PhoneNumberActivity", "⚠️ Phone check didn't return PIN status, checking via getDriverByPhone")
+                                val driverResponse = ApiClient.getApiService().getDriverByPhone(formattedPhone)
+                                if (driverResponse.isSuccessful && driverResponse.body()?.success == true) {
+                                    val driver = driverResponse.body()!!.data
+                                    if (driver != null) {
+                                        android.util.Log.d("PhoneNumberActivity", "✅ Driver found: ${driver.name} (ID: ${driver.id}), hasPin: ${driver.hasPin}")
+                                        
+                                        SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
+                                        SharedPrefs.saveDriverId(this@PhoneNumberActivity, driver.id)
+                                        SharedPrefs.saveDriverName(this@PhoneNumberActivity, driver.name)
+                                        
+                                        if (driver.hasPin == true) {
+                                            // Driver has PIN - go to PIN login
+                                            android.util.Log.d("PhoneNumberActivity", "🔐 Driver has PIN (from getDriverByPhone) - navigating to PIN login")
+                                            val intent = Intent(this@PhoneNumberActivity, PinLoginActivity::class.java)
+                                            intent.putExtra("phone", formattedPhone)
+                                            startActivity(intent)
+                                            return@launch
+                                        } else {
+                                            android.util.Log.d("PhoneNumberActivity", "⚠️ Driver has NO PIN - will send OTP")
+                                        }
+                                    }
+                                }
+                            } else {
+                                // Phone check returned hasPin=false, so no PIN
+                                android.util.Log.d("PhoneNumberActivity", "⚠️ Driver has NO PIN (from check) - will send OTP")
+                                // Still save driver info if available
+                                if (driverInfo != null) {
+                                    SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
+                                    SharedPrefs.saveDriverId(this@PhoneNumberActivity, driverInfo.id)
+                                    SharedPrefs.saveDriverName(this@PhoneNumberActivity, driverInfo.name)
+                                }
+                            }
+                            // Driver exists but no PIN - continue to OTP flow
+                        } else if (isAdmin) {
+                            // Only admin - check if they have PIN
+                            android.util.Log.d("PhoneNumberActivity", "✅ Admin only - checking PIN status")
+                            SharedPrefs.saveAdminPhone(this@PhoneNumberActivity, formattedPhone)
+                            
+                            // Check if admin has PIN from the phone check response
+                            val adminInfo = phoneCheck?.admin
+                            val adminHasPin = adminInfo?.hasPin == true
+                            
+                            android.util.Log.d("PhoneNumberActivity", "🔐 Admin PIN status: $adminHasPin")
+                            
+                            if (adminHasPin && !isResetPin) {
+                                // Admin has PIN and it's not a reset - go to PIN login
+                                android.util.Log.d("PhoneNumberActivity", "🔐 Admin has PIN - navigating to PIN login")
+                                val intent = Intent(this@PhoneNumberActivity, com.dialadrink.driver.ui.admin.AdminLoginActivity::class.java)
+                                intent.putExtra("phone", formattedPhone)
+                                startActivity(intent)
+                                return@launch
+                            } else {
+                                android.util.Log.d("PhoneNumberActivity", "⚠️ Admin has NO PIN or reset requested - will send OTP")
+                            }
+                            // Admin has no PIN or reset requested - continue to OTP flow
                         } else {
-                            // Driver not found (success: false or data is null) - proceed to OTP flow
-                            android.util.Log.d("PhoneNumberActivity", "❌ Driver not found in database (success: ${apiResponse?.success}, data: ${driver != null})")
-                            // Continue to OTP flow below
+                            android.util.Log.d("PhoneNumberActivity", "⚠️ Phone not found as driver or admin - will send OTP")
                         }
+                        // Neither driver nor admin - continue to OTP flow
                     } else {
-                        val errorBody = driverResponse.errorBody()?.string()
-                        val statusCode = driverResponse.code()
-                        android.util.Log.e("PhoneNumberActivity", "❌ Driver check failed: $statusCode - ${driverResponse.message()}")
-                        android.util.Log.e("PhoneNumberActivity", "Error body: $errorBody")
-                        
-                        // If 404, driver doesn't exist - proceed to OTP flow
-                        if (statusCode == 404) {
-                            android.util.Log.d("PhoneNumberActivity", "📱 Driver not found (404) - proceeding to OTP flow")
-                            // Continue to OTP flow below
-                        } else if (statusCode >= 500) {
-                            // Server error (500+) - show error and don't proceed
-                            android.util.Log.e("PhoneNumberActivity", "❌ Server error ($statusCode) - backend may be down or database unavailable")
-                            showError("Service temporarily unavailable. Please try again in a moment.")
-                            return@launch
-                        } else if (errorBody != null && (errorBody.contains("ngrok") || errorBody.contains("ERR_NGROK"))) {
-                            // ngrok error page detected - show error
-                            android.util.Log.e("PhoneNumberActivity", "❌ ngrok error detected in response")
-                            showError("Connection error. Please check your internet connection and try again.")
-                            return@launch
-                        } else {
-                            // Other client errors (400-499 except 404) - proceed to OTP flow
-                            android.util.Log.d("PhoneNumberActivity", "⚠️ Client error ($statusCode) - proceeding to OTP flow")
-                            // Continue to OTP flow below
-                        }
+                        android.util.Log.w("PhoneNumberActivity", "⚠️ Phone check failed - will send OTP")
                     }
                 } else {
                     android.util.Log.d("PhoneNumberActivity", "🔄 PIN reset requested - skipping driver check, will send OTP")
@@ -175,24 +287,54 @@ class PhoneNumberActivity : AppCompatActivity() {
                 // Send OTP using Advanta SMS
                 val logMessage = if (isResetPin) "📱 Sending OTP for PIN reset: $formattedPhone" else "📱 Sending OTP for new driver: $formattedPhone"
                 android.util.Log.d("PhoneNumberActivity", logMessage)
+                // Determine user type - check if admin phone was saved, otherwise default to driver
+                val userType = if (SharedPrefs.getAdminPhone(this@PhoneNumberActivity) == formattedPhone) {
+                    "admin"
+                } else {
+                    "driver"
+                }
+                
                 val sendOtpRequest = SendOtpRequest(
                     phone = formattedPhone,
-                    userType = "driver",
+                    userType = userType,
                     resetPin = if (isResetPin) true else null
                 )
                 val otpResponse = ApiClient.getApiService().sendOtp(sendOtpRequest)
                 
                 if (otpResponse.isSuccessful && otpResponse.body()?.success == true) {
-                    // Save phone number
-                    SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
+                    // Save phone number based on user type
+                    if (userType == "admin") {
+                        SharedPrefs.saveAdminPhone(this@PhoneNumberActivity, formattedPhone)
+                    } else {
+                        SharedPrefs.saveDriverPhone(this@PhoneNumberActivity, formattedPhone)
+                    }
                     
                     // Navigate to OTP screen
                     val intent = Intent(this@PhoneNumberActivity, OtpVerificationActivity::class.java)
                     intent.putExtra("phone", formattedPhone)
+                    intent.putExtra("userType", userType)
                     intent.putExtra("resetPin", isResetPin)
                     startActivity(intent)
                 } else {
-                    showError(otpResponse.body()?.error ?: "Failed to send OTP")
+                    // Check if error indicates PIN is already set (for admin)
+                    val errorBody = otpResponse.body()
+                    val errorMessage = errorBody?.error ?: "Failed to send OTP"
+                    val shouldUsePinLogin = errorBody?.let { 
+                        // Check if response indicates PIN login should be used
+                        errorMessage.contains("PIN already set", ignoreCase = true) ||
+                        errorMessage.contains("use PIN login", ignoreCase = true)
+                    } ?: false
+                    
+                    if (userType == "admin" && shouldUsePinLogin && !isResetPin) {
+                        // Admin has PIN - redirect to PIN login
+                        android.util.Log.d("PhoneNumberActivity", "🔐 Admin has PIN - redirecting to PIN login")
+                        SharedPrefs.saveAdminPhone(this@PhoneNumberActivity, formattedPhone)
+                        val intent = Intent(this@PhoneNumberActivity, com.dialadrink.driver.ui.admin.AdminLoginActivity::class.java)
+                        intent.putExtra("phone", formattedPhone)
+                        startActivity(intent)
+                    } else {
+                        showError(errorMessage)
+                    }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("PhoneNumberActivity", "❌ Exception: ${e.message}", e)
@@ -219,6 +361,41 @@ class PhoneNumberActivity : AppCompatActivity() {
         return cleaned
     }
     
+    private fun checkIfAdminExists() {
+        val phone = binding.phoneEditText.text.toString().trim()
+        
+        if (phone.isEmpty()) {
+            binding.adminLoginButton.visibility = View.GONE
+            return
+        }
+        
+        val formattedPhone = formatPhoneNumber(phone)
+        
+        lifecycleScope.launch {
+            try {
+                // Initialize API client if not already initialized
+                if (!ApiClient.isInitialized()) {
+                    ApiClient.init(this@PhoneNumberActivity)
+                }
+                
+                val phoneCheckResponse = ApiClient.getApiService().checkPhoneForUserTypes(formattedPhone)
+                
+                if (phoneCheckResponse.isSuccessful && phoneCheckResponse.body()?.success == true) {
+                    val phoneCheck = phoneCheckResponse.body()!!.data
+                    val isAdmin = phoneCheck?.isAdmin ?: false
+                    
+                    // Show admin button only if phone exists as admin
+                    binding.adminLoginButton.visibility = if (isAdmin) View.VISIBLE else View.GONE
+                } else {
+                    binding.adminLoginButton.visibility = View.GONE
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PhoneNumberActivity", "Error checking admin: ${e.message}")
+                binding.adminLoginButton.visibility = View.GONE
+            }
+        }
+    }
+    
     private fun showError(message: String) {
         binding.errorText.text = message
         binding.errorText.visibility = View.VISIBLE
@@ -231,4 +408,3 @@ class PhoneNumberActivity : AppCompatActivity() {
         finish()
     }
 }
-

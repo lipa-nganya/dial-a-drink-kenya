@@ -24,6 +24,8 @@
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.DialADrinkDriver"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:usesCleartextTraffic="true"
         tools:targetApi="31">
         
         <activity
@@ -52,6 +54,12 @@
             android:exported="false" />
         
         <activity
+            android:name=".ui.auth.UserTypeSelectionActivity"
+            android:parentActivityName=".ui.auth.PhoneNumberActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
             android:name=".ui.main.MainActivity"
             android:exported="false"
             android:launchMode="singleTop" />
@@ -70,6 +78,12 @@
         <activity
             android:name=".ui.orders.PendingOrdersActivity"
             android:parentActivityName=".ui.dashboard.DashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.orders.InProgressOrdersActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
             android:exported="false"
             android:theme="@style/Theme.DialADrinkDriver" />
         
@@ -137,6 +151,80 @@
             android:excludeFromRecents="true"
             android:showOnLockScreen="true"
             android:turnScreenOn="true" />
+
+        <!-- Admin Activities -->
+        <activity
+            android:name=".ui.admin.AdminLoginActivity"
+            android:parentActivityName=".ui.auth.PhoneNumberActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.AdminDashboardActivity"
+            android:parentActivityName=".ui.admin.AdminLoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.AdminProfileActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.AdminSettingsActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.AssignRiderActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.CompletedDriversActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.DriverTransactionsActivity"
+            android:parentActivityName=".ui.admin.CompletedDriversActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.LoansActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.RequestPaymentActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.AdminCompletedOrdersActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <!-- POS Activities -->
+        <activity
+            android:name=".ui.pos.PosProductListActivity"
+            android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.pos.PosCartActivity"
+            android:parentActivityName=".ui.pos.PosProductListActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
 
         <!-- Firebase Cloud Messaging -->
         <service

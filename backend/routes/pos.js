@@ -276,19 +276,42 @@ router.get('/drinks/barcode/:barcode', async (req, res) => {
 // Get all drinks for POS (with inventory info)
 router.get('/drinks', async (req, res) => {
   try {
+    const { search, limit = 10, offset = 0 } = req.query;
+    
+    // Build where clause
+    const whereClause = {
+      isAvailable: {
+        [Op.ne]: false // Include drinks where isAvailable is not explicitly false
+      }
+    };
+    
+    // Add search filter if provided
+    if (search && search.trim()) {
+      whereClause[Op.or] = [
+        { name: { [Op.like]: `%${search.trim()}%` } },
+        { barcode: { [Op.like]: `%${search.trim()}%` } }
+      ];
+    }
+    
+    // Get total count for pagination
+    const total = await db.Drink.count({ where: whereClause });
+    
+    // Get paginated drinks
+    const limitNum = parseInt(limit) || 10;
+    const offsetNum = parseInt(offset) || 0;
+    
     const drinks = await db.Drink.findAll({
-      where: {
-        isAvailable: {
-          [Op.ne]: false // Include drinks where isAvailable is not explicitly false
-        }
-      },
+      where: whereClause,
+      attributes: ['id', 'name', 'price', 'stock', 'barcode', 'capacity', 'purchasePrice', 'categoryId'],
       include: [{
         model: db.Category,
         as: 'category',
         attributes: ['id', 'name'],
         required: false // Left join - include drinks even if category is missing
       }],
-      order: [['name', 'ASC']]
+      order: [['name', 'ASC']],
+      limit: limitNum,
+      offset: offsetNum
     });
 
     // Map drinks to ensure categoryId is included even if category association failed
@@ -298,10 +321,24 @@ router.get('/drinks', async (req, res) => {
       if (!drinkData.categoryId && drink.categoryId) {
         drinkData.categoryId = drink.categoryId;
       }
+      // Ensure stock is a number (default to 0 if null/undefined)
+      if (drinkData.stock === null || drinkData.stock === undefined) {
+        drinkData.stock = 0;
+      }
       return drinkData;
     });
 
-    res.json(drinksWithCategory);
+    // Calculate hasMore
+    const hasMore = (offsetNum + drinksWithCategory.length) < total;
+
+    // Return response in the format expected by Android app
+    res.json({
+      products: drinksWithCategory,
+      total: total,
+      limit: limitNum,
+      offset: offsetNum,
+      hasMore: hasMore
+    });
   } catch (error) {
     console.error('❌ Error fetching drinks for POS:', error);
     console.error('Error details:', {

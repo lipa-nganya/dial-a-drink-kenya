@@ -1276,6 +1276,13 @@ router.get('/', async (req, res) => {
       return driverData;
     }));
     
+    // Return raw array for web dashboard compatibility
+    // Mobile app will handle unwrapping if needed via UnwrappingJsonConverterFactory
+    // Ensure we always return an array
+    if (!Array.isArray(driversWithCreditStatus)) {
+      console.error('⚠️ driversWithCreditStatus is not an array:', typeof driversWithCreditStatus);
+      return res.json([]);
+    }
     res.json(driversWithCreditStatus);
   } catch (error) {
     console.error('Error fetching drivers:', error);

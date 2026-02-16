@@ -34,7 +34,7 @@ class UnwrappingJsonConverterFactory(
         retrofit: Retrofit
     ): Converter<ResponseBody, *>? {
         val adapter = gson.getAdapter(TypeToken.get(type))
-        return UnwrappingConverter(gson, adapter)
+        return UnwrappingConverter(gson, adapter, type)
     }
 
     private class RequestConverter(
@@ -52,7 +52,8 @@ class UnwrappingJsonConverterFactory(
 
     private class UnwrappingConverter(
         private val gson: Gson,
-        private val adapter: TypeAdapter<*>
+        private val adapter: TypeAdapter<*>,
+        private val type: Type
     ) : Converter<ResponseBody, Any> {
 
         @Throws(IOException::class)
@@ -111,6 +112,22 @@ class UnwrappingJsonConverterFactory(
             return try {
                 adapter.read(reader) ?: throw IOException("Failed to parse JSON")
             } catch (e: Exception) {
+                // If parsing fails, check if the expected type is ApiResponse<T> and the response is a raw array
+                // In this case, we need to wrap the array in ApiResponse format
+                try {
+                    val typeName = type.toString()
+                    if (typeName.contains("ApiResponse") && raw.trim().startsWith("[")) {
+                        // Response is a raw array but we expect ApiResponse<T>
+                        // Wrap it: {"success": true, "data": [...]}
+                        val wrappedJson = """{"success":true,"data":$raw}"""
+                        val wrappedReader = JsonReader(StringReader(wrappedJson))
+                        wrappedReader.isLenient = true
+                        return adapter.read(wrappedReader) ?: throw IOException("Failed to parse wrapped JSON")
+                    }
+                } catch (wrapException: Exception) {
+                    // If wrapping fails, continue with original error handling
+                }
+                
                 // If parsing fails, check if raw is still a stringified JSON
                 // This can happen if the response is double-stringified
                 if (raw.startsWith("\"") && raw.endsWith("\"")) {

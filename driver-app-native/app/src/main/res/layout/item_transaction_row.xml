@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TableRow xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?android:attr/selectableItemBackground"
+    android:padding="8dp"
+    android:minHeight="40dp">
+
+    <TextView
+        android:id="@+id/dateText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1.2"
+        android:text="2026-02-08"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="start"
+        android:paddingEnd="4dp" />
+
+    <TextView
+        android:id="@+id/locationText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="2"
+        android:text="Location"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:paddingEnd="4dp" />
+
+    <TextView
+        android:id="@+id/methodText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="CASH"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="start"
+        android:paddingEnd="4dp" />
+
+    <TextView
+        android:id="@+id/valueText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="0"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="end"
+        android:paddingEnd="4dp" />
+
+    <TextView
+        android:id="@+id/feeText"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="0"
+        android:textColor="@color/text_primary_dark"
+        android:textSize="12sp"
+        android:gravity="end" />
+
+</TableRow>

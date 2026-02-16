@@ -18,7 +18,7 @@ router.post('/autocomplete', async (req, res) => {
   try {
     const { input } = req.body;
 
-    if (!input || input.length < 2) {
+    if (!input || input.length < 1) {
       return res.json({ suggestions: [] });
     }
 
@@ -66,12 +66,16 @@ router.post('/autocomplete', async (req, res) => {
     // This prevents database from blocking Google results with broad partial matches
     let savedAddresses = [];
     try {
-      // Only search for addresses that start with the input (strict match)
+      // Extract first word from input for database search (autosuggest from first word)
+      const words = normalizedInput.split(' ').filter(w => w.length > 0);
+      const firstWord = words.length > 0 ? words[0] : normalizedInput;
+      
+      // Only search for addresses that start with the first word (strict match)
       // This is much more restrictive than '%input%' and won't block Google
       savedAddresses = await db.SavedAddress.findAll({
         where: {
           address: {
-            [Op.iLike]: `${normalizedInput}%` // Starts with, not contains
+            [Op.iLike]: `${firstWord}%` // Starts with first word, not contains
           }
         },
         order: [['createdAt', 'DESC']],

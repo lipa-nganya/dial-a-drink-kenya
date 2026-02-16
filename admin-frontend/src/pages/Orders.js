@@ -243,9 +243,20 @@ const Orders = () => {
   const fetchDrivers = async () => {
     try {
       const response = await api.get('/drivers');
-      setDrivers(response.data || []);
+      // Ensure response.data is an array
+      const driversData = response.data;
+      if (Array.isArray(driversData)) {
+        setDrivers(driversData);
+      } else if (driversData && Array.isArray(driversData.data)) {
+        // Handle wrapped response format
+        setDrivers(driversData.data);
+      } else {
+        console.warn('Drivers response is not an array:', driversData);
+        setDrivers([]);
+      }
     } catch (error) {
       console.error('Error fetching drivers:', error);
+      setDrivers([]);
     }
   };
 
@@ -1340,7 +1351,11 @@ const Orders = () => {
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
       
-      const fetchedRiders = ridersResponse.data || [];
+      // Ensure ridersResponse.data is an array
+      const ridersData = ridersResponse.data;
+      const fetchedRiders = Array.isArray(ridersData) 
+        ? ridersData 
+        : (ridersData && Array.isArray(ridersData.data) ? ridersData.data : []);
       setAllRiders(fetchedRiders);
       const allOrders = ordersResponse.data || [];
       
@@ -2404,12 +2419,59 @@ const Orders = () => {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366', fontSize: '1rem' }}>
-                        KES {Number(order.totalAmount).toFixed(2)}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                        {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
-                      </Typography>
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366', fontSize: '1rem' }}>
+                          KES {Number(order.totalAmount).toFixed(2)}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                          {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
+                        </Typography>
+                        {(() => {
+                          // Calculate profit/loss
+                          const totalAmount = parseFloat(order.totalAmount) || 0;
+                          const deliveryFee = parseFloat(order.deliveryFee) || 0;
+                          const orderItems = order.items || order.orderItems || [];
+                          
+                          let totalPurchaseCost = 0;
+                          orderItems.forEach(item => {
+                            if (item.drink && item.drink.purchasePrice !== null && item.drink.purchasePrice !== undefined) {
+                              const purchasePriceRaw = item.drink.purchasePrice;
+                              const strValue = String(purchasePriceRaw).trim();
+                              if (strValue !== '' && strValue !== 'null' && strValue !== 'undefined') {
+                                const purchasePrice = parseFloat(strValue);
+                                if (!isNaN(purchasePrice) && isFinite(purchasePrice) && purchasePrice >= 0) {
+                                  const quantity = parseInt(item.quantity) || 0;
+                                  totalPurchaseCost += purchasePrice * quantity;
+                                }
+                              }
+                            }
+                          });
+                          
+                          const profit = totalAmount - totalPurchaseCost - deliveryFee;
+                          
+                          if (totalPurchaseCost > 0) {
+                            const profitAmount = Math.abs(profit);
+                            const profitLabel = profit >= 0 
+                              ? `PROFIT +KES ${profitAmount.toFixed(2)}`
+                              : `LOSS -KES ${profitAmount.toFixed(2)}`;
+                            return (
+                              <Chip
+                                label={profitLabel}
+                                size="small"
+                                sx={{
+                                  mt: 0.5,
+                                  backgroundColor: profit >= 0 ? '#4caf50' : '#f44336',
+                                  color: '#ffffff',
+                                  fontWeight: 600,
+                                  fontSize: '0.7rem',
+                                  height: '20px'
+                                }}
+                              />
+                            );
+                          }
+                          return null;
+                        })()}
+                      </Box>
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>

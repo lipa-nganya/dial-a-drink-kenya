@@ -1277,5 +1277,92 @@ router.post('/check-pin-status', async (req, res) => {
   }
 });
 
+/**
+ * Check phone for user types (admin, driver, customer)
+ * GET /api/auth/check-phone-for-user-types?phone=...
+ */
+router.get('/check-phone-for-user-types', async (req, res) => {
+  try {
+    const { phone } = req.query;
+    
+    if (!phone) {
+      return res.status(400).json({
+        success: false,
+        error: 'Phone number is required'
+      });
+    }
+    
+    const cleanedPhone = phone.replace(/\D/g, '');
+    const phoneVariations = [
+      cleanedPhone,
+      cleanedPhone.replace(/^254/, '0'),
+      cleanedPhone.replace(/^254/, ''),
+      `+${cleanedPhone}`
+    ];
+    
+    // Check for admin (not shop_agent)
+    const admin = await db.Admin.findOne({
+      where: {
+        role: { [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin'] },
+        mobileNumber: {
+          [db.Sequelize.Op.in]: phoneVariations
+        }
+      },
+      attributes: ['id', 'name', 'mobileNumber', 'hasSetPin', 'role']
+    });
+    
+    // Check for driver
+    const driver = await db.Driver.findOne({
+      where: {
+        phoneNumber: {
+          [db.Sequelize.Op.in]: phoneVariations
+        }
+      },
+      attributes: ['id', 'name', 'phoneNumber', 'pinHash']
+    });
+    
+    // Check for customer
+    const customer = await db.Customer.findOne({
+      where: {
+        [db.Sequelize.Op.or]: [
+          { phone: { [db.Sequelize.Op.in]: phoneVariations } },
+          { username: { [db.Sequelize.Op.in]: phoneVariations } }
+        ]
+      },
+      attributes: ['id', 'phone', 'username', 'hasSetPassword']
+    });
+    
+    return res.json({
+      success: true,
+      data: {
+        admin: admin ? {
+          id: admin.id,
+          name: admin.name,
+          mobileNumber: admin.mobileNumber,
+          hasPin: admin.hasSetPin || false
+        } : null,
+        driver: driver ? {
+          id: driver.id,
+          name: driver.name,
+          phoneNumber: driver.phoneNumber,
+          hasPin: !!driver.pinHash
+        } : null,
+        customer: customer ? {
+          id: customer.id,
+          phone: customer.phone,
+          username: customer.username,
+          hasPin: customer.hasSetPassword || false
+        } : null
+      }
+    });
+  } catch (error) {
+    console.error('Error checking phone for user types:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check phone for user types'
+    });
+  }
+});
+
 module.exports = router;
 

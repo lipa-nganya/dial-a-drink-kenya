@@ -82,6 +82,62 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/locationLabel" />
 
+        <!-- Driver Label -->
+        <TextView
+            android:id="@+id/driverLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Driver:"
+            android:textColor="@color/text_secondary_dark"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/locationText" />
+
+        <!-- Driver Status -->
+        <TextView
+            android:id="@+id/driverStatusText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text=""
+            android:textColor="@color/text_primary_dark"
+            android:textSize="14sp"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/driverLabel" />
+
+        <!-- Profit/Loss Label -->
+        <TextView
+            android:id="@+id/profitLossLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Profit/Loss:"
+            android:textColor="@color/text_secondary_dark"
+            android:textSize="12sp"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/driverStatusText" />
+
+        <!-- Profit/Loss Chip -->
+        <com.google.android.material.chip.Chip
+            android:id="@+id/profitLossChip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="PROFIT"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            app:chipBackgroundColor="#4caf50"
+            app:chipMinHeight="24dp"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/profitLossLabel" />
+
         <!-- Action Buttons -->
         <LinearLayout
             android:id="@+id/actionButtons"
@@ -92,7 +148,7 @@
             android:gravity="center"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/locationText">
+            app:layout_constraintTop_toBottomOf="@id/profitLossChip">
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/rejectButton"

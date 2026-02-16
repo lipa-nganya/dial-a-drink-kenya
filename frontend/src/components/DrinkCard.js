@@ -68,7 +68,7 @@ const DrinkCard = ({ drink }) => {
 
   // Get available capacities from capacityPricing or fallback to capacity array
   const availableCapacities = Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0 
-    ? drink.capacityPricing.map(pricing => pricing.capacity)
+    ? drink.capacityPricing.map(pricing => pricing.capacity || pricing.size)
     : Array.isArray(drink.capacity) && drink.capacity.length > 0 
     ? drink.capacity 
     : [];
@@ -83,8 +83,8 @@ const DrinkCard = ({ drink }) => {
       const capacitiesWithPrices = availableCapacities.map(capacity => {
         let price = 0;
         if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
-          const pricing = drink.capacityPricing.find(p => String(p.capacity) === String(capacity));
-          price = pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(drink.price) || 0;
+          const pricing = drink.capacityPricing.find(p => String(p.capacity || p.size) === String(capacity));
+          price = pricing ? parseFloat(pricing.currentPrice || pricing.price) || 0 : parseFloat(drink.price) || 0;
         } else {
           price = parseFloat(drink.price) || 0;
         }
@@ -108,8 +108,8 @@ const DrinkCard = ({ drink }) => {
   // Get price for selected capacity
   const getPriceForCapacity = (capacity) => {
     if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
-      const pricing = drink.capacityPricing.find(p => p.capacity === capacity);
-      return pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(drink.price) || 0;
+      const pricing = drink.capacityPricing.find(p => String(p.capacity || p.size) === String(capacity));
+      return pricing ? parseFloat(pricing.currentPrice || pricing.price) || 0 : parseFloat(drink.price) || 0;
     }
     return parseFloat(drink.price) || 0;
   };
@@ -163,40 +163,39 @@ const DrinkCard = ({ drink }) => {
         }
       }}
     >
-      {getImageUrl(drink.image) && !imageError ? (
-        <CardMedia
-          component="img"
-          height="240"
-          image={getImageUrl(drink.image)}
-          alt={drink.name}
-          onClick={handleCardClick}
-          sx={{ 
-            objectFit: 'contain', 
-            p: { xs: 1, sm: 1.5, md: 2 }, 
-            backgroundColor: '#fff',
-            height: { xs: 140, sm: 180, md: 240 },
-            cursor: 'pointer'
-          }}
-          onError={() => {
-            setImageError(true);
-          }}
-        />
-      ) : (
-        <Box
-          onClick={handleCardClick}
-          sx={{
-            height: { xs: 140, sm: 180, md: 240 },
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: '#fff',
-            color: '#666',
-            cursor: 'pointer'
-          }}
-        >
-          <LocalBar sx={{ fontSize: { xs: 40, sm: 50, md: 60 } }} />
-        </Box>
-      )}
+      <Box
+        onClick={handleCardClick}
+        sx={{
+          width: '100%',
+          height: { xs: 180, sm: 220, md: 260 },
+          minHeight: { xs: 180, sm: 220, md: 260 },
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#fff',
+          cursor: 'pointer',
+          overflow: 'hidden'
+        }}
+      >
+        {getImageUrl(drink.image) && !imageError ? (
+          <CardMedia
+            component="img"
+            image={getImageUrl(drink.image)}
+            alt={drink.name}
+            sx={{ 
+              objectFit: 'contain', 
+              width: '100%',
+              height: '100%',
+              p: { xs: 1, sm: 1.5, md: 2 }
+            }}
+            onError={() => {
+              setImageError(true);
+            }}
+          />
+        ) : (
+          <LocalBar sx={{ fontSize: { xs: 40, sm: 50, md: 60 }, color: '#666' }} />
+        )}
+      </Box>
       <CardContent sx={{ 
         flexGrow: 1, 
         overflow: 'visible', 
@@ -250,18 +249,6 @@ const DrinkCard = ({ drink }) => {
         <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: colors.textPrimary }}>
           {drink.name}
         </Typography>
-        
-        <Typography
-          variant="body2"
-          sx={{ 
-            mb: { xs: 0.5, sm: 1 }, 
-            minHeight: { xs: '20px', sm: '30px' }, 
-            fontSize: { xs: '0.7rem', sm: '0.75rem' }, 
-            color: colors.textPrimary 
-          }}
-        >
-          {drink.description}
-        </Typography>
 
         {/* Capacity Selection with Radio Buttons */}
         {availableCapacities.length > 0 ? (
@@ -276,57 +263,53 @@ const DrinkCard = ({ drink }) => {
                 onClick={(e) => e.stopPropagation()}
                 sx={{ gap: 0, width: '100%' }}
               >
-                {availableCapacities.map((capacity) => {
-                  const pricing = Array.isArray(drink.capacityPricing) 
-                    ? drink.capacityPricing.find(p => p.capacity === capacity)
-                    : null;
-                  const price = pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(drink.price) || 0;
-                  const originalPrice = pricing ? parseFloat(pricing.originalPrice) || 0 : parseFloat(drink.originalPrice) || 0;
-                  // const discount = originalPrice && originalPrice > price 
-                  //   ? Math.round(((originalPrice - price) / originalPrice) * 100)
-                  //   : 0; // Unused
-                  
-                  return (
-                  <FormControlLabel
-                    key={capacity}
-                    value={capacity}
-                      control={
-                        <Radio
-                          sx={{
-                            color: colors.textPrimary,
-                            padding: '4px',
-                            marginRight: '4px',
-                            '&.Mui-checked': { color: colors.accentText }
-                          }}
-                        />
-                      }
-                    label={
-                      <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
-                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
-                              {capacity}
-                            </Typography>
-                          </Box>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
-                            {originalPrice && originalPrice > price ? (
-                              <>
-                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: '#666', fontSize: '0.65rem' }}>
-                                  KES {originalPrice.toFixed(2)}
-                                </Typography>
-                                <Typography variant="body2" sx={{ color: '#FF3366', fontWeight: 'bold', fontSize: '0.7rem' }}>
-                                  KES {price.toFixed(2)}
-                                </Typography>
-                              </>
-                            ) : (
-                              <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
-                                KES {price.toFixed(2)}
-                              </Typography>
-                            )}
-                          </Box>
-                        </Box>
-                      </Box>
-                    }
+                {Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0
+                  ? (() => {
+                      // Deduplicate by capacity, keeping the first occurrence
+                      const seen = new Set();
+                      const uniquePricing = drink.capacityPricing.filter(pricing => {
+                        const capacity = pricing.capacity || pricing.size;
+                        if (seen.has(capacity)) {
+                          return false;
+                        }
+                        seen.add(capacity);
+                        return true;
+                      });
+                      
+                      return uniquePricing.map((pricing, index) => {
+                        const capacity = pricing.capacity || pricing.size;
+                        const price = parseFloat(pricing.currentPrice || pricing.price) || 0;
+                        
+                        return (
+                          <FormControlLabel
+                            key={`${drink.id}-${capacity}-${index}`}
+                            value={capacity}
+                          control={
+                            <Radio
+                              sx={{
+                                color: colors.textPrimary,
+                                padding: '4px',
+                                marginRight: '4px',
+                                '&.Mui-checked': { color: colors.accentText }
+                              }}
+                            />
+                          }
+                          label={
+                            <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                    {capacity}
+                                  </Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
+                                  <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                    KES {price.toFixed(2)}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </Box>
+                          }
                     sx={{
                       border: 'none',
                       borderRadius: 1,
@@ -346,8 +329,63 @@ const DrinkCard = ({ drink }) => {
                       }
                     }}
                   />
-                  );
-                })}
+                          );
+                        });
+                    })()
+                  : availableCapacities.map((capacity, index) => {
+                      // Fallback for drinks with capacity array but no capacityPricing
+                      const price = parseFloat(drink.price) || 0;
+                      return (
+                        <FormControlLabel
+                          key={`${drink.id}-${capacity}-${index}`}
+                          value={capacity}
+                          control={
+                            <Radio
+                              sx={{
+                                color: colors.textPrimary,
+                                padding: '4px',
+                                marginRight: '4px',
+                                '&.Mui-checked': { color: colors.accentText }
+                              }}
+                            />
+                          }
+                          label={
+                            <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                    {capacity}
+                                  </Typography>
+                                </Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
+                                  <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                    KES {price.toFixed(2)}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            </Box>
+                          }
+                          sx={{
+                            border: 'none',
+                            borderRadius: 1,
+                            backgroundColor: selectedCapacity === capacity ? '#f5f5f5' : 'transparent',
+                            p: 0.1,
+                            m: 0,
+                            width: '100%',
+                            marginLeft: 0,
+                            marginRight: 0,
+                            alignItems: 'center',
+                            '& .MuiFormControlLabel-label': {
+                              marginLeft: '4px',
+                              width: '100%'
+                            },
+                            '&:hover': {
+                              backgroundColor: '#f0f0f0'
+                            }
+                          }}
+                        />
+                      );
+                    })}
               </RadioGroup>
             </FormControl>
           </Box>
@@ -362,46 +400,6 @@ const DrinkCard = ({ drink }) => {
             </Typography>
           </Box>
         )}
-
-               {/* Discount Badge - Centered above ABV */}
-               {(() => {
-                 let discount = 0;
-                 if (availableCapacities.length > 0 && selectedCapacity) {
-                   // Calculate discount for selected capacity
-                   const pricing = Array.isArray(drink.capacityPricing) 
-                     ? drink.capacityPricing.find(p => p.capacity === selectedCapacity)
-                     : null;
-                   if (pricing) {
-                     const price = parseFloat(pricing.currentPrice) || 0;
-                     const originalPrice = parseFloat(pricing.originalPrice) || 0;
-                     if (originalPrice && originalPrice > price) {
-                       discount = Math.round(((originalPrice - price) / originalPrice) * 100);
-                     }
-                   }
-                 } else {
-                   // Calculate discount for overall drink (no capacity selection or no capacities)
-                   const originalPrice = parseFloat(drink.originalPrice) || 0;
-                   const currentPrice = parseFloat(drink.price) || 0;
-                   if (originalPrice && originalPrice > currentPrice) {
-                     discount = Math.round(((originalPrice - currentPrice) / originalPrice) * 100);
-                   }
-                 }
-                 
-                 return discount > 0 ? (
-                   <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: drink.abv ? 0.5 : (availableCapacities.length >= 2 ? 1 : 0), mt: 0 }}>
-                     <Chip
-                       label={`${discount}% OFF`}
-                       size="small"
-                       sx={{
-                         backgroundColor: '#FF3366',
-                         color: '#F5F5F5',
-                         fontSize: '0.65rem',
-                         height: '20px'
-                       }}
-                     />
-                   </Box>
-                 ) : null;
-               })()}
 
                {/* ABV Display */}
                {drink.abv && (

@@ -46,12 +46,13 @@ minimalApp.get('/', (req, res) => {
 const server = http.createServer(minimalApp);
 
 // Start server IMMEDIATELY - before loading anything else
-// Use 127.0.0.1 for local development (avoid IPv6 issues), 0.0.0.0 for production/Cloud Run
+// Use 0.0.0.0 to allow Android emulator access (10.0.2.2 maps to host's localhost)
 // Check if we're in Cloud Run (has PORT env var and K_SERVICE or GOOGLE_CLOUD_PROJECT)
 const isCloudRun = !!process.env.K_SERVICE || !!process.env.GOOGLE_CLOUD_PROJECT;
 const isProduction = process.env.NODE_ENV === 'production';
-// Always use 0.0.0.0 in Cloud Run, otherwise use 127.0.0.1 for local dev
-const HOST = process.env.HOST || (isCloudRun || isProduction ? '0.0.0.0' : '127.0.0.1');
+// Always use 0.0.0.0 to allow Android emulator and other network access
+// Android emulator uses 10.0.2.2 to access host's localhost, which requires 0.0.0.0 binding
+const HOST = process.env.HOST || '0.0.0.0';
 console.log(`📡 Starting server on ${HOST}:${PORT}...`);
 console.log(`🔧 Environment: NODE_ENV=${process.env.NODE_ENV || 'undefined'}, isProduction=${isProduction}`);
 server.listen(PORT, HOST, () => {
@@ -304,6 +305,9 @@ async function initializeDatabase(db, seedData) {
         return addMissingColumns(db);
       })
       .then(() => {
+        return checkAndCreatePenaltiesTable(db);
+      })
+      .then(() => {
         console.log('Database columns updated successfully.');
         return db.Category ? db.Category.count() : Promise.resolve(0);
       })
@@ -460,6 +464,94 @@ async function addMissingColumns(db) {
     console.warn('Column migration failed:', error.message);
     // Don't fail completely - try to continue
     return false;
+  }
+}
+
+// Function to check and create penalties table if it doesn't exist
+async function checkAndCreatePenaltiesTable(db) {
+  try {
+    // Check if penalties table exists
+    const [penaltiesCheck] = await db.sequelize.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'penalties'
+      ) as table_exists;
+    `);
+
+    if (!penaltiesCheck[0]?.table_exists) {
+      console.log('📝 Creating penalties table...');
+      
+      await db.sequelize.query(`
+        CREATE TABLE penalties (
+          id SERIAL PRIMARY KEY,
+          "driverId" INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+          amount DECIMAL(10, 2) NOT NULL,
+          balance DECIMAL(10, 2) NOT NULL DEFAULT 0,
+          reason TEXT NOT NULL,
+          "createdBy" INTEGER REFERENCES admins(id),
+          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await db.sequelize.query(`
+        CREATE INDEX idx_penalties_driver_id ON penalties("driverId");
+        CREATE INDEX idx_penalties_created_at ON penalties("createdAt");
+      `);
+
+      console.log('✅ Penalties table created successfully');
+    } else {
+      console.log('✅ Penalties table already exists');
+    }
+
+    // Also check loans table
+    const [loansCheck] = await db.sequelize.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name = 'loans'
+      ) as table_exists;
+    `);
+
+    if (!loansCheck[0]?.table_exists) {
+      console.log('📝 Creating loans table...');
+      
+      await db.sequelize.query(`
+        DO $$ BEGIN
+          CREATE TYPE loan_status_enum AS ENUM ('active', 'paid_off', 'cancelled');
+        EXCEPTION
+          WHEN duplicate_object THEN null;
+        END $$;
+      `);
+      
+      await db.sequelize.query(`
+        CREATE TABLE loans (
+          id SERIAL PRIMARY KEY,
+          "driverId" INTEGER NOT NULL REFERENCES drivers(id) ON DELETE CASCADE,
+          amount DECIMAL(10, 2) NOT NULL,
+          balance DECIMAL(10, 2) NOT NULL DEFAULT 0,
+          reason TEXT NOT NULL,
+          "nextDeductionDate" TIMESTAMP WITH TIME ZONE,
+          status loan_status_enum NOT NULL DEFAULT 'active',
+          "createdBy" INTEGER REFERENCES admins(id),
+          "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+      await db.sequelize.query(`
+        CREATE INDEX idx_loans_driver_id ON loans("driverId");
+        CREATE INDEX idx_loans_status ON loans(status);
+        CREATE INDEX idx_loans_created_at ON loans("createdAt");
+      `);
+
+      console.log('✅ Loans table created successfully');
+    } else {
+      console.log('✅ Loans table already exists');
+    }
+  } catch (error) {
+    console.warn('Error checking/creating penalties/loans tables:', error.message);
   }
 }
 

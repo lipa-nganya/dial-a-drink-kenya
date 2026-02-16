@@ -218,6 +218,162 @@ object OrderRepository {
     }
     
     /**
+     * Get admin pending orders (all pending orders regardless of rider assignment)
+     * Uses the admin pending orders endpoint
+     */
+    suspend fun getAdminPendingOrders(
+        context: Context,
+        forceRefresh: Boolean = false
+    ): List<Order> {
+        return try {
+            ensureApiClientInitialized(context)
+            
+            // Pass summary = false to get full order data including items and purchasePrice for profit/loss calculation
+            val response = ApiClient.getApiService().getAdminPendingOrders(
+                summary = false
+            )
+            
+            if (!response.isSuccessful || response.body() == null) {
+                Log.w(TAG, "❌ Failed to fetch admin pending orders: ${response.code()}")
+                return emptyList()
+            }
+            
+            val apiResponse = response.body()!!
+            if (apiResponse.success != true || apiResponse.data == null) {
+                Log.w(TAG, "❌ Admin pending orders API returned error: ${apiResponse.error}")
+                return emptyList()
+            }
+            
+            val pendingOrders = apiResponse.data
+            Log.d(TAG, "✅ Fetched ${pendingOrders.size} admin pending orders")
+            pendingOrders
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error fetching admin pending orders", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Get admin in-progress orders (all orders accepted by drivers and being processed)
+     * Uses the admin in-progress orders endpoint
+     */
+    suspend fun getAdminInProgressOrders(
+        context: Context,
+        forceRefresh: Boolean = false
+    ): List<Order> {
+        return try {
+            ensureApiClientInitialized(context)
+            
+            // Pass summary = false to get full order data including items and purchasePrice for profit/loss calculation
+            val response = ApiClient.getApiService().getAdminInProgressOrders(
+                summary = false
+            )
+            
+            if (!response.isSuccessful || response.body() == null) {
+                Log.w(TAG, "❌ Failed to fetch admin in-progress orders: ${response.code()}")
+                return emptyList()
+            }
+            
+            val apiResponse = response.body()!!
+            if (apiResponse.success != true || apiResponse.data == null) {
+                Log.w(TAG, "❌ Admin in-progress orders API returned error: ${apiResponse.error}")
+                return emptyList()
+            }
+            
+            val inProgressOrders = apiResponse.data
+            Log.d(TAG, "✅ Fetched ${inProgressOrders.size} admin in-progress orders")
+            inProgressOrders
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error fetching admin in-progress orders", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Get admin completed orders (all orders with status 'completed' or 'delivered')
+     * Uses the admin orders endpoint and filters by status
+     */
+    suspend fun getAdminCompletedOrders(
+        context: Context,
+        fromDate: java.util.Date? = null,
+        toDate: java.util.Date? = null,
+        forceRefresh: Boolean = false
+    ): List<Order> {
+        return try {
+            ensureApiClientInitialized(context)
+            
+            val response = ApiClient.getApiService().getAdminOrders()
+            
+            if (!response.isSuccessful || response.body() == null) {
+                Log.w(TAG, "❌ Failed to fetch admin orders: ${response.code()}")
+                return emptyList()
+            }
+            
+            val allOrders = response.body()!!
+            
+            // Filter to only completed/delivered orders
+            var completedOrders = allOrders.filter { order ->
+                order.status == "completed" || order.status == "delivered"
+            }
+            
+            // Apply date filtering if provided
+            if (fromDate != null || toDate != null) {
+                val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                completedOrders = completedOrders.filter { order ->
+                    val orderDate = parseOrderDate(order.updatedAt ?: order.createdAt)
+                    if (orderDate == null) return@filter false
+                    
+                    val fromCheck = fromDate == null || orderDate >= fromDate
+                    val toCheck = toDate == null || orderDate <= toDate
+                    fromCheck && toCheck
+                }
+            }
+            
+            // Sort by date descending (most recent first)
+            completedOrders = completedOrders.sortedByDescending { 
+                it.updatedAt ?: it.createdAt ?: ""
+            }
+            
+            Log.d(TAG, "✅ Fetched ${completedOrders.size} admin completed orders")
+            completedOrders
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error fetching admin completed orders", e)
+            emptyList()
+        }
+    }
+    
+    /**
+     * Parse order date from string format
+     * Supports multiple date formats including UTC timestamps
+     */
+    private fun parseOrderDate(dateString: String?): java.util.Date? {
+        if (dateString == null) return null
+        
+        val utcTimeZone = java.util.TimeZone.getTimeZone("UTC")
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd HH:mm:ss",
+            "yyyy-MM-dd'T'HH:mm:ss"
+        )
+        
+        for (format in formats) {
+            try {
+                val parser = java.text.SimpleDateFormat(format, java.util.Locale.getDefault())
+                parser.timeZone = utcTimeZone
+                val date = parser.parse(dateString)
+                if (date != null) {
+                    return date
+                }
+            } catch (e: Exception) {
+                // Try next format
+            }
+        }
+        
+        return null
+    }
+    
+    /**
      * Get pending orders (assigned to driver but not yet accepted/rejected)
      * Uses the dedicated pending orders endpoint
      */

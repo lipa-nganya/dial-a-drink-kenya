@@ -8,6 +8,8 @@
         <item name="android:windowBackground">@color/background_dark</item>
         <item name="android:textColorPrimary">@color/text_primary_dark</item>
         <item name="editTextStyle">@style/Widget.DialADrinkDriver.TextInputEditText</item>
+        <item name="popupMenuStyle">@style/Widget.DialADrinkDriver.PopupMenu</item>
+        <item name="android:popupMenuStyle">@style/Widget.DialADrinkDriver.PopupMenu</item>
     </style>
     
     <style name="Theme.DialADrinkDriver.FullScreen" parent="Theme.DialADrinkDriver">
@@ -52,6 +54,13 @@
     <style name="Widget.DialADrinkDriver.EditText" parent="Widget.AppCompat.EditText">
         <item name="android:textColor">@color/text_primary_dark</item>
         <item name="android:textColorHint">@color/text_secondary_dark</item>
+    </style>
+    
+    <!-- Dark theme for PopupMenu -->
+    <style name="Widget.DialADrinkDriver.PopupMenu" parent="Widget.MaterialComponents.PopupMenu">
+        <item name="android:popupBackground">@color/paper_dark</item>
+        <item name="android:textColor">@color/text_primary_dark</item>
+        <item name="android:textColorPrimary">@color/text_primary_dark</item>
     </style>
 </resources>
 

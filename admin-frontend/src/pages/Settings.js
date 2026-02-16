@@ -53,7 +53,9 @@ import {
   AdminPanelSettings,
   CloudUpload,
   WhatsApp,
-  Star
+  Star,
+  AccountBalance,
+  AccessTime
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -107,6 +109,17 @@ const Settings = () => {
   const [showDeliverySettings, setShowDeliverySettings] = useState(false);
   const [deliverySettingsLoading, setDeliverySettingsLoading] = useState(false);
   const [showTestModeWarning, setShowTestModeWarning] = useState(false);
+
+  // Loan Settings state
+  const [loanSettings, setLoanSettings] = useState({
+    loanDeductionDays: 0,
+    loanDeductionHours: 24, // default 24 hours
+    loanDeductionMinutes: 0,
+    loanDeductionAmount: 0 // KES
+  });
+  const [showLoanSettings, setShowLoanSettings] = useState(false);
+  const [loanSettingsLoading, setLoanSettingsLoading] = useState(false);
+  const [nextDeductionTime, setNextDeductionTime] = useState(null);
 
   // WhatsApp Message Settings state
   const [whatsappMessage, setWhatsappMessage] = useState('');
@@ -198,10 +211,27 @@ const Settings = () => {
   const [userFormError, setUserFormError] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState(null);
 
+  // Calculate next loan deduction run time (runs every 15 minutes)
+  const calculateNextDeductionTime = () => {
+    const now = new Date();
+    const intervalMs = 15 * 60 * 1000; // 15 minutes in milliseconds
+    const nextRun = new Date(Math.ceil(now.getTime() / intervalMs) * intervalMs);
+    setNextDeductionTime(nextRun.getTime());
+  };
+
   useEffect(() => {
     fetchAllData();
     fetchCurrentUser();
     fetchStockAlertSettings();
+    fetchLoanSettings();
+    calculateNextDeductionTime();
+    
+    // Update next deduction time every minute
+    const interval = setInterval(() => {
+      calculateNextDeductionTime();
+    }, 60000); // Update every minute
+    
+    return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, []);
 
@@ -650,6 +680,106 @@ Welcome aboard! 🎉`;
   const confirmTestMode = () => {
     setDeliverySettings(prev => ({ ...prev, isTestMode: true }));
     setShowTestModeWarning(false);
+  };
+
+  // ========== LOAN SETTINGS ==========
+  const fetchLoanSettings = async () => {
+    try {
+      const [frequencyRes, amountRes] = await Promise.all([
+        api.get('/settings/loanDeductionFrequency').catch(() => ({ data: null, status: 404 })),
+        api.get('/settings/loanDeductionAmount').catch(() => ({ data: null, status: 404 }))
+      ]);
+
+      // Parse frequency - can be JSON {days, hours, minutes} or legacy format (hours as number)
+      let days = 0, hours = 24, minutes = 0;
+      
+      if (frequencyRes.data?.value) {
+        try {
+          const parsed = JSON.parse(frequencyRes.data.value);
+          if (parsed && typeof parsed === 'object') {
+            // New format: {days, hours, minutes}
+            days = parseInt(parsed.days || 0);
+            hours = parseInt(parsed.hours || 0);
+            minutes = parseInt(parsed.minutes || 0);
+          } else if (typeof parsed === 'number') {
+            // Total minutes as number - convert to days/hours/minutes
+            const totalMinutes = parsed;
+            days = Math.floor(totalMinutes / (24 * 60));
+            const remainingMinutes = totalMinutes % (24 * 60);
+            hours = Math.floor(remainingMinutes / 60);
+            minutes = remainingMinutes % 60;
+          }
+        } catch (e) {
+          // Not JSON, try as number (legacy format - hours)
+          const numericValue = parseFloat(frequencyRes.data.value);
+          if (!isNaN(numericValue)) {
+            // If value is > 1000, assume it's total minutes, otherwise assume hours (legacy)
+            const totalMinutes = numericValue > 1000 ? numericValue : numericValue * 60;
+            days = Math.floor(totalMinutes / (24 * 60));
+            const remainingMinutes = totalMinutes % (24 * 60);
+            hours = Math.floor(remainingMinutes / 60);
+            minutes = remainingMinutes % 60;
+          }
+        }
+      }
+
+      setLoanSettings({
+        loanDeductionDays: days,
+        loanDeductionHours: hours,
+        loanDeductionMinutes: minutes,
+        loanDeductionAmount: amountRes.data?.value ? parseFloat(amountRes.data.value) : 0
+      });
+    } catch (error) {
+      console.error('Error fetching loan settings:', error);
+      setLoanSettings({
+        loanDeductionDays: 0,
+        loanDeductionHours: 24,
+        loanDeductionMinutes: 0,
+        loanDeductionAmount: 0
+      });
+    }
+  };
+
+  const saveLoanSettings = async () => {
+    try {
+      // Validate that at least one time unit is set
+      const days = parseInt(loanSettings.loanDeductionDays || 0);
+      const hours = parseInt(loanSettings.loanDeductionHours || 0);
+      const minutes = parseInt(loanSettings.loanDeductionMinutes || 0);
+      
+      if (days === 0 && hours === 0 && minutes === 0) {
+        setError('Please set at least one time unit (days, hours, or minutes)');
+        setLoanSettingsLoading(false);
+        return;
+      }
+      
+      if (loanSettings.loanDeductionAmount <= 0) {
+        setError('Loan deduction amount must be greater than 0');
+        setLoanSettingsLoading(false);
+        return;
+      }
+      
+      setLoanSettingsLoading(true);
+      
+      // Convert days, hours, minutes to JSON format
+      const frequencyValue = JSON.stringify({
+        days: days,
+        hours: hours,
+        minutes: minutes
+      });
+      
+      await Promise.all([
+        api.put('/settings/loanDeductionFrequency', { value: frequencyValue }),
+        api.put('/settings/loanDeductionAmount', { value: loanSettings.loanDeductionAmount.toString() })
+      ]);
+      setNotification({ message: 'Loan settings saved successfully!' });
+      setShowLoanSettings(false);
+    } catch (error) {
+      console.error('Error saving loan settings:', error);
+      setError('Failed to save loan settings');
+    } finally {
+      setLoanSettingsLoading(false);
+    }
   };
 
   // ========== COUNTDOWN OFFERS ==========
@@ -1733,6 +1863,237 @@ Welcome aboard! 🎉`;
                     </>
                   )}
                 </Typography>
+              )}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Loan Settings */}
+      <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <AccountBalance sx={{ fontSize: 32, color: colors.accentText }} />
+              <Box>
+                <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
+                  Loan Settings
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Configure loan deduction frequency and amount
+                </Typography>
+              </Box>
+            </Box>
+            <Button
+              variant="outlined"
+              onClick={() => setShowLoanSettings(!showLoanSettings)}
+              startIcon={<Edit />}
+              sx={{
+                borderColor: colors.accentText,
+                color: colors.accentText,
+                '&:hover': { borderColor: '#00C4A3', backgroundColor: 'rgba(0, 224, 184, 0.1)' }
+              }}
+            >
+              {showLoanSettings ? 'Hide Settings' : 'Edit Settings'}
+            </Button>
+          </Box>
+
+          {showLoanSettings && (
+            <Box sx={{ mt: 3 }}>
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Days"
+                    type="number"
+                    value={loanSettings.loanDeductionDays}
+                    onChange={(e) => setLoanSettings(prev => ({
+                      ...prev,
+                      loanDeductionDays: Math.max(0, parseInt(e.target.value) || 0)
+                    }))}
+                    inputProps={{ min: 0, step: 1 }}
+                    helperText="Days between deductions"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Hours"
+                    type="number"
+                    value={loanSettings.loanDeductionHours}
+                    onChange={(e) => setLoanSettings(prev => ({
+                      ...prev,
+                      loanDeductionHours: Math.max(0, parseInt(e.target.value) || 0)
+                    }))}
+                    inputProps={{ min: 0, max: 23, step: 1 }}
+                    helperText="Hours between deductions (0-23)"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <TextField
+                    fullWidth
+                    label="Minutes"
+                    type="number"
+                    value={loanSettings.loanDeductionMinutes}
+                    onChange={(e) => setLoanSettings(prev => ({
+                      ...prev,
+                      loanDeductionMinutes: Math.max(0, Math.min(59, parseInt(e.target.value) || 0))
+                    }))}
+                    inputProps={{ min: 0, max: 59, step: 1 }}
+                    helperText="Minutes between deductions (0-59)"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Loan Deduction Amount (KES)"
+                    type="number"
+                    value={loanSettings.loanDeductionAmount}
+                    onChange={(e) => setLoanSettings(prev => ({
+                      ...prev,
+                      loanDeductionAmount: parseFloat(e.target.value) || 0
+                    }))}
+                    inputProps={{ min: 0, step: 0.01 }}
+                    helperText="Amount to deduct from savings and add to cash at hand per deduction"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                        '& fieldset': { borderColor: colors.border },
+                        '&:hover fieldset': { borderColor: colors.accentText },
+                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                      },
+                      '& .MuiInputBase-input': {
+                        color: colors.textPrimary
+                      },
+                      '& .MuiInputLabel-root': {
+                        color: colors.textSecondary
+                      },
+                      '& .MuiInputLabel-root.Mui-focused': {
+                        color: colors.accentText
+                      }
+                    }}
+                  />
+                </Grid>
+              </Grid>
+
+              <Box sx={{ display: 'flex', gap: 2, mt: 3, justifyContent: 'flex-end' }}>
+                <Button
+                  variant="outlined"
+                  onClick={() => setShowLoanSettings(false)}
+                  sx={{
+                    borderColor: colors.border,
+                    color: colors.textSecondary
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={saveLoanSettings}
+                  disabled={loanSettingsLoading}
+                  sx={{
+                    backgroundColor: colors.accentText,
+                    color: '#FFFFFF',
+                    '&:hover': { backgroundColor: '#00C4A3' },
+                    '&:disabled': {
+                      backgroundColor: colors.textSecondary,
+                      color: '#FFFFFF'
+                    }
+                  }}
+                >
+                  {loanSettingsLoading ? 'Saving...' : 'Save Settings'}
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {!showLoanSettings && (
+            <Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Frequency: Every{' '}
+                {loanSettings.loanDeductionDays > 0 && `${loanSettings.loanDeductionDays} day${loanSettings.loanDeductionDays > 1 ? 's' : ''} `}
+                {loanSettings.loanDeductionHours > 0 && `${loanSettings.loanDeductionHours} hour${loanSettings.loanDeductionHours > 1 ? 's' : ''} `}
+                {loanSettings.loanDeductionMinutes > 0 && `${loanSettings.loanDeductionMinutes} minute${loanSettings.loanDeductionMinutes > 1 ? 's' : ''}`}
+                {loanSettings.loanDeductionDays === 0 && loanSettings.loanDeductionHours === 0 && loanSettings.loanDeductionMinutes === 0 && '0 minutes'}
+                {' | '}
+                Amount: KES {loanSettings.loanDeductionAmount.toFixed(2)}
+              </Typography>
+              {nextDeductionTime && (
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 1,
+                  mt: 1.5,
+                  p: 1.5,
+                  borderRadius: 1,
+                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)',
+                  border: `1px solid ${colors.accentText}40`
+                }}>
+                  <AccessTime sx={{ fontSize: 18, color: colors.accentText }} />
+                  <Typography variant="body2" sx={{ color: colors.textPrimary }}>
+                    <strong>Next Deduction Run:</strong>{' '}
+                    {new Date(nextDeductionTime).toLocaleString('en-KE', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
+                      hour12: true
+                    })}
+                  </Typography>
+                </Box>
               )}
             </Box>
           )}

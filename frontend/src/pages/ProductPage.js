@@ -28,6 +28,7 @@ import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
+import { stripHtml } from '../utils/stripHtml';
 import DrinkCard from '../components/DrinkCard';
 
 const ProductPage = () => {
@@ -216,7 +217,7 @@ const ProductPage = () => {
   const getAvailableCapacities = () => {
     if (!product) return [];
     return Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0 
-      ? product.capacityPricing.map(pricing => pricing.capacity)
+      ? product.capacityPricing.map(pricing => pricing.capacity || pricing.size)
       : Array.isArray(product.capacity) && product.capacity.length > 0 
       ? product.capacity 
       : [];
@@ -225,20 +226,12 @@ const ProductPage = () => {
   const getPriceForCapacity = (capacity) => {
     if (!product) return 0;
     if (Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0) {
-      const pricing = product.capacityPricing.find(p => p.capacity === capacity);
-      return pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(product.price) || 0;
+      const pricing = product.capacityPricing.find(p => String(p.capacity || p.size) === String(capacity));
+      return pricing ? parseFloat(pricing.currentPrice || pricing.price) || 0 : parseFloat(product.price) || 0;
     }
     return parseFloat(product.price) || 0;
   };
 
-  const getOriginalPriceForCapacity = (capacity) => {
-    if (!product) return 0;
-    if (Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0) {
-      const pricing = product.capacityPricing.find(p => p.capacity === capacity);
-      return pricing ? parseFloat(pricing.originalPrice) || 0 : parseFloat(product.originalPrice) || 0;
-    }
-    return parseFloat(product.originalPrice) || 0;
-  };
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -330,182 +323,25 @@ const ProductPage = () => {
     return 'Various';
   };
 
-  const cleanProductDescription = (description) => {
-    if (!description) return '';
-    
-    let cleaned = description;
-    
-    // Remove emojis
-    cleaned = cleaned.replace(/[\u{1F300}-\u{1F9FF}]/gu, '');
-    cleaned = cleaned.replace(/[\u{2600}-\u{26FF}]/gu, '');
-    cleaned = cleaned.replace(/[\u{2700}-\u{27BF}]/gu, '');
-    cleaned = cleaned.replace(/[🛒📱]/gu, '');
-    
-    // Remove UI elements
-    cleaned = cleaned.replace(/in\s+stock/gi, '');
-    cleaned = cleaned.replace(/quantity[^.]*/gi, '');
-    cleaned = cleaned.replace(/add\s+to\s+cart/gi, '');
-    cleaned = cleaned.replace(/order\s+via\s+whatsapp/gi, '');
-    cleaned = cleaned.replace(/share[^.]*/gi, '');
-    cleaned = cleaned.replace(/product\s+details/gi, '');
-    cleaned = cleaned.replace(/category/gi, '');
-    cleaned = cleaned.replace(/sub\s+category/gi, '');
-    cleaned = cleaned.replace(/alcohol\s+content/gi, '');
-    cleaned = cleaned.replace(/rate\s+[^.]*/gi, '');
-    cleaned = cleaned.replace(/−\s*\+\s*/gi, '');
-    
-    // Remove specific promotional sentences
-    cleaned = cleaned.replace(/our\s+delivery\s+service\s+(are|is)\s+(free|fast)[^.]*/gi, '');
-    cleaned = cleaned.replace(/we\s+offer\s+you\s+prices[^.]*/gi, '');
-    cleaned = cleaned.replace(/free\s+and\s+fast\s+alcohol\s+delivery[^.]*/gi, '');
-    cleaned = cleaned.replace(/in\s+nairobi\s+and\s+its\s+environs[^.]*/gi, '');
-    cleaned = cleaned.replace(/website\s+to\s+sample\s+more\s+drinks[^.]*/gi, '');
-    cleaned = cleaned.replace(/ranging\s+from\s+wine[^.]*/gi, '');
-    cleaned = cleaned.replace(/just\s+to\s+mention\s+a\s+few[^.]*/gi, '');
-    cleaned = cleaned.replace(/our\s+drinks\s+are\s+at\s+prices[^.]*/gi, '');
-    cleaned = cleaned.replace(/delivery\s+is\s+free[^.]*/gi, '');
-    
-    // Remove ABV mentions
-    cleaned = cleaned.replace(/abv\s*\d+%/gi, '');
-    cleaned = cleaned.replace(/\d+%\s*abv/gi, '');
-    cleaned = cleaned.replace(/alcohol\s+content[^.]*/gi, '');
-    cleaned = cleaned.replace(/\(abv[^)]*\)/gi, '');
-    
-    // Remove promotional language
-    const promotionalPatterns = [
-      /buy\s+now/gi,
-      /order\s+now/gi,
-      /shop\s+now/gi,
-      /get\s+it\s+now/gi,
-      /limited\s+time\s+offer/gi,
-      /special\s+offer/gi,
-      /don't\s+miss\s+out/gi,
-      /act\s+now/gi,
-      /hurry\s+up/gi,
-      /while\s+supplies\s+last/gi,
-      /exclusive\s+deal/gi,
-      /best\s+price/gi,
-      /lowest\s+price/gi,
-      /save\s+big/gi,
-      /discount/gi,
-      /sale/gi,
-      /call\s+us/gi,
-      /contact\s+us/gi,
-      /visit\s+our/gi,
-      /check\s+out/gi,
-      /click\s+here/gi,
-      /learn\s+more/gi,
-      /find\s+out\s+more/gi,
-      /delivery\s+(service|available|is|free|fast)/gi,
-      /fast\s+and\s+free/gi,
-      /free\s+delivery/gi,
-      /within\s*nairobi/gi,
-      /across\s*nairobi/gi,
-      /nairobi\s+and\s+environs/gi,
-      /affordable\s+(price|prices)/gi,
-      /at\s+affordable\s+prices/gi
-    ];
-    
-    promotionalPatterns.forEach(pattern => {
-      cleaned = cleaned.replace(pattern, '');
-    });
-    
-    // Remove prices, capacities, phone numbers, website
-    cleaned = cleaned
-      .replace(/KES\s*\d+[.,]?\d*/gi, '')
-      .replace(/\d+\s*(ml|ML|L|litre|Litre|pack|Pack|bottle|Bottle)/gi, '')
-      .replace(/0\d{9,}/g, '')
-      .replace(/\+254\d+/g, '')
-      .replace(/072\d+/g, '')
-      .replace(/073\d+/g, '')
-      .replace(/071\d+/g, '')
-      .replace(/074\d+/g, '')
-      .replace(/075\d+/g, '')
-      .replace(/076\d+/g, '')
-      .replace(/079\d+/g, '')
-      .replace(/dialadrinkkenya\.com/gi, '')
-      .replace(/www\.dialadrinkkenya\.com/gi, '')
-      .replace(/dial\s*a\s*drink/gi, '')
-      .replace(/https?:\/\/[^\s]+/gi, '');
-    
-    // Split into sentences and filter out non-logical sentences
-    let sentences = cleaned.split(/[.!?]+/)
-      .map(s => s.trim())
-      .filter(s => {
-        if (s.length < 30) return false;
-        
-        // Remove sentences with promotional content
-        if (/our\s+delivery\s+service|we\s+offer\s+you|free\s+and\s+fast|delivery\s+(service|is|free|fast)|buy\s+[^.]*\s+online|order\s+(online|via)|visit\s+our|dialadrinkkenya|place\s+your\s+order|call\s+(or|to|us)|affordable\s+price|website\s+to\s+sample|ranging\s+from|just\s+to\s+mention|our\s+drinks\s+are|rate\s+[^.]*|abv|alcohol\s+content/i.test(s)) {
-          return false;
-        }
-        
-        // Remove sentences mentioning ABV
-        if (/abv|alcohol\s+content|%\s*abv|abv\s*%/i.test(s)) return false;
-        
-        // Remove sentences with prices
-        if (/KES\s*\d+|ksh\s*\d+/.test(s)) return false;
-        
-        return true;
-      });
-    
-    cleaned = sentences.join('. ') + '.';
-    
-    // Clean up multiple spaces and punctuation
-    cleaned = cleaned.replace(/\s+/g, ' ');
-    cleaned = cleaned.replace(/[.,]{2,}/g, '.');
-    cleaned = cleaned.replace(/^[.,\s]+|[.,\s]+$/g, '');
-    
-    return cleaned;
-  };
 
-  const refineLanguage = (text) => {
-    if (!text) return '';
-    
-    // Replace overly casual or promotional phrases with more refined language
-    const refinements = [
-      { pattern: /\bawesome\b/gi, replacement: 'exceptional' },
-      { pattern: /\bamazing\b/gi, replacement: 'remarkable' },
-      { pattern: /\bincredible\b/gi, replacement: 'notable' },
-      { pattern: /\bfantastic\b/gi, replacement: 'superb' },
-      { pattern: /\bperfect\s+for\b/gi, replacement: 'well-suited for' },
-      { pattern: /\bgreat\s+for\b/gi, replacement: 'ideal for' },
-      { pattern: /\breally\s+/gi, replacement: '' },
-      { pattern: /\bvery\s+/gi, replacement: '' },
-      { pattern: /\bso\s+/gi, replacement: '' },
-      { pattern: /\bdefinitely\b/gi, replacement: 'certainly' },
-      { pattern: /\babsolutely\b/gi, replacement: 'indeed' },
-      { pattern: /\bdefinitely\b/gi, replacement: 'certainly' },
-      { pattern: /\bawesome\b/gi, replacement: 'excellent' },
-      { pattern: /\bamazing\b/gi, replacement: 'impressive' },
-    ];
-    
-    let refined = text;
-    refinements.forEach(({ pattern, replacement }) => {
-      refined = refined.replace(pattern, replacement);
-    });
-    
-    return refined;
-  };
 
   const getProductDescription = () => {
     if (!product) return { sentences: [], fullText: '' };
     
     let description = '';
     
-    // Prefer detailed description from website if available
-    if (detailedDescription && detailedDescription.length > 0) {
+    // Use the full description from database (with HTML stripped) for "For More Information" section
+    // Show the complete content, not the cleaned/promotional-removed version
+    if (product.description && product.description.length > 0) {
+      console.log(`[ProductPage] Using full product description from database, length: ${product.description.length}`);
+      // Strip HTML but keep all the content (don't remove promotional text)
+      description = stripHtml(product.description);
+    } else if (detailedDescription && detailedDescription.length > 0) {
       console.log(`[ProductPage] Using detailed description, length: ${detailedDescription.length}`);
-      // Backend already cleaned it well, just do light refinement
       description = detailedDescription;
-      description = refineLanguage(description);
-    } else if (product.description && product.description.length > 0) {
-      console.log(`[ProductPage] Using product description from database, length: ${product.description.length}`);
-      // Fallback to product description from database
-      description = cleanProductDescription(product.description);
-      description = refineLanguage(description);
     }
     
-    // If no description or cleaned description is too short, generate a refined one
+    // If no description, generate a basic one
     if (!description || description.length < 30) {
       const productType = getProductType();
       const origin = product.origin || product.country || '';
@@ -578,34 +414,35 @@ const ProductPage = () => {
         {/* Product Image */}
         <Box sx={{ width: { xs: '100%', md: '33.333%' }, flexShrink: 0 }}>
           <Card sx={{ width: '100%' }}>
-            {imageUrl && !imageError ? (
-              <CardMedia
-                component="img"
-                image={imageUrl}
-                alt={product.name}
-                sx={{ 
-                  objectFit: 'contain', 
-                  p: 2, 
-                  backgroundColor: '#fff',
-                  height: '400px',
-                  width: '100%'
-                }}
-                onError={() => setImageError(true)}
-              />
-            ) : (
-              <Box
-                sx={{
-                  height: 400,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#fff',
-                  color: '#666'
-                }}
-              >
-                <LocalBar sx={{ fontSize: 80 }} />
-              </Box>
-            )}
+            <Box
+              sx={{
+                width: '100%',
+                height: '400px',
+                minHeight: '400px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: '#fff',
+                overflow: 'hidden'
+              }}
+            >
+              {imageUrl && !imageError ? (
+                <CardMedia
+                  component="img"
+                  image={imageUrl}
+                  alt={product.name}
+                  sx={{ 
+                    objectFit: 'contain', 
+                    width: '100%',
+                    height: '100%',
+                    p: 2
+                  }}
+                  onError={() => setImageError(true)}
+                />
+              ) : (
+                <LocalBar sx={{ fontSize: 80, color: '#666' }} />
+              )}
+            </Box>
           </Card>
           
           {/* Add to Cart Button - Mobile Only (below image) */}
@@ -760,51 +597,87 @@ const ProductPage = () => {
                   value={selectedCapacity}
                   onChange={(e) => setSelectedCapacity(e.target.value)}
                 >
-                  {availableCapacities.map((capacity) => {
-                    const price = getPriceForCapacity(capacity);
-                    const originalPrice = getOriginalPriceForCapacity(capacity);
-                    const discount = originalPrice && originalPrice > price 
-                      ? Math.round(((originalPrice - price) / originalPrice) * 100)
-                      : 0;
-                    
-                    return (
-                      <FormControlLabel
-                        key={capacity}
-                        value={capacity}
-                        control={<Radio />}
-                        label={
-                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                              {capacity}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {originalPrice && originalPrice > price && (
-                                <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                                  KES {originalPrice.toFixed(2)}
-                                </Typography>
-                              )}
-                              <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
-                                KES {price.toFixed(2)}
-                              </Typography>
-                              {discount > 0 && (
-                                <Chip label={`${discount}% OFF`} size="small" color="error" />
-                              )}
-                            </Box>
-                          </Box>
-                        }
-                        sx={{
-                          border: '1px solid',
-                          borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
-                          borderRadius: 1,
-                          p: 1.5,
-                          mb: 1,
-                          '&:hover': {
-                            borderColor: colors.accentText
+                  {Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0
+                    ? (() => {
+                        // Deduplicate by capacity, keeping the first occurrence
+                        const seen = new Set();
+                        const uniquePricing = product.capacityPricing.filter(pricing => {
+                          const capacity = pricing.capacity || pricing.size;
+                          if (seen.has(capacity)) {
+                            return false;
                           }
-                        }}
-                      />
-                    );
-                  })}
+                          seen.add(capacity);
+                          return true;
+                        });
+                        
+                        return uniquePricing.map((pricing, index) => {
+                          const capacity = pricing.capacity || pricing.size;
+                          const price = parseFloat(pricing.currentPrice || pricing.price) || 0;
+                          
+                          return (
+                            <FormControlLabel
+                              key={`${product.id}-${capacity}-${index}`}
+                              value={capacity}
+                            control={<Radio />}
+                            label={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                  {capacity}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
+                                    KES {price.toFixed(2)}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            }
+                            sx={{
+                              border: '1px solid',
+                              borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
+                              borderRadius: 1,
+                              p: 1.5,
+                              mb: 1,
+                              '&:hover': {
+                                borderColor: colors.accentText
+                              }
+                            }}
+                          />
+                          );
+                        });
+                      })()
+                    : availableCapacities.map((capacity, index) => {
+                        // Fallback for drinks with capacity array but no capacityPricing
+                        const price = getPriceForCapacity(capacity);
+                        return (
+                          <FormControlLabel
+                            key={`${product.id}-${capacity}-${index}`}
+                            value={capacity}
+                            control={<Radio />}
+                            label={
+                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                  {capacity}
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
+                                    KES {price.toFixed(2)}
+                                  </Typography>
+                                </Box>
+                              </Box>
+                            }
+                            sx={{
+                              border: '1px solid',
+                              borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
+                              borderRadius: 1,
+                              p: 1.5,
+                              mb: 1,
+                              '&:hover': {
+                                borderColor: colors.accentText
+                              }
+                            }}
+                          />
+                        );
+                      })}
                 </RadioGroup>
               </FormControl>
             ) : (
