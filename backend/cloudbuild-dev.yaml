@@ -7,7 +7,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:${SHORT_SHA}'
       - '-t'
       - 'gcr.io/$PROJECT_ID/deliveryos-backend:latest'
       - '.'
@@ -16,7 +16,7 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:${SHORT_SHA}'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -31,7 +31,7 @@ steps:
       - 'deploy'
       - 'deliveryos-development-backend'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/deliveryos-backend:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-backend:${SHORT_SHA}'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -48,7 +48,7 @@ steps:
       # Note: DATABASE_URL should be set manually or via Secret Manager
 
 images:
-  - 'gcr.io/$PROJECT_ID/deliveryos-backend:${SHORT_SHA:-latest}'
+  - 'gcr.io/$PROJECT_ID/deliveryos-backend:${SHORT_SHA}'
   - 'gcr.io/$PROJECT_ID/deliveryos-backend:latest'
 
 options:
