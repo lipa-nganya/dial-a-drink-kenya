@@ -339,7 +339,8 @@ const Customers = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {Array.isArray(customers) && customers.length > 0 ? customers.map((customer) => (
+              {Array.isArray(customers) && customers.length > 0 ? (
+                customers.map((customer) => (
                   <TableRow key={customer.id}>
                     <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                       {customer.name || 'Customer'}
@@ -435,11 +436,11 @@ const Customers = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                )
-              )) : (
+                ))
+              ) : (
                 <TableRow>
                   <TableCell colSpan={7} sx={{ color: colors.textSecondary, textAlign: 'center', py: 4 }}>
-                    Loading customers...
+                    {loading ? 'Loading customers...' : 'No customers found.'}
                   </TableCell>
                 </TableRow>
               )}
