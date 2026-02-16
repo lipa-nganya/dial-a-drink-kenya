@@ -24,7 +24,7 @@ export const getBackendUrl = () => {
   // Development sites (thewolfgang.tech)
   const isDevSite = hostname.includes('thewolfgang.tech');
   if (isDevSite) {
-    return 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app';
+    return 'https://deliveryos-development-backend-805803410802.us-central1.run.app';
   }
   
   // Fallback: Production backend URL (used for other hosted environments)
