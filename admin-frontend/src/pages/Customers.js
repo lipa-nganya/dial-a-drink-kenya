@@ -97,6 +97,16 @@ const Customers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
 
+  // Debounce search input - update searchQuery after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchQuery(searchInput);
+      setPage(0); // Reset to first page when search changes
+    }, 500); // 500ms debounce delay
+
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   useEffect(() => {
     fetchCustomers();
   }, [page, rowsPerPage, searchQuery]);
@@ -149,14 +159,7 @@ const Customers = () => {
 
   const handleSearchChange = (event) => {
     setSearchInput(event.target.value);
-  };
-
-  const handleSearchSubmit = (event) => {
-    if (event) {
-      event.preventDefault();
-    }
-    setSearchQuery(searchInput);
-    setPage(0); // Reset to first page when searching
+    // searchQuery will be updated automatically via debounce useEffect
   };
 
   const handleClearSearch = () => {
@@ -242,56 +245,54 @@ const Customers = () => {
 
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
         <Box sx={{ flex: 1, minWidth: 300, maxWidth: 500 }}>
-          <form onSubmit={handleSearchSubmit}>
-            <TextField
-              fullWidth
-              placeholder="Search by name, phone, email, or username..."
-              value={searchInput}
-              onChange={handleSearchChange}
-              variant="outlined"
-              size="small"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <Search sx={{ color: colors.textSecondary }} />
-                  </InputAdornment>
-                ),
-                endAdornment: searchInput && (
-                  <InputAdornment position="end">
-                    <IconButton
-                      size="small"
-                      onClick={handleClearSearch}
-                      sx={{ color: colors.textSecondary }}
-                    >
-                      <Clear />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-                sx: {
-                  backgroundColor: colors.paper,
-                  color: colors.textPrimary,
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: colors.border
-                  },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: colors.accentText
-                  },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: colors.accentText
-                  }
-                }
-              }}
-              sx={{
-                '& .MuiInputBase-input': {
-                  color: colors.textPrimary
+          <TextField
+            fullWidth
+            placeholder="Search by name, phone, email, or username..."
+            value={searchInput}
+            onChange={handleSearchChange}
+            variant="outlined"
+            size="small"
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search sx={{ color: colors.textSecondary }} />
+                </InputAdornment>
+              ),
+              endAdornment: searchInput && (
+                <InputAdornment position="end">
+                  <IconButton
+                    size="small"
+                    onClick={handleClearSearch}
+                    sx={{ color: colors.textSecondary }}
+                  >
+                    <Clear />
+                  </IconButton>
+                </InputAdornment>
+              ),
+              sx: {
+                backgroundColor: colors.paper,
+                color: colors.textPrimary,
+                '& .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.border
                 },
-                '& .MuiInputBase-input::placeholder': {
-                  color: colors.textSecondary,
-                  opacity: 1
+                '&:hover .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accentText
+                },
+                '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                  borderColor: colors.accentText
                 }
-              }}
-            />
-          </form>
+              }
+            }}
+            sx={{
+              '& .MuiInputBase-input': {
+                color: colors.textPrimary
+              },
+              '& .MuiInputBase-input::placeholder': {
+                color: colors.textSecondary,
+                opacity: 1
+              }
+            }}
+          />
         </Box>
         <Button
           variant="outlined"
