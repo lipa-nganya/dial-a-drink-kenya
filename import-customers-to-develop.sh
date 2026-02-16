@@ -24,12 +24,18 @@ echo "📂 SQL file: $SQL_FILE"
 echo "🔌 Database: $DB_CONNECTION"
 echo ""
 
-# Check if Cloud SQL Proxy is installed
-if ! command -v cloud-sql-proxy &> /dev/null; then
+# Check if Cloud SQL Proxy is available (in PATH or local directory)
+CLOUD_SQL_PROXY=""
+if command -v cloud-sql-proxy &> /dev/null; then
+    CLOUD_SQL_PROXY="cloud-sql-proxy"
+elif [ -f "./cloud-sql-proxy" ]; then
+    CLOUD_SQL_PROXY="./cloud-sql-proxy"
+else
     echo "❌ Cloud SQL Proxy not found"
-    echo "   Install from: https://cloud.google.com/sql/docs/postgres/sql-proxy"
-    echo "   Or download: https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.darwin.arm64"
-    exit 1
+    echo "   Downloading Cloud SQL Proxy..."
+    curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.darwin.arm64
+    chmod +x cloud-sql-proxy
+    CLOUD_SQL_PROXY="./cloud-sql-proxy"
 fi
 
 # Check if proxy is already running
@@ -37,11 +43,11 @@ if pgrep -f "cloud-sql-proxy.*$DB_CONNECTION" > /dev/null; then
     echo "✅ Cloud SQL Proxy is already running"
     PROXY_RUNNING=true
 else
-    echo "🚀 Starting Cloud SQL Proxy..."
-    cloud-sql-proxy "$DB_CONNECTION" --port 5432 &
+    echo "🚀 Starting Cloud SQL Proxy on port 5433..."
+    $CLOUD_SQL_PROXY "$DB_CONNECTION" --port 5433 &
     PROXY_PID=$!
     PROXY_RUNNING=false
-    sleep 3
+    sleep 5
     
     # Check if proxy started successfully
     if ! kill -0 $PROXY_PID 2>/dev/null; then
@@ -62,8 +68,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Set DATABASE_URL for development
-export DATABASE_URL="postgresql://dialadrink_app:E7A3IIa60hFD3bkGH1XAiryvB@localhost:5432/dialadrink_prod"
+# Set DATABASE_URL for development (using port 5433 for Cloud SQL Proxy)
+export DATABASE_URL="postgresql://dialadrink_app:E7A3IIa60hFD3bkGH1XAiryvB@localhost:5433/dialadrink_prod"
 export NODE_ENV=production
 
 echo ""
