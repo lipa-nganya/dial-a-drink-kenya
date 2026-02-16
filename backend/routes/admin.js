@@ -4556,9 +4556,15 @@ router.get('/customers', async (req, res) => {
             )
           : customer.createdAt;
 
+        // Use customerName if it exists and is not empty, otherwise fall back to username/phone
+        // Only use username/phone if customerName is truly null or empty
+        const displayName = (customerName && customerName.trim() !== '') 
+          ? customerName.trim() 
+          : (username || 'Customer');
+
         return {
           id: customer.id,
-          name: customerName || username || 'Customer',
+          name: displayName,
           username,
           email,
           phone,
