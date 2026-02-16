@@ -23,7 +23,9 @@ import {
   Tabs,
   Tab,
   Grid,
-  TablePagination
+  TablePagination,
+  TextField,
+  InputAdornment
 } from '@mui/material';
 import {
   People,
@@ -31,7 +33,9 @@ import {
   VpnKey,
   VisibilityOff,
   Refresh,
-  ContentCopy
+  ContentCopy,
+  Search,
+  Clear
 } from '@mui/icons-material';
 import {
   getOrderStatusChipProps,
@@ -88,21 +92,30 @@ const Customers = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
   const [totalCustomers, setTotalCustomers] = useState(0);
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
 
   useEffect(() => {
     fetchCustomers();
-  }, [page, rowsPerPage]);
+  }, [page, rowsPerPage, searchQuery]);
 
   const fetchCustomers = async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get('/admin/customers', {
-        params: {
-          page: page + 1, // Backend uses 1-based pagination
-          limit: rowsPerPage
-        }
-      });
+      const params = {
+        page: page + 1, // Backend uses 1-based pagination
+        limit: rowsPerPage
+      };
+      
+      // Add search query if provided
+      if (searchQuery && searchQuery.trim() !== '') {
+        params.search = searchQuery.trim();
+      }
+      
+      const response = await api.get('/admin/customers', { params });
       
       // Handle both paginated and non-paginated responses
       if (response.data.customers && response.data.total !== undefined) {
@@ -132,6 +145,24 @@ const Customers = () => {
   const handleChangeRowsPerPage = (event) => {
     setRowsPerPage(parseInt(event.target.value, 10));
     setPage(0); // Reset to first page when changing rows per page
+  };
+
+  const handleSearchChange = (event) => {
+    setSearchInput(event.target.value);
+  };
+
+  const handleSearchSubmit = (event) => {
+    if (event) {
+      event.preventDefault();
+    }
+    setSearchQuery(searchInput);
+    setPage(0); // Reset to first page when searching
+  };
+
+  const handleClearSearch = () => {
+    setSearchInput('');
+    setSearchQuery('');
+    setPage(0);
   };
 
   const fetchCustomerDetails = async (customerId) => {
@@ -209,7 +240,59 @@ const Customers = () => {
         </Box>
       </Box>
 
-      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <Box sx={{ flex: 1, minWidth: 300, maxWidth: 500 }}>
+          <form onSubmit={handleSearchSubmit}>
+            <TextField
+              fullWidth
+              placeholder="Search by name, phone, email, or username..."
+              value={searchInput}
+              onChange={handleSearchChange}
+              variant="outlined"
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search sx={{ color: colors.textSecondary }} />
+                  </InputAdornment>
+                ),
+                endAdornment: searchInput && (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={handleClearSearch}
+                      sx={{ color: colors.textSecondary }}
+                    >
+                      <Clear />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+                sx: {
+                  backgroundColor: colors.paper,
+                  color: colors.textPrimary,
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.border
+                  },
+                  '&:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText
+                  },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: colors.accentText
+                  }
+                }
+              }}
+              sx={{
+                '& .MuiInputBase-input': {
+                  color: colors.textPrimary
+                },
+                '& .MuiInputBase-input::placeholder': {
+                  color: colors.textSecondary,
+                  opacity: 1
+                }
+              }}
+            />
+          </form>
+        </Box>
         <Button
           variant="outlined"
           startIcon={<Refresh />}

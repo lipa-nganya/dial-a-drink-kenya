@@ -4460,12 +4460,28 @@ router.get('/customers', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 25;
     const offset = (page - 1) * limit;
+    
+    // Search parameter
+    const searchQuery = req.query.search ? req.query.search.trim() : null;
 
-    // Get total count for pagination
-    const totalCustomers = await db.Customer.count();
+    // Build where clause for search
+    const whereClause = {};
+    if (searchQuery) {
+      const searchPattern = `%${searchQuery}%`;
+      whereClause[Op.or] = [
+        { customerName: { [Op.iLike]: searchPattern } },
+        { phone: { [Op.iLike]: searchPattern } },
+        { email: { [Op.iLike]: searchPattern } },
+        { username: { [Op.iLike]: searchPattern } }
+      ];
+    }
 
-    // Get paginated customers
+    // Get total count for pagination (with search filter if applicable)
+    const totalCustomers = await db.Customer.count({ where: whereClause });
+
+    // Get paginated customers (with search filter if applicable)
     const customers = await db.Customer.findAll({
+      where: whereClause,
       order: [['createdAt', 'DESC']],
       limit: limit,
       offset: offset
