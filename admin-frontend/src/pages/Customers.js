@@ -128,7 +128,7 @@ const Customers = () => {
       const response = await api.get('/admin/customers', { params });
       
       // Handle both paginated and non-paginated responses
-      if (response.data.customers && response.data.total !== undefined) {
+      if (response.data && response.data.customers && Array.isArray(response.data.customers) && response.data.total !== undefined) {
         // Paginated response
         setCustomers(response.data.customers);
         setTotalCustomers(response.data.total);
@@ -137,6 +137,8 @@ const Customers = () => {
         setCustomers(response.data);
         setTotalCustomers(response.data.length);
       } else {
+        // Fallback: ensure customers is always an array
+        console.warn('Unexpected response format from /admin/customers:', response.data);
         setCustomers([]);
         setTotalCustomers(0);
       }
@@ -337,8 +339,7 @@ const Customers = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {customers.map((customer) => {
-                return (
+              {Array.isArray(customers) && customers.length > 0 ? customers.map((customer) => (
                   <TableRow key={customer.id}>
                     <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                       {customer.name || 'Customer'}
@@ -434,10 +435,16 @@ const Customers = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                )
+              )) : (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ color: colors.textSecondary, textAlign: 'center', py: 4 }}>
+                    Loading customers...
+                  </TableCell>
+                </TableRow>
+              )}
 
-              {customers.length === 0 && (
+              {Array.isArray(customers) && customers.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={7} sx={{ color: colors.textSecondary, textAlign: 'center', py: 4 }}>
                     No customers found.
