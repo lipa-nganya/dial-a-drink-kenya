@@ -158,18 +158,42 @@ function parseCustomersFromSQL(sqlContent) {
 
 async function importCustomers() {
   try {
-    const sqlFilePath = process.argv[2] || path.join(process.env.HOME || '', 'Documents', 'dial a drink database.sql');
+    let sqlFilePath = process.argv[2];
+    let sqlContent;
+    
+    // Check if SQL file path is a Cloud Storage URL (gs://)
+    if (sqlFilePath && sqlFilePath.startsWith('gs://')) {
+      console.log(`📥 Downloading SQL file from Cloud Storage: ${sqlFilePath}`);
+      const { Storage } = require('@google-cloud/storage');
+      const storage = new Storage();
+      const bucketName = sqlFilePath.replace('gs://', '').split('/')[0];
+      const fileName = sqlFilePath.replace(`gs://${bucketName}/`, '');
+      const bucket = storage.bucket(bucketName);
+      const file = bucket.file(fileName);
+      
+      // Download file to temporary location
+      const tempPath = `/tmp/customers-import-${Date.now()}.sql`;
+      await file.download({ destination: tempPath });
+      sqlFilePath = tempPath;
+      console.log(`✅ Downloaded to: ${tempPath}`);
+    }
+    
+    // Default to local file if no argument provided
+    if (!sqlFilePath) {
+      sqlFilePath = path.join(process.env.HOME || '', 'Documents', 'dial a drink database.sql');
+    }
     
     if (!fs.existsSync(sqlFilePath)) {
       console.error(`❌ SQL file not found: ${sqlFilePath}`);
       console.error('Usage: node import-customers-from-sql.js /path/to/dial\\ a\\ drink\\ database.sql');
+      console.error('   Or: node import-customers-from-sql.js gs://bucket-name/file.sql');
       process.exit(1);
     }
     
     console.log(`📂 Reading SQL file: ${sqlFilePath}`);
     console.log('⏳ This may take a while for large files...');
     
-    const sqlContent = fs.readFileSync(sqlFilePath, 'utf8');
+    sqlContent = fs.readFileSync(sqlFilePath, 'utf8');
     console.log(`✅ File read successfully (${(sqlContent.length / 1024 / 1024).toFixed(2)} MB)`);
     
     console.log('\n📊 Parsing customer data...');
