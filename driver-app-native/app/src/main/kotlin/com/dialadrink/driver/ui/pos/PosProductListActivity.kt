@@ -20,6 +20,7 @@ import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.PosProduct
 import com.dialadrink.driver.data.model.PosCartItem
 import com.dialadrink.driver.databinding.ActivityPosProductListBinding
+import com.dialadrink.driver.utils.SharedPrefs
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.util.Locale
@@ -55,11 +56,20 @@ class PosProductListActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
 
-        // Restore cart from intent if coming from cart screen
+        // Restore cart from intent if coming from cart screen, otherwise load from SharedPrefs
         val cartItems = intent.getParcelableArrayListExtra<PosCartItem>(CART_EXTRA)
-        if (cartItems != null) {
+        if (cartItems != null && cartItems.isNotEmpty()) {
             cart.clear()
             cart.addAll(cartItems)
+            // Save to SharedPrefs when cart is passed via Intent
+            SharedPrefs.savePosCart(this, cart)
+        } else {
+            // Load cart from SharedPrefs if no cart passed via Intent
+            val savedCart = SharedPrefs.getPosCart(this)
+            if (savedCart.isNotEmpty()) {
+                cart.clear()
+                cart.addAll(savedCart)
+            }
         }
 
         setupRecyclerView()
@@ -70,7 +80,15 @@ class PosProductListActivity : AppCompatActivity() {
         loadProducts(initialLoad = true)
     }
 
+    override fun onPause() {
+        super.onPause()
+        // Save cart when navigating away
+        SharedPrefs.savePosCart(this, cart)
+    }
+    
     override fun onSupportNavigateUp(): Boolean {
+        // Save cart before navigating back
+        SharedPrefs.savePosCart(this, cart)
         finish()
         return true
     }
@@ -204,6 +222,8 @@ class PosProductListActivity : AppCompatActivity() {
         }
 
         updateCartButton()
+        // Save cart to SharedPrefs when items are added
+        SharedPrefs.savePosCart(this, cart)
         Toast.makeText(this, "Added ${product.name} to cart", Toast.LENGTH_SHORT).show()
     }
 
@@ -286,6 +306,8 @@ class PosProductListActivity : AppCompatActivity() {
             if (updatedCart != null) {
                 cart.clear()
                 cart.addAll(updatedCart)
+                // Save updated cart to SharedPrefs
+                SharedPrefs.savePosCart(this, cart)
                 updateCartButton()
                 // Reload products to refresh stock
                 currentOffset = 0

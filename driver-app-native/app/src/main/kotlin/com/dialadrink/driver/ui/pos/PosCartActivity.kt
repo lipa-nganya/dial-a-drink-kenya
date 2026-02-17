@@ -23,6 +23,7 @@ import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.*
 import com.dialadrink.driver.databinding.ActivityPosCartBinding
+import com.dialadrink.driver.utils.SharedPrefs
 // Removed Google Places SDK imports - now using backend API for cost savings
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
@@ -69,11 +70,20 @@ class PosCartActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.setDisplayShowHomeEnabled(true)
 
-        // Get cart from intent
+        // Get cart from intent first (if coming from product list)
         val cartItems = intent.getParcelableArrayListExtra<PosCartItem>(CART_EXTRA)
-        if (cartItems != null) {
+        if (cartItems != null && cartItems.isNotEmpty()) {
             cart.clear()
             cart.addAll(cartItems)
+            // Save to SharedPrefs when cart is passed via Intent
+            SharedPrefs.savePosCart(this, cart)
+        } else {
+            // Load cart from SharedPrefs if no cart passed via Intent
+            val savedCart = SharedPrefs.getPosCart(this)
+            if (savedCart.isNotEmpty()) {
+                cart.clear()
+                cart.addAll(savedCart)
+            }
         }
         
         setupRecyclerView()
@@ -85,9 +95,105 @@ class PosCartActivity : AppCompatActivity() {
         // Setup payment method spinner
         setupPaymentMethodSpinner()
         
+        // Restore form fields from SharedPrefs
+        restoreCartFormFields()
+        
         // Update UI after everything is set up
         adapter.notifyDataSetChanged()
         updateTotals()
+    }
+    
+    private fun restoreCartFormFields() {
+        // Restore customer phone
+        val savedPhone = SharedPrefs.getPosCartCustomerPhone(this)
+        if (!savedPhone.isNullOrEmpty()) {
+            binding.customerPhoneEditText.setText(savedPhone)
+            // Trigger customer check if phone exists
+            checkCustomer(savedPhone)
+        }
+        
+        // Restore delivery address
+        val savedAddress = SharedPrefs.getPosCartDeliveryAddress(this)
+        if (!savedAddress.isNullOrEmpty()) {
+            binding.deliveryAddressEditText.setText(savedAddress)
+            selectedAddressText = savedAddress
+        }
+        
+        // Restore territory
+        val savedTerritoryId = SharedPrefs.getPosCartTerritoryId(this)
+        if (savedTerritoryId != null) {
+            selectedTerritory = territories.find { it.id == savedTerritoryId }
+            selectedTerritory?.let {
+                binding.territoryEditText.setText(it.name)
+            }
+        }
+        
+        // Restore payment method
+        val savedPaymentMethod = SharedPrefs.getPosCartPaymentMethod(this)
+        if (!savedPaymentMethod.isNullOrEmpty()) {
+            selectedPaymentMethod = savedPaymentMethod
+            val paymentIndex = paymentMethods.indexOf(savedPaymentMethod)
+            if (paymentIndex >= 0) {
+                binding.paymentMethodSpinner.setSelection(paymentIndex)
+            }
+        }
+        
+        // Restore delivery fee
+        val savedDeliveryFee = SharedPrefs.getPosCartDeliveryFee(this)
+        if (savedDeliveryFee != null && savedDeliveryFee > 0) {
+            binding.deliveryFeeEditText.setText(savedDeliveryFee.toString())
+        }
+        
+        // Restore order type
+        val savedOrderType = SharedPrefs.getPosCartOrderType(this)
+        if (!savedOrderType.isNullOrEmpty()) {
+            val orderTypeIndex = orderTypes.indexOf(savedOrderType)
+            if (orderTypeIndex >= 0) {
+                binding.orderTypeSpinner.setSelection(orderTypeIndex)
+            }
+        }
+    }
+    
+    private fun saveCartToPrefs() {
+        SharedPrefs.savePosCart(this, cart)
+    }
+    
+    private fun saveFormFieldsToPrefs() {
+        // Save customer phone
+        val phone = binding.customerPhoneEditText.text?.toString()?.trim()
+        if (!phone.isNullOrEmpty()) {
+            SharedPrefs.savePosCartCustomerPhone(this, phone)
+        }
+        
+        // Save delivery address
+        val address = binding.deliveryAddressEditText.text?.toString()?.trim()
+        if (!address.isNullOrEmpty()) {
+            SharedPrefs.savePosCartDeliveryAddress(this, address)
+        }
+        
+        // Save territory
+        SharedPrefs.savePosCartTerritoryId(this, selectedTerritory?.id)
+        
+        // Save payment method
+        SharedPrefs.savePosCartPaymentMethod(this, selectedPaymentMethod)
+        
+        // Save delivery fee
+        val deliveryFeeText = binding.deliveryFeeEditText.text?.toString()?.trim()
+        val deliveryFee = deliveryFeeText?.toDoubleOrNull() ?: 0.0
+        if (deliveryFee > 0) {
+            SharedPrefs.savePosCartDeliveryFee(this, deliveryFee)
+        }
+        
+        // Save order type
+        val orderType = if (isWalkIn) "Walk-in" else "Delivery"
+        SharedPrefs.savePosCartOrderType(this, orderType)
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Save cart and form fields when navigating away
+        saveCartToPrefs()
+        saveFormFieldsToPrefs()
     }
     
     override fun onDestroy() {
@@ -98,6 +204,10 @@ class PosCartActivity : AppCompatActivity() {
     }
 
     override fun onSupportNavigateUp(): Boolean {
+        // Save cart and form fields before navigating back
+        saveCartToPrefs()
+        saveFormFieldsToPrefs()
+        
         val resultIntent = Intent()
         resultIntent.putParcelableArrayListExtra(CART_EXTRA, ArrayList(cart))
         setResult(RESULT_OK, resultIntent)
@@ -119,6 +229,10 @@ class PosCartActivity : AppCompatActivity() {
 
     private fun setupListeners() {
         binding.addItemsButton.setOnClickListener {
+            // Save cart and form fields before navigating to product list
+            saveCartToPrefs()
+            saveFormFieldsToPrefs()
+            
             val resultIntent = Intent()
             resultIntent.putParcelableArrayListExtra(CART_EXTRA, ArrayList(cart))
             setResult(RESULT_OK, resultIntent)
@@ -473,6 +587,7 @@ class PosCartActivity : AppCompatActivity() {
         item.quantity++
         adapter.notifyDataSetChanged()
         updateTotals()
+        saveCartToPrefs() // Persist cart changes
     }
 
     private fun decreaseQuantity(item: PosCartItem) {
@@ -480,6 +595,7 @@ class PosCartActivity : AppCompatActivity() {
             item.quantity--
             adapter.notifyDataSetChanged()
             updateTotals()
+            saveCartToPrefs() // Persist cart changes
         }
     }
 
@@ -487,6 +603,7 @@ class PosCartActivity : AppCompatActivity() {
         cart.remove(item)
         adapter.notifyDataSetChanged()
         updateTotals()
+        saveCartToPrefs() // Persist cart changes
         if (cart.isEmpty()) {
             Toast.makeText(this, "Cart is empty", Toast.LENGTH_SHORT).show()
         }
@@ -775,6 +892,8 @@ class PosCartActivity : AppCompatActivity() {
                 if (isWalkIn) {
                     updatePhoneNumberForWalkInCash()
                 }
+                // Save form fields when payment method changes
+                saveFormFieldsToPrefs()
             }
             
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
@@ -1112,7 +1231,9 @@ class PosCartActivity : AppCompatActivity() {
                     if (order != null && order.id > 0) {
                         android.util.Log.d("PosCartActivity", "Order created successfully: ID=${order.id}")
                         Toast.makeText(this@PosCartActivity, "Order submitted successfully", Toast.LENGTH_SHORT).show()
+                        // Clear cart and form fields from SharedPrefs only on successful order
                         cart.clear()
+                        SharedPrefs.clearPosCart(this)
                         finish()
                     } else {
                         android.util.Log.e("PosCartActivity", "Order response body is null or invalid format")
@@ -1121,7 +1242,9 @@ class PosCartActivity : AppCompatActivity() {
                         // Even if we can't parse the order, if the response was successful (201), the order was likely created
                         // Show success message but log the issue
                         Toast.makeText(this@PosCartActivity, "Order submitted successfully", Toast.LENGTH_SHORT).show()
+                        // Clear cart and form fields from SharedPrefs only on successful order
                         cart.clear()
+                        SharedPrefs.clearPosCart(this)
                         finish()
                     }
                 } else {
