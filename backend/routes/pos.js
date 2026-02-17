@@ -85,6 +85,80 @@ function buildPhoneLookupVariants(phone) {
 }
 
 /**
+ * Create or get customer for POS
+ * POST /api/pos/customer
+ */
+router.post('/customer', verifyAdmin, async (req, res) => {
+  try {
+    const { phone, customerName, email } = req.body;
+
+    if (!phone) {
+      return res.status(400).json({ error: 'Phone number is required' });
+    }
+
+    // Normalize phone number
+    const variants = buildPhoneLookupVariants(phone);
+    const normalizedPhone = variants.length > 0 ? variants[0] : phone.replace(/\D/g, '');
+
+    console.log(`🔍 POS: Creating/getting customer with phone: ${phone}`);
+    console.log(`📋 Normalized phone: ${normalizedPhone}`);
+
+    // Check if customer already exists
+    const existingCustomer = await db.Customer.findOne({
+      where: {
+        [Op.or]: [
+          { phone: normalizedPhone },
+          { username: normalizedPhone },
+          ...variants.map(v => ({ phone: v })),
+          ...variants.map(v => ({ username: v }))
+        ]
+      }
+    });
+
+    if (existingCustomer) {
+      console.log(`✅ Customer already exists: ${existingCustomer.customerName || existingCustomer.username} (${existingCustomer.phone})`);
+      return res.json({
+        success: true,
+        customer: {
+          id: existingCustomer.id,
+          name: existingCustomer.customerName || existingCustomer.username || 'Customer',
+          username: existingCustomer.username,
+          email: existingCustomer.email,
+          phone: existingCustomer.phone,
+          customerName: existingCustomer.customerName
+        }
+      });
+    }
+
+    // Create new customer
+    console.log(`➕ Creating new customer: ${customerName || 'POS Customer'} (${normalizedPhone})`);
+    const newCustomer = await db.Customer.create({
+      phone: normalizedPhone,
+      username: normalizedPhone,
+      customerName: customerName || 'POS Customer',
+      email: email || null
+    });
+
+    console.log(`✅ Customer created: ${newCustomer.id} - ${newCustomer.customerName}`);
+    res.json({
+      success: true,
+      customer: {
+        id: newCustomer.id,
+        name: newCustomer.customerName || newCustomer.username || 'Customer',
+        username: newCustomer.username,
+        email: newCustomer.email,
+        phone: newCustomer.phone,
+        customerName: newCustomer.customerName
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error creating/getting POS customer:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to create/get customer', details: error.message });
+  }
+});
+
+/**
  * Lookup customer by phone number
  * GET /api/pos/customer/:phoneNumber
  */
