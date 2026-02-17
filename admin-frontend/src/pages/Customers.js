@@ -127,24 +127,44 @@ const Customers = () => {
       
       const response = await api.get('/admin/customers', { params });
       
+      // Defensive: Always ensure we have a valid response
+      if (!response || !response.data) {
+        console.warn('Invalid response from /admin/customers:', response);
+        setCustomers([]);
+        setTotalCustomers(0);
+        return;
+      }
+      
       // Handle both paginated and non-paginated responses
-      if (response.data && response.data.customers && Array.isArray(response.data.customers) && response.data.total !== undefined) {
-        // Paginated response
+      if (response.data.customers && Array.isArray(response.data.customers) && typeof response.data.total === 'number') {
+        // Paginated response: { customers: [...], total: N, page: P, limit: L }
         setCustomers(response.data.customers);
         setTotalCustomers(response.data.total);
       } else if (Array.isArray(response.data)) {
-        // Non-paginated response (fallback)
+        // Non-paginated response (fallback): direct array
         setCustomers(response.data);
         setTotalCustomers(response.data.length);
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        // Wrapped response: { data: [...] }
+        setCustomers(response.data.data);
+        setTotalCustomers(response.data.data.length);
       } else {
         // Fallback: ensure customers is always an array
-        console.warn('Unexpected response format from /admin/customers:', response.data);
+        console.warn('Unexpected response format from /admin/customers:', {
+          data: response.data,
+          type: typeof response.data,
+          isArray: Array.isArray(response.data),
+          keys: response.data ? Object.keys(response.data) : []
+        });
         setCustomers([]);
         setTotalCustomers(0);
       }
     } catch (err) {
       console.error('Error fetching customers:', err);
       setError(err.response?.data?.error || 'Failed to load customers');
+      // Ensure customers is always an array even on error
+      setCustomers([]);
+      setTotalCustomers(0);
     } finally {
       setLoading(false);
     }
