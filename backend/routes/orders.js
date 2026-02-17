@@ -287,10 +287,10 @@ router.post('/', async (req, res) => {
     }
 
     // Determine allowed payment methods based on order source
-    // For admin orders (especially walk-in), allow cash in addition to card and mobile_money
+    // For admin orders (especially walk-in), allow cash and cash_at_hand in addition to card and mobile_money
     // For customer orders, only allow card and mobile_money
     const allowedPaymentMethods = adminOrder 
-      ? ['card', 'mobile_money', 'cash'] 
+      ? ['card', 'mobile_money', 'cash', 'cash_at_hand'] 
       : ['card', 'mobile_money'];
     
     console.log('💳 Payment validation check:', {

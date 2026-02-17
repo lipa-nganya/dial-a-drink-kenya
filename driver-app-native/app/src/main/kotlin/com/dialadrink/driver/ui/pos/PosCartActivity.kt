@@ -38,6 +38,7 @@ class PosCartActivity : AppCompatActivity() {
     private var selectedPaymentMethod: String? = null
     private val deliveryPaymentMethods = listOf("Pay on Delivery", "Swipe on Delivery", "Already Paid")
     private val walkInPaymentMethods = listOf("Cash", "Mpesa (prompt)")
+    private val staffPurchasePaymentMethods = listOf("Cash", "Mpesa (prompt)", "Cash at Hand")
     private val paymentMethods = mutableListOf<String>() // Will be set based on order type
     private lateinit var paymentMethodAdapter: ArrayAdapter<String>
     private var customerExists = false
@@ -808,6 +809,8 @@ class PosCartActivity : AppCompatActivity() {
                     binding.deliveryFeeLayout.visibility = View.GONE
                     binding.deliveryAddressLayout.visibility = View.GONE
                     binding.staffPurchaseCheckbox.visibility = View.VISIBLE
+                    // Setup staff purchase checkbox listener
+                    setupStaffPurchaseCheckbox()
                     // Update payment methods for walk-in
                     updatePaymentMethodsForWalkIn()
                     // Check if payment method is Cash and set phone number
@@ -888,10 +891,11 @@ class PosCartActivity : AppCompatActivity() {
         binding.paymentMethodSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
                 if (isWalkIn) {
-                    // Walk-in payment methods: Cash or Mpesa (prompt)
+                    // Walk-in payment methods: Cash, Mpesa (prompt), or Cash at Hand (if staff purchase)
                     selectedPaymentMethod = when (position) {
                         0 -> "cash" // Cash
                         1 -> "mpesa_prompt" // Mpesa (prompt)
+                        2 -> "cash_at_hand" // Cash at Hand (staff purchase only)
                         else -> "cash"
                     }
                 } else {
@@ -918,9 +922,37 @@ class PosCartActivity : AppCompatActivity() {
         }
     }
     
+    private fun setupStaffPurchaseCheckbox() {
+        binding.staffPurchaseCheckbox.setOnCheckedChangeListener { _, isChecked ->
+            isStaffPurchase = isChecked
+            // Update payment methods based on staff purchase status
+            if (isWalkIn) {
+                if (isStaffPurchase) {
+                    // Staff purchase: add "Cash at Hand" option
+                    paymentMethods.clear()
+                    paymentMethods.addAll(staffPurchasePaymentMethods)
+                    paymentMethodAdapter.notifyDataSetChanged()
+                } else {
+                    // Regular walk-in: standard payment methods
+                    paymentMethods.clear()
+                    paymentMethods.addAll(walkInPaymentMethods)
+                    paymentMethodAdapter.notifyDataSetChanged()
+                    // Reset to first option (Cash)
+                    binding.paymentMethodSpinner.setSelection(0)
+                    selectedPaymentMethod = "cash"
+                }
+            }
+            saveFormFieldsToPrefs()
+        }
+    }
+    
     private fun updatePaymentMethodsForWalkIn() {
         paymentMethods.clear()
-        paymentMethods.addAll(walkInPaymentMethods)
+        if (isStaffPurchase) {
+            paymentMethods.addAll(staffPurchasePaymentMethods)
+        } else {
+            paymentMethods.addAll(walkInPaymentMethods)
+        }
         paymentMethodAdapter.notifyDataSetChanged()
         // Reset to first option (Cash)
         binding.paymentMethodSpinner.setSelection(0)
@@ -1175,6 +1207,7 @@ class PosCartActivity : AppCompatActivity() {
                 val paymentMethod = selectedPaymentMethod ?: if (isWalkIn) "cash" else "pay_on_delivery"
                 val paymentType = when (paymentMethod) {
                     "cash" -> "pay_now"
+                    "cash_at_hand" -> "pay_now" // Cash at hand - paid from driver's cash at hand
                     "mpesa_prompt" -> "pay_on_delivery" // Mpesa prompt - will be prompted after order creation
                     "pay_on_delivery" -> "pay_on_delivery"
                     "card" -> "pay_now"
@@ -1182,6 +1215,7 @@ class PosCartActivity : AppCompatActivity() {
                 }
                 val paymentStatus = when (paymentMethod) {
                     "cash" -> "paid" // Cash collected immediately
+                    "cash_at_hand" -> "paid" // Paid from driver's cash at hand
                     "mpesa_prompt" -> "unpaid" // Will prompt customer for Mpesa payment
                     "pay_on_delivery" -> "unpaid" // Rider will collect payment
                     "card" -> "paid" // Already paid
@@ -1209,6 +1243,13 @@ class PosCartActivity : AppCompatActivity() {
                         // For walk-in orders, use "POS" as phone placeholder if empty
                         val customerPhoneForOrder = if (isWalkIn && phone.isEmpty()) "POS" else phone
                         
+                        // Get driver ID if this is a staff purchase with cash at hand payment
+                        val driverIdForRequest = if (isWalkIn && isStaffPurchase && paymentMethod == "cash_at_hand") {
+                            SharedPrefs.getDriverId(this@PosCartActivity)
+                        } else {
+                            null
+                        }
+                        
                         val request = CreateOrderRequest(
                             customerName = customerName,
                             customerPhone = customerPhoneForOrder,
@@ -1222,7 +1263,8 @@ class PosCartActivity : AppCompatActivity() {
                             adminOrder = true,
                             deliveryFee = deliveryFee,
                             territoryId = territoryId,
-                            notes = if (isWalkIn) "POS Order - Walk-in" else "POS Order"
+                            notes = if (isWalkIn) "POS Order - Walk-in" else "POS Order",
+                            driverId = driverIdForRequest
                         )
                 
                 android.util.Log.d("PosCartActivity", "Submitting order: ${request}")

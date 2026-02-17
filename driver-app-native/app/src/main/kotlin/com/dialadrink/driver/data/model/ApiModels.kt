@@ -630,7 +630,8 @@ data class CreateOrderRequest(
     val adminOrder: Boolean = true,
     val deliveryFee: Double? = null,
     val territoryId: Int? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    val driverId: Int? = null // Driver ID for staff purchases with cash at hand
 )
 
 data class AssignDriverRequest(
