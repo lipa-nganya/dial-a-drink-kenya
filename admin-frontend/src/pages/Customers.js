@@ -108,11 +108,7 @@ const Customers = () => {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [page, rowsPerPage, searchQuery]);
-
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -201,7 +197,11 @@ const Customers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, rowsPerPage, searchQuery]);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
   
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
