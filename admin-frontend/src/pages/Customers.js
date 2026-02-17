@@ -133,6 +133,7 @@ const Customers = () => {
         console.warn('Invalid response from /admin/customers:', response);
         setCustomers([]);
         setTotalCustomers(0);
+        setLoading(false);
         return;
       }
       
