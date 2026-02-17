@@ -2181,6 +2181,41 @@ router.post('/callback', async (req, res) => {
             io.to('admin').emit('order-status-updated', orderStatusUpdateData);
             
             console.log(`📡 Socket.IO events emitted for Order #${order.id} with transaction status: completed`);
+            
+            // Send push notification to driver when payment is successful
+            // receiptNumber is defined earlier in the success block (around line 1605)
+            if (order.driverId) {
+              try {
+                const driver = await db.Driver.findByPk(order.driverId);
+                if (driver && driver.pushToken) {
+                  // Get receiptNumber from transaction if not already available
+                  const finalReceiptNumber = receiptNumber || transaction?.receiptNumber || 'N/A';
+                  const pushMessage = {
+                    sound: 'default',
+                    title: '✅ Payment Received',
+                    body: `Customer payment received for Order #${order.id}. Amount: KES ${parseFloat(order.totalAmount).toFixed(2)}`,
+                    data: {
+                      type: 'payment-success',
+                      orderId: String(order.id),
+                      amount: parseFloat(order.totalAmount).toFixed(2),
+                      receiptNumber: finalReceiptNumber
+                    },
+                    priority: 'high',
+                    badge: 1,
+                    channelId: 'notifications'
+                  };
+                  
+                  const pushResult = await pushNotifications.sendFCMNotification(driver.pushToken, pushMessage);
+                  if (pushResult.success) {
+                    console.log(`✅ Push notification sent to driver ${driver.name} (ID: ${order.driverId}) for payment success on Order #${order.id}`);
+                  } else {
+                    console.error(`⚠️ Failed to send push notification to driver ${driver.name}:`, pushResult.error);
+                  }
+                }
+              } catch (pushError) {
+                console.error(`❌ Error sending push notification for payment success:`, pushError);
+              }
+            }
           }
       } else {
         // Payment failed - check the specific error code
@@ -2250,6 +2285,47 @@ router.post('/callback', async (req, res) => {
             resultDesc: resultDesc
           });
           console.log(`📡 Emitted payment-failed event to admin room for Order #${order.id}`);
+        }
+        
+        // Send push notification to driver when payment fails or is cancelled
+        if (order.driverId) {
+          try {
+            const driver = await db.Driver.findByPk(order.driverId);
+            if (driver && driver.pushToken) {
+              const notificationTitle = errorType === 'timeout' ? '⏱️ Payment Timeout' : 
+                                       errorType === 'wrong_pin' ? '❌ Payment Cancelled' : 
+                                       '❌ Payment Failed';
+              const notificationBody = errorType === 'timeout' 
+                ? `Payment request timed out for Order #${order.id}. Customer did not complete payment.`
+                : errorType === 'wrong_pin' || errorType === 'cancelled'
+                ? `Payment was cancelled for Order #${order.id}. ${errorMessage}`
+                : `Payment failed for Order #${order.id}. ${errorMessage}`;
+              
+              const pushMessage = {
+                sound: 'default',
+                title: notificationTitle,
+                body: notificationBody,
+                data: {
+                  type: 'payment-failed',
+                  orderId: String(order.id),
+                  errorType: errorType,
+                  errorMessage: errorMessage
+                },
+                priority: 'high',
+                badge: 1,
+                channelId: 'notifications'
+              };
+              
+              const pushResult = await pushNotifications.sendFCMNotification(driver.pushToken, pushMessage);
+              if (pushResult.success) {
+                console.log(`✅ Push notification sent to driver ${driver.name} (ID: ${order.driverId}) for payment failure on Order #${order.id}`);
+              } else {
+                console.error(`⚠️ Failed to send push notification to driver ${driver.name}:`, pushResult.error);
+              }
+            }
+          } catch (pushError) {
+            console.error(`❌ Error sending push notification for payment failure:`, pushError);
+          }
         }
       }
       } else {
