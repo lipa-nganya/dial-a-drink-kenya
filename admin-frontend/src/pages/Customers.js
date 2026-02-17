@@ -361,7 +361,7 @@ const Customers = () => {
             </TableHead>
             <TableBody>
               {Array.isArray(customers) && customers.length > 0 ? (
-                customers.map((customer) => (
+                customers.filter(c => c != null && typeof c === 'object').map((customer) => (
                   <TableRow key={customer.id}>
                     <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                       {customer.name || 'Customer'}
