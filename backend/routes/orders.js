@@ -596,6 +596,38 @@ router.post('/', async (req, res) => {
         console.log(`✅ Created payment transaction for admin order #${order.id} with transaction code: ${transactionCode}`);
       }
 
+      // Handle cash at hand payment for staff purchases (walk-in orders)
+      if (isWalkInOrder && paymentMethod === 'cash_at_hand' && finalPaymentStatus === 'paid' && driverId) {
+        const driver = await db.Driver.findByPk(parseInt(driverId), { transaction });
+        if (driver) {
+          const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+          const orderTotal = parseFloat(finalTotal) || 0;
+          const newCashAtHand = currentCashAtHand + orderTotal;
+          
+          await driver.update({ cashAtHand: newCashAtHand }, { transaction });
+          
+          // Create transaction record for cash at hand payment
+          await db.Transaction.create({
+            orderId: order.id,
+            driverId: parseInt(driverId),
+            transactionType: 'cash_settlement',
+            paymentMethod: 'cash',
+            paymentProvider: 'cash_at_hand',
+            amount: orderTotal, // Positive amount increases cash at hand
+            status: 'completed',
+            paymentStatus: 'paid',
+            receiptNumber: `CASH-AT-HAND-${order.id}`,
+            transactionDate: new Date(),
+            notes: `Staff purchase paid from cash at hand - Order #${order.id}`
+          }, { transaction });
+          
+          console.log(`✅ Staff purchase paid from cash at hand for Order #${order.id}`);
+          console.log(`   Driver ${driverId} cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (+${orderTotal.toFixed(2)})`);
+        } else {
+          console.warn(`⚠️ Driver ${driverId} not found for cash at hand payment on Order #${order.id}`);
+        }
+      }
+
       await transaction.commit();
     } catch (error) {
       if (error?.errors) {
