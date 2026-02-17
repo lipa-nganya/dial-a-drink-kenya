@@ -6,6 +6,14 @@ const mpesaService = require('../services/mpesa');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 
+// Helper function to format description using first 2 words of delivery address
+const formatDescriptionFromAddress = (deliveryAddress) => {
+  if (!deliveryAddress) return 'submission';
+  const words = deliveryAddress.trim().split(/\s+/);
+  const firstTwoWords = words.slice(0, 2).join(' ');
+  return firstTwoWords ? `${firstTwoWords} submission` : 'submission';
+};
+
 /**
  * Get cash at hand data for driver
  * GET /api/driver-wallet/:driverId/cash-at-hand
@@ -138,14 +146,6 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
 
     // Format entries for response
     const entries = [];
-
-    // Helper function to format description using first 2 words of delivery address
-    const formatDescriptionFromAddress = (deliveryAddress) => {
-      if (!deliveryAddress) return 'submission';
-      const words = deliveryAddress.trim().split(/\s+/);
-      const firstTwoWords = words.slice(0, 2).join(' ');
-      return firstTwoWords ? `${firstTwoWords} submission` : 'submission';
-    };
 
     // Add cash order entries (50% delivery fee + order total per Pay on Delivery cash order)
     for (const order of cashOrders) {
