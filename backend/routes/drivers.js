@@ -1253,6 +1253,11 @@ router.get('/', async (req, res) => {
         driverData.cashAtHand = parseFloat(driverData.cashAtHand || 0);
       }
       
+      // Get driver wallet savings
+      let wallet = await db.DriverWallet.findOne({ where: { driverId: driver.id } });
+      const savings = wallet ? parseFloat(wallet.savings || 0) : 0;
+      driverData.savings = savings;
+      
       // Use synced cashAtHand value for credit check
       // Reload driver one more time to ensure creditCheck gets the latest value
       await driver.reload();

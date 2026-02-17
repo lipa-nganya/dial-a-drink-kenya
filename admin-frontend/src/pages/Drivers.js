@@ -980,6 +980,7 @@ const Drivers = () => {
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Phone Number</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Cash at Hand</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Savings</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Credit Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Last Activity</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>OTP</TableCell>
@@ -989,7 +990,7 @@ const Drivers = () => {
           <TableBody>
             {filteredDrivers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
                     {searchQuery.trim() 
                       ? `No riders found matching "${searchQuery}".` 
@@ -1001,6 +1002,7 @@ const Drivers = () => {
               filteredDrivers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((driver) => {
                 const creditStatus = driver.creditStatus || {};
                 const cashAtHand = creditStatus.cashAtHand || driver.cashAtHand || 0;
+                const savings = driver.savings || driver.wallet?.savings || 0;
                 const creditLimit = creditStatus.creditLimit || driver.creditLimit || 0;
                 const exceeded = creditStatus.exceeded || false;
                 // const walletBalance = driver.wallet?.balance || 0; // Unused
@@ -1068,6 +1070,17 @@ const Drivers = () => {
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: colors.textPrimary }}>
                       KES {parseFloat(cashAtHand).toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontWeight: 500, 
+                        color: parseFloat(savings) < 0 ? '#d32f2f' : colors.textPrimary 
+                      }}
+                    >
+                      KES {parseFloat(savings).toFixed(2)}
                     </Typography>
                   </TableCell>
                   <TableCell>
