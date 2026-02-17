@@ -469,16 +469,22 @@ class AssignRiderActivity : AppCompatActivity() {
                     }
                 }
                 
-                // Assign driver if selected
-                if (driver != null) {
-                    val request = AssignDriverRequest(driverId = driver.id)
-                    val response = ApiClient.getApiService().assignDriverToOrder(order.id, request)
-                    
-                    if (!response.isSuccessful || response.body()?.success != true) {
-                        Toast.makeText(this@AssignRiderActivity, "Failed to assign rider", Toast.LENGTH_SHORT).show()
-                        binding.loadingProgress.visibility = View.GONE
-                        return@launch
+                // Assign or unassign driver based on selection
+                // Backend supports driverId: null to unassign
+                val request = AssignDriverRequest(driverId = driver?.id)
+                val response = ApiClient.getApiService().assignDriverToOrder(order.id, request)
+                
+                if (response.isSuccessful && response.body()?.success == true) {
+                    if (driver != null) {
+                        Toast.makeText(this@AssignRiderActivity, "Rider assigned successfully. Order moved to pending.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this@AssignRiderActivity, "Rider unassigned successfully.", Toast.LENGTH_SHORT).show()
                     }
+                } else {
+                    val errorMsg = response.body()?.error ?: if (driver != null) "Failed to assign rider" else "Failed to unassign rider"
+                    Toast.makeText(this@AssignRiderActivity, errorMsg, Toast.LENGTH_SHORT).show()
+                    binding.loadingProgress.visibility = View.GONE
+                    return@launch
                 }
                 
                 // Update delivery fee if changed
