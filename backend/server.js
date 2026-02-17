@@ -316,6 +316,9 @@ async function loadFullApplication() {
     // Start background job to check for inactive drivers and set them to offline
     startDriverActivityCheckJob(app);
     
+    // Start background job to process loan deductions (every 15 minutes)
+    startLoanDeductionJob();
+    
     console.log('✅ Full application loaded successfully');
   } catch (appError) {
     console.error('⚠️ Error loading full application:', appError.message);
@@ -777,4 +780,36 @@ async function syncPendingTransactions() {
     console.error('❌ Background transaction sync job error:', error.message);
     // Don't throw - this is a background job, failures shouldn't crash the server
   }
+}
+
+// Background job to process loan deductions
+// This runs every 15 minutes to check for loans that need deduction (every 24 hours)
+function startLoanDeductionJob() {
+  console.log('🔄 Starting loan deduction job (runs every 15 minutes)...');
+  
+  const { processLoanDeductions } = require('./utils/loanDeductions');
+  
+  // Run immediately on startup (after a delay), then every 15 minutes
+  setTimeout(async () => {
+    try {
+      const result = await processLoanDeductions();
+      if (result.processed > 0) {
+        console.log(`✅ Loan deduction job: Processed ${result.processed} loan(s)`);
+      }
+    } catch (error) {
+      console.error('❌ Error in loan deduction job:', error);
+    }
+  }, 30000); // Wait 30 seconds after startup to ensure DB is ready
+  
+  // Then run every 15 minutes (900000 ms)
+  setInterval(async () => {
+    try {
+      const result = await processLoanDeductions();
+      if (result.processed > 0) {
+        console.log(`✅ Loan deduction job: Processed ${result.processed} loan(s)`);
+      }
+    } catch (error) {
+      console.error('❌ Error in loan deduction job:', error);
+    }
+  }, 900000); // 15 minutes
 }

@@ -5960,9 +5960,27 @@ router.post('/loans', verifyAdmin, async (req, res) => {
       });
     }
 
+    // Get or create driver wallet
+    let wallet = await db.DriverWallet.findOne({ where: { driverId: parseInt(driverId) } });
+    if (!wallet) {
+      wallet = await db.DriverWallet.create({
+        driverId: parseInt(driverId),
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      });
+    }
+
     let newRecord;
     if (type === 'penalty') {
-      // Create penalty
+      // Create penalty - reduce savings by penalty amount
+      const currentSavings = parseFloat(wallet.savings || 0);
+      const newSavings = currentSavings - loanAmount;
+      await wallet.update({ savings: newSavings });
+      
       newRecord = await db.Penalty.create({
         driverId: parseInt(driverId),
         amount: loanAmount,
@@ -5977,12 +5995,22 @@ router.post('/loans', verifyAdmin, async (req, res) => {
       });
     } else {
       // Create loan (default)
+      // Reduce savings by loan amount (make it negative)
+      const currentSavings = parseFloat(wallet.savings || 0);
+      const newSavings = currentSavings - loanAmount;
+      await wallet.update({ savings: newSavings });
+      
+      // Set nextDeductionDate to 24 hours from now
+      const nextDeductionDate = new Date();
+      nextDeductionDate.setHours(nextDeductionDate.getHours() + 24);
+      
       newRecord = await db.Loan.create({
         driverId: parseInt(driverId),
         amount: loanAmount,
         balance: loanAmount, // Initial balance equals amount
         reason: reason.trim(),
         status: 'active',
+        nextDeductionDate: nextDeductionDate,
         createdBy: req.admin.id
       });
       res.status(201).json({
