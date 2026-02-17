@@ -46,6 +46,15 @@ class AdminCompletedOrdersActivity : AppCompatActivity() {
         binding.earningsTodayCard.visibility = View.GONE
         binding.earningsWeekCard.visibility = View.GONE
         binding.earningsMonthCard.visibility = View.GONE
+        
+        // Set default date range to last 30 days
+        val calendar = Calendar.getInstance()
+        toDate = calendar.time
+        calendar.add(Calendar.DAY_OF_YEAR, -30)
+        fromDate = calendar.time
+        binding.fromDateButton.text = dateFormat.format(fromDate!!)
+        binding.toDateButton.text = dateFormat.format(toDate!!)
+        
         loadOrders()
     }
     

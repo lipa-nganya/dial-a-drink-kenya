@@ -69,9 +69,9 @@ class AdminDashboardActivity : AppCompatActivity() {
             startActivity(intent)
         }
         
-        // Row 3: Complete, Request Payment
+        // Row 3: Completed Orders, Request Payment
         binding.completeCard.setOnClickListener {
-            val intent = Intent(this, CompletedDriversActivity::class.java)
+            val intent = Intent(this, AdminCompletedOrdersActivity::class.java)
             startActivity(intent)
         }
         
