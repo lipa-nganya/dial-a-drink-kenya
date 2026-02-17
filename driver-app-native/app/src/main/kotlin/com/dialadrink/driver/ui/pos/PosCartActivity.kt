@@ -54,6 +54,7 @@ class PosCartActivity : AppCompatActivity() {
     private var addressAdapter: ArrayAdapter<String>? = null
     private val customerSuggestions = mutableListOf<PosCustomer>()
     private var customerPhoneAdapter: ArrayAdapter<String>? = null
+    private var selectedAddressText: String = "" // Store selected address to preserve it
 
     companion object {
         const val CART_EXTRA = "cart"
@@ -313,12 +314,14 @@ class PosCartActivity : AppCompatActivity() {
             val suggestion = addressSuggestions.getOrNull(position)
             if (suggestion != null) {
                 val addressText = suggestion.description
+                // Store the selected address text before fetching details
+                selectedAddressText = addressText
                 binding.deliveryAddressEditText.setText(addressText)
                 binding.deliveryAddressEditText.clearFocus()
                 
-                // Fetch place details if placeId exists
+                // Fetch place details if placeId exists (for coordinates, but preserve selected address)
                 if (suggestion.placeId != null) {
-                    fetchPlaceDetails(suggestion.placeId!!)
+                    fetchPlaceDetails(suggestion.placeId!!, addressText)
                 }
                 
                 // Save address to database if not already from database (for cost savings)
@@ -377,7 +380,7 @@ class PosCartActivity : AppCompatActivity() {
         addressCheckHandler.postDelayed(addressCheckRunnable!!, 300)
     }
     
-    private fun fetchPlaceDetails(placeId: String) {
+    private fun fetchPlaceDetails(placeId: String, selectedAddress: String? = null) {
         lifecycleScope.launch {
             try {
                 if (!ApiClient.isInitialized()) {
@@ -388,19 +391,54 @@ class PosCartActivity : AppCompatActivity() {
                 
                 if (response.isSuccessful && response.body() != null) {
                     val placeDetails = response.body()!!
-                    val address = placeDetails.formatted_address ?: placeDetails.name ?: ""
                     
-                    if (address.isNotEmpty()) {
-                        binding.deliveryAddressEditText.setText(address)
+                    // Determine which address to use:
+                    // 1. If user selected a specific address (like "Denali Apartments"), prefer it
+                    // 2. Otherwise, use formatted_address from Google
+                    // 3. Fallback to name if formatted_address is not available
+                    val addressToUse = when {
+                        // If we have a selected address and it contains the place name, use it
+                        selectedAddress != null && selectedAddress.isNotEmpty() -> {
+                            val placeName = placeDetails.name ?: ""
+                            val formattedAddress = placeDetails.formatted_address ?: ""
+                            
+                            // If selected address contains the place name, it's likely more specific
+                            if (placeName.isNotEmpty() && selectedAddress.contains(placeName, ignoreCase = true)) {
+                                selectedAddress
+                            } else if (formattedAddress.isNotEmpty() && formattedAddress.contains(placeName, ignoreCase = true)) {
+                                // formatted_address contains the name, use it
+                                formattedAddress
+                            } else {
+                                // Use selected address if it seems more specific than formatted_address
+                                // (e.g., "Denali Apartments" vs "Riruta, Nairobi")
+                                if (selectedAddress.split(',').size <= formattedAddress.split(',').size) {
+                                    selectedAddress
+                                } else {
+                                    formattedAddress.ifEmpty { placeName }
+                                }
+                            }
+                        }
+                        placeDetails.formatted_address != null && placeDetails.formatted_address!!.isNotEmpty() -> {
+                            placeDetails.formatted_address!!
+                        }
+                        placeDetails.name != null && placeDetails.name!!.isNotEmpty() -> {
+                            placeDetails.name!!
+                        }
+                        else -> ""
+                    }
+                    
+                    if (addressToUse.isNotEmpty()) {
+                        binding.deliveryAddressEditText.setText(addressToUse)
                         binding.deliveryAddressEditText.clearFocus()
+                        selectedAddressText = addressToUse
                     }
                 } else {
                     android.util.Log.e("PosCartActivity", "Failed to fetch place details: ${response.code()}")
-                    Toast.makeText(this@PosCartActivity, "Error loading address details", Toast.LENGTH_SHORT).show()
+                    // Don't show error toast - user already has an address selected
                 }
             } catch (e: Exception) {
                 android.util.Log.e("PosCartActivity", "Error fetching place details: ${e.message}", e)
-                Toast.makeText(this@PosCartActivity, "Error loading address details", Toast.LENGTH_SHORT).show()
+                // Don't show error toast - user already has an address selected
             }
         }
     }

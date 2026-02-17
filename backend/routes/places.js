@@ -271,23 +271,59 @@ router.get('/details/:placeId', async (req, res) => {
           });
         }
         
+        // Extract address components for building a proper address
+        const components = placeResult.address_components || [];
+        const streetNumber = components.find(c => c.types.includes('street_number'))?.long_name || '';
+        const route = components.find(c => c.types.includes('route'))?.long_name || '';
+        const sublocality = components.find(c => c.types.includes('sublocality') || c.types.includes('sublocality_level_1'))?.long_name || '';
+        const locality = components.find(c => c.types.includes('locality'))?.long_name || '';
+        const administrativeArea = components.find(c => c.types.includes('administrative_area_level_1'))?.long_name || '';
+        const country = components.find(c => c.types.includes('country'))?.long_name || '';
+        
+        // Check if this is an establishment (has name and is not just a general area)
+        const isEstablishment = placeResult.name && (
+          components.some(c => c.types.includes('establishment')) ||
+          components.some(c => c.types.includes('point_of_interest'))
+        );
+        
         // Check if formatted_address is a Plus Code (e.g., "PP2X+58P, Nairobi, Kenya")
         const plusCodePattern = /^[A-Z0-9]{2,}\+[A-Z0-9]+/;
         const isPlusCode = placeResult.formatted_address && plusCodePattern.test(placeResult.formatted_address.split(',')[0].trim());
         
-        if (isPlusCode && placeResult.address_components) {
-          // Build a proper address from address_components
-          const components = placeResult.address_components;
+        // For establishments (like "Denali Apartments"), prioritize name + location over generic formatted_address
+        if (isEstablishment && placeResult.name) {
+          // Build address with name first, then location details
+          const addressParts = [placeResult.name];
           
-          // Extract address parts
-          const streetNumber = components.find(c => c.types.includes('street_number'))?.long_name || '';
-          const route = components.find(c => c.types.includes('route'))?.long_name || '';
-          const sublocality = components.find(c => c.types.includes('sublocality') || c.types.includes('sublocality_level_1'))?.long_name || '';
-          const locality = components.find(c => c.types.includes('locality'))?.long_name || '';
-          const administrativeArea = components.find(c => c.types.includes('administrative_area_level_1'))?.long_name || '';
-          const country = components.find(c => c.types.includes('country'))?.long_name || '';
+          // Add street address if available
+          if (streetNumber || route) {
+            addressParts.push(`${streetNumber} ${route}`.trim());
+          }
           
-          // Build address parts
+          // Add sublocality/area if available
+          if (sublocality && !addressParts.includes(sublocality)) {
+            addressParts.push(sublocality);
+          }
+          
+          // Add locality/city
+          if (locality && !addressParts.includes(locality)) {
+            addressParts.push(locality);
+          }
+          
+          // Add administrative area (state/province)
+          if (administrativeArea && !addressParts.includes(administrativeArea)) {
+            addressParts.push(administrativeArea);
+          }
+          
+          // Add country
+          if (country && !addressParts.includes(country)) {
+            addressParts.push(country);
+          }
+          
+          // Use the constructed address (name + location) instead of generic formatted_address
+          placeResult.formatted_address = addressParts.join(', ');
+        } else if (isPlusCode) {
+          // Build a proper address from address_components for Plus Codes
           const addressParts = [];
           
           // Street address
@@ -322,6 +358,24 @@ router.get('/details/:placeId', async (req, res) => {
             if (administrativeArea) fallbackParts.push(administrativeArea);
             if (country) fallbackParts.push(country);
             placeResult.formatted_address = fallbackParts.join(', ');
+          }
+        } else if (placeResult.name && placeResult.formatted_address) {
+          // For other places with names, check if formatted_address is too generic
+          // If formatted_address doesn't contain the name, prefer name + location
+          const formattedLower = placeResult.formatted_address.toLowerCase();
+          const nameLower = placeResult.name.toLowerCase();
+          
+          if (!formattedLower.includes(nameLower)) {
+            // formatted_address is generic (like "Riruta, Nairobi"), use name + location instead
+            const addressParts = [placeResult.name];
+            if (sublocality) addressParts.push(sublocality);
+            if (locality && !addressParts.includes(locality)) addressParts.push(locality);
+            if (administrativeArea && !addressParts.includes(administrativeArea)) addressParts.push(administrativeArea);
+            if (country && !addressParts.includes(country)) addressParts.push(country);
+            
+            if (addressParts.length > 1) {
+              placeResult.formatted_address = addressParts.join(', ');
+            }
           }
         }
         
