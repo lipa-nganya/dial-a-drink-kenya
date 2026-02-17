@@ -825,6 +825,10 @@ class PosCartActivity : AppCompatActivity() {
                     // Reset customer phone field
                     setupCustomerPhoneField()
                 }
+                
+                updateTotals()
+                // Save form fields when order type changes
+                saveFormFieldsToPrefs()
             }
             
             override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
