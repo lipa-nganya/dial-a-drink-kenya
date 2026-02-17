@@ -126,7 +126,10 @@ const Customers = () => {
         params.search = searchQuery.trim();
       }
       
-      const response = await api.get('/admin/customers', { params });
+      const response = await api.get('/admin/customers', { 
+        params,
+        timeout: 30000 // 30 second timeout
+      });
       
       // Defensive: Always ensure we have a valid response
       if (!response || !response.data) {
