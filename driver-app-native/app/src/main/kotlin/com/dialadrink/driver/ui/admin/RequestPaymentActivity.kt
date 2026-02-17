@@ -457,17 +457,46 @@ class RequestPaymentActivity : AppCompatActivity() {
             val orderNumber = order.id ?: 0
             val customerName = order.customerName ?: "Customer"
             
-            AlertDialog.Builder(requireContext(), R.style.Theme_DialADrinkDriver_AlertDialog)
-                .setTitle("Request Payment")
-                .setMessage("Send payment prompt to customer for Order #$orderNumber?\n\nAmount: ${currencyFormat.format(orderTotal)}")
-                .setPositiveButton("Send M-Pesa Prompt") { _, _ ->
-                    requestPaymentFromOrder(order)
-                }
+            // Create dialog with editable phone number field
+            val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_make_payment, null)
+            val phoneEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.phoneEditText)
+            val phoneLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.phoneLayout)
+            val amountText = dialogView.findViewById<android.widget.TextView>(R.id.amountText)
+            val makePaymentButton = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.makePaymentButton)
+            
+            // Show order amount
+            amountText.text = "Amount: ${currencyFormat.format(orderTotal)}"
+            
+            // Prefill phone number from order, but allow editing
+            val initialPhone = if (order.customerPhone != null && order.customerPhone != "POS") {
+                order.customerPhone
+            } else {
+                ""
+            }
+            phoneEditText.setText(initialPhone)
+            phoneLayout.hint = "Customer Phone Number"
+            
+            val dialog = AlertDialog.Builder(requireContext(), R.style.Theme_DialADrinkDriver_AlertDialog)
+                .setTitle("Make Payment - Order #$orderNumber")
+                .setView(dialogView)
                 .setNegativeButton("Cancel", null)
-                .show()
+                .create()
+            
+            // Handle button click inside dialog
+            makePaymentButton.setOnClickListener {
+                val phoneNumber = phoneEditText.text?.toString()?.trim() ?: ""
+                if (phoneNumber.isEmpty()) {
+                    Toast.makeText(requireContext(), "Please enter customer phone number", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                requestPaymentFromOrder(order, phoneNumber)
+            }
+            
+            dialog.show()
         }
         
-        private fun requestPaymentFromOrder(order: Order) {
+        private fun requestPaymentFromOrder(order: Order, customerPhone: String) {
             binding.loadingProgress.visibility = View.VISIBLE
             
             viewLifecycleOwner.lifecycleScope.launch {
@@ -476,14 +505,8 @@ class RequestPaymentActivity : AppCompatActivity() {
                         ApiClient.init(requireContext())
                     }
                     
-                    // Use customer phone from order, or null if it's "POS" (walk-in order)
-                    val customerPhone = if (order.customerPhone != null && order.customerPhone != "POS") {
-                        order.customerPhone
-                    } else {
-                        null
-                    }
-                    
-                    val request = PromptOrderPaymentRequest(customerPhone = customerPhone)
+                    // Use provided phone number (can be edited by admin)
+                    val request = PromptOrderPaymentRequest(customerPhone = customerPhone.ifEmpty { null })
                     val response = ApiClient.getApiService().promptOrderPayment(order.id, request)
                     
                     withContext(Dispatchers.Main) {
