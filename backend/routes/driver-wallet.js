@@ -34,7 +34,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         paymentStatus: 'paid',
         status: { [Op.in]: ['delivered', 'completed'] }
       },
-      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status'],
+      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status', 'deliveryAddress'],
       order: [['createdAt', 'DESC']]
     });
 
@@ -78,6 +78,9 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         amount: { [Op.lt]: 0 }
       },
       attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider'],
+      include: [
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress'], required: false }
+      ],
       order: [['createdAt', 'DESC']]
     });
     const orderIdsWithSettlementFromTx = new Set((cashSettlements || []).map(tx => tx.orderId).filter(Boolean));
@@ -85,6 +88,15 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     const approvedCashSubmissions = await db.CashSubmission.findAll({
       where: { driverId: driverId, status: 'approved' },
       attributes: ['id', 'amount', 'createdAt', 'submissionType', 'details'],
+      include: [
+        {
+          model: db.Order,
+          as: 'orders',
+          attributes: ['id', 'deliveryAddress'],
+          required: false,
+          through: { attributes: [] }
+        }
+      ],
       order: [['createdAt', 'DESC']]
     });
 
@@ -127,6 +139,14 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     // Format entries for response
     const entries = [];
 
+    // Helper function to format description using first 2 words of delivery address
+    const formatDescriptionFromAddress = (deliveryAddress) => {
+      if (!deliveryAddress) return 'submission';
+      const words = deliveryAddress.trim().split(/\s+/);
+      const firstTwoWords = words.slice(0, 2).join(' ');
+      return firstTwoWords ? `${firstTwoWords} submission` : 'submission';
+    };
+
     // Add cash order entries (50% delivery fee + order total per Pay on Delivery cash order)
     for (const order of cashOrders) {
       let amount = 0;
@@ -140,7 +160,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         customerName: order.customerName,
         amount,
         date: order.createdAt,
-        description: `Cash received for Order #${order.id} (50% delivery fee + order total)`
+        description: formatDescriptionFromAddress(order.deliveryAddress)
       });
     }
 
@@ -158,8 +178,13 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       if (isSavingsWithdrawal) {
         description = `Savings withdrawal`;
       } else {
-        // For other cash settlements, use the notes or default description
-        description = tx.notes || `Cash remitted to business`;
+        // For cash settlements with order, use delivery address (first 2 words) + "submission"
+        if (tx.order && tx.order.deliveryAddress) {
+          description = formatDescriptionFromAddress(tx.order.deliveryAddress);
+        } else {
+          // For other cash settlements, use the notes or default description
+          description = tx.notes || `Cash remitted to business`;
+        }
       }
       
       entries.push({
@@ -178,7 +203,19 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       if (submission.submissionType === 'order_payment' && submission.details?.orderId != null && orderIdsWithSettlementFromTx.has(submission.details.orderId)) return;
       const submissionType = submission.submissionType;
       let description = 'Cash submission';
-      if (submissionType === 'purchases' && submission.details?.supplier) {
+      
+      // Check if submission has linked orders with delivery address
+      const orderWithAddress = submission.orders && submission.orders.length > 0 
+        ? submission.orders.find(o => o.deliveryAddress) || submission.orders[0]
+        : null;
+      
+      if (orderWithAddress && orderWithAddress.deliveryAddress) {
+        // Use delivery address (first 2 words) + "submission"
+        description = formatDescriptionFromAddress(orderWithAddress.deliveryAddress);
+      } else if (submissionType === 'purchases' && submission.details?.deliveryLocation) {
+        // For purchases, use deliveryLocation if available
+        description = formatDescriptionFromAddress(submission.details.deliveryLocation);
+      } else if (submissionType === 'purchases' && submission.details?.supplier) {
         // Support both old format (single item) and new format (multiple items)
         if (submission.details?.items && Array.isArray(submission.details.items) && submission.details.items.length > 0) {
           const itemsList = submission.details.items.map((item) => item.item).join(', ');
@@ -681,18 +718,27 @@ router.get('/:driverId', async (req, res) => {
         canWithdraw: canWithdraw
       },
       recentDeliveryPayments: [], // No wallet
-      recentSavingsCredits: savingsCreditTransactions.map(tx => ({
-        id: tx.id,
-        amount: Math.abs(parseFloat(tx.amount)),
-        transactionType: 'savings_credit',
-        orderId: tx.orderId,
-        orderNumber: tx.order?.id,
-        orderLocation: tx.order?.deliveryAddress || null,
-        customerName: tx.order?.customerName,
-        status: tx.order?.status,
-        date: tx.createdAt,
-        notes: tx.notes
-      })),
+      recentSavingsCredits: savingsCreditTransactions.map(tx => {
+        // Format description using delivery address (first 2 words) + "submission"
+        let description = 'submission';
+        if (tx.order && tx.order.deliveryAddress) {
+          description = formatDescriptionFromAddress(tx.order.deliveryAddress);
+        } else {
+          description = tx.notes || `Savings credit from Order #${tx.orderId || 'N/A'}`;
+        }
+        return {
+          id: tx.id,
+          amount: Math.abs(parseFloat(tx.amount)),
+          transactionType: 'savings_credit',
+          orderId: tx.orderId,
+          orderNumber: tx.order?.id,
+          orderLocation: tx.order?.deliveryAddress || null,
+          customerName: tx.order?.customerName,
+          status: tx.order?.status,
+          date: tx.createdAt,
+          notes: description // Use formatted description
+        };
+      }),
       cashSettlements: cashSettlementTransactions.map(tx => ({
         id: tx.id,
         amount: Math.abs(parseFloat(tx.amount)),
