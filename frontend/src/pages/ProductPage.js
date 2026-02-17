@@ -467,7 +467,7 @@ const ProductPage = () => {
                 }
               }}
             >
-              Add to Cart
+              Buy Now
             </Button>
           </Box>
         </Box>

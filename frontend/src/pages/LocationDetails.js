@@ -7,7 +7,6 @@ import {
   InputAdornment,
   Button,
   Chip,
-  Pagination,
   CircularProgress
 } from '@mui/material';
 import { Search, Star } from '@mui/icons-material';
@@ -31,9 +30,10 @@ const LocationDetails = () => {
   const [selectedCategory, setSelectedCategory] = useState(0);
   const [selectedSubcategory, setSelectedSubcategory] = useState(0);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
-  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsToShow, setItemsToShow] = useState(16); // Initial items to show
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   
-  const itemsPerPage = 16; // 4 rows × 4 columns
+  const itemsPerLoad = 16; // Load 16 items at a time
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -210,16 +210,34 @@ const LocationDetails = () => {
     setSearchParams(params);
   };
 
-  const handlePageChange = (event, value) => {
-    setCurrentPage(value);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-  
-  // Calculate pagination for filtered drinks
-  const totalPages = Math.ceil(filteredDrinks.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedDrinks = filteredDrinks.slice(startIndex, endIndex);
+  // Lazy loading: Load more items when scrolling
+  useEffect(() => {
+    const handleScroll = () => {
+      if (isLoadingMore) return;
+      
+      // Check if user is near bottom of page
+      if (window.innerHeight + window.scrollY >= document.documentElement.offsetHeight - 1000) {
+        if (itemsToShow < filteredDrinks.length) {
+          setIsLoadingMore(true);
+          // Simulate loading delay for better UX
+          setTimeout(() => {
+            setItemsToShow(prev => Math.min(prev + itemsPerLoad, filteredDrinks.length));
+            setIsLoadingMore(false);
+          }, 300);
+        }
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [itemsToShow, filteredDrinks.length, isLoadingMore, itemsPerLoad]);
+
+  // Reset items to show when filtered drinks change
+  useEffect(() => {
+    setItemsToShow(Math.min(itemsPerLoad, filteredDrinks.length));
+  }, [filteredDrinks.length, itemsPerLoad]);
+
+  const displayedDrinks = filteredDrinks.slice(0, itemsToShow);
 
   const formatCurrency = (amount) => {
     if (!amount || amount === 0) return 'Free';
@@ -482,19 +500,24 @@ const LocationDetails = () => {
               gap: 2,
               width: '100%'
             }}>
-              {paginatedDrinks.map((drink) => (
+              {displayedDrinks.map((drink) => (
                 <DrinkCard key={drink.id} drink={drink} />
               ))}
             </Box>
-            {totalPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                <Pagination
-                  count={totalPages}
-                  page={currentPage}
-                  onChange={handlePageChange}
-                  color="primary"
-                  size="large"
-                />
+            
+            {/* Loading indicator for lazy loading */}
+            {isLoadingMore && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 3 }}>
+                <CircularProgress size={40} />
+              </Box>
+            )}
+            
+            {/* Show message when all items are loaded */}
+            {!isLoadingMore && itemsToShow >= filteredDrinks.length && filteredDrinks.length > itemsPerLoad && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3, mb: 3 }}>
+                <Typography variant="body2" color="text.secondary">
+                  All {filteredDrinks.length} items loaded
+                </Typography>
               </Box>
             )}
           </>

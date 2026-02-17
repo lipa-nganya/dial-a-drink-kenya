@@ -454,7 +454,7 @@ const DrinkCard = ({ drink }) => {
             }
           }}
         >
-          Add to Cart
+          Buy Now
         </Button>
       </CardActions>
     </Card>
