@@ -74,12 +74,24 @@ const POS = () => {
       const [drinksResponse, accountsResponse, customersResponse] = await Promise.all([
         api.get('/pos/drinks').catch(() => api.get('/drinks')),
         api.get('/admin/accounts').catch(() => ({ data: [] })),
-        api.get('/admin/customers').catch(() => ({ data: [] }))
+        api.get('/admin/customers').catch(() => ({ data: { customers: [] } }))
       ]);
       
       setDrinks(drinksResponse.data || []);
       setAccounts(accountsResponse.data || []);
-      setCustomers(customersResponse.data || []);
+      
+      // Handle paginated response from /admin/customers
+      let customersArray = [];
+      if (customersResponse.data) {
+        if (Array.isArray(customersResponse.data)) {
+          // Direct array (legacy format)
+          customersArray = customersResponse.data;
+        } else if (customersResponse.data.customers && Array.isArray(customersResponse.data.customers)) {
+          // Paginated response: { customers: [...], total: ... }
+          customersArray = customersResponse.data.customers;
+        }
+      }
+      setCustomers(customersArray);
     } catch (err) {
       console.error('Error fetching POS data:', err);
       setError(err.response?.data?.error || 'Failed to load POS data');

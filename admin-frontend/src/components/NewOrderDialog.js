@@ -142,9 +142,21 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const fetchCustomers = async () => {
     try {
       const response = await api.get('/admin/customers');
-      setCustomers(response.data || []);
+      // Handle paginated response: { customers: [...], total: ... }
+      let customersArray = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          // Direct array (legacy format)
+          customersArray = response.data;
+        } else if (response.data.customers && Array.isArray(response.data.customers)) {
+          // Paginated response: { customers: [...], total: ... }
+          customersArray = response.data.customers;
+        }
+      }
+      setCustomers(customersArray);
     } catch (error) {
       console.error('Error fetching customers:', error);
+      setCustomers([]); // Ensure customers is always an array
     }
   };
 
