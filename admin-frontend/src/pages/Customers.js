@@ -137,18 +137,21 @@ const Customers = () => {
       }
       
       // Handle both paginated and non-paginated responses
+      let customersArray = [];
+      let total = 0;
+      
       if (response.data.customers && Array.isArray(response.data.customers) && typeof response.data.total === 'number') {
         // Paginated response: { customers: [...], total: N, page: P, limit: L }
-        setCustomers(response.data.customers);
-        setTotalCustomers(response.data.total);
+        customersArray = response.data.customers.filter(c => c != null && typeof c === 'object');
+        total = response.data.total;
       } else if (Array.isArray(response.data)) {
         // Non-paginated response (fallback): direct array
-        setCustomers(response.data);
-        setTotalCustomers(response.data.length);
+        customersArray = response.data.filter(c => c != null && typeof c === 'object');
+        total = customersArray.length;
       } else if (response.data.data && Array.isArray(response.data.data)) {
         // Wrapped response: { data: [...] }
-        setCustomers(response.data.data);
-        setTotalCustomers(response.data.data.length);
+        customersArray = response.data.data.filter(c => c != null && typeof c === 'object');
+        total = customersArray.length;
       } else {
         // Fallback: ensure customers is always an array
         console.warn('Unexpected response format from /admin/customers:', {
@@ -157,9 +160,19 @@ const Customers = () => {
           isArray: Array.isArray(response.data),
           keys: response.data ? Object.keys(response.data) : []
         });
-        setCustomers([]);
-        setTotalCustomers(0);
+        customersArray = [];
+        total = 0;
       }
+      
+      // Double-check: ensure customersArray is actually an array before setting state
+      if (!Array.isArray(customersArray)) {
+        console.error('customersArray is not an array after processing:', customersArray, typeof customersArray);
+        customersArray = [];
+        total = 0;
+      }
+      
+      setCustomers(customersArray);
+      setTotalCustomers(total);
     } catch (err) {
       console.error('Error fetching customers:', err);
       setError(err.response?.data?.error || 'Failed to load customers');
