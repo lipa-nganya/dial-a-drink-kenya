@@ -354,16 +354,20 @@ class LoansActivity : AppCompatActivity() {
                     
                     if (response.isSuccessful && response.body()?.success == true) {
                         Toast.makeText(requireContext(), "Loan created successfully", Toast.LENGTH_SHORT).show()
+                        // Add a small delay to ensure backend has processed the request
+                        kotlinx.coroutines.delay(500)
+                        // Reset isLoading flag to allow refresh
+                        isLoading = false
                         loadDriversWithLoans() // Refresh the list
                     } else {
                         val errorBody = response.errorBody()?.string()
                         Log.e(TAG, "Failed to create loan. Code: ${response.code()}, Error: $errorBody")
                         Toast.makeText(requireContext(), "Failed to create loan", Toast.LENGTH_SHORT).show()
+                        binding.loadingProgress.visibility = View.GONE
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error creating loan: ${e.message}", e)
                     Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                } finally {
                     binding.loadingProgress.visibility = View.GONE
                 }
             }
@@ -650,16 +654,20 @@ class LoansActivity : AppCompatActivity() {
                     
                     if (response.isSuccessful && response.body()?.success == true) {
                         Toast.makeText(requireContext(), "Penalty created successfully", Toast.LENGTH_SHORT).show()
+                        // Add a small delay to ensure backend has processed the request
+                        kotlinx.coroutines.delay(500)
+                        // Reset isLoading flag to allow refresh
+                        isLoading = false
                         loadDriversWithPenalties() // Refresh the list
                     } else {
                         val errorBody = response.errorBody()?.string()
                         Log.e(TAG, "Failed to create penalty. Code: ${response.code()}, Error: $errorBody")
                         Toast.makeText(requireContext(), "Failed to create penalty", Toast.LENGTH_SHORT).show()
+                        binding.loadingProgress.visibility = View.GONE
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Error creating penalty: ${e.message}", e)
                     Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                } finally {
                     binding.loadingProgress.visibility = View.GONE
                 }
             }
