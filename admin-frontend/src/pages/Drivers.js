@@ -519,6 +519,14 @@ const Drivers = () => {
   });
   const [creatingLoan, setCreatingLoan] = useState(false);
   const [creatingPenalty, setCreatingPenalty] = useState(false);
+  const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
+  const [selectedDriverForPenalty, setSelectedDriverForPenalty] = useState(null);
+  const [selectedDriverForWithdrawal, setSelectedDriverForWithdrawal] = useState(null);
+  const [withdrawalFormData, setWithdrawalFormData] = useState({
+    amount: '',
+    reason: ''
+  });
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     fetchDrivers();
@@ -772,6 +780,86 @@ const Drivers = () => {
       setError(errorMessage);
     } finally {
       setTestingPush(null);
+    }
+  };
+
+  const handleOpenPenaltyDialog = (driver) => {
+    setSelectedDriverForPenalty(driver);
+    setPenaltyFormData({
+      driverId: driver.id,
+      amount: '',
+      reason: ''
+    });
+    setPenaltyDialogOpen(true);
+  };
+
+  const handleOpenWithdrawalDialog = (driver) => {
+    setSelectedDriverForWithdrawal(driver);
+    setWithdrawalFormData({
+      amount: '',
+      reason: ''
+    });
+    setWithdrawalDialogOpen(true);
+  };
+
+  const handleCreatePenalty = async () => {
+    if (!penaltyFormData.amount || !penaltyFormData.reason) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setCreatingPenalty(true);
+      setError('');
+      await api.post('/admin/penalties', penaltyFormData);
+      setPenaltyDialogOpen(false);
+      setPenaltyFormData({ driverId: '', amount: '', reason: '' });
+      setSelectedDriverForPenalty(null);
+      fetchDrivers();
+      setNotification({
+        message: 'Penalty created successfully',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error creating penalty:', err);
+      setError(err.response?.data?.error || 'Failed to create penalty');
+    } finally {
+      setCreatingPenalty(false);
+    }
+  };
+
+  const handleWithdrawSavings = async () => {
+    if (!withdrawalFormData.amount || !withdrawalFormData.reason) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    const savings = selectedDriverForWithdrawal?.savings || selectedDriverForWithdrawal?.wallet?.savings || 0;
+    if (parseFloat(withdrawalFormData.amount) > parseFloat(savings)) {
+      setError(`Insufficient savings. Available: KES ${parseFloat(savings).toFixed(2)}`);
+      return;
+    }
+
+    try {
+      setWithdrawing(true);
+      setError('');
+      await api.post(`/admin/drivers/${selectedDriverForWithdrawal.id}/withdraw-savings`, {
+        amount: withdrawalFormData.amount,
+        reason: withdrawalFormData.reason
+      });
+      setWithdrawalDialogOpen(false);
+      setWithdrawalFormData({ amount: '', reason: '' });
+      setSelectedDriverForWithdrawal(null);
+      fetchDrivers();
+      setNotification({
+        message: 'Savings withdrawal completed successfully',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error withdrawing savings:', err);
+      setError(err.response?.data?.error || 'Failed to withdraw savings');
+    } finally {
+      setWithdrawing(false);
     }
   };
 
@@ -1188,6 +1276,34 @@ const Drivers = () => {
                         ) : (
                           <WhatsApp />
                         )}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Add Penalty">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenPenaltyDialog(driver);
+                        }}
+                        sx={{ color: '#FF9800' }}
+                      >
+                        <RemoveCircle />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Withdraw Savings">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenWithdrawalDialog(driver);
+                        }}
+                        disabled={parseFloat(savings) <= 0}
+                        sx={{ 
+                          color: parseFloat(savings) > 0 ? '#2196F3' : 'text.disabled',
+                          '&:hover': { backgroundColor: parseFloat(savings) > 0 ? 'rgba(33, 150, 243, 0.1)' : 'transparent' }
+                        }}
+                      >
+                        <Download />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Edit Rider">

@@ -6060,7 +6060,25 @@ router.post('/penalties', verifyAdmin, async (req, res) => {
       });
     }
 
-    // Create penalty
+    // Get or create driver wallet
+    let wallet = await db.DriverWallet.findOne({ where: { driverId: parseInt(driverId) } });
+    if (!wallet) {
+      wallet = await db.DriverWallet.create({
+        driverId: parseInt(driverId),
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      });
+    }
+
+    // Create penalty - reduce savings by penalty amount
+    const currentSavings = parseFloat(wallet.savings || 0);
+    const newSavings = currentSavings - penaltyAmount;
+    await wallet.update({ savings: newSavings });
+    
     const newPenalty = await db.Penalty.create({
       driverId: parseInt(driverId),
       amount: penaltyAmount,
