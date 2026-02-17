@@ -2317,6 +2317,16 @@ router.patch('/orders/:id/cancellation-request', verifyAdmin, async (req, res) =
         status: 'cancelled'
         // Keep paymentStatus as is - don't change it to 'cancelled' as it's not a valid enum value
       });
+      
+      // Restore stock when cancellation is approved
+      try {
+        const { increaseInventoryForOrder } = require('../utils/inventory');
+        await increaseInventoryForOrder(order.id);
+        console.log(`📦 Stock restored for Order #${order.id} (cancellation approved)`);
+      } catch (inventoryError) {
+        console.error(`❌ Error restoring stock for Order #${order.id}:`, inventoryError);
+        // Don't fail the cancellation approval if stock restoration fails
+      }
 
       // Add note
       const approvalNote = `[${now.toISOString()}] Cancellation approved by admin. Reason: ${order.cancellationReason || 'N/A'}`;

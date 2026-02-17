@@ -110,6 +110,19 @@ router.post('/:orderId/respond', async (req, res) => {
       // This ensures the order moves from pending to active state and appears in active orders
       // IMPORTANT: Explicitly preserve driverId to ensure it persists after acceptance
       const newStatus = order.status === 'pending' ? 'confirmed' : order.status;
+      
+      // If order was cancelled and is now being accepted, restore stock
+      if (oldStatus === 'cancelled' && accepted === true) {
+        try {
+          const { increaseInventoryForOrder } = require('../utils/inventory');
+          await increaseInventoryForOrder(order.id);
+          console.log(`📦 Stock restored for Order #${order.id} (cancelled order accepted)`);
+        } catch (inventoryError) {
+          console.error(`❌ Error restoring stock for Order #${order.id}:`, inventoryError);
+          // Don't fail the acceptance if stock restoration fails
+        }
+      }
+      
       await order.update({ 
         driverAccepted: accepted,
         driverId: parseInt(driverId), // Explicitly preserve driverId
