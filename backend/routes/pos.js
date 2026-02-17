@@ -150,27 +150,38 @@ router.get('/customer/:phoneNumber', async (req, res) => {
       
       if (order) {
         return res.json({
-          customer: {
+          success: true,
+          data: {
+            id: null,
             name: order.customerName,
             phone: order.customerPhone,
-            email: order.customerEmail
+            email: order.customerEmail,
+            exists: true
           }
         });
       }
     } else {
       const customerData = {
+        id: customer.id,
         name: customer.customerName || customer.username || null,
         phone: customer.phone,
-        email: customer.email || null
+        email: customer.email || null,
+        exists: true
       };
       console.log(`✅ Returning customer data:`, customerData);
       return res.json({
-        customer: customerData
+        success: true,
+        data: customerData
       });
     }
     
     console.log('❌ No customer found for phone:', phoneNumber);
-    res.json({ customer: null });
+    res.json({ 
+      success: true,
+      data: {
+        exists: false
+      }
+    });
   } catch (error) {
     console.error('❌ Error looking up customer by phone:', error);
     console.error('Error stack:', error.stack);
