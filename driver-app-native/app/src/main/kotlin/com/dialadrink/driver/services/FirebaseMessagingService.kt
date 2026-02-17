@@ -19,6 +19,8 @@ import com.dialadrink.driver.ui.notifications.TestNotificationOverlayActivity
 import com.dialadrink.driver.ui.notifications.NotificationsActivity
 import com.dialadrink.driver.ui.wallet.CashAtHandActivity
 import com.dialadrink.driver.utils.PermissionHelper
+import com.dialadrink.driver.utils.SharedPrefs
+import com.dialadrink.driver.data.model.PushNotification
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -86,6 +88,10 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
             } else if (type == "cancellation-approved") {
                 // Handle cancellation approval notification
                 handleCancellationApproved(remoteMessage)
+                return
+            } else if (type == "payment-success" || type == "payment-failed") {
+                // Handle payment success/failure notifications
+                handlePaymentNotification(type, remoteMessage)
                 return
             }
         }
@@ -520,6 +526,91 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
             startActivity(intent)
         } catch (e: Exception) {
             Log.e(TAG, "Error handling cancellation approval notification", e)
+        }
+    }
+    
+    private fun handlePaymentNotification(type: String, remoteMessage: RemoteMessage) {
+        try {
+            val orderId = remoteMessage.data["orderId"]?.toIntOrNull()
+            val title = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: 
+                        if (type == "payment-success") "✅ Payment Received" else "❌ Payment Failed"
+            val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: ""
+            val amount = remoteMessage.data["amount"] ?: ""
+            val receiptNumber = remoteMessage.data["receiptNumber"] ?: ""
+            
+            Log.d(TAG, "📬 Payment notification received: type=$type, orderId=$orderId")
+            
+            // Save notification to SharedPrefs for later reference
+            try {
+                val notificationId = System.currentTimeMillis().toInt()
+                val notification = PushNotification(
+                    id = notificationId,
+                    title = title,
+                    preview = body.take(100), // Preview is first 100 chars
+                    message = body,
+                    sentAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()).format(java.util.Date()),
+                    isRead = false
+                )
+                SharedPrefs.addPushNotification(this, notification)
+                Log.d(TAG, "✅ Payment notification saved to SharedPrefs")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error saving payment notification to SharedPrefs", e)
+            }
+            
+            // Check permissions before showing notification
+            if (!PermissionHelper.hasNotificationPermission(this)) {
+                Log.w(TAG, "❌ Cannot show payment notification: Permission not granted")
+                return
+            }
+            
+            if (!PermissionHelper.areNotificationsEnabled(this)) {
+                Log.w(TAG, "❌ Cannot show payment notification: Notifications disabled")
+                return
+            }
+            
+            // Bring app to foreground
+            bringAppToForeground()
+            
+            // Create intent to open NotificationsActivity
+            val intent = Intent(this, NotificationsActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT)
+            }
+            
+            val notificationId = orderId ?: System.currentTimeMillis().toInt()
+            
+            val pendingIntent = PendingIntent.getActivity(
+                this, notificationId, intent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_ONE_SHOT
+            )
+            
+            val notificationBuilder = NotificationCompat.Builder(this, "notifications")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setAutoCancel(true)
+                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                .setContentIntent(pendingIntent)
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            
+            val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            notificationManager.notify(notificationId, notificationBuilder.build())
+            
+            Log.d(TAG, "✅ Payment notification displayed: $type")
+            
+            // Also launch activity directly if app is in foreground
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error launching NotificationsActivity", e)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error handling payment notification", e)
         }
     }
     
