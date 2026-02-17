@@ -2184,12 +2184,13 @@ router.post('/callback', async (req, res) => {
             
             // Send push notification to driver when payment is successful
             // receiptNumber is defined earlier in the success block (around line 1605)
-            if (order.driverId) {
+            const driverIdForNotification = dbOrder?.driverId || finalOrder?.driverId || order.driverId;
+            if (driverIdForNotification) {
               try {
-                const driver = await db.Driver.findByPk(order.driverId);
+                const driver = await db.Driver.findByPk(driverIdForNotification);
                 if (driver && driver.pushToken) {
-                  // Get receiptNumber from transaction if not already available
-                  const finalReceiptNumber = receiptNumber || transaction?.receiptNumber || 'N/A';
+                  // Get receiptNumber from transaction if not already available in scope
+                  const finalReceiptNumber = transaction?.receiptNumber || receiptNumber || 'N/A';
                   const pushMessage = {
                     sound: 'default',
                     title: '✅ Payment Received',
@@ -2207,7 +2208,7 @@ router.post('/callback', async (req, res) => {
                   
                   const pushResult = await pushNotifications.sendFCMNotification(driver.pushToken, pushMessage);
                   if (pushResult.success) {
-                    console.log(`✅ Push notification sent to driver ${driver.name} (ID: ${order.driverId}) for payment success on Order #${order.id}`);
+                    console.log(`✅ Push notification sent to driver ${driver.name} (ID: ${driverIdForNotification}) for payment success on Order #${order.id}`);
                   } else {
                     console.error(`⚠️ Failed to send push notification to driver ${driver.name}:`, pushResult.error);
                   }
