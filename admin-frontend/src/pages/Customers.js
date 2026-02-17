@@ -389,8 +389,8 @@ const Customers = () => {
             </TableHead>
             <TableBody>
               {Array.isArray(customers) && customers.length > 0 ? (
-                customers.filter(c => c != null && typeof c === 'object').map((customer) => (
-                  <TableRow key={customer.id}>
+                customers.filter(c => c != null && typeof c === 'object' && c.id != null).map((customer) => (
+                  <TableRow key={customer.id || `customer-${Math.random()}`}>
                     <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                       {customer.name || 'Customer'}
                       <Typography variant="caption" display="block" color="text.secondary">
@@ -398,12 +398,12 @@ const Customers = () => {
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
-                      {customer.phone && (
+                      {customer?.phone && (
                         <Typography variant="body2" color="text.secondary">
                           {customer.phone}
                         </Typography>
                       )}
-                      {customer.email && (
+                      {customer?.email && (
                         <Typography variant="body2" color="text.secondary">
                           {customer.email}
                         </Typography>
@@ -411,47 +411,47 @@ const Customers = () => {
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
                       <Chip
-                        label={`${customer.totalOrders || 0}`}
-                        color={customer.totalOrders > 0 ? 'success' : 'default'}
+                        label={`${customer?.totalOrders || 0}`}
+                        color={(customer?.totalOrders || 0) > 0 ? 'success' : 'default'}
                         size="small"
                         sx={{ fontWeight: 600 }}
                       />
-                      {customer.lastOrderAt && (
+                      {customer?.lastOrderAt && (
                         <Typography variant="caption" display="block" color="text.secondary">
                           Last: {formatDate(new Date(customer.lastOrderAt))}
                         </Typography>
                       )}
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
-                      {formatCurrency(customer.totalSpent || 0)}
+                      {formatCurrency(customer?.totalSpent || 0)}
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
-                      {formatDate(customer.dateJoined || customer.createdAt)}
+                      {formatDate(customer?.dateJoined || customer?.createdAt)}
                     </TableCell>
                     <TableCell>
                       <Tooltip title="Toggle OTP">
                         <span>
                           <IconButton
-                            onClick={() => toggleOtpVisibility(customer)}
+                            onClick={() => customer?.id && toggleOtpVisibility(customer)}
                             size="small"
                             sx={{ color: colors.accentText }}
                           >
-                            {showOtps[customer.id] ? <VisibilityOff /> : <VpnKey />}
+                            {showOtps[customer?.id] ? <VisibilityOff /> : <VpnKey />}
                           </IconButton>
                         </span>
                       </Tooltip>
-                      {loadingOtps[customer.id] && <CircularProgress size={16} sx={{ ml: 1 }} />}
-                      {showOtps[customer.id] && customerOtps[customer.id] && (
+                      {loadingOtps[customer?.id] && <CircularProgress size={16} sx={{ ml: 1 }} />}
+                      {showOtps[customer?.id] && customerOtps[customer?.id] && (
                         <Box sx={{ mt: 1 }}>
-                          {customerOtps[customer.id].hasOtp ? (
+                          {customerOtps[customer?.id]?.hasOtp ? (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                                OTP: {customerOtps[customer.id].otpCode}
+                                OTP: {customerOtps[customer?.id]?.otpCode}
                               </Typography>
                               <Tooltip title="Copy OTP">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleCopyOtp(customer.id)}
+                                  onClick={() => customer?.id && handleCopyOtp(customer.id)}
                                   sx={{ color: colors.accentText }}
                                 >
                                   <ContentCopy fontSize="inherit" />
@@ -460,7 +460,7 @@ const Customers = () => {
                             </Box>
                           ) : (
                             <Typography variant="caption" color="text.secondary">
-                              {customerOtps[customer.id].message || customerOtps[customer.id].error || 'No active OTP'}
+                              {customerOtps[customer?.id]?.message || customerOtps[customer?.id]?.error || 'No active OTP'}
                             </Typography>
                           )}
                         </Box>
@@ -471,7 +471,7 @@ const Customers = () => {
                         variant="outlined"
                         size="small"
                         startIcon={<Visibility />}
-                        onClick={() => handleOpenDetails(customer)}
+                        onClick={() => customer?.id && handleOpenDetails(customer)}
                         sx={{
                           borderColor: colors.accentText,
                           color: colors.accentText,
