@@ -44,8 +44,9 @@ const Inventory = () => {
   // Pagination states
   const [outOfStockPage, setOutOfStockPage] = useState(0);
   const [outOfStockRowsPerPage, setOutOfStockRowsPerPage] = useState(10);
-  const [slowMovingPage, setSlowMovingPage] = useState(0);
-  const [slowMovingRowsPerPage, setSlowMovingRowsPerPage] = useState(10);
+  // TODO: These will be used for slow moving items pagination in future
+  // const [slowMovingPage, setSlowMovingPage] = useState(0);
+  // const [slowMovingRowsPerPage, setSlowMovingRowsPerPage] = useState(10);
   const [zeroPricePage, setZeroPricePage] = useState(0);
   const [zeroPriceRowsPerPage, setZeroPriceRowsPerPage] = useState(10);
   

@@ -505,20 +505,21 @@ const Drivers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [notification, setNotification] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
-  const [loanDialogOpen, setLoanDialogOpen] = useState(false);
-  const [penaltyDialogOpen, setPenaltyDialogOpen] = useState(false);
-  const [loanFormData, setLoanFormData] = useState({
-    driverId: '',
-    amount: '',
-    reason: ''
-  });
-  const [penaltyFormData, setPenaltyFormData] = useState({
-    driverId: '',
-    amount: '',
-    reason: ''
-  });
-  const [creatingLoan, setCreatingLoan] = useState(false);
-  const [creatingPenalty, setCreatingPenalty] = useState(false);
+  // TODO: These will be used for loan/penalty dialogs in future
+  // const [loanDialogOpen, setLoanDialogOpen] = useState(false);
+  // const [penaltyDialogOpen, setPenaltyDialogOpen] = useState(false);
+  // const [loanFormData, setLoanFormData] = useState({
+  //   driverId: '',
+  //   amount: '',
+  //   reason: ''
+  // });
+  // const [penaltyFormData, setPenaltyFormData] = useState({
+  //   driverId: '',
+  //   amount: '',
+  //   reason: ''
+  // });
+  // const [creatingLoan, setCreatingLoan] = useState(false);
+  // const [creatingPenalty, setCreatingPenalty] = useState(false);
 
   useEffect(() => {
     fetchDrivers();
