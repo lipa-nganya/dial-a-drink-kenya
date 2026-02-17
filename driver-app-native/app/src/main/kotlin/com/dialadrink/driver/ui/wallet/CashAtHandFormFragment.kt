@@ -31,11 +31,9 @@ class CashAtHandFormFragment : Fragment() {
     private val binding get() = _binding!!
     
     private var selectedSubmissionType: String? = null
-    private val submissionTypes = listOf("Purchases", "Cash", "General Expense", "Payment to Office", "Order Payment")
+    private val submissionTypes = listOf("Purchases", "Cash", "General Expense", "Payment to Office")
     private val accountTypes = listOf("cash", "mpesa", "till", "bank", "paybill", "pdq")
     private val submissionItems = mutableListOf<PurchaseItem>()
-    private var ordersForOrderPayment = listOf<com.dialadrink.driver.data.model.OrderForOrderPayment>()
-    private var selectedOrderPaymentOrder: com.dialadrink.driver.data.model.OrderForOrderPayment? = null // Store multiple items for all submission types
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -200,7 +198,6 @@ class CashAtHandFormFragment : Fragment() {
                     1 -> "cash"
                     2 -> "general_expense"
                     3 -> "payment_to_office"
-                    4 -> "order_payment"
                     else -> null
                 }
                 updateDynamicFields()
@@ -236,13 +233,15 @@ class CashAtHandFormFragment : Fragment() {
         binding.recipientNameLayout.visibility = View.GONE
         binding.natureLayout.visibility = View.GONE
         binding.accountTypeLayout.visibility = View.GONE
-        binding.orderPaymentOrderLayout.visibility = View.GONE
+        
+        // Hide Amount and Payment Type fields by default - they'll be shown only when needed
+        binding.amountLayout.visibility = View.GONE
+        binding.paymentTypeLayout.visibility = View.GONE
         
         binding.dynamicFieldsContainer.visibility = View.VISIBLE
         submissionItems.clear()
         binding.itemEditText.text?.clear()
         binding.priceEditText.text?.clear()
-        selectedOrderPaymentOrder = null
         binding.amountEditText.text?.clear()
         
         when (selectedSubmissionType) {
@@ -252,31 +251,28 @@ class CashAtHandFormFragment : Fragment() {
                 binding.priceLayout.hint = "Price (KES)"
                 binding.deliveryLocationLayout.visibility = View.VISIBLE
                 binding.addItemButton.visibility = View.VISIBLE
+                // Amount and Payment Type are hidden for Purchases
             }
             "cash" -> {
-                binding.itemLayout.hint = "Item/Description"
+                binding.itemLayout.hint = "Source"  // Renamed from "Item/Description"
                 binding.priceLayout.hint = "Amount (KES)"
                 binding.recipientNameLayout.visibility = View.VISIBLE
                 binding.addItemButton.visibility = View.VISIBLE
+                // Amount and Payment Type are hidden for Cash
             }
             "general_expense" -> {
-                binding.itemLayout.hint = "Expense Item"
+                binding.itemLayout.hint = "Description"  // Renamed from "Expense Item"
                 binding.priceLayout.hint = "Amount (KES)"
-                binding.natureLayout.visibility = View.VISIBLE
+                // Nature field removed
                 binding.addItemButton.visibility = View.VISIBLE
+                // Amount and Payment Type are hidden for General Expense
             }
             "payment_to_office" -> {
-                binding.itemLayout.hint = "Payment Item/Description"
+                binding.itemLayout.hint = "Sender"  // Renamed from "Payment Item/Description"
                 binding.priceLayout.hint = "Amount (KES)"
                 binding.accountTypeLayout.visibility = View.VISIBLE
                 binding.addItemButton.visibility = View.VISIBLE
-            }
-            "order_payment" -> {
-                binding.itemLayout.visibility = View.GONE
-                binding.priceLayout.visibility = View.GONE
-                binding.addItemButton.visibility = View.GONE
-                binding.orderPaymentOrderLayout.visibility = View.VISIBLE
-                loadOrdersForOrderPayment()
+                // Amount and Payment Type are hidden for Payment to Office
             }
             else -> {
                 binding.dynamicFieldsContainer.visibility = View.GONE
@@ -288,34 +284,6 @@ class CashAtHandFormFragment : Fragment() {
         applyFieldColors()
     }
     
-    private fun loadOrdersForOrderPayment() {
-        val driverId = SharedPrefs.getDriverId(requireContext()) ?: return
-        lifecycleScope.launch {
-            try {
-                val response = ApiClient.getApiService().getOrdersForOrderPayment(driverId)
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val list = response.body()?.data?.orders ?: emptyList()
-                    ordersForOrderPayment = list
-                    val labels = list.map { o ->
-                        "Order #${o.orderId} - ${o.customerName} - KES ${String.format("%.2f", o.totalToSubmit)} (Order: ${String.format("%.2f", o.itemsTotal)} + Savings: ${String.format("%.2f", o.savings)})"
-                    }
-                    (binding.orderPaymentOrderLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
-                        val adapter = ArrayAdapter(requireContext(), R.layout.item_dropdown_dark, labels)
-                        autoComplete.setAdapter(adapter)
-                        autoComplete.setOnItemClickListener { _, _, position, _ ->
-                            selectedOrderPaymentOrder = ordersForOrderPayment.getOrNull(position)
-                            selectedOrderPaymentOrder?.let { o ->
-                                binding.amountEditText.setText(String.format("%.2f", o.totalToSubmit))
-                            }
-                        }
-                        autoComplete.setText("", false)
-                    }
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("CashAtHandForm", "Load orders for order payment failed", e)
-            }
-        }
-    }
     
     private fun setupSubmitButton() {
         binding.submitButton.setOnClickListener {
@@ -424,70 +392,31 @@ class CashAtHandFormFragment : Fragment() {
                 Pair(totalAmount, detailsMap)
             }
             "cash" -> {
-                // Cash can have items array OR single recipientName (backward compatibility)
+                // Cash: items array with source field, recipientName optional
                 if (items.isEmpty()) {
-                    val recipient = binding.recipientNameEditText.text.toString().trim()
-                    if (recipient.isEmpty()) {
-                        binding.errorText.text = "Please add at least one item or enter recipient name"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    val amountText = binding.amountEditText.text.toString().trim()
-                    if (amountText.isEmpty()) {
-                        binding.errorText.text = "Please enter an amount"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    val calculatedAmount = amountText.toDoubleOrNull()
-                    if (calculatedAmount == null || calculatedAmount <= 0) {
-                        binding.errorText.text = "Please enter a valid amount"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    Pair(calculatedAmount, mapOf("recipientName" to recipient))
-                } else {
-                    val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-                    val detailsMap = mutableMapOf<String, Any>("items" to items)
-                    // Include recipientName if provided (backward compatibility)
-                    val recipient = binding.recipientNameEditText.text.toString().trim()
-                    if (recipient.isNotEmpty()) {
-                        detailsMap["recipientName"] = recipient
-                    }
-                    Pair(totalAmount, detailsMap)
+                    binding.errorText.text = "Please add at least one item"
+                    binding.errorText.visibility = View.VISIBLE
+                    return
                 }
+                val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+                val detailsMap = mutableMapOf<String, Any>("items" to items)
+                // Include recipientName if provided
+                val recipient = binding.recipientNameEditText.text.toString().trim()
+                if (recipient.isNotEmpty()) {
+                    detailsMap["recipientName"] = recipient
+                }
+                Pair(totalAmount, detailsMap)
             }
             "general_expense" -> {
-                // General expense can have items array OR single nature (backward compatibility)
+                // General expense: items array only (no nature, amount, or payment type)
                 if (items.isEmpty()) {
-                    val nature = binding.natureEditText.text.toString().trim()
-                    if (nature.isEmpty()) {
-                        binding.errorText.text = "Please add at least one item or enter nature of expenditure"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    val amountText = binding.amountEditText.text.toString().trim()
-                    if (amountText.isEmpty()) {
-                        binding.errorText.text = "Please enter an amount"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    val calculatedAmount = amountText.toDoubleOrNull()
-                    if (calculatedAmount == null || calculatedAmount <= 0) {
-                        binding.errorText.text = "Please enter a valid amount"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    Pair(calculatedAmount, mapOf("nature" to nature))
-                } else {
-                    val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-                    val detailsMap = mutableMapOf<String, Any>("items" to items)
-                    // Include nature if provided (backward compatibility)
-                    val nature = binding.natureEditText.text.toString().trim()
-                    if (nature.isNotEmpty()) {
-                        detailsMap["nature"] = nature
-                    }
-                    Pair(totalAmount, detailsMap)
+                    binding.errorText.text = "Please add at least one item"
+                    binding.errorText.visibility = View.VISIBLE
+                    return
                 }
+                val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+                val detailsMap = mutableMapOf<String, Any>("items" to items)
+                Pair(totalAmount, detailsMap)
             }
             "payment_to_office" -> {
                 val accountType = (binding.accountTypeLayout.editText as? AutoCompleteTextView)?.text?.toString()?.trim()?.lowercase()
@@ -497,37 +426,18 @@ class CashAtHandFormFragment : Fragment() {
                     return
                 }
                 
+                // Payment to Office: items array only (no amount or payment type)
                 if (items.isEmpty()) {
-                    val amountText = binding.amountEditText.text.toString().trim()
-                    if (amountText.isEmpty()) {
-                        binding.errorText.text = "Please enter an amount or add items"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    val calculatedAmount = amountText.toDoubleOrNull()
-                    if (calculatedAmount == null || calculatedAmount <= 0) {
-                        binding.errorText.text = "Please enter a valid amount"
-                        binding.errorText.visibility = View.VISIBLE
-                        return
-                    }
-                    Pair(calculatedAmount, mapOf("accountType" to accountType))
-                } else {
-                    val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-                    val detailsMap = mutableMapOf<String, Any>(
-                        "accountType" to accountType,
-                        "items" to items
-                    )
-                    Pair(totalAmount, detailsMap)
-                }
-            }
-            "order_payment" -> {
-                val order = selectedOrderPaymentOrder
-                if (order == null) {
-                    binding.errorText.text = "Please select an order"
+                    binding.errorText.text = "Please add at least one item"
                     binding.errorText.visibility = View.VISIBLE
                     return
                 }
-                Pair(order.totalToSubmit, mapOf("orderId" to order.orderId))
+                val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
+                val detailsMap = mutableMapOf<String, Any>(
+                    "accountType" to accountType,
+                    "items" to items
+                )
+                Pair(totalAmount, detailsMap)
             }
             else -> {
                 binding.errorText.text = "Invalid submission type"
@@ -542,14 +452,13 @@ class CashAtHandFormFragment : Fragment() {
         
         lifecycleScope.launch {
             try {
-                val orderIdParam = if (selectedSubmissionType == "order_payment") selectedOrderPaymentOrder?.orderId else null
                 val response = ApiClient.getApiService().createCashSubmission(
                     driverId,
                     CreateCashSubmissionRequest(
                         submissionType = selectedSubmissionType!!,
                         amount = amount,
                         details = details,
-                        orderId = orderIdParam
+                        orderId = null
                     )
                 )
                 
@@ -594,11 +503,9 @@ class CashAtHandFormFragment : Fragment() {
         binding.recipientNameEditText.text?.clear()
         binding.natureEditText.text?.clear()
         binding.accountTypeLayout.editText?.text?.clear()
-        binding.orderPaymentOrderLayout.editText?.text?.clear()
         binding.amountEditText.text?.clear()
         binding.errorText.visibility = View.GONE
         selectedSubmissionType = null
-        selectedOrderPaymentOrder = null
         submissionItems.clear()
         binding.dynamicFieldsContainer.visibility = View.GONE
         binding.addItemButton.visibility = View.GONE
