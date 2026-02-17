@@ -76,7 +76,8 @@ const formatDate = (date) => {
 
 const Customers = () => {
   const { colors } = useTheme();
-  const [customers, setCustomers] = useState([]);
+  // Ensure customers is always initialized as an array
+  const [customers, setCustomers] = useState(() => []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [customerOtps, setCustomerOtps] = useState({});
