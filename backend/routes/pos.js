@@ -178,6 +178,80 @@ router.get('/customer/:phoneNumber', async (req, res) => {
   }
 });
 
+/**
+ * Search customers for POS autocomplete
+ * GET /api/pos/customers/search?q=...
+ */
+router.get('/customers/search', async (req, res) => {
+  try {
+    const query = req.query.q || req.query.query || '';
+    
+    if (!query || query.trim().length < 3) {
+      return res.json({
+        success: true,
+        data: []
+      });
+    }
+    
+    const searchTerm = query.trim();
+    console.log(`🔍 POS: Searching customers with query: ${searchTerm}`);
+    
+    // Build phone variants for phone number search
+    const phoneVariants = buildPhoneLookupVariants(searchTerm);
+    
+    // Build search conditions
+    const searchPattern = `%${searchTerm}%`;
+    const whereConditions = [];
+    
+    // Search by phone (exact match and variants)
+    phoneVariants.forEach(variant => {
+      whereConditions.push({ phone: variant });
+      whereConditions.push({ phone: { [Op.iLike]: `%${variant}%` } });
+      whereConditions.push({ username: variant });
+      whereConditions.push({ username: { [Op.iLike]: `%${variant}%` } });
+    });
+    
+    // Search by name, email, username
+    whereConditions.push({ customerName: { [Op.iLike]: searchPattern } });
+    whereConditions.push({ email: { [Op.iLike]: searchPattern } });
+    whereConditions.push({ phone: { [Op.iLike]: searchPattern } });
+    whereConditions.push({ username: { [Op.iLike]: searchPattern } });
+    
+    // Find matching customers
+    const customers = await db.Customer.findAll({
+      where: {
+        [Op.or]: whereConditions
+      },
+      limit: 10, // Limit to 10 results for autocomplete
+      order: [['createdAt', 'DESC']],
+      attributes: ['id', 'phone', 'customerName', 'username', 'email']
+    });
+    
+    console.log(`✅ Found ${customers.length} customers matching "${searchTerm}"`);
+    
+    // Format response for Android app
+    const formattedCustomers = customers.map(customer => ({
+      id: customer.id,
+      name: customer.customerName || customer.username || 'Customer',
+      phone: customer.phone,
+      email: customer.email || null
+    }));
+    
+    res.json({
+      success: true,
+      data: formattedCustomers
+    });
+  } catch (error) {
+    console.error('❌ Error searching customers:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to search customers', 
+      details: error.message 
+    });
+  }
+});
+
 // Get drink by barcode for POS
 router.get('/drinks/barcode/:barcode', async (req, res) => {
   try {
