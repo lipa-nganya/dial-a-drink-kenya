@@ -259,6 +259,7 @@ const Customers = () => {
   };
 
   const handleOpenDetails = (customer) => {
+    if (!customer?.id) return;
     setSelectedCustomer(customer);
     setCustomerDetails(null);
     setDetailTab(0);
