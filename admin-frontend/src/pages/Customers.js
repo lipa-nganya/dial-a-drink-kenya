@@ -136,6 +136,17 @@ const Customers = () => {
         return;
       }
       
+      // Debug: Log the response structure
+      console.log('[Customers] API Response:', {
+        hasCustomers: !!response.data.customers,
+        customersIsArray: Array.isArray(response.data.customers),
+        hasTotal: typeof response.data.total === 'number',
+        dataIsArray: Array.isArray(response.data),
+        hasData: !!response.data.data,
+        dataDataIsArray: Array.isArray(response.data.data),
+        responseKeys: Object.keys(response.data)
+      });
+      
       // Handle both paginated and non-paginated responses
       let customersArray = [];
       let total = 0;
@@ -144,17 +155,20 @@ const Customers = () => {
         // Paginated response: { customers: [...], total: N, page: P, limit: L }
         customersArray = response.data.customers.filter(c => c != null && typeof c === 'object');
         total = response.data.total;
+        console.log('[Customers] Using paginated response:', { count: customersArray.length, total });
       } else if (Array.isArray(response.data)) {
         // Non-paginated response (fallback): direct array
         customersArray = response.data.filter(c => c != null && typeof c === 'object');
         total = customersArray.length;
+        console.log('[Customers] Using direct array response:', { count: customersArray.length });
       } else if (response.data.data && Array.isArray(response.data.data)) {
         // Wrapped response: { data: [...] }
         customersArray = response.data.data.filter(c => c != null && typeof c === 'object');
         total = customersArray.length;
+        console.log('[Customers] Using wrapped data response:', { count: customersArray.length });
       } else {
         // Fallback: ensure customers is always an array
-        console.warn('Unexpected response format from /admin/customers:', {
+        console.warn('[Customers] Unexpected response format:', {
           data: response.data,
           type: typeof response.data,
           isArray: Array.isArray(response.data),
@@ -166,11 +180,12 @@ const Customers = () => {
       
       // Double-check: ensure customersArray is actually an array before setting state
       if (!Array.isArray(customersArray)) {
-        console.error('customersArray is not an array after processing:', customersArray, typeof customersArray);
+        console.error('[Customers] customersArray is not an array after processing:', customersArray, typeof customersArray);
         customersArray = [];
         total = 0;
       }
       
+      console.log('[Customers] Setting state:', { customersCount: customersArray.length, total, isArray: Array.isArray(customersArray) });
       setCustomers(customersArray);
       setTotalCustomers(total);
     } catch (err) {
