@@ -505,28 +505,25 @@ const Drivers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [notification, setNotification] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
-  const [loanDialogOpen, setLoanDialogOpen] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [penaltyDialogOpen, setPenaltyDialogOpen] = useState(false);
-  const [loanFormData, setLoanFormData] = useState({
-    driverId: '',
-    amount: '',
-    reason: ''
-  });
+  // eslint-disable-next-line no-unused-vars
   const [penaltyFormData, setPenaltyFormData] = useState({
     driverId: '',
     amount: '',
     reason: ''
   });
-  const [creatingLoan, setCreatingLoan] = useState(false);
-  const [creatingPenalty, setCreatingPenalty] = useState(false);
-  const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [selectedDriverForPenalty, setSelectedDriverForPenalty] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [selectedDriverForWithdrawal, setSelectedDriverForWithdrawal] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [withdrawalFormData, setWithdrawalFormData] = useState({
     amount: '',
     reason: ''
   });
-  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     fetchDrivers();
@@ -802,66 +799,6 @@ const Drivers = () => {
     setWithdrawalDialogOpen(true);
   };
 
-  const handleCreatePenalty = async () => {
-    if (!penaltyFormData.amount || !penaltyFormData.reason) {
-      setError('Please fill in all fields');
-      return;
-    }
-
-    try {
-      setCreatingPenalty(true);
-      setError('');
-      await api.post('/admin/penalties', penaltyFormData);
-      setPenaltyDialogOpen(false);
-      setPenaltyFormData({ driverId: '', amount: '', reason: '' });
-      setSelectedDriverForPenalty(null);
-      fetchDrivers();
-      setNotification({
-        message: 'Penalty created successfully',
-        severity: 'success'
-      });
-    } catch (err) {
-      console.error('Error creating penalty:', err);
-      setError(err.response?.data?.error || 'Failed to create penalty');
-    } finally {
-      setCreatingPenalty(false);
-    }
-  };
-
-  const handleWithdrawSavings = async () => {
-    if (!withdrawalFormData.amount || !withdrawalFormData.reason) {
-      setError('Please fill in all fields');
-      return;
-    }
-
-    const savings = selectedDriverForWithdrawal?.savings || selectedDriverForWithdrawal?.wallet?.savings || 0;
-    if (parseFloat(withdrawalFormData.amount) > parseFloat(savings)) {
-      setError(`Insufficient savings. Available: KES ${Math.round(parseFloat(savings))}`);
-      return;
-    }
-
-    try {
-      setWithdrawing(true);
-      setError('');
-      await api.post(`/admin/drivers/${selectedDriverForWithdrawal.id}/withdraw-savings`, {
-        amount: withdrawalFormData.amount,
-        reason: withdrawalFormData.reason
-      });
-      setWithdrawalDialogOpen(false);
-      setWithdrawalFormData({ amount: '', reason: '' });
-      setSelectedDriverForWithdrawal(null);
-      fetchDrivers();
-      setNotification({
-        message: 'Savings withdrawal completed successfully',
-        severity: 'success'
-      });
-    } catch (err) {
-      console.error('Error withdrawing savings:', err);
-      setError(err.response?.data?.error || 'Failed to withdraw savings');
-    } finally {
-      setWithdrawing(false);
-    }
-  };
 
   // eslint-disable-next-line no-unused-vars
   const getStatusColor = (status) => {
