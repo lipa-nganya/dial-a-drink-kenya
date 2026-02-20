@@ -396,15 +396,23 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       const firstOrderId = orderIdsToLink[0];
       let merchantCreditAmount = submissionAmount;
       let driverSavingsCreditAmount = 0;
+      let breakdownError = null;
       try {
         const breakdown = await getOrderFinancialBreakdown(firstOrderId);
         const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
         const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
         driverSavingsCreditAmount = deliveryFee * 0.5;
         merchantCreditAmount = itemsTotal;
+        console.log(`   Order payment breakdown for Order #${firstOrderId}: itemsTotal=${itemsTotal.toFixed(2)}, deliveryFee=${deliveryFee.toFixed(2)}, savingsCredit=${driverSavingsCreditAmount.toFixed(2)}`);
       } catch (e) {
-        console.warn('Order payment create: could not get breakdown, using full amount for merchant:', e.message);
+        breakdownError = e;
+        console.error(`❌ Order payment create: could not get breakdown for Order #${firstOrderId}:`, e.message);
+        console.error(`❌ Stack:`, e.stack);
+        // Try to calculate from submission amount (submissionAmount = itemsTotal + 50% deliveryFee)
+        // If breakdown fails, we can't accurately split, so use full amount for merchant
+        // But we should still try to credit savings if possible
       }
+      
       let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
       if (!adminWallet) {
         adminWallet = await db.AdminWallet.create({ id: 1, balance: 0, totalRevenue: 0, totalOrders: 0, cashAtHand: 0 });
@@ -415,6 +423,8 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
         cashAtHand: parseFloat(adminWallet.cashAtHand || 0) + submissionAmount
       });
       console.log(`   Order payment (auto-approved): merchant +KES ${merchantCreditAmount.toFixed(2)}, admin cashAtHand +KES ${submissionAmount.toFixed(2)}`);
+      
+      // Credit driver savings (50% delivery fee) - ensure this always happens if there's a delivery fee
       if (driverSavingsCreditAmount > 0.009) {
         let driverWallet = await db.DriverWallet.findOne({ where: { driverId: parseInt(driverId, 10) } });
         if (!driverWallet) {
@@ -428,8 +438,12 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
             savings: 0
           });
         }
-        await driverWallet.update({ savings: parseFloat(driverWallet.savings || 0) + driverSavingsCreditAmount });
-        await db.Transaction.create({
+        const currentSavings = parseFloat(driverWallet.savings || 0);
+        const newSavings = currentSavings + driverSavingsCreditAmount;
+        await driverWallet.update({ savings: newSavings });
+        
+        // Create savings credit transaction
+        const savingsTransaction = await db.Transaction.create({
           orderId: firstOrderId,
           transactionType: 'savings_credit',
           paymentMethod: 'cash',
@@ -441,7 +455,13 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
           driverWalletId: driverWallet.id,
           notes: `Savings credit from Order Payment submission #${submission.id} - 50% delivery fee for Order #${firstOrderId} (KES ${driverSavingsCreditAmount.toFixed(2)})`
         });
-        console.log(`   Driver savings +KES ${driverSavingsCreditAmount.toFixed(2)} for Order #${firstOrderId}`);
+        console.log(`   ✅ Driver savings credited: ${currentSavings.toFixed(2)} → ${newSavings.toFixed(2)} (+${driverSavingsCreditAmount.toFixed(2)}) for Order #${firstOrderId}`);
+        console.log(`   ✅ Savings transaction created: ID ${savingsTransaction.id}`);
+      } else {
+        console.warn(`   ⚠️ No savings credit for Order #${firstOrderId}: driverSavingsCreditAmount=${driverSavingsCreditAmount.toFixed(2)} (too small or breakdown failed)`);
+        if (breakdownError) {
+          console.error(`   ⚠️ Breakdown error prevented savings credit:`, breakdownError.message);
+        }
       }
       await db.Transaction.create({
         orderId: firstOrderId,

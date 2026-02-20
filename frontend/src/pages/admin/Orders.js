@@ -638,7 +638,7 @@ const Orders = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366' }}>
-                        KES {Number(order.totalAmount).toFixed(2)}
+                        KES {Math.round(Number(order.totalAmount))}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
@@ -844,7 +844,7 @@ const Orders = () => {
                   Customer: {selectedOrder.customerName}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Amount: KES {Number(selectedOrder.totalAmount).toFixed(2)}
+                  Amount: KES {Math.round(Number(selectedOrder.totalAmount))}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Address: {selectedOrder.deliveryAddress}

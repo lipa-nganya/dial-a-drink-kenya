@@ -359,7 +359,7 @@ const RouteMapView = ({
                       {marker.data.deliveryAddress}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                      KES {parseFloat(marker.data.totalAmount || 0).toFixed(2)}
+                      KES {Math.round(parseFloat(marker.data.totalAmount || 0))}
                     </Typography>
                   </>
                 )}
@@ -381,7 +381,7 @@ const RouteMapView = ({
                     )}
                     {marker.data.payment && (
                       <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
-                        Payment: KES {parseFloat(marker.data.payment || 0).toFixed(2)}
+                        Payment: KES {Math.round(parseFloat(marker.data.payment || 0))}
                       </Typography>
                     )}
                   </>

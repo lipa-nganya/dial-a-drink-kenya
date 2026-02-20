@@ -776,7 +776,7 @@ const Reports = () => {
   };
 
   const formatCurrency = (amount) => {
-    return `KES ${Number(amount || 0).toFixed(2)}`;
+    return `KES ${Math.round(Number(amount || 0))}`;
   };
 
   return (
@@ -1186,7 +1186,7 @@ const Reports = () => {
                   </Tooltip>
                 </Box>
                 <Typography variant="h4" sx={{ fontWeight: 700, color: colors.textPrimary, mb: 1 }}>
-                  {(ridersStats.avgOrdersPerRider || 0).toFixed(2)}
+                  {Math.round(ridersStats.avgOrdersPerRider || 0)}
                 </Typography>
                 <Typography variant="body2" sx={{ color: colors.textSecondary }}>
                   {dateRange} period
@@ -1461,7 +1461,7 @@ const Reports = () => {
                                 size="small"
                                 onClick={() => {
                                   setSelectedRider(rider);
-                                  setSettlementAmount((rider.balanceOwed || 0).toFixed(2));
+                                  setSettlementAmount(Math.round(rider.balanceOwed || 0));
                                   setRiderPin('');
                                   setSettlementError('');
                                   setSettlementDialogOpen(true);

@@ -311,7 +311,7 @@ const CashAtHand = () => {
   };
 
   const formatCurrency = (amount) => {
-    return `KES ${Number(amount || 0).toFixed(2)}`;
+    return `KES ${Math.round(Number(amount || 0))}`;
   };
 
   const formatDate = (dateString) => {
@@ -767,7 +767,7 @@ const CashAtHand = () => {
                 const orderId = option.id || option;
                 const customerName = option.customerName || 'Unknown';
                 const totalAmount = option.totalAmount || 0;
-                return `Order #${orderId} - ${customerName} (KES ${parseFloat(totalAmount).toFixed(2)})`;
+                return `Order #${orderId} - ${customerName} (KES ${Math.round(parseFloat(totalAmount))})`;
               }}
               value={availableOrders.filter(order => (submissionFormData?.orderIds || []).includes(order.id))}
               onChange={(event, newValue) => {
@@ -778,7 +778,7 @@ const CashAtHand = () => {
                 setSubmissionFormData({
                   ...submissionFormData,
                   orderIds: newValue.map(order => order.id),
-                  amount: totalAmount > 0 ? totalAmount.toFixed(2) : ''
+                  amount: totalAmount > 0 ? Math.round(totalAmount) : ''
                 });
               }}
               loading={loadingOrders}
@@ -806,7 +806,7 @@ const CashAtHand = () => {
                       Order #{option.id} - {option.customerName || 'Unknown'}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      KES {parseFloat(option.totalAmount || 0).toFixed(2)} • {option.status || 'unknown'}
+                      KES {Math.round(parseFloat(option.totalAmount || 0))} • {option.status || 'unknown'}
                     </Typography>
                   </Box>
                 </li>

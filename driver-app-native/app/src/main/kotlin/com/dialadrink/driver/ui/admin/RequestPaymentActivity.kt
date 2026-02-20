@@ -89,7 +89,10 @@ class RequestPaymentActivity : AppCompatActivity() {
         private var _binding: FragmentRequestPaymentTabBinding? = null
         private val binding get() = _binding!!
         private val drivers = mutableListOf<Driver>()
-        private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+        private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
+            maximumFractionDigits = 0
+            minimumFractionDigits = 0
+        }
         private val TAG = "RidersTabFragment"
         private var isLoading = false
         
@@ -323,7 +326,10 @@ class RequestPaymentActivity : AppCompatActivity() {
         private val orders = mutableListOf<Order>()
         private val TAG = "OrdersTabFragment"
         private var isLoading = false
-        private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+        private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
+            maximumFractionDigits = 0
+            minimumFractionDigits = 0
+        }
         
         override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
             _binding = FragmentRequestPaymentTabBinding.inflate(inflater, container, false)
@@ -370,6 +376,7 @@ class RequestPaymentActivity : AppCompatActivity() {
                             if (response.isSuccessful && response.body() != null) {
                                 val ordersResponse = response.body()!!
                                 // Filter for orders that have not been paid for
+                                // Include all statuses (pending, completed, etc.) - this ensures walk-in completed orders with Mpesa prompt appear
                                 ordersResponse.filter { 
                                     it.paymentStatus == "unpaid" || 
                                     it.paymentStatus == null ||
@@ -439,14 +446,19 @@ class RequestPaymentActivity : AppCompatActivity() {
             // Hide driver-related elements
             cardBinding.driverLabel.visibility = View.GONE
             cardBinding.driverStatusText.visibility = View.GONE
-            cardBinding.acceptButton.visibility = View.GONE
             
-            // Show Request Payment button
+            // Show both Request Payment and Received Cash buttons
             cardBinding.actionButtons.visibility = View.VISIBLE
             cardBinding.rejectButton.visibility = View.VISIBLE
             cardBinding.rejectButton.text = "Request Payment"
             cardBinding.rejectButton.setOnClickListener {
                 showRequestPaymentDialog(order)
+            }
+            
+            cardBinding.acceptButton.visibility = View.VISIBLE
+            cardBinding.acceptButton.text = "Received Cash"
+            cardBinding.acceptButton.setOnClickListener {
+                markOrderAsCompleted(order)
             }
             
             return card
@@ -457,17 +469,46 @@ class RequestPaymentActivity : AppCompatActivity() {
             val orderNumber = order.id ?: 0
             val customerName = order.customerName ?: "Customer"
             
-            AlertDialog.Builder(requireContext(), R.style.Theme_DialADrinkDriver_AlertDialog)
-                .setTitle("Request Payment")
-                .setMessage("Send payment prompt to customer for Order #$orderNumber?\n\nAmount: ${currencyFormat.format(orderTotal)}")
-                .setPositiveButton("Send M-Pesa Prompt") { _, _ ->
-                    requestPaymentFromOrder(order)
-                }
+            // Create dialog with editable phone number field
+            val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_make_payment, null)
+            val phoneEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.phoneEditText)
+            val phoneLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.phoneLayout)
+            val amountText = dialogView.findViewById<android.widget.TextView>(R.id.amountText)
+            val makePaymentButton = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.makePaymentButton)
+            
+            // Show order amount
+            amountText.text = "Amount: ${currencyFormat.format(orderTotal)}"
+            
+            // Prefill phone number from order, but allow editing
+            val initialPhone = if (order.customerPhone != null && order.customerPhone != "POS") {
+                order.customerPhone
+            } else {
+                ""
+            }
+            phoneEditText.setText(initialPhone)
+            phoneLayout.hint = "Customer Phone Number"
+            
+            val dialog = AlertDialog.Builder(requireContext(), R.style.Theme_DialADrinkDriver_AlertDialog)
+                .setTitle("Make Payment - Order #$orderNumber")
+                .setView(dialogView)
                 .setNegativeButton("Cancel", null)
-                .show()
+                .create()
+            
+            // Handle button click inside dialog
+            makePaymentButton.setOnClickListener {
+                val phoneNumber = phoneEditText.text?.toString()?.trim() ?: ""
+                if (phoneNumber.isEmpty()) {
+                    Toast.makeText(requireContext(), "Please enter customer phone number", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                requestPaymentFromOrder(order, phoneNumber)
+            }
+            
+            dialog.show()
         }
         
-        private fun requestPaymentFromOrder(order: Order) {
+        private fun requestPaymentFromOrder(order: Order, customerPhone: String) {
             binding.loadingProgress.visibility = View.VISIBLE
             
             viewLifecycleOwner.lifecycleScope.launch {
@@ -476,14 +517,8 @@ class RequestPaymentActivity : AppCompatActivity() {
                         ApiClient.init(requireContext())
                     }
                     
-                    // Use customer phone from order, or null if it's "POS" (walk-in order)
-                    val customerPhone = if (order.customerPhone != null && order.customerPhone != "POS") {
-                        order.customerPhone
-                    } else {
-                        null
-                    }
-                    
-                    val request = PromptOrderPaymentRequest(customerPhone = customerPhone)
+                    // Use provided phone number (can be edited by admin)
+                    val request = PromptOrderPaymentRequest(customerPhone = customerPhone.ifEmpty { null })
                     val response = ApiClient.getApiService().promptOrderPayment(order.id, request)
                     
                     withContext(Dispatchers.Main) {
@@ -495,6 +530,92 @@ class RequestPaymentActivity : AppCompatActivity() {
                         } else {
                             val errorMsg = response.body()?.error ?: "Failed to send payment prompt"
                             Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        binding.loadingProgress.visibility = View.GONE
+                        Toast.makeText(requireContext(), "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+        
+        private fun markOrderAsCompleted(order: Order) {
+            // Check if this is a walk-in order
+            val isWalkIn = order.deliveryAddress == "In-Store Purchase"
+            
+            // Show confirmation dialog with appropriate message
+            val message = if (isWalkIn) {
+                "Mark Order #${order.id} as completed? This will update the payment status to 'paid' and complete the order."
+            } else {
+                "Mark payment as received for Order #${order.id}? This will update the payment status to 'paid'. The order will remain in its current status for the rider to complete delivery."
+            }
+            
+            AlertDialog.Builder(requireContext(), R.style.Theme_DialADrinkDriver_AlertDialog)
+                .setTitle("Received Cash")
+                .setMessage(message)
+                .setPositiveButton("Yes") { _, _ ->
+                    markPaymentAsReceived(order)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+        
+        private fun markPaymentAsReceived(order: Order) {
+            binding.loadingProgress.visibility = View.VISIBLE
+            
+            viewLifecycleOwner.lifecycleScope.launch {
+                try {
+                    if (!ApiClient.isInitialized()) {
+                        ApiClient.init(requireContext())
+                    }
+                    
+                    // Check if this is a walk-in order
+                    val isWalkIn = order.deliveryAddress == "In-Store Purchase"
+                    
+                    // Always update payment status to paid since cash was received
+                    val paymentStatusRequest = UpdatePaymentStatusRequest(paymentStatus = "paid")
+                    val paymentStatusResponse = ApiClient.getApiService().updateOrderPaymentStatus(order.id, paymentStatusRequest)
+                    
+                    if (!paymentStatusResponse.isSuccessful) {
+                        withContext(Dispatchers.Main) {
+                            binding.loadingProgress.visibility = View.GONE
+                            val errorMsg = paymentStatusResponse.body()?.error ?: "Failed to update payment status"
+                            Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                        }
+                        return@launch
+                    }
+                    
+                    // Only update order status to completed if it's a walk-in order
+                    if (isWalkIn) {
+                        val driverId = order.driverId ?: 0
+                        val statusRequest = UpdateOrderStatusRequest(status = "completed", driverId = driverId)
+                        val statusResponse = ApiClient.getApiService().updateAdminOrderStatus(order.id, statusRequest)
+                        
+                        withContext(Dispatchers.Main) {
+                            binding.loadingProgress.visibility = View.GONE
+                            
+                            if (statusResponse.isSuccessful && paymentStatusResponse.isSuccessful) {
+                                Toast.makeText(requireContext(), "Walk-in order marked as completed and payment received", Toast.LENGTH_SHORT).show()
+                                loadOrders() // Refresh the list - walk-in order should disappear as it's now completed and paid
+                            } else {
+                                val errorMsg = statusResponse.body()?.error ?: paymentStatusResponse.body()?.error ?: "Failed to update order"
+                                Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    } else {
+                        // For delivery orders, only payment status is updated
+                        withContext(Dispatchers.Main) {
+                            binding.loadingProgress.visibility = View.GONE
+                            
+                            if (paymentStatusResponse.isSuccessful) {
+                                Toast.makeText(requireContext(), "Payment marked as received. Rider no longer needs to collect payment.", Toast.LENGTH_SHORT).show()
+                                loadOrders() // Refresh the list - order may disappear if it was only showing unpaid orders
+                            } else {
+                                val errorMsg = paymentStatusResponse.body()?.error ?: "Failed to update payment status"
+                                Toast.makeText(requireContext(), errorMsg, Toast.LENGTH_SHORT).show()
+                            }
                         }
                     }
                 } catch (e: Exception) {

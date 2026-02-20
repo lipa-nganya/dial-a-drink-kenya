@@ -1475,19 +1475,46 @@ router.get('/orders/in-progress', verifyAdmin, async (req, res) => {
   }
 });
 
-// Get all pending orders (admin) - regardless of rider assignment
+// Get all pending orders (admin) - orders without a rider assigned
 router.get('/orders/pending', verifyAdmin, async (req, res) => {
   try {
     const { Op } = require('sequelize');
     const { summary } = req.query;
     
     // Get all orders with status 'pending' or 'confirmed' that are not cancelled or completed
-    // This includes orders with or without riders assigned
+    // Exclude in-store orders (they should never be pending - they're either 'in_progress' or 'completed')
+    // Exclude orders that have a rider assigned (they should appear in "In Progress" list instead)
     const whereClause = {
-      status: {
-        [Op.in]: ['pending', 'confirmed']
-      }
+      [Op.and]: [
+        {
+          status: {
+            [Op.in]: ['pending', 'confirmed']
+          }
+        },
+        {
+          // Exclude orders with a driver assigned - these should appear in "In Progress" list
+          driverId: {
+            [Op.is]: null
+          }
+        },
+        {
+          // Exclude in-store orders - they should never be in pending list (they're 'in_progress' or 'completed')
+          [Op.or]: [
+            { deliveryAddress: { [Op.ne]: 'In-Store Purchase' } },
+            { deliveryAddress: { [Op.is]: null } }
+          ]
+        },
+        {
+          [Op.or]: [
+            { customerPhone: { [Op.ne]: 'POS' } },
+            { customerPhone: { [Op.is]: null } }
+          ]
+        }
+      ]
     };
+    
+    // Log the query for debugging
+    console.log('🔍 [PENDING ORDERS] Query whereClause:', JSON.stringify(whereClause, null, 2));
     
     // Build includes - for summary mode, exclude all nested objects to shrink payload
     const includes = [];
@@ -2317,6 +2344,16 @@ router.patch('/orders/:id/cancellation-request', verifyAdmin, async (req, res) =
         status: 'cancelled'
         // Keep paymentStatus as is - don't change it to 'cancelled' as it's not a valid enum value
       });
+      
+      // Restore stock when cancellation is approved
+      try {
+        const { increaseInventoryForOrder } = require('../utils/inventory');
+        await increaseInventoryForOrder(order.id);
+        console.log(`📦 Stock restored for Order #${order.id} (cancellation approved)`);
+      } catch (inventoryError) {
+        console.error(`❌ Error restoring stock for Order #${order.id}:`, inventoryError);
+        // Don't fail the cancellation approval if stock restoration fails
+      }
 
       // Add note
       const approvalNote = `[${now.toISOString()}] Cancellation approved by admin. Reason: ${order.cancellationReason || 'N/A'}`;
@@ -2466,12 +2503,20 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       }
     }
 
+    // Check if this is an in-store order
+    const isWalkInOrder = order.deliveryAddress === 'In-Store Purchase' || order.customerPhone === 'POS';
+    
     // Update payment status
     await order.update({ paymentStatus });
 
-    // If delivered and payment is paid, auto-update to completed
+    // For in-store orders: if paid, move from 'in_progress' to 'completed'
+    // For delivery orders: if delivered and payment is paid, auto-update to completed
     let finalStatus = order.status;
-    if (order.status === 'delivered' && paymentStatus === 'paid') {
+    if (isWalkInOrder && paymentStatus === 'paid') {
+      await order.update({ status: 'completed' });
+      finalStatus = 'completed';
+      console.log(`✅ In-store order #${order.id} moved from '${order.status}' to 'completed' after payment`);
+    } else if (order.status === 'delivered' && paymentStatus === 'paid') {
       await order.update({ status: 'completed' });
       finalStatus = 'completed';
     }
@@ -3245,10 +3290,17 @@ router.patch('/orders/:id/driver', async (req, res) => {
       }
     }
 
-    res.json(orderData);
+    // Return standardized response format
+    res.json({
+      success: true,
+      data: orderData
+    });
   } catch (error) {
     console.error('Error updating driver assignment:', error);
-    res.status(500).json({ error: 'Failed to update driver assignment' });
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to update driver assignment' 
+    });
   }
 });
 
@@ -5950,31 +6002,148 @@ router.post('/loans', verifyAdmin, async (req, res) => {
       });
     }
 
+    // Get or create driver wallet
+    let wallet = await db.DriverWallet.findOne({ where: { driverId: parseInt(driverId) } });
+    if (!wallet) {
+      wallet = await db.DriverWallet.create({
+        driverId: parseInt(driverId),
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      });
+    }
+
     let newRecord;
     if (type === 'penalty') {
-      // Create penalty
+      // Create penalty - reduce savings by penalty amount
+      const currentSavings = parseFloat(wallet.savings || 0);
+      const newSavings = currentSavings - loanAmount;
+      await wallet.update({ savings: newSavings });
+      
       newRecord = await db.Penalty.create({
         driverId: parseInt(driverId),
         amount: loanAmount,
-        balance: loanAmount, // Initial balance equals amount
+        balance: 0, // No longer tracking balance - penalty is immediately applied to savings (negative savings = penalty)
         reason: reason.trim(),
         createdBy: req.admin.id
       });
+      
+      // Create or update loan for penalty - so penalty is deducted as a loan
+      // Find existing active loan for this driver, or create a new one
+      let penaltyLoan = await db.Loan.findOne({
+        where: {
+          driverId: parseInt(driverId),
+          status: 'active',
+          reason: {
+            [db.Sequelize.Op.like]: '%Penalty%'
+          }
+        },
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // Get loan deduction settings for nextDeductionDate
+      const { getLoanDeductionSettings, calculateNextDeductionDate } = require('../utils/loanDeductions');
+      const { frequencyInMs } = await getLoanDeductionSettings();
+      const nextDeductionDate = calculateNextDeductionDate(frequencyInMs);
+      
+      if (penaltyLoan) {
+        // Update existing penalty loan - increase amount and balance
+        const newLoanAmount = parseFloat(penaltyLoan.amount || 0) + loanAmount;
+        const newLoanBalance = parseFloat(penaltyLoan.balance || 0) + loanAmount;
+        
+        await penaltyLoan.update({
+          amount: newLoanAmount,
+          balance: newLoanBalance,
+          nextDeductionDate: nextDeductionDate // Reset next deduction date
+        });
+        
+        console.log(`✅ Updated existing penalty loan #${penaltyLoan.id} for Penalty #${newRecord.id}: Amount=${newLoanAmount.toFixed(2)}, Balance=${newLoanBalance.toFixed(2)}`);
+      } else {
+        // Create new loan for penalty
+        penaltyLoan = await db.Loan.create({
+          driverId: parseInt(driverId),
+          amount: loanAmount,
+          balance: loanAmount,
+          reason: `Penalty Recovery - ${reason.trim()}`,
+          status: 'active',
+          nextDeductionDate: nextDeductionDate,
+          createdBy: req.admin.id
+        });
+        
+        console.log(`✅ Created new penalty loan #${penaltyLoan.id} for Penalty #${newRecord.id}: Amount=${loanAmount.toFixed(2)}`);
+      }
+      
+      // Create transaction record for penalty addition
+      try {
+        await db.Transaction.create({
+          orderId: null,
+          driverId: parseInt(driverId),
+          driverWalletId: wallet.id,
+          transactionType: 'withdrawal', // Using withdrawal type for penalty
+          paymentMethod: 'system',
+          paymentProvider: 'penalty',
+          amount: -loanAmount, // Negative amount (reduces savings)
+          status: 'completed',
+          paymentStatus: 'paid',
+          notes: `Penalty added - ${reason.trim()} (Penalty #${newRecord.id}, Loan #${penaltyLoan.id})`
+        });
+        console.log(`✅ Created penalty transaction for Penalty #${newRecord.id}: -KES ${loanAmount.toFixed(2)}`);
+      } catch (txError) {
+        console.error(`❌ Error creating penalty transaction: ${txError.message}`);
+        // Don't fail penalty creation if transaction creation fails
+      }
+      
       res.status(201).json({
         success: true,
         data: newRecord,
-        message: 'Penalty created successfully'
+        message: 'Penalty created successfully',
+        loanId: penaltyLoan.id // Include loan ID in response
       });
     } else {
       // Create loan (default)
+      // Reduce savings by loan amount (make it negative)
+      const currentSavings = parseFloat(wallet.savings || 0);
+      const newSavings = currentSavings - loanAmount;
+      await wallet.update({ savings: newSavings });
+      
+      // Set nextDeductionDate based on loan deduction frequency settings
+      const { getLoanDeductionSettings, calculateNextDeductionDate } = require('../utils/loanDeductions');
+      const { frequencyInMs } = await getLoanDeductionSettings();
+      const nextDeductionDate = calculateNextDeductionDate(frequencyInMs);
+      
       newRecord = await db.Loan.create({
         driverId: parseInt(driverId),
         amount: loanAmount,
-        balance: loanAmount, // Initial balance equals amount
+        balance: 0, // No longer tracking balance - loan is immediately applied to savings (negative savings = loan)
         reason: reason.trim(),
         status: 'active',
+        nextDeductionDate: nextDeductionDate,
         createdBy: req.admin.id
       });
+      
+      // Create transaction record for loan addition (as savings_withdrawal to show in savings log)
+      try {
+        await db.Transaction.create({
+          orderId: null,
+          driverId: parseInt(driverId),
+          driverWalletId: wallet.id,
+          transactionType: 'savings_withdrawal', // Use savings_withdrawal so it appears in savings transaction log
+          paymentMethod: 'system',
+          paymentProvider: 'loan',
+          amount: -loanAmount, // Negative amount (reduces savings) - debit transaction
+          status: 'completed',
+          paymentStatus: 'paid',
+          notes: `Loan added - ${reason.trim()} (Loan #${newRecord.id})`
+        });
+        console.log(`✅ Created loan transaction for Loan #${newRecord.id}: -KES ${loanAmount.toFixed(2)}`);
+      } catch (txError) {
+        console.error(`❌ Error creating loan transaction: ${txError.message}`);
+        // Don't fail loan creation if transaction creation fails
+      }
+      
       res.status(201).json({
         success: true,
         data: newRecord,
@@ -6022,19 +6191,102 @@ router.post('/penalties', verifyAdmin, async (req, res) => {
       });
     }
 
-    // Create penalty
+    // Get or create driver wallet
+    let wallet = await db.DriverWallet.findOne({ where: { driverId: parseInt(driverId) } });
+    if (!wallet) {
+      wallet = await db.DriverWallet.create({
+        driverId: parseInt(driverId),
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      });
+    }
+
+    // Create penalty - reduce savings by penalty amount
+    const currentSavings = parseFloat(wallet.savings || 0);
+    const newSavings = currentSavings - penaltyAmount;
+    await wallet.update({ savings: newSavings });
+    
     const newPenalty = await db.Penalty.create({
       driverId: parseInt(driverId),
       amount: penaltyAmount,
-      balance: penaltyAmount, // Initial balance equals amount
+      balance: 0, // No longer tracking balance - penalty is immediately applied to savings (negative savings = penalty)
       reason: reason.trim(),
       createdBy: req.admin.id
     });
+    
+    // Create or update loan for penalty - so penalty is deducted as a loan
+    // Find existing active loan for this driver, or create a new one
+    let penaltyLoan = await db.Loan.findOne({
+      where: {
+        driverId: parseInt(driverId),
+        status: 'active',
+        reason: {
+          [db.Sequelize.Op.like]: '%Penalty%'
+        }
+      },
+      order: [['createdAt', 'DESC']]
+    });
+    
+    // Get loan deduction settings for nextDeductionDate
+    const { getLoanDeductionSettings, calculateNextDeductionDate } = require('../utils/loanDeductions');
+    const { frequencyInMs } = await getLoanDeductionSettings();
+    const nextDeductionDate = calculateNextDeductionDate(frequencyInMs);
+    
+    if (penaltyLoan) {
+      // Update existing penalty loan - increase amount (balance not tracked)
+      const newLoanAmount = parseFloat(penaltyLoan.amount || 0) + penaltyAmount;
+      
+      await penaltyLoan.update({
+        amount: newLoanAmount,
+        balance: 0, // No longer tracking balance - penalty is immediately applied to savings
+        nextDeductionDate: nextDeductionDate // Reset next deduction date
+      });
+      
+      console.log(`✅ Updated existing penalty loan #${penaltyLoan.id} for Penalty #${newPenalty.id}: Amount=${newLoanAmount.toFixed(2)}`);
+    } else {
+      // Create new loan for penalty
+      penaltyLoan = await db.Loan.create({
+        driverId: parseInt(driverId),
+        amount: penaltyAmount,
+        balance: 0, // No longer tracking balance - penalty is immediately applied to savings
+        reason: `Penalty Recovery - ${reason.trim()}`,
+        status: 'active',
+        nextDeductionDate: nextDeductionDate,
+        createdBy: req.admin.id
+      });
+      
+      console.log(`✅ Created new penalty loan #${penaltyLoan.id} for Penalty #${newPenalty.id}: Amount=${penaltyAmount.toFixed(2)}`);
+    }
+    
+    // Create transaction record for penalty addition (as savings_withdrawal to show in savings log)
+    try {
+      await db.Transaction.create({
+        orderId: null,
+        driverId: parseInt(driverId),
+        driverWalletId: wallet.id,
+        transactionType: 'savings_withdrawal', // Use savings_withdrawal so it appears in savings transaction log
+        paymentMethod: 'system',
+        paymentProvider: 'penalty',
+        amount: -penaltyAmount, // Negative amount (reduces savings) - debit transaction
+        status: 'completed',
+        paymentStatus: 'paid',
+        notes: `Penalty added - ${reason.trim()} (Penalty #${newPenalty.id}, Loan #${penaltyLoan.id})`
+      });
+      console.log(`✅ Created penalty transaction for Penalty #${newPenalty.id}: -KES ${penaltyAmount.toFixed(2)}`);
+    } catch (txError) {
+      console.error(`❌ Error creating penalty transaction: ${txError.message}`);
+      // Don't fail penalty creation if transaction creation fails
+    }
 
     res.status(201).json({
       success: true,
       data: newPenalty,
-      message: 'Penalty created successfully'
+      message: 'Penalty created successfully',
+      loanId: penaltyLoan.id // Include loan ID in response
     });
   } catch (error) {
     console.error('Error creating penalty:', error);
@@ -6158,6 +6410,26 @@ router.post('/penalties/pay-off', verifyAdmin, async (req, res) => {
           await penalty.update({ balance: 0 });
         }
       }
+      
+      // Create transaction record for penalty payment (cash)
+      try {
+        await db.Transaction.create({
+          orderId: null,
+          driverId: parseInt(driverId),
+          driverWalletId: wallet.id,
+          transactionType: 'cash_settlement',
+          paymentMethod: 'cash',
+          paymentProvider: 'penalty_payment',
+          amount: totalPenaltyBalance, // Positive amount (cash received)
+          status: 'completed',
+          paymentStatus: 'paid',
+          notes: `Penalty paid off (Cash) - Total: KES ${totalPenaltyBalance.toFixed(2)}`
+        });
+        console.log(`✅ Created penalty payment transaction: +KES ${totalPenaltyBalance.toFixed(2)}`);
+      } catch (txError) {
+        console.error(`❌ Error creating penalty payment transaction: ${txError.message}`);
+        // Don't fail penalty payment if transaction creation fails
+      }
 
       const { sendSuccess } = require('../utils/apiResponse');
       sendSuccess(res, {
@@ -6210,6 +6482,157 @@ router.post('/penalties/pay-off', verifyAdmin, async (req, res) => {
     console.error('Error paying off penalty:', error);
     const { sendError } = require('../utils/apiResponse');
     sendError(res, error.message || 'Failed to pay off penalty', 500);
+  }
+});
+
+/**
+ * Get all drivers with loan balances
+ * GET /api/admin/drivers/loans
+ */
+router.get('/drivers/loans', verifyAdmin, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    
+    // Get all active loans
+    const loans = await db.Loan.findAll({
+      where: {
+        status: 'active',
+        balance: { [Op.gt]: 0 } // Only loans with remaining balance > 0
+      },
+      include: [{
+        model: db.Driver,
+        as: 'driver',
+        attributes: ['id', 'name', 'phoneNumber']
+      }]
+    });
+    
+    // Group loans by driver and calculate total balance per driver
+    const driversMap = new Map();
+    
+    loans.forEach(loan => {
+      if (!loan.driver) return; // Skip if driver not found
+      
+      const driverId = loan.driver.id;
+      if (!driversMap.has(driverId)) {
+        driversMap.set(driverId, {
+          id: driverId,
+          name: loan.driver.name,
+          phoneNumber: loan.driver.phoneNumber,
+          loanBalance: 0
+        });
+      }
+      
+      const driverData = driversMap.get(driverId);
+      driverData.loanBalance += parseFloat(loan.balance || 0);
+    });
+    
+    // Convert map to array
+    const driversWithLoans = Array.from(driversMap.values());
+    
+    // Sort by loan balance (descending)
+    driversWithLoans.sort((a, b) => b.loanBalance - a.loanBalance);
+    
+    const { sendSuccess } = require('../utils/apiResponse');
+    sendSuccess(res, driversWithLoans);
+  } catch (error) {
+    console.error('Error fetching drivers with loans:', error);
+    const { sendError } = require('../utils/apiResponse');
+    sendError(res, error.message || 'Failed to fetch drivers with loans', 500);
+  }
+});
+
+/**
+ * Get all drivers with penalty balances
+ * GET /api/admin/drivers/penalties
+ */
+router.get('/drivers/penalties', verifyAdmin, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    
+    // Get all penalties with remaining balance
+    const penalties = await db.Penalty.findAll({
+      where: {
+        balance: { [Op.gt]: 0 } // Only penalties with remaining balance > 0
+      },
+      include: [{
+        model: db.Driver,
+        as: 'driver',
+        attributes: ['id', 'name', 'phoneNumber']
+      }]
+    });
+    
+    // Group penalties by driver and calculate total balance per driver
+    const driversMap = new Map();
+    
+    penalties.forEach(penalty => {
+      if (!penalty.driver) return; // Skip if driver not found
+      
+      const driverId = penalty.driver.id;
+      if (!driversMap.has(driverId)) {
+        driversMap.set(driverId, {
+          id: driverId,
+          name: penalty.driver.name,
+          phoneNumber: penalty.driver.phoneNumber,
+          penaltyBalance: 0
+        });
+      }
+      
+      const driverData = driversMap.get(driverId);
+      driverData.penaltyBalance += parseFloat(penalty.balance || 0);
+    });
+    
+    // Convert map to array
+    const driversWithPenalties = Array.from(driversMap.values());
+    
+    // Sort by penalty balance (descending)
+    driversWithPenalties.sort((a, b) => b.penaltyBalance - a.penaltyBalance);
+    
+    const { sendSuccess } = require('../utils/apiResponse');
+    sendSuccess(res, driversWithPenalties);
+  } catch (error) {
+    console.error('Error fetching drivers with penalties:', error);
+    const { sendError } = require('../utils/apiResponse');
+    sendError(res, error.message || 'Failed to fetch drivers with penalties', 500);
+  }
+});
+
+/**
+ * Get loan and penalty transactions for a driver
+ * GET /api/admin/drivers/:driverId/loan-penalty-transactions
+ */
+router.get('/drivers/:driverId/loan-penalty-transactions', verifyAdmin, async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const { Op } = require('sequelize');
+    
+    // Get all transactions related to loans and penalties
+    // This includes: loan creation, loan recovery, penalty creation, penalty payment
+    const transactions = await db.Transaction.findAll({
+      where: {
+        driverId: parseInt(driverId),
+        [Op.or]: [
+          { paymentProvider: 'loan' },
+          { paymentProvider: 'penalty' },
+          { paymentProvider: 'penalty_payment' },
+          { paymentProvider: 'savings_recovery' },
+          { notes: { [Op.like]: '%Loan #%' } },
+          { notes: { [Op.like]: '%Penalty #%' } },
+          { notes: { [Op.like]: '%Savings Recovery%' } },
+          { notes: { [Op.like]: '%Loan added%' } },
+          { notes: { [Op.like]: '%Penalty added%' } },
+          { notes: { [Op.like]: '%Penalty paid%' } }
+        ]
+      },
+      order: [['createdAt', 'DESC']],
+      limit: 100 // Limit to last 100 transactions
+    });
+    
+    const { sendSuccess } = require('../utils/apiResponse');
+    sendSuccess(res, transactions);
+  } catch (error) {
+    console.error('Error fetching loan/penalty transactions:', error);
+    const { sendError } = require('../utils/apiResponse');
+    sendError(res, error.message || 'Failed to fetch loan/penalty transactions', 500);
   }
 });
 

@@ -287,10 +287,10 @@ router.post('/', async (req, res) => {
     }
 
     // Determine allowed payment methods based on order source
-    // For admin orders (especially walk-in), allow cash in addition to card and mobile_money
+    // For admin orders (especially walk-in), allow cash and cash_at_hand in addition to card and mobile_money
     // For customer orders, only allow card and mobile_money
     const allowedPaymentMethods = adminOrder 
-      ? ['card', 'mobile_money', 'cash'] 
+      ? ['card', 'mobile_money', 'cash', 'cash_at_hand'] 
       : ['card', 'mobile_money'];
     
     console.log('💳 Payment validation check:', {
@@ -502,10 +502,22 @@ router.post('/', async (req, res) => {
         ? paymentStatus 
         : 'pending';
       
+      // For walk-in orders: never 'pending', use 'in_progress' if unpaid, 'completed' if paid
       // For admin orders, allow setting status if provided, otherwise default to 'pending'
-      const finalOrderStatus = (adminOrder && status && ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'].includes(status))
-        ? status
-        : 'pending';
+      let finalOrderStatus;
+      if (isWalkInOrder) {
+        // Walk-in orders: 'in_progress' if unpaid, 'completed' if paid
+        if (adminOrder && status && ['in_progress', 'completed'].includes(status)) {
+          finalOrderStatus = status;
+        } else {
+          finalOrderStatus = (finalPaymentStatus === 'paid') ? 'completed' : 'in_progress';
+        }
+      } else {
+        // Delivery orders: use provided status or default to 'pending'
+        finalOrderStatus = (adminOrder && status && ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'].includes(status))
+          ? status
+          : 'pending';
+      }
 
       // Generate secure tracking token for customer SMS link
       const trackingToken = crypto.randomBytes(32).toString('hex');
@@ -525,13 +537,16 @@ router.post('/', async (req, res) => {
         return cleaned; // Return cleaned version
       };
       
-      // Only normalize phone if it exists (walk-in orders may have null phone)
-      const normalizedCustomerPhone = customerPhone ? normalizePhoneForStorage(customerPhone) : null;
+      // Only normalize phone if it exists (walk-in orders use "POS" placeholder)
+      // For walk-in orders, use "POS" as placeholder since customerPhone cannot be null in the database
+      const normalizedCustomerPhone = customerPhone 
+        ? normalizePhoneForStorage(customerPhone) 
+        : (isWalkInOrder ? 'POS' : null);
       console.log(`📱 Phone normalization: "${customerPhone}" -> "${normalizedCustomerPhone}"`);
       
       const order = await db.Order.create({
         customerName,
-        customerPhone: normalizedCustomerPhone,
+        customerPhone: normalizedCustomerPhone || (isWalkInOrder ? 'POS' : ''),
         customerEmail,
         deliveryAddress,
         totalAmount: finalTotal,
@@ -594,6 +609,38 @@ router.post('/', async (req, res) => {
         }, { transaction });
         
         console.log(`✅ Created payment transaction for admin order #${order.id} with transaction code: ${transactionCode}`);
+      }
+
+      // Handle cash at hand payment for staff purchases (walk-in orders)
+      if (isWalkInOrder && paymentMethod === 'cash_at_hand' && finalPaymentStatus === 'paid' && driverId) {
+        const driver = await db.Driver.findByPk(parseInt(driverId), { transaction });
+        if (driver) {
+          const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+          const orderTotal = parseFloat(finalTotal) || 0;
+          const newCashAtHand = currentCashAtHand + orderTotal;
+          
+          await driver.update({ cashAtHand: newCashAtHand }, { transaction });
+          
+          // Create transaction record for cash at hand payment
+          await db.Transaction.create({
+            orderId: order.id,
+            driverId: parseInt(driverId),
+            transactionType: 'cash_settlement',
+            paymentMethod: 'cash',
+            paymentProvider: 'cash_at_hand',
+            amount: orderTotal, // Positive amount increases cash at hand
+            status: 'completed',
+            paymentStatus: 'paid',
+            receiptNumber: `CASH-AT-HAND-${order.id}`,
+            transactionDate: new Date(),
+            notes: `Staff purchase paid from cash at hand - Order #${order.id}`
+          }, { transaction });
+          
+          console.log(`✅ Staff purchase paid from cash at hand for Order #${order.id}`);
+          console.log(`   Driver ${driverId} cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (+${orderTotal.toFixed(2)})`);
+        } else {
+          console.warn(`⚠️ Driver ${driverId} not found for cash at hand payment on Order #${order.id}`);
+        }
       }
 
       await transaction.commit();
@@ -836,8 +883,10 @@ router.post('/', async (req, res) => {
       console.error('Error sending notifications:', error);
     }
     
-    // Decrease inventory stock for orders created as completed and paid
-    if (completeOrder.status === 'completed' && completeOrder.paymentStatus === 'paid') {
+    // Decrease inventory stock for completed orders
+    // For walk-in orders, inventory is reduced immediately when order is placed (regardless of payment status)
+    // For delivery orders, inventory is only reduced if payment is completed
+    if (completeOrder.status === 'completed') {
       try {
         const { decreaseInventoryForOrder } = require('../utils/inventory');
         await decreaseInventoryForOrder(completeOrder.id);

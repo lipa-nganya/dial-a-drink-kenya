@@ -24,14 +24,32 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
       throw new Error(`Order #${orderId} not found`);
     }
 
-    // Only decrease inventory if order is completed and paid
-    if (order.status !== 'completed' || order.paymentStatus !== 'paid') {
-      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - status: ${order.status}, paymentStatus: ${order.paymentStatus}`);
+    // Check if this is a walk-in order (POS order)
+    const isWalkInOrder = order.deliveryAddress === 'In-Store Purchase' || order.customerPhone === 'POS';
+
+    // For walk-in orders, reduce inventory immediately when order is placed (regardless of payment status)
+    // For delivery orders, only reduce inventory if order is completed and paid
+    if (order.status !== 'completed') {
+      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - status: ${order.status}`);
       return {
         skipped: true,
-        reason: 'order_not_completed_or_paid',
+        reason: 'order_not_completed',
         orderId
       };
+    }
+
+    if (!isWalkInOrder && order.paymentStatus !== 'paid') {
+      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - delivery order not paid (paymentStatus: ${order.paymentStatus})`);
+      return {
+        skipped: true,
+        reason: 'delivery_order_not_paid',
+        orderId
+      };
+    }
+
+    // For walk-in orders, reduce inventory even if payment is pending (items are physically taken)
+    if (isWalkInOrder && order.paymentStatus !== 'paid') {
+      console.log(`📦 Reducing inventory for walk-in Order #${orderId} (paymentStatus: ${order.paymentStatus} - items physically taken)`);
     }
 
     const results = [];
@@ -156,7 +174,99 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
   }
 };
 
+/**
+ * Increases inventory stock for all items in a cancelled order when it's accepted
+ * @param {number} orderId - The order ID
+ * @param {object} transaction - Optional Sequelize transaction
+ * @returns {Promise<object>} Summary of inventory updates
+ */
+const increaseInventoryForOrder = async (orderId, transaction = null) => {
+  try {
+    // Load order with items
+    const order = await db.Order.findByPk(orderId, {
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        required: true
+      }],
+      transaction
+    });
+
+    if (!order) {
+      throw new Error(`Order #${orderId} not found`);
+    }
+
+    const results = [];
+    const errors = [];
+
+    // Process each order item
+    for (const item of order.items || []) {
+      try {
+        const drink = await db.Drink.findByPk(item.drinkId, { transaction });
+        
+        if (!drink) {
+          console.warn(`⚠️  Drink #${item.drinkId} not found for Order #${orderId}`);
+          errors.push({
+            drinkId: item.drinkId,
+            error: 'Drink not found'
+          });
+          continue;
+        }
+
+        const currentStock = parseInt(drink.stock) || 0;
+        const quantity = parseInt(item.quantity) || 0;
+
+        if (quantity <= 0) {
+          console.warn(`⚠️  Invalid quantity (${quantity}) for Drink #${item.drinkId} in Order #${orderId}`);
+          continue;
+        }
+
+        // Calculate new stock (increase by quantity)
+        const newStock = currentStock + quantity;
+
+        // Update drink stock and automatically set isAvailable based on stock
+        await drink.update({
+          stock: newStock,
+          isAvailable: newStock > 0
+        }, { transaction });
+
+        if (currentStock === 0 && newStock > 0) {
+          console.log(`✅ Drink #${item.drinkId} (${drink.name}) is back in stock (${newStock} units)`);
+        }
+
+        results.push({
+          drinkId: item.drinkId,
+          drinkName: drink.name,
+          quantity: quantity,
+          oldStock: currentStock,
+          newStock: newStock
+        });
+
+        console.log(`📈 Increased inventory for Drink #${item.drinkId} (${drink.name}): ${currentStock} → ${newStock} (restored ${quantity})`);
+      } catch (itemError) {
+        console.error(`❌ Error increasing inventory for Drink #${item.drinkId} in Order #${orderId}:`, itemError);
+        errors.push({
+          drinkId: item.drinkId,
+          error: itemError.message
+        });
+      }
+    }
+
+    return {
+      orderId,
+      success: errors.length === 0,
+      itemsProcessed: results.length,
+      itemsUpdated: results,
+      errors: errors.length > 0 ? errors : undefined
+    };
+  } catch (error) {
+    console.error(`❌ Error increasing inventory for Order #${orderId}:`, error);
+    throw error;
+  }
+};
+
 module.exports = {
-  decreaseInventoryForOrder
+  decreaseInventoryForOrder,
+  increaseInventoryForOrder
 };
 

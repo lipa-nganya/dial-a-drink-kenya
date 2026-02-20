@@ -175,9 +175,10 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   // For successful payments, always set status to 'confirmed' (unless it's a POS order which becomes 'completed')
   let finalStatus = 'confirmed'; // Default to 'confirmed' for successful payments
   
-  // For POS orders, set status to 'completed' immediately (no delivery needed)
+  // For POS orders (walk-in/in-store), set status to 'completed' when paid
+  // If unpaid, they should be 'in_progress', not 'pending'
   if (isPOSOrder) {
-    finalStatus = 'completed';
+    finalStatus = 'completed'; // Always completed when paid
   } else if (orderInstance.status && orderInstance.status !== 'pending' && orderInstance.status !== 'unpaid') {
     // If order already has a status other than pending/unpaid, preserve it (e.g., 'out_for_delivery', 'delivered')
     // But only if it's not a POS order
@@ -1891,10 +1892,10 @@ router.post('/callback', async (req, res) => {
           const currentOrderStatus = order.status;
           let newOrderStatus = currentOrderStatus;
           
-          // POS orders should always be 'completed' after payment
+          // POS orders should always be 'completed' after payment (move from 'in_progress' to 'completed')
           if (isPOSOrder) {
             newOrderStatus = 'completed';
-            console.log(`📝 POS Order #${order.id} - setting status to 'completed' after payment confirmation`);
+            console.log(`📝 POS Order #${order.id} - moving from '${currentOrderStatus}' to 'completed' after payment confirmation`);
           } else if (currentOrderStatus === 'out_for_delivery') {
             // If order was out for delivery when payment is confirmed, mark as completed directly
             // (delivered + paid = completed, and it should be moved to completed orders on driver app)
@@ -1904,6 +1905,10 @@ router.post('/callback', async (req, res) => {
             // If order was already delivered, mark as completed
             newOrderStatus = 'completed';
             console.log(`📝 Order #${order.id} was "delivered", updating to "completed" after payment confirmation`);
+          } else if (currentOrderStatus === 'in_progress' && isPOSOrder) {
+            // For in-store orders that were 'in_progress', move to 'completed' when paid
+            newOrderStatus = 'completed';
+            console.log(`📝 In-store Order #${order.id} was "in_progress", updating to "completed" after payment confirmation`);
           } else if (currentOrderStatus === 'pending' || currentOrderStatus === 'cancelled') {
             // For newly paid orders, move them into confirmed so they flow through the rest of the lifecycle
             newOrderStatus = 'confirmed';
@@ -2181,6 +2186,42 @@ router.post('/callback', async (req, res) => {
             io.to('admin').emit('order-status-updated', orderStatusUpdateData);
             
             console.log(`📡 Socket.IO events emitted for Order #${order.id} with transaction status: completed`);
+            
+            // Send push notification to driver when payment is successful
+            // receiptNumber is defined earlier in the success block (around line 1605)
+            const driverIdForNotification = dbOrder?.driverId || finalOrder?.driverId || order.driverId;
+            if (driverIdForNotification) {
+              try {
+                const driver = await db.Driver.findByPk(driverIdForNotification);
+                if (driver && driver.pushToken) {
+                  // Get receiptNumber from transaction if not already available in scope
+                  const finalReceiptNumber = transaction?.receiptNumber || receiptNumber || 'N/A';
+                  const pushMessage = {
+                    sound: 'default',
+                    title: '✅ Payment Received',
+                    body: `Customer payment received for Order #${order.id}. Amount: KES ${parseFloat(order.totalAmount).toFixed(2)}`,
+                    data: {
+                      type: 'payment-success',
+                      orderId: String(order.id),
+                      amount: parseFloat(order.totalAmount).toFixed(2),
+                      receiptNumber: finalReceiptNumber
+                    },
+                    priority: 'high',
+                    badge: 1,
+                    channelId: 'notifications'
+                  };
+                  
+                  const pushResult = await pushNotifications.sendFCMNotification(driver.pushToken, pushMessage);
+                  if (pushResult.success) {
+                    console.log(`✅ Push notification sent to driver ${driver.name} (ID: ${driverIdForNotification}) for payment success on Order #${order.id}`);
+                  } else {
+                    console.error(`⚠️ Failed to send push notification to driver ${driver.name}:`, pushResult.error);
+                  }
+                }
+              } catch (pushError) {
+                console.error(`❌ Error sending push notification for payment success:`, pushError);
+              }
+            }
           }
       } else {
         // Payment failed - check the specific error code
@@ -2250,6 +2291,47 @@ router.post('/callback', async (req, res) => {
             resultDesc: resultDesc
           });
           console.log(`📡 Emitted payment-failed event to admin room for Order #${order.id}`);
+        }
+        
+        // Send push notification to driver when payment fails or is cancelled
+        if (order.driverId) {
+          try {
+            const driver = await db.Driver.findByPk(order.driverId);
+            if (driver && driver.pushToken) {
+              const notificationTitle = errorType === 'timeout' ? '⏱️ Payment Timeout' : 
+                                       errorType === 'wrong_pin' ? '❌ Payment Cancelled' : 
+                                       '❌ Payment Failed';
+              const notificationBody = errorType === 'timeout' 
+                ? `Payment request timed out for Order #${order.id}. Customer did not complete payment.`
+                : errorType === 'wrong_pin' || errorType === 'cancelled'
+                ? `Payment was cancelled for Order #${order.id}. ${errorMessage}`
+                : `Payment failed for Order #${order.id}. ${errorMessage}`;
+              
+              const pushMessage = {
+                sound: 'default',
+                title: notificationTitle,
+                body: notificationBody,
+                data: {
+                  type: 'payment-failed',
+                  orderId: String(order.id),
+                  errorType: errorType,
+                  errorMessage: errorMessage
+                },
+                priority: 'high',
+                badge: 1,
+                channelId: 'notifications'
+              };
+              
+              const pushResult = await pushNotifications.sendFCMNotification(driver.pushToken, pushMessage);
+              if (pushResult.success) {
+                console.log(`✅ Push notification sent to driver ${driver.name} (ID: ${order.driverId}) for payment failure on Order #${order.id}`);
+              } else {
+                console.error(`⚠️ Failed to send push notification to driver ${driver.name}:`, pushResult.error);
+              }
+            }
+          } catch (pushError) {
+            console.error(`❌ Error sending push notification for payment failure:`, pushError);
+          }
         }
       }
       } else {

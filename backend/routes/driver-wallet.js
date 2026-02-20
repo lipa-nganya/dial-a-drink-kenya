@@ -6,6 +6,14 @@ const mpesaService = require('../services/mpesa');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 
+// Helper function to format description using first 2 words of delivery address
+const formatDescriptionFromAddress = (deliveryAddress) => {
+  if (!deliveryAddress) return 'submission';
+  const words = deliveryAddress.trim().split(/\s+/);
+  const firstTwoWords = words.slice(0, 2).join(' ');
+  return firstTwoWords ? `${firstTwoWords} submission` : 'submission';
+};
+
 /**
  * Get cash at hand data for driver
  * GET /api/driver-wallet/:driverId/cash-at-hand
@@ -34,7 +42,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         paymentStatus: 'paid',
         status: { [Op.in]: ['delivered', 'completed'] }
       },
-      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status'],
+      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status', 'deliveryAddress'],
       order: [['createdAt', 'DESC']]
     });
 
@@ -70,7 +78,8 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       }
     }
 
-    const cashSettlements = await db.Transaction.findAll({
+    // Get negative cash_settlement transactions (cash remitted)
+    const cashSettlementsNegative = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'cash_settlement',
@@ -78,13 +87,41 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         amount: { [Op.lt]: 0 }
       },
       attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider'],
+      include: [
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress'], required: false }
+      ],
       order: [['createdAt', 'DESC']]
     });
-    const orderIdsWithSettlementFromTx = new Set((cashSettlements || []).map(tx => tx.orderId).filter(Boolean));
+    
+    // Get positive cash_settlement transactions (cash added, e.g., from loan recovery)
+    const cashSettlementsPositive = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        status: { [Op.in]: ['completed', 'pending'] },
+        amount: { [Op.gt]: 0 }
+      },
+      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider'],
+      include: [
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress'], required: false }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    const orderIdsWithSettlementFromTx = new Set((cashSettlementsNegative || []).map(tx => tx.orderId).filter(Boolean));
 
     const approvedCashSubmissions = await db.CashSubmission.findAll({
       where: { driverId: driverId, status: 'approved' },
       attributes: ['id', 'amount', 'createdAt', 'submissionType', 'details'],
+      include: [
+        {
+          model: db.Order,
+          as: 'orders',
+          attributes: ['id', 'deliveryAddress'],
+          required: false,
+          through: { attributes: [] }
+        }
+      ],
       order: [['createdAt', 'DESC']]
     });
 
@@ -94,14 +131,19 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     });
     const pendingSubmissionsTotal = pendingCashSubmissions.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0);
 
-    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+    // Calculate cash remitted (negative cash_settlement transactions)
+    const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+    
+    // Calculate cash added (positive cash_settlement transactions, e.g., from loan recovery)
+    const cashAdded = cashSettlementsPositive.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    
     // Include approved submissions; for order_payment, skip if already counted via cash_settlement (negative amount)
     const approvedSubmissionsTotal = approvedCashSubmissions.reduce((sum, s) => {
       if (s.submissionType === 'order_payment' && s.details?.orderId != null && orderIdsWithSettlementFromTx.has(s.details.orderId)) return sum;
       return sum + parseFloat(s.amount || 0);
     }, 0);
 
-    const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal;
+    const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal + cashAdded;
 
     // CRITICAL: ALWAYS sync the database value with calculated value to ensure consistency
     // This ensures both admin and driver app show the same value from the database
@@ -140,12 +182,17 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         customerName: order.customerName,
         amount,
         date: order.createdAt,
-        description: `Cash received for Order #${order.id} (50% delivery fee + order total)`
+        description: formatDescriptionFromAddress(order.deliveryAddress)
       });
     }
 
     // Add cash settlement entries (remittances to business and savings withdrawals)
-    cashSettlements.forEach(tx => {
+    // Combine negative and positive cash_settlement transactions for display
+    const allCashSettlements = [...cashSettlementsNegative, ...cashSettlementsPositive].sort((a, b) => 
+      new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    
+    allCashSettlements.forEach(tx => {
       // Check if this is a savings withdrawal by paymentProvider
       // Savings withdrawals have paymentProvider = 'savings_withdrawal_record' or 'mpesa' with notes containing 'Savings withdrawal'
       const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' || 
@@ -158,14 +205,25 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       if (isSavingsWithdrawal) {
         description = `Savings withdrawal`;
       } else {
-        // For other cash settlements, use the notes or default description
-        description = tx.notes || `Cash remitted to business`;
+        // For cash settlements with order, use delivery address (first 2 words) + "submission"
+        if (tx.order && tx.order.deliveryAddress) {
+          description = formatDescriptionFromAddress(tx.order.deliveryAddress);
+        } else {
+          // For other cash settlements, use the notes or default description
+          description = tx.notes || `Cash remitted to business`;
+        }
       }
       
+      // Determine entry type based on transaction amount
+      // Negative amounts = cash sent (remitted)
+      // Positive amounts = cash received (e.g., from loan recovery)
+      const txAmount = parseFloat(tx.amount) || 0;
+      const entryType = txAmount < 0 ? 'cash_sent' : 'cash_received';
+      
       entries.push({
-        type: 'cash_sent',
+        type: entryType,
         transactionId: tx.id,
-        amount: Math.abs(parseFloat(tx.amount) || 0), // Make positive for display
+        amount: Math.abs(txAmount), // Make positive for display
         date: tx.transactionDate || tx.createdAt,
         description: description,
         receiptNumber: tx.receiptNumber
@@ -178,7 +236,19 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       if (submission.submissionType === 'order_payment' && submission.details?.orderId != null && orderIdsWithSettlementFromTx.has(submission.details.orderId)) return;
       const submissionType = submission.submissionType;
       let description = 'Cash submission';
-      if (submissionType === 'purchases' && submission.details?.supplier) {
+      
+      // Check if submission has linked orders with delivery address
+      const orderWithAddress = submission.orders && submission.orders.length > 0 
+        ? submission.orders.find(o => o.deliveryAddress) || submission.orders[0]
+        : null;
+      
+      if (orderWithAddress && orderWithAddress.deliveryAddress) {
+        // Use delivery address (first 2 words) + "submission"
+        description = formatDescriptionFromAddress(orderWithAddress.deliveryAddress);
+      } else if (submissionType === 'purchases' && submission.details?.deliveryLocation) {
+        // For purchases, use deliveryLocation if available
+        description = formatDescriptionFromAddress(submission.details.deliveryLocation);
+      } else if (submissionType === 'purchases' && submission.details?.supplier) {
         // Support both old format (single item) and new format (multiple items)
         if (submission.details?.items && Array.isArray(submission.details.items) && submission.details.items.length > 0) {
           const itemsList = submission.details.items.map((item) => item.item).join(', ');
@@ -433,13 +503,27 @@ router.post('/:driverId/cash-at-hand/submit', async (req, res) => {
       attributes: ['id', 'totalAmount', 'driverPayAmount']
     });
 
-    const cashSettlements = await db.Transaction.findAll({
+    // Get negative cash_settlement transactions (cash remitted)
+    const cashSettlementsNegative = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'cash_settlement',
         status: 'completed',
         amount: {
           [Op.lt]: 0
+        }
+      },
+      attributes: ['amount']
+    });
+    
+    // Get positive cash_settlement transactions (cash added, e.g., from loan recovery)
+    const cashSettlementsPositive = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        status: 'completed',
+        amount: {
+          [Op.gt]: 0
         }
       },
       attributes: ['amount']
@@ -453,12 +537,16 @@ router.post('/:driverId/cash-at-hand/submit', async (req, res) => {
       return sum + (totalAmount - driverPayAmount);
     }, 0);
 
-    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => {
+    const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => {
       return sum + (parseFloat(tx.amount) || 0);
     }, 0));
+    
+    const cashAdded = cashSettlementsPositive.reduce((sum, tx) => {
+      return sum + (parseFloat(tx.amount) || 0);
+    }, 0);
 
     // Allow negative cash at hand - drivers can go into negative balance (credit)
-    const currentCashAtHand = cashCollected - cashRemitted;
+    const currentCashAtHand = cashCollected - cashRemitted + cashAdded;
 
     // Allow drivers to submit more than they have - they can go into negative balance
     // Removed validation that prevented submitting more than current cash at hand
@@ -681,18 +769,27 @@ router.get('/:driverId', async (req, res) => {
         canWithdraw: canWithdraw
       },
       recentDeliveryPayments: [], // No wallet
-      recentSavingsCredits: savingsCreditTransactions.map(tx => ({
-        id: tx.id,
-        amount: Math.abs(parseFloat(tx.amount)),
-        transactionType: 'savings_credit',
-        orderId: tx.orderId,
-        orderNumber: tx.order?.id,
-        orderLocation: tx.order?.deliveryAddress || null,
-        customerName: tx.order?.customerName,
-        status: tx.order?.status,
-        date: tx.createdAt,
-        notes: tx.notes
-      })),
+      recentSavingsCredits: savingsCreditTransactions.map(tx => {
+        // Format description using delivery address (first 2 words) + "submission"
+        let description = 'submission';
+        if (tx.order && tx.order.deliveryAddress) {
+          description = formatDescriptionFromAddress(tx.order.deliveryAddress);
+        } else {
+          description = tx.notes || `Savings credit from Order #${tx.orderId || 'N/A'}`;
+        }
+        return {
+          id: tx.id,
+          amount: Math.abs(parseFloat(tx.amount)),
+          transactionType: 'savings_credit',
+          orderId: tx.orderId,
+          orderNumber: tx.order?.id,
+          orderLocation: tx.order?.deliveryAddress || null,
+          customerName: tx.order?.customerName,
+          status: tx.order?.status,
+          date: tx.createdAt,
+          notes: description // Use formatted description
+        };
+      }),
       cashSettlements: cashSettlementTransactions.map(tx => ({
         id: tx.id,
         amount: Math.abs(parseFloat(tx.amount)),
@@ -721,7 +818,8 @@ router.get('/:driverId', async (req, res) => {
         paymentStatus: tx.paymentStatus,
         receiptNumber: tx.receiptNumber,
         date: tx.transactionDate || tx.createdAt,
-        notes: tx.notes || `Savings withdrawal${tx.phoneNumber ? ` to ${tx.phoneNumber}` : ''}`
+        notes: tx.notes || `Savings withdrawal${tx.phoneNumber ? ` to ${tx.phoneNumber}` : ''}`,
+        paymentProvider: tx.paymentProvider // Include paymentProvider to identify loan/penalty transactions
       }))
     });
   } catch (error) {

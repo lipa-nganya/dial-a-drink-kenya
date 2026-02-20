@@ -1103,8 +1103,8 @@ const AdminOverview = () => {
               </Box>
               {!deliverySettings.isTestMode && (
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  With Alcohol: KES {deliverySettings.deliveryFeeWithAlcohol.toFixed(2)} | 
-                  Without Alcohol: KES {deliverySettings.deliveryFeeWithoutAlcohol.toFixed(2)}
+                  With Alcohol: KES {Math.round(deliverySettings.deliveryFeeWithAlcohol)} | 
+                  Without Alcohol: KES {Math.round(deliverySettings.deliveryFeeWithoutAlcohol)}
                 </Typography>
               )}
             </Box>

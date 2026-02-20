@@ -132,7 +132,7 @@ const SaveTheFishes = () => {
                     Cost Savings
                   </Typography>
                   <Typography variant="h3" sx={{ color: colors.accentText, fontWeight: 700 }}>
-                    KES {stats?.totalCostSaved?.toFixed(2) || '0.00'}
+                    KES {Math.round(stats?.totalCostSaved || 0)}
                   </Typography>
                   <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 1 }}>
                     Saved from API calls
@@ -197,7 +197,7 @@ const SaveTheFishes = () => {
                         {address.apiCallsSaved}
                       </TableCell>
                       <TableCell align="right" sx={{ color: colors.accentText, fontWeight: 600 }}>
-                        {address.costSaved.toFixed(2)}
+                        {Math.round(address.costSaved)}
                       </TableCell>
                     </TableRow>
                   ))}

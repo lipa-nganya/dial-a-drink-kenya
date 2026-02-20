@@ -202,6 +202,10 @@ data class UpdateOrderStatusRequest(
     val driverId: Int
 )
 
+data class UpdatePaymentStatusRequest(
+    val paymentStatus: String
+)
+
 data class RespondToOrderRequest(
     val driverId: Int,
     val accepted: Boolean
@@ -630,7 +634,10 @@ data class CreateOrderRequest(
     val adminOrder: Boolean = true,
     val deliveryFee: Double? = null,
     val territoryId: Int? = null,
-    val notes: String? = null
+    val notes: String? = null,
+    val driverId: Int? = null, // Driver ID for staff purchases with cash at hand
+    val isStop: Boolean? = null, // Whether this order is a stop (deducts from driver savings)
+    val stopDeductionAmount: Double? = null // Amount to deduct from driver savings when order is completed
 )
 
 data class AssignDriverRequest(
@@ -645,12 +652,22 @@ data class UnassignedOrdersResponse(
 // Driver Transaction Model (for admin completed screen)
 data class DriverTransaction(
     val id: Int,
-    val orderId: Int,
-    val date: String?,
-    val location: String?,
-    val paymentMethod: String?,
-    val amount: Double,
-    val deliveryFee: Double
+    val orderId: Int? = null,
+    val date: String? = null,
+    val location: String? = null,
+    val paymentMethod: String? = null,
+    val amount: Double? = null,
+    val deliveryFee: Double? = null,
+    // Additional fields for loan/penalty transactions
+    val driverId: Int? = null,
+    val driverWalletId: Int? = null,
+    val transactionType: String? = null,
+    val paymentProvider: String? = null,
+    val status: String? = null,
+    val paymentStatus: String? = null,
+    val notes: String? = null,
+    val createdAt: String? = null,
+    val updatedAt: String? = null
 )
 
 // Request Payment Models

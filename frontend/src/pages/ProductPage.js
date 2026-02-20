@@ -90,7 +90,7 @@ const ProductPage = () => {
         // Select the most expensive capacity
         const mostExpensive = capacitiesWithPrices[0];
         setSelectedCapacity(mostExpensive.capacity);
-        console.log(`[ProductPage] Auto-selected most expensive capacity: ${mostExpensive.capacity} (KES ${mostExpensive.price.toFixed(2)})`);
+        console.log(`[ProductPage] Auto-selected most expensive capacity: ${mostExpensive.capacity} (KES ${Math.round(mostExpensive.price)})`);
         console.log(`[ProductPage] All capacities with prices:`, capacitiesWithPrices);
       } else {
         // No capacities - clear selection
@@ -467,7 +467,7 @@ const ProductPage = () => {
                 }
               }}
             >
-              Add to Cart
+              Buy Now
             </Button>
           </Box>
         </Box>
@@ -510,7 +510,7 @@ const ProductPage = () => {
                         {capacity} price:
                       </Typography>
                       <Typography variant="body1">
-                        KES {price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                        KES {Math.round(price).toLocaleString('en-KE')}
                       </Typography>
                     </Box>
                   );
@@ -521,7 +521,7 @@ const ProductPage = () => {
                     Price:
                   </Typography>
                   <Typography variant="body1">
-                    KES {(Number(product.price) || 0).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                    KES {Math.round(Number(product.price) || 0).toLocaleString('en-KE')}
                   </Typography>
                 </Box>
               )}
@@ -626,7 +626,7 @@ const ProductPage = () => {
                                 </Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
-                                    KES {price.toFixed(2)}
+                                    KES {Math.round(price)}
                                   </Typography>
                                 </Box>
                               </Box>
@@ -660,7 +660,7 @@ const ProductPage = () => {
                                 </Typography>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                   <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
-                                    KES {price.toFixed(2)}
+                                    KES {Math.round(price)}
                                   </Typography>
                                 </Box>
                               </Box>
@@ -682,7 +682,7 @@ const ProductPage = () => {
               </FormControl>
             ) : (
               <Typography variant="h5" sx={{ fontWeight: 'bold', color: colors.accentText, mb: 3 }}>
-                KES {(Number(product.price) || 0).toFixed(2)}
+                KES {Math.round(Number(product.price) || 0)}
               </Typography>
             )}
 

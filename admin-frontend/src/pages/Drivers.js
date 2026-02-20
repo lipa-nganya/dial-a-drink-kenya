@@ -505,21 +505,28 @@ const Drivers = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [notification, setNotification] = useState(null);
   const [activeTab, setActiveTab] = useState(0);
-  // TODO: These will be used for loan/penalty dialogs in future
-  // const [loanDialogOpen, setLoanDialogOpen] = useState(false);
-  // const [penaltyDialogOpen, setPenaltyDialogOpen] = useState(false);
-  // const [loanFormData, setLoanFormData] = useState({
-  //   driverId: '',
-  //   amount: '',
-  //   reason: ''
-  // });
-  // const [penaltyFormData, setPenaltyFormData] = useState({
-  //   driverId: '',
-  //   amount: '',
-  //   reason: ''
-  // });
-  // const [creatingLoan, setCreatingLoan] = useState(false);
-  // const [creatingPenalty, setCreatingPenalty] = useState(false);
+  const [loanDialogOpen, setLoanDialogOpen] = useState(false);
+  const [penaltyDialogOpen, setPenaltyDialogOpen] = useState(false);
+  const [loanFormData, setLoanFormData] = useState({
+    driverId: '',
+    amount: '',
+    reason: ''
+  });
+  const [penaltyFormData, setPenaltyFormData] = useState({
+    driverId: '',
+    amount: '',
+    reason: ''
+  });
+  const [creatingLoan, setCreatingLoan] = useState(false);
+  const [creatingPenalty, setCreatingPenalty] = useState(false);
+  const [withdrawalDialogOpen, setWithdrawalDialogOpen] = useState(false);
+  const [selectedDriverForPenalty, setSelectedDriverForPenalty] = useState(null);
+  const [selectedDriverForWithdrawal, setSelectedDriverForWithdrawal] = useState(null);
+  const [withdrawalFormData, setWithdrawalFormData] = useState({
+    amount: '',
+    reason: ''
+  });
+  const [withdrawing, setWithdrawing] = useState(false);
 
   useEffect(() => {
     fetchDrivers();
@@ -776,6 +783,86 @@ const Drivers = () => {
     }
   };
 
+  const handleOpenPenaltyDialog = (driver) => {
+    setSelectedDriverForPenalty(driver);
+    setPenaltyFormData({
+      driverId: driver.id,
+      amount: '',
+      reason: ''
+    });
+    setPenaltyDialogOpen(true);
+  };
+
+  const handleOpenWithdrawalDialog = (driver) => {
+    setSelectedDriverForWithdrawal(driver);
+    setWithdrawalFormData({
+      amount: '',
+      reason: ''
+    });
+    setWithdrawalDialogOpen(true);
+  };
+
+  const handleCreatePenalty = async () => {
+    if (!penaltyFormData.amount || !penaltyFormData.reason) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    try {
+      setCreatingPenalty(true);
+      setError('');
+      await api.post('/admin/penalties', penaltyFormData);
+      setPenaltyDialogOpen(false);
+      setPenaltyFormData({ driverId: '', amount: '', reason: '' });
+      setSelectedDriverForPenalty(null);
+      fetchDrivers();
+      setNotification({
+        message: 'Penalty created successfully',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error creating penalty:', err);
+      setError(err.response?.data?.error || 'Failed to create penalty');
+    } finally {
+      setCreatingPenalty(false);
+    }
+  };
+
+  const handleWithdrawSavings = async () => {
+    if (!withdrawalFormData.amount || !withdrawalFormData.reason) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    const savings = selectedDriverForWithdrawal?.savings || selectedDriverForWithdrawal?.wallet?.savings || 0;
+    if (parseFloat(withdrawalFormData.amount) > parseFloat(savings)) {
+      setError(`Insufficient savings. Available: KES ${Math.round(parseFloat(savings))}`);
+      return;
+    }
+
+    try {
+      setWithdrawing(true);
+      setError('');
+      await api.post(`/admin/drivers/${selectedDriverForWithdrawal.id}/withdraw-savings`, {
+        amount: withdrawalFormData.amount,
+        reason: withdrawalFormData.reason
+      });
+      setWithdrawalDialogOpen(false);
+      setWithdrawalFormData({ amount: '', reason: '' });
+      setSelectedDriverForWithdrawal(null);
+      fetchDrivers();
+      setNotification({
+        message: 'Savings withdrawal completed successfully',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Error withdrawing savings:', err);
+      setError(err.response?.data?.error || 'Failed to withdraw savings');
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
   // eslint-disable-next-line no-unused-vars
   const getStatusColor = (status) => {
     switch (status) {
@@ -981,6 +1068,7 @@ const Drivers = () => {
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Phone Number</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Cash at Hand</TableCell>
+              <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Savings</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Credit Status</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Last Activity</TableCell>
               <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>OTP</TableCell>
@@ -990,7 +1078,7 @@ const Drivers = () => {
           <TableBody>
             {filteredDrivers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
                   <Typography variant="body1" color="text.secondary">
                     {searchQuery.trim() 
                       ? `No riders found matching "${searchQuery}".` 
@@ -1002,6 +1090,7 @@ const Drivers = () => {
               filteredDrivers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((driver) => {
                 const creditStatus = driver.creditStatus || {};
                 const cashAtHand = creditStatus.cashAtHand || driver.cashAtHand || 0;
+                const savings = driver.savings || driver.wallet?.savings || 0;
                 const creditLimit = creditStatus.creditLimit || driver.creditLimit || 0;
                 const exceeded = creditStatus.exceeded || false;
                 // const walletBalance = driver.wallet?.balance || 0; // Unused
@@ -1068,7 +1157,18 @@ const Drivers = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: colors.textPrimary }}>
-                      KES {parseFloat(cashAtHand).toFixed(2)}
+                      KES {Math.round(parseFloat(cashAtHand))}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontWeight: 500, 
+                        color: parseFloat(savings) < 0 ? '#d32f2f' : colors.textPrimary 
+                      }}
+                    >
+                      KES {Math.round(parseFloat(savings))}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -1080,16 +1180,16 @@ const Drivers = () => {
                         sx={{ fontWeight: 'bold' }}
                       />
                       <Typography variant="caption" color="text.secondary">
-                        Cash at Hand: KES {parseFloat(cashAtHand).toFixed(2)}
+                        Cash at Hand: KES {Math.round(parseFloat(cashAtHand))}
                       </Typography>
                       {creditLimit > 0 && (
                         <>
                           <Typography variant="caption" color="text.secondary">
-                            Credit Limit: KES {parseFloat(creditLimit).toFixed(2)}
+                            Credit Limit: KES {Math.round(parseFloat(creditLimit))}
                           </Typography>
                           {exceeded && (
                             <Typography variant="caption" color="error">
-                              Exceeds by: KES {(parseFloat(cashAtHand) - parseFloat(creditLimit)).toFixed(2)}
+                              Exceeds by: KES {Math.round(parseFloat(cashAtHand) - parseFloat(creditLimit))}
                             </Typography>
                           )}
                         </>
@@ -1176,6 +1276,34 @@ const Drivers = () => {
                         ) : (
                           <WhatsApp />
                         )}
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Add Penalty">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenPenaltyDialog(driver);
+                        }}
+                        sx={{ color: '#FF9800' }}
+                      >
+                        <RemoveCircle />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Withdraw Savings">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenWithdrawalDialog(driver);
+                        }}
+                        disabled={parseFloat(savings) <= 0}
+                        sx={{ 
+                          color: parseFloat(savings) > 0 ? '#2196F3' : 'text.disabled',
+                          '&:hover': { backgroundColor: parseFloat(savings) > 0 ? 'rgba(33, 150, 243, 0.1)' : 'transparent' }
+                        }}
+                      >
+                        <Download />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Edit Rider">

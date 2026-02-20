@@ -70,11 +70,11 @@ export const generateShareImage = async (product) => {
         const prices = product.capacityPricing.map(p => {
           const price = parseFloat(p.currentPrice) || 0;
           const capacity = p.capacity;
-          return `${capacity}: KES ${price.toFixed(2)}`;
+          return `${capacity}: KES ${Math.round(price)}`;
         });
         return prices.join('\n');
       }
-      return `KES ${Number(productPrice).toFixed(2)}`;
+      return `KES ${Math.round(Number(productPrice))}`;
     };
     
     // Draw the image
@@ -203,11 +203,11 @@ const getPriceText = (product) => {
     const prices = product.capacityPricing.map(p => {
       const price = parseFloat(p.currentPrice) || 0;
       const capacity = p.capacity;
-      return `${capacity}: KES ${price.toFixed(2)}`;
+      return `${capacity}: KES ${Math.round(price)}`;
     });
     return prices.join(', ');
   }
-  return `KES ${Number(product.price || 0).toFixed(2)}`;
+  return `KES ${Math.round(Number(product.price || 0))}`;
 };
 
 /**

@@ -2,114 +2,174 @@ const db = require('../models');
 const { Op } = require('sequelize');
 
 /**
- * Process loan deductions for all drivers with negative savings
- * Loans and penalties are represented as negative savings - as long as savings is negative, loan recovery should happen
- * Penalties are treated as part of the loan and are recovered together with loans
+ * Format date and time in EAT (East Africa Time) timezone
+ * EAT is UTC+3 (Africa/Nairobi)
+ */
+function formatEATDateTime(date = new Date()) {
+  try {
+    // Convert to EAT timezone (Africa/Nairobi, UTC+3)
+    const options = {
+      timeZone: 'Africa/Nairobi',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    };
+    
+    const parts = new Intl.DateTimeFormat('en-US', options).formatToParts(date);
+    const year = parts.find(p => p.type === 'year').value;
+    const month = parts.find(p => p.type === 'month').value;
+    const day = parts.find(p => p.type === 'day').value;
+    const hour = parts.find(p => p.type === 'hour').value;
+    const minute = parts.find(p => p.type === 'minute').value;
+    const second = parts.find(p => p.type === 'second').value;
+    
+    return `${year}-${month}-${day} ${hour}:${minute}:${second} EAT`;
+  } catch (error) {
+    // Fallback to simple formatting if Intl.DateTimeFormat fails
+    const d = new Date(date);
+    const year = d.getUTCFullYear();
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const hours = String((d.getUTCHours() + 3) % 24).padStart(2, '0'); // EAT is UTC+3
+    const minutes = String(d.getUTCMinutes()).padStart(2, '0');
+    const seconds = String(d.getUTCSeconds()).padStart(2, '0');
+    
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds} EAT`;
+  }
+}
+
+/**
+ * Get loan deduction settings from database
+ * Returns { amount, frequencyInMs } with defaults if not set
+ */
+async function getLoanDeductionSettings() {
+  try {
+    // Get deduction amount
+    const amountSetting = await db.Settings.findOne({ where: { key: 'loanDeductionAmount' } });
+    const deductionAmount = amountSetting?.value ? parseFloat(amountSetting.value) : 150; // Default: 150 KES
+    
+    // Get deduction frequency
+    const frequencySetting = await db.Settings.findOne({ where: { key: 'loanDeductionFrequency' } });
+    let frequencyInMs = 24 * 60 * 60 * 1000; // Default: 24 hours in milliseconds
+    
+    if (frequencySetting?.value) {
+      try {
+        const frequency = JSON.parse(frequencySetting.value);
+        const days = parseInt(frequency.days || 0);
+        const hours = parseInt(frequency.hours || 0);
+        const minutes = parseInt(frequency.minutes || 0);
+        
+        // Convert to milliseconds
+        frequencyInMs = (days * 24 * 60 * 60 * 1000) + 
+                        (hours * 60 * 60 * 1000) + 
+                        (minutes * 60 * 1000);
+        
+        // Ensure minimum of 1 minute
+        if (frequencyInMs < 60000) {
+          frequencyInMs = 60000;
+        }
+      } catch (parseError) {
+        console.warn('⚠️ Error parsing loan deduction frequency, using default:', parseError.message);
+      }
+    }
+    
+    return { deductionAmount, frequencyInMs };
+  } catch (error) {
+    console.warn('⚠️ Error fetching loan deduction settings, using defaults:', error.message);
+    return { 
+      deductionAmount: 150, 
+      frequencyInMs: 24 * 60 * 60 * 1000 // 24 hours
+    };
+  }
+}
+
+/**
+ * Calculate next deduction date based on frequency settings
+ */
+function calculateNextDeductionDate(frequencyInMs) {
+  const nextDate = new Date();
+  nextDate.setTime(nextDate.getTime() + frequencyInMs);
+  return nextDate;
+}
+
+/**
+ * Process loan deductions based on negative savings
+ * NEW LOGIC: Loans/penalties are immediately applied to savings (negative savings = loan)
+ * When savings is negative, reduce savings by deduction amount and increase cash at hand
+ * Uses loan settings for deduction amount and frequency
+ * Creates "Loan Recovery" transactions
  * This function should be called periodically (e.g., every 15 minutes)
- * 
- * For each driver with negative savings (which includes both loans and penalties):
- * - Reduce savings by loanDeductionAmount (makes it more negative, or less negative if close to zero)
- * - Increase driver cash at hand by loanDeductionAmount
- * - Create 2 transactions: savings_withdrawal and cash_settlement
- * - Both loans and penalties are recovered together from the total negative savings balance
  */
 async function processLoanDeductions() {
   try {
-    console.log('💰 Starting loan deduction processing...');
+    console.log('💰 Starting loan deduction processing (based on negative savings)...');
     console.log(`   Current time: ${new Date().toISOString()}`);
     
     // Get loan deduction settings
-    const frequencySetting = await db.Settings.findOne({ 
-      where: { key: 'loanDeductionFrequency' } 
-    });
-    const amountSetting = await db.Settings.findOne({ 
-      where: { key: 'loanDeductionAmount' } 
-    });
+    const { deductionAmount, frequencyInMs } = await getLoanDeductionSettings();
+    const frequencyHours = frequencyInMs / (60 * 60 * 1000);
     
-    console.log(`   Frequency setting:`, frequencySetting ? `Found (value: ${frequencySetting.value})` : 'NOT FOUND');
-    console.log(`   Amount setting:`, amountSetting ? `Found (value: ${amountSetting.value})` : 'NOT FOUND');
+    console.log(`   Loan deduction settings: Amount=KES ${deductionAmount.toFixed(2)}, Frequency=${frequencyHours.toFixed(2)} hours`);
     
-    if (!frequencySetting || !amountSetting) {
-      console.log('⚠️  Loan deduction settings not found. Skipping loan deductions.');
-      return { processed: 0, errors: [] };
-    }
+    const now = new Date();
     
-    // Parse frequency - can be total minutes (number) or hours (legacy format)
-    let deductionFrequencyMinutes = 0;
-    const frequencyValue = frequencySetting.value;
-    
-    // Try to parse as JSON first (new format: {days, hours, minutes})
-    try {
-      const parsed = JSON.parse(frequencyValue);
-      if (parsed && typeof parsed === 'object') {
-        // New format: {days, hours, minutes}
-        const days = parseInt(parsed.days || 0);
-        const hours = parseInt(parsed.hours || 0);
-        const minutes = parseInt(parsed.minutes || 0);
-        deductionFrequencyMinutes = (days * 24 * 60) + (hours * 60) + minutes;
-      } else if (typeof parsed === 'number') {
-        // Total minutes as number
-        deductionFrequencyMinutes = parsed;
-      }
-    } catch (e) {
-      // Not JSON, try as number (could be hours in legacy format or total minutes)
-      const numericValue = parseFloat(frequencyValue);
-      if (!isNaN(numericValue)) {
-        // If value is > 1000, assume it's already in minutes, otherwise assume hours (legacy)
-        deductionFrequencyMinutes = numericValue > 1000 ? numericValue : numericValue * 60;
-      }
-    }
-    
-    // Default to 24 hours (1440 minutes) if invalid
-    if (deductionFrequencyMinutes <= 0) {
-      deductionFrequencyMinutes = 24 * 60; // 24 hours default
-    }
-    
-    const deductionAmount = parseFloat(amountSetting.value) || 0;
-    
-    if (deductionAmount <= 0) {
-      console.log(`⚠️  Loan deduction amount is 0 or invalid (${deductionAmount}). Skipping loan deductions.`);
-      return { processed: 0, errors: [] };
-    }
-    
-    const hours = Math.floor(deductionFrequencyMinutes / 60);
-    const minutes = deductionFrequencyMinutes % 60;
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-    
-    let frequencyDisplay = '';
-    if (days > 0) frequencyDisplay += `${days} day${days > 1 ? 's' : ''} `;
-    if (remainingHours > 0) frequencyDisplay += `${remainingHours} hour${remainingHours > 1 ? 's' : ''} `;
-    if (minutes > 0) frequencyDisplay += `${minutes} minute${minutes > 1 ? 's' : ''}`;
-    if (!frequencyDisplay) frequencyDisplay = '0 minutes';
-    
-    console.log(`   Settings: Frequency = ${frequencyDisplay.trim()} (${deductionFrequencyMinutes} minutes), Amount = KES ${deductionAmount.toFixed(2)}`);
-    
-    // Get all drivers with negative savings (these have loans)
-    const driversWithLoans = await db.DriverWallet.findAll({
+    // Get all drivers with negative savings (they have loans/penalties)
+    const walletsWithNegativeSavings = await db.DriverWallet.findAll({
       where: {
         savings: {
-          [Op.lt]: 0
+          [Op.lt]: 0 // Savings is negative (loan/penalty exists)
         }
       },
       include: [{
         model: db.Driver,
         as: 'driver',
-        attributes: ['id', 'name', 'phoneNumber', 'cashAtHand']
+        attributes: ['id', 'name', 'phoneNumber', 'cashAtHand'],
+        required: true
       }]
     });
     
-    console.log(`   Found ${driversWithLoans.length} driver(s) with negative savings (have loans)`);
+    console.log(`   Found ${walletsWithNegativeSavings.length} driver(s) with negative savings`);
     
-    if (driversWithLoans.length === 0) {
-      console.log('✅ No drivers with loans (negative savings)');
+    if (walletsWithNegativeSavings.length === 0) {
+      console.log('✅ No drivers with negative savings (no loans/penalties to process)');
+      return { processed: 0, errors: [] };
+    }
+    
+    // Get active loans to check nextDeductionDate (for timing control)
+    const activeLoans = await db.Loan.findAll({
+      where: {
+        status: 'active',
+        [Op.or]: [
+          { nextDeductionDate: { [Op.lte]: now } }, // Next deduction date has passed
+          { nextDeductionDate: null } // No deduction date set yet (legacy loans or needs setup)
+        ]
+      },
+      attributes: ['id', 'driverId', 'nextDeductionDate', 'reason']
+    });
+    
+    // Create a map of driver IDs that are ready for deduction (have active loans with passed nextDeductionDate)
+    const readyDriverIds = new Set(activeLoans.map(loan => loan.driverId));
+    
+    // Filter to only process drivers with negative savings AND ready for deduction
+    const walletsToProcess = walletsWithNegativeSavings.filter(wallet => 
+      readyDriverIds.has(wallet.driverId)
+    );
+    
+    console.log(`   Found ${walletsToProcess.length} driver(s) ready for deduction (negative savings + active loan with passed nextDeductionDate)`);
+    
+    if (walletsToProcess.length === 0) {
+      console.log('✅ No drivers ready for deduction');
       return { processed: 0, errors: [] };
     }
     
     const errors = [];
     let processedCount = 0;
     
-    for (const wallet of driversWithLoans) {
+    for (const wallet of walletsToProcess) {
       try {
         const dbTransaction = await db.sequelize.transaction();
         
@@ -121,63 +181,85 @@ async function processLoanDeductions() {
             throw new Error(`Driver ${driverId} not found`);
           }
           
-          // Count how many loan recovery deductions have been made for this driver
-          const previousDeductions = await db.Transaction.count({
-            where: {
-              driverId: driverId,
-              transactionType: 'savings_withdrawal',
-              paymentProvider: 'loan_recovery'
-            },
-            transaction: dbTransaction
-          });
-          const deductionNumber = previousDeductions + 1;
-          
-          // Current savings is negative (this is the loan amount)
+          // Current savings (should be negative)
           const currentSavings = parseFloat(wallet.savings || 0);
-          const loanAmount = Math.abs(currentSavings); // The absolute value is the loan amount
           
-          // Reduce savings by deduction amount (makes it more negative, or less negative if close to zero)
-          const newSavings = currentSavings - deductionAmount;
+          if (currentSavings >= 0) {
+            console.log(`   ⚠️ Skipping driver ${driverId} - savings is not negative (KES ${currentSavings.toFixed(2)})`);
+            await dbTransaction.rollback();
+            continue;
+          }
           
-          console.log(`   BEFORE UPDATE - Driver ${driverId}:`);
-          console.log(`     Savings (loan): KES ${currentSavings.toFixed(2)} (loan amount: KES ${loanAmount.toFixed(2)})`);
-          console.log(`     Cash at hand: KES ${parseFloat(driver.cashAtHand || 0).toFixed(2)}`);
+          // Increase savings by deduction amount (making it less negative, moving towards 0)
+          // This recovers the loan - savings moves from negative towards 0
+          const newSavings = currentSavings + deductionAmount;
+          
+          // Current cash at hand
+          const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+          const newCashAtHand = currentCashAtHand + deductionAmount;
+          
+          // Find the active loan for this driver (for logging and updating nextDeductionDate)
+          const activeLoan = activeLoans.find(loan => loan.driverId === driverId);
+          const loanId = activeLoan?.id || 'N/A';
+          
+          console.log(`   BEFORE UPDATE - Driver ${driverId} (Loan #${loanId}):`);
+          console.log(`     Savings: KES ${currentSavings.toFixed(2)} → KES ${newSavings.toFixed(2)}`);
+          console.log(`     Cash at hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)}`);
           console.log(`     Deduction amount: KES ${deductionAmount.toFixed(2)}`);
-          console.log(`     Deduction number: #${deductionNumber}`);
           
+          // Update wallet savings
           await wallet.update({ savings: newSavings }, { transaction: dbTransaction });
           
-          // Reload to verify update
-          await wallet.reload({ transaction: dbTransaction });
-          const verifiedSavings = parseFloat(wallet.savings || 0);
-          console.log(`   ✅ Updated savings: KES ${currentSavings.toFixed(2)} → KES ${verifiedSavings.toFixed(2)} (expected: ${newSavings.toFixed(2)})`);
+          // Update driver cash at hand
+          await driver.update({ cashAtHand: newCashAtHand }, { transaction: dbTransaction });
           
-          // Create TWO transactions atomically - savings reduction and cash at hand increase
-          const savingsNotes = `Loan Recovery #${deductionNumber} (KES ${deductionAmount.toFixed(2)})`;
-          const cashNotes = `Loan Recovery #${deductionNumber} (KES ${deductionAmount.toFixed(2)})`;
+          // Update loan status and nextDeductionDate if loan exists
+          if (activeLoan) {
+            // If savings is now positive or zero, mark loan as paid off
+            const loanStatus = newSavings >= 0 ? 'paid_off' : 'active';
+            const nextDeductionDate = loanStatus === 'active' ? calculateNextDeductionDate(frequencyInMs) : null;
+            
+            await activeLoan.update({
+              status: loanStatus,
+              nextDeductionDate: nextDeductionDate,
+              balance: 0 // No longer tracking balance - set to 0
+            }, { transaction: dbTransaction });
+            
+            if (loanStatus === 'paid_off') {
+              console.log(`     - Loan #${activeLoan.id} marked as paid off (savings is now positive)`);
+            } else {
+              console.log(`     - Next deduction scheduled for: ${nextDeductionDate?.toISOString()}`);
+            }
+          }
           
-          console.log(`   Creating 2 Loan Recovery transactions for Driver ${driverId}, deduction #${deductionNumber}:`);
-          console.log(`     - Savings reduction: -KES ${deductionAmount.toFixed(2)}`);
+          // Create TWO transactions atomically - savings increase and cash at hand increase
+          const transactionTime = new Date();
+          const eatDateTime = formatEATDateTime(transactionTime);
+          const savingsNotes = `Savings Recovery (KES ${deductionAmount.toFixed(2)}) - ${eatDateTime}`;
+          const cashNotes = `Savings Recovery (KES ${deductionAmount.toFixed(2)}) - ${eatDateTime}`;
+          
+          console.log(`   Creating 2 Savings Recovery transactions for Driver ${driverId}:`);
+          console.log(`     - Savings increase: +KES ${deductionAmount.toFixed(2)} (moving towards 0)`);
           console.log(`     - Cash at hand increase: +KES ${deductionAmount.toFixed(2)}`);
           
-          // Transaction 1: Savings withdrawal (reduces savings - makes it more negative)
+          // Transaction 1: Savings credit (increases savings - recovers loan)
           let savingsTx;
           try {
             savingsTx = await db.Transaction.create({
               orderId: null,
               driverId: driverId,
               driverWalletId: wallet.id,
-              transactionType: 'savings_withdrawal',
+              transactionType: 'savings_withdrawal', // Using same type for consistency
               paymentMethod: 'cash',
               paymentProvider: 'loan_recovery',
-              amount: -deductionAmount, // Negative amount for savings withdrawal
+              amount: deductionAmount, // Positive amount - increases savings (makes it less negative)
               status: 'completed',
               paymentStatus: 'paid',
               notes: savingsNotes
             }, { transaction: dbTransaction });
-            console.log(`   ✅ Created Loan Recovery savings withdrawal transaction #${savingsTx.id}: -KES ${deductionAmount.toFixed(2)}`);
+            console.log(`   ✅ Created Savings Recovery credit transaction #${savingsTx.id}: +KES ${deductionAmount.toFixed(2)} (savings increases)`);
           } catch (txError) {
-            console.error(`   ❌ Error creating Loan Recovery savings withdrawal transaction: ${txError.message}`);
+            console.error(`   ❌ Error creating Savings Recovery credit transaction: ${txError.message}`);
             console.error(`   Stack: ${txError.stack}`);
             throw txError; // Re-throw to trigger rollback
           }
@@ -197,9 +279,9 @@ async function processLoanDeductions() {
               paymentStatus: 'paid',
               notes: cashNotes
             }, { transaction: dbTransaction });
-            console.log(`   ✅ Created Loan Recovery cash at hand transaction #${cashTx.id}: +KES ${deductionAmount.toFixed(2)}`);
+            console.log(`   ✅ Created Savings Recovery cash at hand transaction #${cashTx.id}: +KES ${deductionAmount.toFixed(2)}`);
           } catch (cashTxError) {
-            console.error(`   ❌ CRITICAL: Error creating Loan Recovery cash at hand transaction: ${cashTxError.message}`);
+            console.error(`   ❌ CRITICAL: Error creating Savings Recovery cash at hand transaction: ${cashTxError.message}`);
             console.error(`   Stack: ${cashTxError.stack}`);
             console.error(`   Transaction details:`, {
               driverId: driverId,
@@ -216,30 +298,21 @@ async function processLoanDeductions() {
             throw new Error(`Failed to create both transactions: savingsTx=${!!savingsTx}, cashTx=${!!cashTx}`);
           }
           
-          console.log(`   ✅ Both Loan Recovery transactions created successfully:`);
-          console.log(`     - Savings reduction #${savingsTx.id}: -KES ${deductionAmount.toFixed(2)}`);
+          console.log(`   ✅ Both Savings Recovery transactions created successfully:`);
+          console.log(`     - Savings increase #${savingsTx.id}: +KES ${deductionAmount.toFixed(2)}`);
           console.log(`     - Cash at hand increase #${cashTx.id}: +KES ${deductionAmount.toFixed(2)}`);
-          
-          // Update cash at hand (increase by deduction amount)
-          const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-          const newCashAtHand = currentCashAtHand + deductionAmount;
-          await driver.update({ cashAtHand: newCashAtHand }, { transaction: dbTransaction });
-          
-          // Reload to verify update
-          await driver.reload({ transaction: dbTransaction });
-          const verifiedCashAtHand = parseFloat(driver.cashAtHand || 0);
-          console.log(`   ✅ Updated cash at hand: KES ${currentCashAtHand.toFixed(2)} → KES ${verifiedCashAtHand.toFixed(2)} (expected: ${newCashAtHand.toFixed(2)})`);
+          console.log(`     - New savings: KES ${newSavings.toFixed(2)} (was KES ${currentSavings.toFixed(2)})`);
           
           await dbTransaction.commit();
           processedCount++;
           
-          console.log(`✅ Processed loan recovery deduction for Driver ${driverId} (deduction #${deductionNumber})`);
+          console.log(`✅ Processed Loan Recovery deduction for Driver ${driverId}`);
         } catch (error) {
           await dbTransaction.rollback();
           throw error;
         }
       } catch (error) {
-        console.error(`❌ Error processing loan recovery for driver ${wallet.driverId}:`, error);
+        console.error(`❌ Error processing Loan Recovery for driver ${wallet.driverId}:`, error);
         errors.push({
           driverId: wallet.driverId,
           error: error.message
@@ -255,6 +328,29 @@ async function processLoanDeductions() {
   }
 }
 
+/**
+ * Process penalty deductions based on negative savings
+ * NEW LOGIC: Penalties are immediately applied to savings (negative savings = penalty)
+ * Since penalties create penalty loans, they are handled by the loan deduction process
+ * This function is kept for backward compatibility but penalties are now processed via loans
+ * This function now returns empty (penalties handled by processLoanDeductions)
+ */
+async function processPenaltyDeductions() {
+  try {
+    console.log('💰 Starting penalty deduction processing...');
+    console.log(`   Current time: ${new Date().toISOString()}`);
+    console.log(`   ℹ️ Penalties are now handled by the loan deduction process (penalties create penalty loans)`);
+    console.log(`   ✅ No separate penalty processing needed`);
+    return { processed: 0, errors: [] };
+  } catch (error) {
+    console.error('❌ Error in processPenaltyDeductions:', error);
+    return { processed: 0, errors: [{ error: error.message }] };
+  }
+}
+
 module.exports = {
-  processLoanDeductions
+  processLoanDeductions,
+  processPenaltyDeductions,
+  getLoanDeductionSettings,
+  calculateNextDeductionDate
 };

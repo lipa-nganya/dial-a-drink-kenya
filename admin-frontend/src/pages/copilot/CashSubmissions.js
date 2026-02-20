@@ -333,11 +333,11 @@ const CashSubmissions = () => {
     const csvRows = riders.map(rider => [
       escapeCSV(rider.name),
       escapeCSV(rider.phoneNumber),
-      escapeCSV(parseFloat(rider.cashAtHand || 0).toFixed(2))
+      escapeCSV(Math.round(parseFloat(rider.cashAtHand || 0)))
     ].join(','));
 
     const totalCash = riders.reduce((sum, rider) => sum + parseFloat(rider.cashAtHand || 0), 0);
-    const summaryRow = ['TOTALS', '', escapeCSV(totalCash.toFixed(2))];
+    const summaryRow = ['TOTALS', '', escapeCSV(Math.round(totalCash))];
 
     const csvContent = [
       headers.join(','),
@@ -374,12 +374,12 @@ const CashSubmissions = () => {
       escapeCSV(order.id),
       escapeCSV(order.customerName),
       escapeCSV(formatDate(order.createdAt)),
-      escapeCSV(parseFloat(order.totalAmount || 0).toFixed(2)),
+      escapeCSV(Math.round(parseFloat(order.totalAmount || 0))),
       escapeCSV(order.status)
     ].join(','));
 
     const totalAmount = filteredOrdersForTable.reduce((sum, order) => sum + parseFloat(order.totalAmount || 0), 0);
-    const summaryRow = ['TOTALS', '', '', '', escapeCSV(totalAmount.toFixed(2)), ''];
+    const summaryRow = ['TOTALS', '', '', '', escapeCSV(Math.round(totalAmount)), ''];
 
     const csvContent = [
       headers.join(','),

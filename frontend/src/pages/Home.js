@@ -265,7 +265,7 @@ const Home = () => {
           {/* Countdown Timer Above Image */}
           <CountdownTimer />
           
-          {/* Advertising Image - Reduced Size */}
+          {/* Advertising Image - Wider on Desktop */}
           <Box
             sx={{
               mt: 4,
@@ -273,16 +273,18 @@ const Home = () => {
               width: '100%',
               display: 'flex',
               justifyContent: 'center',
-              maxHeight: '300px',
+              maxHeight: { xs: '300px', md: '400px' },
               overflow: 'hidden'
             }}
           >
-            <img
+            <Box
+              component="img"
               src={heroImage}
               alt="Special Offer - Premium Drinks"
-              style={{
-                maxWidth: '100%',
-                maxHeight: '300px',
+              sx={{
+                maxWidth: { xs: '100%', md: '1400px' },
+                width: { xs: '100%', md: '100%' },
+                maxHeight: { xs: '300px', md: '400px' },
                 height: 'auto',
                 display: 'block',
                 objectFit: 'contain'
@@ -390,7 +392,7 @@ const Home = () => {
                   {filteredDrinks.slice(0, 8).map((drink) => (
                     <Grid
                       item
-                      xs={12}
+                      xs={6}
                       sm={6}
                       md={3}
                       key={drink.id}

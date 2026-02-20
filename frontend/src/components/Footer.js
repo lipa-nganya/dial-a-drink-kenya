@@ -189,16 +189,13 @@ const Footer = () => {
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'center' }}>
               <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
-                • Cash On Delivery
+                • Swipe on Delivery
               </Typography>
               <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
-                • Pay via MPESA
+                • Pay Online - VISA or Mastercard
               </Typography>
               <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
-                • Pay via VISA
-              </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
-                • Pay Via Master Card
+                • Pay via Mpesa
               </Typography>
             </Box>
           </Grid>

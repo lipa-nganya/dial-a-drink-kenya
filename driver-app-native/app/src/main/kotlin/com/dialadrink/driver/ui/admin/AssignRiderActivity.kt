@@ -108,7 +108,11 @@ class AssignRiderActivity : AppCompatActivity() {
                 if (response.isSuccessful && response.body() != null) {
                     val responseBody = response.body()!!
                     unassignedOrders.clear()
-                    unassignedOrders.addAll(responseBody.orders)
+                    // Filter out walk-in orders (deliveryAddress == "In-Store Purchase")
+                    val filteredOrders = responseBody.orders.filter { 
+                        it.deliveryAddress != "In-Store Purchase" 
+                    }
+                    unassignedOrders.addAll(filteredOrders)
                     
                     // Update driver order counts
                     responseBody.driverOrderCounts?.forEach { (driverIdStr, count) ->
@@ -116,12 +120,12 @@ class AssignRiderActivity : AppCompatActivity() {
                     }
                     
                     // Count orders with no assigned rider (driverId is null)
-                    val noRiderCount = responseBody.orders.count { it.driverId == null }
+                    val noRiderCount = filteredOrders.count { it.driverId == null }
                     updateUnassignedCount(noRiderCount)
                     
                     ordersAdapter?.notifyDataSetChanged()
                     
-                    if (responseBody.orders.isEmpty()) {
+                    if (filteredOrders.isEmpty()) {
                         binding.emptyStateText.visibility = View.VISIBLE
                         binding.emptyStateText.text = "No unassigned orders"
                     } else {
@@ -203,12 +207,11 @@ class AssignRiderActivity : AppCompatActivity() {
         
         // Setup rider dropdown with order counts
         val riderSpinnerLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.riderSpinnerLayout)
-        val riderSpinner = dialogView.findViewById<android.widget.Spinner>(R.id.riderSpinner)
+        val riderSpinner = dialogView.findViewById<androidx.appcompat.widget.AppCompatAutoCompleteTextView>(R.id.riderSpinner)
         
-        // Set hint to "Select Rider" in white
-        riderSpinnerLayout.hint = "Select Rider"
+        // Set hint to "Select a rider" in white
+        riderSpinnerLayout.hint = "Select a rider"
         riderSpinnerLayout.defaultHintTextColor = android.content.res.ColorStateList.valueOf(getColor(R.color.text_primary_dark))
-        riderSpinnerLayout.boxStrokeColor = getColor(R.color.accent)
         
         // Apply green border
         val strokeColorStateList = android.content.res.ColorStateList(
@@ -230,39 +233,64 @@ class AssignRiderActivity : AppCompatActivity() {
             riderSpinnerLayout.boxStrokeColor = getColor(R.color.accent)
         }
         
-        // Create adapter with "Select Rider" as first item
+        // Create adapter with "Select a rider" as first item
         val driversWithCounts = mutableListOf<String>()
-        driversWithCounts.add("Select Rider")
+        driversWithCounts.add("Select a rider")
         driversWithCounts.addAll(drivers.map { driver ->
             "${driver.name} (${driver.phoneNumber})"
         })
         
         val adapter = android.widget.ArrayAdapter(this, R.layout.item_dropdown_dark, driversWithCounts)
-        adapter.setDropDownViewResource(R.layout.item_dropdown_dark)
-        riderSpinner.adapter = adapter
+        riderSpinner.setAdapter(adapter)
         
-        // Set spinner text color to white
-        riderSpinner.setSelection(0) // Default to "Select Rider"
+        // Set default text to "Select a rider"
+        riderSpinner.setText("Select a rider", false)
         
-        // Set spinner dropdown background to dark
-        riderSpinner.setPopupBackgroundDrawable(android.graphics.drawable.ColorDrawable(getColor(R.color.paper_dark)))
+        // Set dropdown background to dark color
+        val drawable = android.graphics.drawable.ColorDrawable(getColor(R.color.paper_dark))
+        riderSpinner.setDropDownBackgroundDrawable(drawable)
         
-        // Set current driver if assigned (offset by 1 because "Select Rider" is at index 0)
-        order.driverId?.let { driverId ->
-            val driverIndex = drivers.indexOfFirst { it.id == driverId }
-            if (driverIndex >= 0) {
-                riderSpinner.setSelection(driverIndex + 1) // +1 because "Select Rider" is at index 0
+        // Make it show dropdown on click
+        riderSpinner.setOnClickListener {
+            riderSpinner.showDropDown()
+        }
+        
+        // Prevent text editing - only allow selection from dropdown
+        riderSpinner.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                riderSpinner.showDropDown()
             }
         }
         
-        // Format date - convert from UTC to local time
+        // Handle item selection
+        riderSpinner.setOnItemClickListener { parent, _, position, _ ->
+            val selectedName = parent?.adapter?.getItem(position)?.toString()
+            if (!selectedName.isNullOrEmpty() && selectedName != "Select a rider") {
+                riderSpinner.setText(selectedName, false)
+                riderSpinner.clearFocus()
+            } else if (selectedName == "Select a rider") {
+                riderSpinner.setText("Select a rider", false)
+                riderSpinner.clearFocus()
+            }
+        }
+        
+        // Set current driver if assigned
+        order.driverId?.let { driverId ->
+            val driver = drivers.find { it.id == driverId }
+            driver?.let {
+                val driverText = "${it.name} (${it.phoneNumber})"
+                riderSpinner.setText(driverText, false)
+            }
+        }
+        
+        // Format date - convert from UTC to EAT (East Africa Time)
         order.createdAt?.let { dateStr ->
             try {
                 val utcFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
                 utcFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
                 val date = utcFormat.parse(dateStr)
                 val displayFormat = java.text.SimpleDateFormat("MMM dd, yyyy HH:mm", java.util.Locale.getDefault())
-                displayFormat.timeZone = java.util.TimeZone.getDefault() // Use local timezone
+                displayFormat.timeZone = java.util.TimeZone.getTimeZone("Africa/Nairobi") // EAT timezone
                 dialogView.findViewById<android.widget.TextView>(R.id.orderDateText).text = displayFormat.format(date ?: java.util.Date())
             } catch (e: Exception) {
                 dialogView.findViewById<android.widget.TextView>(R.id.orderDateText).text = dateStr
@@ -313,7 +341,7 @@ class AssignRiderActivity : AppCompatActivity() {
             // Only use calculated fee if it's greater than 0, otherwise keep 0
             if (calculatedFee > 0.0) calculatedFee else 0.0
         }
-        deliveryFeeEditText.setText(String.format("%.2f", actualDeliveryFee))
+        deliveryFeeEditText.setText(actualDeliveryFee.toInt().toString())
         
         // Setup items list
         val itemsRecyclerView = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.itemsRecyclerView)
@@ -324,12 +352,12 @@ class AssignRiderActivity : AppCompatActivity() {
         // Function to update totals
         val updateTotals = {
             val newSubtotal = mutableItems.sumOf { (it.price ?: 0.0) * (it.quantity ?: 0) }
-            dialogView.findViewById<android.widget.TextView>(R.id.subtotalText).text = "KES ${String.format("%.2f", newSubtotal)}"
+            dialogView.findViewById<android.widget.TextView>(R.id.subtotalText).text = "KES ${newSubtotal.toInt()}"
             
             // Update total including delivery fee
             val deliveryFeeValue = deliveryFeeEditText.text.toString().toDoubleOrNull() ?: actualDeliveryFee
             val totalWithDelivery = newSubtotal + deliveryFeeValue + tipAmount
-            dialogView.findViewById<android.widget.TextView>(R.id.totalWithDeliveryText).text = "KES ${String.format("%.2f", totalWithDelivery)}"
+            dialogView.findViewById<android.widget.TextView>(R.id.totalWithDeliveryText).text = "KES ${totalWithDelivery.toInt()}"
         }
         
         val itemsAdapter = OrderItemsAdapter(mutableItems) { item, newPrice ->
@@ -343,7 +371,7 @@ class AssignRiderActivity : AppCompatActivity() {
         itemsRecyclerView.adapter = itemsAdapter
         
         // Display initial subtotal
-        dialogView.findViewById<android.widget.TextView>(R.id.subtotalText).text = "KES ${String.format("%.2f", subtotal)}"
+        dialogView.findViewById<android.widget.TextView>(R.id.subtotalText).text = "KES ${subtotal.toInt()}"
         
         // Setup total including delivery fee
         val totalWithDelivery = subtotal + actualDeliveryFee + tipAmount
@@ -357,7 +385,7 @@ class AssignRiderActivity : AppCompatActivity() {
                 val deliveryFeeValue = s.toString().toDoubleOrNull() ?: 0.0
                 val currentSubtotal = mutableItems.sumOf { (it.price ?: 0.0) * (it.quantity ?: 0) }
                 val totalWithDelivery = currentSubtotal + deliveryFeeValue + tipAmount
-                dialogView.findViewById<android.widget.TextView>(R.id.totalWithDeliveryText).text = "KES ${String.format("%.2f", totalWithDelivery)}"
+                dialogView.findViewById<android.widget.TextView>(R.id.totalWithDeliveryText).text = "KES ${totalWithDelivery.toInt()}"
             }
         })
         
@@ -376,10 +404,13 @@ class AssignRiderActivity : AppCompatActivity() {
         }
         
         updateButton.setOnClickListener {
-            val selectedDriverIndex = riderSpinner.selectedItemPosition
-            // Account for "Select Rider" at index 0, so actual driver index is selectedDriverIndex - 1
-            val selectedDriver = if (selectedDriverIndex > 0 && (selectedDriverIndex - 1) < drivers.size) {
-                drivers[selectedDriverIndex - 1]
+            // Get selected driver from text (format: "Name (Phone)")
+            val selectedText = riderSpinner.text.toString()
+            val selectedDriver = if (selectedText != "Select a rider" && selectedText.isNotEmpty()) {
+                // Find driver by matching the text format "Name (Phone)"
+                drivers.find { driver ->
+                    "${driver.name} (${driver.phoneNumber})" == selectedText
+                }
             } else {
                 null
             }
@@ -469,17 +500,29 @@ class AssignRiderActivity : AppCompatActivity() {
                     }
                 }
                 
-                // Assign driver if selected
-                if (driver != null) {
-                    val request = AssignDriverRequest(driverId = driver.id)
+                // Only assign or unassign driver if the selection has changed
+                val currentDriverId = order.driverId
+                val newDriverId = driver?.id
+                
+                if (currentDriverId != newDriverId) {
+                    // Driver assignment has changed, update it
+                    val request = AssignDriverRequest(driverId = newDriverId)
                     val response = ApiClient.getApiService().assignDriverToOrder(order.id, request)
                     
-                    if (!response.isSuccessful || response.body()?.success != true) {
-                        Toast.makeText(this@AssignRiderActivity, "Failed to assign rider", Toast.LENGTH_SHORT).show()
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        if (newDriverId != null) {
+                            Toast.makeText(this@AssignRiderActivity, "Rider assigned successfully. Order moved to pending.", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(this@AssignRiderActivity, "Rider unassigned successfully.", Toast.LENGTH_SHORT).show()
+                        }
+                    } else {
+                        val errorMsg = response.body()?.error ?: if (newDriverId != null) "Failed to assign rider" else "Failed to unassign rider"
+                        Toast.makeText(this@AssignRiderActivity, errorMsg, Toast.LENGTH_SHORT).show()
                         binding.loadingProgress.visibility = View.GONE
                         return@launch
                     }
                 }
+                // If driver hasn't changed, skip the assignment/unassignment call
                 
                 // Update delivery fee if changed
                 if (kotlin.math.abs((deliveryFee - (order.deliveryFee ?: 0.0))) > 0.01) {
@@ -556,13 +599,15 @@ class AssignRiderActivity : AppCompatActivity() {
             fun bind(order: Order, onOrderClick: (Order) -> Unit) {
                 itemView.findViewById<android.widget.TextView>(R.id.orderIdText).text = "Order #${order.id}"
                 
-                // Format date
+                // Format date - convert from UTC to EAT (East Africa Time)
                 val dateText = itemView.findViewById<android.widget.TextView>(R.id.orderDateText)
                 order.createdAt?.let { dateStr ->
                     try {
-                        val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
-                        val date = dateFormat.parse(dateStr)
+                        val utcFormat = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault())
+                        utcFormat.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                        val date = utcFormat.parse(dateStr)
                         val displayFormat = java.text.SimpleDateFormat("MMM dd, yyyy HH:mm", java.util.Locale.getDefault())
+                        displayFormat.timeZone = java.util.TimeZone.getTimeZone("Africa/Nairobi") // EAT timezone
                         dateText.text = displayFormat.format(date ?: java.util.Date())
                     } catch (e: Exception) {
                         dateText.text = dateStr
@@ -574,7 +619,7 @@ class AssignRiderActivity : AppCompatActivity() {
                 itemView.findViewById<android.widget.TextView>(R.id.customerPhoneText).text = order.customerPhone
                 itemView.findViewById<android.widget.TextView>(R.id.territoryText).text = "Territory: ${order.territory?.name ?: "N/A"}"
                 itemView.findViewById<android.widget.TextView>(R.id.deliveryAddressText).text = order.deliveryAddress
-                itemView.findViewById<android.widget.TextView>(R.id.totalAmountText).text = "KES ${String.format("%.2f", order.totalAmount)}"
+                itemView.findViewById<android.widget.TextView>(R.id.totalAmountText).text = "KES ${(order.totalAmount ?: 0.0).toInt()}"
                 
                 // Show driver status if driver is assigned but hasn't accepted
                 val driverStatusText = itemView.findViewById<android.widget.TextView>(R.id.driverStatusText)
@@ -621,10 +666,35 @@ class AssignRiderActivity : AppCompatActivity() {
                 val itemNameText = itemView.findViewById<android.widget.TextView>(R.id.itemNameText)
                 val itemQuantityText = itemView.findViewById<android.widget.TextView>(R.id.itemQuantityText)
                 val itemPriceEditText = itemView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.itemPriceEditText)
+                val itemPriceLayout = itemView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.itemPriceLayout)
                 
                 itemNameText.text = item.drink?.name ?: "Item ${item.drinkId}"
                 itemQuantityText.text = "Qty: ${item.quantity}"
-                itemPriceEditText.setText(String.format("%.2f", item.price ?: 0.0))
+                itemPriceEditText.setText((item.price ?: 0.0).toInt().toString())
+                
+                // Set green border color for the price field
+                val context = itemView.context
+                val accentColor = context.getColor(R.color.accent)
+                val strokeColorStateList = android.content.res.ColorStateList(
+                    arrayOf(
+                        intArrayOf(android.R.attr.state_focused),
+                        intArrayOf(android.R.attr.state_enabled),
+                        intArrayOf(-android.R.attr.state_enabled),
+                        intArrayOf()
+                    ),
+                    intArrayOf(accentColor, accentColor, accentColor, accentColor)
+                )
+                try {
+                    val setBoxStrokeColorStateListMethod = itemPriceLayout.javaClass.getMethod(
+                        "setBoxStrokeColorStateList",
+                        android.content.res.ColorStateList::class.java
+                    )
+                    setBoxStrokeColorStateListMethod.invoke(itemPriceLayout, strokeColorStateList)
+                } catch (e: Exception) {
+                    itemPriceLayout.boxStrokeColor = accentColor
+                }
+                itemPriceLayout.boxStrokeWidth = 2
+                itemPriceLayout.boxStrokeWidthFocused = 2
                 
                 // Update when price changes
                 itemPriceEditText.addTextChangedListener(object : android.text.TextWatcher {

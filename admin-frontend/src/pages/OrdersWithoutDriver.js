@@ -441,7 +441,7 @@ const OrdersWithoutDriver = () => {
                               {item.drink?.name || 'Item'} × {item.quantity || 0}
                             </Typography>
                             <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                              KES {Number(item.price || 0).toFixed(2)}
+                              KES {Math.round(Number(item.price || 0))}
                             </Typography>
                           </Box>
                         ))

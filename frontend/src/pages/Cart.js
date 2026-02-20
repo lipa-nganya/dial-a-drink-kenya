@@ -360,12 +360,12 @@ const Cart = () => {
       if (item.selectedCapacity) {
         message += ` (${item.selectedCapacity})`;
       }
-      message += ` - Qty: ${item.quantity} x KES ${Number(item.price).toFixed(2)} = KES ${(Number(item.price) * item.quantity).toFixed(2)}\n`;
+      message += ` - Qty: ${item.quantity} x KES ${Math.round(Number(item.price))} = KES ${Math.round(Number(item.price) * item.quantity)}\n`;
     });
     message += `\n*Order Summary:*\n`;
-    message += `Subtotal: KES ${getTotalPrice().toFixed(2)}\n`;
-    message += `Delivery Fee: KES ${deliveryFee.toFixed(2)}\n`;
-    message += `*Total: KES ${totalAmount.toFixed(2)}*\n\n`;
+    message += `Subtotal: KES ${Math.round(getTotalPrice())}\n`;
+    message += `Delivery Fee: KES ${Math.round(deliveryFee)}\n`;
+    message += `*Total: KES ${Math.round(totalAmount)}*\n\n`;
     message += `*Payment Method:* ${paymentType === 'pay_now' ? 'Pay Now' : 'Pay on Delivery'}`;
     if (paymentType === 'pay_now' && paymentMethod) {
       message += ` (${paymentMethod === 'card' ? 'Card' : 'Mobile Money'})`;
@@ -854,7 +854,7 @@ const Cart = () => {
                       </Typography>
                     )}
                     <Typography variant="body2" color="text.secondary">
-                      KES {Number(item.price).toFixed(2)} each
+                      KES {Math.round(Number(item.price))} each
                     </Typography>
                   </Box>
 
@@ -887,7 +887,7 @@ const Cart = () => {
                   </Box>
 
                   <Typography variant="h6" sx={{ minWidth: 80, textAlign: 'right' }}>
-                    KES {(Number(item.price) * item.quantity).toFixed(2)}
+                    KES {Math.round(Number(item.price) * item.quantity)}
                   </Typography>
                 </Box>
                 <Divider />
@@ -928,7 +928,7 @@ const Cart = () => {
             <Box sx={{ mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography>Subtotal:</Typography>
-                <Typography>KES {getTotalPrice().toFixed(2)}</Typography>
+                <Typography>KES {Math.round(getTotalPrice())}</Typography>
               </Box>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                 <Typography>Delivery:</Typography>
@@ -938,7 +938,7 @@ const Cart = () => {
               <Divider sx={{ my: 1 }} />
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="h6">Total:</Typography>
-                <Typography variant="h6">KES {(getTotalPrice() + deliveryFee).toFixed(2)}</Typography>
+                <Typography variant="h6">KES {Math.round(getTotalPrice() + deliveryFee)}</Typography>
               </Box>
             </Box>
 
@@ -1229,7 +1229,7 @@ const Cart = () => {
                     Total Amount to Pay:
                   </Typography>
                   <Typography variant="h6" color="primary" fontWeight="bold">
-                    KES {(getTotalPrice() + deliveryFee).toFixed(2)}
+                    KES {Math.round(getTotalPrice() + deliveryFee)}
                   </Typography>
                 </Box>
               </Box>
@@ -1255,7 +1255,7 @@ const Cart = () => {
                       Total Amount to Pay:
                     </Typography>
                     <Typography variant="h6" color="primary" fontWeight="bold" sx={{ mb: 2 }}>
-                      KES {(getTotalPrice() + deliveryFee).toFixed(2)}
+                      KES {Math.round(getTotalPrice() + deliveryFee)}
                     </Typography>
                     {isProcessingPayment ? (
                       <Box sx={{ mt: 2 }}>

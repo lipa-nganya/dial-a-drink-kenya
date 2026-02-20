@@ -717,7 +717,7 @@ const MyOrders = () => {
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
                       <Typography variant="body2" sx={{ fontWeight: 600, color: '#FF3366' }}>
-                        KES {Number(order.totalAmount).toFixed(2)}
+                        KES {Math.round(Number(order.totalAmount))}
                       </Typography>
                       <Chip
                         icon={getStatusIcon(order.status)}
@@ -843,7 +843,7 @@ const MyOrders = () => {
                   </Typography>
                   {order.items?.slice(0, 5).map((item, index) => (
                     <Typography key={index} variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                      {item.drink?.name} x{item.quantity} - KES {Number(item.price || 0).toFixed(2)}
+                      {item.drink?.name} x{item.quantity} - KES {Math.round(Number(item.price || 0))}
                     </Typography>
                   ))}
                   {order.items?.length > 5 && (
@@ -953,7 +953,7 @@ const MyOrders = () => {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Total Amount: KES {selectedOrder?.totalAmount ? Number(selectedOrder.totalAmount).toFixed(2) : '0.00'}
+            Total Amount: KES {selectedOrder?.totalAmount ? Math.round(Number(selectedOrder.totalAmount)) : '0'}
           </Typography>
 
           {/* Payment Method Selection */}

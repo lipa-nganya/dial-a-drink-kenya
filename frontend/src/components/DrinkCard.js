@@ -97,7 +97,7 @@ const DrinkCard = ({ drink }) => {
       // Select the most expensive capacity
       const mostExpensive = capacitiesWithPrices[0];
       setSelectedCapacity(mostExpensive.capacity);
-      console.log(`[DrinkCard] Auto-selected most expensive capacity for ${drink.name}: ${mostExpensive.capacity} (KES ${mostExpensive.price.toFixed(2)})`);
+      console.log(`[DrinkCard] Auto-selected most expensive capacity for ${drink.name}: ${mostExpensive.capacity} (KES ${Math.round(mostExpensive.price)})`);
     } else if (availableCapacities.length === 0) {
       // No capacities - clear selection
       setSelectedCapacity('');
@@ -304,7 +304,7 @@ const DrinkCard = ({ drink }) => {
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
                                   <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
-                                    KES {price.toFixed(2)}
+                                    KES {Math.round(price)}
                                   </Typography>
                                 </Box>
                               </Box>
@@ -359,7 +359,7 @@ const DrinkCard = ({ drink }) => {
                                 </Box>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
                                   <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
-                                    KES {price.toFixed(2)}
+                                    KES {Math.round(price)}
                                   </Typography>
                                 </Box>
                               </Box>
@@ -396,7 +396,7 @@ const DrinkCard = ({ drink }) => {
               variant="subtitle1"
               sx={{ fontWeight: 'bold', fontSize: '0.9rem', color: colors.accentText }}
             >
-              KES {(Number(drink.price) || 0).toFixed(2)}
+              KES {Math.round(Number(drink.price) || 0)}
             </Typography>
           </Box>
         )}
@@ -454,7 +454,7 @@ const DrinkCard = ({ drink }) => {
             }
           }}
         >
-          Add to Cart
+          Buy Now
         </Button>
       </CardActions>
     </Card>

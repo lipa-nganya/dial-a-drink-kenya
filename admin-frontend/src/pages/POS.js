@@ -801,7 +801,7 @@ const POS = () => {
                   {items.map((item, index) => (
                     <TableRow key={index} hover>
                       <TableCell>{item.name}</TableCell>
-                      <TableCell>KES {item.price.toFixed(2)}</TableCell>
+                      <TableCell>KES {Math.round(item.price)}</TableCell>
                       <TableCell>
                         <TextField
                           type="number"
@@ -829,7 +829,7 @@ const POS = () => {
                           }}
                         />
                       </TableCell>
-                      <TableCell>KES {item.subTotal.toFixed(2)}</TableCell>
+                      <TableCell>KES {Math.round(item.subTotal)}</TableCell>
                       <TableCell>
                         <IconButton
                           size="small"
@@ -846,7 +846,7 @@ const POS = () => {
                       <Typography variant="h6">Total:</Typography>
                     </TableCell>
                     <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-                      KES {getTotal().toFixed(2)}
+                      KES {getTotal()Math.round(}
                     </TableCell>
                     <TableCell></TableCell>
                   </TableRow>

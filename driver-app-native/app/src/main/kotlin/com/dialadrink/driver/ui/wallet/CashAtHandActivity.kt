@@ -174,6 +174,16 @@ class CashAtHandActivity : AppCompatActivity() {
         }
     }
     
+    /**
+     * Switch to a specific main tab (0 = Cash At Hand, 1 = Transactions)
+     * This method is public so fragments can navigate between tabs
+     */
+    fun switchToMainTab(position: Int) {
+        if (::binding.isInitialized) {
+            binding.mainViewPager.setCurrentItem(position, true)
+        }
+    }
+    
     private fun handleDeepLink(intent: Intent) {
         val submissionId = intent.getStringExtra("submissionId")
         if (submissionId != null) {

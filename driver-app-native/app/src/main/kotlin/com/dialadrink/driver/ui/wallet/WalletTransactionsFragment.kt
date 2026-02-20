@@ -107,7 +107,10 @@ class WalletTransactionsFragment : Fragment() {
         val container = binding.transactionsContainer
         container.removeAllViews()
         
-        val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+        val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
+            maximumFractionDigits = 0
+            minimumFractionDigits = 0
+        }
         val allTransactions = mutableListOf<WalletTransactionItem>()
         
         // Wallet: 50% delivery fee from Pay Now orders only (no tips)

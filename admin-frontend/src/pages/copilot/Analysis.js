@@ -281,7 +281,7 @@ const Analysis = () => {
   };
 
   const formatCurrency = (amount) => {
-    return `KES ${parseFloat(amount || 0).toFixed(2)}`;
+    return `KES ${Math.round(parseFloat(amount || 0))}`;
   };
 
   const formatDate = (dateString) => {
@@ -355,10 +355,10 @@ const Analysis = () => {
         order.id,
         `${dateStr} ${timeStr}`,
         escapeCSV(order.customerName || 'N/A'),
-        calc.totalSellingPrice.toFixed(2),
-        calc.totalPurchasePrice.toFixed(2),
-        calc.deliveryFee.toFixed(2),
-        calc.profitLoss.toFixed(2),
+        Math.round(calc.totalSellingPrice),
+        Math.round(calc.totalPurchasePrice),
+        Math.round(calc.deliveryFee),
+        Math.round(calc.profitLoss),
         escapeCSV(order.status || 'N/A'),
         isPOSOrder(order) ? 'Yes' : 'No'
       ].join(',');
@@ -369,10 +369,10 @@ const Analysis = () => {
       '',
       'TOTALS',
       '',
-      totals.totalSellingPrice.toFixed(2),
-      totals.totalPurchasePrice.toFixed(2),
-      totals.totalDeliveryFee.toFixed(2),
-      totals.totalProfitLoss.toFixed(2),
+      Math.round(totals.totalSellingPrice),
+      Math.round(totals.totalPurchasePrice),
+      Math.round(totals.totalDeliveryFee),
+      Math.round(totals.totalProfitLoss),
       '',
       `Total: ${filteredOrders.length} orders`
     ];

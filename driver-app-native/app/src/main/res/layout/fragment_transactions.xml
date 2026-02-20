@@ -6,6 +6,19 @@
     android:orientation="vertical"
     android:background="@color/background_dark">
 
+    <!-- Cash At Hand Summary Button -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/cashAtHandSummaryButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="16dp"
+        android:layout_marginBottom="8dp"
+        android:text="View Cash At Hand Summary"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:backgroundTint="@color/accent"
+        app:cornerRadius="8dp" />
+
     <!-- Sub-tabs for Transactions -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/transactionsTabLayout"

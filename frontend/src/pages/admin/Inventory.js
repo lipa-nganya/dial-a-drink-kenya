@@ -699,7 +699,7 @@ const InventoryPage = () => {
                             fontSize: '0.65rem' 
                           }}
                         >
-                          KES {Number(drink.originalPrice).toFixed(2)}
+                          KES {Math.round(Number(drink.originalPrice))}
                         </Typography>
                         <Typography 
                           variant="body2" 
@@ -709,7 +709,7 @@ const InventoryPage = () => {
                             fontSize: '0.7rem' 
                           }}
                         >
-                          KES {Number(drink.price).toFixed(2)}
+                          KES {Math.round(Number(drink.price))}
                         </Typography>
                       </Box>
                     ) : (
@@ -721,7 +721,7 @@ const InventoryPage = () => {
                           fontSize: '0.7rem' 
                         }}
                       >
-                        KES {Number(drink.price).toFixed(2)}
+                        KES {Math.round(Number(drink.price))}
                       </Typography>
                     )}
                   </Box>

@@ -711,7 +711,7 @@ const OrderTracking = ({ order: orderProp }) => {
                     {item.selectedCapacity && ` (${item.selectedCapacity})`}
                   </Typography>
                   <Typography>
-                    KES {Number((item.price || 0) * (item.quantity || 0)).toFixed(2)}
+                    KES {Math.round(Number((item.price || 0) * (item.quantity || 0)))}
                   </Typography>
                 </Box>
               ))}
@@ -725,7 +725,7 @@ const OrderTracking = ({ order: orderProp }) => {
                     {item.selectedCapacity && ` (${item.selectedCapacity})`}
                   </Typography>
                   <Typography>
-                    KES {Number((item.price || 0) * (item.quantity || 0)).toFixed(2)}
+                    KES {Math.round(Number((item.price || 0) * (item.quantity || 0)))}
                   </Typography>
                 </Box>
               ))}
@@ -756,7 +756,7 @@ const OrderTracking = ({ order: orderProp }) => {
                       items.reduce((sum, item) => 
                         sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
                       );
-                    return Number(itemsTotal).toFixed(2);
+                    return Math.round(Number(itemsTotal));
                   })()}
                 </Typography>
               </Box>
@@ -768,7 +768,7 @@ const OrderTracking = ({ order: orderProp }) => {
                   Delivery Fee:
                 </Typography>
                 <Typography variant="body1">
-                  KES {Number(orderDetails.deliveryFee || 0).toFixed(2)}
+                  KES {Math.round(Number(orderDetails.deliveryFee || 0))}
                 </Typography>
               </Box>
             )}
@@ -779,7 +779,7 @@ const OrderTracking = ({ order: orderProp }) => {
                   Tip:
                 </Typography>
                 <Typography variant="body1">
-                  KES {Number(orderDetails.tipAmount).toFixed(2)}
+                  KES {Math.round(Number(orderDetails.tipAmount))}
                 </Typography>
               </Box>
             )}
@@ -790,7 +790,7 @@ const OrderTracking = ({ order: orderProp }) => {
                 Total Amount:
               </Typography>
               <Typography variant="h5" color="primary" sx={{ fontWeight: 600 }}>
-                KES {orderDetails.totalAmount ? Number(orderDetails.totalAmount).toFixed(2) : '0.00'}
+                KES {orderDetails.totalAmount ? Math.round(Number(orderDetails.totalAmount)) : '0'}
               </Typography>
             </Box>
           </Box>
@@ -863,7 +863,7 @@ const OrderTracking = ({ order: orderProp }) => {
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Total Amount: KES {orderDetails.totalAmount ? Number(orderDetails.totalAmount).toFixed(2) : '0.00'}
+            Total Amount: KES {orderDetails.totalAmount ? Math.round(Number(orderDetails.totalAmount)) : '0'}
           </Typography>
 
           {/* Payment Method Selection */}

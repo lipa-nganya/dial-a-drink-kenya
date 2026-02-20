@@ -51,6 +51,48 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
+                android:hint="Order Type"
+                app:hintTextColor="#FFFFFF"
+                app:boxStrokeColor="@color/dropdown_border_green"
+                app:boxStrokeWidth="2dp"
+                app:boxStrokeWidthFocused="2dp"
+                app:boxBackgroundColor="@color/paper_dark"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <androidx.appcompat.widget.AppCompatAutoCompleteTextView
+                    android:id="@+id/orderTypeSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Select Order Type"
+                    android:inputType="none"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#FFFFFF"
+                    android:minHeight="56dp"
+                    android:padding="16dp"
+                    android:focusable="false"
+                    android:clickable="true"
+                    android:cursorVisible="false"
+                    android:completionThreshold="2147483647" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- This is a Stop Checkbox (only visible for Delivery) -->
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/isStopCheckbox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="This is a stop (deducts from driver savings)"
+                android:textColor="@color/text_primary_dark"
+                android:textSize="16sp"
+                android:visibility="gone" />
+
+            <!-- Stop Deduction Amount (only visible when stop checkbox is checked) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/stopDeductionAmountLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone"
                 app:hintTextColor="#FFFFFF"
                 app:boxStrokeColor="@color/accent"
                 app:boxStrokeWidth="2dp"
@@ -58,14 +100,16 @@
                 app:boxBackgroundColor="@color/paper_dark"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
-                <androidx.appcompat.widget.AppCompatSpinner
-                    android:id="@+id/orderTypeSpinner"
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/stopDeductionAmountEditText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:minHeight="56dp"
-                    android:padding="16dp"
+                    android:hint="Stop Deduction Amount (KES)"
+                    android:inputType="numberDecimal"
                     android:textColor="#FFFFFF"
-                    android:backgroundTint="@color/accent" />
+                    android:textColorHint="#FFFFFF"
+                    android:minHeight="56dp"
+                    android:padding="16dp" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Staff Purchase Checkbox (only visible for Walk-in) -->
@@ -110,6 +154,37 @@
                     android:minHeight="56dp"
                     android:padding="16dp"
                     android:completionThreshold="3" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <!-- Rider Dropdown (for Staff Purchase) -->
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/riderLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:visibility="gone"
+                android:hint="Select Rider"
+                app:hintTextColor="#FFFFFF"
+                app:boxStrokeColor="@color/dropdown_border_green"
+                app:boxStrokeWidth="2dp"
+                app:boxStrokeWidthFocused="2dp"
+                app:boxBackgroundColor="@color/paper_dark"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                <androidx.appcompat.widget.AppCompatAutoCompleteTextView
+                    android:id="@+id/riderSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="Select Rider"
+                    android:inputType="text"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#FFFFFF"
+                    android:minHeight="56dp"
+                    android:padding="16dp"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:clickable="true"
+                    android:completionThreshold="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Create Customer Button (shown when customer doesn't exist) -->
@@ -159,49 +234,38 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
+                android:hint="Select Territory"
                 app:hintTextColor="#FFFFFF"
-                app:boxStrokeColor="@color/accent"
+                app:boxStrokeColor="@color/dropdown_border_green"
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
                 style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
-                <com.google.android.material.textfield.TextInputEditText
+                <androidx.appcompat.widget.AppCompatAutoCompleteTextView
                     android:id="@+id/territoryEditText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:hint="Select Territory"
-                    android:inputType="none"
+                    android:inputType="text"
                     android:textColor="#FFFFFF"
                     android:textColorHint="#FFFFFF"
                     android:minHeight="56dp"
                     android:padding="16dp"
-                    android:focusable="false"
-                    android:clickable="true" />
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:clickable="true"
+                    android:completionThreshold="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Payment Method -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:id="@+id/paymentMethodLayout"
+            <androidx.appcompat.widget.AppCompatSpinner
+                android:id="@+id/paymentMethodSpinner"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                app:hintTextColor="#FFFFFF"
-                app:boxStrokeColor="@color/accent"
-                app:boxStrokeWidth="2dp"
-                app:boxStrokeWidthFocused="2dp"
-                app:boxBackgroundColor="@color/paper_dark"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-
-                <androidx.appcompat.widget.AppCompatSpinner
-                    android:id="@+id/paymentMethodSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="56dp"
-                    android:padding="16dp"
-                    android:textColor="@color/text_primary_dark"
-                    android:backgroundTint="@color/accent" />
-            </com.google.android.material.textfield.TextInputLayout>
+                android:minHeight="56dp"
+                android:padding="16dp" />
 
             <!-- Delivery Fee -->
             <com.google.android.material.textfield.TextInputLayout
