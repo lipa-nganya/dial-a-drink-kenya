@@ -256,11 +256,6 @@ const LocationDetails = () => {
   const formatCurrency = (amount) => {
     return `KES ${Math.round(Number(amount || 0))}`;
   };
-  
-  const formatCurrencyOld = (amount) => {
-    if (!amount || amount === 0) return 'Free';
-    return `KES ${parseFloat(amount).toFixed(0)}`;
-  };
 
   const displayLocationName = location ? location.name : decodeURIComponent(locationName || '');
 
