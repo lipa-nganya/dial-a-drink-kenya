@@ -52,25 +52,33 @@ const getCallbackUrl = () => {
   // Priority 3: Check if we're in Cloud Run and determine which instance
   const { isProduction, isCloudRun } = require('../utils/envDetection');
   if (isCloudRun()) {
-    // Determine which Cloud Run instance we're on based on GCP project
+    // Determine which Cloud Run instance we're on based on NODE_ENV and service name
+    const nodeEnv = process.env.NODE_ENV;
     const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT;
     
-    // Dev backend: project 910510650031 or drink-suite
-    if (gcpProject === '910510650031' || gcpProject === 'drink-suite') {
-      callbackUrl = 'https://deliveryos-backend-910510650031.us-central1.run.app/api/mpesa/callback';
-      console.log(`✅ Using dev backend callback URL: ${callbackUrl}`);
+    // Development backend: NODE_ENV=development or dialadrink-production project with development service
+    if (nodeEnv === 'development' || (gcpProject === 'dialadrink-production' && process.env.K_SERVICE === 'deliveryos-development-backend')) {
+      callbackUrl = 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/mpesa/callback';
+      console.log(`✅ Using development backend callback URL: ${callbackUrl}`);
       return callbackUrl;
     }
     
-    // Production backend: dialadrink-production project
+    // Dev backend: project 910510650031 or drink-suite (legacy)
+    if (gcpProject === '910510650031' || gcpProject === 'drink-suite') {
+      callbackUrl = 'https://deliveryos-backend-910510650031.us-central1.run.app/api/mpesa/callback';
+      console.log(`✅ Using dev backend callback URL (legacy): ${callbackUrl}`);
+      return callbackUrl;
+    }
+    
+    // Production backend: dialadrink-production project with production service
     if (gcpProject === 'dialadrink-production' || isProduction()) {
-      callbackUrl = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/mpesa/callback';
+      callbackUrl = 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api/mpesa/callback';
       console.log(`✅ Using production callback URL: ${callbackUrl}`);
       return callbackUrl;
     }
     
     // Fallback: try to detect from service URL or use production
-    callbackUrl = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/mpesa/callback';
+    callbackUrl = 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api/mpesa/callback';
     console.log(`⚠️  Could not determine Cloud Run instance, using production callback URL: ${callbackUrl}`);
     return callbackUrl;
   }

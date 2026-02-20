@@ -1,0 +1,6 @@
+# Ensure .env files are never committed, even if accidentally added
+.env filter=git-crypt diff=git-crypt
+.env.* filter=git-crypt diff=git-crypt
+*.env filter=git-crypt diff=git-crypt
+*.env.bak filter=git-crypt diff=git-crypt
+*.env.backup filter=git-crypt diff=git-crypt
