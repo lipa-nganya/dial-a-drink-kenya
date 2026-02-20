@@ -2242,6 +2242,9 @@ router.post('/callback', async (req, res) => {
         } else if (resultCode === 1032) {
           errorType = 'timeout';
           errorMessage = 'Payment request timed out - customer did not complete payment';
+        } else if (resultCode === 1037) {
+          errorType = 'request_cancelled';
+          errorMessage = 'Customer cancelled the payment request';
         }
         
         // Update transaction status if exists
@@ -2254,18 +2257,37 @@ router.post('/callback', async (req, res) => {
             status: 'failed',
             paymentStatus: 'unpaid',
             notes: transaction.notes ? 
-              `${transaction.notes}\n❌ Payment Failed: ${errorMessage}` : 
-              `❌ Payment Failed: ${errorMessage}`
+              `${transaction.notes}\n❌ Payment Failed: ${errorMessage} (ResultCode: ${resultCode})` : 
+              `❌ Payment Failed: ${errorMessage} (ResultCode: ${resultCode})`
           });
         }
         
+        // CRITICAL: When payment is rejected, preserve the current order status
+        // Only revert to 'pending' if order was never confirmed/assigned
+        // If order is already confirmed/out_for_delivery, keep that status but mark payment as unpaid
+        const currentStatus = order.status;
+        let newStatus = currentStatus;
+        
+        // Only revert to pending if order hasn't progressed beyond pending
+        // This prevents reverting orders that are already confirmed or out for delivery
+        if (currentStatus === 'pending' || currentStatus === 'confirmed') {
+          // For pending/confirmed orders, keep as pending when payment fails
+          newStatus = 'pending';
+        } else {
+          // For orders that have progressed (out_for_delivery, delivered, etc.), preserve status
+          // Payment failure doesn't mean order should be cancelled - customer can retry payment
+          newStatus = currentStatus;
+        }
+        
         await order.update({
-          status: 'pending',
+          status: newStatus,
           paymentStatus: 'unpaid',
           notes: order.notes ? 
-            `${order.notes}\nM-Pesa Payment Failed: ${errorMessage}` : 
-            `M-Pesa Payment Failed: ${errorMessage}`
+            `${order.notes}\n❌ M-Pesa Payment Rejected: ${errorMessage} (ResultCode: ${resultCode})` : 
+            `❌ M-Pesa Payment Rejected: ${errorMessage} (ResultCode: ${resultCode})`
         });
+        
+        console.log(`✅ Order #${order.id} updated: status='${newStatus}' (was '${currentStatus}'), paymentStatus='unpaid'`);
         
         // Emit socket event to notify driver and admin about payment failure
         const io = req.app.get('io');
