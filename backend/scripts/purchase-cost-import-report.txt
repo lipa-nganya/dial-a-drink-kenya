@@ -1,126 +1,126 @@
 Purchase Cost Import Report
 ==================================================
-Generated: 2026-02-08T08:14:19.370Z
+Generated: 2026-02-18T07:47:36.753Z
 
 Total products in SQL file: 1205
-Total drinks in database: 1388
+Total drinks in database: 2077
 
-✅ Matched and updated: 1136
-  - New: 0
+✅ Matched and updated: 1143
+  - New: 7
   - Overwritten: 1136
 
-❌ Unmatched: 69
+❌ Unmatched: 62
 
 --- Matched Products ---
-  Jameson Black Barrel (similarity: 100.0%) -> KES 3000.00 [OVERWRITTEN: was KES 3146.50]
-  Yuoto Thanos (similarity: 100.0%) -> KES 1000.00 [OVERWRITTEN: was KES 1330.00]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1400.00 [OVERWRITTEN: was KES 1256.50]
-  Malibu (similarity: 80.0%) -> KES 2000.00 [OVERWRITTEN: was KES 1890.00]
-  Malibu (similarity: 100.0%) -> KES 1700.00 [OVERWRITTEN: was KES 1890.00]
-  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 1000.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1500.00 [OVERWRITTEN: was KES 1256.50]
-  Belaire Gold (similarity: 100.0%) -> KES 4000.00 [OVERWRITTEN: was KES 3640.00]
-  Belaire Rose (similarity: 100.0%) -> KES 4250.00 [OVERWRITTEN: was KES 3640.00]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 8500.00 [OVERWRITTEN: was KES 1256.50]
-  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 9000.00 [OVERWRITTEN: was KES 400.00]
-  Moet & Chandon Imperial Ice (similarity: 120.0%) -> KES 9000.00 [OVERWRITTEN: was KES 10150.00]
-  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 3300.00 [OVERWRITTEN: was KES 400.00]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 1000.00 [OVERWRITTEN: was KES 1256.50]
-  Schweppes C+ (similarity: 100.0%) -> KES 159.00 [OVERWRITTEN: was KES 70.00]
-  Desperados (similarity: 80.0%) -> KES 241.00 [OVERWRITTEN: was KES 1539.30]
-  1659 Sweet Rose (similarity: 100.0%) -> KES 150.00 [OVERWRITTEN: was KES 1326.50]
-  Balozi Can (similarity: 100.0%) -> KES 140.00 [OVERWRITTEN: was KES 1046.50]
-  Afri Bull Cafe Rum (similarity: 100.0%) -> KES 235.00 [OVERWRITTEN: was KES 980.00]
-  Hunter's Gold Cider (similarity: 80.0%) -> KES 250.00 [OVERWRITTEN: was KES 1470.00]
-  Balozi Can (similarity: 100.0%) -> KES 210.00 [OVERWRITTEN: was KES 1046.50]
-  Savanna Cider (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 1470.00]
-  Snapp (similarity: 100.0%) -> KES 159.00 [OVERWRITTEN: was KES 1050.00]
-  Tusker Cider (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 1116.50]
-  Tusker Lager (similarity: 100.0%) -> KES 179.00 [OVERWRITTEN: was KES 1116.50]
-  Tusker Lite (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 1189.30]
-  Tusker Malt (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 1186.50]
-  Whitecap (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 1190.00]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 1098.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 4000.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 700.00 [OVERWRITTEN: was KES 1256.50]
-  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 1300.00 [OVERWRITTEN: was KES 1256.50]
-  Belaire Luxe (similarity: 100.0%) -> KES 4000.00 [OVERWRITTEN: was KES 3640.00]
-  Chamdor Red Wine (similarity: 80.0%) -> KES 750.00 [OVERWRITTEN: was KES 840.00]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 750.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 10500.00 [OVERWRITTEN: was KES 1256.50]
-  Moet & Chandon Nectar Imperial Rose (similarity: 166.7%) -> KES 9000.00 [OVERWRITTEN: was KES 9450.00]
-  Dunhill Double Switch (similarity: 100.0%) -> KES 465.00 [OVERWRITTEN: was KES 420.00]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 480.00 [OVERWRITTEN: was KES 1256.50]
-  Embassy King (similarity: 80.0%) -> KES 435.00 [OVERWRITTEN: was KES 420.00]
-  Embassy Lights (similarity: 100.0%) -> KES 480.00 [OVERWRITTEN: was KES 420.00]
-  Sportsman (similarity: 100.0%) -> KES 350.00 [OVERWRITTEN: was KES 385.00]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 6500.00 [OVERWRITTEN: was KES 1256.50]
-  Courvoisier VSOP (similarity: 100.0%) -> KES 6000.00 [OVERWRITTEN: was KES 5040.00]
-  Hennessy VS (similarity: 100.0%) -> KES 4600.00 [OVERWRITTEN: was KES 3849.30]
-  Martell VS (similarity: 100.0%) -> KES 4500.00 [OVERWRITTEN: was KES 3849.30]
-  Martell Blueswift (similarity: 100.0%) -> KES 8500.00 [OVERWRITTEN: was KES 6440.00]
-  Martel XO (similarity: 100.0%) -> KES 30500.00 [OVERWRITTEN: was KES 23100.00]
-  Maker`s Mark (similarity: 100.0%) -> KES 4900.00 [OVERWRITTEN: was KES 2376.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1450.00 [OVERWRITTEN: was KES 1256.50]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 2000.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1400.00 [OVERWRITTEN: was KES 1256.50]
-  Dasani Water (similarity: 80.0%) -> KES 80.00 [OVERWRITTEN: was KES 35.00]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 1400.00 [OVERWRITTEN: was KES 1256.50]
-  Delmonte Mango (similarity: 80.0%) -> KES 255.00 [OVERWRITTEN: was KES 210.00]
-  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 42000.00 [OVERWRITTEN: was KES 400.00]
-  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 800.00 [OVERWRITTEN: was KES 1256.50]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 1100.00 [OVERWRITTEN: was KES 1256.50]
-  Blacklabel 750ml Giftpack (similarity: 66.7%) -> KES 1300.00 [OVERWRITTEN: was KES 400.00]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1181.00 [OVERWRITTEN: was KES 1256.50]
-  Glenlivet Founder`s Reserve (similarity: 100.0%) -> KES 6100.00 [OVERWRITTEN: was KES 2376.50]
-  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 1200.00 [OVERWRITTEN: was KES 400.00]
-  Gilbey's Gin (similarity: 100.0%) -> KES 850.00 [OVERWRITTEN: was KES 1050.00]
-  Beefeater Pink Gin (similarity: 80.0%) -> KES 1900.00 [OVERWRITTEN: was KES 1960.00]
-  K.O - Lime & Ginger (similarity: 100.0%) -> KES 3300.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 5000.00 [OVERWRITTEN: was KES 1256.50]
-  Hendrick's Gin (similarity: 100.0%) -> KES 4500.00 [OVERWRITTEN: was KES 3849.30]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 3500.00 [OVERWRITTEN: was KES 1256.50]
-  Tanqueray Gin (similarity: 80.0%) -> KES 2200.00 [OVERWRITTEN: was KES 2096.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 11600.00 [OVERWRITTEN: was KES 1256.50]
-  Johnnie Walker Gold Label (similarity: 100.0%) -> KES 5000.00 [OVERWRITTEN: was KES 2376.50]
-  Gordon's Gin (similarity: 100.0%) -> KES 2000.00 [OVERWRITTEN: was KES 1680.00]
-  Hennessy XO (similarity: 100.0%) -> KES 37000.00 [OVERWRITTEN: was KES 19950.00]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 11000.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1500.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1155.20 [OVERWRITTEN: was KES 1256.50]
-  Fitch & Leedes Classic Passionade (similarity: 80.0%) -> KES 2100.00 [OVERWRITTEN: was KES 210.00]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1800.00 [OVERWRITTEN: was KES 1256.50]
-  Bacardi spiced Rum (similarity: 80.0%) -> KES 1600.00 [OVERWRITTEN: was KES 1820.00]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 2100.00 [OVERWRITTEN: was KES 1256.50]
-  Jim Beam (similarity: 100.0%) -> KES 2000.00 [OVERWRITTEN: was KES 1609.30]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 3000.00 [OVERWRITTEN: was KES 1256.50]
-  K.O Beer - Pineapple & Mint (similarity: 116.7%) -> KES 1300.00 [OVERWRITTEN: was KES 1256.50]
-  Gibson's Gin (similarity: 100.0%) -> KES 1350.00 [OVERWRITTEN: was KES 1330.00]
-  Tanqueray Sevilla (similarity: 100.0%) -> KES 2300.00 [OVERWRITTEN: was KES 2096.50]
-  K.O Beer - Pineapple & Mint (similarity: 66.7%) -> KES 1000.00 [OVERWRITTEN: was KES 1256.50]
-  Blacklabel 750ml Giftpack (similarity: 66.7%) -> KES 1200.00 [OVERWRITTEN: was KES 400.00]
-  Beefeater Clear Gin (similarity: 80.0%) -> KES 1800.00 [OVERWRITTEN: was KES 1960.00]
-  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 810.00 [OVERWRITTEN: was KES 1256.50]
-  Jack Daniel 700ml Corkless (similarity: 125.0%) -> KES 3200.00 [OVERWRITTEN: was KES 2380.00]
-  Camus VS (similarity: 100.0%) -> KES 3225.00 [OVERWRITTEN: was KES 3780.00]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 15000.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 450.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 7500.00 [OVERWRITTEN: was KES 1256.50]
-  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 1400.00 [OVERWRITTEN: was KES 400.00]
-  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 2800.00 [OVERWRITTEN: was KES 400.00]
-  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 14000.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 80.0%) -> KES 365.00 [OVERWRITTEN: was KES 1256.50]
-  K.O - Lime & Ginger (similarity: 120.0%) -> KES 2500.00 [OVERWRITTEN: was KES 1256.50]
-  Dusse VSOP Cognac (similarity: 80.0%) -> KES 5000.00 [OVERWRITTEN: was KES 7840.00]
-  ... and 1036 more
+  Jameson Black Barrel (similarity: 100.0%) -> KES 3000.00 [OVERWRITTEN: was KES 6421.43]
+  Yuoto Thanos (similarity: 100.0%) -> KES 1000.00 [OVERWRITTEN: was KES 2714.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1400.00 [OVERWRITTEN: was KES 2564.29]
+  Malibu (similarity: 80.0%) -> KES 2000.00 [OVERWRITTEN: was KES 3857.14]
+  Malibu (similarity: 100.0%) -> KES 1700.00 [OVERWRITTEN: was KES 3857.14]
+  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 1000.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1500.00 [OVERWRITTEN: was KES 2564.29]
+  Belaire Gold (similarity: 100.0%) -> KES 4000.00 [OVERWRITTEN: was KES 7428.57]
+  Belaire Rose` (similarity: 100.0%) -> KES 4250.00 [OVERWRITTEN: was KES 7428.57]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 8500.00 [OVERWRITTEN: was KES 2564.29]
+  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 9000.00 [OVERWRITTEN: was KES 4428.57]
+  Moet & Chandon Imperial Ice (similarity: 120.0%) -> KES 9000.00 [OVERWRITTEN: was KES 20714.29]
+  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 3300.00 [OVERWRITTEN: was KES 4428.57]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 1000.00 [OVERWRITTEN: was KES 2564.29]
+  Schweppes C+ (similarity: 100.0%) -> KES 159.00 [OVERWRITTEN: was KES 142.86]
+  Desperados (similarity: 80.0%) -> KES 241.00 [OVERWRITTEN: was KES 3141.43]
+  Guiness Smooth 330ml (similarity: 80.0%) -> KES 200.00 [OVERWRITTEN: was KES 3000.00]
+  1659 Sweet Red (similarity: 100.0%) -> KES 150.00 [OVERWRITTEN: was KES 2714.29]
+  Ama la Vida (similarity: 100.0%) -> KES 140.00 [OVERWRITTEN: was KES 1714.29]
+  Amani Bay Dry Rose (similarity: 125.0%) -> KES 235.00 [OVERWRITTEN: was KES 2571.43]
+  Hunter`s Gold Cider (similarity: 80.0%) -> KES 250.00 [OVERWRITTEN: was KES 2285.71]
+  Ama la Vida (similarity: 100.0%) -> KES 210.00 [OVERWRITTEN: was KES 1714.29]
+  Savanna Cider (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 3000.00]
+  Snapp (similarity: 100.0%) -> KES 159.00 [OVERWRITTEN: was KES 2000.00]
+  Tusker Cider (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 2278.57]
+  Tusker Lager (similarity: 100.0%) -> KES 179.00 [OVERWRITTEN: was KES 2278.57]
+  Tusker Lite (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 2427.14]
+  Tusker Malt (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 2421.43]
+  Whitecap (similarity: 100.0%) -> KES 200.00 [OVERWRITTEN: was KES 2428.57]
+  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 1098.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 4000.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 700.00 [OVERWRITTEN: was KES 2564.29]
+  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 1300.00 [OVERWRITTEN: was KES 2564.29]
+  Belaire Luxe (similarity: 100.0%) -> KES 4000.00 [OVERWRITTEN: was KES 7428.57]
+  Chamdor Red Wine (similarity: 80.0%) -> KES 750.00 [OVERWRITTEN: was KES 1714.29]
+  Chamdor White Wine (similarity: 80.0%) -> KES 750.00 [OVERWRITTEN: was KES 1714.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 10500.00 [OVERWRITTEN: was KES 2564.29]
+  Moet & Chandon Nectar Imperial Rose (similarity: 166.7%) -> KES 9000.00 [OVERWRITTEN: was KES 19285.71]
+  Dunhill Double Switch (similarity: 100.0%) -> KES 465.00 [OVERWRITTEN: was KES 928.57]
+  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 480.00 [OVERWRITTEN: was KES 2564.29]
+  Embassy King (similarity: 80.0%) -> KES 435.00 [OVERWRITTEN: was KES 857.14]
+  Embassy Lights (similarity: 100.0%) -> KES 480.00 [OVERWRITTEN: was KES 928.57]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 6500.00 [OVERWRITTEN: was KES 2564.29]
+  Courvoisier VSOP (similarity: 100.0%) -> KES 6000.00 [OVERWRITTEN: was KES 10285.71]
+  Hennessy VS (similarity: 100.0%) -> KES 4600.00 [OVERWRITTEN: was KES 7855.71]
+  Martell VS (similarity: 100.0%) -> KES 4500.00 [OVERWRITTEN: was KES 7855.71]
+  Martell Blueswift (similarity: 100.0%) -> KES 8500.00 [OVERWRITTEN: was KES 13142.86]
+  Martel XO (similarity: 100.0%) -> KES 30500.00 [OVERWRITTEN: was KES 47142.86]
+  Maker`s Mark (similarity: 100.0%) -> KES 4900.00 [OVERWRITTEN: was KES 7857.14]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1450.00 [OVERWRITTEN: was KES 2564.29]
+  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 2000.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1400.00 [OVERWRITTEN: was KES 2564.29]
+  Dasani Water (similarity: 80.0%) -> KES 80.00 [OVERWRITTEN: was KES 71.43]
+  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 1400.00 [OVERWRITTEN: was KES 2564.29]
+  Delmonte Mango (similarity: 80.0%) -> KES 255.00 [OVERWRITTEN: was KES 428.57]
+  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 42000.00 [OVERWRITTEN: was KES 4428.57]
+  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 800.00 [OVERWRITTEN: was KES 2564.29]
+  Douglas Green Chardonnay (similarity: 100.0%) -> KES 1100.00 [OVERWRITTEN: was KES 2285.71]
+  B & G Chateau Magnol Haut-Medoc (similarity: 66.7%) -> KES 1300.00 [OVERWRITTEN: was KES 7857.14]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1181.00 [OVERWRITTEN: was KES 2564.29]
+  Glenlivet Founder`s Reserve (similarity: 100.0%) -> KES 6100.00 [OVERWRITTEN: was KES 8857.14]
+  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 1200.00 [OVERWRITTEN: was KES 4428.57]
+  Gilbey's Gin (similarity: 100.0%) -> KES 850.00 [OVERWRITTEN: was KES 2142.86]
+  Beefeater Pink Gin (similarity: 80.0%) -> KES 1900.00 [OVERWRITTEN: was KES 4000.00]
+  Bulldog Gin (similarity: 100.0%) -> KES 3300.00 [OVERWRITTEN: was KES 6000.00]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 5000.00 [OVERWRITTEN: was KES 2564.29]
+  Ginraw Gin (similarity: 100.0%) -> KES 4500.00 [OVERWRITTEN: was KES 12142.86]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 3500.00 [OVERWRITTEN: was KES 2564.29]
+  Tanqueray ABV 0.0 750ml (similarity: 80.0%) -> KES 2200.00 [OVERWRITTEN: was KES 5000.00]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 11600.00 [OVERWRITTEN: was KES 2564.29]
+  B & G Chateau Magnol Haut-Medoc (similarity: 100.0%) -> KES 5000.00 [OVERWRITTEN: was KES 7857.14]
+  Ginraw Gin (similarity: 100.0%) -> KES 2000.00 [OVERWRITTEN: was KES 12142.86]
+  Hennessy XO (similarity: 100.0%) -> KES 37000.00 [OVERWRITTEN: was KES 40714.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 11000.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1500.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1155.20 [OVERWRITTEN: was KES 2564.29]
+  Rupert & Rothschild Classique (similarity: 100.0%) -> KES 2100.00 [OVERWRITTEN: was KES 6857.14]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 1800.00 [OVERWRITTEN: was KES 2564.29]
+  Bacardi spiced Rum (similarity: 80.0%) -> KES 1600.00 [OVERWRITTEN: was KES 3714.29]
+  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 2100.00 [OVERWRITTEN: was KES 2564.29]
+  Jim Beam (similarity: 100.0%) -> KES 2000.00 [OVERWRITTEN: was KES 3284.29]
+  K.O Beer - Pineapple & Mint (similarity: 100.0%) -> KES 3000.00 [OVERWRITTEN: was KES 2564.29]
+  K.O Beer - Pineapple & Mint (similarity: 116.7%) -> KES 1300.00 [OVERWRITTEN: was KES 2564.29]
+  Gibson's Gin (similarity: 100.0%) -> KES 1350.00 [OVERWRITTEN: was KES 2714.29]
+  Tanqueray Sevilla (similarity: 100.0%) -> KES 2300.00 [OVERWRITTEN: was KES 4278.57]
+  K.O Beer - Pineapple & Mint (similarity: 66.7%) -> KES 1000.00 [OVERWRITTEN: was KES 2564.29]
+  Blacklabel 750ml Giftpack (similarity: 66.7%) -> KES 1200.00 [OVERWRITTEN: was KES 4428.57]
+  Beefeater Clear Gin (similarity: 80.0%) -> KES 1800.00 [OVERWRITTEN: was KES 4000.00]
+  Bertani Soave Vintage (similarity: 100.0%) -> KES 810.00 [OVERWRITTEN: was KES 4571.43]
+  Jack Daniel 700ml Corkless (similarity: 125.0%) -> KES 3200.00 [OVERWRITTEN: was KES 4857.14]
+  Camus VS (similarity: 100.0%) -> KES 3225.00 [OVERWRITTEN: was KES 7714.29]
+  Courvoisier XO (similarity: 100.0%) -> KES 15000.00 [OVERWRITTEN: was KES 37142.86]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 450.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 7500.00 [OVERWRITTEN: was KES 2564.29]
+  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 1400.00 [OVERWRITTEN: was KES 4428.57]
+  Blacklabel 750ml Giftpack (similarity: 100.0%) -> KES 2800.00 [OVERWRITTEN: was KES 4428.57]
+  K.O Beer - Pineapple & Mint (similarity: 133.3%) -> KES 14000.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 80.0%) -> KES 365.00 [OVERWRITTEN: was KES 2564.29]
+  K.O - Lime & Ginger (similarity: 120.0%) -> KES 2500.00 [OVERWRITTEN: was KES 2564.29]
+  Dusse VSOP Cognac (similarity: 80.0%) -> KES 5000.00 [OVERWRITTEN: was KES 16000.00]
+  ... and 1043 more
 
 --- Skipped Products (Already Have Price) ---
 
 --- Unmatched Products (from SQL file) ---
   Guaranna 330ml -> KES 159.00
-  Guiness 500ml -> KES 200.00
   Redbull -> KES 185.00
   Lighters. -> KES 130.00
+  Sportsman -> KES 350.00
   Durex -> KES 450.00
   Aperol -> KES 2250.00
   FAXE -> KES 250.00
@@ -138,29 +138,24 @@ Total drinks in database: 1388
   soda 500ml -> KES 70.00
   Fanta  1L -> KES 125.00
   Stoney 1L -> KES 125.00
-  Konyagi 750ml -> KES 700.00
   JnB 1Litre -> KES 1600.00
   Gamla -> KES 1000.00
-  KAHLUA -> KES 2600.00
   Safari 1L -> KES 50.00
   Caprice 1L -> KES 950.00
   Irish 750ml -> KES 700.00
   Disarono 1l -> KES 3200.00
   Sikera -> KES 45.00
-  Haymans 750ml -> KES 2084.00
   spytail -> KES 1834.00
   Dimple -> KES 3200.00
   Hombo 750ml -> KES 4000.00
   Jp syra -> KES 1021.00
   Paddy -> KES 1240.00
-  Kensington -> KES 950.00
   Bond 7 750ml -> KES 1270.00
   Popov 250ml -> KES 195.00
   Firewater 750ml -> KES 1750.00
   St Ann 750ml -> KES 650.00
   Tango -> KES 1950.00
   Cicero 250ml -> KES 298.00
-  Aviation 750ml -> KES 3350.00
   County 250ml -> KES 300.00
   kane -> KES 400.00
   Genesis -> KES 600.00
@@ -170,19 +165,17 @@ Total drinks in database: 1388
   Weezy -> KES 170.00
   Macmohan 700ml -> KES 700.00
   ff -> KES 1000.00
-  Stellenbosch Reserve Cabarnet Sauvignon 750ml -> KES 3160.00
   Afribull -> KES 800.00
   Tamnavulin 750ml -> KES 3365.00
   Rooster -> KES 142.30
   bhang -> KES 2000.00
   lot 750ml -> KES 650.00
   kawasaki -> KES 4000.00
-  MG Gin -> KES 1600.00
+  Origin 750ml -> KES 600.00
   Predator -> KES 35.00
   trust -> KES 200.00
   Reserve 7 750ml -> KES 900.00
   Aquamist -> KES 116.00
   BAVERIA -> KES 300.00
-  Gin mg -> KES 1600.00
   MGG -> KES 1847.84
   Shes -> KES 413.00

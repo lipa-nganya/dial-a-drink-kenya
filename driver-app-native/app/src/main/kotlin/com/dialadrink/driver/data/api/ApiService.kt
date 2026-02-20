@@ -289,6 +289,10 @@ interface ApiService {
     @GET("admin/drivers/penalties")
     suspend fun getDriversWithPenaltyBalances(): Response<ApiResponse<List<DriverWithPenaltyBalance>>>
     
+   
+    @GET("admin/drivers/{driverId}/loan-penalty-transactions")
+    suspend fun getLoanPenaltyTransactions(@Path("driverId") driverId: Int): Response<ApiResponse<List<DriverTransaction>>>
+    
     @POST("admin/loans")
     suspend fun createLoan(@Body request: CreateLoanRequest): Response<ApiResponse<Any>>
     
@@ -316,8 +320,12 @@ interface ApiService {
         @Path("orderId") orderId: Int,
         @Body request: UpdateOrderStatusRequest
     ): Response<ApiResponse<Order>>
-    
-    @POST("admin/orders/{orderId}/prompt-payment")
+
+    @PATCH("admin/orders/{orderId}/payment-status")
+    suspend fun updateOrderPaymentStatus(
+        @Path("orderId") orderId: Int,
+        @Body request: UpdatePaymentStatusRequest
+    ): Response<ApiResponse<Order>>    @POST("admin/orders/{orderId}/prompt-payment")
     suspend fun promptOrderPayment(
         @Path("orderId") orderId: Int,
         @Body request: PromptOrderPaymentRequest? = null

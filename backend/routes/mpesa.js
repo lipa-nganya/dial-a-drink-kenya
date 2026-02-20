@@ -175,9 +175,10 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   // For successful payments, always set status to 'confirmed' (unless it's a POS order which becomes 'completed')
   let finalStatus = 'confirmed'; // Default to 'confirmed' for successful payments
   
-  // For POS orders, set status to 'completed' immediately (no delivery needed)
+  // For POS orders (walk-in/in-store), set status to 'completed' when paid
+  // If unpaid, they should be 'in_progress', not 'pending'
   if (isPOSOrder) {
-    finalStatus = 'completed';
+    finalStatus = 'completed'; // Always completed when paid
   } else if (orderInstance.status && orderInstance.status !== 'pending' && orderInstance.status !== 'unpaid') {
     // If order already has a status other than pending/unpaid, preserve it (e.g., 'out_for_delivery', 'delivered')
     // But only if it's not a POS order
@@ -1891,10 +1892,10 @@ router.post('/callback', async (req, res) => {
           const currentOrderStatus = order.status;
           let newOrderStatus = currentOrderStatus;
           
-          // POS orders should always be 'completed' after payment
+          // POS orders should always be 'completed' after payment (move from 'in_progress' to 'completed')
           if (isPOSOrder) {
             newOrderStatus = 'completed';
-            console.log(`📝 POS Order #${order.id} - setting status to 'completed' after payment confirmation`);
+            console.log(`📝 POS Order #${order.id} - moving from '${currentOrderStatus}' to 'completed' after payment confirmation`);
           } else if (currentOrderStatus === 'out_for_delivery') {
             // If order was out for delivery when payment is confirmed, mark as completed directly
             // (delivered + paid = completed, and it should be moved to completed orders on driver app)
@@ -1904,6 +1905,10 @@ router.post('/callback', async (req, res) => {
             // If order was already delivered, mark as completed
             newOrderStatus = 'completed';
             console.log(`📝 Order #${order.id} was "delivered", updating to "completed" after payment confirmation`);
+          } else if (currentOrderStatus === 'in_progress' && isPOSOrder) {
+            // For in-store orders that were 'in_progress', move to 'completed' when paid
+            newOrderStatus = 'completed';
+            console.log(`📝 In-store Order #${order.id} was "in_progress", updating to "completed" after payment confirmation`);
           } else if (currentOrderStatus === 'pending' || currentOrderStatus === 'cancelled') {
             // For newly paid orders, move them into confirmed so they flow through the rest of the lifecycle
             newOrderStatus = 'confirmed';

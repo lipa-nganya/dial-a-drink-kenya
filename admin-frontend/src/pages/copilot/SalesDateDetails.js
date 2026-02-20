@@ -71,7 +71,7 @@ const SalesDateDetails = () => {
   };
 
   const formatCurrency = (amount) => {
-    return `KES ${Number(amount || 0).toFixed(2)}`;
+    return `KES ${Math.round(Number(amount || 0))}`;
   };
 
   const formatDate = (dateString) => {
@@ -204,9 +204,9 @@ const SalesDateDetails = () => {
         escapeCSV(order.customerName || 'Guest'),
         escapeCSV(order.customerPhone || ''),
         escapeCSV(order.customerEmail || ''),
-        orderAmount.toFixed(2),
-        tipAmount.toFixed(2),
-        revenue.toFixed(2),
+        Math.round(orderAmount),
+        Math.round(tipAmount),
+        Math.round(revenue),
         escapeCSV(order.status || ''),
         escapeCSV(order.paymentStatus || ''),
         escapeCSV(order.paymentMethod || ''),
@@ -233,9 +233,9 @@ const SalesDateDetails = () => {
       '',
       '',
       '',
-      orders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0).toFixed(2),
-      orders.reduce((sum, o) => sum + (parseFloat(o.tipAmount) || 0), 0).toFixed(2),
-      totalRevenue.toFixed(2),
+      Math.round(orders.reduce((sum, o) => sum + (parseFloat(o.totalAmount) || 0), 0)),
+      Math.round(orders.reduce((sum, o) => sum + (parseFloat(o.tipAmount) || 0), 0)),
+      Math.round(totalRevenue),
       '',
       '',
       '',

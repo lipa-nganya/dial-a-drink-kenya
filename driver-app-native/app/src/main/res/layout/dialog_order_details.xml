@@ -115,6 +115,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
+            android:hint="Select a rider"
             app:hintTextColor="#FFFFFF"
             app:boxStrokeColor="@color/accent"
             app:boxStrokeWidth="2dp"
@@ -122,13 +123,20 @@
             app:boxBackgroundColor="@color/paper_dark"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
             
-            <androidx.appcompat.widget.AppCompatSpinner
+            <androidx.appcompat.widget.AppCompatAutoCompleteTextView
                 android:id="@+id/riderSpinner"
                 android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:background="@android:color/transparent"
-                android:padding="12dp"
-                android:textColor="@color/text_primary_dark" />
+                android:layout_height="wrap_content"
+                android:hint="Select a rider"
+                android:inputType="text"
+                android:textColor="#FFFFFF"
+                android:textColorHint="#FFFFFF"
+                android:minHeight="56dp"
+                android:padding="16dp"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:clickable="true"
+                android:completionThreshold="1" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <!-- Items and Cost -->

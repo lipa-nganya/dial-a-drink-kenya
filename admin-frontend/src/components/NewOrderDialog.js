@@ -117,9 +117,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   }, [currentProduct]);
 
   useEffect(() => {
-    // Auto-set delivery status: completed for walk-in, confirmed for regular orders
+    // Auto-set delivery status: confirmed for walk-in (pending payment), confirmed for regular orders
     if (isWalkIn) {
-      setDeliveryStatus('completed');
+      setDeliveryStatus('confirmed');
     } else {
       setDeliveryStatus('confirmed');
     }
@@ -142,9 +142,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const fetchCustomers = async () => {
     try {
       const response = await api.get('/admin/customers');
-      setCustomers(response.data || []);
+      // Ensure we always set an array
+      const customersData = response.data;
+      if (Array.isArray(customersData)) {
+        setCustomers(customersData);
+      } else if (customersData && Array.isArray(customersData.customers)) {
+        setCustomers(customersData.customers);
+      } else {
+        setCustomers([]);
+      }
     } catch (error) {
       console.error('Error fetching customers:', error);
+      setCustomers([]);
     }
   };
 
@@ -441,7 +450,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
       const orderData = {
         customerName: isWalkIn ? 'POS' : (finalCustomer.customerName || finalCustomer.name || ''),
-        customerPhone: isWalkIn ? 'POS' : (paymentMethod === 'mobile_money' && mpesaPhoneNumber.trim() ? mpesaPhoneNumber.trim() : (finalCustomer.phone || '')),
+        customerPhone: isWalkIn ? null : (paymentMethod === 'mobile_money' && mpesaPhoneNumber.trim() ? mpesaPhoneNumber.trim() : (finalCustomer.phone || null)),
         customerEmail: isWalkIn ? null : (finalCustomer.email || null),
         deliveryAddress: finalDeliveryAddress,
         items: cartItems.map(item => ({
@@ -451,8 +460,12 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         })),
         paymentType: paymentMethod === 'cash' ? 'pay_now' : (paymentMethod === 'pay_on_delivery' ? 'pay_on_delivery' : (paymentMethod === 'mobile_money' ? 'pay_on_delivery' : (paymentMethod === 'card' ? 'pay_now' : 'pay_on_delivery'))),
         paymentMethod: paymentMethod || null,
-        paymentStatus: (paymentMethod === 'mobile_money' && !transactionCode.trim()) ? 'unpaid' : (paymentMethod === 'pay_on_delivery' ? 'unpaid' : (paymentMethod ? 'paid' : 'unpaid')),
-        status: deliveryStatus,
+        paymentStatus: isWalkIn 
+          ? ((paymentMethod === 'cash' || paymentMethod === 'card') ? 'paid' : 'unpaid')
+          : ((paymentMethod === 'mobile_money' && !transactionCode.trim()) ? 'unpaid' : (paymentMethod === 'pay_on_delivery' ? 'unpaid' : (paymentMethod ? 'paid' : 'unpaid'))),
+        status: isWalkIn 
+          ? ((paymentMethod === 'cash' || paymentMethod === 'card') ? 'completed' : 'in_progress') // Walk-in: 'completed' if paid, 'in_progress' if unpaid
+          : deliveryStatus,
         adminOrder: true,
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
@@ -608,8 +621,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         : (finalCustomer?.customerName || finalCustomer?.name || '');
       
       const customerPhoneForOrder = isWalkIn 
-        ? mpesaPhoneNumber.trim() 
-        : (finalCustomer?.phone || mpesaPhoneNumber.trim());
+        ? null
+        : (finalCustomer?.phone || mpesaPhoneNumber.trim() || null);
 
       const orderData = {
         customerName: customerNameForOrder,
@@ -624,7 +637,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         paymentType: 'pay_on_delivery', // Set as pay_on_delivery so prompt-payment endpoint accepts it
         paymentMethod: 'mobile_money',
         paymentStatus: 'unpaid',
-        status: deliveryStatus,
+        status: isWalkIn ? 'in_progress' : deliveryStatus, // Walk-in orders: 'in_progress' if unpaid, will be 'completed' when paid
         adminOrder: true,
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
@@ -639,8 +652,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       const orderId = orderResponse.data.id;
 
       // Now prompt for payment
-      // For walk-in orders, send customerPhone in request body since order.customerPhone might be different
-      const promptPayload = isWalkIn && mpesaPhoneNumber.trim() 
+      // For walk-in orders, send customerPhone in request body if provided
+      const promptPayload = !isWalkIn && mpesaPhoneNumber.trim() 
         ? { customerPhone: mpesaPhoneNumber.trim() }
         : {};
       const promptResponse = await api.post(`/admin/orders/${orderId}/prompt-payment`, promptPayload);
@@ -879,8 +892,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         : (finalCustomer?.customerName || finalCustomer?.name || '');
       
       const customerPhoneForOrder = isWalkIn 
-        ? (finalCustomer?.phone || 'POS')
-        : (finalCustomer?.phone || '');
+        ? null
+        : (finalCustomer?.phone || null);
 
       const orderData = {
         customerName: customerNameForOrder,
@@ -895,7 +908,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         paymentType: 'pay_now',
         paymentMethod: 'card',
         paymentStatus: 'unpaid',
-        status: deliveryStatus,
+        status: isWalkIn ? 'in_progress' : deliveryStatus, // Walk-in orders: 'in_progress' if unpaid, will be 'completed' when paid
         adminOrder: true,
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
@@ -1017,7 +1030,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
   };
 
-  const filteredCustomers = customers.filter(customer => {
+  const filteredCustomers = (Array.isArray(customers) ? customers : []).filter(customer => {
     if (!customerSearch) return true;
     const search = customerSearch.toLowerCase();
     const name = (customer.customerName || customer.name || '').toLowerCase();
@@ -1053,7 +1066,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
       if (response.data?.success && response.data?.customer) {
         // Add new customer to list
-        setCustomers([...customers, response.data.customer]);
+        setCustomers([...(Array.isArray(customers) ? customers : []), response.data.customer]);
         // Select the newly created customer
         setSelectedCustomer(response.data.customer);
         const name = response.data.customer.customerName || response.data.customer.name || 'Unknown';
@@ -1150,8 +1163,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         : (finalCustomer?.customerName || finalCustomer?.name || '');
       
       const customerPhoneForOrder = isWalkIn 
-        ? (finalCustomer?.phone || 'POS')
-        : (finalCustomer?.phone || '');
+        ? null
+        : (finalCustomer?.phone || null);
 
       const orderData = {
         customerName: customerNameForOrder,
@@ -1166,7 +1179,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         paymentType: 'pay_now',
         paymentMethod: 'card',
         paymentStatus: 'unpaid', // Will be updated after PDQ payment
-        status: deliveryStatus,
+        status: isWalkIn ? 'in_progress' : deliveryStatus, // Walk-in orders: 'in_progress' if unpaid, will be 'completed' when paid
         adminOrder: true,
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
@@ -1773,22 +1786,20 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             </Select>
           </FormControl>
 
-          {/* M-Pesa Payment Section */}
-          {paymentMethod === 'mobile_money' && (
+          {/* M-Pesa Payment Section - Hidden for walk-in orders */}
+          {paymentMethod === 'mobile_money' && !isWalkIn && (
             <Box>
               <TextField
                 fullWidth
                 label="Customer Phone Number *"
-                value={mpesaPhoneNumber || (selectedCustomer?.phone && !isWalkIn ? selectedCustomer.phone : '')}
+                value={mpesaPhoneNumber || (selectedCustomer?.phone ? selectedCustomer.phone : '')}
                 onChange={(e) => setMpesaPhoneNumber(e.target.value)}
                 placeholder="e.g., 0712345678 or 254712345678"
                 sx={{ mb: 2 }}
                 helperText={
-                  isWalkIn 
-                    ? "Enter customer's M-Pesa registered phone number (required for walk-in orders)" 
-                    : selectedCustomer?.phone && !isWalkIn 
-                      ? "Customer phone number (can be edited)" 
-                      : "Enter customer's M-Pesa registered phone number"
+                  selectedCustomer?.phone 
+                    ? "Customer phone number (can be edited)" 
+                    : "Enter customer's M-Pesa registered phone number"
                 }
                 required
               />
@@ -1933,7 +1944,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   variant="contained"
                   onClick={() => {
                     const totalAmount = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                    setPdqPaymentData(prev => ({ ...prev, amount: totalAmount.toFixed(2) }));
+                    setPdqPaymentData(prev => ({ ...prev, amount: Math.round(totalAmount) }));
                     setPdqDialogOpen(true);
                   }}
                   disabled={cartItems.length === 0}

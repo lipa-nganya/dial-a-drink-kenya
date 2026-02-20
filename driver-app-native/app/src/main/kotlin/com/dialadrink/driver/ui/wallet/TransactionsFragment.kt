@@ -61,7 +61,10 @@ class TransactionsFragment : Fragment() {
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()?.data
                     if (data != null) {
-                        val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+                        val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
+                            maximumFractionDigits = 0
+                            minimumFractionDigits = 0
+                        }
                         val actualCashAtHand = data.totalCashAtHand ?: 0.0
                         val pendingCashAtHand = data.pendingCashAtHand ?: 0.0
                         val balance = actualCashAtHand + pendingCashAtHand
@@ -79,9 +82,7 @@ class TransactionsFragment : Fragment() {
                             .setMessage(message)
                             .setPositiveButton("Submit Pending Cash At Hand") { _, _ ->
                                 // Navigate to Cash At Hand form tab
-                                (activity as? CashAtHandActivity)?.let { activity ->
-                                    activity.binding.mainViewPager.setCurrentItem(0, true)
-                                }
+                                (activity as? CashAtHandActivity)?.switchToMainTab(0)
                             }
                             .setNegativeButton("Close", null)
                             .show()

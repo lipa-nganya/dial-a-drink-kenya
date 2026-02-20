@@ -85,11 +85,6 @@ const LocationDetails = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [drinks, searchTerm, selectedCategory, selectedSubcategory]);
 
-  // Reset pagination when category or search changes
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedCategory, searchTerm]);
-
   const fetchLocation = async () => {
     try {
       setLocationLoading(true);
@@ -240,6 +235,10 @@ const LocationDetails = () => {
   const displayedDrinks = filteredDrinks.slice(0, itemsToShow);
 
   const formatCurrency = (amount) => {
+    return `KES ${Math.round(Number(amount || 0))}`;
+  };
+  
+  const formatCurrencyOld = (amount) => {
     if (!amount || amount === 0) return 'Free';
     return `KES ${parseFloat(amount).toFixed(0)}`;
   };

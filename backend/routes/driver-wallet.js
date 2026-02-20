@@ -78,7 +78,8 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       }
     }
 
-    const cashSettlements = await db.Transaction.findAll({
+    // Get negative cash_settlement transactions (cash remitted)
+    const cashSettlementsNegative = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'cash_settlement',
@@ -91,7 +92,23 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       ],
       order: [['createdAt', 'DESC']]
     });
-    const orderIdsWithSettlementFromTx = new Set((cashSettlements || []).map(tx => tx.orderId).filter(Boolean));
+    
+    // Get positive cash_settlement transactions (cash added, e.g., from loan recovery)
+    const cashSettlementsPositive = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        status: { [Op.in]: ['completed', 'pending'] },
+        amount: { [Op.gt]: 0 }
+      },
+      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider'],
+      include: [
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress'], required: false }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    const orderIdsWithSettlementFromTx = new Set((cashSettlementsNegative || []).map(tx => tx.orderId).filter(Boolean));
 
     const approvedCashSubmissions = await db.CashSubmission.findAll({
       where: { driverId: driverId, status: 'approved' },
@@ -114,14 +131,19 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     });
     const pendingSubmissionsTotal = pendingCashSubmissions.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0);
 
-    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+    // Calculate cash remitted (negative cash_settlement transactions)
+    const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+    
+    // Calculate cash added (positive cash_settlement transactions, e.g., from loan recovery)
+    const cashAdded = cashSettlementsPositive.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
+    
     // Include approved submissions; for order_payment, skip if already counted via cash_settlement (negative amount)
     const approvedSubmissionsTotal = approvedCashSubmissions.reduce((sum, s) => {
       if (s.submissionType === 'order_payment' && s.details?.orderId != null && orderIdsWithSettlementFromTx.has(s.details.orderId)) return sum;
       return sum + parseFloat(s.amount || 0);
     }, 0);
 
-    const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal;
+    const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal + cashAdded;
 
     // CRITICAL: ALWAYS sync the database value with calculated value to ensure consistency
     // This ensures both admin and driver app show the same value from the database
@@ -165,7 +187,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     }
 
     // Add cash settlement entries (remittances to business and savings withdrawals)
-    cashSettlements.forEach(tx => {
+    // Combine negative and positive cash_settlement transactions for display
+    const allCashSettlements = [...cashSettlementsNegative, ...cashSettlementsPositive].sort((a, b) => 
+      new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    
+    allCashSettlements.forEach(tx => {
       // Check if this is a savings withdrawal by paymentProvider
       // Savings withdrawals have paymentProvider = 'savings_withdrawal_record' or 'mpesa' with notes containing 'Savings withdrawal'
       const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' || 
@@ -187,10 +214,16 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         }
       }
       
+      // Determine entry type based on transaction amount
+      // Negative amounts = cash sent (remitted)
+      // Positive amounts = cash received (e.g., from loan recovery)
+      const txAmount = parseFloat(tx.amount) || 0;
+      const entryType = txAmount < 0 ? 'cash_sent' : 'cash_received';
+      
       entries.push({
-        type: 'cash_sent',
+        type: entryType,
         transactionId: tx.id,
-        amount: Math.abs(parseFloat(tx.amount) || 0), // Make positive for display
+        amount: Math.abs(txAmount), // Make positive for display
         date: tx.transactionDate || tx.createdAt,
         description: description,
         receiptNumber: tx.receiptNumber
@@ -470,13 +503,27 @@ router.post('/:driverId/cash-at-hand/submit', async (req, res) => {
       attributes: ['id', 'totalAmount', 'driverPayAmount']
     });
 
-    const cashSettlements = await db.Transaction.findAll({
+    // Get negative cash_settlement transactions (cash remitted)
+    const cashSettlementsNegative = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'cash_settlement',
         status: 'completed',
         amount: {
           [Op.lt]: 0
+        }
+      },
+      attributes: ['amount']
+    });
+    
+    // Get positive cash_settlement transactions (cash added, e.g., from loan recovery)
+    const cashSettlementsPositive = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        status: 'completed',
+        amount: {
+          [Op.gt]: 0
         }
       },
       attributes: ['amount']
@@ -490,12 +537,16 @@ router.post('/:driverId/cash-at-hand/submit', async (req, res) => {
       return sum + (totalAmount - driverPayAmount);
     }, 0);
 
-    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => {
+    const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => {
       return sum + (parseFloat(tx.amount) || 0);
     }, 0));
+    
+    const cashAdded = cashSettlementsPositive.reduce((sum, tx) => {
+      return sum + (parseFloat(tx.amount) || 0);
+    }, 0);
 
     // Allow negative cash at hand - drivers can go into negative balance (credit)
-    const currentCashAtHand = cashCollected - cashRemitted;
+    const currentCashAtHand = cashCollected - cashRemitted + cashAdded;
 
     // Allow drivers to submit more than they have - they can go into negative balance
     // Removed validation that prevented submitting more than current cash at hand
@@ -767,7 +818,8 @@ router.get('/:driverId', async (req, res) => {
         paymentStatus: tx.paymentStatus,
         receiptNumber: tx.receiptNumber,
         date: tx.transactionDate || tx.createdAt,
-        notes: tx.notes || `Savings withdrawal${tx.phoneNumber ? ` to ${tx.phoneNumber}` : ''}`
+        notes: tx.notes || `Savings withdrawal${tx.phoneNumber ? ` to ${tx.phoneNumber}` : ''}`,
+        paymentProvider: tx.paymentProvider // Include paymentProvider to identify loan/penalty transactions
       }))
     });
   } catch (error) {

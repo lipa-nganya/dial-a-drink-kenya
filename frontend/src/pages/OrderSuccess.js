@@ -681,7 +681,7 @@ const OrderSuccess = () => {
                 Transaction Details
               </Typography>
               <Typography variant="body1" sx={{ fontWeight: 600, mb: 1 }}>
-                Amount: KES {Number(transactionData.amount || 0).toFixed(2)}
+                Amount: KES {Math.round(Number(transactionData.amount || 0))}
               </Typography>
               {transactionData.receiptNumber && (
                 <Typography variant="body2" color="text.secondary">

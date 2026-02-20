@@ -158,15 +158,15 @@ const CapacityPricingManager = ({ capacityPricing = [], onChange }) => {
                   {pricing.originalPrice > pricing.currentPrice ? (
                     <>
                       <Typography variant="body2" sx={{ textDecoration: 'line-through', color: 'text.secondary' }}>
-                        KES {(Number(pricing.originalPrice) || 0).toFixed(2)}
+                        KES {Math.round(Number(pricing.originalPrice) || 0)}
                       </Typography>
                       <Typography variant="h6" sx={{ color: '#FF3366', fontWeight: 'bold' }}>
-                        KES {(Number(pricing.currentPrice) || 0).toFixed(2)}
+                        KES {Math.round(Number(pricing.currentPrice) || 0)}
                       </Typography>
                     </>
                   ) : (
                     <Typography variant="h6" sx={{ color: '#00E0B8', fontWeight: 'bold' }}>
-                      KES {(Number(pricing.currentPrice) || 0).toFixed(2)}
+                      KES {(Number(pricing.currentPrice) || 0)Math.round(}
                     </Typography>
                   )}
                 </Box>

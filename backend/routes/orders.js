@@ -502,10 +502,22 @@ router.post('/', async (req, res) => {
         ? paymentStatus 
         : 'pending';
       
+      // For walk-in orders: never 'pending', use 'in_progress' if unpaid, 'completed' if paid
       // For admin orders, allow setting status if provided, otherwise default to 'pending'
-      const finalOrderStatus = (adminOrder && status && ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'].includes(status))
-        ? status
-        : 'pending';
+      let finalOrderStatus;
+      if (isWalkInOrder) {
+        // Walk-in orders: 'in_progress' if unpaid, 'completed' if paid
+        if (adminOrder && status && ['in_progress', 'completed'].includes(status)) {
+          finalOrderStatus = status;
+        } else {
+          finalOrderStatus = (finalPaymentStatus === 'paid') ? 'completed' : 'in_progress';
+        }
+      } else {
+        // Delivery orders: use provided status or default to 'pending'
+        finalOrderStatus = (adminOrder && status && ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'].includes(status))
+          ? status
+          : 'pending';
+      }
 
       // Generate secure tracking token for customer SMS link
       const trackingToken = crypto.randomBytes(32).toString('hex');
@@ -525,13 +537,16 @@ router.post('/', async (req, res) => {
         return cleaned; // Return cleaned version
       };
       
-      // Only normalize phone if it exists (walk-in orders may have null phone)
-      const normalizedCustomerPhone = customerPhone ? normalizePhoneForStorage(customerPhone) : null;
+      // Only normalize phone if it exists (walk-in orders use "POS" placeholder)
+      // For walk-in orders, use "POS" as placeholder since customerPhone cannot be null in the database
+      const normalizedCustomerPhone = customerPhone 
+        ? normalizePhoneForStorage(customerPhone) 
+        : (isWalkInOrder ? 'POS' : null);
       console.log(`📱 Phone normalization: "${customerPhone}" -> "${normalizedCustomerPhone}"`);
       
       const order = await db.Order.create({
         customerName,
-        customerPhone: normalizedCustomerPhone,
+        customerPhone: normalizedCustomerPhone || (isWalkInOrder ? 'POS' : ''),
         customerEmail,
         deliveryAddress,
         totalAmount: finalTotal,
@@ -868,8 +883,10 @@ router.post('/', async (req, res) => {
       console.error('Error sending notifications:', error);
     }
     
-    // Decrease inventory stock for orders created as completed and paid
-    if (completeOrder.status === 'completed' && completeOrder.paymentStatus === 'paid') {
+    // Decrease inventory stock for completed orders
+    // For walk-in orders, inventory is reduced immediately when order is placed (regardless of payment status)
+    // For delivery orders, inventory is only reduced if payment is completed
+    if (completeOrder.status === 'completed') {
       try {
         const { decreaseInventoryForOrder } = require('../utils/inventory');
         await decreaseInventoryForOrder(completeOrder.id);

@@ -48,8 +48,8 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 
 const formatCurrency = (value) => `KES ${(Number(value || 0)).toLocaleString('en-KE', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0
 })}`;
 
 const formatDateTime = (date) => {

@@ -782,34 +782,44 @@ async function syncPendingTransactions() {
   }
 }
 
-// Background job to process loan deductions
-// This runs every 15 minutes to check for loans that need deduction (every 24 hours)
+// Background job to process loan and penalty deductions
+// This runs every 15 minutes to check for loans and penalties that need deduction
 function startLoanDeductionJob() {
-  console.log('🔄 Starting loan deduction job (runs every 15 minutes)...');
+  console.log('🔄 Starting loan and penalty deduction job (runs every 15 minutes)...');
   
-  const { processLoanDeductions } = require('./utils/loanDeductions');
+  const { processLoanDeductions, processPenaltyDeductions } = require('./utils/loanDeductions');
   
   // Run immediately on startup (after a delay), then every 15 minutes
   setTimeout(async () => {
     try {
-      const result = await processLoanDeductions();
-      if (result.processed > 0) {
-        console.log(`✅ Loan deduction job: Processed ${result.processed} loan(s)`);
+      const loanResult = await processLoanDeductions();
+      if (loanResult.processed > 0) {
+        console.log(`✅ Loan deduction job: Processed ${loanResult.processed} loan(s)`);
+      }
+      
+      const penaltyResult = await processPenaltyDeductions();
+      if (penaltyResult.processed > 0) {
+        console.log(`✅ Penalty deduction job: Processed ${penaltyResult.processed} penalty(ies)`);
       }
     } catch (error) {
-      console.error('❌ Error in loan deduction job:', error);
+      console.error('❌ Error in loan/penalty deduction job:', error);
     }
   }, 30000); // Wait 30 seconds after startup to ensure DB is ready
   
   // Then run every 15 minutes (900000 ms)
   setInterval(async () => {
     try {
-      const result = await processLoanDeductions();
-      if (result.processed > 0) {
-        console.log(`✅ Loan deduction job: Processed ${result.processed} loan(s)`);
+      const loanResult = await processLoanDeductions();
+      if (loanResult.processed > 0) {
+        console.log(`✅ Loan deduction job: Processed ${loanResult.processed} loan(s)`);
+      }
+      
+      const penaltyResult = await processPenaltyDeductions();
+      if (penaltyResult.processed > 0) {
+        console.log(`✅ Penalty deduction job: Processed ${penaltyResult.processed} penalty(ies)`);
       }
     } catch (error) {
-      console.error('❌ Error in loan deduction job:', error);
+      console.error('❌ Error in loan/penalty deduction job:', error);
     }
   }, 900000); // 15 minutes
 }

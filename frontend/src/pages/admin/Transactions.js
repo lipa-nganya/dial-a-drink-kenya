@@ -210,10 +210,9 @@ const Transactions = () => {
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Total Amount</Typography>
           <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
-            KES {filteredTransactions
+            KES {Math.round(filteredTransactions
               .filter(t => t.status === 'completed')
-              .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
-              .toFixed(2)}
+              .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0))}
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
@@ -405,7 +404,7 @@ const Transactions = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366' }}>
-                      KES {Number(transaction.amount).toFixed(2)}
+                      KES {Math.round(Number(transaction.amount))}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -511,7 +510,7 @@ const Transactions = () => {
                                       <strong>Customer Email:</strong> {transaction.order.customerEmail || 'N/A'}
                                     </Typography>
                                     <Typography variant="body2" sx={{ mb: 1 }}>
-                                      <strong>Order Total:</strong> KES {Number(transaction.order.totalAmount || 0).toFixed(2)}
+                                      <strong>Order Total:</strong> KES {Math.round(Number(transaction.order.totalAmount || 0))}
                                     </Typography>
                                     <Typography variant="body2" sx={{ mb: 1 }}>
                                       <strong>Order Status:</strong> {transaction.order.status || 'N/A'}
@@ -587,7 +586,7 @@ const Transactions = () => {
                       <strong>Payment Provider:</strong> {selectedTransaction.paymentProvider || 'N/A'}
                     </Typography>
                     <Typography variant="body2" sx={{ mb: 1.5 }}>
-                      <strong>Amount:</strong> <span style={{ color: '#FF3366', fontWeight: 600 }}>KES {Number(selectedTransaction.amount).toFixed(2)}</span>
+                      <strong>Amount:</strong> <span style={{ color: '#FF3366', fontWeight: 600 }}>KES {Math.round(Number(selectedTransaction.amount))}</span>
                     </Typography>
                     <Box sx={{ mb: 1.5 }}>
                       <strong>Status: </strong>
@@ -652,7 +651,7 @@ const Transactions = () => {
                           <strong>Delivery Address:</strong> {selectedTransaction.order.deliveryAddress || 'N/A'}
                         </Typography>
                         <Typography variant="body2" sx={{ mb: 1.5 }}>
-                          <strong>Order Total:</strong> <span style={{ color: '#FF3366', fontWeight: 600 }}>KES {Number(selectedTransaction.order.totalAmount || 0).toFixed(2)}</span>
+                          <strong>Order Total:</strong> <span style={{ color: '#FF3366', fontWeight: 600 }}>KES {Math.round(Number(selectedTransaction.order.totalAmount || 0))}</span>
                         </Typography>
                         <Typography variant="body2" sx={{ mb: 1.5 }}>
                           <strong>Order Status:</strong> {selectedTransaction.order.status || 'N/A'}

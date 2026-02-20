@@ -1853,13 +1853,13 @@ Welcome aboard! 🎉`;
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                   {deliverySettings.deliveryFeeMode === 'fixed' ? (
                     <>
-                      With Alcohol: KES {deliverySettings.deliveryFeeWithAlcohol.toFixed(2)} | 
-                      Without Alcohol: KES {deliverySettings.deliveryFeeWithoutAlcohol.toFixed(2)}
+                      With Alcohol: KES {Math.round(deliverySettings.deliveryFeeWithAlcohol)} | 
+                      Without Alcohol: KES {Math.round(deliverySettings.deliveryFeeWithoutAlcohol)}
                     </>
                   ) : (
                     <>
-                      With Alcohol: KES {deliverySettings.deliveryFeePerKmWithAlcohol.toFixed(2)}/km | 
-                      Without Alcohol: KES {deliverySettings.deliveryFeePerKmWithoutAlcohol.toFixed(2)}/km
+                      With Alcohol: KES {Math.round(deliverySettings.deliveryFeePerKmWithAlcohol)}/km | 
+                      Without Alcohol: KES {Math.round(deliverySettings.deliveryFeePerKmWithoutAlcohol)}/km
                     </>
                   )}
                 </Typography>
@@ -2067,7 +2067,7 @@ Welcome aboard! 🎉`;
                 {loanSettings.loanDeductionMinutes > 0 && `${loanSettings.loanDeductionMinutes} minute${loanSettings.loanDeductionMinutes > 1 ? 's' : ''}`}
                 {loanSettings.loanDeductionDays === 0 && loanSettings.loanDeductionHours === 0 && loanSettings.loanDeductionMinutes === 0 && '0 minutes'}
                 {' | '}
-                Amount: KES {loanSettings.loanDeductionAmount.toFixed(2)}
+                Amount: KES {Math.round(loanSettings.loanDeductionAmount)}
               </Typography>
               {nextDeductionTime && (
                 <Box sx={{ 

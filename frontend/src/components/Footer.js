@@ -192,13 +192,10 @@ const Footer = () => {
                 • Swipe on Delivery
               </Typography>
               <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
-                • Pay Online - Visa
+                • Pay Online - VISA or Mastercard
               </Typography>
               <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
-                • Pay Online - Mastercard
-              </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
-                • Pay via MPESA
+                • Pay via Mpesa
               </Typography>
             </Box>
           </Grid>

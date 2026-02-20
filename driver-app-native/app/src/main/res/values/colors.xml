@@ -28,5 +28,6 @@
     
     <!-- Form field colors -->
     <color name="form_field_border_light_green">#4CAF50</color>
+    <color name="dropdown_border_green">#4CAF50</color>
 </resources>
 

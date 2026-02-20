@@ -148,7 +148,10 @@ class CashAtHandFormFragment : Fragment() {
         pendingCashAtHand: Double? = null,
         pendingSubmissionsTotal: Double? = null
     ) {
-        val currencyFormat = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("en", "KE"))
+        val currencyFormat = java.text.NumberFormat.getCurrencyInstance(java.util.Locale("en", "KE")).apply {
+            maximumFractionDigits = 0
+            minimumFractionDigits = 0
+        }
         binding.totalCashText.text = currencyFormat.format(actualCashAtHand).replace("KES", "KES")
         val hasPending = (pendingSubmissionsTotal != null && pendingSubmissionsTotal > 0) ||
             (pendingCashAtHand != null)

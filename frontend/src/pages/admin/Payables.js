@@ -170,8 +170,9 @@ const Payables = () => {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-KE', {
       style: 'currency',
-      currency: 'KES',
-      minimumFractionDigits: 2
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+      currency: 'KES'
     }).format(amount || 0);
   };
 

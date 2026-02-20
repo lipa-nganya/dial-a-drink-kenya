@@ -645,7 +645,7 @@ const Transactions = () => {
         <Paper sx={{ p: 2, flex: 1 }}>
           <Typography variant="body2" color="text.secondary">Total Amount (Excludes Tips)</Typography>
           <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
-            KES {displayTransactions
+            KES {Math.round(displayTransactions
               .filter(t => {
                 // Exclude tips
                 if (t.transactionType === 'tip') return false;
@@ -654,8 +654,7 @@ const Transactions = () => {
                 if (t.transactionType === 'delivery_pay' && t.driverWalletId) return false;
                 return t.status === 'completed';
               })
-              .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
-              .toFixed(2)}
+              .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0))}
           </Typography>
         </Paper>
         <Paper sx={{ p: 2, flex: 1 }}>
@@ -1075,7 +1074,7 @@ const Transactions = () => {
                         color: transactionType === 'tip' ? '#FFC107' : '#FF3366'
                       }}
                     >
-                      KES {Number(transaction.amount).toFixed(2)}
+                      KES {Math.round(Number(transaction.amount))}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -1281,7 +1280,7 @@ const Transactions = () => {
                                       <strong>Transaction ID:</strong> #{transaction.id}
                                     </Typography>
                                     <Typography variant="body1" sx={{ mb: 1.5 }}>
-                                      <strong>Amount:</strong> KES {Number(transaction.amount || 0).toFixed(2)}
+                                      <strong>Amount:</strong> KES {Math.round(Number(transaction.amount || 0))}
                                     </Typography>
                                     <Typography variant="body1" sx={{ mb: 1.5 }}>
                                       <strong>Category:</strong> {getTransactionCategory(transactionType)}
@@ -1338,7 +1337,7 @@ const Transactions = () => {
                                           </Typography>
                                         )}
                                         <Typography variant="body1" sx={{ mb: 1.5 }}>
-                                          <strong>Order Total:</strong> KES {Number(transaction.order.totalAmount || 0).toFixed(2)}
+                                          <strong>Order Total:</strong> KES {Math.round(Number(transaction.order.totalAmount || 0))}
                                         </Typography>
                                         <Typography variant="body1" sx={{ mb: 1.5 }}>
                                           <strong>Order Status:</strong> {transaction.order.status || 'N/A'}
@@ -1545,7 +1544,7 @@ const Transactions = () => {
                     </Typography>
                   )}
                   <Typography variant="body1">
-                    <strong>Amount:</strong> KES {Number(selectedTransaction.amount || 0).toFixed(2)}
+                    <strong>Amount:</strong> KES {Math.round(Number(selectedTransaction.amount || 0))}
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="body1"><strong>Status:</strong></Typography>
@@ -1599,7 +1598,7 @@ const Transactions = () => {
                         <Typography variant="body1"><strong>Driver Phone:</strong> {selectedTransaction.order.driver.phoneNumber}</Typography>
                       )}
                       <Typography variant="body1">
-                        <strong>Order Total:</strong> KES {Number(selectedTransaction.order.totalAmount || 0).toFixed(2)}
+                        <strong>Order Total:</strong> KES {Math.round(Number(selectedTransaction.order.totalAmount || 0))}
                       </Typography>
                       <Typography variant="body1">
                         <strong>Order Status:</strong> {selectedTransaction.order.status || 'N/A'}
@@ -1699,7 +1698,7 @@ const Transactions = () => {
                 const orderId = option.id || option;
                 const customerName = option.customerName || 'Unknown';
                 const totalAmount = option.totalAmount || 0;
-                return `Order #${orderId} - ${customerName} (KES ${parseFloat(totalAmount).toFixed(2)})`;
+                return `Order #${orderId} - ${customerName} (KES ${Math.round(parseFloat(totalAmount))})`;
               }}
               value={availableOrders.filter(order => (submissionFormData?.orderIds || []).includes(order.id))}
               onChange={(event, newValue) => {
@@ -1711,7 +1710,7 @@ const Transactions = () => {
                 setSubmissionFormData({
                   ...submissionFormData,
                   orderIds: newValue.map(order => order.id),
-                  amount: totalAmount > 0 ? totalAmount.toFixed(2) : ''
+                  amount: totalAmount > 0 ? Math.round(totalAmount) : ''
                 });
               }}
               loading={loadingOrders}
@@ -1739,7 +1738,7 @@ const Transactions = () => {
                       Order #{option.id} - {option.customerName || 'Unknown'}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      KES {parseFloat(option.totalAmount || 0).toFixed(2)} • {option.status || 'unknown'}
+                      KES {Math.round(parseFloat(option.totalAmount || 0))} • {option.status || 'unknown'}
                     </Typography>
                   </Box>
                 </li>

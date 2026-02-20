@@ -41,11 +41,14 @@
         </LinearLayout>
 
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/itemPriceLayout"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             app:hintTextColor="#FFFFFF"
             app:boxStrokeColor="@color/accent"
+            app:boxStrokeWidth="2dp"
+            app:boxStrokeWidthFocused="2dp"
             app:boxBackgroundColor="@color/paper_dark"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 

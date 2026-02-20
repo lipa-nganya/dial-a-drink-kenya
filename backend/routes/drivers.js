@@ -63,7 +63,8 @@ async function calculateCashAtHand(driverId) {
       } catch (e) {}
     }
 
-    const cashSettlements = await db.Transaction.findAll({
+    // Get negative cash_settlement transactions (cash remitted)
+    const cashSettlementsNegative = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'cash_settlement',
@@ -72,14 +73,27 @@ async function calculateCashAtHand(driverId) {
       },
       attributes: ['amount']
     });
+    
+    // Get positive cash_settlement transactions (cash added, e.g., from loan recovery)
+    const cashSettlementsPositive = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        status: 'completed',
+        amount: { [Op.gt]: 0 }
+      },
+      attributes: ['amount']
+    });
+    
     const approvedSubmissions = await db.CashSubmission.findAll({
       where: { driverId: driverId, status: 'approved' },
       attributes: ['amount']
     });
-    const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+    const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+    const cashAdded = cashSettlementsPositive.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
     const approvedTotal = approvedSubmissions.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0);
 
-    return cashCollected - cashDeductionPayNow - cashRemitted - approvedTotal;
+    return cashCollected - cashDeductionPayNow - cashRemitted - approvedTotal + cashAdded;
   } catch (error) {
     console.error(`Error calculating cash at hand for driver ${driverId}:`, error);
     return 0;
@@ -1211,7 +1225,8 @@ router.get('/', async (req, res) => {
           } catch (e) {}
         }
         
-        const cashSettlements = await db.Transaction.findAll({
+        // Get negative cash_settlement transactions (cash remitted)
+        const cashSettlementsNegative = await db.Transaction.findAll({
           where: {
             driverId: driver.id,
             transactionType: 'cash_settlement',
@@ -1221,15 +1236,27 @@ router.get('/', async (req, res) => {
           attributes: ['amount']
         });
         
+        // Get positive cash_settlement transactions (cash added, e.g., from loan recovery)
+        const cashSettlementsPositive = await db.Transaction.findAll({
+          where: {
+            driverId: driver.id,
+            transactionType: 'cash_settlement',
+            status: 'completed',
+            amount: { [Op.gt]: 0 }
+          },
+          attributes: ['amount']
+        });
+        
         const approvedCashSubmissions = await db.CashSubmission.findAll({
           where: { driverId: driver.id, status: 'approved' },
           attributes: ['amount']
         });
         
-        const cashRemitted = Math.abs(cashSettlements.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+        const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
+        const cashAdded = cashSettlementsPositive.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
         const approvedSubmissionsTotal = approvedCashSubmissions.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0);
         
-        const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal;
+        const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal + cashAdded;
         const storedCashAtHand = parseFloat(driverData.cashAtHand || 0);
         
         // ALWAYS sync database value to ensure consistency between admin and driver app
@@ -1241,7 +1268,7 @@ router.get('/', async (req, res) => {
           await driver.reload();
           const updatedValue = parseFloat(driver.cashAtHand || 0);
           driverData.cashAtHand = updatedValue;
-          console.log(`🔄 [Cash At Hand Sync] Driver ${driver.id}: Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (cashCollected: ${cashCollected}, payNowDeduction: ${cashDeductionPayNow}, cashRemitted: ${cashRemitted}, approvedSubmissions: ${approvedSubmissionsTotal})`);
+          console.log(`🔄 [Cash At Hand Sync] Driver ${driver.id}: Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (cashCollected: ${cashCollected}, payNowDeduction: ${cashDeductionPayNow}, cashRemitted: ${cashRemitted}, cashAdded: ${cashAdded}, approvedSubmissions: ${approvedSubmissionsTotal})`);
         } else {
           // Even if values match, use calculated value to ensure consistency
           driverData.cashAtHand = calculatedCashAtHand;

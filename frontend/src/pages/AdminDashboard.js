@@ -441,7 +441,7 @@ const AdminDashboard = () => {
                         variant="body2"
                         sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
                       >
-                        Total: KES {Number(order.totalAmount).toFixed(2)}
+                        Total: KES {Math.round(Number(order.totalAmount))}
                       </Typography>
                     </Box>
                     <Box 
@@ -511,7 +511,7 @@ const AdminDashboard = () => {
                         color="textSecondary"
                         sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
                       >
-                        KES {Number(drink.price).toFixed(2)}
+                        KES {Math.round(Number(drink.price))}
                       </Typography>
                     </Box>
                     <FormControlLabel

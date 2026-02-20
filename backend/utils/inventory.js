@@ -24,14 +24,32 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
       throw new Error(`Order #${orderId} not found`);
     }
 
-    // Only decrease inventory if order is completed and paid
-    if (order.status !== 'completed' || order.paymentStatus !== 'paid') {
-      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - status: ${order.status}, paymentStatus: ${order.paymentStatus}`);
+    // Check if this is a walk-in order (POS order)
+    const isWalkInOrder = order.deliveryAddress === 'In-Store Purchase' || order.customerPhone === 'POS';
+
+    // For walk-in orders, reduce inventory immediately when order is placed (regardless of payment status)
+    // For delivery orders, only reduce inventory if order is completed and paid
+    if (order.status !== 'completed') {
+      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - status: ${order.status}`);
       return {
         skipped: true,
-        reason: 'order_not_completed_or_paid',
+        reason: 'order_not_completed',
         orderId
       };
+    }
+
+    if (!isWalkInOrder && order.paymentStatus !== 'paid') {
+      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - delivery order not paid (paymentStatus: ${order.paymentStatus})`);
+      return {
+        skipped: true,
+        reason: 'delivery_order_not_paid',
+        orderId
+      };
+    }
+
+    // For walk-in orders, reduce inventory even if payment is pending (items are physically taken)
+    if (isWalkInOrder && order.paymentStatus !== 'paid') {
+      console.log(`📦 Reducing inventory for walk-in Order #${orderId} (paymentStatus: ${order.paymentStatus} - items physically taken)`);
     }
 
     const results = [];

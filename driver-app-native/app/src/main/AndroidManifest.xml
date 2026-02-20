@@ -202,6 +202,12 @@
             android:theme="@style/Theme.DialADrinkDriver" />
         
         <activity
+            android:name=".ui.admin.RiderDetailsActivity"
+            android:parentActivityName=".ui.admin.LoansActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
             android:name=".ui.admin.RequestPaymentActivity"
             android:parentActivityName=".ui.admin.AdminDashboardActivity"
             android:exported="false"
@@ -210,6 +216,12 @@
         <activity
             android:name=".ui.admin.AdminCompletedOrdersActivity"
             android:parentActivityName=".ui.admin.AdminDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.admin.PosCompletedOrdersActivity"
+            android:parentActivityName=".ui.admin.AdminCompletedOrdersActivity"
             android:exported="false"
             android:theme="@style/Theme.DialADrinkDriver" />
         

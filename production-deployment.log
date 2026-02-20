@@ -1,0 +1,114 @@
+🚀 Starting production deployment...
+====================================
+
+--- 1. Git Operations ---
+Current branch: main
+Merging develop into main...
+Already up to date.
+Pushing to main...
+To https://github.com/lipa-nganya/dial-a-drink-kenya.git
+ ! [rejected]        main -> main (non-fast-forward)
+error: failed to push some refs to 'https://github.com/lipa-nganya/dial-a-drink-kenya.git'
+hint: Updates were rejected because the tip of your current branch is behind
+hint: its remote counterpart. Integrate the remote changes (e.g.
+hint: 'git pull ...') before pushing again.
+hint: See the 'Note about fast-forwards' in 'git push --help' for details.
+[1;33m⚠️  Push to main failed. Continuing with deployment...[0m
+
+--- 2. Setting GCloud Project ---
+WARNING: Your active project does not match the quota project in your local Application Default Credentials file. This might result in unexpected quota issues.
+
+To update your Application Default Credentials quota project, use the `gcloud auth application-default set-quota-project` command.
+Updated property [core/project].
+
+--- 3. Database Migrations ---
+Running database migrations for penalties and loans tables...
+[1;33m⚠️  DATABASE_URL not set. Attempting to construct from Cloud SQL...[0m
+[1;33m⚠️  Could not retrieve DB password. Skipping migrations.[0m
+[1;33m⚠️  Please run migrations manually:[0m
+   NODE_ENV=production DATABASE_URL='postgresql://user:pass@/db?host=/cloudsql/dialadrink-production:us-central1:dialadrink-db-prod' node scripts/create-penalties-table-direct.js
+
+--- 4. Backend Deployment ---
+Deploying backend to: deliveryos-production-backend
+Building and deploying backend...
+Creating temporary archive of 6195 file(s) totalling 167.8 MiB before compression.
+Uploading tarball of [.] to [gs://dialadrink-production_cloudbuild/source/1771248223.101816-17306c92970e4f5782cb2f8fe5056528.tgz]
+Created [https://cloudbuild.googleapis.com/v1/projects/dialadrink-production/locations/global/builds/7788326f-c3f7-4def-9af4-abcf681b2aea].
+Logs are available at [ https://console.cloud.google.com/cloud-build/builds/7788326f-c3f7-4def-9af4-abcf681b2aea?project=805803410802 ].
+
+gcloud builds submit only displays logs from Cloud Storage. To view logs from Cloud Logging, run:
+gcloud beta builds submit
+
+Waiting for build to complete. Polling interval: 1 second(s).
+ID                                    CREATE_TIME                DURATION  SOURCE                                                                                               IMAGES                                                             STATUS
+7788326f-c3f7-4def-9af4-abcf681b2aea  2026-02-16T13:25:32+00:00  2M59S     gs://dialadrink-production_cloudbuild/source/1771248223.101816-17306c92970e4f5782cb2f8fe5056528.tgz  gcr.io/dialadrink-production/deliveryos-backend:77a4459 (+2 more)  SUCCESS
+[0;32m✅ Backend deployed: https://deliveryos-production-backend-lssctajjoq-uc.a.run.app[0m
+
+--- 5. Admin Frontend Deployment ---
+Deploying admin frontend to: deliveryos-admin-frontend
+Building and deploying admin frontend...
+Creating temporary archive of 85 file(s) totalling 2.2 MiB before compression.
+Some files were not included in the source upload.
+
+Check the gcloud log [/Users/maria/.config/gcloud/logs/2026.02.16/16.29.37.292671.log] to see which files and the contents of the
+default gcloudignore file used (see `$ gcloud topic gcloudignore` to learn
+more).
+
+Uploading tarball of [.] to [gs://dialadrink-production_cloudbuild/source/1771248577.386345-ce8f05bbf5e54243be331f056389c94c.tgz]
+Created [https://cloudbuild.googleapis.com/v1/projects/dialadrink-production/locations/global/builds/e29d6042-7498-4dab-904f-b0aecd207e4b].
+Logs are available at [ https://console.cloud.google.com/cloud-build/builds/e29d6042-7498-4dab-904f-b0aecd207e4b?project=805803410802 ].
+
+gcloud builds submit only displays logs from Cloud Storage. To view logs from Cloud Logging, run:
+gcloud beta builds submit
+
+Waiting for build to complete. Polling interval: 1 second(s).
+ID                                    CREATE_TIME                DURATION  SOURCE                                                                                               IMAGES                                                           STATUS
+e29d6042-7498-4dab-904f-b0aecd207e4b  2026-02-16T13:29:41+00:00  3M24S     gs://dialadrink-production_cloudbuild/source/1771248577.386345-ce8f05bbf5e54243be331f056389c94c.tgz  gcr.io/dialadrink-production/deliveryos-admin:77a4459 (+2 more)  SUCCESS
+[0;32m✅ Admin frontend deployed: https://deliveryos-admin-frontend-lssctajjoq-uc.a.run.app[0m
+
+--- 6. Customer Frontend Deployment ---
+Deploying customer frontend to: deliveryos-customer-frontend
+Building and deploying customer frontend...
+Creating temporary archive of 165 file(s) totalling 3.1 MiB before compression.
+Some files were not included in the source upload.
+
+Check the gcloud log [/Users/maria/.config/gcloud/logs/2026.02.16/16.34.06.670818.log] to see which files and the contents of the
+default gcloudignore file used (see `$ gcloud topic gcloudignore` to learn
+more).
+
+Uploading tarball of [.] to [gs://dialadrink-production_cloudbuild/source/1771248846.782492-a3f21d4639834efe9e9eac19c7a351ed.tgz]
+Created [https://cloudbuild.googleapis.com/v1/projects/dialadrink-production/locations/global/builds/12b09f72-86eb-4154-afba-1341a979c21b].
+Logs are available at [ https://console.cloud.google.com/cloud-build/builds/12b09f72-86eb-4154-afba-1341a979c21b?project=805803410802 ].
+
+gcloud builds submit only displays logs from Cloud Storage. To view logs from Cloud Logging, run:
+gcloud beta builds submit
+
+Waiting for build to complete. Polling interval: 1 second(s).
+ID                                    CREATE_TIME                DURATION  SOURCE                                                                                               IMAGES                                                              STATUS
+12b09f72-86eb-4154-afba-1341a979c21b  2026-02-16T13:34:12+00:00  2M58S     gs://dialadrink-production_cloudbuild/source/1771248846.782492-a3f21d4639834efe9e9eac19c7a351ed.tgz  gcr.io/dialadrink-production/dialadrink-frontend:77a4459 (+2 more)  SUCCESS
+[0;32m✅ Customer frontend deployed: https://deliveryos-customer-frontend-lssctajjoq-uc.a.run.app[0m
+
+--- 7. Android App Build ---
+Building productionDebug variant...
+Building productionDebug variant...
+./gradlew: line 3: exec: gradle: not found
+[1;33m⚠️  Android build failed. Please build manually.[0m
+[1;33m⚠️  Could not find built APK[0m
+
+====================================
+[0;32m✅ Production Deployment Complete![0m
+====================================
+
+Deployed Services:
+  Backend: https://deliveryos-production-backend-lssctajjoq-uc.a.run.app
+  Admin Frontend: https://deliveryos-admin-frontend-lssctajjoq-uc.a.run.app
+  Customer Frontend: https://deliveryos-customer-frontend-lssctajjoq-uc.a.run.app
+
+Next Steps:
+  1. Verify all services are running correctly
+  2. Test API endpoints
+  3. Test frontend applications
+  4. Install and test Android app (productionDebug APK)
+
+[1;33mNote: Development credentials are maintained in production for testing.[0m
+[1;33mNote: CORS is configured to allow production URLs.[0m

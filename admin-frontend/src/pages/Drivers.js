@@ -836,7 +836,7 @@ const Drivers = () => {
 
     const savings = selectedDriverForWithdrawal?.savings || selectedDriverForWithdrawal?.wallet?.savings || 0;
     if (parseFloat(withdrawalFormData.amount) > parseFloat(savings)) {
-      setError(`Insufficient savings. Available: KES ${parseFloat(savings).toFixed(2)}`);
+      setError(`Insufficient savings. Available: KES ${Math.round(parseFloat(savings))}`);
       return;
     }
 
@@ -1157,7 +1157,7 @@ const Drivers = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2" sx={{ fontWeight: 500, color: colors.textPrimary }}>
-                      KES {parseFloat(cashAtHand).toFixed(2)}
+                      KES {Math.round(parseFloat(cashAtHand))}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -1168,7 +1168,7 @@ const Drivers = () => {
                         color: parseFloat(savings) < 0 ? '#d32f2f' : colors.textPrimary 
                       }}
                     >
-                      KES {parseFloat(savings).toFixed(2)}
+                      KES {Math.round(parseFloat(savings))}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -1180,16 +1180,16 @@ const Drivers = () => {
                         sx={{ fontWeight: 'bold' }}
                       />
                       <Typography variant="caption" color="text.secondary">
-                        Cash at Hand: KES {parseFloat(cashAtHand).toFixed(2)}
+                        Cash at Hand: KES {Math.round(parseFloat(cashAtHand))}
                       </Typography>
                       {creditLimit > 0 && (
                         <>
                           <Typography variant="caption" color="text.secondary">
-                            Credit Limit: KES {parseFloat(creditLimit).toFixed(2)}
+                            Credit Limit: KES {Math.round(parseFloat(creditLimit))}
                           </Typography>
                           {exceeded && (
                             <Typography variant="caption" color="error">
-                              Exceeds by: KES {(parseFloat(cashAtHand) - parseFloat(creditLimit)).toFixed(2)}
+                              Exceeds by: KES {Math.round(parseFloat(cashAtHand) - parseFloat(creditLimit))}
                             </Typography>
                           )}
                         </>

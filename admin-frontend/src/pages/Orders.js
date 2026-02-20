@@ -1453,13 +1453,6 @@ const Orders = () => {
     }
   };
 
-  const handleTabChange = (event, newValue) => {
-    setActiveTab(newValue);
-    if (newValue === 1) {
-      // Route Optimisation tab selected
-      fetchRiderRoutes();
-    }
-  };
 
   const handleRefreshLocations = async () => {
     setRefreshingLocations(true);
@@ -2089,54 +2082,26 @@ const Orders = () => {
               Orders
             </Typography>
           </Box>
-          {activeTab === 0 && (
-            <Button
-              variant="contained"
-              startIcon={<ShoppingCart />}
-              onClick={() => setNewOrderDialogOpen(true)}
-              sx={{
-                backgroundColor: colors.accentText,
-                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                '&:hover': { backgroundColor: '#00C4A3' }
-              }}
-            >
-              NEW ORDER
-            </Button>
-          )}
+          <Button
+            variant="contained"
+            startIcon={<ShoppingCart />}
+            onClick={() => setNewOrderDialogOpen(true)}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': { backgroundColor: '#00C4A3' }
+            }}
+          >
+            NEW ORDER
+          </Button>
         </Box>
         <Typography variant="h6" color="text.secondary">
-          {activeTab === 0 ? 'Manage customer orders and track their status' : 'Optimize rider routes and manage deliveries'}
+          Manage customer orders and track their status
         </Typography>
       </Box>
 
-      {/* Tabs */}
-      <Paper sx={{ mb: 3, backgroundColor: colors.paper }}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          sx={{
-            '& .MuiTab-root': {
-              minHeight: 56,
-              color: colors.textSecondary,
-              '&.Mui-selected': {
-                color: colors.accentText,
-                fontWeight: 600
-              }
-            },
-            '& .MuiTabs-indicator': {
-              backgroundColor: colors.accentText,
-              height: 3
-            }
-          }}
-        >
-          <Tab icon={<Assignment />} iconPosition="start" label="Orders Management" />
-          <Tab icon={<RouteIcon />} iconPosition="start" label="Route Optimisation" />
-        </Tabs>
-      </Paper>
-
-      {/* Orders Management Tab */}
-      {activeTab === 0 && (
-        <Box>
+      {/* Orders Management */}
+      <Box>
       {/* Order Tabs: Completed, Pending, Unassigned */}
       <Paper sx={{ mb: 3, backgroundColor: colors.paper }}>
         <Tabs
@@ -2372,8 +2337,8 @@ const Orders = () => {
                         const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
                         const deliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
                         
-                        orderWithBreakdown.itemsTotal = Number(itemsTotal.toFixed(2));
-                        orderWithBreakdown.deliveryFee = Number(deliveryFee.toFixed(2));
+                        orderWithBreakdown.itemsTotal = Math.round(Number(itemsTotal));
+                        orderWithBreakdown.deliveryFee = Math.round(Number(deliveryFee));
                       }
                       
                       setSelectedOrderForDetail(orderWithBreakdown);
@@ -2421,56 +2386,57 @@ const Orders = () => {
                     <TableCell>
                       <Box>
                         <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366', fontSize: '1rem' }}>
-                          KES {Number(order.totalAmount).toFixed(2)}
+                          KES {Math.round(Number(order.totalAmount))}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
-                          {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
-                        </Typography>
-                        {(() => {
-                          // Calculate profit/loss
-                          const totalAmount = parseFloat(order.totalAmount) || 0;
-                          const deliveryFee = parseFloat(order.deliveryFee) || 0;
-                          const orderItems = order.items || order.orderItems || [];
-                          
-                          let totalPurchaseCost = 0;
-                          orderItems.forEach(item => {
-                            if (item.drink && item.drink.purchasePrice !== null && item.drink.purchasePrice !== undefined) {
-                              const purchasePriceRaw = item.drink.purchasePrice;
-                              const strValue = String(purchasePriceRaw).trim();
-                              if (strValue !== '' && strValue !== 'null' && strValue !== 'undefined') {
-                                const purchasePrice = parseFloat(strValue);
-                                if (!isNaN(purchasePrice) && isFinite(purchasePrice) && purchasePrice >= 0) {
-                                  const quantity = parseInt(item.quantity) || 0;
-                                  totalPurchaseCost += purchasePrice * quantity;
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                            {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
+                          </Typography>
+                          {(() => {
+                            // Calculate profit/loss
+                            const totalAmount = parseFloat(order.totalAmount) || 0;
+                            const deliveryFee = parseFloat(order.deliveryFee) || 0;
+                            const orderItems = order.items || order.orderItems || [];
+                            
+                            let totalPurchaseCost = 0;
+                            orderItems.forEach(item => {
+                              if (item.drink && item.drink.purchasePrice !== null && item.drink.purchasePrice !== undefined) {
+                                const purchasePriceRaw = item.drink.purchasePrice;
+                                const strValue = String(purchasePriceRaw).trim();
+                                if (strValue !== '' && strValue !== 'null' && strValue !== 'undefined') {
+                                  const purchasePrice = parseFloat(strValue);
+                                  if (!isNaN(purchasePrice) && isFinite(purchasePrice) && purchasePrice >= 0) {
+                                    const quantity = parseInt(item.quantity) || 0;
+                                    totalPurchaseCost += purchasePrice * quantity;
+                                  }
                                 }
                               }
+                            });
+                            
+                            const profit = totalAmount - totalPurchaseCost - deliveryFee;
+                            
+                            if (totalPurchaseCost > 0) {
+                              const profitAmount = Math.abs(profit);
+                              const profitLabel = profit >= 0 
+                                ? `PROFIT +KES ${Math.round(profitAmount)}`
+                                : `LOSS -KES ${Math.round(profitAmount)}`;
+                              return (
+                                <Chip
+                                  label={profitLabel}
+                                  size="small"
+                                  sx={{
+                                    backgroundColor: profit >= 0 ? '#4caf50' : '#f44336',
+                                    color: '#ffffff',
+                                    fontWeight: 600,
+                                    fontSize: '0.7rem',
+                                    height: '20px'
+                                  }}
+                                />
+                              );
                             }
-                          });
-                          
-                          const profit = totalAmount - totalPurchaseCost - deliveryFee;
-                          
-                          if (totalPurchaseCost > 0) {
-                            const profitAmount = Math.abs(profit);
-                            const profitLabel = profit >= 0 
-                              ? `PROFIT +KES ${profitAmount.toFixed(2)}`
-                              : `LOSS -KES ${profitAmount.toFixed(2)}`;
-                            return (
-                              <Chip
-                                label={profitLabel}
-                                size="small"
-                                sx={{
-                                  mt: 0.5,
-                                  backgroundColor: profit >= 0 ? '#4caf50' : '#f44336',
-                                  color: '#ffffff',
-                                  fontWeight: 600,
-                                  fontSize: '0.7rem',
-                                  height: '20px'
-                                }}
-                              />
-                            );
-                          }
-                          return null;
-                        })()}
+                            return null;
+                          })()}
+                        </Box>
                       </Box>
                     </TableCell>
                     <TableCell>
@@ -3000,7 +2966,7 @@ const Orders = () => {
                                      driver.status === 'offline' ? 'Off Shift' :
                                      driver.status === 'on_delivery' ? 'On Delivery' :
                                      driver.status || 'Unknown';
-                  const cashAtHand = parseFloat(driver.cashAtHand || 0).toFixed(2);
+                  const cashAtHand = Math.round(parseFloat(driver.cashAtHand || 0));
                   return (
                     <MenuItem key={driver.id} value={driver.id}>
                       <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
@@ -3032,7 +2998,7 @@ const Orders = () => {
                   Customer: {selectedOrder.customerName}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Amount: KES {Number(selectedOrder.totalAmount).toFixed(2)}
+                  Amount: KES {Math.round(Number(selectedOrder.totalAmount))}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Address: {selectedOrder.deliveryAddress}
@@ -3183,7 +3149,7 @@ const Orders = () => {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                         <Typography variant="body2" sx={{ color: colors.textPrimary }}>
-                          <strong>Current delivery fee:</strong> KES {Number(selectedOrderForDetail.deliveryFee ?? 0).toFixed(2)}
+                          <strong>Current delivery fee:</strong> KES {Math.round(Number(selectedOrderForDetail.deliveryFee ?? 0))}
                         </Typography>
                         {recentlyUpdatedInOrderDetail.deliveryFee && (
                           <CheckCircle sx={{ color: '#2e7d32', fontSize: 20 }} aria-label="Updated" />
@@ -3192,7 +3158,7 @@ const Orders = () => {
                           <IconButton
                             size="small"
                             onClick={() => {
-                              setNewDeliveryFee(Number(selectedOrderForDetail.deliveryFee ?? 0).toFixed(2));
+                              setNewDeliveryFee(Math.round(Number(selectedOrderForDetail.deliveryFee ?? 0)));
                               setEditDeliveryFeeDialogOpen(true);
                             }}
                             sx={{ color: colors.accentText }}
@@ -3266,7 +3232,7 @@ const Orders = () => {
                                 disabled={applyingTerritoryFee}
                                 sx={{ fontSize: '0.8rem' }}
                               >
-                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – CBD (KES ${feeCBD.toFixed(2)})`}
+                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – CBD (KES ${Math.round(feeCBD)})`}
                               </Button>
                             )}
                             {feeRuaka != null && (
@@ -3277,7 +3243,7 @@ const Orders = () => {
                                 disabled={applyingTerritoryFee}
                                 sx={{ fontSize: '0.8rem' }}
                               >
-                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – Ruaka (KES ${feeRuaka.toFixed(2)})`}
+                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – Ruaka (KES ${Math.round(feeRuaka)})`}
                               </Button>
                             )}
                             <Button
@@ -3287,7 +3253,7 @@ const Orders = () => {
                               disabled={applyingTerritoryFee}
                               sx={{ fontSize: '0.8rem' }}
                             >
-                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – With alcohol (KES ${Number(adminDeliveryFees.deliveryFeeWithAlcohol).toFixed(2)})`}
+                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – With alcohol (KES ${Math.round(Number(adminDeliveryFees.deliveryFeeWithAlcohol))})`}
                             </Button>
                             <Button
                               variant="outlined"
@@ -3296,7 +3262,7 @@ const Orders = () => {
                               disabled={applyingTerritoryFee}
                               sx={{ fontSize: '0.8rem' }}
                             >
-                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – Without alcohol (KES ${Number(adminDeliveryFees.deliveryFeeWithoutAlcohol).toFixed(2)})`}
+                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – Without alcohol (KES ${Math.round(Number(adminDeliveryFees.deliveryFeeWithoutAlcohol))})`}
                             </Button>
                           </Box>
                         );
@@ -3333,7 +3299,7 @@ const Orders = () => {
                           </Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
-                              KES {Number(item.price || 0).toFixed(2)}
+                              KES {Math.round(Number(item.price || 0))}
                             </Typography>
                             {selectedOrderForDetail.status !== 'completed' && 
                              selectedOrderForDetail.status !== 'cancelled' && 
@@ -3342,7 +3308,7 @@ const Orders = () => {
                                 size="small"
                                 onClick={() => {
                                   setEditingItem(item);
-                                  setNewPrice(Number(item.price || 0).toFixed(2));
+                                  setNewPrice(Math.round(Number(item.price || 0)));
                                   setEditPriceDialogOpen(true);
                                 }}
                                 sx={{ color: colors.accentText }}
@@ -3381,7 +3347,7 @@ const Orders = () => {
                               selectedOrderForDetail.items.reduce((sum, item) => 
                                 sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
                               );
-                            return Number(itemsTotal).toFixed(2);
+                            return Math.round(Number(itemsTotal));
                           })()}
                         </Typography>
                       </Box>
@@ -3393,7 +3359,7 @@ const Orders = () => {
                           <strong>Delivery Fee:</strong>
                         </Typography>
                         <Typography variant="body1">
-                          KES {Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2)}
+                          KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
                         </Typography>
                       </Box>
                     )}
@@ -3404,7 +3370,7 @@ const Orders = () => {
                           <strong>Tip:</strong>
                         </Typography>
                         <Typography variant="body1">
-                          KES {Number(selectedOrderForDetail.tipAmount).toFixed(2)}
+                          KES {Math.round(Number(selectedOrderForDetail.tipAmount))}
                         </Typography>
                       </Box>
                     )}
@@ -3415,7 +3381,7 @@ const Orders = () => {
                         <strong>Total Amount:</strong>
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366' }}>
-                        KES {Number(selectedOrderForDetail.totalAmount).toFixed(2)}
+                        KES {Math.round(Number(selectedOrderForDetail.totalAmount))}
                       </Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -3466,7 +3432,7 @@ const Orders = () => {
                           <strong>Delivery Distance:</strong>
                         </Typography>
                         <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                          {Number(selectedOrderForDetail.deliveryDistance).toFixed(2)} km
+                          {Number(selectedOrderForDetail.deliveryDistance).toFixed(1)} km
                         </Typography>
                       </Box>
                     )}
@@ -3610,7 +3576,7 @@ const Orders = () => {
                 <strong>Item:</strong> {editingItem.drink?.name || 'Unknown Item'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Current Price: KES {Number(editingItem.price || 0).toFixed(2)}
+                Current Price: KES {Math.round(Number(editingItem.price || 0))}
               </Typography>
               <TextField
                 autoFocus
@@ -3681,7 +3647,7 @@ const Orders = () => {
           {selectedOrderForDetail && (
             <Box sx={{ pt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Current Delivery Fee: KES {Number(selectedOrderForDetail.deliveryFee || 0).toFixed(2)}
+                Current Delivery Fee: KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
               </Typography>
               <TextField
                 autoFocus
@@ -3831,7 +3797,7 @@ const Orders = () => {
                 Customer: {selectedOrderForPayment.customerName || 'N/A'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Amount: <strong>KES {parseFloat(selectedOrderForPayment.totalAmount || 0).toFixed(2)}</strong>
+                Amount: <strong>KES {Math.round(parseFloat(selectedOrderForPayment.totalAmount || 0))}</strong>
               </Typography>
               <TextField
                 autoFocus
@@ -3901,8 +3867,6 @@ const Orders = () => {
           </Button>
         </DialogActions>
       </Dialog>
-        </Box>
-      )}
 
       {/* New Order Dialog - Outside conditional blocks so it can appear from any tab */}
       <NewOrderDialog
@@ -3947,910 +3911,6 @@ const Orders = () => {
           {toastMessage}
         </Alert>
       </Snackbar>
-
-      {/* Route Optimisation Tab */}
-      {activeTab === 1 && (
-        <Box>
-          {routesLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <Box>
-              {/* View Mode Switcher and Search */}
-              <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-                <ToggleButtonGroup
-                  value={routeViewMode}
-                  exclusive
-                  onChange={(e, newMode) => newMode && setRouteViewMode(newMode)}
-                  sx={{
-                    '& .MuiToggleButton-root': {
-                      color: colors.textSecondary,
-                      borderColor: colors.border,
-                      '&.Mui-selected': {
-                        backgroundColor: colors.accentText,
-                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                        '&:hover': {
-                          backgroundColor: '#00C4A3'
-                        }
-                      }
-                    }
-                  }}
-                >
-                  <ToggleButton value="list">
-                    <List sx={{ mr: 1 }} />
-                    List View
-                  </ToggleButton>
-                  <ToggleButton value="map">
-                    <Map sx={{ mr: 1 }} />
-                    Map View
-                  </ToggleButton>
-                </ToggleButtonGroup>
-
-                {routeViewMode === 'map' && (
-                  <Tooltip title="Refresh rider locations">
-                    <IconButton
-                      onClick={handleRefreshLocations}
-                      disabled={refreshingLocations}
-                      sx={{
-                        color: colors.accentText,
-                        '&:hover': {
-                          backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)',
-                        },
-                      }}
-                    >
-                      {refreshingLocations ? <CircularProgress size={24} /> : <Refresh />}
-                    </IconButton>
-                  </Tooltip>
-                )}
-
-                <Button
-                  variant="contained"
-                  startIcon={optimizing ? <CircularProgress size={20} /> : <AutoAwesome />}
-                  onClick={handleOptimizeRoutes}
-                  disabled={optimizing || isRouteOptimized()}
-                  sx={{
-                    backgroundColor: colors.accentText,
-                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                    '&:hover': {
-                      backgroundColor: '#00C4A3'
-                    },
-                    '&:disabled': {
-                      backgroundColor: colors.border,
-                      color: colors.textSecondary
-                    }
-                  }}
-                >
-                  {optimizing ? 'Optimizing...' : isRouteOptimized() ? 'Optimized' : 'Optimize Routes'}
-                </Button>
-
-                <Box sx={{ flex: 1, minWidth: '500px' }}>
-                  <Autocomplete
-                    multiple
-                    options={allRiders}
-                    getOptionLabel={(option) => {
-                      const status = option.status || 'offline';
-                      const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
-                      return `${option.name} (${option.phoneNumber}) - ${statusLabel}`;
-                    }}
-                    value={selectedRiders}
-                    onChange={(event, newValue) => {
-                      if (newValue.length <= 3) {
-                        setSelectedRiders(newValue);
-                        if (newValue.length === 0) {
-                          setRiderRoutes(allRiderRoutes);
-                        } else {
-                          const selectedIds = newValue.map(rider => rider.id);
-                          const existingRoutes = allRiderRoutes.filter(route => selectedIds.includes(route.rider.id));
-                          const ridersWithoutRoutes = newValue.filter(rider => 
-                            !allRiderRoutes.some(route => route.rider.id === rider.id)
-                          );
-                          const newRoutes = ridersWithoutRoutes.map(rider => ({
-                            rider,
-                            orders: []
-                          }));
-                          setRiderRoutes([...existingRoutes, ...newRoutes]);
-                        }
-                      }
-                    }}
-                    filterOptions={(options, params) => {
-                      const { inputValue } = params;
-                      const filtered = options.filter(option => {
-                        const searchTerm = inputValue.toLowerCase();
-                        const name = (option.name || '').toLowerCase();
-                        const phone = (option.phoneNumber || '').toLowerCase();
-                        const status = (option.status || '').toLowerCase();
-                        return name.includes(searchTerm) || phone.includes(searchTerm) || status.includes(searchTerm);
-                      });
-                      return filtered;
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Search and Select Riders (Max 3)"
-                        placeholder="Type to search riders..."
-                        sx={{
-                          width: '100%',
-                          minWidth: '500px',
-                          '& .MuiOutlinedInput-root': {
-                            '& fieldset': {
-                              borderColor: colors.accentText,
-                            },
-                            '&:hover fieldset': {
-                              borderColor: '#00C4A3',
-                            },
-                            '&.Mui-focused fieldset': {
-                              borderColor: colors.accentText,
-                            },
-                          },
-                          '& .MuiInputBase-input': {
-                            color: colors.textPrimary,
-                          },
-                          '& .MuiInputLabel-root': {
-                            color: colors.textSecondary,
-                          },
-                          '& .MuiInputLabel-root.Mui-focused': {
-                            color: colors.accentText,
-                          },
-                        }}
-                      />
-                    )}
-                    renderTags={(value, getTagProps) => 
-                      value.map((option, index) => (
-                        <Chip
-                          label={`${option.name} (${option.phoneNumber})`}
-                          {...getTagProps({ index })}
-                          onDelete={() => {
-                            const updatedSelectedRiders = selectedRiders.filter(rider => rider.id !== option.id);
-                            setSelectedRiders(updatedSelectedRiders);
-                            if (updatedSelectedRiders.length === 0) {
-                              setRiderRoutes(allRiderRoutes);
-                            } else {
-                              const selectedIds = updatedSelectedRiders.map(rider => rider.id);
-                              const existingRoutes = allRiderRoutes.filter(route => selectedIds.includes(route.rider.id));
-                              const ridersWithoutRoutes = updatedSelectedRiders.filter(rider => 
-                                !allRiderRoutes.some(route => route.rider.id === rider.id)
-                              );
-                              const newRoutes = ridersWithoutRoutes.map(rider => ({
-                                rider,
-                                orders: []
-                              }));
-                              setRiderRoutes([...existingRoutes, ...newRoutes]);
-                            }
-                          }}
-                          sx={{
-                            backgroundColor: colors.accentText,
-                            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                            '& .MuiChip-deleteIcon': {
-                              color: isDarkMode ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)',
-                              '&:hover': {
-                                color: isDarkMode ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)',
-                              },
-                            },
-                          }}
-                        />
-                      ))
-                    }
-                    filterSelectedOptions
-                    noOptionsText="No riders found"
-                    getOptionDisabled={() => selectedRiders.length >= 3}
-                  />
-                </Box>
-              </Box>
-
-              {routeViewMode === 'map' ? (
-                // Map View
-                <Box sx={{ height: '600px', width: '100%', position: 'relative', mb: 3 }}>
-                  {process.env.REACT_APP_GOOGLE_MAPS_API_KEY && isMapLoaded ? (
-                    <RouteMapView
-                      riderRoutes={riderRoutes}
-                      stops={stops}
-                      riderLocations={riderLocations}
-                      mapCenter={mapCenter}
-                      onMapCenterChange={setMapCenter}
-                      colors={colors}
-                      isDarkMode={isDarkMode}
-                      formatDateTime={formatDateTime}
-                      getOrderStatusChipProps={getOrderStatusChipProps}
-                      getPaymentStatusChipProps={getPaymentStatusChipProps}
-                    />
-                  ) : process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? (
-                    <Paper sx={{ p: 4, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <CircularProgress sx={{ mb: 2 }} />
-                      <Typography variant="h6" color="text.secondary">
-                        Loading Map...
-                      </Typography>
-                    </Paper>
-                  ) : (
-                    <Paper sx={{ p: 4, textAlign: 'center', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                      <Map sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                      <Typography variant="h6" color="text.secondary">
-                        Google Maps API Key Required
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                        Please add REACT_APP_GOOGLE_MAPS_API_KEY to your .env file to enable Map View
-                      </Typography>
-                    </Paper>
-                  )}
-                </Box>
-              ) : riderRoutes.length === 0 ? (
-                <Paper sx={{ p: 4, textAlign: 'center' }}>
-                  <LocalShipping sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-                  <Typography variant="h6" color="text.secondary">
-                    No routes found
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                    {selectedRiders.length > 0 
-                      ? 'No routes match the selected riders'
-                      : 'Routes will appear here when riders have assigned orders'}
-                  </Typography>
-                </Paper>
-              ) : (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    gap: 3,
-                    width: '100%',
-                    alignItems: 'stretch'
-                  }}
-                >
-                  {riderRoutes.map((route) => {
-                    // Build timeline items (orders and stops combined)
-                    const timelineItems = [];
-                    const riderStops = stops[route.rider.id] || [];
-                    
-                    route.orders.forEach((order, orderIndex) => {
-                      timelineItems.push({ type: 'order', data: order, orderIndex });
-                      
-                      const stopsAfterThisOrder = riderStops.filter(stopItem => 
-                        stopItem.insertAfterIndex === orderIndex
-                      );
-                      stopsAfterThisOrder.forEach((stopItem, stopItemIndex) => {
-                        const originalIndex = riderStops.findIndex(s => s === stopItem);
-                        timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex });
-                      });
-                    });
-                    
-                    const stopsAfterLastOrder = riderStops.filter(stopItem => 
-                      stopItem.insertAfterIndex === -1
-                    );
-                    stopsAfterLastOrder.forEach(stopItem => {
-                      const originalIndex = riderStops.findIndex(s => s === stopItem);
-                      timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex });
-                    });
-
-                    return (
-                      <Box
-                        key={route.rider.id}
-                        sx={{
-                          flex: '1 1 0',
-                          minWidth: 0,
-                          display: 'flex',
-                          transition: 'flex 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                        }}
-                      >
-                        <Card 
-                          sx={{ 
-                            backgroundColor: colors.paper, 
-                            width: '100%', 
-                            display: 'flex', 
-                            flexDirection: 'column',
-                            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
-                          }}
-                        >
-                          <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'visible' }}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 2 }}>
-                              <LocalShipping sx={{ fontSize: 32, color: colors.accentText }} />
-                              <Box sx={{ flex: 1 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                  <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                                    {route.rider.name}
-                                  </Typography>
-                                  {route.rider.status && (
-                                    <Chip
-                                      label={
-                                        route.rider.status === 'active' ? 'On Shift' :
-                                        route.rider.status === 'offline' ? 'Off Shift' :
-                                        route.rider.status === 'on_delivery' ? 'On Delivery' :
-                                        route.rider.status === 'inactive' ? 'Inactive' :
-                                        route.rider.status
-                                      }
-                                      size="small"
-                                      color={
-                                        route.rider.status === 'active' ? 'success' :
-                                        route.rider.status === 'offline' ? 'error' :
-                                        route.rider.status === 'on_delivery' ? 'warning' :
-                                        'default'
-                                      }
-                                      sx={{
-                                        height: 20,
-                                        fontSize: '0.7rem',
-                                        fontWeight: 600
-                                      }}
-                                    />
-                                  )}
-                                </Box>
-                                <Typography variant="body2" color="text.secondary">
-                                  {route.rider.phoneNumber} • {route.orders.length} order{route.orders.length !== 1 ? 's' : ''}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {riderStops.length} stop{riderStops.length !== 1 ? 's' : ''}
-                                </Typography>
-                              </Box>
-                              <IconButton
-                                size="small"
-                                onClick={() => {
-                                  const updatedSelectedRiders = selectedRiders.filter(rider => rider.id !== route.rider.id);
-                                  setSelectedRiders(updatedSelectedRiders);
-                                  if (updatedSelectedRiders.length === 0) {
-                                    setRiderRoutes(allRiderRoutes);
-                                  } else {
-                                    const selectedIds = updatedSelectedRiders.map(rider => rider.id);
-                                    const existingRoutes = allRiderRoutes.filter(routeItem => selectedIds.includes(routeItem.rider.id));
-                                    const ridersWithoutRoutes = updatedSelectedRiders.filter(rider => 
-                                      !allRiderRoutes.some(routeItem => routeItem.rider.id === rider.id)
-                                    );
-                                    const newRoutes = ridersWithoutRoutes.map(rider => ({
-                                      rider,
-                                      orders: []
-                                    }));
-                                    setRiderRoutes([...existingRoutes, ...newRoutes]);
-                                  }
-                                }}
-                                sx={{
-                                  color: colors.textSecondary,
-                                  '&:hover': {
-                                    color: colors.error,
-                                    backgroundColor: isDarkMode ? 'rgba(255, 51, 102, 0.1)' : 'rgba(255, 51, 102, 0.05)',
-                                  },
-                                }}
-                              >
-                                <Close />
-                              </IconButton>
-                            </Box>
-                            <Divider sx={{ mb: 3 }} />
-                            
-                            <Box sx={{ mb: 2, px: 1 }}>
-                              <Typography 
-                                variant="caption" 
-                                color="text.secondary" 
-                                sx={{ 
-                                  fontStyle: 'italic',
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 0.5,
-                                  fontSize: '0.75rem'
-                                }}
-                              >
-                                <LocalShipping sx={{ fontSize: 14 }} />
-                                Click and hold an order or stop card to reassign it to another rider
-                              </Typography>
-                            </Box>
-                            
-                            <Box 
-                              sx={{ 
-                                position: 'relative', 
-                                flexGrow: 1,
-                                transition: 'all 0.3s ease',
-                                opacity: dragOverRider === route.rider.id ? 1 : 1,
-                                backgroundColor: dragOverRider === route.rider.id 
-                                  ? (isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)')
-                                  : 'transparent',
-                                borderRadius: dragOverRider === route.rider.id ? 2 : 0,
-                                border: dragOverRider === route.rider.id 
-                                  ? `2px dashed ${colors.accentText}` 
-                                  : '2px solid transparent',
-                                p: dragOverRider === route.rider.id ? 2 : 0,
-                                overflow: 'visible', // Ensure buttons are visible
-                                m: dragOverRider === route.rider.id ? -2 : 0
-                              }}
-                              onDragOver={(e) => {
-                                e.preventDefault();
-                                if ((draggedOrder || draggedStop) && 
-                                    (!draggedOrder || draggedOrder.driverId !== route.rider.id) &&
-                                    (!draggedStop || draggedStop.riderId !== route.rider.id)) {
-                                  setDragOverRider(route.rider.id);
-                                }
-                              }}
-                              onDragLeave={() => {
-                                setDragOverRider(null);
-                              }}
-                              onDrop={async (e) => {
-                                e.preventDefault();
-                                if (draggedOrder) {
-                                  // Only reassign if the order is being moved to a different rider
-                                  if (draggedOrder.driverId !== route.rider.id) {
-                                    try {
-                                      await api.patch(`/admin/orders/${draggedOrder.id}/driver`, {
-                                        driverId: route.rider.id
-                                      });
-                                      // Fetch fresh data from backend to avoid duplicates
-                                      await fetchRiderRoutes();
-                                    } catch (error) {
-                                      console.error('Error reassigning order:', error);
-                                      setError(error.response?.data?.error || 'Failed to reassign order');
-                                    }
-                                  }
-                                  // If same rider, no action needed (order stays in place)
-                                } else if (draggedStop) {
-                                  // Move stop to this rider (same or different)
-                                  const { riderId: oldRiderId, stopIndex } = draggedStop;
-                                  const stopToMove = stops[oldRiderId]?.[stopIndex];
-                                  
-                                  if (stopToMove && stopToMove.stop?.id) {
-                                    try {
-                                      // Calculate new sequence (count of stops at insertAfterIndex -1 for new rider)
-                                      const newRiderStops = stops[route.rider.id] || [];
-                                      const stopsAtEnd = newRiderStops.filter(s => s.insertAfterIndex === -1);
-                                      const newSequence = stopsAtEnd.length;
-                                      
-                                      // Update in database
-                                      await api.patch(`/admin/stops/${stopToMove.stop.id}`, {
-                                        driverId: route.rider.id,
-                                        insertAfterIndex: -1,
-                                        sequence: newSequence
-                                      });
-                                      
-                                      // Update local state
-                                      setStops(prev => {
-                                        const newStops = { ...prev };
-                                        // Remove from old rider
-                                        newStops[oldRiderId] = newStops[oldRiderId].filter((_, idx) => idx !== stopIndex);
-                                        if (newStops[oldRiderId].length === 0) {
-                                          delete newStops[oldRiderId];
-                                        }
-                                        // Add to new rider
-                                        if (!newStops[route.rider.id]) {
-                                          newStops[route.rider.id] = [];
-                                        }
-                                        newStops[route.rider.id].push({
-                                          ...stopToMove,
-                                          insertAfterIndex: -1
-                                        });
-                                        return newStops;
-                                      });
-                                      
-                                      // Refresh to ensure consistency
-                                      await fetchRiderRoutes();
-                                    } catch (error) {
-                                      console.error('Error moving stop:', error);
-                                      setError(error.response?.data?.error || 'Failed to move stop');
-                                    }
-                                  }
-                                }
-                                setDraggedOrder(null);
-                                setDraggedStop(null);
-                                setDragOverRider(null);
-                              }}
-                            >
-                              {timelineItems.length === 0 ? (
-                                <Box sx={{ py: 3, textAlign: 'center' }}>
-                                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', mb: 2 }}>
-                                    No active orders assigned
-                                  </Typography>
-                                  <Button
-                                    variant="outlined"
-                                    startIcon={<Add />}
-                                    onClick={() => {
-                                      setSelectedRiderForStop(route.rider.id);
-                                      setSelectedOrderIndexForStop(-1);
-                                      setStopDialogOpen(true);
-                                    }}
-                                    sx={{
-                                      borderColor: colors.accentText,
-                                      color: colors.accentText,
-                                      '&:hover': {
-                                        borderColor: colors.accentText,
-                                        backgroundColor: isDarkMode 
-                                          ? 'rgba(0, 224, 184, 0.1)' 
-                                          : 'rgba(0, 224, 184, 0.05)'
-                                      }
-                                    }}
-                                  >
-                                    Add Stop
-                                  </Button>
-                                </Box>
-                              ) : (
-                                <>
-                                  {timelineItems.map((item, itemIndex) => {
-                                    if (item.type === 'order') {
-                                      const order = item.data;
-                                      const statusChip = getOrderStatusChipProps(order.status);
-                                      const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
-                                      const isDragging = draggedOrder?.id === order.id;
-                                      
-                                      return (
-                                        <React.Fragment key={`order-${order.id}`}>
-                                          <Box 
-                                            sx={{ 
-                                              position: 'relative', 
-                                              mb: 4,
-                                              ml: 5, // Add left margin for down button
-                                              mr: 5, // Add right margin for up button
-                                              opacity: isDragging ? 0.5 : 1,
-                                              cursor: 'grab',
-                                              '&:active': {
-                                                cursor: 'grabbing'
-                                              },
-                                              transition: 'opacity 0.2s ease, transform 0.2s ease',
-                                              transform: isDragging ? 'scale(0.98)' : 'scale(1)'
-                                            }}
-                                            draggable
-                                            onDragStart={(e) => {
-                                              setDraggedOrder(order);
-                                              e.dataTransfer.effectAllowed = 'move';
-                                              e.dataTransfer.setData('application/json', JSON.stringify(order));
-                                            }}
-                                            onDragEnd={() => {
-                                              setDraggedOrder(null);
-                                              setDragOverRider(null);
-                                            }}
-                                          >
-                                            <Card 
-                                              variant="outlined" 
-                                              sx={{ 
-                                                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.05)' : 'rgba(0, 224, 184, 0.02)',
-                                                borderColor: isDarkMode ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.12)',
-                                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                                                userSelect: 'none',
-                                                transition: 'all 0.2s ease',
-                                                '&:hover': {
-                                                  boxShadow: isDragging ? '0 2px 8px rgba(0, 0, 0, 0.1)' : `0 4px 12px rgba(0, 224, 184, 0.2)`,
-                                                  transform: isDragging ? 'none' : 'translateY(-2px)'
-                                                }
-                                              }}
-                                            >
-                                              <CardContent>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
-                                                  <Box sx={{ flex: 1 }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                                                      Order #{order.id}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                                                      {order.customerName}
-                                                    </Typography>
-                                                  </Box>
-                                                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                                                    <Chip
-                                                      {...statusChip}
-                                                      size="small"
-                                                    />
-                                                    <Chip
-                                                      {...paymentStatusChip}
-                                                      size="small"
-                                                    />
-                                                  </Box>
-                                                </Box>
-                                                {order.deliveryAddress && (
-                                                  <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2, gap: 0.5, width: '100%' }}>
-                                                    <LocationOn fontSize="small" sx={{ color: colors.textSecondary, flexShrink: 0 }} />
-                                                    <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-                                                      {order.deliveryAddress}
-                                                    </Typography>
-                                                  </Box>
-                                                )}
-                                                
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 2 }}>
-                                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                                    <AccessTime fontSize="small" sx={{ color: colors.textSecondary }} />
-                                                    <Typography variant="caption" color="text.secondary">
-                                                      {formatDateTime(order.createdAt)}
-                                                    </Typography>
-                                                  </Box>
-                                                  <Typography variant="body2" sx={{ fontWeight: 600, color: colors.accentText }}>
-                                                    KES {parseFloat(order.totalAmount || 0).toFixed(2)}
-                                                  </Typography>
-                                                </Box>
-                                                
-                                                {order.items && order.items.length > 0 && (
-                                                  <Box sx={{ mt: 2 }}>
-                                                    <Typography variant="caption" color="text.secondary">
-                                                      {order.items.length} item{order.items.length !== 1 ? 's' : ''}
-                                                    </Typography>
-                                                  </Box>
-                                                )}
-                                              </CardContent>
-                                            </Card>
-                                            <IconButton
-                                              size="small"
-                                              onClick={() => handleMoveOrder(route.rider.id, order.id, 'down')}
-                                              disabled={item.orderIndex === route.orders.length - 1}
-                                              sx={{
-                                                position: 'absolute',
-                                                left: -45,
-                                                top: '50%',
-                                                transform: 'translateY(-50%)',
-                                                p: 0.75,
-                                                color: colors.textSecondary,
-                                                backgroundColor: colors.paper,
-                                                border: `1px solid ${colors.border}`,
-                                                zIndex: 10,
-                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                                '&:hover': {
-                                                  color: colors.accentText,
-                                                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)',
-                                                  borderColor: colors.accentText
-                                                },
-                                                '&:disabled': {
-                                                  color: colors.border,
-                                                  opacity: 0.5
-                                                }
-                                              }}
-                                            >
-                                              <KeyboardArrowDown fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                              size="small"
-                                              onClick={() => handleMoveOrder(route.rider.id, order.id, 'up')}
-                                              disabled={item.orderIndex === 0}
-                                              sx={{
-                                                position: 'absolute',
-                                                right: -45,
-                                                top: '50%',
-                                                transform: 'translateY(-50%)',
-                                                p: 0.75,
-                                                color: colors.textSecondary,
-                                                backgroundColor: colors.paper,
-                                                border: `1px solid ${colors.border}`,
-                                                zIndex: 10,
-                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                                '&:hover': {
-                                                  color: colors.accentText,
-                                                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)',
-                                                  borderColor: colors.accentText
-                                                },
-                                                '&:disabled': {
-                                                  color: colors.border,
-                                                  opacity: 0.5
-                                                }
-                                              }}
-                                            >
-                                              <KeyboardArrowUp fontSize="small" />
-                                            </IconButton>
-                                          </Box>
-                                          
-                                          {item.orderIndex < route.orders.length - 1 && (
-                                            <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-                                              <Button
-                                                variant="outlined"
-                                                startIcon={<Add />}
-                                                onClick={() => {
-                                                  setSelectedRiderForStop(route.rider.id);
-                                                  setSelectedOrderIndexForStop(item.orderIndex);
-                                                  setStopDialogOpen(true);
-                                                }}
-                                                sx={{
-                                                  borderColor: colors.accentText,
-                                                  color: colors.accentText,
-                                                  '&:hover': {
-                                                    borderColor: colors.accentText,
-                                                    backgroundColor: isDarkMode 
-                                                      ? 'rgba(0, 224, 184, 0.1)' 
-                                                      : 'rgba(0, 224, 184, 0.05)'
-                                                  }
-                                                }}
-                                              >
-                                                Add Stop
-                                              </Button>
-                                            </Box>
-                                          )}
-                                        </React.Fragment>
-                                      );
-                                    } else {
-                                      // Stop card
-                                      const stop = item.data;
-                                      const riderStops = stops[route.rider.id] || [];
-                                      // Use the stopIndex from the timeline item if available, otherwise find it
-                                      const stopIndex = item.stopIndex !== undefined 
-                                        ? item.stopIndex 
-                                        : riderStops.findIndex((s, idx) => {
-                                            // Find the stop in the stops array
-                                            return s.stop.name === stop.name && s.stop.location === stop.location;
-                                          });
-                                      
-                                      // Build timeline to check if stop can move
-                                      const timelineItemsForCheck = [];
-                                      route.orders.forEach((order, orderIdx) => {
-                                        timelineItemsForCheck.push({ type: 'order', data: order, orderIndex: orderIdx });
-                                        const stopsAfterOrder = riderStops.filter(s => s.insertAfterIndex === orderIdx);
-                                        // Sort stops by sequence
-                                        stopsAfterOrder.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
-                                        stopsAfterOrder.forEach((stopItem) => {
-                                          const origIdx = riderStops.findIndex(s => s === stopItem);
-                                          timelineItemsForCheck.push({ type: 'stop', data: stopItem.stop, stopIndex: origIdx, stopItem });
-                                        });
-                                      });
-                                      const stopsAtEnd = riderStops.filter(s => s.insertAfterIndex === -1);
-                                      // Sort stops by sequence
-                                      stopsAtEnd.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
-                                      stopsAtEnd.forEach(stopItem => {
-                                        const origIdx = riderStops.findIndex(s => s === stopItem);
-                                        timelineItemsForCheck.push({ type: 'stop', data: stopItem.stop, stopIndex: origIdx, stopItem });
-                                      });
-                                      
-                                      const currentTimelineIdx = timelineItemsForCheck.findIndex(item => 
-                                        item.type === 'stop' && item.stopIndex === stopIndex
-                                      );
-                                      
-                                      // Disabled conditions: check timeline position (can move with orders or stops)
-                                      const isFirstInTimeline = currentTimelineIdx === 0;
-                                      const isLastInTimeline = currentTimelineIdx === timelineItemsForCheck.length - 1;
-                                      
-                                      const isDragging = draggedStop?.riderId === route.rider.id && draggedStop?.stopIndex === stopIndex;
-                                      
-                                      return (
-                                        <Box key={`stop-${itemIndex}`} sx={{ mb: 4, ml: 5, mr: 5 }}>
-                                          <Box
-                                            sx={{
-                                              position: 'relative',
-                                              opacity: isDragging ? 0.5 : 1,
-                                              cursor: 'grab',
-                                              '&:active': {
-                                                cursor: 'grabbing'
-                                              },
-                                              transition: 'opacity 0.2s ease, transform 0.2s ease',
-                                              transform: isDragging ? 'scale(0.98)' : 'scale(1)'
-                                            }}
-                                            draggable
-                                            onDragStart={(e) => {
-                                              setDraggedStop({ riderId: route.rider.id, stopIndex });
-                                              e.dataTransfer.effectAllowed = 'move';
-                                              e.dataTransfer.setData('application/json', JSON.stringify({ type: 'stop', riderId: route.rider.id, stopIndex }));
-                                            }}
-                                            onDragEnd={() => {
-                                              setDraggedStop(null);
-                                              setDragOverRider(null);
-                                            }}
-                                          >
-                                            <Card
-                                              variant="outlined"
-                                              sx={{
-                                                backgroundColor: isDarkMode 
-                                                  ? 'rgba(255, 193, 7, 0.1)' 
-                                                  : 'rgba(255, 193, 7, 0.05)',
-                                                borderColor: '#FFC107',
-                                                borderWidth: 2,
-                                                borderStyle: 'dashed',
-                                                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                                                transition: 'all 0.2s ease',
-                                                '&:hover': {
-                                                  boxShadow: isDragging ? '0 2px 8px rgba(0, 0, 0, 0.1)' : '0 4px 12px rgba(255, 193, 7, 0.3)',
-                                                  transform: isDragging ? 'none' : 'translateY(-2px)'
-                                                }
-                                              }}
-                                            >
-                                              <CardContent sx={{ position: 'relative' }}>
-                                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
-                                                  <Box sx={{ flex: 1 }}>
-                                                    <Typography variant="h6" sx={{ fontWeight: 600, color: '#FFC107' }}>
-                                                      {stop.name}
-                                                    </Typography>
-                                                    {stop.location && (
-                                                      <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, mb: 2, gap: 0.5, width: '100%' }}>
-                                                        <LocationOn fontSize="small" sx={{ color: colors.textSecondary, flexShrink: 0 }} />
-                                                        <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-                                                          {stop.location}
-                                                        </Typography>
-                                                      </Box>
-                                                    )}
-                                                    {stop.instruction && (
-                                                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                                                        {stop.instruction}
-                                                      </Typography>
-                                                    )}
-                                                  </Box>
-                                                  {stop.payment && (
-                                                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#FFC107' }}>
-                                                      KES {parseFloat(stop.payment || 0).toFixed(2)}
-                                                    </Typography>
-                                                  )}
-                                                </Box>
-                                                <Box sx={{ position: 'absolute', bottom: 8, right: 8 }}>
-                                                  <StopMenu stop={stop} riderId={route.rider.id} onEdit={handleEditStop} onDelete={handleDeleteStop} />
-                                                </Box>
-                                              </CardContent>
-                                            </Card>
-                                            <IconButton
-                                              size="small"
-                                              onClick={() => handleMoveStop(route.rider.id, stopIndex, 'down')}
-                                              disabled={stopIndex === -1 || isLastInTimeline}
-                                              sx={{
-                                                position: 'absolute',
-                                                left: -45,
-                                                top: '50%',
-                                                transform: 'translateY(-50%)',
-                                                p: 0.75,
-                                                color: colors.textSecondary,
-                                                backgroundColor: colors.paper,
-                                                border: `1px solid ${colors.border}`,
-                                                zIndex: 10,
-                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                                '&:hover': {
-                                                  color: '#FFC107',
-                                                  backgroundColor: isDarkMode ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 193, 7, 0.05)',
-                                                  borderColor: '#FFC107'
-                                                },
-                                                '&:disabled': {
-                                                  color: colors.border,
-                                                  opacity: 0.5
-                                                }
-                                              }}
-                                            >
-                                              <KeyboardArrowDown fontSize="small" />
-                                            </IconButton>
-                                            <IconButton
-                                              size="small"
-                                              onClick={() => handleMoveStop(route.rider.id, stopIndex, 'up')}
-                                              disabled={stopIndex === -1 || isFirstInTimeline}
-                                              sx={{
-                                                position: 'absolute',
-                                                right: -45,
-                                                top: '50%',
-                                                transform: 'translateY(-50%)',
-                                                p: 0.75,
-                                                color: colors.textSecondary,
-                                                backgroundColor: colors.paper,
-                                                border: `1px solid ${colors.border}`,
-                                                zIndex: 10,
-                                                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-                                                '&:hover': {
-                                                  color: '#FFC107',
-                                                  backgroundColor: isDarkMode ? 'rgba(255, 193, 7, 0.1)' : 'rgba(255, 193, 7, 0.05)',
-                                                  borderColor: '#FFC107'
-                                                },
-                                                '&:disabled': {
-                                                  color: colors.border,
-                                                  opacity: 0.5
-                                                }
-                                              }}
-                                            >
-                                              <KeyboardArrowUp fontSize="small" />
-                                            </IconButton>
-                                          </Box>
-                                        </Box>
-                                      );
-                                    }
-                                  })}
-                                  
-                                  {route.orders.length > 0 && (
-                                    <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
-                                      <Button
-                                        variant="outlined"
-                                        startIcon={<Add />}
-                                        onClick={() => {
-                                          setSelectedRiderForStop(route.rider.id);
-                                          setSelectedOrderIndexForStop(-1);
-                                          setStopDialogOpen(true);
-                                        }}
-                                        sx={{
-                                          borderColor: colors.accentText,
-                                          color: colors.accentText,
-                                          '&:hover': {
-                                            borderColor: colors.accentText,
-                                            backgroundColor: isDarkMode 
-                                              ? 'rgba(0, 224, 184, 0.1)' 
-                                              : 'rgba(0, 224, 184, 0.05)'
-                                          }
-                                        }}
-                                      >
-                                        Add Stop
-                                      </Button>
-                                    </Box>
-                                  )}
-                                </>
-                              )}
-                            </Box>
-                          </CardContent>
-                        </Card>
-                      </Box>
-                    );
-                  })}
-                </Box>
-              )}
-            </Box>
-          )}
-        </Box>
-      )}
 
       {/* Add Stop Dialog */}
       <Dialog
@@ -5168,7 +4228,8 @@ const Orders = () => {
 
 
 
-          </Container>
+        </Box>
+      </Container>
   );
 };
 

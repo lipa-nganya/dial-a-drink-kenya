@@ -650,6 +650,7 @@ router.get('/fix-order/:orderId', async (req, res) => {
     // If transaction is completed, update order
     if (transaction.status === 'completed' && transaction.paymentStatus === 'paid') {
       const isPOSOrder = order.deliveryAddress === 'In-Store Purchase';
+      // For POS orders, move from 'in_progress' to 'completed' when paid
       const targetStatus = isPOSOrder ? 'completed' : 'confirmed';
       
       console.log(`✅ Transaction is completed. Updating order to: paymentStatus='paid', status='${targetStatus}'`);

@@ -31,7 +31,10 @@ class PosProductListActivity : AppCompatActivity() {
     private val filteredProducts = mutableListOf<PosProduct>()
     private val cart = mutableListOf<PosCartItem>()
     private lateinit var adapter: ProductAdapter
-    private val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+    private val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
+        maximumFractionDigits = 0
+        minimumFractionDigits = 0
+    }
     private var currentOffset = 0
     private val pageSize = 10
     private var hasMoreProducts = true

@@ -345,14 +345,14 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                   </Box>
 
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    KES {(Number(pricing.originalPrice) || 0).toFixed(2)}
+                    KES {Math.round(Number(pricing.originalPrice) || 0)}
                   </Typography>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     {pricing.originalPrice > pricing.currentPrice ? (
                       <>
                         <Typography variant="body1" sx={{ color: '#FF3366', fontWeight: 'bold' }}>
-                          KES {(Number(pricing.currentPrice) || 0).toFixed(2)}
+                          KES {Math.round(Number(pricing.currentPrice) || 0)}
                         </Typography>
                         {calculateDiscount(pricing.originalPrice, pricing.currentPrice) > 0 && (
                           <Chip

@@ -51,10 +51,6 @@ const RiderDetails = () => {
   const [ordersRowsPerPage, setOrdersRowsPerPage] = useState(10);
   const [savingsBalance, setSavingsBalance] = useState(null);
   const [savingsLoading, setSavingsLoading] = useState(false);
-  const [remainingLoanAmount, setRemainingLoanAmount] = useState(null);
-  const [loanBalanceLoading, setLoanBalanceLoading] = useState(false);
-  const [remainingPenaltyBalance, setRemainingPenaltyBalance] = useState(null);
-  const [penaltyBalanceLoading, setPenaltyBalanceLoading] = useState(false);
   const [transactionTab, setTransactionTab] = useState('orders'); // 'orders', 'cash-at-hand', 'savings', 'loans'
   const [cashAtHandData, setCashAtHandData] = useState(null);
   const [cashAtHandLoading, setCashAtHandLoading] = useState(false);
@@ -69,12 +65,6 @@ const RiderDetails = () => {
   const [penaltyAmount, setPenaltyAmount] = useState('');
   const [penaltyReason, setPenaltyReason] = useState('');
   const [addingPenalty, setAddingPenalty] = useState(false);
-  const [payOffLoanDialogOpen, setPayOffLoanDialogOpen] = useState(false);
-  const [payOffPenaltyDialogOpen, setPayOffPenaltyDialogOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState('cash'); // 'cash' or 'mpesa'
-  const [mpesaPhoneNumber, setMpesaPhoneNumber] = useState('');
-  const [sendingMpesaPrompt, setSendingMpesaPrompt] = useState(false);
-  const [payingOffPenalty, setPayingOffPenalty] = useState(false);
 
   // Fetch rider details
   useEffect(() => {
@@ -168,49 +158,6 @@ const RiderDetails = () => {
     fetchSavingsBalance();
   }, [riderId]);
 
-  // Fetch remaining loan amount (excluding penalties)
-  useEffect(() => {
-    const fetchLoanBalance = async () => {
-      if (!riderId) return;
-      try {
-        setLoanBalanceLoading(true);
-        const response = await api.get(`/admin/drivers/${riderId}/loan-balance`);
-        if (response?.data?.success && response.data.data) {
-          setRemainingLoanAmount(parseFloat(response.data.data.remainingLoanAmount || 0));
-        } else {
-          setRemainingLoanAmount(0);
-        }
-      } catch (err) {
-        console.error('Error fetching loan balance:', err);
-        setRemainingLoanAmount(0);
-      } finally {
-        setLoanBalanceLoading(false);
-      }
-    };
-    fetchLoanBalance();
-  }, [riderId]);
-
-  // Fetch remaining penalty balance
-  useEffect(() => {
-    const fetchPenaltyBalance = async () => {
-      if (!riderId) return;
-      try {
-        setPenaltyBalanceLoading(true);
-        const response = await api.get(`/admin/drivers/${riderId}/penalty-balance`);
-        if (response?.data?.success && response.data.data) {
-          setRemainingPenaltyBalance(parseFloat(response.data.data.remainingPenaltyBalance || 0));
-        } else {
-          setRemainingPenaltyBalance(0);
-        }
-      } catch (err) {
-        console.error('Error fetching penalty balance:', err);
-        setRemainingPenaltyBalance(0);
-      } finally {
-        setPenaltyBalanceLoading(false);
-      }
-    };
-    fetchPenaltyBalance();
-  }, [riderId]);
 
 
   // Fetch cash at hand data (also fetch on mount to get the amount)
@@ -272,7 +219,7 @@ const RiderDetails = () => {
 
 
   const formatCurrency = (amount) => {
-    return `KES ${Number(amount || 0).toFixed(2)}`;
+    return `KES ${Math.round(Number(amount || 0))}`;
   };
 
   const driverResponseLabel = (driverAccepted) => {
@@ -287,130 +234,6 @@ const RiderDetails = () => {
     return 'default';
   };
 
-  const handlePayOffLoan = async () => {
-    if (!riderId || remainingLoanAmount <= 0) return;
-
-    try {
-      if (paymentMethod === 'cash') {
-        const response = await api.post('/admin/loans/pay-off', {
-          driverId: parseInt(riderId, 10),
-          paymentMethod: 'cash'
-        });
-
-        if (response?.data?.success) {
-          // Refresh balances
-          const walletResponse = await api.get(`/driver-wallet/${riderId}`);
-          let walletData = null;
-          if (walletResponse?.data?.success && walletResponse.data.data) {
-            walletData = walletResponse.data.data;
-          } else if (walletResponse?.data?.data) {
-            walletData = walletResponse.data.data;
-          } else if (walletResponse?.data) {
-            walletData = walletResponse.data;
-          }
-          if (walletData?.wallet?.savings !== undefined) {
-            setSavingsBalance(parseFloat(walletData.wallet.savings || 0));
-          }
-          // Refresh loan balance
-          const loanResponse = await api.get(`/admin/drivers/${riderId}/loan-balance`);
-          if (loanResponse?.data?.success && loanResponse.data.data) {
-            setRemainingLoanAmount(parseFloat(loanResponse.data.data.remainingLoanAmount || 0));
-          }
-          setPayOffLoanDialogOpen(false);
-          alert('Loan paid off successfully (Cash Received)');
-        } else {
-          alert('Failed to pay off loan: ' + (response?.data?.error || 'Unknown error'));
-        }
-      } else if (paymentMethod === 'mpesa') {
-        if (!mpesaPhoneNumber || !mpesaPhoneNumber.trim()) {
-          alert('Please enter phone number');
-          return;
-        }
-        
-        setSendingMpesaPrompt(true);
-        const response = await api.post('/admin/loans/pay-off', {
-          driverId: parseInt(riderId, 10),
-          paymentMethod: 'mpesa',
-          phoneNumber: mpesaPhoneNumber.trim()
-        });
-
-        if (response?.data?.success) {
-          setPayOffLoanDialogOpen(false);
-          alert('M-Pesa prompt sent successfully. The rider will receive a prompt to enter their PIN.');
-        } else {
-          alert('Failed to send M-Pesa prompt: ' + (response?.data?.error || 'Unknown error'));
-        }
-      }
-    } catch (err) {
-      console.error('Error paying off loan:', err);
-      alert('Error: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setSendingMpesaPrompt(false);
-    }
-  };
-
-  const handlePayOffPenalty = async () => {
-    if (!riderId || remainingPenaltyBalance <= 0) return;
-
-    try {
-      if (paymentMethod === 'cash') {
-        setPayingOffPenalty(true);
-        const response = await api.post('/admin/penalties/pay-off', {
-          driverId: parseInt(riderId, 10),
-          paymentMethod: 'cash'
-        });
-
-        if (response?.data?.success) {
-          // Refresh balances
-          const walletResponse = await api.get(`/driver-wallet/${riderId}`);
-          let walletData = null;
-          if (walletResponse?.data?.success && walletResponse.data.data) {
-            walletData = walletResponse.data.data;
-          } else if (walletResponse?.data?.data) {
-            walletData = walletResponse.data.data;
-          } else if (walletResponse?.data) {
-            walletData = walletResponse.data;
-          }
-          if (walletData?.wallet?.savings !== undefined) {
-            setSavingsBalance(parseFloat(walletData.wallet.savings || 0));
-          }
-          // Refresh penalty balance
-          const penaltyResponse = await api.get(`/admin/drivers/${riderId}/penalty-balance`);
-          if (penaltyResponse?.data?.success && penaltyResponse.data.data) {
-            setRemainingPenaltyBalance(parseFloat(penaltyResponse.data.data.remainingPenaltyBalance || 0));
-          }
-          setPayOffPenaltyDialogOpen(false);
-          alert('Penalty paid off successfully (Cash Received)');
-        } else {
-          alert('Failed to pay off penalty: ' + (response?.data?.error || 'Unknown error'));
-        }
-      } else if (paymentMethod === 'mpesa') {
-        if (!mpesaPhoneNumber || !mpesaPhoneNumber.trim()) {
-          alert('Please enter phone number');
-          return;
-        }
-        
-        setPayingOffPenalty(true);
-        const response = await api.post('/admin/penalties/pay-off', {
-          driverId: parseInt(riderId, 10),
-          paymentMethod: 'mpesa',
-          phoneNumber: mpesaPhoneNumber.trim()
-        });
-
-        if (response?.data?.success) {
-          setPayOffPenaltyDialogOpen(false);
-          alert('M-Pesa prompt sent successfully. The rider will receive a prompt to enter their PIN.');
-        } else {
-          alert('Failed to send M-Pesa prompt: ' + (response?.data?.error || 'Unknown error'));
-        }
-      }
-    } catch (err) {
-      console.error('Error paying off penalty:', err);
-      alert('Error: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setPayingOffPenalty(false);
-    }
-  };
 
   const handleAddPenalty = async () => {
     if (!penaltyAmount || !penaltyReason || parseFloat(penaltyAmount) <= 0) {
@@ -440,17 +263,6 @@ const RiderDetails = () => {
           const newSavings = parseFloat(walletData.wallet.savings || 0);
           console.log('Updated savings balance after penalty:', newSavings);
           setSavingsBalance(newSavings);
-        }
-        // Refresh penalty balance (always 0 since penalties are part of loan)
-        const penaltyResponse = await api.get(`/admin/drivers/${riderId}/penalty-balance`);
-        if (penaltyResponse?.data?.success && penaltyResponse.data.data) {
-          setRemainingPenaltyBalance(parseFloat(penaltyResponse.data.data.remainingPenaltyBalance || 0));
-        }
-
-        // Refresh loan balance (includes penalties)
-        const loanResponse = await api.get(`/admin/drivers/${riderId}/loan-balance`);
-        if (loanResponse?.data?.success && loanResponse.data.data) {
-          setRemainingLoanAmount(parseFloat(loanResponse.data.data.remainingLoanAmount || 0));
         }
 
         setAddPenaltyDialogOpen(false);
@@ -511,11 +323,6 @@ const RiderDetails = () => {
               const walletSavings = parseFloat(walletData.wallet.savings || 0);
               console.log('Updated savings balance from wallet after loan:', walletSavings);
               setSavingsBalance(walletSavings);
-            }
-            // Refresh loan balance
-            const loanResponse = await api.get(`/admin/drivers/${riderId}/loan-balance`);
-            if (loanResponse?.data?.success && loanResponse.data.data) {
-              setRemainingLoanAmount(parseFloat(loanResponse.data.data.remainingLoanAmount || 0));
             }
           } catch (walletErr) {
             console.error('Error fetching wallet after loan:', walletErr);
@@ -697,86 +504,6 @@ const RiderDetails = () => {
                         {formatCurrency(savingsBalance)}
                       </Typography>
                     </Box>
-                    {loanBalanceLoading ? (
-                      <Box>
-                        <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
-                          Remaining Loan Amount
-                        </Typography>
-                        <CircularProgress size={20} />
-                      </Box>
-                    ) : remainingLoanAmount !== null && (
-                      <Box>
-                        <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
-                          Remaining Loan Amount
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body1" sx={{ fontWeight: 600, color: remainingLoanAmount > 0 ? '#f44336' : colors.textPrimary }}>
-                            {formatCurrency(remainingLoanAmount)}
-                          </Typography>
-                          {remainingLoanAmount > 0 && (
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => {
-                                setMpesaPhoneNumber(rider?.phoneNumber || '');
-                                setPaymentMethod('cash');
-                                setPayOffLoanDialogOpen(true);
-                              }}
-                              sx={{
-                                borderColor: '#f44336',
-                                color: '#f44336',
-                                '&:hover': {
-                                  borderColor: '#d32f2f',
-                                  backgroundColor: 'rgba(244, 67, 54, 0.04)'
-                                }
-                              }}
-                            >
-                              Pay Off
-                            </Button>
-                          )}
-                        </Box>
-                      </Box>
-                    )}
-                    {penaltyBalanceLoading ? (
-                      <Box>
-                        <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
-                          Remaining Penalty Balance
-                        </Typography>
-                        <CircularProgress size={20} />
-                      </Box>
-                    ) : remainingPenaltyBalance !== null && (
-                      <Box>
-                        <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
-                          Remaining Penalty Balance
-                        </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body1" sx={{ fontWeight: 600, color: remainingPenaltyBalance > 0 ? '#f44336' : colors.textPrimary }}>
-                            {formatCurrency(remainingPenaltyBalance)}
-                          </Typography>
-                          {remainingPenaltyBalance > 0 && (
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => {
-                                setMpesaPhoneNumber(rider?.phoneNumber || '');
-                                setPaymentMethod('cash');
-                                setPayOffPenaltyDialogOpen(true);
-                              }}
-                              sx={{
-                                borderColor: '#f44336',
-                                color: '#f44336',
-                                '&:hover': {
-                                  borderColor: '#d32f2f',
-                                  backgroundColor: 'rgba(244, 67, 54, 0.04)'
-                                }
-                              }}
-                            >
-                              Pay Off
-                            </Button>
-                          )}
-                        </Box>
-                      </Box>
-                    )}
                   </>
                 )}
               </Box>
@@ -1011,13 +738,13 @@ const RiderDetails = () => {
                             {entry.description || entry.customerName || 'N/A'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                            {isCredit ? `KES ${Math.round(amount)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {!isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                            {!isCredit ? `KES ${Math.round(amount)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                            KES {currentBalance.toFixed(2)}
+                            KES {Math.round(currentBalance)}
                           </TableCell>
                         </TableRow>
                       );
@@ -1109,7 +836,7 @@ const RiderDetails = () => {
                       
                       const description = isCredit 
                         ? (tx.notes || tx.orderLocation || tx.customerName || `Order #${tx.orderNumber || tx.orderId || 'N/A'}`)
-                        : (tx.notes || `Savings withdrawal - KES ${amount.toFixed(2)}`);
+                        : (tx.notes || `Savings withdrawal - KES ${Math.round(amount)}`);
                       
                       return (
                         <TableRow key={index} hover>
@@ -1124,13 +851,13 @@ const RiderDetails = () => {
                             {description}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {!isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                            {!isCredit ? `KES ${Math.round(amount)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {isCredit ? `KES ${amount.toFixed(2)}` : '—'}
+                            {isCredit ? `KES ${Math.round(amount)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                            KES {currentBalance.toFixed(2)}
+                            KES {Math.round(currentBalance)}
                           </TableCell>
                         </TableRow>
                       );
@@ -1235,233 +962,6 @@ const RiderDetails = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Pay Off Loan Dialog */}
-      <Dialog
-        open={payOffLoanDialogOpen}
-        onClose={() => {
-          setPayOffLoanDialogOpen(false);
-          setPaymentMethod('cash');
-          setMpesaPhoneNumber('');
-        }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ color: colors.accentText, fontWeight: 600 }}>
-          Pay Off Loan - {formatCurrency(remainingLoanAmount || 0)}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
-            <Box>
-              <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1, fontWeight: 600 }}>
-                Payment Method
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button
-                  variant={paymentMethod === 'cash' ? 'contained' : 'outlined'}
-                  onClick={() => setPaymentMethod('cash')}
-                  sx={{
-                    flex: 1,
-                    backgroundColor: paymentMethod === 'cash' ? colors.accentText : 'transparent',
-                    color: paymentMethod === 'cash' ? '#FFFFFF' : colors.textPrimary,
-                    borderColor: colors.accentText,
-                    '&:hover': {
-                      backgroundColor: paymentMethod === 'cash' ? colors.accentText : 'rgba(0,0,0,0.04)'
-                    }
-                  }}
-                >
-                  Cash Received
-                </Button>
-                <Button
-                  variant={paymentMethod === 'mpesa' ? 'contained' : 'outlined'}
-                  onClick={() => setPaymentMethod('mpesa')}
-                  sx={{
-                    flex: 1,
-                    backgroundColor: paymentMethod === 'mpesa' ? colors.accentText : 'transparent',
-                    color: paymentMethod === 'mpesa' ? '#FFFFFF' : colors.textPrimary,
-                    borderColor: colors.accentText,
-                    '&:hover': {
-                      backgroundColor: paymentMethod === 'mpesa' ? colors.accentText : 'rgba(0,0,0,0.04)'
-                    }
-                  }}
-                >
-                  M-Pesa Prompt
-                </Button>
-              </Box>
-            </Box>
-
-            {paymentMethod === 'mpesa' && (
-              <Box>
-                <TextField
-                  label="Phone Number"
-                  value={mpesaPhoneNumber}
-                  onChange={(e) => setMpesaPhoneNumber(e.target.value)}
-                  fullWidth
-                  required
-                  placeholder="0712345678"
-                  helperText="Rider will receive M-Pesa prompt to enter PIN"
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      color: colors.textPrimary
-                    }
-                  }}
-                />
-              </Box>
-            )}
-
-            {paymentMethod === 'cash' && (
-              <Box>
-                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                  Confirm that cash has been received from the rider.
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setPayOffLoanDialogOpen(false);
-              setPaymentMethod('cash');
-              setMpesaPhoneNumber('');
-            }}
-            sx={{ color: colors.textSecondary }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handlePayOffLoan}
-            disabled={sendingMpesaPrompt || (paymentMethod === 'mpesa' && !mpesaPhoneNumber.trim())}
-            variant="contained"
-            sx={{
-              backgroundColor: colors.accentText,
-              color: '#FFFFFF',
-              '&:hover': {
-                backgroundColor: colors.accentText,
-                opacity: 0.9
-              },
-              '&:disabled': {
-                backgroundColor: colors.textSecondary
-              }
-            }}
-          >
-            {sendingMpesaPrompt ? 'Sending...' : paymentMethod === 'cash' ? 'Confirm Cash Received' : 'Send M-Pesa Prompt'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Pay Off Penalty Dialog */}
-      <Dialog
-        open={payOffPenaltyDialogOpen}
-        onClose={() => {
-          setPayOffPenaltyDialogOpen(false);
-          setPaymentMethod('cash');
-          setMpesaPhoneNumber('');
-        }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ color: '#f44336', fontWeight: 600 }}>
-          Pay Off Penalty - {formatCurrency(remainingPenaltyBalance || 0)}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
-            <Box>
-              <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1, fontWeight: 600 }}>
-                Payment Method
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button
-                  variant={paymentMethod === 'cash' ? 'contained' : 'outlined'}
-                  onClick={() => setPaymentMethod('cash')}
-                  sx={{
-                    flex: 1,
-                    backgroundColor: paymentMethod === 'cash' ? '#f44336' : 'transparent',
-                    color: paymentMethod === 'cash' ? '#FFFFFF' : colors.textPrimary,
-                    borderColor: '#f44336',
-                    '&:hover': {
-                      backgroundColor: paymentMethod === 'cash' ? '#f44336' : 'rgba(0,0,0,0.04)'
-                    }
-                  }}
-                >
-                  Cash Received
-                </Button>
-                <Button
-                  variant={paymentMethod === 'mpesa' ? 'contained' : 'outlined'}
-                  onClick={() => setPaymentMethod('mpesa')}
-                  sx={{
-                    flex: 1,
-                    backgroundColor: paymentMethod === 'mpesa' ? '#f44336' : 'transparent',
-                    color: paymentMethod === 'mpesa' ? '#FFFFFF' : colors.textPrimary,
-                    borderColor: '#f44336',
-                    '&:hover': {
-                      backgroundColor: paymentMethod === 'mpesa' ? '#f44336' : 'rgba(0,0,0,0.04)'
-                    }
-                  }}
-                >
-                  M-Pesa Prompt
-                </Button>
-              </Box>
-            </Box>
-
-            {paymentMethod === 'mpesa' && (
-              <Box>
-                <TextField
-                  label="Phone Number"
-                  value={mpesaPhoneNumber}
-                  onChange={(e) => setMpesaPhoneNumber(e.target.value)}
-                  fullWidth
-                  required
-                  placeholder="0712345678"
-                  helperText="Rider will receive M-Pesa prompt to enter PIN"
-                  sx={{
-                    '& .MuiInputBase-input': {
-                      color: colors.textPrimary
-                    }
-                  }}
-                />
-              </Box>
-            )}
-
-            {paymentMethod === 'cash' && (
-              <Box>
-                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                  Confirm that cash has been received from the rider.
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setPayOffPenaltyDialogOpen(false);
-              setPaymentMethod('cash');
-              setMpesaPhoneNumber('');
-            }}
-            sx={{ color: colors.textSecondary }}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handlePayOffPenalty}
-            disabled={payingOffPenalty || (paymentMethod === 'mpesa' && !mpesaPhoneNumber.trim())}
-            variant="contained"
-            sx={{
-              backgroundColor: '#f44336',
-              color: '#FFFFFF',
-              '&:hover': {
-                backgroundColor: '#f44336',
-                opacity: 0.9
-              },
-              '&:disabled': {
-                backgroundColor: colors.textSecondary
-              }
-            }}
-          >
-            {payingOffPenalty ? 'Processing...' : paymentMethod === 'cash' ? 'Confirm Cash Received' : 'Send M-Pesa Prompt'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Add Penalty Dialog */}
       <Dialog
