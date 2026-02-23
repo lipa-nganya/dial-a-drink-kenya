@@ -96,6 +96,14 @@ const InventoryPage = () => {
     return `${backendUrl}${imagePath}`;
   };
 
+  // Helper function to truncate description to 20 words
+  const truncateDescription = (text, maxWords = 20) => {
+    if (!text) return '';
+    const words = text.trim().split(/\s+/);
+    if (words.length <= maxWords) return text;
+    return words.slice(0, maxWords).join(' ') + '...';
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -920,7 +928,7 @@ const InventoryPage = () => {
                       variant="body2"
                       sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: colors.textPrimary }}
                     >
-                      {drink.description}
+                      {truncateDescription(drink.description)}
                     </Typography>
                   )}
 
