@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -76,7 +76,8 @@ const formatDate = (date) => {
 
 const Customers = () => {
   const { colors } = useTheme();
-  const [customers, setCustomers] = useState([]);
+  // Ensure customers is always initialized as an array
+  const [customers, setCustomers] = useState(() => []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [customerOtps, setCustomerOtps] = useState({});
@@ -107,11 +108,7 @@ const Customers = () => {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [page, rowsPerPage, searchQuery]);
-
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
       setError('');
@@ -125,28 +122,86 @@ const Customers = () => {
         params.search = searchQuery.trim();
       }
       
-      const response = await api.get('/admin/customers', { params });
+      const response = await api.get('/admin/customers', { 
+        params,
+        timeout: 30000 // 30 second timeout
+      });
       
-      // Handle both paginated and non-paginated responses
-      if (response.data.customers && response.data.total !== undefined) {
-        // Paginated response
-        setCustomers(response.data.customers);
-        setTotalCustomers(response.data.total);
-      } else if (Array.isArray(response.data)) {
-        // Non-paginated response (fallback)
-        setCustomers(response.data);
-        setTotalCustomers(response.data.length);
-      } else {
+      // Defensive: Always ensure we have a valid response
+      if (!response || !response.data) {
+        console.warn('Invalid response from /admin/customers:', response);
         setCustomers([]);
         setTotalCustomers(0);
+        setLoading(false);
+        return;
       }
+      
+      // Debug: Log the response structure
+      console.log('[Customers] API Response:', {
+        hasCustomers: !!response.data.customers,
+        customersIsArray: Array.isArray(response.data.customers),
+        hasTotal: typeof response.data.total === 'number',
+        dataIsArray: Array.isArray(response.data),
+        hasData: !!response.data.data,
+        dataDataIsArray: Array.isArray(response.data.data),
+        responseKeys: Object.keys(response.data)
+      });
+      
+      // Handle both paginated and non-paginated responses
+      let customersArray = [];
+      let total = 0;
+      
+      if (response.data.customers && Array.isArray(response.data.customers) && typeof response.data.total === 'number') {
+        // Paginated response: { customers: [...], total: N, page: P, limit: L }
+        customersArray = response.data.customers.filter(c => c != null && typeof c === 'object');
+        total = response.data.total;
+        console.log('[Customers] Using paginated response:', { count: customersArray.length, total });
+      } else if (Array.isArray(response.data)) {
+        // Non-paginated response (fallback): direct array
+        customersArray = response.data.filter(c => c != null && typeof c === 'object');
+        total = customersArray.length;
+        console.log('[Customers] Using direct array response:', { count: customersArray.length });
+      } else if (response.data.data && Array.isArray(response.data.data)) {
+        // Wrapped response: { data: [...] }
+        customersArray = response.data.data.filter(c => c != null && typeof c === 'object');
+        total = customersArray.length;
+        console.log('[Customers] Using wrapped data response:', { count: customersArray.length });
+      } else {
+        // Fallback: ensure customers is always an array
+        console.warn('[Customers] Unexpected response format:', {
+          data: response.data,
+          type: typeof response.data,
+          isArray: Array.isArray(response.data),
+          keys: response.data ? Object.keys(response.data) : []
+        });
+        customersArray = [];
+        total = 0;
+      }
+      
+      // Double-check: ensure customersArray is actually an array before setting state
+      if (!Array.isArray(customersArray)) {
+        console.error('[Customers] customersArray is not an array after processing:', customersArray, typeof customersArray);
+        customersArray = [];
+        total = 0;
+      }
+      
+      console.log('[Customers] Setting state:', { customersCount: customersArray.length, total, isArray: Array.isArray(customersArray) });
+      setCustomers(customersArray);
+      setTotalCustomers(total);
     } catch (err) {
       console.error('Error fetching customers:', err);
       setError(err.response?.data?.error || 'Failed to load customers');
+      // Ensure customers is always an array even on error
+      setCustomers([]);
+      setTotalCustomers(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, rowsPerPage, searchQuery]);
+
+  useEffect(() => {
+    fetchCustomers();
+  }, [fetchCustomers]);
   
   const handleChangePage = (event, newPage) => {
     setPage(newPage);
@@ -208,6 +263,7 @@ const Customers = () => {
   };
 
   const handleOpenDetails = (customer) => {
+    if (!customer?.id) return;
     setSelectedCustomer(customer);
     setCustomerDetails(null);
     setDetailTab(0);
@@ -337,9 +393,9 @@ const Customers = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {customers.map((customer) => {
-                return (
-                  <TableRow key={customer.id}>
+              {Array.isArray(customers) && customers.length > 0 ? (
+                customers.filter(c => c != null && typeof c === 'object' && c.id != null).map((customer) => (
+                  <TableRow key={customer.id || `customer-${Math.random()}`}>
                     <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                       {customer.name || 'Customer'}
                       <Typography variant="caption" display="block" color="text.secondary">
@@ -347,12 +403,12 @@ const Customers = () => {
                       </Typography>
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
-                      {customer.phone && (
+                      {customer?.phone && (
                         <Typography variant="body2" color="text.secondary">
                           {customer.phone}
                         </Typography>
                       )}
-                      {customer.email && (
+                      {customer?.email && (
                         <Typography variant="body2" color="text.secondary">
                           {customer.email}
                         </Typography>
@@ -360,47 +416,47 @@ const Customers = () => {
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
                       <Chip
-                        label={`${customer.totalOrders || 0}`}
-                        color={customer.totalOrders > 0 ? 'success' : 'default'}
+                        label={`${customer?.totalOrders || 0}`}
+                        color={(customer?.totalOrders || 0) > 0 ? 'success' : 'default'}
                         size="small"
                         sx={{ fontWeight: 600 }}
                       />
-                      {customer.lastOrderAt && (
+                      {customer?.lastOrderAt && (
                         <Typography variant="caption" display="block" color="text.secondary">
                           Last: {formatDate(new Date(customer.lastOrderAt))}
                         </Typography>
                       )}
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
-                      {formatCurrency(customer.totalSpent || 0)}
+                      {formatCurrency(customer?.totalSpent || 0)}
                     </TableCell>
                     <TableCell sx={{ color: colors.textPrimary }}>
-                      {formatDate(customer.dateJoined || customer.createdAt)}
+                      {formatDate(customer?.dateJoined || customer?.createdAt)}
                     </TableCell>
                     <TableCell>
                       <Tooltip title="Toggle OTP">
                         <span>
                           <IconButton
-                            onClick={() => toggleOtpVisibility(customer)}
+                            onClick={() => customer?.id && toggleOtpVisibility(customer)}
                             size="small"
                             sx={{ color: colors.accentText }}
                           >
-                            {showOtps[customer.id] ? <VisibilityOff /> : <VpnKey />}
+                            {showOtps[customer?.id] ? <VisibilityOff /> : <VpnKey />}
                           </IconButton>
                         </span>
                       </Tooltip>
-                      {loadingOtps[customer.id] && <CircularProgress size={16} sx={{ ml: 1 }} />}
-                      {showOtps[customer.id] && customerOtps[customer.id] && (
+                      {loadingOtps[customer?.id] && <CircularProgress size={16} sx={{ ml: 1 }} />}
+                      {showOtps[customer?.id] && customerOtps[customer?.id] && (
                         <Box sx={{ mt: 1 }}>
-                          {customerOtps[customer.id].hasOtp ? (
+                          {customerOtps[customer?.id]?.hasOtp ? (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                                OTP: {customerOtps[customer.id].otpCode}
+                                OTP: {customerOtps[customer?.id]?.otpCode}
                               </Typography>
                               <Tooltip title="Copy OTP">
                                 <IconButton
                                   size="small"
-                                  onClick={() => handleCopyOtp(customer.id)}
+                                  onClick={() => customer?.id && handleCopyOtp(customer.id)}
                                   sx={{ color: colors.accentText }}
                                 >
                                   <ContentCopy fontSize="inherit" />
@@ -409,7 +465,7 @@ const Customers = () => {
                             </Box>
                           ) : (
                             <Typography variant="caption" color="text.secondary">
-                              {customerOtps[customer.id].message || customerOtps[customer.id].error || 'No active OTP'}
+                              {customerOtps[customer?.id]?.message || customerOtps[customer?.id]?.error || 'No active OTP'}
                             </Typography>
                           )}
                         </Box>
@@ -420,7 +476,7 @@ const Customers = () => {
                         variant="outlined"
                         size="small"
                         startIcon={<Visibility />}
-                        onClick={() => handleOpenDetails(customer)}
+                        onClick={() => customer?.id && handleOpenDetails(customer)}
                         sx={{
                           borderColor: colors.accentText,
                           color: colors.accentText,
@@ -434,10 +490,16 @@ const Customers = () => {
                       </Button>
                     </TableCell>
                   </TableRow>
-                );
-              })}
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} sx={{ color: colors.textSecondary, textAlign: 'center', py: 4 }}>
+                    {loading ? 'Loading customers...' : 'No customers found.'}
+                  </TableCell>
+                </TableRow>
+              )}
 
-              {customers.length === 0 && (
+              {Array.isArray(customers) && customers.length === 0 && !loading && (
                 <TableRow>
                   <TableCell colSpan={7} sx={{ color: colors.textSecondary, textAlign: 'center', py: 4 }}>
                     No customers found.

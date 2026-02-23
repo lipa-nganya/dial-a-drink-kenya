@@ -12,6 +12,8 @@ steps:
       - 'gcr.io/$PROJECT_ID/dialadrink-frontend:latest'
       - '--build-arg'
       - 'REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api'
+      - '--build-arg'
+      - 'REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
       - '.'
 
   # Push the container image to Container Registry
@@ -42,7 +44,7 @@ steps:
       - '--memory'
       - '256Mi'
       - '--set-env-vars'
-      - 'REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api'
+      - 'REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api,REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
 
 images:
   - 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA'
@@ -53,5 +55,10 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'
+
+# Substitution variables - must be set via Cloud Build trigger or --substitutions flag
+# Example: gcloud builds submit --substitutions=_GOOGLE_MAPS_API_KEY=your_key_here
+substitutions:
+  _GOOGLE_MAPS_API_KEY: ''  # REQUIRED: Set this in Cloud Build trigger configuration
 
 

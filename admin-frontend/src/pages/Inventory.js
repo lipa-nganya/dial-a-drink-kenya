@@ -43,12 +43,16 @@ import {
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAdmin } from '../contexts/AdminContext';
 import EditDrinkDialog from '../components/EditDrinkDialog';
 import InventoryChecks from '../components/InventoryChecks';
 import { getBackendUrl } from '../utils/backendUrl';
+import { Badge } from '@mui/material';
 
 const InventoryPage = () => {
   const { isDarkMode, colors } = useTheme();
+  const { user, pendingInventoryChecksCount } = useAdmin();
+  const isSuperAdmin = user?.role === 'super_admin';
   const [drinks, setDrinks] = useState([]);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -94,6 +98,14 @@ const InventoryPage = () => {
     // For relative paths, construct the full URL using backend URL utility
     const backendUrl = getBackendUrl();
     return `${backendUrl}${imagePath}`;
+  };
+
+  // Helper function to truncate description to 20 words
+  const truncateDescription = (text, maxWords = 20) => {
+    if (!text) return '';
+    const words = text.trim().split(/\s+/);
+    if (words.length <= maxWords) return text;
+    return words.slice(0, maxWords).join(' ') + '...';
   };
 
   useEffect(() => {
@@ -458,23 +470,48 @@ const InventoryPage = () => {
           }}
         >
           <Tab label="Inventory Items" />
-          <Tab label="Inventory Checks" />
+          <Tab 
+            label={
+              isSuperAdmin ? (
+                <Badge 
+                  badgeContent={pendingInventoryChecksCount} 
+                  color="warning" 
+                  max={99}
+                  sx={{ 
+                    '& .MuiBadge-badge': { 
+                      backgroundColor: '#ffc107',
+                      color: '#000',
+                      fontWeight: 'bold'
+                    } 
+                  }}
+                >
+                  Inventory Checks
+                </Badge>
+              ) : (
+                'Inventory Checks'
+              )
+            }
+            disabled={!isSuperAdmin}
+          />
         </Tabs>
       </Box>
 
-      {/* Purchase Price Population Message */}
-      {purchasePriceMessage && (
-        <Alert 
-          severity={purchasePriceMessage.type} 
-          sx={{ mb: 2 }}
-          onClose={() => setPurchasePriceMessage(null)}
-        >
-          {purchasePriceMessage.text}
-        </Alert>
-      )}
+      {/* Inventory Items Tab Content */}
+      {currentTab === 0 && (
+        <>
+          {/* Purchase Price Population Message */}
+          {purchasePriceMessage && (
+            <Alert 
+              severity={purchasePriceMessage.type} 
+              sx={{ mb: 2 }}
+              onClose={() => setPurchasePriceMessage(null)}
+            >
+              {purchasePriceMessage.text}
+            </Alert>
+          )}
 
-      {/* Summary Stats */}
-      <Box sx={{ mb: 4 }}>
+          {/* Summary Stats */}
+          <Box sx={{ mb: 4 }}>
         <Grid
           container
           spacing={2}
@@ -920,7 +957,7 @@ const InventoryPage = () => {
                       variant="body2"
                       sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: colors.textPrimary }}
                     >
-                      {drink.description}
+                      {truncateDescription(drink.description)}
                     </Typography>
                   )}
 
@@ -1117,10 +1154,23 @@ const InventoryPage = () => {
           )}
         </>
       )}
+        </>
+      )}
 
-      {currentTab === 1 && (
+      {/* Inventory Checks Tab Content */}
+      {currentTab === 1 && isSuperAdmin && (
         <Box sx={{ mt: 3 }}>
           <InventoryChecks />
+        </Box>
+      )}
+      {currentTab === 1 && !isSuperAdmin && (
+        <Box sx={{ mt: 3, textAlign: 'center', py: 4 }}>
+          <Typography variant="h6" color="error">
+            Access Denied
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Only Super Admin users can access Inventory Checks.
+          </Typography>
         </Box>
       )}
 

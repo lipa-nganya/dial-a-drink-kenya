@@ -185,10 +185,57 @@ object SharedPrefs {
     
     fun getUserType(context: Context): String {
         return when {
+            isShopAgentLoggedIn(context) -> "shop_agent"
             isAdminLoggedIn(context) -> "admin"
             isLoggedIn(context) -> "driver"
             else -> "none"
         }
+    }
+    
+    // Shop Agent info
+    fun saveShopAgentPhone(context: Context, phone: String) {
+        getPrefs(context).edit().putString("shop_agent_phone", phone).apply()
+    }
+    
+    fun getShopAgentPhone(context: Context): String? {
+        return getPrefs(context).getString("shop_agent_phone", null)
+    }
+    
+    fun saveShopAgentId(context: Context, shopAgentId: Int) {
+        getPrefs(context).edit().putInt("shop_agent_id", shopAgentId).apply()
+    }
+    
+    fun getShopAgentId(context: Context): Int? {
+        val id = getPrefs(context).getInt("shop_agent_id", -1)
+        return if (id == -1) null else id
+    }
+    
+    fun saveShopAgentName(context: Context, name: String) {
+        getPrefs(context).edit().putString("shop_agent_name", name).apply()
+    }
+    
+    fun getShopAgentName(context: Context): String? {
+        return getPrefs(context).getString("shop_agent_name", null)
+    }
+    
+    fun saveShopAgentToken(context: Context, token: String) {
+        getPrefs(context).edit().putString("shop_agent_token", token).apply()
+    }
+    
+    fun getShopAgentToken(context: Context): String? {
+        return getPrefs(context).getString("shop_agent_token", null)
+    }
+    
+    fun clearShopAgentToken(context: Context) {
+        getPrefs(context).edit().remove("shop_agent_token").apply()
+    }
+    
+    fun setShopAgentLoggedIn(context: Context, loggedIn: Boolean) {
+        getPrefs(context).edit().putBoolean("shop_agent_logged_in", loggedIn).apply()
+    }
+    
+    fun isShopAgentLoggedIn(context: Context): Boolean {
+        return getPrefs(context).getBoolean("shop_agent_logged_in", false)
     }
     
     // Push Notifications
@@ -326,6 +373,30 @@ object SharedPrefs {
     fun getPosCartDeliveryFee(context: Context): Double? {
         val feeStr = getPrefs(context).getString(KEY_POS_CART_DELIVERY_FEE, null)
         return feeStr?.toDoubleOrNull()
+    }
+    
+    // Checked Items persistence (for Shop Agent Inventory Check)
+    private const val KEY_CHECKED_ITEMS = "checked_items"
+    
+    fun saveCheckedItems(context: Context, items: List<com.dialadrink.driver.data.model.CountedInventoryItem>) {
+        val prefs = getPrefs(context)
+        val json = gson.toJson(items)
+        prefs.edit().putString(KEY_CHECKED_ITEMS, json).apply()
+    }
+    
+    fun getCheckedItems(context: Context): List<com.dialadrink.driver.data.model.CountedInventoryItem> {
+        val prefs = getPrefs(context)
+        val json = prefs.getString(KEY_CHECKED_ITEMS, null) ?: return emptyList()
+        return try {
+            val type = object : TypeToken<List<com.dialadrink.driver.data.model.CountedInventoryItem>>() {}.type
+            gson.fromJson<List<com.dialadrink.driver.data.model.CountedInventoryItem>>(json, type) ?: emptyList()
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+    
+    fun clearCheckedItems(context: Context) {
+        getPrefs(context).edit().remove(KEY_CHECKED_ITEMS).apply()
     }
 }
 

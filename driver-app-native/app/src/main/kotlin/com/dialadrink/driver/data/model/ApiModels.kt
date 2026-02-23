@@ -73,6 +73,138 @@ data class AdminMobileLoginResponse(
     val user: AdminUser?
 )
 
+// Shop Agent Models
+data class ShopAgentLoginRequest(
+    val mobileNumber: String,
+    val pin: String
+)
+
+data class ShopAgentLoginResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val error: String? = null,
+    val token: String?,
+    val user: ShopAgentUser?
+)
+
+data class ShopAgentUser(
+    val id: Int,
+    val name: String?,
+    val mobileNumber: String,
+    val role: String
+)
+
+data class ShopAgentSetPinRequest(
+    val mobileNumber: String,
+    val pin: String,
+    val otpCode: String? = null
+)
+
+data class ShopAgentSetPinResponse(
+    val success: Boolean,
+    val message: String? = null,
+    val error: String? = null,
+    val token: String?,
+    val user: ShopAgentUser?
+)
+
+data class ShopAgentResponse(
+    val id: Int,
+    val name: String,
+    val mobileNumber: String,
+    val role: String,
+    val hasPin: Boolean
+)
+
+@Parcelize
+data class ShopAgentInventoryItem(
+    val id: Int,
+    val name: String,
+    val barcode: String?,
+    val currentStock: Int,
+    val isAvailable: Boolean,
+    val category: InventoryCategory?
+) : Parcelable
+
+@Parcelize
+data class InventoryCategory(
+    val id: Int,
+    val name: String
+) : Parcelable
+
+data class ShopAgentInventoryItemsResponse(
+    val success: Boolean,
+    val items: List<ShopAgentInventoryItem>
+)
+
+data class InventoryCheckRequest(
+    val items: List<InventoryCheckItem>
+)
+
+data class InventoryCheckItem(
+    val drinkId: Int,
+    val count: Int
+)
+
+data class InventoryCheckResponse(
+    val success: Boolean,
+    val message: String,
+    val results: List<InventoryCheckResult>?,
+    val errors: List<InventoryCheckError>?
+)
+
+data class InventoryCheckResult(
+    val drinkId: Int,
+    val drinkName: String,
+    val agentCount: Int,
+    val databaseCount: Int,
+    val isFlagged: Boolean,
+    val checkId: Int
+)
+
+data class InventoryCheckError(
+    val drinkId: String,
+    val error: String
+)
+
+data class InventoryCheckHistoryItem(
+    val id: Int,
+    val drink: InventoryCheckDrink?,
+    val agentCount: Int,
+    val databaseCount: Int,
+    val status: String,
+    val isFlagged: Boolean,
+    val approvedBy: InventoryCheckApprover?,
+    val approvedAt: String?,
+    val notes: String?,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+data class InventoryCheckDrink(
+    val id: Int,
+    val name: String,
+    val barcode: String?,
+    val currentStock: Int,
+    val category: InventoryCategory?
+)
+
+data class InventoryCheckApprover(
+    val id: Int,
+    val name: String
+)
+
+data class InventoryCheckHistoryResponse(
+    val success: Boolean,
+    val checks: List<InventoryCheckHistoryItem>
+)
+
+@Parcelize
+data class CountedInventoryItem(
+    val item: ShopAgentInventoryItem,
+    var count: Int
+) : Parcelable
+
 data class AdminUser(
     val id: Int,
     val username: String,
@@ -85,11 +217,13 @@ data class AdminUser(
 data class PhoneCheckResponse(
     val driver: DriverInfo?,
     val admin: AdminInfo?,
+    val shopAgent: ShopAgentInfo? = null,
     val customer: CustomerInfo? = null
 ) {
     // Computed properties for backward compatibility
     val isDriver: Boolean get() = driver != null
     val isAdmin: Boolean get() = admin != null
+    val isShopAgent: Boolean get() = shopAgent != null
 }
 
 data class CustomerInfo(
@@ -114,6 +248,13 @@ data class AdminInfo(
     val hasPin: Boolean? = null
 )
 
+data class ShopAgentInfo(
+    val id: Int,
+    val name: String? = null,
+    val mobileNumber: String? = null,
+    val hasPin: Boolean? = null
+)
+
 // Driver Model
 data class Driver(
     val id: Int,
@@ -135,6 +276,18 @@ data class UpdateDriverStatusRequest(
 )
 
 // Push Token
+data class ShopAgentPushTokenRequest(
+    val shopAgentId: Int,
+    val pushToken: String,
+    val tokenType: String? = null
+)
+
+data class ShopAgentPushTokenResponse(
+    val shopAgentId: Int,
+    val pushToken: String,
+    val tokenType: String
+)
+
 data class PushTokenRequest(
     val driverId: Int,
     val pushToken: String,

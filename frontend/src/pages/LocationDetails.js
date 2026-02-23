@@ -110,10 +110,29 @@ const LocationDetails = () => {
         api.get('/drinks'),
         api.get('/categories')
       ]);
-      setDrinks(drinksResponse.data);
-      setCategories(categoriesResponse.data);
+      
+      // Defensive: Ensure drinks is always an array
+      const drinksArray = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+      setDrinks(drinksArray);
+      
+      // Defensive: Ensure categories is always an array
+      let categoriesArray = [];
+      if (categoriesResponse.data) {
+        if (Array.isArray(categoriesResponse.data)) {
+          categoriesArray = categoriesResponse.data;
+        } else if (categoriesResponse.data.data && Array.isArray(categoriesResponse.data.data)) {
+          categoriesArray = categoriesResponse.data.data;
+        }
+      }
+      if (!Array.isArray(categoriesArray)) {
+        console.warn('Categories response is not an array:', categoriesResponse.data);
+        categoriesArray = [];
+      }
+      setCategories(categoriesArray);
     } catch (error) {
       console.error('Error fetching data:', error);
+      setDrinks([]);
+      setCategories([]);
     } finally {
       setLoading(false);
     }
@@ -236,11 +255,6 @@ const LocationDetails = () => {
 
   const formatCurrency = (amount) => {
     return `KES ${Math.round(Number(amount || 0))}`;
-  };
-  
-  const formatCurrencyOld = (amount) => {
-    if (!amount || amount === 0) return 'Free';
-    return `KES ${parseFloat(amount).toFixed(0)}`;
   };
 
   const displayLocationName = location ? location.name : decodeURIComponent(locationName || '');

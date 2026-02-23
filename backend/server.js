@@ -519,6 +519,24 @@ async function addMissingColumns(db) {
       console.log('✅ "cash" already exists in payment_method_enum');
     }
     
+    // Check if pushToken column exists in admins table
+    const [pushTokenResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'admins' AND column_name = 'pushToken'
+    `);
+    
+    if (pushTokenResults.length === 0) {
+      console.log('📝 Adding missing pushToken column to admins table...');
+      await db.sequelize.query(`
+        ALTER TABLE "admins" 
+        ADD COLUMN "pushToken" VARCHAR(255) NULL
+      `);
+      console.log('✅ Added pushToken column to admins table');
+    } else {
+      console.log('✅ pushToken column already exists in admins table');
+    }
+    
     return true;
   } catch (error) {
     console.warn('Column migration failed:', error.message);

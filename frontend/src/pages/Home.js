@@ -145,10 +145,28 @@ const Home = () => {
       // Note: API URL is resolved dynamically in api.js interceptor
       const response = await api.get('/categories');
       console.log('Categories response:', response.data);
-      setCategories(response.data);
+      
+      // Defensive: Ensure categories is always an array
+      let categoriesArray = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          categoriesArray = response.data;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          // Wrapped response: { data: [...] }
+          categoriesArray = response.data.data;
+        }
+      }
+      
+      if (!Array.isArray(categoriesArray)) {
+        console.warn('Categories response is not an array:', response.data);
+        categoriesArray = [];
+      }
+      
+      setCategories(categoriesArray);
     } catch (error) {
       console.error('Error fetching categories:', error);
       console.error('Error details:', error.response?.data || error.message);
+      setCategories([]); // Ensure categories is always an array even on error
     } finally {
       setCategoriesLoading(false);
     }
@@ -255,7 +273,7 @@ const Home = () => {
               width: '100%',
               display: 'flex',
               justifyContent: 'center',
-              maxHeight: { xs: '300px', md: '400px' },
+              maxHeight: { xs: '250px', md: '300px' },
               overflow: 'hidden'
             }}
           >
@@ -266,7 +284,7 @@ const Home = () => {
               sx={{
                 maxWidth: { xs: '100%', md: '1400px' },
                 width: { xs: '100%', md: '100%' },
-                maxHeight: { xs: '300px', md: '400px' },
+                maxHeight: { xs: '250px', md: '300px' },
                 height: 'auto',
                 display: 'block',
                 objectFit: 'contain'

@@ -37,18 +37,18 @@ const PrivacyPolicy = () => {
           </Typography>
         </Box>
 
-        <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 3, lineHeight: 1.8 }}>
+        <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 3, lineHeight: 1.8, textAlign: 'left' }}>
           <strong>Last Updated:</strong> {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
         </Typography>
 
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2, textAlign: 'left' }}>
             1. Information We Collect
           </Typography>
-          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8 }}>
+          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8, textAlign: 'left' }}>
             We collect information that you provide directly to us, including:
           </Typography>
-          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2 }}>
+          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2, textAlign: 'left' }}>
             <li>Name, phone number, and email address</li>
             <li>Delivery address and location information</li>
             <li>Order history and preferences (including alcoholic beverage preferences)</li>
@@ -59,10 +59,10 @@ const PrivacyPolicy = () => {
         </Box>
 
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2, textAlign: 'left' }}>
             2. How We Use Your Information
           </Typography>
-          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2 }}>
+          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2, textAlign: 'left' }}>
             <li>Process and fulfill your orders for alcoholic beverages</li>
             <li>Verify age and identity for compliance with alcohol sales regulations</li>
             <li>Communicate with you about your orders and our services</li>
@@ -74,13 +74,13 @@ const PrivacyPolicy = () => {
         </Box>
 
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2, textAlign: 'left' }}>
             3. Information Sharing
           </Typography>
-          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8 }}>
+          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8, textAlign: 'left' }}>
             We do not sell your personal information. We may share your information with:
           </Typography>
-          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2 }}>
+          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2, textAlign: 'left' }}>
             <li>Delivery drivers to fulfill your orders (including age verification requirements)</li>
             <li>Payment processors to handle transactions</li>
             <li>Service providers who assist in our operations</li>
@@ -90,19 +90,19 @@ const PrivacyPolicy = () => {
         </Box>
 
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2, textAlign: 'left' }}>
             4. Data Security
           </Typography>
-          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8 }}>
+          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8, textAlign: 'left' }}>
             We implement appropriate security measures to protect your personal information. However, no method of transmission over the internet is 100% secure.
           </Typography>
         </Box>
 
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2, textAlign: 'left' }}>
             5. Your Rights
           </Typography>
-          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2 }}>
+          <Typography variant="body2" component="ul" sx={{ color: colors.textSecondary, pl: 3, mb: 2, textAlign: 'left' }}>
             <li>Access your personal information</li>
             <li>Request correction of inaccurate data</li>
             <li>Request deletion of your data</li>
@@ -111,10 +111,10 @@ const PrivacyPolicy = () => {
         </Box>
 
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2 }}>
+          <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2, textAlign: 'left' }}>
             6. Contact Us
           </Typography>
-          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8 }}>
+          <Typography variant="body1" sx={{ color: colors.textPrimary, mb: 2, lineHeight: 1.8, textAlign: 'left' }}>
             If you have questions about this Privacy Policy, please contact us through our customer support channels.
           </Typography>
         </Box>

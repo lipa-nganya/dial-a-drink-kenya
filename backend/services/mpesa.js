@@ -6,6 +6,8 @@ const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE;
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY;
+// For PayBill: PartyB is the PayBill account number (different from BusinessShortCode)
+const MPESA_PAYBILL_ACCOUNT = process.env.MPESA_PAYBILL_ACCOUNT || process.env.MPESA_PARTYB || process.env.MPESA_SHORTCODE;
 
 // Validate required credentials - don't throw during module load, check at runtime
 const validateMpesaCredentials = () => {
@@ -52,25 +54,33 @@ const getCallbackUrl = () => {
   // Priority 3: Check if we're in Cloud Run and determine which instance
   const { isProduction, isCloudRun } = require('../utils/envDetection');
   if (isCloudRun()) {
-    // Determine which Cloud Run instance we're on based on GCP project
+    // Determine which Cloud Run instance we're on based on NODE_ENV and service name
+    const nodeEnv = process.env.NODE_ENV;
     const gcpProject = process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT;
     
-    // Dev backend: project 910510650031 or drink-suite
-    if (gcpProject === '910510650031' || gcpProject === 'drink-suite') {
-      callbackUrl = 'https://deliveryos-backend-910510650031.us-central1.run.app/api/mpesa/callback';
-      console.log(`✅ Using dev backend callback URL: ${callbackUrl}`);
+    // Development backend: NODE_ENV=development or dialadrink-production project with development service
+    if (nodeEnv === 'development' || (gcpProject === 'dialadrink-production' && process.env.K_SERVICE === 'deliveryos-development-backend')) {
+      callbackUrl = 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/mpesa/callback';
+      console.log(`✅ Using development backend callback URL: ${callbackUrl}`);
       return callbackUrl;
     }
     
-    // Production backend: dialadrink-production project
+    // Dev backend: project 910510650031 or drink-suite (legacy)
+    if (gcpProject === '910510650031' || gcpProject === 'drink-suite') {
+      callbackUrl = 'https://deliveryos-backend-910510650031.us-central1.run.app/api/mpesa/callback';
+      console.log(`✅ Using dev backend callback URL (legacy): ${callbackUrl}`);
+      return callbackUrl;
+    }
+    
+    // Production backend: dialadrink-production project with production service
     if (gcpProject === 'dialadrink-production' || isProduction()) {
-      callbackUrl = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/mpesa/callback';
+      callbackUrl = 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api/mpesa/callback';
       console.log(`✅ Using production callback URL: ${callbackUrl}`);
       return callbackUrl;
     }
     
     // Fallback: try to detect from service URL or use production
-    callbackUrl = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/mpesa/callback';
+    callbackUrl = 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api/mpesa/callback';
     console.log(`⚠️  Could not determine Cloud Run instance, using production callback URL: ${callbackUrl}`);
     return callbackUrl;
   }
@@ -249,8 +259,9 @@ function formatPhoneNumber(phone) {
  * @param {number} amount - Amount to charge
  * @param {string} accountReference - Reference for the transaction
  * @param {string} transactionDesc - Description of the transaction
+ * @param {string} [customCallbackUrl] - Optional custom callback URL (overrides automatic detection)
  */
-async function initiateSTKPush(phoneNumber, amount, accountReference, transactionDesc) {
+async function initiateSTKPush(phoneNumber, amount, accountReference, transactionDesc, customCallbackUrl = null) {
   // Validate credentials at runtime
   if (!validateMpesaCredentials()) {
     throw new Error('M-Pesa credentials are required. Please set environment variables: MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY');
@@ -270,32 +281,46 @@ async function initiateSTKPush(phoneNumber, amount, accountReference, transactio
     const token = await getAccessToken();
     const { password, timestamp } = generatePassword();
 
-    // Get callback URL at runtime (async so we can resolve ngrok from API when env not set)
-    const callbackUrl = await getCallbackUrlAsync();
+    // Get callback URL - use custom URL if provided, otherwise auto-detect
+    let callbackUrl;
+    if (customCallbackUrl) {
+      callbackUrl = customCallbackUrl;
+      console.log(`✅ Using custom callback URL from request: ${callbackUrl}`);
+    } else {
+      // Get callback URL at runtime (async so we can resolve ngrok from API when env not set)
+      callbackUrl = await getCallbackUrlAsync();
+      console.log(`✅ Using auto-detected callback URL: ${callbackUrl}`);
+    }
     
     const payload = {
-      BusinessShortCode: MPESA_SHORTCODE,
+      BusinessShortCode: MPESA_SHORTCODE, // Shortcode for authentication
       Password: password,
       Timestamp: timestamp,
       TransactionType: 'CustomerPayBillOnline',
       Amount: Math.ceil(amount), // M-Pesa requires integer amounts
-      PartyA: formattedPhone,
-      PartyB: MPESA_SHORTCODE,
+      PartyA: formattedPhone, // Customer phone number
+      PartyB: MPESA_PAYBILL_ACCOUNT, // PayBill account number (where money goes) - different from BusinessShortCode
       PhoneNumber: formattedPhone,
       CallBackURL: callbackUrl,
       AccountReference: accountReference,
       TransactionDesc: transactionDesc
     };
 
-    console.log('M-Pesa STK Push Request:', {
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📤 M-Pesa STK Push Request Payload:');
+    console.log(JSON.stringify({
       BusinessShortCode: MPESA_SHORTCODE,
+      PartyB: MPESA_PAYBILL_ACCOUNT, // PayBill account number
       PhoneNumber: formattedPhone,
       Amount: Math.ceil(amount),
-      CallBackURL: callbackUrl,
+      CallBackURL: callbackUrl, // ✅ Included in request - Safaricom will send results here automatically
       AccountReference: accountReference,
+      TransactionDesc: transactionDesc,
+      TransactionType: 'CustomerPayBillOnline',
       Environment: MPESA_ENVIRONMENT,
       BaseURL: MPESA_BASE_URL
-    });
+    }, null, 2));
+    console.log('═══════════════════════════════════════════════════════');
     
     // Validate callback URL format
     if (!callbackUrl.startsWith('https://') && !callbackUrl.startsWith('http://')) {

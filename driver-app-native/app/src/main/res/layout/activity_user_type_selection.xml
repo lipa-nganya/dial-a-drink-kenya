@@ -73,4 +73,18 @@
         app:layout_constraintTop_toBottomOf="@id/driverButton"
         android:layout_marginTop="24dp" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/shopAgentButton"
+        android:layout_width="0dp"
+        android:layout_height="80dp"
+        android:text="Shop Agent"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        app:backgroundTint="@color/accent"
+        app:cornerRadius="12dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/adminButton"
+        android:layout_marginTop="24dp" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

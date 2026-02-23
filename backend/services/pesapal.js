@@ -135,16 +135,15 @@ async function getAccessToken() {
  * Even when using sandbox credentials, IPN must be configured in Production section.
  */
 const getIPNCallbackUrl = () => {
-  // CRITICAL: Always use production IPN URL since PesaPal only allows IPN configuration
-  // in the production credentials section, even when using sandbox credentials
-  const PRODUCTION_IPN_URL = 'https://deliveryos-backend-805803410802.us-central1.run.app/api/pesapal/ipn';
+  const PRODUCTION_IPN_URL = 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api/pesapal/ipn';
+  const DEV_IPN_URL = 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/pesapal/ipn';
   
   // Priority 1: If PESAPAL_IPN_CALLBACK_URL is explicitly set, use it (for testing/override)
   let callbackUrl = process.env.PESAPAL_IPN_CALLBACK_URL;
   if (callbackUrl) {
     if (callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1')) {
-      console.warn('⚠️  Localhost IPN callback URL detected. Using production URL instead.');
-      callbackUrl = PRODUCTION_IPN_URL;
+      console.warn('⚠️  Localhost IPN callback URL detected. Using dev backend URL instead.');
+      callbackUrl = DEV_IPN_URL;
     } else {
       console.log(`✅ Using IPN callback URL from environment: ${callbackUrl}`);
       return callbackUrl;
@@ -152,7 +151,6 @@ const getIPNCallbackUrl = () => {
   }
   
   // Priority 2: Check for ngrok URL in environment (for local development)
-  // This allows local testing while PesaPal IPN is configured in production credentials section
   const ngrokUrl = process.env.NGROK_URL;
   if (ngrokUrl && !ngrokUrl.includes('localhost') && !ngrokUrl.includes('127.0.0.1')) {
     callbackUrl = `${ngrokUrl}/api/pesapal/ipn`;
@@ -161,19 +159,23 @@ const getIPNCallbackUrl = () => {
     return callbackUrl;
   }
   
-  // Priority 3: Check if we're in production
-  const { isProduction } = require('../utils/envDetection');
+  // Priority 3: Check if we're in development backend
+  const { isProduction, isCloudRun } = require('../utils/envDetection');
+  if (isCloudRun() && process.env.NODE_ENV === 'development') {
+    console.log(`✅ Using development backend IPN callback URL: ${DEV_IPN_URL}`);
+    return DEV_IPN_URL;
+  }
+  
+  // Priority 4: Check if we're in production
   if (isProduction()) {
     console.log(`✅ Using production IPN callback URL: ${PRODUCTION_IPN_URL}`);
     return PRODUCTION_IPN_URL;
   }
   
-  // Priority 4: Fall back to production IPN URL for local development
-  // This is required because PesaPal only allows IPN configuration in production credentials
-  // Even when using sandbox credentials, you must configure IPN in production section
-  console.log(`⚠️  No ngrok URL found. Using production IPN URL for local development: ${PRODUCTION_IPN_URL}`);
+  // Priority 5: Fall back to dev backend URL for local development
+  console.log(`⚠️  No ngrok URL found. Using development backend IPN URL for local development: ${DEV_IPN_URL}`);
   console.log(`⚠️  For local testing, set NGROK_URL in .env.local and configure that URL in PesaPal dashboard`);
-  return PRODUCTION_IPN_URL;
+  return DEV_IPN_URL;
 };
 
 /**

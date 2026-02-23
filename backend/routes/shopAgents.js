@@ -301,14 +301,35 @@ router.post('/login', async (req, res) => {
     }
 
     // Find shop agent by mobile number (try normalized and original format)
-    const shopAgent = await db.Admin.findOne({
-      where: {
-        role: 'shop_agent',
-        mobileNumber: {
-          [Op.in]: [normalizedMobile, mobileNumber.trim(), normalizedMobile.replace(/^254/, '0')]
-        }
+    // Use try-catch to handle potential database column issues
+    let shopAgent;
+    try {
+      shopAgent = await db.Admin.findOne({
+        where: {
+          role: 'shop_agent',
+          mobileNumber: {
+            [Op.in]: [normalizedMobile, mobileNumber.trim(), normalizedMobile.replace(/^254/, '0')]
+          }
+        },
+        attributes: ['id', 'name', 'mobileNumber', 'role', 'pinHash', 'hasSetPin', 'pushToken']
+      });
+    } catch (dbError) {
+      // If pushToken column doesn't exist, try without it
+      if (dbError.message && dbError.message.includes('pushToken')) {
+        console.warn('pushToken column not found, querying without it');
+        shopAgent = await db.Admin.findOne({
+          where: {
+            role: 'shop_agent',
+            mobileNumber: {
+              [Op.in]: [normalizedMobile, mobileNumber.trim(), normalizedMobile.replace(/^254/, '0')]
+            }
+          },
+          attributes: ['id', 'name', 'mobileNumber', 'role', 'pinHash', 'hasSetPin']
+        });
+      } else {
+        throw dbError; // Re-throw if it's a different error
       }
-    });
+    }
 
     if (!shopAgent) {
       return res.status(401).json({
@@ -359,9 +380,16 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Shop agent login error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
     return res.status(500).json({
       success: false,
-      error: 'Failed to login. Please try again.'
+      error: 'Failed to login. Please try again.',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -514,17 +542,20 @@ router.get('/inventory-items', async (req, res) => {
 
       return res.json({
         success: true,
-        items: drinks.map(drink => ({
-          id: drink.id,
-          name: drink.name,
-          barcode: drink.barcode,
-          currentStock: drink.stock || 0,
-          isAvailable: drink.isAvailable,
-          category: drink.category ? {
-            id: drink.category.id,
-            name: drink.category.name
-          } : null
-        }))
+        data: {
+          success: true,
+          items: drinks.map(drink => ({
+            id: drink.id,
+            name: drink.name,
+            barcode: drink.barcode,
+            currentStock: drink.stock || 0,
+            isAvailable: drink.isAvailable,
+            category: drink.category ? {
+              id: drink.category.id,
+              name: drink.category.name
+            } : null
+          }))
+        }
       });
     } catch (jwtError) {
       return res.status(401).json({ error: 'Invalid or expired token' });
@@ -625,9 +656,12 @@ router.post('/inventory-check', async (req, res) => {
 
       return res.json({
         success: true,
-        message: `Inventory check submitted for ${results.length} item(s)`,
-        results,
-        errors: errors.length > 0 ? errors : undefined
+        data: {
+          success: true,
+          message: `Inventory check submitted for ${results.length} item(s)`,
+          results,
+          errors: errors.length > 0 ? errors : undefined
+        }
       });
     } catch (jwtError) {
       return res.status(401).json({ error: 'Invalid or expired token' });
@@ -645,6 +679,84 @@ router.post('/inventory-check', async (req, res) => {
  * Get inventory check history for shop agent
  * GET /api/shop-agents/inventory-check-history
  */
+/**
+ * Register or update shop agent push token (native FCM/APNs)
+ * POST /api/shop-agents/push-token
+ */
+router.post('/push-token', async (req, res) => {
+  try {
+    const { shopAgentId, pushToken, tokenType } = req.body;
+
+    console.log(`📱 Push token registration request received for shop agent #${shopAgentId}`);
+    console.log(`📱 Token preview: ${pushToken ? pushToken.substring(0, 20) + '...' : 'null'}`);
+    console.log(`📱 Token type: ${tokenType || 'not provided'}`);
+
+    if (!shopAgentId || !pushToken) {
+      console.error('❌ Missing required fields: shopAgentId or pushToken');
+      return res.status(400).json({
+        success: false,
+        error: 'shopAgentId and pushToken are required'
+      });
+    }
+
+    if (!pushToken || pushToken.length < 10) {
+      console.error(`❌ Invalid push token format: length=${pushToken?.length || 0}`);
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid push token format'
+      });
+    }
+
+    const shopAgent = await db.Admin.findOne({
+      where: {
+        id: shopAgentId,
+        role: 'shop_agent'
+      }
+    });
+
+    if (!shopAgent) {
+      console.error(`❌ Shop agent #${shopAgentId} not found`);
+      return res.status(404).json({
+        success: false,
+        error: 'Shop agent not found'
+      });
+    }
+
+    const detectedTokenType = tokenType || 'FCM/Native';
+    
+    console.log(`📱 Saving ${detectedTokenType} push token for shop agent #${shopAgentId} (${shopAgent.name || 'Unknown'})...`);
+    console.log(`📱 Token length: ${pushToken.length} characters`);
+    
+    shopAgent.pushToken = pushToken;
+    await shopAgent.save();
+    
+    // Verify it was saved
+    const savedShopAgent = await db.Admin.findByPk(shopAgentId);
+    if (savedShopAgent && savedShopAgent.pushToken === pushToken) {
+      console.log(`✅ Push token successfully saved and verified for shop agent #${shopAgentId}`);
+    } else {
+      console.error(`❌ Push token verification failed for shop agent #${shopAgentId}`);
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        shopAgentId: shopAgent.id,
+        pushToken: shopAgent.pushToken,
+        tokenType: detectedTokenType
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error saving shop agent push token:', error);
+    console.error('Error stack:', error.stack);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to save push token',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 router.get('/inventory-check-history', async (req, res) => {
   try {
     const authHeader = req.headers.authorization || req.headers.Authorization;
@@ -695,31 +807,34 @@ router.get('/inventory-check-history', async (req, res) => {
 
       return res.json({
         success: true,
-        checks: inventoryChecks.map(check => ({
-          id: check.id,
-          drink: check.drink ? {
-            id: check.drink.id,
-            name: check.drink.name,
-            barcode: check.drink.barcode,
-            currentStock: check.drink.stock || 0,
-            category: check.drink.category ? {
-              id: check.drink.category.id,
-              name: check.drink.category.name
-            } : null
-          } : null,
-          agentCount: check.agentCount,
-          databaseCount: check.databaseCount,
-          status: check.status,
-          isFlagged: check.isFlagged,
-          approvedBy: check.approver ? {
-            id: check.approver.id,
-            name: check.approver.name || check.approver.username
-          } : null,
-          approvedAt: check.approvedAt,
-          notes: check.notes,
-          createdAt: check.createdAt,
-          updatedAt: check.updatedAt
-        }))
+        data: {
+          success: true,
+          checks: inventoryChecks.map(check => ({
+            id: check.id,
+            drink: check.drink ? {
+              id: check.drink.id,
+              name: check.drink.name,
+              barcode: check.drink.barcode,
+              currentStock: check.drink.stock || 0,
+              category: check.drink.category ? {
+                id: check.drink.category.id,
+                name: check.drink.category.name
+              } : null
+            } : null,
+            agentCount: check.agentCount,
+            databaseCount: check.databaseCount,
+            status: check.status,
+            isFlagged: check.isFlagged,
+            approvedBy: check.approver ? {
+              id: check.approver.id,
+              name: check.approver.name || check.approver.username
+            } : null,
+            approvedAt: check.approvedAt,
+            notes: check.notes,
+            createdAt: check.createdAt,
+            updatedAt: check.updatedAt
+          }))
+        }
       });
     } catch (jwtError) {
       return res.status(401).json({ error: 'Invalid or expired token' });

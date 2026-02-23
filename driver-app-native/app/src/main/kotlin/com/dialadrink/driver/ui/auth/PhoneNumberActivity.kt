@@ -147,22 +147,34 @@ class PhoneNumberActivity : AppCompatActivity() {
                         val phoneCheck = phoneCheckResponse.body()!!.data
                         val isDriver = phoneCheck?.isDriver ?: false
                         val isAdmin = phoneCheck?.isAdmin ?: false
+                        val isShopAgent = phoneCheck?.isShopAgent ?: false
                         
-                        android.util.Log.d("PhoneNumberActivity", "📦 Phone check: isDriver=$isDriver, isAdmin=$isAdmin")
+                        android.util.Log.d("PhoneNumberActivity", "📦 Phone check: isDriver=$isDriver, isAdmin=$isAdmin, isShopAgent=$isShopAgent")
                         android.util.Log.d("PhoneNumberActivity", "📦 Driver info: ${phoneCheck?.driver}")
                         android.util.Log.d("PhoneNumberActivity", "📦 Admin info: ${phoneCheck?.admin}")
+                        android.util.Log.d("PhoneNumberActivity", "📦 Shop Agent info: ${phoneCheck?.shopAgent}")
                         
-                        if (isDriver && isAdmin) {
-                            // Phone exists as both - show user type selection
-                            android.util.Log.d("PhoneNumberActivity", "🔀 Phone exists as both driver and admin - showing selection")
+                        // Check if phone exists as multiple user types
+                        val userTypes = mutableListOf<String>()
+                        if (isDriver) userTypes.add("driver")
+                        if (isAdmin) userTypes.add("admin")
+                        if (isShopAgent) userTypes.add("shop_agent")
+                        
+                        // Always show user type selection if phone exists as any type
+                        // This allows users to see all available options
+                        if (userTypes.size >= 1) {
+                            // Phone exists - show user type selection
+                            android.util.Log.d("PhoneNumberActivity", "🔀 Phone exists as: ${userTypes.joinToString(", ")} - showing selection")
                             
                             // Get PIN status from phone check response
                             val driverInfo = phoneCheck?.driver
                             val adminInfo = phoneCheck?.admin
+                            val shopAgentInfo = phoneCheck?.shopAgent
                             val driverHasPin = driverInfo?.hasPin == true
                             val adminHasPin = adminInfo?.hasPin == true
+                            val shopAgentHasPin = shopAgentInfo?.hasPin == true
                             
-                            android.util.Log.d("PhoneNumberActivity", "🔐 Driver PIN: $driverHasPin, Admin PIN: $adminHasPin")
+                            android.util.Log.d("PhoneNumberActivity", "🔐 Driver PIN: $driverHasPin, Admin PIN: $adminHasPin, Shop Agent PIN: $shopAgentHasPin")
                             
                             // Save info
                             if (driverInfo != null) {
@@ -173,11 +185,20 @@ class PhoneNumberActivity : AppCompatActivity() {
                             if (adminInfo != null) {
                                 SharedPrefs.saveAdminPhone(this@PhoneNumberActivity, formattedPhone)
                             }
+                            if (shopAgentInfo != null) {
+                                SharedPrefs.saveShopAgentPhone(this@PhoneNumberActivity, formattedPhone)
+                                SharedPrefs.saveShopAgentId(this@PhoneNumberActivity, shopAgentInfo.id)
+                                SharedPrefs.saveShopAgentName(this@PhoneNumberActivity, shopAgentInfo.name ?: "")
+                            }
                             
                             val intent = Intent(this@PhoneNumberActivity, UserTypeSelectionActivity::class.java)
                             intent.putExtra("phone", formattedPhone)
                             intent.putExtra("driverHasPin", driverHasPin)
                             intent.putExtra("adminHasPin", adminHasPin)
+                            intent.putExtra("shopAgentHasPin", shopAgentHasPin)
+                            intent.putExtra("isDriver", isDriver)
+                            intent.putExtra("isAdmin", isAdmin)
+                            intent.putExtra("isShopAgent", isShopAgent)
                             startActivity(intent)
                             return@launch
                         } else if (isDriver) {
@@ -259,10 +280,37 @@ class PhoneNumberActivity : AppCompatActivity() {
                                 android.util.Log.d("PhoneNumberActivity", "⚠️ Admin has NO PIN or reset requested - will send OTP")
                             }
                             // Admin has no PIN or reset requested - continue to OTP flow
+                        } else if (isShopAgent) {
+                            // Only shop agent - check if they have PIN
+                            android.util.Log.d("PhoneNumberActivity", "✅ Shop agent only - checking PIN status")
+                            SharedPrefs.saveShopAgentPhone(this@PhoneNumberActivity, formattedPhone)
+                            
+                            // Check if shop agent has PIN from the phone check response
+                            val shopAgentInfo = phoneCheck?.shopAgent
+                            val shopAgentHasPin = shopAgentInfo?.hasPin == true
+                            
+                            android.util.Log.d("PhoneNumberActivity", "🔐 Shop agent PIN status: $shopAgentHasPin")
+                            
+                            if (shopAgentInfo != null) {
+                                SharedPrefs.saveShopAgentId(this@PhoneNumberActivity, shopAgentInfo.id)
+                                SharedPrefs.saveShopAgentName(this@PhoneNumberActivity, shopAgentInfo.name ?: "")
+                            }
+                            
+                            if (shopAgentHasPin && !isResetPin) {
+                                // Shop agent has PIN and it's not a reset - go to PIN login
+                                android.util.Log.d("PhoneNumberActivity", "🔐 Shop agent has PIN - navigating to shop agent login")
+                                val intent = Intent(this@PhoneNumberActivity, com.dialadrink.driver.ui.shopagent.ShopAgentLoginActivity::class.java)
+                                intent.putExtra("phone", formattedPhone)
+                                startActivity(intent)
+                                return@launch
+                            } else {
+                                android.util.Log.d("PhoneNumberActivity", "⚠️ Shop agent has NO PIN or reset requested - will send OTP")
+                            }
+                            // Shop agent has no PIN or reset requested - continue to OTP flow
                         } else {
-                            android.util.Log.d("PhoneNumberActivity", "⚠️ Phone not found as driver or admin - will send OTP")
+                            android.util.Log.d("PhoneNumberActivity", "⚠️ Phone not found as driver, admin, or shop agent - will send OTP")
                         }
-                        // Neither driver nor admin - continue to OTP flow
+                        // Neither driver, admin, nor shop agent - continue to OTP flow
                     } else {
                         android.util.Log.w("PhoneNumberActivity", "⚠️ Phone check failed - will send OTP")
                     }

@@ -51,6 +51,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: false,
       comment: 'Whether shop agent has set their PIN'
+    },
+    pushToken: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'FCM push token for shop agents'
     }
   }, {
     tableName: 'admins',

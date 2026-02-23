@@ -238,6 +238,48 @@
             android:exported="false"
             android:theme="@style/Theme.DialADrinkDriver" />
 
+        <!-- Shop Agent Activities -->
+        <activity
+            android:name=".ui.shopagent.ShopAgentLoginActivity"
+            android:parentActivityName=".ui.auth.PhoneNumberActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.shopagent.ShopAgentDashboardActivity"
+            android:parentActivityName=".ui.shopagent.ShopAgentLoginActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.shopagent.ShopAgentInventoryCheckActivity"
+            android:parentActivityName=".ui.shopagent.ShopAgentDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.shopagent.CheckedItemsActivity"
+            android:parentActivityName=".ui.shopagent.ShopAgentInventoryCheckActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.shopagent.ShopAgentInventoryCheckHistoryActivity"
+            android:parentActivityName=".ui.shopagent.ShopAgentDashboardActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+
+        <!-- Common Activities -->
+        <activity
+            android:name=".ui.common.TermsOfUseActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+        
+        <activity
+            android:name=".ui.common.PrivacyPolicyActivity"
+            android:exported="false"
+            android:theme="@style/Theme.DialADrinkDriver" />
+
         <!-- Firebase Cloud Messaging -->
         <service
             android:name=".services.DriverFirebaseMessagingService"

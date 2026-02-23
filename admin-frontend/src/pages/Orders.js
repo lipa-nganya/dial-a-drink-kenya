@@ -32,10 +32,6 @@ import {
   Card,
   CardContent,
   Divider,
-  Autocomplete,
-  ToggleButton,
-  ToggleButtonGroup,
-  Menu,
   Snackbar
 } from '@mui/material';
 import {
@@ -45,21 +41,9 @@ import {
   Edit,
   Person,
   Delete,
-  MoreVert,
   Search,
   Clear,
   PictureAsPdf,
-  Route as RouteIcon,
-  LocalShipping,
-  AccessTime,
-  LocationOn,
-  Add,
-  Map,
-  List,
-  Refresh,
-  Close,
-  KeyboardArrowUp,
-  KeyboardArrowDown,
   AutoAwesome,
   Phone,
   Payment,
@@ -74,7 +58,6 @@ import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChi
 import NewOrderDialog from '../components/NewOrderDialog';
 import { useJsApiLoader } from '@react-google-maps/api';
 import AddressAutocomplete from '../components/AddressAutocomplete';
-import RouteMapView from '../components/RouteMapView';
 
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
@@ -146,17 +129,34 @@ const Orders = () => {
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   
-  // Route Optimisation state
-  const [activeTab, setActiveTab] = useState(0);
+  // Route Optimisation state (kept for fetchRiderRoutes function which is still called)
   const [orderTab, setOrderTab] = useState('all'); // 'all', 'completed', 'pending', 'unassigned', 'confirmed', 'cancelled', 'cancellation-requests'
+  // eslint-disable-next-line no-unused-vars
   const [riderRoutes, setRiderRoutes] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [allRiderRoutes, setAllRiderRoutes] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [allRiders, setAllRiders] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [routesLoading, setRoutesLoading] = useState(false);
+  // eslint-disable-next-line no-unused-vars
   const [selectedRiders, setSelectedRiders] = useState([]);
-  const [draggedOrder, setDraggedOrder] = useState(null);
-  const [draggedStop, setDraggedStop] = useState(null);
-  const [dragOverRider, setDragOverRider] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [riderLocations, setRiderLocations] = useState({});
+  // eslint-disable-next-line no-unused-vars
+  const [refreshingLocations, setRefreshingLocations] = useState(false);
+  // eslint-disable-next-line no-unused-vars
+  const [optimizedRoutes, setOptimizedRoutes] = useState({}); // riderId -> array of order IDs in optimized order
+  // eslint-disable-next-line no-unused-vars
+  const [, setOptimizationSavings] = useState({}); // riderId -> { timeSaved, costSaved }
+  // eslint-disable-next-line no-unused-vars
+  const [optimizationProgress, setOptimizationProgress] = useState({
+    open: false,
+    step: 0,
+    totalSteps: 9,
+    currentStep: '',
+    progress: 0
+  });
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
   const [selectedRiderForStop, setSelectedRiderForStop] = useState(null);
   const [selectedOrderIndexForStop, setSelectedOrderIndexForStop] = useState(null);
@@ -168,23 +168,10 @@ const Orders = () => {
     payment: ''
   });
   const [stops, setStops] = useState({}); // riderId -> array of { stop, insertAfterIndex }
-  const [routeViewMode, setRouteViewMode] = useState('list');
-  const [riderLocations, setRiderLocations] = useState({});
-  const [refreshingLocations, setRefreshingLocations] = useState(false);
-  const [mapCenter, setMapCenter] = useState({ lat: -1.2921, lng: 36.8219 });
-  const [optimizedRoutes, setOptimizedRoutes] = useState({}); // riderId -> array of order IDs in optimized order
-  const [optimizing, setOptimizing] = useState(false);
-  const [, setOptimizationSavings] = useState({}); // riderId -> { timeSaved, costSaved }
-  const [optimizationProgress, setOptimizationProgress] = useState({
-    open: false,
-    step: 0,
-    totalSteps: 9,
-    currentStep: '',
-    progress: 0
-  });
 
   
   // Google Maps API loader
+  // eslint-disable-next-line no-unused-vars
   const { isLoaded: isMapLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '',
@@ -1330,17 +1317,6 @@ const Orders = () => {
   };
 
   // Route Optimisation functions
-  const formatDateTime = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
 
   const fetchRiderRoutes = async () => {
     try {
@@ -1454,6 +1430,7 @@ const Orders = () => {
   };
 
 
+  // eslint-disable-next-line no-unused-vars
   const handleRefreshLocations = async () => {
     setRefreshingLocations(true);
     try {
@@ -1475,29 +1452,10 @@ const Orders = () => {
     }
   };
 
-  // Check if routes are currently optimized
-  const isRouteOptimized = () => {
-    if (Object.keys(optimizedRoutes).length === 0) return false;
-    
-    // Check if current order matches optimized order for each rider
-    for (const route of riderRoutes) {
-      const optimizedOrder = optimizedRoutes[route.rider.id];
-      if (!optimizedOrder) continue;
-      
-      const currentOrder = route.orders.map(o => o.id);
-      if (currentOrder.length !== optimizedOrder.length) return false;
-      
-      // Check if orders match
-      for (let i = 0; i < currentOrder.length; i++) {
-        if (currentOrder[i] !== optimizedOrder[i]) return false;
-      }
-    }
-    
-    return true;
-  };
 
 
   // Helper function to update optimization progress
+  // eslint-disable-next-line no-unused-vars
   const updateOptimizationProgress = (step, currentStep, progress) => {
     setOptimizationProgress({
       open: true,
@@ -1508,523 +1466,6 @@ const Orders = () => {
     });
   };
   
-  // Optimize routes using Google Maps and TSP-like algorithm
-  const handleOptimizeRoutes = async () => {
-    if (!window.google || !isMapLoaded) {
-      setError('Google Maps is not loaded. Please wait and try again.');
-      return;
-    }
-
-    setOptimizing(true);
-    setError(null);
-    
-    // Open progress dialog
-    updateOptimizationProgress(0, 'Initializing optimization engine...', 0);
-
-    try {
-      // Step 1: Check current driver locations
-      updateOptimizationProgress(1, 'Checking current driver locations...', 11);
-      await handleRefreshLocations();
-      await new Promise(resolve => setTimeout(resolve, 300)); // Small delay for UX
-      
-      const geocoder = new window.google.maps.Geocoder();
-      const distanceMatrixService = new window.google.maps.DistanceMatrixService();
-      const newOptimizedRoutes = {};
-      const newSavings = {};
-      
-      // Step 2: Check order locations
-      updateOptimizationProgress(2, 'Checking order locations...', 22);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      // Step 3: Check stop locations  
-      updateOptimizationProgress(3, 'Checking stop locations...', 33);
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      // Step 4: Rearrange orders and stops based on driver locations
-      updateOptimizationProgress(4, 'Rearranging orders and stops based on driver locations...', 44);
-      
-      // Optimize each rider's route
-      for (const route of riderRoutes) {
-        if (route.orders.length < 2) {
-          // No optimization needed for 0 or 1 order
-          continue;
-        }
-
-        // Get rider's current location
-        const riderLocation = riderLocations[route.rider.id];
-        if (!riderLocation) {
-          console.warn(`No location found for rider ${route.rider.id}`);
-          continue;
-        }
-
-        // Geocode all order addresses
-        // const orderLocations = []; // Unused
-        const geocodePromises = route.orders.map(async (order) => {
-          if (!order.deliveryAddress || order.deliveryAddress === 'In-Store Purchase') {
-            return null;
-          }
-          
-          return new Promise((resolve) => {
-            geocoder.geocode({ address: order.deliveryAddress }, (results, status) => {
-              if (status === window.google.maps.GeocoderStatus.OK && results && results.length > 0) {
-                const location = results[0].geometry.location;
-                resolve({
-                  orderId: order.id,
-                  location: { lat: location.lat(), lng: location.lng() },
-                  address: order.deliveryAddress
-                });
-              } else {
-                resolve(null);
-              }
-            });
-          });
-        });
-
-        const geocoded = (await Promise.all(geocodePromises)).filter(Boolean);
-        
-        if (geocoded.length < 2) {
-          // Not enough geocoded addresses
-          continue;
-        }
-
-        // Calculate distance matrix
-        const origins = [riderLocation, ...geocoded.map(o => o.location)];
-        const destinations = [...geocoded.map(o => o.location), riderLocation];
-        
-        const distanceMatrix = await new Promise((resolve) => {
-          distanceMatrixService.getDistanceMatrix(
-            {
-              origins: origins.map(orig => new window.google.maps.LatLng(orig.lat, orig.lng)),
-              destinations: destinations.map(dest => new window.google.maps.LatLng(dest.lat, dest.lng)),
-              travelMode: window.google.maps.TravelMode.DRIVING,
-              unitSystem: window.google.maps.UnitSystem.METRIC
-            },
-            (response, status) => {
-              if (status === window.google.maps.DistanceMatrixStatus.OK) {
-                resolve(response);
-              } else {
-                resolve(null);
-              }
-            }
-          );
-        });
-
-        if (!distanceMatrix) continue;
-
-        // Extract distances and durations from matrix
-        const distances = [];
-        const durations = [];
-        for (let i = 0; i < origins.length; i++) {
-          distances[i] = [];
-          durations[i] = [];
-          for (let j = 0; j < destinations.length; j++) {
-            const element = distanceMatrix.rows[i].elements[j];
-            distances[i][j] = element.distance.value; // meters
-            durations[i][j] = element.duration.value; // seconds
-          }
-        }
-
-        // Nearest neighbor algorithm for TSP
-        const optimizedOrderIds = [];
-        const unvisited = [...geocoded.map(o => o.orderId)];
-        let currentIndex = 0; // Start from rider location (index 0)
-        
-        while (unvisited.length > 0) {
-          let nearestIndex = -1;
-          let nearestDistance = Infinity;
-          
-          // Find nearest unvisited order
-          for (let i = 0; i < geocoded.length; i++) {
-            const orderId = geocoded[i].orderId;
-            if (!unvisited.includes(orderId)) continue;
-            
-            const destIndex = i; // destination index in distance matrix
-            const distance = distances[currentIndex][destIndex + 1]; // +1 because rider is at index 0
-            
-            if (distance < nearestDistance) {
-              nearestDistance = distance;
-              nearestIndex = i;
-            }
-          }
-          
-          if (nearestIndex === -1) break;
-          
-          const nearestOrderId = geocoded[nearestIndex].orderId;
-          optimizedOrderIds.push(nearestOrderId);
-          unvisited.splice(unvisited.indexOf(nearestOrderId), 1);
-          currentIndex = nearestIndex + 1; // +1 because rider is at index 0
-        }
-
-        // Calculate current route total distance/time
-        let currentTotalDistance = 0;
-        let currentTotalTime = 0;
-        for (let i = 0; i < route.orders.length - 1; i++) {
-          const currentOrder = route.orders[i];
-          const nextOrder = route.orders[i + 1];
-          
-          const currentGeocoded = geocoded.find(g => g.orderId === currentOrder.id);
-          const nextGeocoded = geocoded.find(g => g.orderId === nextOrder.id);
-          
-          if (currentGeocoded && nextGeocoded) {
-            const fromIndex = i === 0 ? 0 : geocoded.findIndex(g => g.orderId === currentOrder.id) + 1;
-            const toIndex = geocoded.findIndex(g => g.orderId === nextOrder.id) + 1;
-            
-            if (distances[fromIndex] && distances[fromIndex][toIndex] !== undefined) {
-              currentTotalDistance += distances[fromIndex][toIndex];
-              currentTotalTime += durations[fromIndex][toIndex];
-            }
-          }
-        }
-
-        // Step 5: Estimate total distance travelled per selected rider
-        // Calculate optimized route total distance/time
-        let optimizedTotalDistance = 0;
-        let optimizedTotalTime = 0;
-        for (let i = 0; i < optimizedOrderIds.length - 1; i++) {
-          const fromIndex = i === 0 ? 0 : geocoded.findIndex(g => g.orderId === optimizedOrderIds[i]) + 1;
-          const toIndex = geocoded.findIndex(g => g.orderId === optimizedOrderIds[i + 1]) + 1;
-          
-          if (distances[fromIndex] && distances[fromIndex][toIndex] !== undefined) {
-            optimizedTotalDistance += distances[fromIndex][toIndex];
-            optimizedTotalTime += durations[fromIndex][toIndex];
-          }
-        }
-        
-        // Step 6: Estimate total travel time per selected rider (already calculated above)
-
-        // Calculate savings
-        const distanceSaved = currentTotalDistance - optimizedTotalDistance; // meters
-        const timeSaved = currentTotalTime - optimizedTotalTime; // seconds
-        
-        // Estimate cost savings (assuming fuel cost per km and time cost)
-        const fuelCostPerKm = 120; // KES per km (approximate)
-        const driverCostPerHour = 500; // KES per hour (approximate)
-        const distanceSavedKm = distanceSaved / 1000;
-        const timeSavedHours = timeSaved / 3600;
-        const costSaved = (distanceSavedKm * fuelCostPerKm) + (timeSavedHours * driverCostPerHour);
-
-        newOptimizedRoutes[route.rider.id] = optimizedOrderIds;
-        newSavings[route.rider.id] = {
-          timeSaved: Math.round(timeSaved / 60), // minutes
-          costSaved: Math.round(costSaved), // KES
-          distanceSaved: Math.round(distanceSavedKm * 10) / 10 // km, 1 decimal
-        };
-
-        // Update order sequences in database
-        for (let i = 0; i < optimizedOrderIds.length; i++) {
-          try {
-            await api.patch(`/admin/orders/${optimizedOrderIds[i]}/sequence`, {
-              deliverySequence: i
-            });
-          } catch (error) {
-            console.error(`Error updating sequence for order ${optimizedOrderIds[i]}:`, error);
-          }
-        }
-      }
-      
-      // Step 5: Update progress after distance calculation
-      updateOptimizationProgress(5, 'Estimating total distance per rider...', 56);
-      
-      // Step 6: Update progress after time calculation
-      updateOptimizationProgress(6, 'Estimating total travel time per rider...', 67);
-      
-      // Step 7: Check if additional riders are required (30min per card)
-      updateOptimizationProgress(7, 'Checking if additional riders are required...', 78);
-      // TODO: Implement logic to check if routes exceed 30 minutes per rider
-      // and recommend additional riders if needed
-      
-      // Step 8: Recommend best additional driver if needed
-      updateOptimizationProgress(8, 'Recommending best additional drivers...', 89);
-      // TODO: Implement logic to recommend best additional drivers
-      
-      setOptimizedRoutes(newOptimizedRoutes);
-      setOptimizationSavings(newSavings);
-      
-      // Step 9: Apply optimization and update UI
-      updateOptimizationProgress(9, 'Applying optimization and updating routes...', 100);
-      
-      // Refresh routes to show optimized order
-      await fetchRiderRoutes();
-      
-      // Close progress dialog
-      setOptimizationProgress(prev => ({ ...prev, open: false }));
-      
-      // Show success message
-      console.log('Routes optimized successfully!');
-    } catch (error) {
-      console.error('Error optimizing routes:', error);
-      setError(error.message || 'Failed to optimize routes');
-      setOptimizationProgress(prev => ({ ...prev, open: false }));
-    } finally {
-      setOptimizing(false);
-    }
-  };
-
-  // Move order up/down in timeline
-  const handleMoveOrder = async (riderId, orderId, direction) => {
-    const route = riderRoutes.find(r => r.rider.id === riderId);
-    if (!route) return;
-    
-    const orders = [...route.orders];
-    const orderIndex = orders.findIndex(o => o.id === orderId);
-    
-    if (orderIndex === -1) return;
-    if (direction === 'up' && orderIndex === 0) return; // Already at top
-    if (direction === 'down' && orderIndex === orders.length - 1) return; // Already at bottom
-    
-    const newIndex = direction === 'up' ? orderIndex - 1 : orderIndex + 1;
-    
-    // Get current deliverySequence values (or use index as fallback)
-    const currentOrder = orders[orderIndex];
-    const swapOrder = orders[newIndex];
-    
-    // Update local state immediately for UI responsiveness
-    setRiderRoutes(prevRoutes => {
-      return prevRoutes.map(r => {
-        if (r.rider.id !== riderId) return r;
-        const updatedOrders = [...r.orders];
-        [updatedOrders[orderIndex], updatedOrders[newIndex]] = [updatedOrders[newIndex], updatedOrders[orderIndex]];
-        return { ...r, orders: updatedOrders };
-      });
-    });
-    
-    setAllRiderRoutes(prevRoutes => {
-      return prevRoutes.map(r => {
-        if (r.rider.id !== riderId) return r;
-        const updatedOrders = [...r.orders];
-        const idx = updatedOrders.findIndex(o => o.id === orderId);
-        if (idx === -1) return r;
-        const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-        if (swapIdx < 0 || swapIdx >= updatedOrders.length) return r;
-        [updatedOrders[idx], updatedOrders[swapIdx]] = [updatedOrders[swapIdx], updatedOrders[idx]];
-        return { ...r, orders: updatedOrders };
-      });
-    });
-    
-    // Save to database
-    try {
-      // Swap deliverySequence values
-      const currentSeq = currentOrder.deliverySequence !== null && currentOrder.deliverySequence !== undefined 
-        ? currentOrder.deliverySequence 
-        : orderIndex;
-      const swapSeq = swapOrder.deliverySequence !== null && swapOrder.deliverySequence !== undefined
-        ? swapOrder.deliverySequence 
-        : newIndex;
-      
-      await Promise.all([
-        api.patch(`/admin/orders/${orderId}/sequence`, { deliverySequence: swapSeq }),
-        api.patch(`/admin/orders/${swapOrder.id}/sequence`, { deliverySequence: currentSeq })
-      ]);
-      
-      // Refresh data to ensure consistency
-      await fetchRiderRoutes();
-    } catch (error) {
-      console.error('Error updating order sequence:', error);
-      setError(error.response?.data?.error || 'Failed to update order sequence');
-      // Revert on error
-      await fetchRiderRoutes();
-    }
-  };
-
-  // Move stop up/down in timeline (can move with orders or stops)
-  const handleMoveStop = async (riderId, stopIndex, direction) => {
-    const route = riderRoutes.find(r => r.rider.id === riderId);
-    if (!route) return;
-    
-    const riderStops = stops[riderId] || [];
-    if (stopIndex === -1 || stopIndex >= riderStops.length) return;
-    
-    const stopToMove = riderStops[stopIndex];
-    if (!stopToMove.stop?.id) return;
-    
-    // Build timeline to find current position
-    const timelineItems = [];
-    route.orders.forEach((order, orderIndex) => {
-      timelineItems.push({ type: 'order', data: order, orderIndex });
-      const stopsAfterThisOrder = riderStops.filter(s => s.insertAfterIndex === orderIndex);
-      // Sort stops by sequence
-      stopsAfterThisOrder.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
-      stopsAfterThisOrder.forEach((stopItem) => {
-        const originalIndex = riderStops.findIndex(s => s === stopItem);
-        timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex, stopItem });
-      });
-    });
-    const stopsAfterLastOrder = riderStops.filter(s => s.insertAfterIndex === -1);
-    // Sort stops by sequence
-    stopsAfterLastOrder.sort((a, b) => (a.stop.sequence || 0) - (b.stop.sequence || 0));
-    stopsAfterLastOrder.forEach(stopItem => {
-      const originalIndex = riderStops.findIndex(s => s === stopItem);
-      timelineItems.push({ type: 'stop', data: stopItem.stop, stopIndex: originalIndex, stopItem });
-    });
-    
-    // Find the stop's position in timeline
-    const currentTimelineIndex = timelineItems.findIndex(item => 
-      item.type === 'stop' && item.stopIndex === stopIndex
-    );
-    
-    if (currentTimelineIndex === -1) return;
-    if (direction === 'up' && currentTimelineIndex === 0) return; // Already at top
-    if (direction === 'down' && currentTimelineIndex === timelineItems.length - 1) return; // Already at bottom
-    
-    const targetTimelineIndex = direction === 'up' ? currentTimelineIndex - 1 : currentTimelineIndex + 1;
-    const targetItem = timelineItems[targetTimelineIndex];
-    
-    try {
-      if (targetItem.type === 'order') {
-        // Moving past an order - update insertAfterIndex
-        const targetOrderIndex = targetItem.orderIndex;
-        const newInsertAfterIndex = direction === 'up' ? targetOrderIndex - 1 : targetOrderIndex;
-        
-        // Calculate new sequence (count of stops at new insertAfterIndex)
-        const stopsAtNewPosition = riderStops.filter(s => 
-          s.insertAfterIndex === newInsertAfterIndex && s !== stopToMove
-        );
-        const newSequence = stopsAtNewPosition.length;
-        
-        // Update stop's insertAfterIndex and sequence
-        await api.patch(`/admin/stops/${stopToMove.stop.id}`, {
-          insertAfterIndex: newInsertAfterIndex,
-          sequence: newSequence
-        });
-      } else {
-        // Moving past another stop - swap sequence if same insertAfterIndex, otherwise update insertAfterIndex
-        const targetStopItem = targetItem.stopItem;
-        if (stopToMove.insertAfterIndex === targetStopItem.insertAfterIndex) {
-          // Same group - swap sequence
-          const stopId = stopToMove.stop.id;
-          const swapStopId = targetStopItem.stop.id;
-          const currentSeq = stopToMove.stop.sequence !== undefined ? stopToMove.stop.sequence : 0;
-          const swapSeq = targetStopItem.stop.sequence !== undefined ? targetStopItem.stop.sequence : 0;
-          
-          await Promise.all([
-            api.patch(`/admin/stops/${stopId}`, { sequence: swapSeq }),
-            api.patch(`/admin/stops/${swapStopId}`, { sequence: currentSeq })
-          ]);
-        } else {
-          // Different group - move to target stop's position
-          const newInsertAfterIndex = targetStopItem.insertAfterIndex;
-          const stopsAtNewPosition = riderStops.filter(s => 
-            s.insertAfterIndex === newInsertAfterIndex && s !== stopToMove
-          );
-          const newSequence = direction === 'up' 
-            ? stopsAtNewPosition.length // Add at end
-            : 0; // Insert at beginning (we'll need to shift others)
-          
-          // If inserting at beginning, we need to increment sequence of existing stops
-          if (newSequence === 0 && stopsAtNewPosition.length > 0) {
-            await Promise.all([
-              api.patch(`/admin/stops/${stopToMove.stop.id}`, {
-                insertAfterIndex: newInsertAfterIndex,
-                sequence: 0
-              }),
-              ...stopsAtNewPosition.map((s, idx) => 
-                api.patch(`/admin/stops/${s.stop.id}`, { sequence: idx + 1 })
-              )
-            ]);
-          } else {
-            await api.patch(`/admin/stops/${stopToMove.stop.id}`, {
-              insertAfterIndex: newInsertAfterIndex,
-              sequence: newSequence
-            });
-          }
-        }
-      }
-      
-      // Refresh data to ensure consistency
-      await fetchRiderRoutes();
-    } catch (error) {
-      console.error('Error updating stop position:', error);
-      setError(error.response?.data?.error || 'Failed to update stop position');
-      // Revert on error
-      await fetchRiderRoutes();
-    }
-  };
-
-  // Handle edit stop
-  const handleEditStop = (stop, riderId) => {
-    const riderStops = stops[riderId] || [];
-    const stopItem = riderStops.find(s => s.stop.id === stop.id);
-    if (stopItem) {
-      setEditingStop(stop);
-      setSelectedRiderForStop(riderId);
-      setSelectedOrderIndexForStop(stopItem.insertAfterIndex);
-      setStopFormData({
-        name: stop.name || '',
-        location: stop.location || '',
-        instruction: stop.instruction || '',
-        payment: stop.payment || 0
-      });
-      setStopDialogOpen(true);
-    }
-  };
-
-  // Handle delete stop
-  const handleDeleteStop = async (stop, riderId) => {
-    if (!window.confirm(`Are you sure you want to delete the stop "${stop.name}"?`)) {
-      return;
-    }
-
-    try {
-      await api.delete(`/admin/stops/${stop.id}`);
-      await fetchRiderRoutes();
-    } catch (error) {
-      console.error('Error deleting stop:', error);
-      setError(error.response?.data?.error || 'Failed to delete stop');
-    }
-  };
-
-  // Stop menu component
-  const StopMenu = ({ stop, riderId, onEdit, onDelete }) => {
-    const [anchorEl, setAnchorEl] = useState(null);
-    const open = Boolean(anchorEl);
-
-    const handleClick = (event) => {
-      event.stopPropagation();
-      setAnchorEl(event.currentTarget);
-    };
-
-    const handleClose = () => {
-      setAnchorEl(null);
-    };
-
-    const handleEditClick = () => {
-      handleClose();
-      onEdit(stop, riderId);
-    };
-
-    const handleDeleteClick = () => {
-      handleClose();
-      onDelete(stop, riderId);
-    };
-
-    return (
-      <>
-        <IconButton
-          size="small"
-          onClick={handleClick}
-          sx={{ color: colors.textSecondary }}
-        >
-          <MoreVert fontSize="small" />
-        </IconButton>
-        <Menu
-          anchorEl={anchorEl}
-          open={open}
-          onClose={handleClose}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MenuItem onClick={handleEditClick}>
-            <Edit fontSize="small" sx={{ mr: 1 }} />
-            Edit
-          </MenuItem>
-          <MenuItem onClick={handleDeleteClick} sx={{ color: 'error.main' }}>
-            <Delete fontSize="small" sx={{ mr: 1 }} />
-            Delete
-          </MenuItem>
-        </Menu>
-      </>
-    );
-  };
-
   const getNextStatusOptions = (currentStatus, paymentType, paymentStatus) => {
     const options = [];
     

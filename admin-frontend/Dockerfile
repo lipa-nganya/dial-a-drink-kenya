@@ -8,7 +8,9 @@ RUN npm ci
 COPY . .
 # Default to production, but can be overridden via --build-arg
 ARG REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api
+ARG REACT_APP_GOOGLE_MAPS_API_KEY
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}
+ENV REACT_APP_GOOGLE_MAPS_API_KEY=${REACT_APP_GOOGLE_MAPS_API_KEY}
 RUN npm run build
 
 FROM nginx:1.25-alpine

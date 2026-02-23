@@ -207,6 +207,25 @@ const Footer = () => {
           <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem' }}>
             © {new Date().getFullYear()} Dial a Drink Kenya - All Rights Reserved
           </Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: '0.75rem', mt: 1 }}>
+            Developed with ❤️ by{' '}
+            <Link
+              href="https://thewolfgang.tech/"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{
+                color: colors.textSecondary,
+                textDecoration: 'none',
+                fontSize: '0.75rem',
+                '&:hover': {
+                  color: colors.accentText,
+                  textDecoration: 'underline'
+                }
+              }}
+            >
+              Wolfgang
+            </Link>
+          </Typography>
         </Box>
       </Container>
     </Box>

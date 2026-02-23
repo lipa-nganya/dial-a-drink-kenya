@@ -21,6 +21,15 @@ class ReadNotificationsFragment : Fragment() {
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("Africa/Nairobi")
     }
+    private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+    }
+    private val dayFormat = SimpleDateFormat("EEEE, MMM dd, yyyy", Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+    }
+    private val todayFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+    }
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
@@ -71,35 +80,86 @@ class ReadNotificationsFragment : Fragment() {
         
         binding.emptyStateText.visibility = View.GONE
         
-        notifications.forEach { notification ->
-            val cardView = LayoutInflater.from(requireContext()).inflate(
-                R.layout.item_notification,
-                container,
-                false
-            )
-            val card = cardView as MaterialCardView
-            
-            val titleText = card.findViewById<TextView>(R.id.titleText)
-            val previewText = card.findViewById<TextView>(R.id.previewText)
-            val dateText = card.findViewById<TextView>(R.id.dateText)
-            
-            titleText.text = notification.title
-            previewText.text = notification.preview
-            
-            // Format date
+        // Group notifications by day
+        val groupedByDay = notifications.groupBy { notification ->
             try {
                 val date = parseDate(notification.sentAt)
-                dateText.text = dateFormat.format(date)
+                todayFormat.format(date)
             } catch (e: Exception) {
-                dateText.text = notification.sentAt
+                // If parsing fails, use current date
+                todayFormat.format(Date())
+            }
+        }
+        
+        // Sort days in descending order (newest first)
+        val sortedDays = groupedByDay.keys.sortedDescending()
+        
+        // Get today's date string for comparison
+        val todayString = todayFormat.format(Date())
+        
+        sortedDays.forEach { dayString ->
+            val dayNotifications = groupedByDay[dayString] ?: emptyList()
+            
+            // Add day header
+            val dayHeader = LayoutInflater.from(requireContext()).inflate(
+                R.layout.item_day_header,
+                container,
+                false
+            ) as TextView
+            
+            // Format day header text
+            val dayDate = try {
+                todayFormat.parse(dayString) ?: Date()
+            } catch (e: Exception) {
+                Date()
             }
             
-            // Open notification detail when clicked
-            card.setOnClickListener {
-                NotificationDetailActivity.start(requireContext(), notification)
+            val dayHeaderText = when (dayString) {
+                todayString -> "Today"
+                else -> dayFormat.format(dayDate)
+            }
+            dayHeader.text = dayHeaderText
+            container.addView(dayHeader)
+            
+            // Add notifications for this day (sorted by time, newest first)
+            val sortedNotifications = dayNotifications.sortedByDescending { notification ->
+                try {
+                    parseDate(notification.sentAt).time
+                } catch (e: Exception) {
+                    0L
+                }
             }
             
-            container.addView(card)
+            sortedNotifications.forEach { notification ->
+                val cardView = LayoutInflater.from(requireContext()).inflate(
+                    R.layout.item_notification,
+                    container,
+                    false
+                )
+                val card = cardView as MaterialCardView
+                
+                val titleText = card.findViewById<TextView>(R.id.titleText)
+                val previewText = card.findViewById<TextView>(R.id.previewText)
+                val dateText = card.findViewById<TextView>(R.id.dateText)
+                
+                titleText.text = notification.title
+                previewText.text = notification.preview
+                
+                // Format time only (HH:mm format)
+                try {
+                    val date = parseDate(notification.sentAt)
+                    dateText.text = timeFormat.format(date)
+                } catch (e: Exception) {
+                    dateText.text = notification.sentAt
+                }
+                
+                // Open notification detail when clicked
+                card.setOnClickListener {
+                    NotificationDetailActivity.start(requireContext(), notification)
+                }
+                
+                container.addView(card)
+            }
         }
     }
     
