@@ -15,7 +15,7 @@ import { api } from '../services/api';
 import { useCustomer } from '../contexts/CustomerContext';
 import SetPin from './SetPin';
 
-const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
+const OtpVerification = ({ phone, email, onBack, infoMessage, onLoginSuccess }) => {
   const navigate = useNavigate();
   const { login } = useCustomer();
   const [otpCode, setOtpCode] = useState('');
@@ -25,6 +25,8 @@ const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
   const [countdown, setCountdown] = useState(60); // 60 seconds cooldown for resend
   const [verifiedCustomer, setVerifiedCustomer] = useState(null);
   const [requiresPinSetup, setRequiresPinSetup] = useState(false);
+  const [showSpamNotice, setShowSpamNotice] = useState(false);
+  const [timeElapsed, setTimeElapsed] = useState(0);
 
   useEffect(() => {
     // Countdown timer for resend button
@@ -33,6 +35,22 @@ const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
       return () => clearTimeout(timer);
     }
   }, [countdown]);
+
+  useEffect(() => {
+    // Timer to show spam folder notice after 1 minute for email-based OTPs
+    if (email) {
+      const startTime = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setTimeElapsed(elapsed);
+        if (elapsed >= 60) {
+          setShowSpamNotice(true);
+        }
+      }, 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [email]);
 
   const handleVerify = async (e) => {
     e.preventDefault();
@@ -46,11 +64,15 @@ const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
     }
 
     try {
-      const response = await api.post('/auth/verify-otp', {
+      const requestData = {
         phone: phone,
         otpCode: otpCode,
         userType: 'customer'
-      });
+      };
+      if (email) {
+        requestData.email = email;
+      }
+      const response = await api.post('/auth/verify-otp', requestData);
 
       if (response.data.success && response.data.customer) {
         const needsPinSetup =
@@ -109,16 +131,25 @@ const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
     setError('');
     
     try {
-      const response = await api.post('/auth/send-otp', {
+      const requestData = {
         phone: phone,
         userType: 'customer'
-      });
+      };
+      if (email) {
+        requestData.email = email;
+      }
+      const response = await api.post('/auth/send-otp', requestData);
 
       if (response.data.success) {
         setOtpCode('');
         setCountdown(60); // Reset countdown
+        setTimeElapsed(0); // Reset time elapsed
+        setShowSpamNotice(false); // Reset spam notice
         setError('');
-        alert('OTP sent successfully. Please check your phone.');
+        const message = email 
+          ? 'OTP sent successfully. Please check your email.'
+          : 'OTP sent successfully. Please check your phone.';
+        alert(message);
       } else {
         setError(response.data.error || 'Failed to resend OTP. Please try again.');
       }
@@ -159,7 +190,7 @@ const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
             Verify OTP
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Enter the 6-digit code sent to {phone}
+            Enter the 6-digit code sent to {email ? email : phone}
           </Typography>
         </Box>
 
@@ -172,6 +203,17 @@ const OtpVerification = ({ phone, onBack, infoMessage, onLoginSuccess }) => {
         {error && (
           <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
             {error}
+          </Alert>
+        )}
+
+        {email && showSpamNotice && (
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              Haven't received the email?
+            </Typography>
+            <Typography variant="body2">
+              Please check your spam or junk folder. The email may have been filtered there.
+            </Typography>
           </Alert>
         )}
 

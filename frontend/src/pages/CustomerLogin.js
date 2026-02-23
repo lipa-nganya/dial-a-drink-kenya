@@ -7,7 +7,11 @@ import {
   Typography,
   Alert,
   Paper,
-  Link
+  Link,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel
 } from '@mui/material';
 import { PhoneIphone, Lock, Sms } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -20,6 +24,8 @@ const CustomerLogin = () => {
   const { login } = useCustomer();
 
   const [phone, setPhone] = useState('');
+  const [countryCode, setCountryCode] = useState('+254');
+  const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [hasPin, setHasPin] = useState(false);
@@ -28,10 +34,15 @@ const CustomerLogin = () => {
   const [otpLoading, setOtpLoading] = useState(false);
   const [showOtpVerification, setShowOtpVerification] = useState(false);
   const [otpPhone, setOtpPhone] = useState('');
+  const [otpEmail, setOtpEmail] = useState('');
   const [otpMessage, setOtpMessage] = useState('');
+  
+  // Check if country code is Kenyan (+254)
+  const isKenyanNumber = countryCode === '+254';
 
   useEffect(() => {
-    if (!phone) {
+    // Only check PIN status for Kenyan numbers
+    if (!isKenyanNumber || !phone) {
       setHasPin(false);
       return;
     }
@@ -66,7 +77,7 @@ const CustomerLogin = () => {
     }, 600); // debounce to avoid excessive requests
 
     return () => clearTimeout(timer);
-  }, [phone]);
+  }, [phone, isKenyanNumber]);
 
   const sanitizePhoneInput = (value) => value.replace(/[^\d+]/g, '');
 
@@ -124,29 +135,63 @@ const CustomerLogin = () => {
   const handleSendOtp = async () => {
     setError('');
 
-    if (!phone) {
-      setError('Please enter your phone number');
-      return;
+    if (isKenyanNumber) {
+      if (!phone) {
+        setError('Please enter your phone number');
+        return;
+      }
+    } else {
+      if (!phone) {
+        setError('Please enter your phone number');
+        return;
+      }
+      if (!email) {
+        setError('Please enter your email address');
+        return;
+      }
+      // Basic email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        setError('Please enter a valid email address');
+        return;
+      }
     }
 
     setOtpLoading(true);
 
     try {
-      const response = await api.post('/auth/send-otp', {
-        phone,
+      const requestData = {
+        phone: isKenyanNumber ? phone : `${countryCode}${phone}`,
         userType: 'customer'
-      });
+      };
+      
+      if (!isKenyanNumber) {
+        requestData.email = email;
+        requestData.countryCode = countryCode;
+      }
 
-      const { success, error: responseError, note, message, smsFailed } = response.data || {};
-      setOtpPhone(phone);
+      const response = await api.post('/auth/send-otp', requestData);
+
+      const { success, error: responseError, note, message, smsFailed, emailSent } = response.data || {};
+      setOtpPhone(isKenyanNumber ? phone : `${countryCode}${phone}`);
+      if (!isKenyanNumber) {
+        setOtpEmail(email);
+      }
       
       // Always proceed to OTP entry if OTP was generated (success: true)
-      // Even if SMS failed, admin can provide the code
+      // Even if SMS/email failed, admin can provide the code
       if (success) {
         setError('');
-        const info = smsFailed
-          ? (note || message || 'SMS delivery failed. Please contact administrator for the OTP code.')
-          : (message || 'OTP sent successfully. Enter the code you received.');
+        let info = '';
+        if (isKenyanNumber) {
+          info = smsFailed
+            ? (note || message || 'SMS delivery failed. Please contact administrator for the OTP code.')
+            : (message || 'OTP sent successfully. Enter the code you received.');
+        } else {
+          info = emailSent
+            ? (message || 'OTP sent successfully to your email. Enter the code you received.')
+            : (note || message || 'Email delivery failed. Please contact administrator for the OTP code.');
+        }
         setOtpMessage(info);
         setShowOtpVerification(true);
       } else {
@@ -163,7 +208,10 @@ const CustomerLogin = () => {
       // Admin can provide the code from dashboard
       if (responseData.otpCode || status === 402) {
         setError('');
-        setOtpPhone(phone);
+        setOtpPhone(isKenyanNumber ? phone : `${countryCode}${phone}`);
+        if (!isKenyanNumber) {
+          setOtpEmail(email);
+        }
         setOtpMessage(
           responseData.note || 
           `${apiError} Enter the OTP shared with you by support to continue.`
@@ -181,10 +229,12 @@ const CustomerLogin = () => {
     return (
       <OtpVerification
         phone={otpPhone}
+        email={otpEmail}
         infoMessage={otpMessage}
         onBack={() => {
           setShowOtpVerification(false);
           setOtpPhone('');
+          setOtpEmail('');
           setOtpMessage('');
           setError('');
         }}
@@ -212,20 +262,65 @@ const CustomerLogin = () => {
         )}
 
         <Box component="form" onSubmit={handleLoginWithPin}>
-          <TextField
-            label="Phone Number"
-            type="tel"
-            value={phone}
-            onChange={(e) => {
-              setPhone(sanitizePhoneInput(e.target.value));
-              setError('');
-            }}
-            fullWidth
-            sx={{ mb: 2 }}
-            placeholder="0712345678 or 254712345678"
-            disabled={pinLoginLoading || otpLoading || checkingPin}
-            autoComplete="tel"
-          />
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <FormControl sx={{ minWidth: 120 }}>
+              <InputLabel>Country</InputLabel>
+              <Select
+                value={countryCode}
+                label="Country"
+                onChange={(e) => {
+                  setCountryCode(e.target.value);
+                  setError('');
+                  // Clear email when switching to Kenyan number
+                  if (e.target.value === '+254') {
+                    setEmail('');
+                  }
+                }}
+                disabled={pinLoginLoading || otpLoading || checkingPin}
+              >
+                <MenuItem value="+254">+254 (KE)</MenuItem>
+                <MenuItem value="+1">+1 (US/CA)</MenuItem>
+                <MenuItem value="+44">+44 (UK)</MenuItem>
+                <MenuItem value="+27">+27 (ZA)</MenuItem>
+                <MenuItem value="+234">+234 (NG)</MenuItem>
+                <MenuItem value="+255">+255 (TZ)</MenuItem>
+                <MenuItem value="+256">+256 (UG)</MenuItem>
+                <MenuItem value="+250">+250 (RW)</MenuItem>
+                <MenuItem value="+233">+233 (GH)</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Phone Number"
+              type="tel"
+              value={phone}
+              onChange={(e) => {
+                setPhone(sanitizePhoneInput(e.target.value));
+                setError('');
+              }}
+              fullWidth
+              placeholder={isKenyanNumber ? "0712345678 or 254712345678" : "Enter phone number"}
+              disabled={pinLoginLoading || otpLoading || checkingPin}
+              autoComplete="tel"
+            />
+          </Box>
+          
+          {!isKenyanNumber && (
+            <TextField
+              label="Email Address"
+              type="email"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value.trim());
+                setError('');
+              }}
+              fullWidth
+              sx={{ mb: 2 }}
+              placeholder="your.email@example.com"
+              disabled={pinLoginLoading || otpLoading || checkingPin}
+              autoComplete="email"
+              required
+            />
+          )}
 
           {hasPin && (
             <>
@@ -266,7 +361,8 @@ const CustomerLogin = () => {
               otpLoading ||
               checkingPin ||
               pin.length !== 4 ||
-              !phone
+              !phone ||
+              !isKenyanNumber
             }
             sx={{
               backgroundColor: '#00E0B8',
@@ -286,7 +382,7 @@ const CustomerLogin = () => {
             fullWidth
             size="large"
             startIcon={<Sms />}
-            disabled={otpLoading || pinLoginLoading || !phone}
+            disabled={otpLoading || pinLoginLoading || !phone || (!isKenyanNumber && !email)}
             onClick={handleSendOtp}
             sx={{
               borderColor: '#00E0B8',
@@ -312,9 +408,6 @@ const CustomerLogin = () => {
             >
               Start Shopping
             </Link>
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Login is optional – you can place orders without logging in.
           </Typography>
           <Button
             variant="outlined"

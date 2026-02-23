@@ -96,7 +96,7 @@ function buildPhoneLookupVariants(phone) {
  */
 router.post('/send-otp', async (req, res) => {
   try {
-    const { phone } = req.body;
+    const { phone, email, countryCode } = req.body;
     const rawContext =
       req.body?.userType ||
       req.body?.context ||
@@ -109,10 +109,21 @@ router.post('/send-otp', async (req, res) => {
     const forceCustomer = normalizedContext === 'customer';
     const forceDriver = normalizedContext === 'driver';
 
+    // Check if this is a non-Kenyan number requiring email OTP
+    const isNonKenyan = countryCode && countryCode !== '+254';
+    const useEmailOtp = isNonKenyan && email;
+
     if (!phone) {
       return res.status(400).json({
         success: false,
         error: 'Phone number is required'
+      });
+    }
+
+    if (isNonKenyan && !email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email address is required for non-Kenyan phone numbers'
       });
     }
 
@@ -280,12 +291,15 @@ router.post('/send-otp', async (req, res) => {
       console.log(`🔄 PIN reset requested - OTP will be sent via SMS`);
     }
 
-    // Invalidate any existing unused OTPs for this phone number
+    // Determine OTP identifier - use email prefix for non-Kenyan numbers
+    const otpIdentifier = useEmailOtp ? `email:${email.toLowerCase().trim()}` : cleanedPhone;
+
+    // Invalidate any existing unused OTPs for this identifier
     await db.Otp.update(
       { isUsed: true },
       {
         where: {
-          phoneNumber: cleanedPhone,
+          phoneNumber: otpIdentifier,
           isUsed: false
         }
       }
@@ -293,37 +307,52 @@ router.post('/send-otp', async (req, res) => {
 
     // Create new OTP record
     const otp = await db.Otp.create({
-      phoneNumber: cleanedPhone,
+      phoneNumber: otpIdentifier,
       otpCode: otpCode,
       expiresAt: expiresAt,
       isUsed: false,
       attempts: 0
     });
 
-    // Send OTP via SMS (always send, not subject to admin SMS settings)
-    // For shop agents and drivers, force sending via Advanta SMS even in local dev
-    // For PIN reset requests, always force send SMS regardless of user type
-    // For customers in production, also force send SMS
-    // Allow forcing SMS in local dev via ENABLE_SMS_IN_LOCAL_DEV env var
-    const isProduction = process.env.NODE_ENV === 'production' || process.env.K_SERVICE || process.env.RENDER;
-    const enableSmsInLocalDev = process.env.ENABLE_SMS_IN_LOCAL_DEV === 'true';
-    const forceSendSMS = isDriver || isShopAgent || isResetRequest || (isProduction && !isDriver && !isShopAgent) || enableSmsInLocalDev;
-    
-    console.log(`📱 OTP sending configuration:`, {
-      phone: cleanedPhone,
-      userType: isDriver ? 'driver' : (isShopAgent ? 'shopAgent' : 'customer'),
-      isProduction,
-      forceSendSMS,
-      isResetRequest
-    });
-    
-    const smsResult = await smsService.sendOTP(cleanedPhone, otpCode, forceSendSMS);
-    
-    console.log(`📱 OTP send result:`, {
-      success: smsResult.success,
-      error: smsResult.error,
-      localDev: smsResult.localDev
-    });
+    // Send OTP via email for non-Kenyan numbers, SMS for Kenyan numbers
+    let emailResult = null;
+    let smsResult = null;
+
+    if (useEmailOtp) {
+      // Send OTP via email for non-Kenyan numbers
+      const emailService = require('../services/email');
+      emailResult = await emailService.sendOtpEmail(email, otpCode);
+      console.log(`📧 OTP email send result:`, {
+        success: emailResult.success,
+        error: emailResult.error,
+        email: email
+      });
+    } else {
+      // Send OTP via SMS (always send, not subject to admin SMS settings)
+      // For shop agents and drivers, force sending via Advanta SMS even in local dev
+      // For PIN reset requests, always force send SMS regardless of user type
+      // For customers in production, also force send SMS
+      // Allow forcing SMS in local dev via ENABLE_SMS_IN_LOCAL_DEV env var
+      const isProduction = process.env.NODE_ENV === 'production' || process.env.K_SERVICE || process.env.RENDER;
+      const enableSmsInLocalDev = process.env.ENABLE_SMS_IN_LOCAL_DEV === 'true';
+      const forceSendSMS = isDriver || isShopAgent || isResetRequest || (isProduction && !isDriver && !isShopAgent) || enableSmsInLocalDev;
+      
+      console.log(`📱 OTP sending configuration:`, {
+        phone: cleanedPhone,
+        userType: isDriver ? 'driver' : (isShopAgent ? 'shopAgent' : 'customer'),
+        isProduction,
+        forceSendSMS,
+        isResetRequest
+      });
+      
+      smsResult = await smsService.sendOTP(cleanedPhone, otpCode, forceSendSMS);
+      
+      console.log(`📱 OTP send result:`, {
+        success: smsResult.success,
+        error: smsResult.error,
+        localDev: smsResult.localDev
+      });
+    }
 
     // For drivers and shop agents, always return success even if SMS fails
     // The OTP is generated and stored, admin can provide it from dashboard
@@ -352,15 +381,30 @@ router.post('/send-otp', async (req, res) => {
       });
     }
 
-    // Ensure a customer record exists so admins can retrieve OTPs even if SMS fails
+    // Ensure a customer record exists so admins can retrieve OTPs even if SMS/email fails
     let customerRecord = null;
     if (!isDriver) {
-      const customerLookup = [
-        normalizedPhone ? { phone: normalizedPhone } : null,
-        normalizedPhone ? { username: normalizedPhone } : null,
-        cleanedPhone ? { phone: cleanedPhone } : null,
-        cleanedPhone ? { username: cleanedPhone } : null
-      ].filter(Boolean);
+      const customerLookup = [];
+      
+      if (useEmailOtp) {
+        // For email-based OTP, lookup by email
+        customerLookup.push({ email: email.toLowerCase().trim() });
+        // Also try phone if available
+        if (cleanedPhone) {
+          customerLookup.push({ phone: cleanedPhone });
+          customerLookup.push({ username: cleanedPhone });
+        }
+      } else {
+        // For phone-based OTP, lookup by phone
+        if (normalizedPhone) {
+          customerLookup.push({ phone: normalizedPhone });
+          customerLookup.push({ username: normalizedPhone });
+        }
+        if (cleanedPhone) {
+          customerLookup.push({ phone: cleanedPhone });
+          customerLookup.push({ username: cleanedPhone });
+        }
+      }
 
       if (customerLookup.length) {
         customerRecord = await db.Customer.findOne({
@@ -371,19 +415,36 @@ router.post('/send-otp', async (req, res) => {
       }
 
       if (!customerRecord) {
-        customerRecord = await db.Customer.create({
-          phone: normalizedPhone || cleanedPhone,
-          username: normalizedPhone || cleanedPhone,
+        const createData = {
+          username: useEmailOtp ? email.toLowerCase().trim() : (normalizedPhone || cleanedPhone),
           customerName: customerName || null,
           hasSetPassword: false
-        });
+        };
+        if (useEmailOtp) {
+          createData.email = email.toLowerCase().trim();
+          if (cleanedPhone) {
+            createData.phone = cleanedPhone;
+          }
+        } else {
+          createData.phone = normalizedPhone || cleanedPhone;
+        }
+        customerRecord = await db.Customer.create(createData);
       } else {
         const updates = {};
-        if (!customerRecord.phone && (normalizedPhone || cleanedPhone)) {
-          updates.phone = normalizedPhone || cleanedPhone;
-        }
-        if (!customerRecord.username && (normalizedPhone || cleanedPhone)) {
-          updates.username = normalizedPhone || cleanedPhone;
+        if (useEmailOtp) {
+          if (!customerRecord.email) {
+            updates.email = email.toLowerCase().trim();
+          }
+          if (!customerRecord.phone && cleanedPhone) {
+            updates.phone = cleanedPhone;
+          }
+        } else {
+          if (!customerRecord.phone && (normalizedPhone || cleanedPhone)) {
+            updates.phone = normalizedPhone || cleanedPhone;
+          }
+          if (!customerRecord.username && (normalizedPhone || cleanedPhone)) {
+            updates.username = normalizedPhone || cleanedPhone;
+          }
         }
         if (!customerRecord.customerName && customerName) {
           updates.customerName = customerName;
@@ -394,7 +455,38 @@ router.post('/send-otp', async (req, res) => {
       }
     }
 
-    // For customers, handle SMS failures - always allow OTP entry
+    // For email-based OTP
+    if (useEmailOtp) {
+      if (!emailResult.success) {
+        console.error('Failed to send OTP email:', emailResult.error);
+        console.log(`📧 Customer OTP generated (email failed): ${otpCode} - Admin can provide from dashboard`);
+        
+        // Always return success with note that admin can provide OTP
+        return res.status(200).json({
+          success: true,
+          message: 'OTP generated. Admin will provide the code if email failed.',
+          phoneNumber: `${countryCode}${cleanedPhone}`,
+          email: email,
+          expiresAt: expiresAt.toISOString(),
+          emailSent: false,
+          emailError: emailResult.error,
+          note: 'Email delivery failed. Please contact administrator for the OTP code, or try again later.'
+        });
+      }
+
+      // Successfully sent OTP via email
+      return res.status(200).json({
+        success: true,
+        message: 'OTP sent successfully to your email. Please check your inbox.',
+        phoneNumber: `${countryCode}${cleanedPhone}`,
+        email: email,
+        expiresAt: expiresAt.toISOString(),
+        emailSent: true
+      });
+    }
+
+    // For phone-based OTP (Kenyan numbers)
+    // Handle SMS failures - always allow OTP entry
     // Admin can retrieve OTP from dashboard
     if (!smsResult.success) {
       console.error('Failed to send OTP:', smsResult.error);
@@ -434,7 +526,7 @@ router.post('/send-otp', async (req, res) => {
  */
 router.post('/verify-otp', async (req, res) => {
   try {
-    const { phone, otpCode, otp: otpFromBody } = req.body; // Accept both 'otpCode' and 'otp' for compatibility
+    const { phone, email, otpCode, otp: otpFromBody } = req.body; // Accept both 'otpCode' and 'otp' for compatibility
 
     // Use otpCode if provided, otherwise fall back to otp
     const codeToVerify = otpCode || otpFromBody;
@@ -449,45 +541,65 @@ router.post('/verify-otp', async (req, res) => {
       typeof rawContext === 'string' ? rawContext.trim().toLowerCase() : '';
     const forceCustomer = normalizedContext === 'customer';
     const forceDriver = normalizedContext === 'driver';
-    const phoneLookupVariants = buildPhoneLookupVariants(phone);
+    
+    // Check if this is an email-based OTP
+    const useEmailOtp = email && email.trim();
 
-    if (!phone || !codeToVerify) {
+    if ((!phone && !email) || !codeToVerify) {
       console.error('OTP verification error - missing fields:', {
         phone: phone ? 'present' : 'missing',
+        email: email ? 'present' : 'missing',
         otpCode: otpCode ? 'present' : 'missing',
         otp: otpFromBody ? 'present' : 'missing',
         body: req.body
       });
       return res.status(400).json({
         success: false,
-        error: 'Phone number and OTP code are required'
+        error: 'Phone number or email and OTP code are required'
       });
     }
 
-    const cleanedPhone = phone.replace(/\D/g, '');
-    const normalizedPhone = normalizeCustomerPhone(phone) || cleanedPhone;
-
-    const candidatePhones = new Set();
-    candidatePhones.add(cleanedPhone);
-    if (normalizedPhone) {
-      candidatePhones.add(normalizedPhone.replace(/\D/g, ''));
-    }
-    phoneLookupVariants.forEach((variant) => {
-      const digits = (variant || '').replace(/\D/g, '');
-      if (digits) {
-        candidatePhones.add(digits);
-      }
-    });
-
-    const otpRecord = await db.Otp.findOne({
-      where: {
-        phoneNumber: {
-          [db.Sequelize.Op.in]: Array.from(candidatePhones)
+    let otpRecord = null;
+    let candidatePhones = new Set();
+    
+    // Store cleaned phone for later use (if not email-based)
+    const cleanedPhone = phone ? phone.replace(/\D/g, '') : '';
+    const normalizedPhone = phone ? (normalizeCustomerPhone(phone) || cleanedPhone) : '';
+    const phoneLookupVariants = phone ? buildPhoneLookupVariants(phone) : [];
+    
+    if (useEmailOtp) {
+      // Look up OTP by email identifier
+      const emailIdentifier = `email:${email.toLowerCase().trim()}`;
+      otpRecord = await db.Otp.findOne({
+        where: {
+          phoneNumber: emailIdentifier,
+          isUsed: false
         },
-        isUsed: false
-      },
-      order: [['createdAt', 'DESC']]
-    });
+        order: [['createdAt', 'DESC']]
+      });
+    } else {
+      // Look up OTP by phone number (existing logic)
+      candidatePhones.add(cleanedPhone);
+      if (normalizedPhone) {
+        candidatePhones.add(normalizedPhone.replace(/\D/g, ''));
+      }
+      phoneLookupVariants.forEach((variant) => {
+        const digits = (variant || '').replace(/\D/g, '');
+        if (digits) {
+          candidatePhones.add(digits);
+        }
+      });
+
+      otpRecord = await db.Otp.findOne({
+        where: {
+          phoneNumber: {
+            [db.Sequelize.Op.in]: Array.from(candidatePhones)
+          },
+          isUsed: false
+        },
+        order: [['createdAt', 'DESC']]
+      });
+    }
 
     if (!otpRecord) {
       return res.status(404).json({
@@ -529,36 +641,49 @@ router.post('/verify-otp', async (req, res) => {
 
     // Check if this is a shop agent - don't mark OTP as used yet
     // OTP will be marked as used when PIN is actually set in /shop-agents/set-pin
+    // Note: Email-based OTPs are for customers only, not shop agents or admins
     const forceShopAgent = normalizedContext === 'shop_agent';
     let isShopAgent = false;
     
-    if (forceShopAgent) {
+    if (useEmailOtp) {
+      // Email-based OTPs are for customers only
+      isShopAgent = false;
+    } else if (forceShopAgent) {
       isShopAgent = true;
     } else {
       // Check if phone number belongs to a shop agent
-      const shopAgent = await db.Admin.findOne({
-        where: {
-          role: 'shop_agent',
-          mobileNumber: {
-            [db.Sequelize.Op.in]: Array.from(candidatePhones)
+      const phoneVariations = Array.from(candidatePhones);
+      if (phoneVariations.length > 0) {
+        const shopAgent = await db.Admin.findOne({
+          where: {
+            role: 'shop_agent',
+            mobileNumber: {
+              [db.Sequelize.Op.in]: phoneVariations
+            }
           }
-        }
-      });
-      isShopAgent = !!shopAgent;
+        });
+        isShopAgent = !!shopAgent;
+      }
     }
     
     // Check if this is an admin (for admin mobile app)
-    const phoneVariations = Array.from(candidatePhones);
-    const admin = await db.Admin.findOne({
-      where: {
-        mobileNumber: {
-          [db.Sequelize.Op.in]: phoneVariations
-        },
-        role: {
-          [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
-        }
+    // Email-based OTPs are for customers only
+    let admin = null;
+    if (!useEmailOtp) {
+      const phoneVariations = Array.from(candidatePhones);
+      if (phoneVariations.length > 0) {
+        admin = await db.Admin.findOne({
+          where: {
+            mobileNumber: {
+              [db.Sequelize.Op.in]: phoneVariations
+            },
+            role: {
+              [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
+            }
+          }
+        });
       }
-    });
+    }
     const isAdmin = !!admin && !isShopAgent;
 
     // Only mark OTP as used if NOT a shop agent or admin
@@ -631,53 +756,84 @@ router.post('/verify-otp', async (req, res) => {
 
     // Continue with customer logic if not a driver
     // Find customer's orders (if any)
-    const phoneQueryConditions = phoneLookupVariants.length
-      ? phoneLookupVariants.map((variant) => ({
-          customerPhone: {
-            [db.Sequelize.Op.like]: `%${variant}%`
-          }
-        }))
-      : [{
-          customerPhone: {
-            [db.Sequelize.Op.like]: `%${cleanedPhone}%`
-          }
-        }];
-
-    const orders = await db.Order.findAll({
-      where: {
-        [db.Sequelize.Op.or]: phoneQueryConditions
-      },
-      include: [{
-        model: db.OrderItem,
-        as: 'items',
-        include: [{
-          model: db.Drink,
-          as: 'drink'
-        }]
-      }],
-      order: [['createdAt', 'DESC']]
-    });
-
-    // Get customer info from order or create new customer record
-    let customerEmail = null;
+    let orders = [];
+    let customerEmail = useEmailOtp ? email.toLowerCase().trim() : null;
     let customerName = null;
     
-    if (orders.length > 0) {
-      const mostRecentOrder = orders[0];
-      customerEmail = mostRecentOrder.customerEmail || null;
-      customerName = mostRecentOrder.customerName;
+    if (useEmailOtp) {
+      // For email-based OTP, lookup orders by email
+      orders = await db.Order.findAll({
+        where: {
+          customerEmail: {
+            [db.Sequelize.Op.iLike]: `%${customerEmail}%`
+          }
+        },
+        include: [{
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        }],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      if (orders.length > 0) {
+        const mostRecentOrder = orders[0];
+        customerName = mostRecentOrder.customerName;
+      }
     } else {
+      // For phone-based OTP, lookup orders by phone
+      const phoneQueryConditions = phoneLookupVariants.length
+        ? phoneLookupVariants.map((variant) => ({
+            customerPhone: {
+              [db.Sequelize.Op.like]: `%${variant}%`
+            }
+          }))
+        : [{
+            customerPhone: {
+              [db.Sequelize.Op.like]: `%${cleanedPhone}%`
+            }
+          }];
+
+      orders = await db.Order.findAll({
+        where: {
+          [db.Sequelize.Op.or]: phoneQueryConditions
+        },
+        include: [{
+          model: db.OrderItem,
+          as: 'items',
+          include: [{
+            model: db.Drink,
+            as: 'drink'
+          }]
+        }],
+        order: [['createdAt', 'DESC']]
+      });
+      
+      if (orders.length > 0) {
+        const mostRecentOrder = orders[0];
+        customerEmail = mostRecentOrder.customerEmail || null;
+        customerName = mostRecentOrder.customerName;
+      }
+    }
+    
+    // Get customer info from order or create new customer record
+    if (orders.length === 0) {
       // No orders yet - check if customer record exists
       const existingCustomer = await db.Customer.findOne({
-        where: {
-          [db.Sequelize.Op.or]: [
-            { phone: cleanedPhone },
-            { username: cleanedPhone }
-          ]
-        }
+        where: useEmailOtp
+          ? { email: customerEmail }
+          : {
+              [db.Sequelize.Op.or]: [
+                { phone: cleanedPhone },
+                { username: cleanedPhone }
+              ]
+            }
       });
       if (existingCustomer) {
-        customerEmail = existingCustomer.email;
+        customerEmail = existingCustomer.email || customerEmail;
         customerName = existingCustomer.customerName;
       } else {
         // New customer - create record with minimal info
@@ -686,50 +842,129 @@ router.post('/verify-otp', async (req, res) => {
     }
 
     // Check if customer record exists
-    const customerLookupConditions = [
-      ...phoneLookupVariants.flatMap((variant) => ([
-        { phone: variant },
-        { username: variant }
-      ])),
-      customerEmail ? { email: customerEmail } : null,
-      customerEmail ? { username: customerEmail } : null
-    ].filter(Boolean);
+    const customerLookupConditions = [];
+    
+    if (useEmailOtp) {
+      customerLookupConditions.push(
+        { email: customerEmail },
+        { username: customerEmail }
+      );
+      if (phone && cleanedPhone) {
+        customerLookupConditions.push(
+          { phone: cleanedPhone },
+          { username: cleanedPhone }
+        );
+      }
+    } else {
+      customerLookupConditions.push(
+        ...phoneLookupVariants.flatMap((variant) => ([
+          { phone: variant },
+          { username: variant }
+        ]))
+      );
+      if (customerEmail) {
+        customerLookupConditions.push(
+          { email: customerEmail },
+          { username: customerEmail }
+        );
+      }
+      if (cleanedPhone) {
+        customerLookupConditions.push({ phone: cleanedPhone });
+        customerLookupConditions.push({ username: cleanedPhone });
+      }
+    }
 
     let customer = await db.Customer.findOne({
       where: {
         [db.Sequelize.Op.or]: customerLookupConditions.length
           ? customerLookupConditions
-          : [{ phone: cleanedPhone }]
+          : (useEmailOtp ? [{ email: customerEmail }] : [{ phone: cleanedPhone }])
       }
     });
 
     // Create or update customer record
     if (!customer) {
-      customer = await db.Customer.create({
-        phone: normalizedPhone || cleanedPhone,
-        email: customerEmail,
-        username: normalizedPhone || cleanedPhone,
+      const createData = {
         customerName: customerName,
         hasSetPassword: false
-      });
+      };
+      
+      if (useEmailOtp) {
+        createData.email = customerEmail;
+        createData.username = customerEmail;
+        // For email-based OTP, store the phone number as provided (with country code)
+        // This preserves non-Kenyan phone numbers correctly
+        if (phone) {
+          // Store the phone preserving the original format (may include country code like +1234567890)
+          // If it starts with +, keep it; otherwise use cleaned version
+          const phoneToStore = phone.trim();
+          createData.phone = phoneToStore;
+        }
+      } else {
+        createData.phone = normalizedPhone || cleanedPhone;
+        createData.username = normalizedPhone || cleanedPhone;
+        if (customerEmail) {
+          createData.email = customerEmail;
+        }
+      }
+      
+      customer = await db.Customer.create(createData);
     } else {
       // Update customer info if needed
-      await customer.update({
-        phone: normalizedPhone || customer.phone || cleanedPhone,
-        email: customer.email || customerEmail,
-        customerName: customer.customerName || customerName,
-        username: normalizedPhone || customer.username || cleanedPhone
-      });
+      const updateData = {};
+      
+      if (useEmailOtp) {
+        if (!customer.email) {
+          updateData.email = customerEmail;
+        }
+        if (!customer.username || customer.username === customer.phone) {
+          updateData.username = customerEmail;
+        }
+        // For email-based OTP, always update phone if provided to ensure correct non-Kenyan number
+        // This prevents using cached/stale Kenyan phone numbers
+        if (phone) {
+          // Store the phone preserving the original format (may include country code like +1234567890)
+          // Always update phone for email-based OTP to ensure we have the correct number
+          updateData.phone = phone.trim();
+        }
+      } else {
+        if (normalizedPhone || cleanedPhone) {
+          if (!customer.phone) {
+            updateData.phone = normalizedPhone || cleanedPhone;
+          }
+          if (!customer.username || customer.username === customer.email) {
+            updateData.username = normalizedPhone || cleanedPhone;
+          }
+        }
+        if (customerEmail && !customer.email) {
+          updateData.email = customerEmail;
+        }
+      }
+      
+      if (!customer.customerName && customerName) {
+        updateData.customerName = customerName;
+      }
+      
+      if (Object.keys(updateData).length > 0) {
+        await customer.update(updateData);
+        // Reload customer to get updated data
+        await customer.reload();
+      }
     }
 
     // Return customer data - indicate if password needs to be set
+    // For email-based OTP, prioritize the phone from request to avoid returning stale Kenyan numbers
+    const phoneToReturn = useEmailOtp && phone 
+      ? phone.trim()  // Use the phone as provided (preserves country code)
+      : (customer.phone || normalizedPhone || cleanedPhone);
+    
     res.json({
       success: true,
       customer: {
         id: customer.id,
-        phone: customer.phone || normalizedPhone,
-        email: customerEmail,
-        customerName: customerName,
+        phone: phoneToReturn,
+        email: customer.email || customerEmail,
+        customerName: customer.customerName || customerName,
         username: customer.username,
         hasSetPassword: customer.hasSetPassword,
         hasSetPin: customer.hasSetPassword,

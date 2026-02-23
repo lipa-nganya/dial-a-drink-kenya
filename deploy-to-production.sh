@@ -3,8 +3,9 @@
 # This script handles:
 # 1. Database migrations (pushToken column)
 # 2. Backend deployment to Google Cloud Run (production)
-# 3. Git push to GitHub (triggers Netlify for frontend)
-# 4. Android app build instructions
+# 3. Frontend deployments to Google Cloud Run (production)
+# 4. Git push to GitHub
+# 5. Android app build instructions
 
 set -e  # Exit on error
 set -x  # Debug mode - show commands as they execute
@@ -19,7 +20,9 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_ID="dialadrink-production"
 REGION="us-central1"
-SERVICE_NAME="deliveryos-production-backend"
+BACKEND_SERVICE="deliveryos-production-backend"
+ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
+CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 GCLOUD_ACCOUNT="dialadrinkkenya254@gmail.com"
 INSTANCE_NAME="dialadrink-db-prod"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-prod"
@@ -31,12 +34,28 @@ echo -e "${BLUE}🚀 Deploying to Production Environment${NC}"
 echo "=============================================="
 echo ""
 
-<<<<<<< HEAD
-# Check if we're on main branch
+# Step 1: Authenticate and set gcloud project
+echo -e "${GREEN}🔐 Step 1: Setting up gcloud...${NC}"
+gcloud config set account "$GCLOUD_ACCOUNT" || {
+    echo -e "${YELLOW}⚠️  Account authentication may be needed. Run: gcloud auth login${NC}"
+}
+gcloud config set project "$PROJECT_ID"
+echo "✅ Project set to: $PROJECT_ID"
+echo ""
+
+# Step 2: Git Operations
+echo -e "${GREEN}📋 Step 2: Git Operations...${NC}"
 CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "main" ]; then
+echo "Current branch: $CURRENT_BRANCH"
+
+# Check if we're on main branch
+if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
     echo -e "${YELLOW}⚠️  Not on main branch. Switching to main...${NC}"
-    git checkout main
+    git checkout main 2>/dev/null || git checkout master 2>/dev/null || {
+        echo -e "${RED}❌ Could not switch to main/master branch${NC}"
+        exit 1
+    }
+    CURRENT_BRANCH=$(git branch --show-current)
 fi
 
 # Check for uncommitted changes and handle them
@@ -48,66 +67,18 @@ if [ -n "$(git status --porcelain)" ]; then
     }
 fi
 
-# Merge develop into main
-echo "Merging develop into main..."
-git merge develop --no-edit || {
-    echo -e "${RED}❌ Merge failed. Please resolve conflicts manually.${NC}"
-    exit 1
-=======
-# Step 1: Authenticate and set gcloud project
-echo -e "${GREEN}🔐 Step 1: Setting up gcloud...${NC}"
-gcloud config set account "$GCLOUD_ACCOUNT" || {
-    echo -e "${YELLOW}⚠️  Account authentication may be needed. Run: gcloud auth login${NC}"
->>>>>>> develop
-}
-gcloud config set project "$PROJECT_ID"
-echo "✅ Project set to: $PROJECT_ID"
-echo ""
-
-# Step 2: Commit and push changes to GitHub (main branch for production)
-echo -e "${GREEN}📋 Step 2: Committing and pushing changes to GitHub...${NC}"
-if [ -n "$(git status --porcelain)" ]; then
-    echo "Changes detected:"
-    git status --short | head -20
-    echo ""
+# Merge develop into main if on main
+if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
+    echo "Merging develop into $CURRENT_BRANCH..."
+    git merge develop --no-edit || {
+        echo -e "${YELLOW}⚠️  Merge failed or no changes to merge. Continuing...${NC}"
+    }
     
-    # Stage all changes
-    echo -e "${GREEN}📦 Staging all changes...${NC}"
-    git add -A
-    
-    # Commit changes
-    echo -e "${GREEN}💾 Committing changes...${NC}"
-    COMMIT_MSG="Deploy to production: Add shop agent push notifications, inventory check improvements, and bug fixes"
-    git commit -m "$COMMIT_MSG" || echo "No changes to commit or already committed"
-    
-    # Switch to main branch
-    echo -e "${GREEN}🌿 Switching to main branch...${NC}"
-    CURRENT_BRANCH=$(git branch --show-current)
-    if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
-        # Try main first, then master
-        git checkout main 2>/dev/null || git checkout master 2>/dev/null || {
-            echo -e "${YELLOW}⚠️  Could not switch to main/master branch. Current branch: $CURRENT_BRANCH${NC}"
-            echo "Please switch to main/master branch manually and push"
-        }
-    fi
-    
-    # Push to GitHub (triggers Netlify for production frontends)
-    CURRENT_BRANCH=$(git branch --show-current)
-    if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-        echo -e "${GREEN}📤 Pushing to GitHub (triggers Netlify deployment)...${NC}"
-        git push origin "$CURRENT_BRANCH" || echo "Push failed or already up to date"
-        echo -e "${GREEN}✅ Git changes pushed${NC}"
-    fi
-else
-    echo "No uncommitted changes detected"
-    # Still ensure we're on main/master branch and push if needed
-    CURRENT_BRANCH=$(git branch --show-current)
-    if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
-        echo -e "${YELLOW}⚠️  Not on main/master branch. Current: $CURRENT_BRANCH${NC}"
-        echo "Please switch to main/master branch manually"
-    else
-        git push origin "$CURRENT_BRANCH" || echo "Push failed or already up to date"
-    fi
+    # Push to GitHub
+    echo "Pushing to $CURRENT_BRANCH..."
+    git push origin "$CURRENT_BRANCH" || {
+        echo -e "${YELLOW}⚠️  Push failed or already up to date. Continuing...${NC}"
+    }
 fi
 echo ""
 
@@ -129,27 +100,16 @@ echo ""
 
 # Step 4: Deploy backend to Google Cloud Run
 echo -e "${GREEN}☁️  Step 4: Deploying backend to Google Cloud Run...${NC}"
-echo "Service: $SERVICE_NAME"
+echo "Service: $BACKEND_SERVICE"
 echo "Region: $REGION"
 echo ""
 
 cd backend
 
-<<<<<<< HEAD
-# Generate SHORT_SHA for image tagging
-SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 8)
-
-echo "Building and deploying backend..."
-echo "Using SHORT_SHA: $SHORT_SHA"
-gcloud builds submit \
-    --config cloudbuild.yaml \
-    --substitutions=SHORT_SHA=$SHORT_SHA \
-=======
 # Get existing environment variables to preserve them
 echo "📊 Retrieving existing environment variables..."
-EXISTING_ENV_RAW=$(gcloud run services describe "$SERVICE_NAME" \
+EXISTING_ENV_RAW=$(gcloud run services describe "$BACKEND_SERVICE" \
     --region "$REGION" \
->>>>>>> develop
     --project "$PROJECT_ID" \
     --format="get(spec.template.spec.containers[0].env)" 2>/dev/null || echo "")
 
@@ -170,23 +130,9 @@ gcloud builds submit --tag "$IMAGE_TAG" . || {
 echo "✅ Image built successfully"
 echo ""
 
-<<<<<<< HEAD
-cd admin-frontend
-
-SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 8)
-
-echo "Building and deploying admin frontend..."
-echo "Using SHORT_SHA: $SHORT_SHA"
-gcloud builds submit \
-    --config cloudbuild.yaml \
-    --substitutions=SHORT_SHA=$SHORT_SHA \
-    --project "$PROJECT_ID" \
-    . || {
-    echo -e "${RED}❌ Admin frontend deployment failed${NC}"
-=======
 # Deploy to Cloud Run (update existing service, don't create new)
 echo "🚀 Deploying to Cloud Run (updating existing service)..."
-gcloud run deploy "$SERVICE_NAME" \
+gcloud run deploy "$BACKEND_SERVICE" \
     --image "$IMAGE_TAG" \
     --platform managed \
     --region "$REGION" \
@@ -200,46 +146,105 @@ gcloud run deploy "$SERVICE_NAME" \
     --cpu 1 \
     --project "$PROJECT_ID" || {
     echo -e "${RED}❌ Deployment failed${NC}"
->>>>>>> develop
     exit 1
 }
 
 # Get final service URL
-FINAL_SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" \
     --region "$REGION" \
     --project "$PROJECT_ID" \
     --format "value(status.url)")
 
 echo ""
 echo -e "${GREEN}✅ Backend deployed successfully!${NC}"
-echo "🌐 Service URL: $FINAL_SERVICE_URL"
+echo "🌐 Service URL: $BACKEND_URL"
 echo ""
 
 cd ..
 
-# Step 5: Android app build instructions
-echo -e "${GREEN}📱 Step 5: Android App Build${NC}"
-echo "=============================================="
-echo "To build the Android app for production:"
+# Step 5: Deploy Admin Frontend to Google Cloud Run
+echo -e "${GREEN}🌐 Step 5: Deploying Admin Frontend to Google Cloud Run...${NC}"
+echo "Service: $ADMIN_FRONTEND_SERVICE"
 echo ""
-<<<<<<< HEAD
-echo "--- 6. Customer Frontend Deployment ---"
-echo "Deploying customer frontend to: $CUSTOMER_FRONTEND_SERVICE"
+
+cd admin-frontend
+
+SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 8)
+
+# Get Google Maps API Key from environment or secret
+GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-$(gcloud secrets versions access latest --secret=google-maps-api-key --project=$PROJECT_ID 2>/dev/null || echo '')}"
+
+echo "Building and deploying admin frontend..."
+echo "Using SHORT_SHA: $SHORT_SHA"
+if [ -z "$GOOGLE_MAPS_API_KEY" ]; then
+    echo -e "${YELLOW}⚠️  GOOGLE_MAPS_API_KEY not set. Build may fail if required.${NC}"
+    gcloud builds submit \
+        --config cloudbuild.yaml \
+        --substitutions=_SHORT_SHA=$SHORT_SHA \
+        --project "$PROJECT_ID" \
+        . || {
+        echo -e "${RED}❌ Admin frontend deployment failed${NC}"
+        exit 1
+    }
+else
+    gcloud builds submit \
+        --config cloudbuild.yaml \
+        --substitutions=_SHORT_SHA=$SHORT_SHA,_GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY \
+        --project "$PROJECT_ID" \
+        . || {
+        echo -e "${RED}❌ Admin frontend deployment failed${NC}"
+        exit 1
+    }
+fi
+
+ADMIN_URL=$(gcloud run services describe "$ADMIN_FRONTEND_SERVICE" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --format "value(status.url)" 2>/dev/null || echo "")
+
+if [ -z "$ADMIN_URL" ]; then
+    echo -e "${YELLOW}⚠️  Could not retrieve admin frontend URL${NC}"
+else
+    echo -e "${GREEN}✅ Admin frontend deployed: $ADMIN_URL${NC}"
+fi
+
+cd ..
+echo ""
+
+# Step 6: Deploy Customer Frontend to Google Cloud Run
+echo -e "${GREEN}🌐 Step 6: Deploying Customer Frontend to Google Cloud Run...${NC}"
+echo "Service: $CUSTOMER_FRONTEND_SERVICE"
+echo ""
 
 cd frontend
 
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 8)
 
+# Get Google Maps API Key from environment or secret
+GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-$(gcloud secrets versions access latest --secret=google-maps-api-key --project=$PROJECT_ID 2>/dev/null || echo '')}"
+
 echo "Building and deploying customer frontend..."
 echo "Using SHORT_SHA: $SHORT_SHA"
-gcloud builds submit \
-    --config cloudbuild.yaml \
-    --substitutions=SHORT_SHA=$SHORT_SHA \
-    --project "$PROJECT_ID" \
-    . || {
-    echo -e "${RED}❌ Customer frontend deployment failed${NC}"
-    exit 1
-}
+if [ -z "$GOOGLE_MAPS_API_KEY" ]; then
+    echo -e "${YELLOW}⚠️  GOOGLE_MAPS_API_KEY not set. Build may fail if required.${NC}"
+    gcloud builds submit \
+        --config cloudbuild.yaml \
+        --substitutions=_SHORT_SHA=$SHORT_SHA \
+        --project "$PROJECT_ID" \
+        . || {
+        echo -e "${RED}❌ Customer frontend deployment failed${NC}"
+        exit 1
+    }
+else
+    gcloud builds submit \
+        --config cloudbuild.yaml \
+        --substitutions=_SHORT_SHA=$SHORT_SHA,_GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY \
+        --project "$PROJECT_ID" \
+        . || {
+        echo -e "${RED}❌ Customer frontend deployment failed${NC}"
+        exit 1
+    }
+fi
 
 CUSTOMER_URL=$(gcloud run services describe "$CUSTOMER_FRONTEND_SERVICE" \
     --region "$REGION" \
@@ -253,33 +258,48 @@ else
 fi
 
 cd ..
+echo ""
 
-# --- 7. Android App Build ---
-=======
+# Step 7: Android app build instructions
+echo -e "${GREEN}📱 Step 7: Android App Build${NC}"
+echo "=============================================="
+echo "To build the Android app for production:"
+echo ""
 echo "  cd driver-app-native"
 echo "  ./gradlew assembleProductionDebug"
->>>>>>> develop
 echo ""
 echo "APK will be at:"
 echo "  app/build/outputs/apk/production/debug/app-production-debug.apk"
 echo ""
 
-# Step 6: Summary
+# Step 8: Summary
 echo -e "${GREEN}✅ Deployment Summary:${NC}"
 echo "=============================================="
 echo "✓ Database migration: pushToken column (will be added on server start)"
-echo "✓ Backend deployed to: $SERVICE_NAME"
-echo "✓ Service URL: $FINAL_SERVICE_URL"
+echo "✓ Backend deployed to: $BACKEND_SERVICE"
+echo "✓ Backend URL: $BACKEND_URL"
+if [ -n "$ADMIN_URL" ]; then
+    echo "✓ Admin frontend deployed to: $ADMIN_FRONTEND_SERVICE"
+    echo "✓ Admin frontend URL: $ADMIN_URL"
+fi
+if [ -n "$CUSTOMER_URL" ]; then
+    echo "✓ Customer frontend deployed to: $CUSTOMER_FRONTEND_SERVICE"
+    echo "✓ Customer frontend URL: $CUSTOMER_URL"
+fi
 echo "✓ CORS maintained (configured in backend/app.js)"
-echo "✓ Frontend changes pushed (Netlify will auto-deploy from GitHub)"
 echo "✓ Android app: Build manually using instructions above"
 echo ""
 echo -e "${GREEN}🎉 Deployment to production completed!${NC}"
 echo ""
 echo "Next steps:"
-echo "1. Verify backend health: curl $FINAL_SERVICE_URL/api/health"
-echo "2. Check Netlify dashboard for frontend deployment status"
-echo "3. Build Android app if needed (see instructions above)"
-echo "4. Test shop agent push notifications"
-echo "5. Monitor production logs: gcloud run services logs read $SERVICE_NAME --region $REGION --project $PROJECT_ID"
+echo "1. Verify backend health: curl $BACKEND_URL/api/health"
+if [ -n "$ADMIN_URL" ]; then
+    echo "2. Test admin frontend: $ADMIN_URL"
+fi
+if [ -n "$CUSTOMER_URL" ]; then
+    echo "3. Test customer frontend: $CUSTOMER_URL"
+fi
+echo "4. Build Android app if needed (see instructions above)"
+echo "5. Test shop agent push notifications"
+echo "6. Monitor production logs: gcloud run services logs read $BACKEND_SERVICE --region $REGION --project $PROJECT_ID"
 echo ""

@@ -350,11 +350,82 @@ async function sendPartnerInvite(email, token, partnerName, apiKey) {
   }
 }
 
+/**
+ * Send OTP via email
+ * @param {string} email - Recipient email address
+ * @param {string} otpCode - OTP code to send
+ * @returns {Promise<Object>} Result of email sending
+ */
+async function sendOtpEmail(email, otpCode) {
+  try {
+    const transporter = createTransporter();
+    
+    if (!transporter) {
+      return {
+        success: false,
+        error: 'Email service not configured'
+      };
+    }
+
+    const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER;
+    const mailOptions = {
+      from: `"Dial A Drink Kenya" <${smtpFrom}>`,
+      to: email,
+      subject: 'Your Login OTP - Dial A Drink Kenya',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #00E0B8;">Your Login OTP</h2>
+          <p>Your OTP code for Dial A Drink Kenya login is:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <div style="background-color: #f5f5f5; border: 2px solid #00E0B8; padding: 20px; 
+                        border-radius: 8px; display: inline-block;">
+              <span style="font-size: 32px; font-weight: bold; color: #00E0B8; letter-spacing: 8px; 
+                           font-family: 'Courier New', monospace;">
+                ${otpCode}
+              </span>
+            </div>
+          </div>
+          <p style="color: #666; font-size: 14px;">
+            Enter this code to verify your login. This code will expire in 3 hours.
+          </p>
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">
+            If you didn't request this OTP, please ignore this email.
+          </p>
+        </div>
+      `,
+      text: `
+        Your Login OTP - Dial A Drink Kenya
+        
+        Your OTP code is: ${otpCode}
+        
+        Enter this code to verify your login. This code will expire in 3 hours.
+        
+        If you didn't request this OTP, please ignore this email.
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log(`✅ OTP email sent to ${email}`);
+    return {
+      success: true,
+      messageId: info.messageId
+    };
+  } catch (error) {
+    console.error(`❌ Error sending OTP email to ${email}:`, error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
 module.exports = {
   sendEmailConfirmation,
   generateEmailToken,
   createTransporter,
   sendAdminInvite,
-  sendPartnerInvite
+  sendPartnerInvite,
+  sendOtpEmail
 };
 

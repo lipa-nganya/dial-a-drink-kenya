@@ -5016,7 +5016,24 @@ router.get('/customers/:id/latest-otp', async (req, res) => {
       return res.status(404).json({ error: 'Customer not found' });
     }
 
-    const otp = await findLatestOtpForPhone(customer.phone || customer.username);
+    // Try to find OTP by phone first (for Kenyan numbers)
+    let otp = null;
+    if (customer.phone || customer.username) {
+      otp = await findLatestOtpForPhone(customer.phone || customer.username);
+    }
+    
+    // If no phone-based OTP found, try email-based OTP
+    if (!otp && customer.email) {
+      const emailIdentifier = `email:${customer.email.toLowerCase().trim()}`;
+      otp = await db.Otp.findOne({
+        where: {
+          phoneNumber: emailIdentifier,
+          isUsed: false
+        },
+        order: [['createdAt', 'DESC']]
+      });
+    }
+    
     if (!otp) {
       return res.json({
         hasOtp: false,
