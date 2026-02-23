@@ -2,8 +2,8 @@
  * Delivery Accounting Logic for Dial a Drink
  *
  * No wallet. Only Cash at Hand and Savings.
- * - Savings = 50% of delivery fee (credited on Pay Now orders only).
- * - Pay on Delivery (cash): driver's cash at hand += 50% delivery fee + order total.
+ * - Savings = 50% of delivery fee (credited on ALL orders).
+ * - Pay on Delivery (cash): driver's cash at hand += 50% delivery fee + order total; savings += 50% delivery fee.
  * - Pay Now (M-Pesa/Pesapal): driver's cash at hand -= 50% delivery fee; savings += 50% delivery fee.
  */
 
@@ -39,9 +39,9 @@ function calculateDeliveryAccounting(alcoholCost, deliveryFee, paymentMethod) {
     cashAtHandChange = -withheldAmount;
     savingsChange = withheldAmount;
   } else {
-    // PAY_ON_DELIVERY (cash): cash at hand increases by 50% delivery fee + order total. No savings.
+    // PAY_ON_DELIVERY (cash): cash at hand increases by 50% delivery fee + order total; 50% delivery fee credited to savings
     cashAtHandChange = alcoholCost + withheldAmount;
-    savingsChange = 0;
+    savingsChange = withheldAmount; // 50% of delivery fee credited to savings for all orders
   }
 
   return {

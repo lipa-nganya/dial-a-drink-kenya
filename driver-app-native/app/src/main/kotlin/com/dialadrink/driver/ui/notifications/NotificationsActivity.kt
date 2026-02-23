@@ -48,6 +48,7 @@ class NotificationsActivity : AppCompatActivity() {
             tab.text = when (position) {
                 0 -> "Unread Messages"
                 1 -> "Read Messages"
+                2 -> "Push Notifications"
                 else -> ""
             }
         }.attach()
@@ -201,9 +202,10 @@ class NotificationsActivity : AppCompatActivity() {
         init {
             fragments.add(UnreadNotificationsFragment())
             fragments.add(ReadNotificationsFragment())
+            fragments.add(PushNotificationsFragment())
         }
         
-        override fun getItemCount(): Int = 2
+        override fun getItemCount(): Int = 3
         
         override fun createFragment(position: Int): Fragment {
             return fragments[position]

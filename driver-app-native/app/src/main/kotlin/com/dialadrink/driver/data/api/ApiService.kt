@@ -61,6 +61,28 @@ interface ApiService {
         @Body request: SetupPinRequest
     ): Response<ApiResponse<SetupPinResponse>>
     
+    // Shop Agent endpoints
+    @GET("shop-agents/phone/{phoneNumber}")
+    suspend fun getShopAgentByPhone(@Path("phoneNumber") phoneNumber: String): Response<ShopAgentResponse>
+    
+    @POST("shop-agents/login")
+    suspend fun shopAgentLogin(@Body request: ShopAgentLoginRequest): Response<ShopAgentLoginResponse>
+    
+    @POST("shop-agents/set-pin")
+    suspend fun shopAgentSetPin(@Body request: ShopAgentSetPinRequest): Response<ShopAgentSetPinResponse>
+    
+    @GET("shop-agents/inventory-items")
+    suspend fun getShopAgentInventoryItems(): Response<ApiResponse<ShopAgentInventoryItemsResponse>>
+    
+    @POST("shop-agents/inventory-check")
+    suspend fun submitInventoryCheck(@Body request: InventoryCheckRequest): Response<ApiResponse<InventoryCheckResponse>>
+    
+    @GET("shop-agents/inventory-check-history")
+    suspend fun getInventoryCheckHistory(@Query("status") status: String? = null): Response<ApiResponse<InventoryCheckHistoryResponse>>
+    
+    @POST("shop-agents/push-token")
+    suspend fun registerShopAgentPushToken(@Body request: ShopAgentPushTokenRequest): Response<ApiResponse<ShopAgentPushTokenResponse>>
+    
     // Push token
     @POST("drivers/push-token")
     suspend fun registerPushToken(@Body request: PushTokenRequest): Response<ApiResponse<PushTokenResponse>>

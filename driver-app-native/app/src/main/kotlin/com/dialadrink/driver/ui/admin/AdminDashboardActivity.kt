@@ -10,9 +10,11 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.dialadrink.driver.R
 import com.dialadrink.driver.databinding.ActivityAdminDashboardBinding
+import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.repository.OrderRepository
 import com.dialadrink.driver.ui.auth.PhoneNumberActivity
 import com.dialadrink.driver.utils.SharedPrefs
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 
 class AdminDashboardActivity : AppCompatActivity() {
@@ -237,20 +239,148 @@ class AdminDashboardActivity : AppCompatActivity() {
             return
         }
         
-        // Clear admin session
-        SharedPrefs.setAdminLoggedIn(this, false)
-        SharedPrefs.saveAdminId(this, -1)
-        SharedPrefs.saveAdminUsername(this, "")
-        SharedPrefs.saveAdminPhone(this, "")
-        SharedPrefs.clearAdminToken(this)
-        
-        // Navigate to UserTypeSelectionActivity with phone number
-        // This will show the admin/driver selection screen
-        // When driver is selected, it will check for PIN and go to PIN login if available
-        val intent = Intent(this, com.dialadrink.driver.ui.auth.UserTypeSelectionActivity::class.java)
-        intent.putExtra("phone", adminPhone)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-        startActivity(intent)
-        finish()
+        // Check phone number for available user types and show dialog
+        lifecycleScope.launch {
+            try {
+                // Ensure ApiClient is initialized
+                if (!ApiClient.isInitialized()) {
+                    ApiClient.init(this@AdminDashboardActivity)
+                }
+                
+                // Check what user types are available for this phone number
+                val phoneCheckResponse = ApiClient.getApiService().checkPhoneForUserTypes(adminPhone)
+                
+                if (phoneCheckResponse.isSuccessful && phoneCheckResponse.body()?.success == true) {
+                    val phoneCheck = phoneCheckResponse.body()!!.data
+                    val isDriver = phoneCheck?.isDriver ?: false
+                    val isAdmin = phoneCheck?.isAdmin ?: false
+                    val isShopAgent = phoneCheck?.shopAgent != null
+                    
+                    // Get PIN status from phone check response
+                    val driverInfo = phoneCheck?.driver
+                    val adminInfo = phoneCheck?.admin
+                    val shopAgentInfo = phoneCheck?.shopAgent
+                    val driverHasPin = driverInfo?.hasPin == true
+                    val adminHasPin = adminInfo?.hasPin == true
+                    val shopAgentHasPin = shopAgentInfo?.hasPin == true
+                    
+                    // Build list of available user types
+                    val availableUsers = mutableListOf<String>()
+                    if (isDriver) availableUsers.add("Driver")
+                    if (isAdmin) availableUsers.add("Admin")
+                    if (isShopAgent) availableUsers.add("Shop Agent")
+                    
+                    if (availableUsers.isEmpty()) {
+                        Toast.makeText(this@AdminDashboardActivity, "No other user types available for this phone number", Toast.LENGTH_SHORT).show()
+                        return@launch
+                    }
+                    
+                    // Show dialog with available users
+                    showUserSelectionDialog(adminPhone, availableUsers, isDriver, isAdmin, isShopAgent, driverHasPin, adminHasPin, shopAgentHasPin)
+                } else {
+                    Toast.makeText(this@AdminDashboardActivity, "Failed to check available user types", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking phone for user types: ${e.message}", e)
+                Toast.makeText(this@AdminDashboardActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    private fun showUserSelectionDialog(
+        phone: String,
+        availableUsers: List<String>,
+        isDriver: Boolean,
+        isAdmin: Boolean,
+        isShopAgent: Boolean,
+        driverHasPin: Boolean,
+        adminHasPin: Boolean,
+        shopAgentHasPin: Boolean
+    ) {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Switch User")
+            .setItems(availableUsers.toTypedArray()) { _, which ->
+                val selectedUser = availableUsers[which]
+                
+                // Clear admin session
+                SharedPrefs.setAdminLoggedIn(this, false)
+                SharedPrefs.saveAdminId(this, -1)
+                SharedPrefs.saveAdminUsername(this, "")
+                SharedPrefs.saveAdminPhone(this, "")
+                SharedPrefs.clearAdminToken(this)
+                
+                // Navigate directly to the selected user type's login flow
+                when (selectedUser) {
+                    "Driver" -> {
+                        if (driverHasPin) {
+                            val intent = Intent(this, com.dialadrink.driver.ui.auth.PinLoginActivity::class.java)
+                            intent.putExtra("phone", phone)
+                            intent.putExtra("userType", "driver")
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                        } else {
+                            // Send OTP for driver
+                            switchToUserType(phone, "driver")
+                        }
+                    }
+                    "Admin" -> {
+                        if (adminHasPin) {
+                            val intent = Intent(this, com.dialadrink.driver.ui.admin.AdminLoginActivity::class.java)
+                            intent.putExtra("phone", phone)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                        } else {
+                            // Send OTP for admin
+                            switchToUserType(phone, "admin")
+                        }
+                    }
+                    "Shop Agent" -> {
+                        if (shopAgentHasPin) {
+                            val intent = Intent(this, com.dialadrink.driver.ui.shopagent.ShopAgentLoginActivity::class.java)
+                            intent.putExtra("phone", phone)
+                            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            startActivity(intent)
+                            finish()
+                        } else {
+                            // Send OTP for shop agent
+                            switchToUserType(phone, "shop_agent")
+                        }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+    
+    private fun switchToUserType(phone: String, userType: String) {
+        lifecycleScope.launch {
+            try {
+                if (!ApiClient.isInitialized()) {
+                    ApiClient.init(this@AdminDashboardActivity)
+                }
+                
+                val sendOtpRequest = com.dialadrink.driver.data.model.SendOtpRequest(
+                    phone = phone,
+                    userType = userType
+                )
+                val response = ApiClient.getApiService().sendOtp(sendOtpRequest)
+                
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val intent = Intent(this@AdminDashboardActivity, com.dialadrink.driver.ui.auth.OtpVerificationActivity::class.java)
+                    intent.putExtra("phone", phone)
+                    intent.putExtra("userType", userType)
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                    startActivity(intent)
+                    finish()
+                } else {
+                    Toast.makeText(this@AdminDashboardActivity, "Failed to send OTP", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error sending OTP: ${e.message}", e)
+                Toast.makeText(this@AdminDashboardActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 }

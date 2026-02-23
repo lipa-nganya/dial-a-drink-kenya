@@ -51,3 +51,4 @@ COMMENT ON COLUMN orders."stopDeductionAmount" IS 'Amount to deduct from driver 
 1. Check if columns exist (they may have been added already)
 2. If not, run the SQL manually via Cloud SQL Console
 3. Verify the columns exist and test the stop fields feature
+Admin Web > Setting

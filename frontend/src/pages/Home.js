@@ -273,7 +273,7 @@ const Home = () => {
               width: '100%',
               display: 'flex',
               justifyContent: 'center',
-              maxHeight: { xs: '300px', md: '400px' },
+              maxHeight: { xs: '250px', md: '300px' },
               overflow: 'hidden'
             }}
           >
@@ -284,7 +284,7 @@ const Home = () => {
               sx={{
                 maxWidth: { xs: '100%', md: '1400px' },
                 width: { xs: '100%', md: '100%' },
-                maxHeight: { xs: '300px', md: '400px' },
+                maxHeight: { xs: '250px', md: '300px' },
                 height: 'auto',
                 display: 'block',
                 objectFit: 'contain'

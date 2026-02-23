@@ -45,13 +45,22 @@ object ApiClient {
                     .addHeader("ngrok-skip-browser-warning", "true")
                     .addHeader("User-Agent", "DialADrink-Driver-Android")
                 
-                // Add admin token if available (for admin API calls)
+                // Add authentication token if available (admin or shop agent)
                 val adminToken = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(context)
-                if (adminToken != null && adminToken.isNotEmpty()) {
-                    requestBuilder.addHeader("Authorization", "Bearer $adminToken")
-                    android.util.Log.d("ApiClient", "✅ Added Authorization header with admin token")
-                } else {
-                    android.util.Log.w("ApiClient", "⚠️ No admin token available - request may fail with 401")
+                val shopAgentToken = com.dialadrink.driver.utils.SharedPrefs.getShopAgentToken(context)
+                
+                when {
+                    adminToken != null && adminToken.isNotEmpty() -> {
+                        requestBuilder.addHeader("Authorization", "Bearer $adminToken")
+                        android.util.Log.d("ApiClient", "✅ Added Authorization header with admin token")
+                    }
+                    shopAgentToken != null && shopAgentToken.isNotEmpty() -> {
+                        requestBuilder.addHeader("Authorization", "Bearer $shopAgentToken")
+                        android.util.Log.d("ApiClient", "✅ Added Authorization header with shop agent token")
+                    }
+                    else -> {
+                        android.util.Log.w("ApiClient", "⚠️ No authentication token available - request may fail with 401")
+                    }
                 }
                 
                 chain.proceed(requestBuilder.build())

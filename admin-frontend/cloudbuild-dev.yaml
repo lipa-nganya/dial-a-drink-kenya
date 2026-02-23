@@ -7,18 +7,20 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:${BUILD_ID}'
       - '-t'
       - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:latest'
       - '--build-arg'
-      - 'REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api'
+      - 'REACT_APP_API_URL=https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api'
+      - '--build-arg'
+      - 'REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
       - '.'
 
   # Push the container image to Container Registry
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'push'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:${BUILD_ID}'
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
@@ -33,7 +35,7 @@ steps:
       - 'deploy'
       - 'deliveryos-admin-frontend-dev'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:${BUILD_ID}'
       - '--region'
       - 'us-central1'
       - '--platform'
@@ -42,10 +44,10 @@ steps:
       - '--memory'
       - '256Mi'
       - '--set-env-vars'
-      - 'REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api'
+      - 'REACT_APP_API_URL=https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api,REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
 
 images:
-  - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:$SHORT_SHA'
+  - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:${BUILD_ID}'
   - 'gcr.io/$PROJECT_ID/deliveryos-admin-dev:latest'
 
 options:
@@ -53,3 +55,7 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'
+
+# Substitution variables - must be set via Cloud Build trigger or --substitutions flag
+substitutions:
+  _GOOGLE_MAPS_API_KEY: ''  # REQUIRED: Set this in Cloud Build trigger configuration

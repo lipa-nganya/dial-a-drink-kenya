@@ -338,7 +338,18 @@ router.get('/check-phone/:phone', async (req, res) => {
           [Op.in]: ['admin', 'manager', 'super_admin']
         }
       },
-      attributes: ['id', 'username', 'hasSetPin', 'mobileNumber']
+      attributes: ['id', 'username', 'hasSetPin', 'mobileNumber', 'name']
+    });
+    
+    // Check for shop agent
+    const shopAgent = await db.Admin.findOne({
+      where: {
+        mobileNumber: {
+          [Op.in]: phoneVariations
+        },
+        role: 'shop_agent'
+      },
+      attributes: ['id', 'name', 'mobileNumber', 'hasSetPin', 'role']
     });
     
     return res.json({
@@ -346,11 +357,19 @@ router.get('/check-phone/:phone', async (req, res) => {
       data: {
         isDriver: !!driver,
         isAdmin: !!admin,
-        driver: driver ? { id: driver.id, name: driver.name } : null,
+        isShopAgent: !!shopAgent,
+        driver: driver ? { id: driver.id, name: driver.name, hasPin: !!driver.pinHash } : null,
         admin: admin ? { 
           id: admin.id, 
           username: admin.username,
+          name: admin.name,
           hasPin: admin.hasSetPin || false
+        } : null,
+        shopAgent: shopAgent ? {
+          id: shopAgent.id,
+          name: shopAgent.name,
+          mobileNumber: shopAgent.mobileNumber,
+          hasPin: shopAgent.hasSetPin || false
         } : null
       }
     });
@@ -489,13 +508,33 @@ router.post('/auth/mobile-login', async (req, res) => {
     }
 
     // Find admin by mobile number
-    const admin = await db.Admin.findOne({
-      where: {
-        mobileNumber: {
-          [Op.in]: [formattedPhone, phone.trim(), formattedPhone.replace(/^254/, '0')]
-        }
+    // Use try-catch to handle potential database column issues
+    let admin;
+    try {
+      admin = await db.Admin.findOne({
+        where: {
+          mobileNumber: {
+            [Op.in]: [formattedPhone, phone.trim(), formattedPhone.replace(/^254/, '0')]
+          }
+        },
+        attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'pinHash', 'hasSetPin', 'pushToken']
+      });
+    } catch (dbError) {
+      // If pushToken column doesn't exist, try without it
+      if (dbError.message && dbError.message.includes('pushToken')) {
+        console.warn('pushToken column not found, querying without it');
+        admin = await db.Admin.findOne({
+          where: {
+            mobileNumber: {
+              [Op.in]: [formattedPhone, phone.trim(), formattedPhone.replace(/^254/, '0')]
+            }
+          },
+          attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'pinHash', 'hasSetPin']
+        });
+      } else {
+        throw dbError; // Re-throw if it's a different error
       }
-    });
+    }
 
     if (!admin) {
       return res.status(401).json({
@@ -551,11 +590,18 @@ router.post('/auth/mobile-login', async (req, res) => {
     });
   } catch (error) {
     console.error('Admin mobile login error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      code: error.code
+    });
     return res.status(500).json({
       success: false,
       error: 'Failed to log in. Please try again.',
       ...(process.env.NODE_ENV === 'development' && {
-        details: error.message
+        details: error.message,
+        stack: error.stack
       })
     });
   }
@@ -3685,7 +3731,24 @@ router.get('/users/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const admin = await db.Admin.findByPk(id);
+    // Use try-catch to handle potential database column issues
+    let admin;
+    try {
+      admin = await db.Admin.findByPk(id, {
+        attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt', 'pushToken']
+      });
+    } catch (dbError) {
+      // If pushToken column doesn't exist, try without it
+      if (dbError.message && dbError.message.includes('pushToken')) {
+        console.warn('pushToken column not found, querying without it');
+        admin = await db.Admin.findByPk(id, {
+          attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
+        });
+      } else {
+        throw dbError; // Re-throw if it's a different error
+      }
+    }
+    
     if (!admin) {
       return res.status(404).json({ error: 'Admin user not found' });
     }
@@ -3693,6 +3756,7 @@ router.get('/users/:id', async (req, res) => {
     return res.json(buildAdminUserResponse(admin));
   } catch (error) {
     console.error('Error fetching admin user:', error);
+    console.error('Error stack:', error.stack);
     return res.status(500).json({ error: error.message || 'Failed to fetch admin user' });
   }
 });
@@ -3704,7 +3768,24 @@ router.put('/users/:id', async (req, res) => {
     const { id } = req.params;
     const { username, email, role, name, mobileNumber } = req.body;
 
-    const admin = await db.Admin.findByPk(id);
+    // Use try-catch to handle potential database column issues
+    let admin;
+    try {
+      admin = await db.Admin.findByPk(id, {
+        attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt', 'pushToken']
+      });
+    } catch (dbError) {
+      // If pushToken column doesn't exist, try without it
+      if (dbError.message && dbError.message.includes('pushToken')) {
+        console.warn('pushToken column not found, querying without it');
+        admin = await db.Admin.findByPk(id, {
+          attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
+        });
+      } else {
+        throw dbError; // Re-throw if it's a different error
+      }
+    }
+    
     if (!admin) {
       return res.status(404).json({ error: 'Admin user not found' });
     }
@@ -3781,7 +3862,24 @@ router.get('/users/:id/otps', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const admin = await db.Admin.findByPk(id);
+    // Use try-catch to handle potential database column issues
+    let admin;
+    try {
+      admin = await db.Admin.findByPk(id, {
+        attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt', 'pushToken']
+      });
+    } catch (dbError) {
+      // If pushToken column doesn't exist, try without it
+      if (dbError.message && dbError.message.includes('pushToken')) {
+        console.warn('pushToken column not found, querying without it');
+        admin = await db.Admin.findByPk(id, {
+          attributes: ['id', 'username', 'email', 'role', 'name', 'mobileNumber', 'createdAt', 'updatedAt']
+        });
+      } else {
+        throw dbError; // Re-throw if it's a different error
+      }
+    }
+    
     if (!admin) {
       return res.status(404).json({ error: 'Admin user not found' });
     }
@@ -3990,13 +4088,31 @@ router.post('/users', async (req, res) => {
       return res.status(400).json({ error: 'Username and email are required' });
     }
 
+    // Check which columns exist in the admins table
+    let hasMobileNumberColumn = false;
+    try {
+      const [existingColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = 'admins' ORDER BY column_name"
+      );
+      const columnNames = new Set(existingColumns.map(col => col.column_name.toLowerCase()));
+      hasMobileNumberColumn = columnNames.has('mobilenumber');
+    } catch (schemaError) {
+      console.warn('⚠️ Could not query information_schema for admins table:', schemaError.message);
+    }
+
     // Check if user already exists
+    const existingUserWhere = [
+      { username },
+      { email }
+    ];
+    // Also check mobileNumber if provided and column exists
+    if (hasMobileNumberColumn && mobileNumber && mobileNumber.trim()) {
+      existingUserWhere.push({ mobileNumber: mobileNumber.trim() });
+    }
+
     const existingUser = await db.Admin.findOne({
       where: {
-        [Op.or]: [
-          { username },
-          { email }
-        ]
+        [Op.or]: existingUserWhere
       }
     });
 
@@ -4009,15 +4125,23 @@ router.post('/users', async (req, res) => {
     const inviteToken = crypto.randomBytes(32).toString('hex');
     const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
-    // Create user
-    const user = await db.Admin.create({
+    // Build create object with only existing fields
+    const createData = {
       username,
       email,
       role: role || 'manager',
       password: null, // Password will be set when user accepts invite
       inviteToken,
       inviteTokenExpiry
-    });
+    };
+
+    // Add mobileNumber if column exists and value is provided
+    if (hasMobileNumberColumn && mobileNumber && mobileNumber.trim()) {
+      createData.mobileNumber = mobileNumber.trim();
+    }
+
+    // Create user
+    const user = await db.Admin.create(createData);
 
     // Send invite email
     const emailService = require('../services/email');
@@ -4028,13 +4152,21 @@ router.post('/users', async (req, res) => {
       // User is created, but email failed - still return success
     }
 
-    res.status(201).json({
+    // Build response with only existing fields
+    const responseData = {
       id: user.id,
       username: user.username,
       email: user.email,
       role: user.role,
       createdAt: user.createdAt
-    });
+    };
+
+    // Include mobileNumber in response if it exists
+    if (hasMobileNumberColumn && user.mobileNumber) {
+      responseData.mobileNumber = user.mobileNumber;
+    }
+
+    res.status(201).json(responseData);
   } catch (error) {
     console.error('Error creating user:', error);
     res.status(500).json({ error: error.message });
@@ -5231,7 +5363,7 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
         {
           model: db.Admin,
           as: 'shopAgent',
-          attributes: ['id', 'name', 'mobileNumber']
+          attributes: ['id', 'name', 'mobileNumber', 'pushToken']
         }
       ]
     });
@@ -5256,6 +5388,52 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
       await inventoryCheck.drink.update({
         stock: inventoryCheck.agentCount
       });
+    }
+
+    // Send push notification to shop agent
+    if (inventoryCheck.shopAgent) {
+      if (inventoryCheck.shopAgent.pushToken) {
+        try {
+          console.log(`📤 Sending push notification to shop agent ${inventoryCheck.shopAgent.id} (${inventoryCheck.shopAgent.name}) for approved inventory check ${checkId}`);
+          console.log(`📤 Push token: ${inventoryCheck.shopAgent.pushToken.substring(0, 20)}...`);
+          
+          const message = {
+            sound: 'default',
+            title: '✅ Inventory Check Approved',
+            body: `Your inventory check for ${inventoryCheck.drink?.name || 'item'} has been approved.${updateStock === true ? ' Stock has been updated.' : ''}`,
+            data: {
+              type: 'inventory-check-approved',
+              checkId: String(inventoryCheck.id),
+              drinkId: String(inventoryCheck.drinkId),
+              drinkName: inventoryCheck.drink?.name || 'Item',
+              stockUpdated: String(updateStock === true),
+              channelId: 'inventory-checks'
+            },
+            priority: 'high',
+            badge: 1,
+            channelId: 'inventory-checks'
+          };
+
+          const pushResult = await pushNotifications.sendFCMNotification(
+            inventoryCheck.shopAgent.pushToken,
+            message
+          );
+
+          if (pushResult.success) {
+            console.log(`✅ Push notification sent successfully to shop agent ${inventoryCheck.shopAgent.id} for approved inventory check ${checkId}`);
+          } else {
+            console.warn(`⚠️ Failed to send push notification to shop agent ${inventoryCheck.shopAgent.id}: ${pushResult.error}`);
+          }
+        } catch (pushError) {
+          console.error('❌ Error sending push notification for approved inventory check:', pushError);
+          console.error('Error stack:', pushError.stack);
+          // Don't fail the request if push notification fails
+        }
+      } else {
+        console.log(`⚠️ Shop agent ${inventoryCheck.shopAgentId} (${inventoryCheck.shopAgent.name || 'Unknown'}) has no push token registered - notification not sent for approved inventory check ${checkId}`);
+      }
+    } else {
+      console.log(`⚠️ Shop agent ${inventoryCheck.shopAgentId} not found - notification not sent for approved inventory check ${checkId}`);
     }
 
     res.json({
@@ -5295,7 +5473,7 @@ router.post('/inventory-checks/:checkId/request-recount', verifyAdmin, async (re
         {
           model: db.Admin,
           as: 'shopAgent',
-          attributes: ['id', 'name', 'mobileNumber']
+          attributes: ['id', 'name', 'mobileNumber', 'pushToken']
         }
       ]
     });
@@ -5331,6 +5509,52 @@ router.post('/inventory-checks/:checkId/request-recount', verifyAdmin, async (re
     } catch (notifError) {
       console.error('Error creating notification:', notifError);
       // Don't fail the request if notification fails
+    }
+
+    // Send push notification to shop agent
+    if (inventoryCheck.shopAgent) {
+      if (inventoryCheck.shopAgent.pushToken) {
+        try {
+          console.log(`📤 Sending push notification to shop agent ${inventoryCheck.shopAgent.id} (${inventoryCheck.shopAgent.name}) for rejected inventory check ${checkId}`);
+          console.log(`📤 Push token: ${inventoryCheck.shopAgent.pushToken.substring(0, 20)}...`);
+          
+          const message = {
+            sound: 'default',
+            title: '⚠️ Inventory Check Rejected',
+            body: `Your inventory check for ${inventoryCheck.drink?.name || 'item'} has been rejected. Please submit a recount.${notes ? ` Notes: ${notes}` : ''}`,
+            data: {
+              type: 'inventory-check-rejected',
+              checkId: String(inventoryCheck.id),
+              drinkId: String(inventoryCheck.drinkId),
+              drinkName: inventoryCheck.drink?.name || 'Item',
+              notes: notes || '',
+              channelId: 'inventory-checks'
+            },
+            priority: 'high',
+            badge: 1,
+            channelId: 'inventory-checks'
+          };
+
+          const pushResult = await pushNotifications.sendFCMNotification(
+            inventoryCheck.shopAgent.pushToken,
+            message
+          );
+
+          if (pushResult.success) {
+            console.log(`✅ Push notification sent successfully to shop agent ${inventoryCheck.shopAgent.id} for rejected inventory check ${checkId}`);
+          } else {
+            console.warn(`⚠️ Failed to send push notification to shop agent ${inventoryCheck.shopAgent.id}: ${pushResult.error}`);
+          }
+        } catch (pushError) {
+          console.error('❌ Error sending push notification for rejected inventory check:', pushError);
+          console.error('Error stack:', pushError.stack);
+          // Don't fail the request if push notification fails
+        }
+      } else {
+        console.log(`⚠️ Shop agent ${inventoryCheck.shopAgentId} (${inventoryCheck.shopAgent.name || 'Unknown'}) has no push token registered - notification not sent for rejected inventory check ${checkId}`);
+      }
+    } else {
+      console.log(`⚠️ Shop agent ${inventoryCheck.shopAgentId} not found - notification not sent for rejected inventory check ${checkId}`);
     }
 
     res.json({

@@ -39,7 +39,7 @@ const DRAWER_WIDTH = 260;
 const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { pendingOrdersCount, pendingSubmissionsCount, logout, user } = useAdmin();
+  const { pendingOrdersCount, pendingSubmissionsCount, pendingInventoryChecksCount, logout, user } = useAdmin();
   const { isDarkMode, colors } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
 
@@ -58,7 +58,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
     { path: '/dashboard', label: 'Dashboard', icon: Dashboard },
     { path: '/orders', label: 'Orders', icon: Receipt, badge: pendingOrdersCount },
     { path: '/transactions', label: 'Transactions', icon: Receipt },
-    { path: '/inventory', label: 'Inventory', icon: Inventory },
+    { path: '/inventory', label: 'Inventory', icon: Inventory, badge: pendingInventoryChecksCount },
     { path: '/payables', label: 'Payables', icon: AccountBalance },
     { path: '/cash-at-hand', label: 'Cash at Hand', icon: AttachMoney, badge: pendingSubmissionsCount },
     // { path: '/pos', label: 'POS', icon: PointOfSale }, // Removed

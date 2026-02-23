@@ -463,12 +463,42 @@ class AssignRiderActivity : AppCompatActivity() {
                     UpdateOrderStatusRequest(status = "cancelled", driverId = order.driverId ?: 0)
                 )
                 
-                if (response.isSuccessful && response.body()?.success == true) {
-                    Toast.makeText(this@AssignRiderActivity, "Order cancelled", Toast.LENGTH_SHORT).show()
-                    parentDialog.dismiss()
-                    loadUnassignedOrders()
+                // Backend returns order directly (not wrapped in { success: true })
+                // Check if response is successful (HTTP 200-299) and order data exists
+                if (response.isSuccessful) {
+                    val responseBody = response.body()
+                    val orderData = responseBody?.data
+                    
+                    // Success if we have order data OR if success field is true
+                    // Backend returns order object directly, so check for order data
+                    if (orderData != null || responseBody?.success == true) {
+                        Toast.makeText(this@AssignRiderActivity, "Order cancelled successfully", Toast.LENGTH_SHORT).show()
+                        parentDialog.dismiss()
+                        loadUnassignedOrders()
+                    } else {
+                        // Check error message from response
+                        val errorMessage = responseBody?.error ?: "Order cancellation may have failed"
+                        Toast.makeText(this@AssignRiderActivity, errorMessage, Toast.LENGTH_SHORT).show()
+                    }
                 } else {
-                    Toast.makeText(this@AssignRiderActivity, "Failed to cancel order", Toast.LENGTH_SHORT).show()
+                    // HTTP error - get error message from response body
+                    val errorMessage = try {
+                        val errorBody = response.errorBody()?.string()
+                        if (errorBody != null) {
+                            try {
+                                // Try to parse error from JSON response
+                                val json = org.json.JSONObject(errorBody)
+                                json.optString("error", "Failed to cancel order")
+                            } catch (e: Exception) {
+                                "Failed to cancel order"
+                            }
+                        } else {
+                            "Failed to cancel order"
+                        }
+                    } catch (e: Exception) {
+                        "Failed to cancel order: ${e.message ?: "Unknown error"}"
+                    }
+                    Toast.makeText(this@AssignRiderActivity, errorMessage, Toast.LENGTH_SHORT).show()
                 }
             } catch (e: Exception) {
                 android.util.Log.e("AssignRiderActivity", "Error cancelling order: ${e.message}", e)

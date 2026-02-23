@@ -136,11 +136,15 @@ class ProfileActivity : AppCompatActivity() {
         
         // Help section
         binding.termsOfUseButton.setOnClickListener {
-            openUrl("https://thewolfgang.tech/terms-of-use")
+            val intent = Intent(this, com.dialadrink.driver.ui.common.TermsOfUseActivity::class.java)
+            intent.putExtra(com.dialadrink.driver.ui.common.TermsOfUseActivity.EXTRA_USER_TYPE, "driver")
+            startActivity(intent)
         }
         
         binding.privacyPolicyButton.setOnClickListener {
-            openUrl("https://thewolfgang.tech/privacy-policy")
+            val intent = Intent(this, com.dialadrink.driver.ui.common.PrivacyPolicyActivity::class.java)
+            intent.putExtra(com.dialadrink.driver.ui.common.PrivacyPolicyActivity.EXTRA_USER_TYPE, "driver")
+            startActivity(intent)
         }
         
         binding.wolfgangLink.setOnClickListener {

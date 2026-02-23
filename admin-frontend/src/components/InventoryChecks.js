@@ -39,7 +39,7 @@ const InventoryChecks = () => {
   const [filteredChecks, setFilteredChecks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('all'); // all, pending, approved, recount_requested
+  const [statusFilter, setStatusFilter] = useState('pending'); // all, pending, approved, recount_requested
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [recountDialogOpen, setRecountDialogOpen] = useState(false);

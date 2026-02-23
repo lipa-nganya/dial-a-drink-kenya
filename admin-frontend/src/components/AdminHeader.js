@@ -33,7 +33,7 @@ import ThemeSwitcher from './ThemeSwitcher';
 const AdminHeader = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { pendingOrdersCount, logout, user } = useAdmin();
+  const { pendingOrdersCount, pendingInventoryChecksCount, logout, user } = useAdmin();
   const { isDarkMode, colors } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
   const { cartItems } = useResupplyCart();
@@ -101,9 +101,11 @@ const AdminHeader = () => {
           <Button
             color="inherit"
             onClick={() => navigate('/inventory')}
-            sx={buttonStyle('/inventory')}
+            sx={{ ...buttonStyle('/inventory'), position: 'relative' }}
           >
-            Inventory
+            <Badge badgeContent={pendingInventoryChecksCount} color="error" max={99} sx={{ '& .MuiBadge-badge': { right: -8, top: -8 } }}>
+              Inventory
+            </Badge>
           </Button>
           <Button
             color="inherit"

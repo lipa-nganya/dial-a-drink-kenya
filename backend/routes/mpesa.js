@@ -787,7 +787,7 @@ const calculateDeliveryFee = async (orderId) => {
  */
 router.post('/stk-push', async (req, res) => {
   try {
-    const { phoneNumber, amount, orderId, accountReference } = req.body;
+    const { phoneNumber, amount, orderId, accountReference, callbackUrl } = req.body;
 
     if (!phoneNumber || !amount || !orderId) {
       return res.status(400).json({ 
@@ -864,11 +864,14 @@ router.post('/stk-push', async (req, res) => {
       };
       console.log('🧪 Skipping real M-Pesa call - simulated response:', stkResponse);
     } else {
+      // Allow custom callback URL override from request body
+      // If not provided, will use auto-detected callback URL
       stkResponse = await mpesaService.initiateSTKPush(
         phoneNumber,
         amount,
         reference,
-        description
+        description,
+        callbackUrl // Optional: custom callback URL override
       );
     }
 

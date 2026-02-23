@@ -93,6 +93,10 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
                 // Handle payment success/failure notifications
                 handlePaymentNotification(type, remoteMessage)
                 return
+            } else if (type == "inventory-check-approved" || type == "inventory-check-rejected") {
+                // Handle inventory check approval/rejection notifications
+                handleInventoryCheckNotification(type, remoteMessage)
+                return
             }
         }
         
@@ -162,6 +166,9 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
     
     private fun showOrderNotification(remoteMessage: RemoteMessage, orderId: Int) {
         try {
+            // Save push notification to SharedPrefs
+            savePushNotification(remoteMessage, orderId)
+            
             // Check permissions before showing notification
             if (!PermissionHelper.hasNotificationPermission(this)) {
                 Log.w(TAG, "❌ Cannot show order notification: Permission not granted")
@@ -208,6 +215,37 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
             Log.d(TAG, "✅ Order notification displayed for order #$orderId")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error showing order notification", e)
+        }
+    }
+    
+    /**
+     * Helper function to save push notification to SharedPrefs
+     */
+    private fun savePushNotification(remoteMessage: RemoteMessage, notificationId: Int? = null) {
+        try {
+            val title = remoteMessage.notification?.title 
+                ?: remoteMessage.data["title"] 
+                ?: "Notification"
+            val body = remoteMessage.notification?.body 
+                ?: remoteMessage.data["body"] 
+                ?: remoteMessage.data["message"] 
+                ?: ""
+            
+            val id = notificationId ?: remoteMessage.data["notificationId"]?.toIntOrNull() ?: System.currentTimeMillis().toInt()
+            
+            val notification = PushNotification(
+                id = id,
+                title = title,
+                preview = body.take(100), // Preview is first 100 chars
+                message = body,
+                sentAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()).format(java.util.Date()),
+                isRead = false
+            )
+            
+            SharedPrefs.addPushNotification(this, notification)
+            Log.d(TAG, "✅ Push notification saved to SharedPrefs: $title")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error saving push notification to SharedPrefs", e)
         }
     }
     
@@ -376,6 +414,9 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
     
     private fun handleCashSubmissionNotification(type: String, submissionId: String?, remoteMessage: RemoteMessage) {
         try {
+            // Save push notification to SharedPrefs
+            savePushNotification(remoteMessage, submissionId?.toIntOrNull())
+            
             val intent = Intent(this, com.dialadrink.driver.ui.wallet.CashAtHandActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -413,6 +454,11 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
     
     private fun handleCustomNotification(remoteMessage: RemoteMessage) {
         try {
+            val notificationId = remoteMessage.data["notificationId"]?.toIntOrNull() ?: System.currentTimeMillis().toInt()
+            
+            // Save push notification to SharedPrefs
+            savePushNotification(remoteMessage, notificationId)
+            
             // Check permissions before showing notification
             if (!PermissionHelper.hasNotificationPermission(this)) {
                 Log.w(TAG, "❌ Cannot show custom notification: Permission not granted")
@@ -436,8 +482,6 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
                 addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
                 addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT)
             }
-            
-            val notificationId = remoteMessage.data["notificationId"]?.toIntOrNull() ?: System.currentTimeMillis().toInt()
             
             val pendingIntent = PendingIntent.getActivity(
                 this, notificationId, intent,
@@ -476,6 +520,9 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
             val message = remoteMessage.data["message"] ?: remoteMessage.notification?.body ?: "Your cancellation request has been approved"
             
             Log.d(TAG, "📬 Cancellation approved notification received for order: $orderId")
+            
+            // Save push notification to SharedPrefs
+            savePushNotification(remoteMessage, orderId)
             
             // Check permissions before showing notification
             if (!PermissionHelper.hasNotificationPermission(this)) {
@@ -529,6 +576,107 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
     
+    private fun handleInventoryCheckNotification(type: String, remoteMessage: RemoteMessage) {
+        try {
+            val checkId = remoteMessage.data["checkId"]?.toIntOrNull()
+            val drinkName = remoteMessage.data["drinkName"] ?: "item"
+            val title = remoteMessage.notification?.title ?: remoteMessage.data["title"] ?: 
+                        if (type == "inventory-check-approved") "✅ Inventory Check Approved" else "⚠️ Inventory Check Rejected"
+            val body = remoteMessage.notification?.body ?: remoteMessage.data["body"] ?: ""
+            
+            Log.d(TAG, "📬 Inventory check notification received: type=$type, checkId=$checkId")
+            
+            // Save push notification to SharedPrefs
+            savePushNotification(remoteMessage, checkId)
+            
+            // Check permissions before showing notification
+            if (!PermissionHelper.hasNotificationPermission(this)) {
+                Log.w(TAG, "❌ Cannot show inventory check notification: Permission not granted")
+                return
+            }
+            
+            if (!PermissionHelper.areNotificationsEnabled(this)) {
+                Log.w(TAG, "❌ Cannot show inventory check notification: Notifications disabled")
+                return
+            }
+            
+            // Create notification channel for inventory checks if it doesn't exist
+            createInventoryCheckNotificationChannel()
+            
+            // Bring app to foreground
+            bringAppToForeground()
+            
+            // Create intent to open Inventory Check History activity
+            val intent = Intent(this, com.dialadrink.driver.ui.shopagent.ShopAgentInventoryCheckHistoryActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT)
+                // Set tab based on type
+                putExtra("tab", if (type == "inventory-check-approved") 1 else 2) // 1 = Approved, 2 = Rejected
+            }
+            
+            val notificationId = checkId ?: System.currentTimeMillis().toInt()
+            
+            val pendingIntent = PendingIntent.getActivity(
+                this, notificationId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            
+            val notification = NotificationCompat.Builder(this, "inventory-checks")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentTitle(title)
+                .setContentText(body)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
+                .setVibrate(longArrayOf(500, 100, 500, 100, 500))
+                .build()
+            
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.notify(notificationId, notification)
+            
+            Log.d(TAG, "✅ Inventory check notification displayed")
+            
+            // Send broadcast to refresh inventory check history if activity is open
+            val refreshIntent = Intent("com.dialadrink.driver.INVENTORY_CHECK_REFRESH").apply {
+                putExtra("type", type)
+                putExtra("checkId", checkId ?: -1)
+            }
+            LocalBroadcastManager.getInstance(this).sendBroadcast(refreshIntent)
+            
+            // Also launch activity directly if app is in foreground
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error handling inventory check notification", e)
+        }
+    }
+    
+    private fun createInventoryCheckNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                "inventory-checks",
+                "Inventory Checks",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Notifications for inventory check approvals and rejections"
+                enableVibration(true)
+                vibrationPattern = longArrayOf(500, 100, 500, 100, 500)
+                enableLights(true)
+                setShowBadge(true)
+                lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+            }
+            
+            val notificationManager = getSystemService(NotificationManager::class.java)
+            notificationManager.createNotificationChannel(channel)
+            Log.d(TAG, "✅ Notification channel created: inventory-checks")
+        }
+    }
+    
     private fun handlePaymentNotification(type: String, remoteMessage: RemoteMessage) {
         try {
             val orderId = remoteMessage.data["orderId"]?.toIntOrNull()
@@ -540,22 +688,8 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
             
             Log.d(TAG, "📬 Payment notification received: type=$type, orderId=$orderId")
             
-            // Save notification to SharedPrefs for later reference
-            try {
-                val notificationId = System.currentTimeMillis().toInt()
-                val notification = PushNotification(
-                    id = notificationId,
-                    title = title,
-                    preview = body.take(100), // Preview is first 100 chars
-                    message = body,
-                    sentAt = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.getDefault()).format(java.util.Date()),
-                    isRead = false
-                )
-                SharedPrefs.addPushNotification(this, notification)
-                Log.d(TAG, "✅ Payment notification saved to SharedPrefs")
-            } catch (e: Exception) {
-                Log.e(TAG, "❌ Error saving payment notification to SharedPrefs", e)
-            }
+            // Save push notification to SharedPrefs
+            savePushNotification(remoteMessage, orderId)
             
             // Check permissions before showing notification
             if (!PermissionHelper.hasNotificationPermission(this)) {
@@ -636,6 +770,9 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
     
     private fun showNotification(remoteMessage: RemoteMessage) {
         try {
+            // Save push notification to SharedPrefs (for generic notifications)
+            savePushNotification(remoteMessage)
+            
             // Check permissions before showing notification
             if (!PermissionHelper.hasNotificationPermission(this)) {
                 Log.w(TAG, "❌ Cannot show notification: Permission not granted")

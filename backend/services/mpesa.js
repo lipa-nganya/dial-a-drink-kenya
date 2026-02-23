@@ -6,6 +6,8 @@ const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
 const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
 const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE;
 const MPESA_PASSKEY = process.env.MPESA_PASSKEY;
+// For PayBill: PartyB is the PayBill account number (different from BusinessShortCode)
+const MPESA_PAYBILL_ACCOUNT = process.env.MPESA_PAYBILL_ACCOUNT || process.env.MPESA_PARTYB || process.env.MPESA_SHORTCODE;
 
 // Validate required credentials - don't throw during module load, check at runtime
 const validateMpesaCredentials = () => {
@@ -257,8 +259,9 @@ function formatPhoneNumber(phone) {
  * @param {number} amount - Amount to charge
  * @param {string} accountReference - Reference for the transaction
  * @param {string} transactionDesc - Description of the transaction
+ * @param {string} [customCallbackUrl] - Optional custom callback URL (overrides automatic detection)
  */
-async function initiateSTKPush(phoneNumber, amount, accountReference, transactionDesc) {
+async function initiateSTKPush(phoneNumber, amount, accountReference, transactionDesc, customCallbackUrl = null) {
   // Validate credentials at runtime
   if (!validateMpesaCredentials()) {
     throw new Error('M-Pesa credentials are required. Please set environment variables: MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY');
@@ -278,32 +281,46 @@ async function initiateSTKPush(phoneNumber, amount, accountReference, transactio
     const token = await getAccessToken();
     const { password, timestamp } = generatePassword();
 
-    // Get callback URL at runtime (async so we can resolve ngrok from API when env not set)
-    const callbackUrl = await getCallbackUrlAsync();
+    // Get callback URL - use custom URL if provided, otherwise auto-detect
+    let callbackUrl;
+    if (customCallbackUrl) {
+      callbackUrl = customCallbackUrl;
+      console.log(`✅ Using custom callback URL from request: ${callbackUrl}`);
+    } else {
+      // Get callback URL at runtime (async so we can resolve ngrok from API when env not set)
+      callbackUrl = await getCallbackUrlAsync();
+      console.log(`✅ Using auto-detected callback URL: ${callbackUrl}`);
+    }
     
     const payload = {
-      BusinessShortCode: MPESA_SHORTCODE,
+      BusinessShortCode: MPESA_SHORTCODE, // Shortcode for authentication
       Password: password,
       Timestamp: timestamp,
       TransactionType: 'CustomerPayBillOnline',
       Amount: Math.ceil(amount), // M-Pesa requires integer amounts
-      PartyA: formattedPhone,
-      PartyB: MPESA_SHORTCODE,
+      PartyA: formattedPhone, // Customer phone number
+      PartyB: MPESA_PAYBILL_ACCOUNT, // PayBill account number (where money goes) - different from BusinessShortCode
       PhoneNumber: formattedPhone,
       CallBackURL: callbackUrl,
       AccountReference: accountReference,
       TransactionDesc: transactionDesc
     };
 
-    console.log('M-Pesa STK Push Request:', {
+    console.log('═══════════════════════════════════════════════════════');
+    console.log('📤 M-Pesa STK Push Request Payload:');
+    console.log(JSON.stringify({
       BusinessShortCode: MPESA_SHORTCODE,
+      PartyB: MPESA_PAYBILL_ACCOUNT, // PayBill account number
       PhoneNumber: formattedPhone,
       Amount: Math.ceil(amount),
-      CallBackURL: callbackUrl,
+      CallBackURL: callbackUrl, // ✅ Included in request - Safaricom will send results here automatically
       AccountReference: accountReference,
+      TransactionDesc: transactionDesc,
+      TransactionType: 'CustomerPayBillOnline',
       Environment: MPESA_ENVIRONMENT,
       BaseURL: MPESA_BASE_URL
-    });
+    }, null, 2));
+    console.log('═══════════════════════════════════════════════════════');
     
     // Validate callback URL format
     if (!callbackUrl.startsWith('https://') && !callbackUrl.startsWith('http://')) {

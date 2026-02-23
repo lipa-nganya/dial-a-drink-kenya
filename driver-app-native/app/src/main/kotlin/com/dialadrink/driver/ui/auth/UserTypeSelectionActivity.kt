@@ -16,6 +16,10 @@ class UserTypeSelectionActivity : AppCompatActivity() {
     private var phone: String = ""
     private var driverHasPin: Boolean = false
     private var adminHasPin: Boolean = false
+    private var shopAgentHasPin: Boolean = false
+    private var isDriver: Boolean = false
+    private var isAdmin: Boolean = false
+    private var isShopAgent: Boolean = false
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,14 +35,24 @@ class UserTypeSelectionActivity : AppCompatActivity() {
         // Get PIN status from intent (if passed from PhoneNumberActivity)
         driverHasPin = intent.getBooleanExtra("driverHasPin", false)
         adminHasPin = intent.getBooleanExtra("adminHasPin", false)
+        shopAgentHasPin = intent.getBooleanExtra("shopAgentHasPin", false)
+        isDriver = intent.getBooleanExtra("isDriver", false)
+        isAdmin = intent.getBooleanExtra("isAdmin", false)
+        isShopAgent = intent.getBooleanExtra("isShopAgent", false)
         
-        android.util.Log.d("UserTypeSelectionActivity", "📥 Received PIN status - driverHasPin: $driverHasPin, adminHasPin: $adminHasPin")
+        android.util.Log.d("UserTypeSelectionActivity", "📥 Received PIN status - driverHasPin: $driverHasPin, adminHasPin: $adminHasPin, shopAgentHasPin: $shopAgentHasPin")
+        android.util.Log.d("UserTypeSelectionActivity", "📥 User types - isDriver: $isDriver, isAdmin: $isAdmin, isShopAgent: $isShopAgent")
         
         setupViews()
     }
     
     private fun setupViews() {
         binding.phoneText.text = "Phone: $phone"
+        
+        // Only show buttons for user types that exist for this phone number
+        binding.driverButton.visibility = if (isDriver) android.view.View.VISIBLE else android.view.View.GONE
+        binding.adminButton.visibility = if (isAdmin) android.view.View.VISIBLE else android.view.View.GONE
+        binding.shopAgentButton.visibility = if (isShopAgent) android.view.View.VISIBLE else android.view.View.GONE
         
         binding.changePhoneButton.setOnClickListener {
             // Navigate back to phone number entry to change phone number
@@ -60,6 +74,13 @@ class UserTypeSelectionActivity : AppCompatActivity() {
             SharedPrefs.saveAdminPhone(this, phone)
             // Check if admin has PIN first
             checkAdminAndProceed()
+        }
+        
+        binding.shopAgentButton.setOnClickListener {
+            // User selected shop agent - proceed with shop agent login flow
+            SharedPrefs.saveShopAgentPhone(this, phone)
+            // Check if shop agent has PIN first
+            checkShopAgentAndProceed()
         }
     }
     
@@ -263,6 +284,93 @@ class UserTypeSelectionActivity : AppCompatActivity() {
                         val intent = Intent(this@UserTypeSelectionActivity, PinLoginActivity::class.java)
                         intent.putExtra("phone", phone)
                         intent.putExtra("userType", "admin")
+                        startActivity(intent)
+                        finish()
+                    } else {
+                        android.widget.Toast.makeText(this@UserTypeSelectionActivity, "Failed to send OTP", android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            } catch (e: Exception) {
+                android.widget.Toast.makeText(this@UserTypeSelectionActivity, "Error: ${e.message}", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+    
+    private fun checkShopAgentAndProceed() {
+        android.util.Log.d("UserTypeSelectionActivity", "🔍 checkShopAgentAndProceed called - shopAgentHasPin: $shopAgentHasPin")
+        
+        // If we already know PIN status from PhoneNumberActivity, use it
+        if (shopAgentHasPin) {
+            android.util.Log.d("UserTypeSelectionActivity", "🔐 Shop agent has PIN (from previous check) - navigating to shop agent login")
+            val intent = Intent(this, com.dialadrink.driver.ui.shopagent.ShopAgentLoginActivity::class.java)
+            intent.putExtra("phone", phone)
+            startActivity(intent)
+            finish()
+            return
+        }
+        
+        android.util.Log.d("UserTypeSelectionActivity", "⚠️ shopAgentHasPin is false, will check via API")
+        
+        // Otherwise, check shop agent PIN status
+        lifecycleScope.launch {
+            try {
+                if (!ApiClient.isInitialized()) {
+                    ApiClient.init(this@UserTypeSelectionActivity)
+                }
+                
+                // Check if shop agent has PIN by checking the phone check response
+                val phoneCheckResponse = ApiClient.getApiService().checkPhoneForUserTypes(phone)
+                
+                if (phoneCheckResponse.isSuccessful && phoneCheckResponse.body()?.success == true) {
+                    val phoneCheck = phoneCheckResponse.body()!!.data
+                    val shopAgentInfo = phoneCheck?.shopAgent
+                    val hasPin = shopAgentInfo?.hasPin ?: false
+                    
+                    android.util.Log.d("UserTypeSelectionActivity", "🔐 Shop agent PIN status: $hasPin")
+                    
+                    if (hasPin) {
+                        // Shop agent has PIN - go to PIN login
+                        android.util.Log.d("UserTypeSelectionActivity", "🔐 Shop agent has PIN - navigating to shop agent login")
+                        val intent = Intent(this@UserTypeSelectionActivity, com.dialadrink.driver.ui.shopagent.ShopAgentLoginActivity::class.java)
+                        intent.putExtra("phone", phone)
+                        startActivity(intent)
+                        finish()
+                        return@launch
+                    }
+                }
+                
+                // Shop agent has no PIN - send OTP
+                sendOtpForShopAgent()
+            } catch (e: Exception) {
+                android.util.Log.e("UserTypeSelectionActivity", "Error checking shop agent: ${e.message}")
+                // If check fails, try OTP flow as fallback
+                sendOtpForShopAgent()
+            }
+        }
+    }
+    
+    private fun sendOtpForShopAgent() {
+        lifecycleScope.launch {
+            try {
+                val sendOtpRequest = com.dialadrink.driver.data.model.SendOtpRequest(
+                    phone = phone,
+                    userType = "shop_agent"
+                )
+                val otpResponse = ApiClient.getApiService().sendOtp(sendOtpRequest)
+                if (otpResponse.isSuccessful && otpResponse.body()?.success == true) {
+                    val intent = Intent(this@UserTypeSelectionActivity, OtpVerificationActivity::class.java)
+                    intent.putExtra("phone", phone)
+                    intent.putExtra("userType", "shop_agent")
+                    startActivity(intent)
+                    finish()
+                } else {
+                    // Check if error indicates PIN is already set
+                    val errorBody = otpResponse.body()?.error
+                    if (errorBody?.contains("PIN already set", ignoreCase = true) == true ||
+                        errorBody?.contains("use PIN login", ignoreCase = true) == true) {
+                        // Shop agent has PIN - go to PIN login
+                        val intent = Intent(this@UserTypeSelectionActivity, com.dialadrink.driver.ui.shopagent.ShopAgentLoginActivity::class.java)
+                        intent.putExtra("phone", phone)
                         startActivity(intent)
                         finish()
                     } else {

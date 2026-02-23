@@ -114,8 +114,17 @@ const Inventory = () => {
 
   const handleEditClick = (item) => {
     setEditingItem(item.id);
-    setEditPurchasePrice(item.purchasePrice || item.purchasePrice === 0 ? String(item.purchasePrice) : '');
-    setEditSellingPrice(item.price || item.originalPrice ? String(item.price || item.originalPrice) : '');
+    // Set purchase price - handle 0, null, undefined properly
+    const purchasePriceValue = (item.purchasePrice !== null && item.purchasePrice !== undefined && item.purchasePrice !== '')
+      ? String(item.purchasePrice)
+      : (item.purchasePrice === 0 ? '0' : '');
+    setEditPurchasePrice(purchasePriceValue);
+    
+    // Set selling price - use price or originalPrice, default to empty string
+    const sellingPriceValue = (item.price || item.originalPrice)
+      ? String(item.price || item.originalPrice)
+      : '';
+    setEditSellingPrice(sellingPriceValue);
   };
 
   const handleCancelEdit = () => {
@@ -145,22 +154,53 @@ const Inventory = () => {
         categoryId: categoryId // Required by backend
       };
       
-      // Only update purchase price if it was changed
-      if (editPurchasePrice !== '' && editPurchasePrice !== null && editPurchasePrice !== undefined) {
-        const parsedPurchasePrice = parseFloat(editPurchasePrice);
+      // Always update purchase price when in edit mode
+      // Convert to string, trim, and parse - handle empty string as 0
+      const trimmedPurchasePrice = String(editPurchasePrice || '').trim();
+      if (trimmedPurchasePrice === '') {
+        updates.purchasePrice = 0; // Allow setting to 0
+      } else {
+        const parsedPurchasePrice = parseFloat(trimmedPurchasePrice);
         if (!isNaN(parsedPurchasePrice) && parsedPurchasePrice >= 0) {
           updates.purchasePrice = parsedPurchasePrice;
+        } else {
+          setSnackbar({ 
+            open: true, 
+            message: 'Invalid purchase price', 
+            severity: 'error' 
+          });
+          setSaving(false);
+          return;
         }
       }
       
-      // Only update selling price if it was changed
-      if (editSellingPrice !== '' && editSellingPrice !== null && editSellingPrice !== undefined) {
-        const parsedSellingPrice = parseFloat(editSellingPrice);
-        if (!isNaN(parsedSellingPrice) && parsedSellingPrice >= 0) {
+      // Always update selling price when in edit mode
+      // Selling price must be greater than 0
+      const trimmedSellingPrice = String(editSellingPrice || '').trim();
+      if (trimmedSellingPrice === '') {
+        setSnackbar({ 
+          open: true, 
+          message: 'Selling price cannot be empty', 
+          severity: 'error' 
+        });
+        setSaving(false);
+        return;
+      } else {
+        const parsedSellingPrice = parseFloat(trimmedSellingPrice);
+        if (!isNaN(parsedSellingPrice) && parsedSellingPrice > 0) {
           updates.price = parsedSellingPrice;
+        } else {
+          setSnackbar({ 
+            open: true, 
+            message: 'Selling price must be greater than 0', 
+            severity: 'error' 
+          });
+          setSaving(false);
+          return;
         }
       }
       
+      console.log('Saving updates:', updates);
       await api.put(`/admin/drinks/${item.id}`, updates);
       
       setSnackbar({ 

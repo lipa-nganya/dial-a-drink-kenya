@@ -256,14 +256,17 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       }
 
       // Get the lowest current price from capacity pricing for the main price field
-      const lowestPrice = Math.min(
-        ...formData.capacityPricing.map(p => parseFloat(p.currentPrice || p.price || 0))
-      );
+      // Handle empty array case to prevent Infinity
+      const priceValues = formData.capacityPricing
+        .map(p => parseFloat(p.currentPrice || p.price || 0))
+        .filter(val => !isNaN(val) && val > 0);
+      const lowestPrice = priceValues.length > 0 ? Math.min(...priceValues) : 0;
 
       // Get the lowest original price from capacity pricing for the originalPrice field
-      const lowestOriginalPrice = Math.min(
-        ...formData.capacityPricing.map(p => parseFloat(p.originalPrice || p.currentPrice || p.price || 0))
-      );
+      const originalPriceValues = formData.capacityPricing
+        .map(p => parseFloat(p.originalPrice || p.currentPrice || p.price || 0))
+        .filter(val => !isNaN(val) && val > 0);
+      const lowestOriginalPrice = originalPriceValues.length > 0 ? Math.min(...originalPriceValues) : lowestPrice;
 
       // Prepare data
       const saveData = {
@@ -283,7 +286,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacityPricing: formData.capacityPricing,
         abv: formData.abv ? parseFloat(formData.abv) : null,
         // Stock is not included - admins cannot update stock quantity
-        purchasePrice: formData.purchasePrice ? parseFloat(formData.purchasePrice) : null
+        // Always include purchasePrice - allow 0 or empty (set to null)
+        purchasePrice: formData.purchasePrice && String(formData.purchasePrice).trim() !== '' 
+          ? (isNaN(parseFloat(formData.purchasePrice)) ? null : parseFloat(formData.purchasePrice))
+          : null
       };
 
       if (drink && drink.id) {
@@ -308,7 +314,15 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       onClose();
     } catch (error) {
       console.error('Error saving drink:', error);
-      setError(error.response?.data?.error || error.message || 'Failed to save drink');
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        saveData: drink && drink.id ? 'Update' : 'Create',
+        capacityPricingLength: formData.capacityPricing?.length || 0
+      });
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Failed to save drink';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }

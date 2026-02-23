@@ -210,6 +210,7 @@ const Settings = () => {
   });
   const [userFormError, setUserFormError] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState(null);
+  const [editingUserId, setEditingUserId] = useState(null);
 
   // Calculate next loan deduction run time (runs every 15 minutes)
   const calculateNextDeductionTime = () => {
@@ -269,13 +270,35 @@ const Settings = () => {
   const handleOpenUserDialog = () => {
     setUserFormData({ username: '', email: '', role: 'manager', name: '', mobileNumber: '' });
     setUserFormError('');
+    setEditingUserId(null);
     setOpenUserDialog(true);
+  };
+
+  const handleEditUser = async (userId) => {
+    try {
+      const response = await api.get(`/admin/users/${userId}`);
+      const user = response.data;
+      setUserFormData({
+        username: user.username || '',
+        email: user.email || '',
+        role: user.role || 'manager',
+        name: user.name || '',
+        mobileNumber: user.mobileNumber || ''
+      });
+      setEditingUserId(userId);
+      setUserFormError('');
+      setOpenUserDialog(true);
+    } catch (error) {
+      console.error('Error fetching user:', error);
+      setError(error.response?.data?.error || 'Failed to fetch user details');
+    }
   };
 
   const handleCloseUserDialog = () => {
     setOpenUserDialog(false);
     setUserFormData({ username: '', email: '', role: 'manager', name: '', mobileNumber: '' });
     setUserFormError('');
+    setEditingUserId(null);
   };
 
   const handleSaveUser = async () => {
@@ -316,6 +339,15 @@ const Settings = () => {
         setUserFormError('Please enter a valid email address');
         return;
       }
+
+      // Optional phone number validation (if provided)
+      if (userFormData.mobileNumber && userFormData.mobileNumber.trim()) {
+        const phoneRegex = /^[\d\s\-+()]+$/;
+        if (!phoneRegex.test(userFormData.mobileNumber.trim())) {
+          setUserFormError('Please enter a valid phone number');
+          return;
+        }
+      }
     }
 
     try {
@@ -324,16 +356,26 @@ const Settings = () => {
         ? { role: userFormData.role, name: userFormData.name, mobileNumber: userFormData.mobileNumber }
         : userFormData;
       
-      await api.post('/admin/users', payload);
-      const successMessage = userFormData.role === 'shop_agent' 
-        ? 'Shop agent created successfully! Click the WhatsApp icon to send the invite.' 
-        : 'User created and invite email sent successfully!';
-      setNotification({ message: successMessage });
+      if (editingUserId) {
+        // Update existing user
+        await api.put(`/admin/users/${editingUserId}`, payload);
+        const successMessage = userFormData.role === 'shop_agent' 
+          ? 'Shop agent updated successfully!' 
+          : 'User updated successfully!';
+        setNotification({ message: successMessage });
+      } else {
+        // Create new user
+        await api.post('/admin/users', payload);
+        const successMessage = userFormData.role === 'shop_agent' 
+          ? 'Shop agent created successfully!' 
+          : 'User created and invite email sent successfully!';
+        setNotification({ message: successMessage });
+      }
       handleCloseUserDialog();
       fetchUsers();
     } catch (error) {
-      console.error('Error creating user:', error);
-      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || 'Failed to create user';
+      console.error('Error saving user:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.details || error.message || (editingUserId ? 'Failed to update user' : 'Failed to create user');
       const errorDetails = error.response?.data?.errors ? JSON.stringify(error.response.data.errors) : '';
       setUserFormError(errorMessage + (errorDetails ? `: ${errorDetails}` : ''));
     }
@@ -1092,7 +1134,18 @@ Welcome aboard! 🎉`;
                           {user.role === 'shop_agent' ? (user.name || user.username) : user.username}
                         </TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>
-                          {user.role === 'shop_agent' ? (user.mobileNumber || user.email) : user.email}
+                          {user.role === 'shop_agent' ? (
+                            user.mobileNumber || user.email
+                          ) : (
+                            <Box>
+                              <Box>{user.email}</Box>
+                              {user.mobileNumber && (
+                                <Box sx={{ fontSize: '0.875rem', color: colors.textSecondary, mt: 0.5 }}>
+                                  {user.mobileNumber}
+                                </Box>
+                              )}
+                            </Box>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Chip
@@ -1117,49 +1170,19 @@ Welcome aboard! 🎉`;
                           })}
                         </TableCell>
                         <TableCell>
-                          {user.role === 'shop_agent' && (
-                            <IconButton
-                              onClick={async () => {
-                                try {
-                                  const response = await api.get(`/admin/users/${user.id}/whatsapp-link`);
-                                  if (response.data?.whatsappLink) {
-                                    window.open(response.data.whatsappLink, '_blank');
-                                    // Show warning if localhost is being used
-                                    if (response.data?.warning) {
-                                      setNotification({
-                                        type: 'warning',
-                                        message: response.data.warning
-                                      });
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error('Error getting WhatsApp link:', error);
-                                  const errorData = error.response?.data;
-                                  let errorMessage = errorData?.error || 'Failed to generate WhatsApp link';
-                                  
-                                  // Include detailed instructions if available
-                                  if (errorData?.message) {
-                                    errorMessage = errorData.message;
-                                  }
-                                  if (errorData?.instructions && Array.isArray(errorData.instructions)) {
-                                    errorMessage += '\n\n' + errorData.instructions.join('\n');
-                                  }
-                                  
-                                  setError(errorMessage);
-                                }
-                              }}
-                              size="small"
-                              sx={{
-                                color: '#25D366',
-                                '&:hover': {
-                                  backgroundColor: 'rgba(37, 211, 102, 0.1)'
-                                }
-                              }}
-                              title="Send WhatsApp Invite"
-                            >
-                              <WhatsApp />
-                            </IconButton>
-                          )}
+                          <IconButton
+                            onClick={() => handleEditUser(user.id)}
+                            size="small"
+                            sx={{
+                              color: colors.accentText,
+                              '&:hover': {
+                                backgroundColor: `${colors.accentText}20`
+                              }
+                            }}
+                            title="Edit User"
+                          >
+                            <Edit />
+                          </IconButton>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -3206,7 +3229,10 @@ Welcome aboard! 🎉`;
         }}
       >
         <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
-          {userFormData.role === 'shop_agent' ? 'Add Shop Agent' : 'Invite New User'}
+          {editingUserId 
+            ? (userFormData.role === 'shop_agent' ? 'Edit Shop Agent' : 'Edit User')
+            : (userFormData.role === 'shop_agent' ? 'Add Shop Agent' : 'Invite New User')
+          }
         </DialogTitle>
         <DialogContent sx={{ backgroundColor: colors.paper }}>
           {userFormError && (
@@ -3221,15 +3247,21 @@ Welcome aboard! 🎉`;
                 value={userFormData.role}
                 label="Role"
                 onChange={(e) => {
-                  // Reset form data when role changes
-                  setUserFormData({ 
-                    username: '', 
-                    email: '', 
-                    role: e.target.value,
-                    name: '',
-                    mobileNumber: ''
-                  });
+                  // Reset form data when role changes (only if not editing)
+                  if (!editingUserId) {
+                    setUserFormData({ 
+                      username: '', 
+                      email: '', 
+                      role: e.target.value,
+                      name: '',
+                      mobileNumber: ''
+                    });
+                  } else {
+                    // When editing, only update role
+                    setUserFormData({ ...userFormData, role: e.target.value });
+                  }
                 }}
+                disabled={!!editingUserId}
                 sx={{
                   color: colors.textPrimary,
                   '& .MuiOutlinedInput-notchedOutline': {
@@ -3365,6 +3397,32 @@ Welcome aboard! 🎉`;
                   }}
                   placeholder="user@example.com"
                 />
+                <TextField
+                  label="Phone Number"
+                  fullWidth
+                  value={userFormData.mobileNumber}
+                  onChange={(e) => setUserFormData({ ...userFormData, mobileNumber: e.target.value })}
+                  sx={{ 
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                      '& fieldset': { borderColor: colors.border },
+                      '&:hover fieldset': { borderColor: colors.accentText },
+                      '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                    },
+                    '& .MuiInputBase-input': {
+                      color: colors.textPrimary
+                    },
+                    '& .MuiInputLabel-root': {
+                      color: colors.textSecondary
+                    },
+                    '& .MuiInputLabel-root.Mui-focused': {
+                      color: colors.accentText
+                    }
+                  }}
+                  placeholder="e.g., +254712345678"
+                  helperText="Optional - Used for login on admin mobile app"
+                />
                 <Alert severity="info" sx={{ mt: 2 }}>
                   An invite email will be sent to the user. They will need to set their password using the link in the email.
                 </Alert>
@@ -3392,7 +3450,10 @@ Welcome aboard! 🎉`;
               }
             }}
           >
-            {userFormData.role === 'shop_agent' ? 'Create Shop Agent' : 'Send Invite'}
+            {editingUserId 
+              ? (userFormData.role === 'shop_agent' ? 'Update Shop Agent' : 'Update User')
+              : (userFormData.role === 'shop_agent' ? 'Create Shop Agent' : 'Send Invite')
+            }
           </Button>
         </DialogActions>
       </Dialog>

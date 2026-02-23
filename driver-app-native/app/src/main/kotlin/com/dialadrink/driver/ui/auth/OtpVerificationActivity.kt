@@ -74,6 +74,7 @@ class OtpVerificationActivity : AppCompatActivity() {
                     
                     // Use userType from intent, or determine from response
                     val actualUserType = when {
+                        userType == "shop_agent" -> "shop_agent"
                         userType == "admin" || isAdminResponse -> "admin"
                         userType == "driver" || isDriverResponse -> "driver"
                         else -> userType // fallback to original userType
@@ -116,6 +117,18 @@ class OtpVerificationActivity : AppCompatActivity() {
                             intent.putExtra("userType", "admin")
                             startActivity(intent)
                         }
+                    } else if (actualUserType == "shop_agent") {
+                        // Shop agent OTP verified
+                        // Navigate to PIN setup (shop agents always set PIN after OTP)
+                        android.util.Log.d("OtpVerificationActivity", "📝 Shop agent OTP verified - navigating to PIN setup")
+                        val otp = binding.otpEditText.text.toString().trim()
+                        val intent = Intent(this@OtpVerificationActivity, PinSetupActivity::class.java)
+                        intent.putExtra("phone", phone)
+                        intent.putExtra("userType", "shop_agent")
+                        intent.putExtra("resetPin", isResetPin)
+                        intent.putExtra("otpCode", otp) // Pass OTP code for shop agent PIN setup
+                        startActivity(intent)
+                        finish()
                     } else {
                         // Driver OTP verified
                         val driver = responseData?.driver

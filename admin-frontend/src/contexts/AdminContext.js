@@ -16,6 +16,7 @@ export const useAdmin = () => {
 export const AdminProvider = ({ children }) => {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [pendingSubmissionsCount, setPendingSubmissionsCount] = useState(0);
+  const [pendingInventoryChecksCount, setPendingInventoryChecksCount] = useState(0);
   const [socket, setSocket] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
@@ -193,6 +194,25 @@ export const AdminProvider = ({ children }) => {
     }
   };
 
+  // Fetch pending inventory checks count
+  const fetchPendingInventoryChecksCount = async () => {
+    try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        return;
+      }
+      const response = await api.get('/admin/inventory-checks?status=pending');
+      if (response.data.success) {
+        const pendingCount = response.data.checks?.length || 0;
+        setPendingInventoryChecksCount(pendingCount);
+      }
+    } catch (error) {
+      if (error.response?.status !== 401) {
+        console.error('Error fetching pending inventory checks count:', error);
+      }
+    }
+  };
+
   useEffect(() => {
     const token = localStorage.getItem('adminToken');
     if (!token || !isAuthenticated) return;
@@ -258,16 +278,18 @@ export const AdminProvider = ({ children }) => {
 
     setSocket(newSocket);
 
-    // Fetch initial pending orders count and submissions count
+    // Fetch initial pending orders count, submissions count, and inventory checks count
     fetchPendingOrdersCount();
     fetchPendingSubmissionsCount();
+    fetchPendingInventoryChecksCount();
 
-    // Poll for pending orders count and submissions count every 30 seconds as backup
+    // Poll for pending orders count, submissions count, and inventory checks count every 30 seconds as backup
     const pollInterval = setInterval(() => {
       // Check token still exists before polling
       if (localStorage.getItem('adminToken')) {
         fetchPendingOrdersCount();
         fetchPendingSubmissionsCount();
+        fetchPendingInventoryChecksCount();
       } else {
         clearInterval(pollInterval);
       }
@@ -308,6 +330,8 @@ export const AdminProvider = ({ children }) => {
       fetchPendingOrdersCount,
       pendingSubmissionsCount,
       fetchPendingSubmissionsCount,
+      pendingInventoryChecksCount,
+      fetchPendingInventoryChecksCount,
       isAuthenticated,
       setIsAuthenticated,
       logout,
