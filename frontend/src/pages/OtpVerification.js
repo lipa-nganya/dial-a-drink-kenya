@@ -26,7 +26,6 @@ const OtpVerification = ({ phone, email, onBack, infoMessage, onLoginSuccess }) 
   const [verifiedCustomer, setVerifiedCustomer] = useState(null);
   const [requiresPinSetup, setRequiresPinSetup] = useState(false);
   const [showSpamNotice, setShowSpamNotice] = useState(false);
-  const [timeElapsed, setTimeElapsed] = useState(0);
 
   useEffect(() => {
     // Countdown timer for resend button
@@ -42,7 +41,6 @@ const OtpVerification = ({ phone, email, onBack, infoMessage, onLoginSuccess }) 
       const startTime = Date.now();
       const interval = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
-        setTimeElapsed(elapsed);
         if (elapsed >= 60) {
           setShowSpamNotice(true);
         }
@@ -143,7 +141,6 @@ const OtpVerification = ({ phone, email, onBack, infoMessage, onLoginSuccess }) 
       if (response.data.success) {
         setOtpCode('');
         setCountdown(60); // Reset countdown
-        setTimeElapsed(0); // Reset time elapsed
         setShowSpamNotice(false); // Reset spam notice
         setError('');
         const message = email 
