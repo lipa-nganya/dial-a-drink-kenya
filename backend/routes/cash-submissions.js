@@ -227,6 +227,7 @@ router.get('/admin/cash-submissions/all', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching all cash submissions:', error);
+    console.error('❌ Error stack:', error.stack);
     sendError(res, error.message, 500);
   }
 });

@@ -800,7 +800,8 @@ router.get('/stats', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching admin stats:', error);
-    res.status(500).json({ error: 'Failed to fetch stats' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to fetch stats', details: error.message });
   }
 });
 
@@ -4447,7 +4448,8 @@ router.get('/latest-transactions', async (req, res) => {
       include: [{
         model: db.Order,
         as: 'order',
-        attributes: ['customerName', 'deliveryAddress']
+        attributes: ['customerName', 'deliveryAddress'],
+        required: false
       }]
     });
 
@@ -4499,7 +4501,8 @@ router.get('/latest-transactions', async (req, res) => {
     res.json(formatted);
   } catch (error) {
     console.error('Error fetching latest transactions:', error);
-    res.status(500).json({ error: 'Failed to fetch latest transactions' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to fetch latest transactions', details: error.message });
   }
 });
 
@@ -4933,7 +4936,8 @@ router.get('/latest-orders', async (req, res) => {
     res.json(formatted);
   } catch (error) {
     console.error('Error fetching latest orders:', error);
-    res.status(500).json({ error: 'Failed to fetch latest orders' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to fetch latest orders', details: error.message });
   }
 });
 
@@ -5757,7 +5761,8 @@ router.get('/top-inventory-items', async (req, res) => {
     res.json(finalList);
   } catch (error) {
     console.error('Error fetching top inventory items:', error);
-    res.status(500).json({ error: 'Failed to fetch top inventory items' });
+    console.error('Error stack:', error.stack);
+    res.status(500).json({ error: 'Failed to fetch top inventory items', details: error.message });
   }
 });
 
