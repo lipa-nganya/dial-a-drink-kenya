@@ -39,6 +39,15 @@ if [ "$CURRENT_BRANCH" != "main" ]; then
     git checkout main
 fi
 
+# Check for uncommitted changes and handle them
+if [ -n "$(git status --porcelain)" ]; then
+    echo -e "${YELLOW}⚠️  Uncommitted changes detected. Staging and committing...${NC}"
+    git add -A
+    git commit -m "Deploy to production: Update deployment script and changes" || {
+        echo -e "${YELLOW}⚠️  No changes to commit or already committed${NC}"
+    }
+fi
+
 # Merge develop into main
 echo "Merging develop into main..."
 git merge develop --no-edit || {
@@ -104,6 +113,7 @@ cd backend
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 8)
 
 echo "Building and deploying backend..."
+echo "Using SHORT_SHA: $SHORT_SHA"
 gcloud builds submit \
     --config cloudbuild.yaml \
     --substitutions=SHORT_SHA=$SHORT_SHA \
@@ -136,6 +146,7 @@ cd admin-frontend
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 8)
 
 echo "Building and deploying admin frontend..."
+echo "Using SHORT_SHA: $SHORT_SHA"
 gcloud builds submit \
     --config cloudbuild.yaml \
     --substitutions=SHORT_SHA=$SHORT_SHA \
@@ -168,6 +179,7 @@ cd frontend
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum | head -c 8)
 
 echo "Building and deploying customer frontend..."
+echo "Using SHORT_SHA: $SHORT_SHA"
 gcloud builds submit \
     --config cloudbuild.yaml \
     --substitutions=SHORT_SHA=$SHORT_SHA \
