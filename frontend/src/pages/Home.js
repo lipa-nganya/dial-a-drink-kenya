@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -24,6 +24,7 @@ const Home = () => {
   const [drinks, setDrinks] = useState([]);
   const [drinksLoading, setDrinksLoading] = useState(true);
   const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
+  const heroImageUrlRef = useRef(null); // Store the base URL to detect changes
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(0);
   const [subcategories, setSubcategories] = useState([]);
