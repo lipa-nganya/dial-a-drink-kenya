@@ -26,7 +26,9 @@ import com.dialadrink.driver.utils.SharedPrefs
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
@@ -45,6 +47,11 @@ class OrderDetailActivity : AppCompatActivity() {
     private val POLLING_INTERVAL_MS = 5000L // Poll every 5 seconds
     /** True when this order already has an order-payment cash submission (pending or completed). */
     private var orderPaymentAlreadySubmitted: Boolean = false
+    
+    private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
+        maximumFractionDigits = 0
+        minimumFractionDigits = 0
+    }
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -376,15 +383,16 @@ class OrderDetailActivity : AppCompatActivity() {
         }
         
         // Disable buttons if credit limit exceeded
-        val shouldDisableButtons = creditLimitExceeded && (showOutForDelivery || showDelivered || showReceivedCash)
+        // Allow "out for delivery" updates even with pending submissions
+        // Only block "delivered" and "received cash" if pending cash at hand exceeds limit
+        val shouldDisableButtons = creditLimitExceeded && (showDelivered || showReceivedCash)
         
         if (shouldDisableButtons) {
-            binding.outForDeliveryButton.isEnabled = false
+            // Don't disable "out for delivery" button - allow it even with pending submissions
             binding.deliveredButton.isEnabled = false
             binding.receivedCashButton.isEnabled = false
             
-            // Grey out buttons
-            binding.outForDeliveryButton.alpha = 0.5f
+            // Grey out buttons (except out for delivery)
             binding.deliveredButton.alpha = 0.5f
             binding.receivedCashButton.alpha = 0.5f
             
@@ -403,6 +411,10 @@ class OrderDetailActivity : AppCompatActivity() {
             // Hide warning message
             binding.creditLimitWarningText.visibility = View.GONE
         }
+        
+        // Always enable "out for delivery" button (allow updates even with pending submissions)
+        binding.outForDeliveryButton.isEnabled = true
+        binding.outForDeliveryButton.alpha = 1.0f
     }
     
     private fun loadDriverData() {
@@ -411,51 +423,31 @@ class OrderDetailActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             try {
-                // Load driver data and pending cash submissions in parallel
+                // Load driver data and cash at hand info in parallel
                 val driverResponse = ApiClient.getApiService().getDriverByPhone(driverPhone)
+                val cashAtHandResponse = ApiClient.getApiService().getCashAtHand(driverId)
                 
                 if (driverResponse.isSuccessful && driverResponse.body()?.data != null) {
                     val driver = driverResponse.body()!!.data!!
                     driverCashAtHand = driver.cashAtHand ?: 0.0
                     driverCreditLimit = driver.creditLimit ?: 0.0
                     
-                    // Check for pending cash submissions
-                    var pendingSubmissionsAmount = 0.0
-                    try {
-                        val submissionsResponse = ApiClient.getApiService().getCashSubmissions(driverId, "pending")
-                        if (submissionsResponse.isSuccessful && submissionsResponse.body()?.success == true) {
-                            val submissions = submissionsResponse.body()?.data?.submissions ?: emptyList()
-                            pendingSubmissionsAmount = submissions
-                                .filter { it.status == "pending" }
-                                .sumOf { it.amount }
-                        }
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Error fetching pending submissions, proceeding without them", e)
+                    // Get pending cash at hand (value after pending submissions are approved)
+                    var pendingCashAtHand = driverCashAtHand
+                    if (cashAtHandResponse.isSuccessful && cashAtHandResponse.body()?.success == true) {
+                        pendingCashAtHand = cashAtHandResponse.body()?.data?.pendingCashAtHand ?: driverCashAtHand
                     }
                     
-                    // Calculate tentative balance (cash at hand after pending submissions)
-                    val tentativeBalance = driverCashAtHand - pendingSubmissionsAmount
-                    
-                    // Check if credit limit is exceeded
-                    // If creditLimit is 0, any cashAtHand > 0 means exceeded
-                    // If creditLimit > 0, cashAtHand > creditLimit means exceeded
-                    val exceededByCurrentBalance = if (driverCreditLimit > 0) {
-                        driverCashAtHand > driverCreditLimit
+                    // Check if credit limit is exceeded based on pending cash at hand
+                    // If creditLimit is 0, any pendingCashAtHand > 0 means exceeded
+                    // If creditLimit > 0, pendingCashAtHand > creditLimit means exceeded
+                    creditLimitExceeded = if (driverCreditLimit > 0) {
+                        pendingCashAtHand > driverCreditLimit
                     } else {
-                        driverCashAtHand > 0
+                        pendingCashAtHand > 0
                     }
                     
-                    // Allow updates if:
-                    // 1. Current balance is within limit, OR
-                    // 2. Current balance exceeds limit BUT tentative balance is 0 or below (pending submissions clear the balance)
-                    creditLimitExceeded = if (exceededByCurrentBalance) {
-                        // If tentative balance is 0 or below, allow updates even if current balance exceeds limit
-                        tentativeBalance > 0 && pendingSubmissionsAmount == 0.0
-                    } else {
-                        false
-                    }
-                    
-                    Log.d(TAG, "Driver credit limit check: cashAtHand=$driverCashAtHand, creditLimit=$driverCreditLimit, pendingSubmissions=$pendingSubmissionsAmount, tentativeBalance=$tentativeBalance, exceeded=$creditLimitExceeded")
+                    Log.d(TAG, "Driver credit limit check: cashAtHand=$driverCashAtHand, creditLimit=$driverCreditLimit, pendingCashAtHand=$pendingCashAtHand, exceeded=$creditLimitExceeded")
                     
                     // Update button states if order is already loaded
                     currentOrder?.let { updateButtonVisibility(it) }
@@ -818,12 +810,8 @@ class OrderDetailActivity : AppCompatActivity() {
     }
     
     private fun updateStatusToOutForDelivery() {
-        // Check credit limit before allowing update
-        if (creditLimitExceeded) {
-            Toast.makeText(this, "Please clear your cash at hand to update orders", Toast.LENGTH_LONG).show()
-            return
-        }
-        
+        // Allow "out for delivery" updates even with pending submissions
+        // Only block if pending cash at hand exceeds the limit
         val driverId = SharedPrefs.getDriverId(this) ?: run {
             Toast.makeText(this, "Driver ID not found", Toast.LENGTH_SHORT).show()
             return
@@ -878,8 +866,9 @@ class OrderDetailActivity : AppCompatActivity() {
     }
     
     private fun updateStatus(newStatus: String) {
-        // Check credit limit before allowing update
-        if (creditLimitExceeded) {
+        // Allow "out for delivery" updates even with pending submissions
+        // Only block other status updates if pending cash at hand exceeds the limit
+        if (creditLimitExceeded && newStatus != "out_for_delivery") {
             Toast.makeText(this, "Please clear your cash at hand to update orders", Toast.LENGTH_LONG).show()
             return
         }
@@ -963,12 +952,54 @@ class OrderDetailActivity : AppCompatActivity() {
             return
         }
         
-        val customerPhone = order.customerPhone
-        if (customerPhone.isBlank()) {
-            Toast.makeText(this, "Customer phone number not found", Toast.LENGTH_SHORT).show()
-            return
+        // Show dialog to allow driver to edit customer phone number
+        showMpesaPaymentDialog(order, driverId)
+    }
+    
+    private fun showMpesaPaymentDialog(order: Order, driverId: Int) {
+        val orderNumber = order.id ?: 0
+        val orderTotal = order.totalAmount ?: 0.0
+        
+        // Create dialog with editable phone number field
+        val dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_make_payment, null)
+        val phoneEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.phoneEditText)
+        val phoneLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.phoneLayout)
+        val amountText = dialogView.findViewById<android.widget.TextView>(R.id.amountText)
+        val makePaymentButton = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.makePaymentButton)
+        
+        // Show order amount
+        amountText.text = "Amount: ${currencyFormat.format(orderTotal)}"
+        
+        // Prefill phone number from order, but allow editing
+        val initialPhone = if (order.customerPhone != null && order.customerPhone.isNotBlank() && order.customerPhone != "POS") {
+            order.customerPhone
+        } else {
+            ""
+        }
+        phoneEditText.setText(initialPhone)
+        phoneLayout.hint = "Customer Phone Number"
+        
+        val dialog = AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog)
+            .setTitle("M-Pesa Payment - Order #$orderNumber")
+            .setView(dialogView)
+            .setNegativeButton("Cancel", null)
+            .create()
+        
+        // Handle button click inside dialog
+        makePaymentButton.setOnClickListener {
+            val phoneNumber = phoneEditText.text?.toString()?.trim() ?: ""
+            if (phoneNumber.isEmpty()) {
+                Toast.makeText(this, "Please enter customer phone number", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            dialog.dismiss()
+            submitMpesaPayment(order.id, driverId, phoneNumber)
         }
         
+        dialog.show()
+    }
+    
+    private fun submitMpesaPayment(orderId: Int, driverId: Int, customerPhone: String) {
         binding.loadingProgress.visibility = View.VISIBLE
         
         lifecycleScope.launch {
@@ -978,17 +1009,22 @@ class OrderDetailActivity : AppCompatActivity() {
                     InitiatePaymentRequest(driverId, customerPhone)
                 )
                 
-                if (response.isSuccessful && response.body()?.success == true) {
-                    Toast.makeText(this@OrderDetailActivity, "M-Pesa payment request sent to customer", Toast.LENGTH_SHORT).show()
-                    loadOrderDetails() // Reload to show updated status
-                } else {
-                    val errorMessage = response.body()?.error ?: "Failed to initiate payment"
-                    Toast.makeText(this@OrderDetailActivity, errorMessage, Toast.LENGTH_SHORT).show()
+                withContext(Dispatchers.Main) {
+                    binding.loadingProgress.visibility = View.GONE
+                    
+                    if (response.isSuccessful && response.body()?.success == true) {
+                        Toast.makeText(this@OrderDetailActivity, "M-Pesa payment request sent to customer", Toast.LENGTH_SHORT).show()
+                        loadOrderDetails() // Reload to show updated status
+                    } else {
+                        val errorMessage = response.body()?.error ?: "Failed to initiate payment"
+                        Toast.makeText(this@OrderDetailActivity, errorMessage, Toast.LENGTH_SHORT).show()
+                    }
                 }
             } catch (e: Exception) {
-                Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            } finally {
-                binding.loadingProgress.visibility = View.GONE
+                withContext(Dispatchers.Main) {
+                    binding.loadingProgress.visibility = View.GONE
+                    Toast.makeText(this@OrderDetailActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

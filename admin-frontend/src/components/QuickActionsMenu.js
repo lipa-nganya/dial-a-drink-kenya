@@ -87,7 +87,7 @@ const QuickActionsMenu = () => {
   const actions = [
     {
       icon: <Add />,
-      name: 'Place New Order',
+      name: 'POS',
       action: () => {
         setNewOrderDialogOpen(true);
       }

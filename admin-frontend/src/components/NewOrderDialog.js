@@ -19,7 +19,9 @@ import {
   Alert,
   Divider,
   FormControlLabel,
-  Checkbox
+  Checkbox,
+  RadioGroup,
+  Radio
 } from '@mui/material';
 import {
   Add,
@@ -47,13 +49,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   // Form state
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [customerSearch, setCustomerSearch] = useState('');
+  const [customerSearchQuery, setCustomerSearchQuery] = useState(''); // Debounced search query
   const [selectedBranch, setSelectedBranch] = useState('');
   const [deliveryLocation, setDeliveryLocation] = useState('');
-  const [isWalkIn, setIsWalkIn] = useState(false);
+  const [orderType, setOrderType] = useState('delivery'); // 'delivery' or 'walk-in'
+  const [selectedTerritory, setSelectedTerritory] = useState('');
+  // Keep isWalkIn for backward compatibility, derived from orderType
+  const isWalkIn = orderType === 'walk-in';
   const [cartItems, setCartItems] = useState([]);
   const [currentProduct, setCurrentProduct] = useState(null);
   const [currentQuantity, setCurrentQuantity] = useState(1);
   const [currentPrice, setCurrentPrice] = useState('');
+  const [selectedCapacity, setSelectedCapacity] = useState('');
   const [priceChangeDialog, setPriceChangeDialog] = useState({ open: false, itemIndex: null, newPrice: '', oldPrice: '', drinkId: null, drinkName: '', originalPrice: '', quantity: null });
   const [paymentMethod, setPaymentMethod] = useState('');
   const [transactionCode, setTransactionCode] = useState('');
@@ -84,6 +91,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
   const [creatingCustomer, setCreatingCustomer] = useState(false);
 
+  // Debounce customer search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCustomerSearchQuery(customerSearch);
+    }, 500); // 500ms debounce delay
+
+    return () => clearTimeout(timer);
+  }, [customerSearch]);
+
+  // Fetch customers when search query changes
   useEffect(() => {
     if (open) {
       fetchCustomers();
@@ -93,8 +110,17 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       fetchProducts();
       // Reset isStop based on initialIsStop prop
       setIsStop(initialIsStop);
+      // Reset order type to delivery
+      setOrderType('delivery');
     }
   }, [open, initialIsStop]);
+
+  // Fetch customers with search query
+  useEffect(() => {
+    if (open && customerSearchQuery) {
+      fetchCustomers();
+    }
+  }, [customerSearchQuery, open]);
 
   useEffect(() => {
     if (productSearch && productSearch.length >= 2) {
@@ -108,13 +134,36 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   }, [productSearch, products]);
 
   useEffect(() => {
-    // Set current price when product is selected
+    // Set current price and capacity when product is selected
     if (currentProduct) {
-      setCurrentPrice(Math.round(parseFloat(currentProduct.price || 0)).toString());
+      if (Array.isArray(currentProduct.capacityPricing) && currentProduct.capacityPricing.length > 0) {
+        const firstPricing = currentProduct.capacityPricing[0];
+        const defaultPrice = parseFloat(firstPricing.currentPrice) || parseFloat(firstPricing.originalPrice) || parseFloat(firstPricing.price) || parseFloat(currentProduct.price) || 0;
+        setSelectedCapacity((firstPricing.capacity || firstPricing.size || '').trim());
+        setCurrentPrice(Math.round(defaultPrice).toString());
+      } else {
+        setSelectedCapacity('');
+        setCurrentPrice(Math.round(parseFloat(currentProduct.price || 0)).toString());
+      }
     } else {
       setCurrentPrice('');
+      setSelectedCapacity('');
     }
   }, [currentProduct]);
+
+  const handleCapacityChange = (capacity) => {
+    setSelectedCapacity(capacity);
+    if (currentProduct && Array.isArray(currentProduct.capacityPricing)) {
+      const pricing = currentProduct.capacityPricing.find(p => {
+        const pCapacity = (p.capacity || p.size || '').trim();
+        return pCapacity === capacity;
+      });
+      if (pricing) {
+        const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || parseFloat(currentProduct.price) || 0;
+        setCurrentPrice(Math.round(price).toString());
+      }
+    }
+  };
 
   useEffect(() => {
     // Auto-set delivery status: confirmed for walk-in (pending payment), confirmed for regular orders
@@ -130,7 +179,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         setDeliveryLocation(`${branch.name}, ${branch.address}`);
       }
     }
-  }, [isWalkIn, selectedBranch, branches]);
+  }, [orderType, selectedBranch, branches]);
 
   // Auto-populate M-Pesa phone number when customer is selected
   useEffect(() => {
@@ -141,13 +190,21 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
   const fetchCustomers = async () => {
     try {
-      const response = await api.get('/admin/customers');
+      const params = {};
+      // Add search query if provided
+      if (customerSearchQuery && customerSearchQuery.trim() !== '') {
+        params.search = customerSearchQuery.trim();
+      }
+      
+      const response = await api.get('/admin/customers', { params });
       // Ensure we always set an array
       const customersData = response.data;
       if (Array.isArray(customersData)) {
         setCustomers(customersData);
       } else if (customersData && Array.isArray(customersData.customers)) {
         setCustomers(customersData.customers);
+      } else if (customersData && customersData.data && Array.isArray(customersData.data)) {
+        setCustomers(customersData.data);
       } else {
         setCustomers([]);
       }
@@ -394,6 +451,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
+    if (!isWalkIn && !selectedTerritory) {
+      setError('Please select a territory for delivery orders');
+      return;
+    }
+
     if (cartItems.length === 0) {
       setError('Please add at least one item to the cart');
       return;
@@ -469,7 +531,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         adminOrder: true,
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
-        territoryId: isWalkIn ? defaultTerritoryId : null,
+        territoryId: isWalkIn ? defaultTerritoryId : (selectedTerritory ? parseInt(selectedTerritory) : null),
         transactionCode: paymentMethod === 'mobile_money' && transactionCode ? transactionCode.trim() : null,
         isStop: isStop,
         stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null,
@@ -507,7 +569,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setCustomerSearch('');
     setSelectedBranch('');
     setDeliveryLocation('');
-    setIsWalkIn(false);
+    setOrderType('delivery');
     setCartItems([]);
     setCurrentProduct(null);
     setCurrentQuantity(1);
@@ -1030,13 +1092,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
   };
 
-  const filteredCustomers = (Array.isArray(customers) ? customers : []).filter(customer => {
-    if (!customerSearch) return true;
-    const search = customerSearch.toLowerCase();
-    const name = (customer.customerName || customer.name || '').toLowerCase();
-    const phone = (customer.phone || '').toLowerCase();
-    return name.includes(search) || phone.includes(search);
-  });
+  // Use customers directly from API (already filtered by backend)
+  const filteredCustomers = Array.isArray(customers) ? customers : [];
 
   // Check if customerSearch looks like a phone number and no customer matches
   const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
@@ -1252,7 +1309,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         fontSize: mobileSize ? '1.08rem' : '1.2rem',
         padding: mobileSize ? '1.35rem' : '1.5rem'
       }}>
-        Create New Order
+        POS
       </DialogTitle>
       <DialogContent sx={{ 
         overflowY: 'auto',
@@ -1305,38 +1362,49 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             }
           }
         }}>
-          {/* Walk-in Order Checkbox */}
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={isWalkIn}
-                onChange={(e) => {
-                  setIsWalkIn(e.target.checked);
-                  if (e.target.checked) {
-                    setSelectedCustomer(null);
-                    setCustomerSearch('');
-                    setDeliveryStatus('completed');
-                    setSelectedDriver(''); // Clear driver assignment for walk-in orders
-                  } else {
-                    setSelectedBranch('');
-                    setDeliveryLocation('');
-                    setDeliveryStatus('confirmed');
-                  }
-                }}
-                sx={{
-                  color: colors.accentText,
-                  '&.Mui-checked': {
-                    color: colors.accentText
-                  }
-                }}
-              />
-            }
-            label={
-              <Typography sx={{ fontSize: mobileSize ? '0.9rem' : '1rem' }}>
-                Walk-in Order
-              </Typography>
-            }
-          />
+          {/* Order Type Dropdown */}
+          <FormControl fullWidth>
+            <InputLabel>Order Type *</InputLabel>
+            <Select
+              value={orderType}
+              label="Order Type *"
+              onChange={(e) => {
+                const newOrderType = e.target.value;
+                setOrderType(newOrderType);
+                if (newOrderType === 'walk-in') {
+                  setSelectedCustomer(null);
+                  setCustomerSearch('');
+                  setDeliveryStatus('completed');
+                  setSelectedDriver(''); // Clear driver assignment for walk-in orders
+                } else {
+                  setSelectedBranch('');
+                  setDeliveryLocation('');
+                  setDeliveryStatus('confirmed');
+                }
+              }}
+            >
+              <MenuItem value="delivery">Delivery</MenuItem>
+              <MenuItem value="walk-in">Walk-in</MenuItem>
+            </Select>
+          </FormControl>
+
+          {/* Territory Selection - Only shown for delivery orders */}
+          {!isWalkIn && (
+            <FormControl fullWidth>
+              <InputLabel>Territory *</InputLabel>
+              <Select
+                value={selectedTerritory}
+                label="Territory *"
+                onChange={(e) => setSelectedTerritory(e.target.value)}
+              >
+                {territories.map((territory) => (
+                  <MenuItem key={territory.id} value={territory.id}>
+                    {territory.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
 
           {/* Customer Selection - Hidden when walk-in is enabled */}
           {!isWalkIn && (
@@ -1559,16 +1627,59 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 renderOption={(props, option) => {
                   const stock = option.stock !== undefined && option.stock !== null ? option.stock : 0;
                   const stockColor = stock > 0 ? '#2196F3' : '#F44336';
+                  // Get capacities with pricing - only show capacities that have a price
+                  const capacitiesWithPricing = [];
+                  
+                  if (Array.isArray(option.capacityPricing) && option.capacityPricing.length > 0) {
+                    option.capacityPricing.forEach(pricing => {
+                      if (!pricing || typeof pricing !== 'object') return;
+                      
+                      const capacity = pricing.capacity;
+                      // Backend stores currentPrice and originalPrice - use currentPrice first, fallback to originalPrice
+                      // Handle both string and number types
+                      const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+                      const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+                      const price = (currentPrice != null && !isNaN(currentPrice) && currentPrice > 0) 
+                        ? currentPrice 
+                        : (originalPrice != null && !isNaN(originalPrice) && originalPrice > 0) 
+                          ? originalPrice 
+                          : 0;
+                      
+                      if (capacity && typeof capacity === 'string' && capacity.trim() && price > 0) {
+                        capacitiesWithPricing.push({
+                          capacity: capacity.trim(),
+                          price: price
+                        });
+                      }
+                    });
+                  }
+                  
                   return (
-                    <li {...props}>
-                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box>
+                    <li key={option.id} {...props}>
+                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>
                             {option.name}
                           </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            KES {Math.round(parseFloat(option.price || 0))}
-                          </Typography>
+                          {capacitiesWithPricing.length > 0 && (
+                            <Box sx={{ mt: 0.5 }}>
+                              {capacitiesWithPricing.map((cap, idx) => (
+                                <Typography 
+                                  key={idx} 
+                                  variant="caption" 
+                                  color="text.secondary" 
+                                  sx={{ display: 'block' }}
+                                >
+                                  {cap.capacity} | {Math.round(cap.price)}
+                                </Typography>
+                              ))}
+                            </Box>
+                          )}
+                          {capacitiesWithPricing.length === 0 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              KES {Math.round(parseFloat(option.price || 0))}
+                            </Typography>
+                          )}
                         </Box>
                         <Typography 
                           variant="caption" 
@@ -1585,6 +1696,124 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   );
                 }}
               />
+              {/* Capacity Selection with Radio Buttons */}
+              {currentProduct && Array.isArray(currentProduct.capacityPricing) && currentProduct.capacityPricing.length > 0 && (
+                <FormControl component="fieldset" fullWidth sx={{ mb: mobileSize ? 1.8 : 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1, color: colors.textPrimary, fontWeight: 600 }}>
+                    Select Capacity & Price:
+                  </Typography>
+                  <RadioGroup
+                    value={selectedCapacity}
+                    onChange={(e) => handleCapacityChange(e.target.value)}
+                    sx={{ gap: 1 }}
+                  >
+                    {(() => {
+                      // Debug: Log the raw capacityPricing data
+                      console.log('[NewOrderDialog] Product:', currentProduct.name);
+                      console.log('[NewOrderDialog] Raw capacityPricing:', JSON.stringify(currentProduct.capacityPricing, null, 2));
+                      console.log('[NewOrderDialog] capacityPricing length:', currentProduct.capacityPricing?.length);
+                      
+                      // Deduplicate by capacity, keeping the first occurrence, and filter by valid price
+                      const seen = new Set();
+                      const uniquePricing = currentProduct.capacityPricing
+                        .filter((pricing, idx) => {
+                          console.log(`[NewOrderDialog] Processing pricing ${idx}:`, JSON.stringify(pricing));
+                          
+                          if (!pricing || typeof pricing !== 'object') {
+                            console.log(`[NewOrderDialog] Pricing ${idx}: Not an object, skipping`);
+                            return false;
+                          }
+                          
+                          // Handle both 'capacity' and 'size' field names
+                          const capacity = pricing.capacity || pricing.size;
+                          if (!capacity || typeof capacity !== 'string' || !capacity.trim()) {
+                            console.log(`[NewOrderDialog] Pricing ${idx}: Invalid capacity, skipping`);
+                            return false;
+                          }
+                          
+                          // Handle both 'currentPrice'/'originalPrice' and 'price' field names
+                          const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+                          const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+                          const priceField = pricing.price != null ? parseFloat(pricing.price) : null;
+                          const price = (currentPrice != null && !isNaN(currentPrice) && currentPrice > 0) 
+                            ? currentPrice 
+                            : (originalPrice != null && !isNaN(originalPrice) && originalPrice > 0) 
+                              ? originalPrice 
+                              : (priceField != null && !isNaN(priceField) && priceField > 0)
+                                ? priceField
+                                : 0;
+                          
+                          console.log(`[NewOrderDialog] Pricing ${idx}: capacity="${capacity}", currentPrice=${currentPrice}, originalPrice=${originalPrice}, finalPrice=${price}`);
+                          
+                          // Only include if price > 0
+                          if (price <= 0) {
+                            console.log(`[NewOrderDialog] Pricing ${idx}: Price is 0 or invalid, skipping`);
+                            return false;
+                          }
+                          
+                          const capacityKey = capacity.trim();
+                          if (seen.has(capacityKey)) {
+                            console.log(`[NewOrderDialog] Pricing ${idx}: Duplicate capacity "${capacityKey}", skipping`);
+                            return false;
+                          }
+                          seen.add(capacityKey);
+                          console.log(`[NewOrderDialog] Pricing ${idx}: INCLUDED`);
+                          return true;
+                        });
+                      
+                      // Debug: Log filtered results
+                      console.log('[NewOrderDialog] Filtered uniquePricing:', JSON.stringify(uniquePricing, null, 2));
+                      console.log('[NewOrderDialog] Final count:', uniquePricing.length);
+                      
+                      return uniquePricing.map((pricing, index) => {
+                        const capacity = (pricing.capacity || pricing.size || '').trim();
+                        const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || 0;
+                        
+                        return (
+                          <FormControlLabel
+                            key={`${currentProduct.id}-${capacity}-${index}`}
+                            value={capacity}
+                            control={
+                              <Radio
+                                sx={{
+                                  color: colors.textPrimary,
+                                  '&.Mui-checked': { color: colors.accentText }
+                                }}
+                              />
+                            }
+                            label={
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between', width: '100%' }}>
+                                <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 'bold' }}>
+                                  {capacity}
+                                </Typography>
+                                <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold' }}>
+                                  KES {Math.round(price)}
+                                </Typography>
+                              </Box>
+                            }
+                            sx={{
+                              border: `1px solid ${colors.border}`,
+                              borderRadius: 1,
+                              backgroundColor: selectedCapacity === capacity ? (isDarkMode ? 'rgba(0, 224, 184, 0.2)' : 'rgba(0, 224, 184, 0.1)') : 'transparent',
+                              px: 2,
+                              py: 0.5,
+                              m: 0,
+                              width: '100%',
+                              '&:hover': {
+                                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.04)'
+                              },
+                              '& .MuiFormControlLabel-label': {
+                                width: '100%',
+                                marginLeft: '8px'
+                              }
+                            }}
+                          />
+                        );
+                      });
+                    })()}
+                  </RadioGroup>
+                </FormControl>
+              )}
               {/* Unit Price Display */}
               {currentProduct && (
                 <TextField
@@ -1610,7 +1839,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                       padding: mobileSize ? '13.5px 14px' : '15px 14px'
                     }
                   }}
-                  helperText={`Original price: KES ${Math.round(parseFloat(currentProduct.price || 0))}`}
+                  helperText={Array.isArray(currentProduct.capacityPricing) && currentProduct.capacityPricing.length > 0 
+                    ? 'Price updates when you select a capacity above'
+                    : `Original price: KES ${Math.round(parseFloat(currentProduct.price || 0))}`}
                 />
               )}
               <Box sx={{ 

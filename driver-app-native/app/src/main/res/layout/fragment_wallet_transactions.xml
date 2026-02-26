@@ -19,17 +19,6 @@
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
-            <!-- Cash At Hand Summary Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/cashAtHandSummaryButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:text="View Cash At Hand Summary"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                app:backgroundTint="@color/accent"
-                app:cornerRadius="8dp" />
 
             <!-- Current Balance Header (only shown for Cash Transactions) -->
             <com.google.android.material.card.MaterialCardView

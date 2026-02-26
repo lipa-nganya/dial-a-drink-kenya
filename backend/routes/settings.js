@@ -50,7 +50,11 @@ router.post('/heroImage/upload', (req, res) => {
     }
 
     const relativePath = `/uploads/hero/${req.file.filename}`;
-    const absoluteUrl = `${req.protocol}://${req.get('host')}${relativePath}`;
+    // Always use HTTPS in production, or if X-Forwarded-Proto indicates HTTPS
+    const forwardedProto = req.get('X-Forwarded-Proto');
+    const useHttps = forwardedProto === 'https' || process.env.NODE_ENV === 'production';
+    const finalProtocol = useHttps ? 'https' : req.protocol;
+    const absoluteUrl = `${finalProtocol}://${req.get('host')}${relativePath}`;
 
     return res.json({
       url: absoluteUrl,
@@ -63,6 +67,13 @@ router.post('/heroImage/upload', (req, res) => {
 // Get setting by key
 router.get('/:key', async (req, res) => {
   try {
+    // Add no-cache headers to prevent browser/proxy caching of settings
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
+    });
+
     const { key } = req.params;
     const setting = await db.Settings.findOne({ where: { key } });
     
@@ -135,6 +146,15 @@ Welcome aboard! 🎉`;
       }
       if (key === 'brandFocus') {
         return res.json({ key: 'brandFocus', value: '' });
+      }
+      if (key === 'loanDeductionFrequency') {
+        // Default: 24 hours (1 day)
+        const defaultFrequency = JSON.stringify({ days: 1, hours: 0, minutes: 0 });
+        return res.json({ key: 'loanDeductionFrequency', value: defaultFrequency });
+      }
+      if (key === 'loanDeductionAmount') {
+        // Default: 150 KES
+        return res.json({ key: 'loanDeductionAmount', value: '150' });
       }
       return res.status(404).json({ error: 'Setting not found' });
     }

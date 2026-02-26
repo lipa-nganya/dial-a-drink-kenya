@@ -603,8 +603,9 @@ const processOrderPaymentSubmission = async (cashSettlementTransaction, { receip
   }
   await adminWallet.update({
     balance: parseFloat(adminWallet.balance) + merchantCreditAmount,
-    totalRevenue: parseFloat(adminWallet.totalRevenue) + merchantCreditAmount,
-    cashAtHand: parseFloat(adminWallet.cashAtHand || 0) + submissionAmount
+    totalRevenue: parseFloat(adminWallet.totalRevenue) + merchantCreditAmount
+    // CRITICAL: Do NOT update cashAtHand - driver cash submissions go to merchant wallet and driver savings only
+    // Admin cash at hand is only for POS orders where customer paid cash or orders where admin received cash directly
   });
 
   if (driverSavingsCreditAmount > 0.009 && driverId) {

@@ -677,11 +677,28 @@ class PriceDeserializer : JsonDeserializer<Double> {
 }
 
 // POS Models
+data class CapacityPricing(
+    @SerializedName("capacity") val capacity: String? = null, // Primary field name
+    @SerializedName("size") val size: String? = null, // Alternative field name (used by some products)
+    @SerializedName("originalPrice") val originalPrice: Double? = null,
+    @SerializedName("currentPrice") val currentPrice: Double? = null,
+    @SerializedName("price") val price: Double? = null // Fallback field name
+) {
+    // Get the effective capacity (capacity > size)
+    val effectiveCapacity: String?
+        get() = capacity?.takeIf { it.isNotBlank() } ?: size?.takeIf { it.isNotBlank() }
+    
+    // Get the effective price (currentPrice > price > originalPrice)
+    val effectivePrice: Double?
+        get() = currentPrice ?: price ?: originalPrice
+}
+
 data class PosProduct(
     val id: Int,
     val name: String,
     @JsonAdapter(CapacityDeserializer::class)
     val capacity: List<String>? = null, // Backend returns capacity as string or array
+    val capacityPricing: List<CapacityPricing>? = null, // Capacity pricing array
     val stock: Int? = 0,
     @JsonAdapter(PriceDeserializer::class)
     val price: Double,
@@ -689,9 +706,31 @@ data class PosProduct(
     val category: PosCategory? = null,
     val purchasePrice: Double? = null // Purchase price for profit/loss calculation
 ) {
-    // Helper property to get capacity as a formatted string for display
+    // Helper property to get capacity with pricing for display
+    // Only shows capacities that have a valid price
+    // Returns list of formatted strings, one per capacity
+    val capacityDisplayList: List<String>
+        get() {
+            return capacityPricing
+                ?.filter { 
+                    val cap = it.effectiveCapacity
+                    val price = it.effectivePrice ?: 0.0
+                    cap != null && cap.isNotBlank() && price > 0
+                }
+                ?.distinctBy { it.effectiveCapacity } // Deduplicate by capacity
+                ?.map { "${it.effectiveCapacity} | ${it.effectivePrice?.toInt() ?: 0}" }
+                ?: emptyList()
+        }
+    
+    // Legacy property for backward compatibility (returns null if capacities have pricing)
     val capacityDisplay: String?
-        get() = capacity?.joinToString(", ") ?: null
+        get() {
+            if (capacityDisplayList.isNotEmpty()) {
+                return null // Return null to indicate we should use capacityDisplayList instead
+            }
+            // Fallback to simple capacity list if no pricing available
+            return capacity?.joinToString(", ") ?: null
+        }
 }
 
 data class PosCategory(
@@ -790,7 +829,8 @@ data class CreateOrderRequest(
     val notes: String? = null,
     val driverId: Int? = null, // Driver ID for staff purchases with cash at hand
     val isStop: Boolean? = null, // Whether this order is a stop (deducts from driver savings)
-    val stopDeductionAmount: Double? = null // Amount to deduct from driver savings when order is completed
+    val stopDeductionAmount: Double? = null, // Amount to deduct from driver savings when order is completed
+    val sendSmsToCustomer: Boolean? = true // Whether to send SMS notification to customer
 )
 
 data class AssignDriverRequest(

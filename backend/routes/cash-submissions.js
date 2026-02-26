@@ -420,10 +420,11 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       }
       await adminWallet.update({
         balance: parseFloat(adminWallet.balance || 0) + merchantCreditAmount,
-        totalRevenue: parseFloat(adminWallet.totalRevenue || 0) + merchantCreditAmount,
-        cashAtHand: parseFloat(adminWallet.cashAtHand || 0) + submissionAmount
+        totalRevenue: parseFloat(adminWallet.totalRevenue || 0) + merchantCreditAmount
+        // CRITICAL: Do NOT update cashAtHand - driver cash submissions go to merchant wallet and driver savings only
+        // Admin cash at hand is only for POS orders where customer paid cash or orders where admin received cash directly
       });
-      console.log(`   Order payment (auto-approved): merchant +KES ${merchantCreditAmount.toFixed(2)}, admin cashAtHand +KES ${submissionAmount.toFixed(2)}`);
+      console.log(`   Order payment (auto-approved): merchant wallet +KES ${merchantCreditAmount.toFixed(2)}, driver savings +KES ${driverSavingsCreditAmount.toFixed(2)} (admin cash at hand NOT updated)`);
       
       // Credit driver savings (50% delivery fee) - ensure this always happens if there's a delivery fee
       if (driverSavingsCreditAmount > 0.009) {
@@ -531,6 +532,24 @@ router.get('/:driverId/orders-for-order-payment', async (req, res) => {
       limit: 100
     });
 
+    // Get order IDs that were paid via admin cash at hand (admin received cash directly)
+    // These should NOT be eligible for driver cash submission
+    const adminCashAtHandTransactions = await db.Transaction.findAll({
+      where: {
+        transactionType: 'payment',
+        paymentProvider: 'admin_cash_at_hand',
+        status: 'completed',
+        paymentStatus: 'paid'
+      },
+      attributes: ['orderId'],
+      raw: true
+    });
+    const adminCashAtHandOrderIds = new Set(
+      adminCashAtHandTransactions
+        .map(tx => tx.orderId)
+        .filter(id => id !== null)
+    );
+
     // Order IDs already linked to an approved (or pending) order_payment submission
     const submissionsWithOrders = await db.CashSubmission.findAll({
       where: {
@@ -547,7 +566,10 @@ router.get('/:driverId/orders-for-order-payment', async (req, res) => {
 
     const eligible = [];
     for (const order of orders) {
+      // Skip if already submitted
       if (submittedOrderIds.has(order.id)) continue;
+      // Skip if admin received cash directly (admin cash at hand)
+      if (adminCashAtHandOrderIds.has(order.id)) continue;
       try {
         const breakdown = await getOrderFinancialBreakdown(order.id);
         const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
@@ -903,14 +925,20 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
     }
 
     // Update admin cash at hand based on submission type
+    // CRITICAL: Driver cash submissions do NOT go to admin cash at hand
+    // Driver cash goes to merchant wallet (order cost) and driver savings (50% delivery fee)
+    // Admin cash at hand is only for POS orders where customer paid cash or orders where admin received cash directly
     const currentCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
     let newCashAtHand = currentCashAtHand;
     
     if (submission.driverId && !submission.adminId) {
-      // Driver submission approved = cash received by admin, so INCREASE cash at hand (full amount submitted)
+      // Driver submission approved = cash received from driver
+      // This cash goes to merchant wallet (order cost) and driver savings (50% delivery fee)
+      // ALSO increase admin cash at hand (admin received the cash from driver)
       newCashAtHand = currentCashAtHand + submissionAmount;
       await adminWallet.update({ cashAtHand: newCashAtHand });
-      console.log(`   Admin cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (added ${submissionAmount.toFixed(2)} from driver)`);
+      console.log(`   Driver cash submission: merchant wallet credited with order cost, driver savings credited with 50% delivery fee`);
+      console.log(`   Admin cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (added ${submissionAmount.toFixed(2)} from driver submission)`);
     } else if (submission.adminId && !submission.driverId) {
       // Admin submission approved = cash spent by admin, so DECREASE cash at hand
       newCashAtHand = Math.max(0, currentCashAtHand - submissionAmount);

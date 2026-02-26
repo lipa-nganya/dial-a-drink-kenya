@@ -141,9 +141,9 @@ const CustomerLogin = () => {
         return;
       }
     } else {
-      if (!phone) {
-        setError('Please enter your phone number');
-        return;
+    if (!phone) {
+      setError('Please enter your phone number');
+      return;
       }
       if (!email) {
         setError('Please enter your email address');
@@ -185,8 +185,8 @@ const CustomerLogin = () => {
         let info = '';
         if (isKenyanNumber) {
           info = smsFailed
-            ? (note || message || 'SMS delivery failed. Please contact administrator for the OTP code.')
-            : (message || 'OTP sent successfully. Enter the code you received.');
+          ? (note || message || 'SMS delivery failed. Please contact administrator for the OTP code.')
+          : (message || 'OTP sent successfully. Enter the code you received.');
         } else {
           info = emailSent
             ? (message || 'OTP sent successfully to your email. Enter the code you received.')
@@ -289,19 +289,19 @@ const CustomerLogin = () => {
                 <MenuItem value="+233">+233 (GH)</MenuItem>
               </Select>
             </FormControl>
-            <TextField
-              label="Phone Number"
-              type="tel"
-              value={phone}
-              onChange={(e) => {
-                setPhone(sanitizePhoneInput(e.target.value));
-                setError('');
-              }}
-              fullWidth
+          <TextField
+            label="Phone Number"
+            type="tel"
+            value={phone}
+            onChange={(e) => {
+              setPhone(sanitizePhoneInput(e.target.value));
+              setError('');
+            }}
+            fullWidth
               placeholder={isKenyanNumber ? "0712345678 or 254712345678" : "Enter phone number"}
-              disabled={pinLoginLoading || otpLoading || checkingPin}
-              autoComplete="tel"
-            />
+            disabled={pinLoginLoading || otpLoading || checkingPin}
+            autoComplete="tel"
+          />
           </Box>
           
           {!isKenyanNumber && (

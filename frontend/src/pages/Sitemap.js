@@ -49,7 +49,7 @@ const Sitemap = () => {
       links: [
         { name: 'Delivery Locations', path: '/delivery-locations' },
         { name: 'Order Tracking', path: '/order-tracking' },
-        { name: 'My Orders', path: '/orders' }
+        { name: 'Track My Orders', path: '/orders' }
       ]
     },
     {
@@ -150,21 +150,6 @@ const Sitemap = () => {
           </Grid>
         ))}
       </Grid>
-
-      <Box sx={{ mt: 4, p: 3, backgroundColor: colors.paper, borderRadius: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2 }}>
-          SEO Information
-        </Typography>
-        <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
-          This sitemap helps search engines index all pages on our website, improving visibility and search rankings.
-        </Typography>
-        <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
-          All pages are optimized for search engines with relevant keywords and meta descriptions.
-        </Typography>
-        <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-          For questions or feedback, please contact us at +254 723 688 108
-        </Typography>
-      </Box>
     </Container>
   );
 };

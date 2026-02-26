@@ -35,8 +35,9 @@ function calculateDeliveryAccounting(alcoholCost, deliveryFee, paymentMethod) {
   let savingsChange;
 
   if (paymentMethod === 'PAY_NOW') {
-    // M-Pesa/Pesapal: cash at hand reduces by 50% of delivery fee; 50% credited to savings
-    cashAtHandChange = -withheldAmount;
+    // M-Pesa/Pesapal: driver did not receive cash, so credit 50% of delivery fee to cash at hand; 50% credited to savings
+    // CRITICAL: For orders where driver did not receive cash, credit 50% to cash at hand instead of reducing it
+    cashAtHandChange = withheldAmount; // Credit (add) 50% delivery fee to cash at hand
     savingsChange = withheldAmount;
   } else {
     // PAY_ON_DELIVERY (cash): cash at hand increases by 50% delivery fee + order total; 50% delivery fee credited to savings

@@ -16,7 +16,7 @@ import {
   useMediaQuery,
   useTheme as useMUITheme,
 } from '@mui/material';
-import { ShoppingCart, Menu as MenuIcon, Home, Restaurant, LocalOffer, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone } from '@mui/icons-material';
+import { ShoppingCart, Menu as MenuIcon, Home, Restaurant, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -133,31 +133,6 @@ const Header = () => {
         </ListItem>
         <ListItem 
           component="button" 
-          onClick={() => handleNavigation('/offers')}
-          sx={{ 
-            backgroundColor: 'transparent',
-            color: colors.textPrimary,
-            py: 1.5,
-            transition: 'all 0.2s ease',
-            '&:hover': { 
-              backgroundColor: colors.accent ? `${colors.accent}15` : 'rgba(32, 178, 170, 0.1)',
-              transform: 'translateX(4px)',
-            }
-          }}
-        >
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <LocalOffer sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
-          </ListItemIcon>
-          <ListItemText 
-            primary="Offers" 
-            primaryTypographyProps={{
-              fontSize: '1rem',
-              fontWeight: 500,
-            }}
-          />
-        </ListItem>
-        <ListItem 
-          component="button" 
           onClick={() => handleNavigation('/cart')}
           sx={{ 
             backgroundColor: 'transparent',
@@ -203,7 +178,7 @@ const Header = () => {
             <ShoppingCart sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
           <ListItemText 
-            primary="My Orders" 
+            primary="Track My Orders" 
             primaryTypographyProps={{
               fontSize: '1rem',
               fontWeight: 500,
@@ -435,17 +410,10 @@ const Header = () => {
               </Button>
               <Button
                 color="inherit"
-                onClick={() => navigate('/offers')}
-                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
-              >
-                Offers
-              </Button>
-              <Button
-                color="inherit"
                 onClick={() => navigate(isLoggedIn ? '/orders' : '/login')}
                 sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
               >
-                My Orders
+                Track My Orders
               </Button>
               {isLoggedIn ? (
                 <Button

@@ -2,6 +2,14 @@
   publish = "build"
   command = "npm install && npm run build"
 
+# Proxy API requests to Cloud Run backend
+[[redirects]]
+  from = "/api/*"
+  to = "https://deliveryos-production-backend-805803410802.us-central1.run.app/api/:splat"
+  status = 200
+  force = true
+
+# Redirect all other routes to index.html for client-side routing
 [[redirects]]
   from = "/*"
   to = "/index.html"

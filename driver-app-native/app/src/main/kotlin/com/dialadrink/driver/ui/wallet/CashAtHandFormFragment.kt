@@ -153,9 +153,9 @@ class CashAtHandFormFragment : Fragment() {
             minimumFractionDigits = 0
         }
         binding.totalCashText.text = currencyFormat.format(actualCashAtHand).replace("KES", "KES")
-        val hasPending = (pendingSubmissionsTotal != null && pendingSubmissionsTotal > 0) ||
-            (pendingCashAtHand != null)
-        if (hasPending && pendingCashAtHand != null) {
+        // Show pending cash at hand if it's provided (even if negative)
+        // This shows the projected balance after pending submissions are approved
+        if (pendingCashAtHand != null) {
             binding.pendingCashAtHandSection.visibility = View.VISIBLE
             binding.pendingCashAtHandText.text = currencyFormat.format(pendingCashAtHand).replace("KES", "KES")
         } else {

@@ -237,24 +237,17 @@ const Transactions = () => {
         }
       });
       
-      // Filter to only show POS orders with CASH payment method
-      // POS orders are identified by: adminOrder === true OR status === 'pos_order' OR deliveryAddress === 'In-Store Purchase'
-      const isPOSOrder = (order) => {
-        return order.adminOrder === true || 
-               order.status === 'pos_order' ||
-               (order.deliveryAddress && order.deliveryAddress.includes('In-Store Purchase'));
-      };
-
-      // Filter out cancelled orders, non-POS orders, non-cash payment methods, and orders already associated with approved submissions
+      // Filter out cancelled orders, non-cash payment methods, and orders already associated with approved submissions
+      // Allow all order types (POS and delivery orders) with cash payment method
       const availableOrders = allOrders.filter(order => {
         // Must not be cancelled
         if (order.status === 'cancelled') return false;
         
-        // Must be a POS order
-        if (!isPOSOrder(order)) return false;
-        
         // Must have payment method === 'cash'
         if (order.paymentMethod !== 'cash') return false;
+        
+        // Only show paid orders
+        if (order.paymentStatus !== 'paid') return false;
         
         // Must not be already associated with an approved submission
         if (usedOrderIds.has(order.id)) return false;
@@ -262,7 +255,7 @@ const Transactions = () => {
         return true;
       });
       
-      console.log(`📋 Filtered orders for cash submission: ${availableOrders.length} POS orders with CASH payment method out of ${allOrders.length} total orders`);
+      console.log(`📋 Filtered orders for cash submission: ${availableOrders.length} orders with CASH payment method out of ${allOrders.length} total orders`);
       
       setAvailableOrders(availableOrders);
     } catch (error) {

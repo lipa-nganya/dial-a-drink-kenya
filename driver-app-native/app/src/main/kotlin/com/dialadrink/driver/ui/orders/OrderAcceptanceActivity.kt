@@ -126,7 +126,7 @@ class OrderAcceptanceActivity : AppCompatActivity() {
     }
     
     private fun loadOrderDetails() {
-        // Try to get order details from intent extras first (from push notification)
+        // Try to get order details from intent extras first (from push notification) for immediate display
         var customerName = intent.getStringExtra("customerName")
         var deliveryAddress = intent.getStringExtra("deliveryAddress")
         var totalAmount = intent.getDoubleExtra("totalAmount", 0.0)
@@ -146,7 +146,7 @@ class OrderAcceptanceActivity : AppCompatActivity() {
             }
         }
         
-        // If we have valid data from intent, display it immediately
+        // Display initial data from intent if available (for faster UI response)
         if (!customerName.isNullOrBlank() && !deliveryAddress.isNullOrBlank()) {
             binding.orderNumberText.text = "Order #$orderId"
             binding.customerNameText.text = customerName
@@ -158,21 +158,31 @@ class OrderAcceptanceActivity : AppCompatActivity() {
                 binding.amountText.text = ""
             }
         } else {
-            // Fallback to API call if data not in intent
-            lifecycleScope.launch {
-                try {
-                    val response = ApiClient.getApiService().getOrderDetails(orderId)
-                    if (response.isSuccessful && response.body()?.data != null) {
-                        displayOrder(response.body()!!.data!!)
-                    } else {
-                        // Show error state
+            // Show loading state if no data from intent
+            binding.orderNumberText.text = "Order #$orderId"
+            binding.customerNameText.text = "Loading..."
+            binding.addressText.text = "Loading..."
+            binding.amountText.text = ""
+        }
+        
+        // Always fetch latest order data from API to ensure we have the updated amount
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.getApiService().getOrderDetails(orderId)
+                if (response.isSuccessful && response.body()?.data != null) {
+                    displayOrder(response.body()!!.data!!)
+                } else {
+                    // If API call fails and we don't have data from intent, show error
+                    if (customerName.isNullOrBlank() || deliveryAddress.isNullOrBlank()) {
                         binding.orderNumberText.text = "Order #$orderId"
-                        binding.customerNameText.text = "Loading..."
-                        binding.addressText.text = "Loading..."
+                        binding.customerNameText.text = "Error loading order"
+                        binding.addressText.text = "Please check your connection"
                         binding.amountText.text = ""
                     }
-                } catch (e: Exception) {
-                    // Show error state
+                }
+            } catch (e: Exception) {
+                // If API call fails and we don't have data from intent, show error
+                if (customerName.isNullOrBlank() || deliveryAddress.isNullOrBlank()) {
                     binding.orderNumberText.text = "Order #$orderId"
                     binding.customerNameText.text = "Error loading order"
                     binding.addressText.text = "Please check your connection"

@@ -47,7 +47,8 @@ import {
   AutoAwesome,
   Phone,
   Payment,
-  CheckCircle
+  CheckCircle,
+  AttachMoney
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -981,6 +982,43 @@ const Orders = () => {
     setPaymentError('');
     setPaymentSuccess(false);
     setProcessingPayment(false);
+  };
+
+  const handleMarkPaymentAsCash = async () => {
+    if (!selectedOrderForPayment) {
+      setPaymentError('Order not found');
+      return;
+    }
+
+    if (!window.confirm(`Mark payment as received in cash (admin cash at hand) for Order #${selectedOrderForPayment.id}?\n\nAmount: KES ${Math.round(parseFloat(selectedOrderForPayment.totalAmount || 0))}\n\n${selectedOrderForPayment.driverId ? 'Driver will receive 50% cash at hand credit and 50% savings credit.' : ''}`)) {
+      return;
+    }
+
+    setProcessingPayment(true);
+    setPaymentError('');
+
+    try {
+      const response = await api.post(`/admin/orders/${selectedOrderForPayment.id}/mark-payment-cash`);
+      
+      if (response.data.success) {
+        setPaymentError('');
+        setPaymentSuccess(true);
+        setProcessingPayment(false);
+        alert('Payment marked as received in cash (admin cash at hand).' + (selectedOrderForPayment.driverId ? '\n\nDriver has been credited with 50% cash at hand and 50% savings.' : ''));
+        // Refresh orders after a short delay to get updated payment status
+        setTimeout(() => {
+          fetchOrders();
+          handleClosePaymentDialog();
+        }, 1000);
+      } else {
+        setPaymentError(response.data.error || 'Failed to mark payment as cash. Please try again.');
+        setProcessingPayment(false);
+      }
+    } catch (error) {
+      console.error('Error marking payment as cash:', error);
+      setPaymentError(error.response?.data?.error || error.message || 'Failed to mark payment as cash. Please try again.');
+      setProcessingPayment(false);
+    }
   };
 
   const handleInitiateMobileMoneyPayment = async () => {
@@ -2136,7 +2174,7 @@ const Orders = () => {
                             }}
                             sx={{ mt: 1, mr: 1 }}
                           >
-                            Prompt Payment
+                            Request Payment
                           </Button>
                         )}
                         {order.status === 'delivered' && order.paymentStatus === 'unpaid' && (
@@ -2203,7 +2241,7 @@ const Orders = () => {
                               }
                             }}
                           >
-                            Download Receipt
+                            RECEIPT
                           </Button>
                         )}
                       </Box>
@@ -2977,7 +3015,7 @@ const Orders = () => {
                 }
               }}
             >
-              Prompt Payment
+              Request Payment
             </Button>
           )}
           <Button 
@@ -3226,7 +3264,7 @@ const Orders = () => {
         fullWidth
       >
         <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
-          Prompt Payment
+          Request Payment
         </DialogTitle>
         <DialogContent>
           {selectedOrderForPayment && (
@@ -3282,6 +3320,34 @@ const Orders = () => {
             Cancel
           </Button>
           <Button
+            onClick={handleMarkPaymentAsCash}
+            variant="outlined"
+            disabled={processingPayment}
+            startIcon={<AttachMoney />}
+            sx={{
+              borderColor: colors.accentText,
+              color: colors.accentText,
+              mr: 1,
+              '&:hover': {
+                borderColor: '#00C4A3',
+                backgroundColor: 'rgba(0, 224, 184, 0.08)'
+              },
+              '&:disabled': {
+                borderColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {processingPayment ? (
+              <>
+                <CircularProgress size={16} sx={{ mr: 1 }} />
+                Processing...
+              </>
+            ) : (
+              'Mark as Cash Received'
+            )}
+          </Button>
+          <Button
             onClick={handleInitiateMobileMoneyPayment}
             variant="contained"
             disabled={processingPayment || !paymentPhone || !validateSafaricomPhone(paymentPhone)}
@@ -3303,7 +3369,7 @@ const Orders = () => {
                 Processing...
               </>
             ) : (
-              'Send Payment Prompt'
+              'Send Payment Request'
             )}
           </Button>
         </DialogActions>

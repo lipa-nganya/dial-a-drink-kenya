@@ -214,6 +214,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
+          {/* Old product route - kept for backward compatibility and redirects */}
           <Route path="/product/:id" element={<ProductPage />} />
           <Route path="/brands" element={<Brands />} />
           <Route path="/brand/:id" element={<BrandDetail />} />
@@ -236,6 +237,8 @@ function AppContent() {
           <Route path="/pricelist" element={<Pricelist />} />
           <Route path="/sitemap" element={<Sitemap />} />
           <Route path="/debug" element={<div style={{padding: '20px', color: 'white'}}>DEBUG: React Router is working!</div>} />
+          {/* New category-based product route: /:categorySlug/:productSlug - MUST be last to avoid conflicts */}
+          <Route path="/:categorySlug/:productSlug" element={<ProductPage />} />
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
           <Route path="/admin" element={<PrivateRoute><AdminOverview /></PrivateRoute>} />

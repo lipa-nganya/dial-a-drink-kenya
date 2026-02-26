@@ -480,21 +480,33 @@ class PosCartActivity : AppCompatActivity() {
         addressAdapter = ArrayAdapter(this, R.layout.item_dropdown_dark, mutableListOf())
         binding.deliveryAddressEditText.setAdapter(addressAdapter)
         
+        // Set threshold to 1 to allow manual control (we'll handle showing dropdown ourselves)
+        binding.deliveryAddressEditText.threshold = 1
+        
         // Set dropdown background to dark color
         val drawable = android.graphics.drawable.ColorDrawable(getColor(R.color.paper_dark))
         binding.deliveryAddressEditText.setDropDownBackgroundDrawable(drawable)
         
-        // Handle text changes to fetch autocomplete predictions
+        // Handle text changes to fetch autocomplete predictions (matches customer site: 2 chars, 300ms debounce)
         binding.deliveryAddressEditText.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
             override fun afterTextChanged(s: Editable?) {
                 val query = s.toString().trim()
-                if (query.length >= 1) {
+                if (query.length >= 2) {
                     fetchAddressSuggestions(query)
                 } else {
+                    // Clear suggestions if less than 2 characters (matches customer site)
                     addressAdapter?.clear()
                     addressAdapter?.notifyDataSetChanged()
+                    // Hide dropdown if open
+                    try {
+                        if (binding.deliveryAddressEditText.isPopupShowing) {
+                            binding.deliveryAddressEditText.dismissDropDown()
+                        }
+                    } catch (e: Exception) {
+                        // Ignore if dropdown not showing
+                    }
                 }
             }
         })
@@ -553,6 +565,21 @@ class PosCartActivity : AppCompatActivity() {
                         addressAdapter?.clear()
                         addressAdapter?.addAll(suggestionTexts)
                         addressAdapter?.notifyDataSetChanged()
+                        
+                        // Explicitly show dropdown if there are suggestions and query length is >= 2
+                        val currentText = binding.deliveryAddressEditText.text.toString().trim()
+                        if (suggestions.isNotEmpty() && currentText.length >= 2) {
+                            // Post to main thread to ensure UI is ready
+                            binding.deliveryAddressEditText.post {
+                                if (binding.deliveryAddressEditText.hasFocus()) {
+                                    try {
+                                        binding.deliveryAddressEditText.showDropDown()
+                                    } catch (e: Exception) {
+                                        android.util.Log.e("PosCartActivity", "Error showing dropdown: ${e.message}")
+                                    }
+                                }
+                            }
+                        }
                         
                         android.util.Log.d("PosCartActivity", "Fetched ${suggestions.size} address suggestions (fromDatabase: ${body.fromDatabase}, hasGoogleResults: ${body.hasGoogleResults})")
                     } else {
@@ -1590,6 +1617,8 @@ class PosCartActivity : AppCompatActivity() {
                             paymentStatus
                         }
                         
+                        val sendSmsToCustomer = binding.sendSmsCheckbox.isChecked
+                        
                         val request = CreateOrderRequest(
                             customerName = customerName,
                             customerPhone = customerPhoneForOrder,
@@ -1606,7 +1635,8 @@ class PosCartActivity : AppCompatActivity() {
                             notes = if (isWalkIn) "POS Order - Walk-in" else "POS Order",
                             driverId = driverIdForRequest,
                             isStop = if (!isWalkIn && isStop) true else null,
-                            stopDeductionAmount = if (!isWalkIn && isStop) stopDeductionAmount else null
+                            stopDeductionAmount = if (!isWalkIn && isStop) stopDeductionAmount else null,
+                            sendSmsToCustomer = sendSmsToCustomer
                         )
                 
                 android.util.Log.d("PosCartActivity", "Submitting order: ${request}")

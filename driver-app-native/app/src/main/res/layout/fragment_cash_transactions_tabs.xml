@@ -6,22 +6,9 @@
     android:orientation="vertical"
     android:background="@color/background_dark">
 
-    <!-- View Summary Button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/cashAtHandSummaryButton"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        android:layout_marginBottom="8dp"
-        android:text="View Summary"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        app:backgroundTint="@color/accent"
-        app:cornerRadius="8dp" />
-
-    <!-- Main Tabs: Transactions and Logs -->
+    <!-- Sub-tabs for Transactions: Pending, Approved, Rejected, All -->
     <com.google.android.material.tabs.TabLayout
-        android:id="@+id/mainTabsLayout"
+        android:id="@+id/transactionsTabLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:tabMode="fixed"
@@ -32,16 +19,22 @@
         app:tabBackground="@color/paper_dark">
 
         <com.google.android.material.tabs.TabItem
-            android:text="Transactions" />
+            android:text="All" />
 
         <com.google.android.material.tabs.TabItem
-            android:text="Logs" />
+            android:text="Pending" />
+
+        <com.google.android.material.tabs.TabItem
+            android:text="Approved" />
+
+        <com.google.android.material.tabs.TabItem
+            android:text="Rejected" />
 
     </com.google.android.material.tabs.TabLayout>
 
-    <!-- Main Tab Content -->
+    <!-- Tab Content -->
     <androidx.viewpager2.widget.ViewPager2
-        android:id="@+id/mainViewPager"
+        android:id="@+id/transactionsViewPager"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1" />

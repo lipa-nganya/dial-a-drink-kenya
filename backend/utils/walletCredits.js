@@ -778,14 +778,15 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             cashAtHand: newCashAtHand
           }, { transaction: dbTransaction });
           
-          // Log cash-at-hand transaction for Pay Now (50% delivery fee reduction)
-          if (paymentTypeForAccounting === 'PAY_NOW' && accounting.cashAtHandChange < -0.009) {
+          // Log cash-at-hand transaction for Pay Now (50% delivery fee credit)
+          // CRITICAL: For orders where driver did not receive cash, credit 50% to cash at hand
+          if (paymentTypeForAccounting === 'PAY_NOW' && accounting.cashAtHandChange > 0.009) {
             const existingCashAtHandLog = await db.Transaction.findOne({
               where: {
                 orderId: orderId,
                 driverId: order.driverId,
-                transactionType: 'delivery_fee_debit',
-                notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand reduction%' }
+                transactionType: 'cash_settlement',
+                notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand credit%' }
               },
               transaction: dbTransaction
             });
@@ -794,17 +795,17 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
                 orderId: orderId,
                 driverId: order.driverId,
                 driverWalletId: driverWallet.id,
-                transactionType: 'delivery_fee_debit',
+                transactionType: 'cash_settlement', // Positive amount = cash credit
                 paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
                 paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
-                amount: accounting.cashAtHandChange,
+                amount: accounting.cashAtHandChange, // Positive amount for credit
                 status: 'completed',
                 paymentStatus: 'paid',
                 receiptNumber: paymentTransaction?.receiptNumber || null,
                 transactionDate: paymentTransaction?.transactionDate || new Date(),
-                notes: `50% delivery fee order ${orderId}`
+                notes: `Pay Now: 50% delivery fee - cash at hand credit for Order #${orderId} (driver did not receive cash)`
               }, { transaction: dbTransaction });
-              console.log(`   Cash at hand transaction logged for Order #${orderId}: -KES ${Math.abs(accounting.cashAtHandChange).toFixed(2)}`);
+              console.log(`   Cash at hand credit transaction logged for Order #${orderId}: +KES ${accounting.cashAtHandChange.toFixed(2)}`);
             }
           }
           
@@ -867,30 +868,22 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           });
         }
 
-        if (driver?.pushToken) {
-          const notificationTitle = effectiveDriverPayAmount > 0 && effectiveTipAmount > 0 
-            ? 'Delivery Completed - Payment Credited'
-            : effectiveDriverPayAmount > 0 
-            ? 'Delivery Fee Credited'
-            : 'Tip Credited';
-          
-          const notificationBody = effectiveDriverPayAmount > 0 && effectiveTipAmount > 0
-            ? `KES ${(effectiveDriverPayAmount + effectiveTipAmount).toFixed(2)} (Delivery: ${effectiveDriverPayAmount.toFixed(2)}, Tip: ${effectiveTipAmount.toFixed(2)}) credited for Order #${orderId}`
-            : effectiveDriverPayAmount > 0
-            ? `KES ${effectiveDriverPayAmount.toFixed(2)} delivery fee credited for Order #${orderId}`
-            : `KES ${effectiveTipAmount.toFixed(2)} tip credited for Order #${orderId}`;
+        // NOTE: Push notifications for delivery fee credits are disabled per user request
+        // Only send push notification for tips (not delivery fees)
+        if (driver?.pushToken && effectiveTipAmount > 0.009 && effectiveDriverPayAmount <= 0.009) {
+          const notificationTitle = 'Tip Credited';
+          const notificationBody = `KES ${effectiveTipAmount.toFixed(2)} tip credited for Order #${orderId}`;
 
           pushNotifications.sendPushNotification(driver.pushToken, {
             title: notificationTitle,
             body: notificationBody,
             data: {
-              type: 'delivery_completed',
+              type: 'tip_credited',
               orderId: orderId,
-              deliveryPayAmount: effectiveDriverPayAmount,
               tipAmount: effectiveTipAmount
             }
           }).catch((pushError) => {
-            console.error('❌ Error sending delivery completion push notification:', pushError);
+            console.error('❌ Error sending tip push notification:', pushError);
           });
         }
 
@@ -1040,8 +1033,8 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
 };
 
 /**
- * Repair missing Pay Now cash-at-hand reduction only (50% delivery fee debit and log).
- * Use when savings/delivery_pay were credited but driver cash at hand was never reduced (e.g. Order 350).
+ * Repair missing Pay Now cash-at-hand credit only (50% delivery fee credit and log).
+ * Use when savings/delivery_pay were credited but driver cash at hand was never credited (e.g. Order 418).
  * Safe to call multiple times (idempotent if already applied).
  */
 const repairPayNowCashAtHandOnly = async (orderId) => {
@@ -1057,27 +1050,27 @@ const repairPayNowCashAtHandOnly = async (orderId) => {
   }
   const paymentType = (order.paymentType || 'pay_on_delivery').toLowerCase();
   if (paymentType !== 'pay_now') {
-    return { orderId, skipped: true, reason: 'not_pay_now', message: 'Cash at hand reduction only applies to Pay Now orders.' };
+    return { orderId, skipped: true, reason: 'not_pay_now', message: 'Cash at hand credit only applies to Pay Now orders (where driver did not receive cash).' };
   }
 
   const breakdown = await getOrderFinancialBreakdown(orderId);
   const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
   const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
   const accounting = calculateDeliveryAccounting(itemsTotal, deliveryFee, 'PAY_NOW');
-  if (accounting.cashAtHandChange > -0.009) {
-    return { orderId, skipped: true, reason: 'no_reduction', cashAtHandChange: accounting.cashAtHandChange };
+  if (accounting.cashAtHandChange < 0.009) {
+    return { orderId, skipped: true, reason: 'no_credit', cashAtHandChange: accounting.cashAtHandChange };
   }
 
-  const existingDebit = await db.Transaction.findOne({
+  const existingCredit = await db.Transaction.findOne({
     where: {
       orderId,
       driverId: order.driverId,
-      transactionType: 'delivery_fee_debit',
-      notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand reduction%' }
+      transactionType: 'cash_settlement',
+      notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand credit%' }
     }
   });
-  if (existingDebit) {
-    return { orderId, skipped: true, reason: 'already_applied', transactionId: existingDebit.id };
+  if (existingCredit) {
+    return { orderId, skipped: true, reason: 'already_applied', transactionId: existingCredit.id };
   }
 
   const paymentTransaction = await db.Transaction.findOne({

@@ -124,10 +124,10 @@ app.use((req, res, next) => {
   // For all other requests, set CORS headers if origin is allowed
   if (origin && isOriginAllowed(origin)) {
     // Explicitly set CORS headers FIRST
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+        res.setHeader('Access-Control-Allow-Origin', origin);
+        res.setHeader('Access-Control-Allow-Credentials', 'true');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Max-Age', '86400'); // 24 hours
     
     // Log for debugging (always log for localhost and thewolfgang.tech)
@@ -207,6 +207,7 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
 app.use('/api/brands', require('./routes/brands'));
 app.use('/api/import-brands', require('./routes/import-brands'));
+app.use('/api/products', require('./routes/products')); // Category-based product routes
 app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/orders', require('./routes/orders'));
@@ -348,6 +349,7 @@ app.use((err, req, res, next) => {
 
 // 404 handler for all unmatched routes
 app.use((req, res) => {
+  console.log(`❌ [404] ${req.method} ${req.originalUrl} - Path: ${req.path}`);
   if (req.originalUrl.startsWith('/api')) {
     res.status(404).json({ error: 'API route not found' });
   } else {

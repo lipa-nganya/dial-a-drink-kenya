@@ -61,9 +61,9 @@ class AllPushNotificationsFragment : Fragment() {
     private fun loadNotifications() {
         val context = requireContext()
         notifications.clear()
-        // Get last 30 notifications
+        // Get last 50 notifications
         val allNotifications = SharedPrefs.getPushNotifications(context)
-        notifications.addAll(allNotifications.take(30))
+        notifications.addAll(allNotifications.take(50))
         displayNotifications()
     }
     

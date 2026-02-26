@@ -1239,9 +1239,35 @@ router.put('/drinks/:id', async (req, res) => {
       }
     }
 
-    const normalizedPricing = normalizeCapacityPricing(capacityPricing);
-    const capacities = deriveCapacities(capacity, normalizedPricing);
-    const summary = summarisePricing(normalizedPricing, finalPrice, originalPrice);
+    // Only normalize capacityPricing if it's provided in the request
+    // If not provided, keep the existing capacityPricing from the drink
+    const shouldUpdateCapacityPricing = capacityPricing !== undefined;
+    const normalizedPricing = shouldUpdateCapacityPricing 
+      ? normalizeCapacityPricing(capacityPricing)
+      : (drink.capacityPricing ? normalizeCapacityPricing(drink.capacityPricing) : []);
+    
+    const capacities = deriveCapacities(
+      capacity !== undefined ? capacity : drink.capacity,
+      normalizedPricing
+    );
+    
+    // Calculate summary: use capacityPricing if provided and valid, otherwise use price from request
+    let summary;
+    if (shouldUpdateCapacityPricing && Array.isArray(capacityPricing) && capacityPricing.length > 0 && normalizedPricing.length > 0) {
+      // Use capacityPricing to calculate price
+      summary = summarisePricing(normalizedPricing, finalPrice, originalPrice);
+    } else {
+      // Use price directly from request, or keep existing price if not provided
+      const requestPrice = toNumber(finalPrice);
+      const requestOriginalPrice = toNumber(originalPrice);
+      summary = {
+        price: requestPrice !== null ? requestPrice : (toNumber(drink.price) !== null ? toNumber(drink.price) : 0),
+        originalPrice: requestOriginalPrice !== null ? requestOriginalPrice : (toNumber(drink.originalPrice) !== null ? toNumber(drink.originalPrice) : (requestPrice !== null ? requestPrice : 0)),
+        isOnOffer: (requestOriginalPrice !== null && requestPrice !== null && requestOriginalPrice > requestPrice) || 
+                   (drink.originalPrice && drink.price && parseFloat(drink.originalPrice) > parseFloat(drink.price))
+      };
+    }
+    
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : drink.limitedTimeOffer;
 
     // Handle stock update
@@ -1285,7 +1311,7 @@ router.put('/drinks/:id', async (req, res) => {
       limitedTimeOffer: limitedTimeFlag,
       isOnOffer: summary.isOnOffer,
       capacity: capacities,
-      capacityPricing: normalizedPricing,
+      capacityPricing: shouldUpdateCapacityPricing ? normalizedPricing : drink.capacityPricing,
       abv: toNumber(abv),
       stock: stockValue,
       purchasePrice: finalPurchasePrice !== undefined && finalPurchasePrice !== null 
@@ -2201,14 +2227,24 @@ router.patch('/orders/:id/status', async (req, res) => {
       finalStatus = 'completed';
     }
 
-    // Credit all wallets when order is completed (delivery completed)
-    if (finalStatus === 'completed') {
-      try {
-        await creditWalletsOnDeliveryCompletion(order.id, req);
-        console.log(`✅ Wallets credited for Order #${order.id} on delivery completion (admin status update)`);
-      } catch (walletError) {
-        console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
-        // Don't fail the status update if wallet crediting fails
+    // CRITICAL: Reload order to get latest driverId and paymentStatus after updates
+    await order.reload();
+
+    // Credit all wallets when order is completed (delivery completed) AND payment is paid
+    // CRITICAL: Credit wallets if order is completed and paid, regardless of which product completed it
+    // as long as a driver was assigned when the order was marked as delivered/completed
+    if (finalStatus === 'completed' && order.paymentStatus === 'paid') {
+      // Credit wallets if driver is assigned (driver must have been assigned when order was delivered/completed)
+      if (order.driverId) {
+        try {
+          await creditWalletsOnDeliveryCompletion(order.id, req);
+          console.log(`✅ Wallets credited for Order #${order.id} on delivery completion (admin status update, driver: ${order.driverId})`);
+        } catch (walletError) {
+          console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
+          // Don't fail the status update if wallet crediting fails
+        }
+      } else {
+        console.log(`⚠️  Order #${order.id} marked as completed and paid, but no driver assigned - skipping wallet credits`);
       }
       
       // Decrease inventory stock for completed orders
@@ -2568,17 +2604,22 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
       finalStatus = 'completed';
     }
 
+    // CRITICAL: Reload order to get latest driverId and status after updates
+    await order.reload();
+
     // CRITICAL: Wallet crediting is now handled by creditWalletsOnDeliveryCompletion
     // when the order is marked as completed, not when payment status is updated.
     // This prevents crediting wallets before delivery is completed.
     // If order is marked as completed (or becomes completed) and payment is paid, credit wallets
+    // CRITICAL: Credit wallets if order is completed and paid, regardless of which product completed it
+    // as long as a driver was assigned when the order was marked as delivered/completed
     if (finalStatus === 'completed' && paymentStatus === 'paid') {
-      // Credit wallets if driver is assigned
+      // Credit wallets if driver is assigned (driver must have been assigned when order was delivered/completed)
       if (order.driverId) {
         try {
           const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
           await creditWalletsOnDeliveryCompletion(order.id, req);
-          console.log(`✅ Wallets credited for Order #${order.id} on payment status update (order completed)`);
+          console.log(`✅ Wallets credited for Order #${order.id} on payment status update (order completed, driver: ${order.driverId})`);
         } catch (walletError) {
           console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
           // Don't fail the payment status update if wallet crediting fails
@@ -2592,6 +2633,8 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
           console.error(`❌ Error updating driver status for Order #${order.id}:`, driverStatusError);
           // Don't fail the payment status update if driver status update fails
         }
+      } else {
+        console.log(`⚠️  Order #${order.id} marked as completed and paid, but no driver assigned - skipping wallet credits`);
       }
       
       // Decrease inventory stock for completed orders
@@ -2673,6 +2716,243 @@ router.patch('/orders/:id/payment-status', async (req, res) => {
   } catch (error) {
     console.error('Error updating payment status:', error);
     res.status(500).json({ error: 'Failed to update payment status' });
+  }
+});
+
+// Mark payment as received in cash (admin cash at hand)
+router.post('/orders/:id/mark-payment-cash', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const order = await db.Order.findByPk(id, {
+      include: [
+        {
+          model: db.Driver,
+          as: 'driver',
+          attributes: ['id', 'name', 'phoneNumber']
+        }
+      ]
+    });
+
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    // Check if already paid
+    if (order.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Order is already paid' });
+    }
+
+    const dbTransaction = await db.sequelize.transaction();
+
+    try {
+      // Update order payment status to paid and payment method to cash
+      await order.update({
+        paymentStatus: 'paid',
+        paymentMethod: 'cash',
+        status: order.status === 'pending' ? 'confirmed' : order.status
+      }, { transaction: dbTransaction });
+
+      // Get order financial breakdown
+      const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+      const breakdown = await getOrderFinancialBreakdown(order.id);
+      const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+      const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+      const tipAmount = parseFloat(breakdown.tipAmount) || 0;
+      const orderTotal = parseFloat(order.totalAmount) || 0;
+
+      // Create payment transaction
+      const paymentTransaction = await db.Transaction.create({
+        orderId: order.id,
+        transactionType: 'payment',
+        paymentMethod: 'cash',
+        paymentProvider: 'admin_cash_at_hand',
+        amount: itemsTotal,
+        status: 'completed',
+        paymentStatus: 'paid',
+        receiptNumber: `CASH-ADMIN-${order.id}-${Date.now()}`,
+        transactionDate: new Date(),
+        notes: `Payment received in cash (admin cash at hand) for Order #${order.id}`
+      }, { transaction: dbTransaction });
+
+      // Update admin cash at hand (increase by order total)
+      let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 }, transaction: dbTransaction });
+      if (!adminWallet) {
+        adminWallet = await db.AdminWallet.create({
+          id: 1,
+          balance: 0,
+          totalRevenue: 0,
+          totalOrders: 0,
+          cashAtHand: 0
+        }, { transaction: dbTransaction });
+      }
+
+      const currentAdminCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
+      const newAdminCashAtHand = currentAdminCashAtHand + orderTotal;
+      await adminWallet.update({
+        cashAtHand: newAdminCashAtHand,
+        balance: parseFloat(adminWallet.balance || 0) + orderTotal,
+        totalRevenue: parseFloat(adminWallet.totalRevenue || 0) + orderTotal
+      }, { transaction: dbTransaction });
+
+      // Reload admin wallet to verify the update
+      await adminWallet.reload({ transaction: dbTransaction });
+      const verifiedCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
+      console.log(`✅ Admin cash at hand updated: ${currentAdminCashAtHand.toFixed(2)} → ${newAdminCashAtHand.toFixed(2)} (verified: ${verifiedCashAtHand.toFixed(2)}) (+${orderTotal.toFixed(2)}) for Order #${order.id}`);
+      
+      if (Math.abs(verifiedCashAtHand - newAdminCashAtHand) > 0.01) {
+        console.error(`❌ WARNING: Admin cash at hand update mismatch! Expected ${newAdminCashAtHand.toFixed(2)}, got ${verifiedCashAtHand.toFixed(2)}`);
+      }
+
+      // If order is a delivery order with a driver, credit driver 50% cash at hand and 50% savings
+      if (order.driverId && deliveryFee > 0) {
+        const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction });
+        if (driver) {
+          // Get or create driver wallet
+          let driverWallet = await db.DriverWallet.findOne({
+            where: { driverId: order.driverId },
+            transaction: dbTransaction
+          });
+          if (!driverWallet) {
+            driverWallet = await db.DriverWallet.create({
+              driverId: order.driverId,
+              balance: 0,
+              totalTipsReceived: 0,
+              totalTipsCount: 0,
+              totalDeliveryPay: 0,
+              totalDeliveryPayCount: 0,
+              savings: 0
+            }, { transaction: dbTransaction });
+          }
+
+          // Calculate 50% of delivery fee
+          const driverCashAtHandCredit = deliveryFee * 0.5;
+          const driverSavingsCredit = deliveryFee * 0.5;
+
+          // Credit driver cash at hand (50% delivery fee)
+          const currentDriverCashAtHand = parseFloat(driver.cashAtHand || 0);
+          const newDriverCashAtHand = currentDriverCashAtHand + driverCashAtHandCredit;
+          await driver.update({
+            cashAtHand: newDriverCashAtHand
+          }, { transaction: dbTransaction });
+
+          // Credit driver savings (50% delivery fee)
+          const currentSavings = parseFloat(driverWallet.savings || 0);
+          const newSavings = currentSavings + driverSavingsCredit;
+          await driverWallet.update({
+            savings: newSavings
+          }, { transaction: dbTransaction });
+
+          // Create cash settlement transaction for driver cash at hand credit
+          await db.Transaction.create({
+            orderId: order.id,
+            driverId: order.driverId,
+            driverWalletId: driverWallet.id,
+            transactionType: 'cash_settlement',
+            paymentMethod: 'cash',
+            paymentProvider: 'admin_cash_at_hand',
+            amount: driverCashAtHandCredit, // Positive amount = credit
+            status: 'completed',
+            paymentStatus: 'paid',
+            receiptNumber: `CASH-ADMIN-${order.id}-${Date.now()}`,
+            transactionDate: new Date(),
+            notes: `Admin cash at hand payment: 50% delivery fee credit for Order #${order.id}`
+          }, { transaction: dbTransaction });
+
+          // Create savings credit transaction
+          await db.Transaction.create({
+            orderId: order.id,
+            driverId: order.driverId,
+            driverWalletId: driverWallet.id,
+            transactionType: 'savings_credit',
+            paymentMethod: 'cash',
+            paymentProvider: 'admin_cash_at_hand',
+            amount: driverSavingsCredit,
+            status: 'completed',
+            paymentStatus: 'paid',
+            receiptNumber: `CASH-ADMIN-${order.id}-${Date.now()}`,
+            transactionDate: new Date(),
+            notes: `Admin cash at hand payment: 50% delivery fee to savings for Order #${order.id}`
+          }, { transaction: dbTransaction });
+
+          console.log(`✅ Driver ${order.driverId} credited: Cash at hand +${driverCashAtHandCredit.toFixed(2)}, Savings +${driverSavingsCredit.toFixed(2)} for Order #${order.id}`);
+        }
+      }
+
+      // If order is delivered and paid, mark as completed
+      if (order.status === 'delivered' || order.status === 'completed') {
+        await order.update({ status: 'completed' }, { transaction: dbTransaction });
+      }
+
+      // Create admin cash submission automatically for this order
+      // This ensures the order is tracked in cash submissions and prevents driver from submitting it
+      try {
+        const adminCashSubmission = await db.CashSubmission.create({
+          adminId: req.admin.id,
+          driverId: null, // Admin submission
+          submissionType: 'walk_in_sale',
+          amount: orderTotal,
+          details: {
+            orderId: order.id,
+            customerName: order.customerName || 'Customer',
+            orderNumber: order.id
+          },
+          status: 'approved', // Auto-approved since admin received cash directly
+          approvedBy: req.admin.id,
+          approvedAt: new Date()
+        }, { transaction: dbTransaction });
+
+        // Link order to cash submission
+        await db.sequelize.query(
+          `INSERT INTO cash_submission_orders ("cashSubmissionId", "orderId", "createdAt", "updatedAt") VALUES (:id, :orderId, NOW(), NOW())`,
+          {
+            replacements: { id: adminCashSubmission.id, orderId: order.id },
+            transaction: dbTransaction
+          }
+        );
+
+        console.log(`✅ Admin cash submission created automatically for Order #${order.id} (submission ID: ${adminCashSubmission.id})`);
+      } catch (submissionError) {
+        console.error(`⚠️  Error creating admin cash submission for Order #${order.id}:`, submissionError);
+        // Don't fail the transaction if cash submission creation fails
+      }
+
+      await dbTransaction.commit();
+      console.log(`✅ Transaction committed for Order #${order.id}`);
+
+      // Reload order to get latest status before responding
+      await order.reload();
+
+      // Send response FIRST to avoid timeout
+      res.json({
+        success: true,
+        message: 'Payment marked as received in cash (admin cash at hand)',
+        order: order
+      });
+
+      // CRITICAL: Credit wallets AFTER sending response to avoid timeout
+      // creditWalletsOnDeliveryCompletion creates its own transaction and uses locks
+      // This runs asynchronously so it doesn't block the response
+      if ((order.status === 'delivered' || order.status === 'completed') && order.driverId) {
+        // Run wallet crediting asynchronously without blocking
+        setImmediate(async () => {
+          try {
+            const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+            await creditWalletsOnDeliveryCompletion(order.id, req);
+            console.log(`✅ Wallets credited for Order #${order.id} (admin cash payment, order completed)`);
+          } catch (walletError) {
+            console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
+            // Don't fail the response if wallet crediting fails - payment is already marked
+          }
+        });
+      }
+    } catch (error) {
+      await dbTransaction.rollback();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error marking payment as cash:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -3931,10 +4211,22 @@ router.post('/users', async (req, res) => {
         return res.status(400).json({ error: 'Name and mobile number are required for shop agents' });
       }
 
-      // Generate username from mobile number (remove non-digits, use as username)
-      const cleanMobile = mobileNumber.replace(/\D/g, '');
-      const generatedUsername = `shop_agent_${cleanMobile}`;
-      const generatedEmail = `${cleanMobile}@shopagent.local`;
+      // Normalize phone number to handle different formats (0727893741 -> 254727893741)
+      const normalizedMobile = normalizePhoneNumber(mobileNumber);
+      if (!normalizedMobile) {
+        return res.status(400).json({ error: 'Invalid mobile number format' });
+      }
+
+      // Generate username and email from normalized mobile number
+      const generatedUsername = `shop_agent_${normalizedMobile}`;
+      const generatedEmail = `${normalizedMobile}@shopagent.local`;
+
+      // Generate all phone number variations to check for existing users
+      const phoneVariations = generatePhoneVariants(mobileNumber);
+      const uniquePhoneVariations = [...new Set(phoneVariations)];
+
+      console.log(`🔍 Checking for existing shop agent with phone: ${mobileNumber} (normalized: ${normalizedMobile})`);
+      console.log(`📱 Phone variations to check: ${uniquePhoneVariations.join(', ')}`);
 
       // Check which columns exist in the admins table (check early for existing user validation)
       let hasNameColumn = false;
@@ -3953,13 +4245,34 @@ router.post('/users', async (req, res) => {
         // Default to false if we can't check - will skip these fields
       }
 
-      // Build existing user check - only include mobileNumber if column exists
+      // Build existing user check - check username, email, and all phone number variations
       const existingUserWhere = [
         { username: generatedUsername },
         { email: generatedEmail }
       ];
-      if (hasMobileNumberColumn) {
-        existingUserWhere.push({ mobileNumber: mobileNumber.trim() });
+      
+      // Check for existing users with any of the phone number variations
+      if (hasMobileNumberColumn && uniquePhoneVariations.length > 0) {
+        existingUserWhere.push({
+          mobileNumber: {
+            [Op.in]: uniquePhoneVariations
+          },
+          role: 'shop_agent'
+        });
+      }
+
+      // Also check for any username/email that might match (in case phone wasn't stored but username was)
+      // This handles edge cases where phone format differs
+      const cleanMobileDigits = mobileNumber.replace(/\D/g, '');
+      if (cleanMobileDigits) {
+        // Check for usernames that might have been created with different phone formats
+        const possibleUsernames = uniquePhoneVariations.map(phone => `shop_agent_${phone.replace(/\D/g, '')}`);
+        existingUserWhere.push({
+          username: {
+            [Op.in]: possibleUsernames
+          },
+          role: 'shop_agent'
+        });
       }
 
       // Check if user already exists
@@ -3970,7 +4283,11 @@ router.post('/users', async (req, res) => {
       });
 
       if (existingUser) {
-        return res.status(400).json({ error: 'Shop agent with this mobile number already exists' });
+        console.log(`❌ Shop agent already exists: ID=${existingUser.id}, username=${existingUser.username}, mobileNumber=${existingUser.mobileNumber}, role=${existingUser.role}`);
+        return res.status(400).json({ 
+          error: 'Shop agent with this mobile number already exists',
+          details: existingUser.mobileNumber ? `Existing phone: ${existingUser.mobileNumber}` : `Existing username: ${existingUser.username}`
+        });
       }
 
       // Generate invite token for PIN setup
@@ -3994,7 +4311,8 @@ router.post('/users', async (req, res) => {
         createData.name = name.trim();
       }
       if (hasMobileNumberColumn) {
-        createData.mobileNumber = mobileNumber.trim();
+        // Store normalized phone number for consistency
+        createData.mobileNumber = normalizedMobile;
       }
       if (hasHasSetPinColumn) {
         createData.hasSetPin = false;
@@ -5713,27 +6031,32 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
       return sum + (parseFloat(order.totalAmount) || 0);
     }, 0);
 
-    // Get cash settlements where drivers remit cash to business
-    // These are negative amounts from driver perspective, but positive for admin (cash received)
-    const cashSettlementsFromDrivers = await db.Transaction.findAll({
+    // Get orders where admin received cash directly (via mark-payment-cash endpoint)
+    // These are identified by payment transactions with provider 'admin_cash_at_hand'
+    const adminCashReceivedOrders = await db.Transaction.findAll({
       where: {
-        transactionType: 'cash_settlement',
+        transactionType: 'payment',
+        paymentProvider: 'admin_cash_at_hand',
         status: 'completed',
-        amount: {
-          [Op.lt]: 0 // Negative amounts (cash remitted by drivers)
-        },
-        driverId: {
-          [Op.ne]: null // Only driver remittances (not admin transactions)
-        }
+        paymentStatus: 'paid'
       },
-      attributes: ['id', 'amount', 'driverId', 'createdAt', 'notes']
+      attributes: ['id', 'orderId', 'amount', 'createdAt'],
+      include: [
+        {
+          model: db.Order,
+          as: 'order',
+          attributes: ['id', 'totalAmount'],
+          required: false
+        }
+      ]
     });
 
-    // Cash remitted by drivers becomes cash received by admin
-    // Amounts are negative, so we take absolute value to get cash received
-    const cashReceivedFromDrivers = Math.abs(cashSettlementsFromDrivers.reduce((sum, tx) => {
-      return sum + (parseFloat(tx.amount) || 0);
-    }, 0));
+    // Calculate cash received from orders where admin received cash directly
+    const cashReceivedFromAdminCashOrders = adminCashReceivedOrders.reduce((sum, tx) => {
+      // Use order total amount if available, otherwise use transaction amount
+      const amount = tx.order ? parseFloat(tx.order.totalAmount || 0) : parseFloat(tx.amount || 0);
+      return sum + amount;
+    }, 0);
 
     // Also check admin cash submissions (cash spent by admin)
     const adminCashSubmissions = await db.CashSubmission.findAll({
@@ -5748,14 +6071,22 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
       return sum + (parseFloat(submission.amount) || 0);
     }, 0);
 
-    // Admin cash at hand = Cash from POS orders + Cash received from drivers - Admin cash submissions
-    const calculatedCashAtHand = Math.max(0, cashReceived + cashReceivedFromDrivers - adminCashSubmitted);
+    // Admin cash at hand = Cash from POS orders + Cash from orders where admin received cash directly - Admin cash submissions
+    // CRITICAL: Driver cash submissions do NOT go to admin cash at hand - they go to merchant wallet and driver savings
+    const calculatedCashAtHand = Math.max(0, cashReceived + cashReceivedFromAdminCashOrders - adminCashSubmitted);
 
     // CRITICAL: Store calculated cash at hand in database to ensure consistency
+    // BUT: Only update if calculated value is higher (to preserve manual updates from mark-payment-cash)
+    // If stored value is higher, it means a manual update happened, so keep it
     const storedCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
-    if (Math.abs(storedCashAtHand - calculatedCashAtHand) > 0.01 || storedCashAtHand === 0 || isNaN(storedCashAtHand)) {
+    
+    // Only sync if calculated value is significantly different AND stored value is not higher
+    // This preserves manual updates from mark-payment-cash endpoint
+    if (storedCashAtHand < calculatedCashAtHand - 0.01 || (storedCashAtHand === 0 && calculatedCashAtHand > 0) || isNaN(storedCashAtHand)) {
       await adminWallet.update({ cashAtHand: calculatedCashAtHand });
-      console.log(`🔄 [Admin Cash At Hand Sync] Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (calculated: ${calculatedCashAtHand}, cashReceived: ${cashReceived}, cashReceivedFromDrivers: ${cashReceivedFromDrivers}, adminCashSubmitted: ${adminCashSubmitted})`);
+      console.log(`🔄 [Admin Cash At Hand Sync] Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (calculated: ${calculatedCashAtHand}, cashReceived: ${cashReceived}, cashReceivedFromAdminCashOrders: ${cashReceivedFromAdminCashOrders}, adminCashSubmitted: ${adminCashSubmitted})`);
+    } else if (storedCashAtHand > calculatedCashAtHand + 0.01) {
+      console.log(`ℹ️  [Admin Cash At Hand Sync] Stored value (${storedCashAtHand}) is higher than calculated (${calculatedCashAtHand}) - preserving manual update`);
     } else {
       console.log(`✅ [Admin Cash At Hand Sync] Value in sync (${storedCashAtHand})`);
     }
@@ -5789,9 +6120,9 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
         walletBalance: parseFloat(adminWallet.balance) || 0,
         cashAtHand: parseFloat(adminWallet.cashAtHand || 0), // Use stored value from database
         calculatedCashAtHand: calculatedCashAtHand, // Also include calculated for reference
-        cashReceived: cashReceived, // From POS orders
-        cashReceivedFromDrivers: cashReceivedFromDrivers, // From driver remittances
-        cashSubmitted: adminCashSubmitted, // Admin cash submissions (spent)
+        cashFromPOS: cashReceived,
+        cashFromAdminCashOrders: cashReceivedFromAdminCashOrders,
+        cashSpent: adminCashSubmitted,
         currency: 'KES'
       }
     });
@@ -5842,21 +6173,33 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
       return sum + (parseFloat(order.totalAmount) || 0);
     }, 0);
 
-    // Get cash submissions from drivers approved by this admin
-    const driverSubmissions = await db.CashSubmission.findAll({
+    // Get orders where admin received cash directly (via mark-payment-cash endpoint)
+    // These are identified by payment transactions with provider 'admin_cash_at_hand'
+    const adminCashReceivedTransactions = await db.Transaction.findAll({
       where: {
-        driverId: { [Op.ne]: null }, // Driver submissions only
-        approvedBy: adminId,
-        status: 'approved'
+        transactionType: 'payment',
+        paymentProvider: 'admin_cash_at_hand',
+        status: 'completed',
+        paymentStatus: 'paid'
       },
+      attributes: ['id', 'orderId', 'amount', 'createdAt'],
       include: [
-        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false }
-      ],
-      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt']
+        {
+          model: db.Order,
+          as: 'order',
+          attributes: ['id', 'totalAmount', 'adminId'],
+          required: true
+        }
+      ]
     });
 
-    const cashFromDrivers = driverSubmissions.reduce((sum, submission) => {
-      return sum + (parseFloat(submission.amount) || 0);
+    // Filter to only orders serviced by this admin and calculate cash received
+    const cashFromAdminCashOrders = adminCashReceivedTransactions.reduce((sum, tx) => {
+      if (tx.order && tx.order.adminId === adminId) {
+        const amount = parseFloat(tx.order.totalAmount || 0);
+        return sum + amount;
+      }
+      return sum;
     }, 0);
 
     // Get admin cash submissions created by this admin (cash spent)
@@ -5873,17 +6216,47 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
       return sum + (parseFloat(submission.amount) || 0);
     }, 0);
 
+    // Get approved driver cash submissions (cash received from drivers)
+    // These increase admin cash at hand when approved
+    const approvedDriverSubmissions = await db.CashSubmission.findAll({
+      where: {
+        driverId: { [Op.ne]: null }, // Driver submissions
+        status: 'approved'
+      },
+      attributes: ['id', 'amount', 'createdAt', 'approvedAt', 'approvedBy']
+    });
+
+    const cashFromDrivers = approvedDriverSubmissions.reduce((sum, submission) => {
+      return sum + (parseFloat(submission.amount) || 0);
+    }, 0);
+
     // Calculate cash at hand for this admin
-    // Cash at hand = Cash from POS orders + Cash from drivers - Cash spent by admin
-    const cashAtHand = Math.max(0, cashFromPOS + cashFromDrivers - cashSpent);
+    // Admin cash at hand = Cash from POS orders + Cash from orders where admin received cash directly + Cash from approved driver submissions - Cash spent by admin
+    const calculatedCashAtHand = Math.max(0, cashFromPOS + cashFromAdminCashOrders + cashFromDrivers - cashSpent);
+    
+    // Always sync the database value with calculated value to ensure consistency
+    // This ensures cash at hand is always up-to-date with POS orders, admin cash orders, driver submissions, and admin submissions
+    const storedCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
+    
+    // Update database if values differ significantly (more than 0.01)
+    if (Math.abs(storedCashAtHand - calculatedCashAtHand) > 0.01) {
+      await adminWallet.update({ cashAtHand: calculatedCashAtHand });
+      console.log(`💰 Synced admin cash at hand: ${storedCashAtHand.toFixed(2)} → ${calculatedCashAtHand.toFixed(2)} (POS: ${cashFromPOS.toFixed(2)}, Admin Cash Orders: ${cashFromAdminCashOrders.toFixed(2)}, Driver Submissions: ${cashFromDrivers.toFixed(2)}, Admin Submissions: ${cashSpent.toFixed(2)})`);
+    }
+    
+    // Reload to get the updated value
+    await adminWallet.reload();
+    const cashAtHand = parseFloat(adminWallet.cashAtHand || 0);
 
     // Get all submissions (for display): include pending (so any admin can approve) plus approved/rejected tied to this admin
+    // For driver submissions, only show approved ones (not pending or rejected)
     const allSubmissions = await db.CashSubmission.findAll({
       where: {
         [Op.or]: [
           { status: 'pending' }, // All pending submissions so any admin can see and approve
-          { approvedBy: adminId, driverId: { [Op.ne]: null } }, // Driver submissions approved by this admin
-          { adminId: adminId, driverId: null } // Admin submissions created by this admin
+          { status: 'approved', driverId: { [Op.ne]: null } }, // Approved driver submissions (any admin can see approved ones)
+          { status: 'rejected', approvedBy: adminId, driverId: { [Op.ne]: null } }, // Rejected driver submissions approved by this admin
+          { adminId: adminId, driverId: null } // Admin submissions created by this admin (all statuses)
         ]
       },
       include: [
@@ -5929,6 +6302,231 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to fetch cash at hand'
+    });
+  }
+});
+
+/**
+ * Get admin cash at hand transactions (credits and debits)
+ * GET /api/admin/cash-at-hand/transactions
+ */
+router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
+  try {
+    const adminId = req.admin.id;
+    const transactions = [];
+
+    // Get cash from POS orders serviced by this admin (CREDITS)
+    const posCashOrders = await db.Order.findAll({
+      where: {
+        adminId: adminId,
+        adminOrder: true,
+        paymentMethod: 'cash',
+        paymentStatus: 'paid',
+        status: {
+          [Op.in]: ['completed', 'delivered']
+        }
+      },
+      attributes: ['id', 'totalAmount', 'createdAt', 'customerName', 'orderNumber'],
+      order: [['createdAt', 'DESC']]
+    });
+
+    posCashOrders.forEach(order => {
+      transactions.push({
+        id: `pos-${order.id}`,
+        type: 'credit',
+        amount: parseFloat(order.totalAmount) || 0,
+        description: `Order #${order.orderNumber || order.id}`,
+        customerName: order.customerName || 'Customer',
+        date: order.createdAt,
+        source: 'pos_order',
+        orderId: order.id,
+        orderNumber: order.orderNumber
+      });
+    });
+
+    // Get orders where admin received cash directly (via mark-payment-cash) (CREDITS)
+    const adminCashReceivedTransactions = await db.Transaction.findAll({
+      where: {
+        transactionType: 'payment',
+        paymentProvider: 'admin_cash_at_hand',
+        status: 'completed',
+        paymentStatus: 'paid'
+      },
+      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes'],
+      include: [
+        {
+          model: db.Order,
+          as: 'order',
+          attributes: ['id', 'totalAmount', 'adminId', 'customerName', 'orderNumber'],
+          required: true
+        }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    adminCashReceivedTransactions.forEach(tx => {
+      if (tx.order && tx.order.adminId === adminId) {
+        transactions.push({
+          id: `admin-cash-${tx.id}`,
+          type: 'credit',
+          amount: parseFloat(tx.order.totalAmount || 0),
+          description: `Order #${tx.order.orderNumber || tx.order.id}`,
+          customerName: tx.order.customerName || 'Customer',
+          date: tx.createdAt,
+          source: 'admin_cash_order',
+          orderId: tx.order.id,
+          orderNumber: tx.order.orderNumber,
+          notes: tx.notes
+        });
+      }
+    });
+
+    // Get approved driver cash submissions (DEBITS - cash received from drivers increases admin cash at hand)
+    const approvedDriverSubmissions = await db.CashSubmission.findAll({
+      where: {
+        driverId: { [Op.ne]: null }, // Driver submissions
+        status: 'approved'
+      },
+      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt'],
+      include: [
+        {
+          model: db.Driver,
+          as: 'driver',
+          attributes: ['id', 'name', 'phoneNumber'],
+          required: false
+        },
+        {
+          model: db.Order,
+          as: 'orders',
+          attributes: ['id', 'orderNumber', 'customerName'],
+          required: false
+        }
+      ],
+      order: [['approvedAt', 'DESC'], ['createdAt', 'DESC']]
+    });
+
+    approvedDriverSubmissions.forEach(submission => {
+      const orderInfo = submission.orders && submission.orders.length > 0
+        ? submission.orders.map(o => `Order #${o.orderNumber || o.id}`).join(', ')
+        : '';
+      
+      const typeLabel = {
+        'cash': 'Cash',
+        'purchases': 'Purchases',
+        'general_expense': 'General Expense',
+        'payment_to_office': 'Payment to Office',
+        'walk_in_sale': 'Walk-in Sale',
+        'order_payment': 'Order Payment'
+      }[submission.submissionType] || submission.submissionType;
+
+      let description = submission.driver?.name || 'Driver';
+      if (orderInfo) {
+        description += ` - ${orderInfo}`;
+      }
+      description += ` (${typeLabel})`;
+
+      transactions.push({
+        id: `driver-submission-${submission.id}`,
+        type: 'credit', // In accounting: cash received = debit (increases cash at hand), but we use 'credit' here to mean "credit to admin"
+        amount: parseFloat(submission.amount) || 0,
+        description: description,
+        date: submission.approvedAt || submission.createdAt,
+        source: 'driver_submission',
+        submissionId: submission.id,
+        submissionType: submission.submissionType,
+        driverName: submission.driver?.name || 'Driver'
+      });
+    });
+
+    // Get admin cash submissions (DEBITS)
+    const adminSubmissions = await db.CashSubmission.findAll({
+      where: {
+        adminId: adminId,
+        driverId: null, // Admin submissions
+        status: 'approved'
+      },
+      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt'],
+      include: [
+        {
+          model: db.Order,
+          as: 'orders',
+          attributes: ['id', 'orderNumber', 'customerName'],
+          required: false
+        }
+      ],
+      order: [['approvedAt', 'DESC'], ['createdAt', 'DESC']]
+    });
+
+    adminSubmissions.forEach(submission => {
+      const orderInfo = submission.orders && submission.orders.length > 0
+        ? submission.orders.map(o => `Order #${o.orderNumber || o.id}`).join(', ')
+        : '';
+      
+      const typeLabel = {
+        'cash': 'Cash',
+        'purchases': 'Purchases',
+        'general_expense': 'General Expense',
+        'payment_to_office': 'Payment to Office',
+        'walk_in_sale': 'Walk-in Sale',
+        'order_payment': 'Order Payment'
+      }[submission.submissionType] || submission.submissionType;
+
+      let description = typeLabel;
+      if (orderInfo) {
+        description += ` - ${orderInfo}`;
+      }
+      if (submission.details && typeof submission.details === 'object') {
+        if (submission.details.recipientName) {
+          description += ` (${submission.details.recipientName})`;
+        } else if (submission.details.nature) {
+          description += ` (${submission.details.nature})`;
+        } else if (submission.details.supplier) {
+          description += ` (${submission.details.supplier})`;
+        }
+      }
+
+      transactions.push({
+        id: `submission-${submission.id}`,
+        type: 'debit',
+        amount: parseFloat(submission.amount) || 0,
+        description: description,
+        date: submission.approvedAt || submission.createdAt,
+        source: 'cash_submission',
+        submissionId: submission.id,
+        submissionType: submission.submissionType
+      });
+    });
+
+    // First, sort by date ascending (oldest first) to calculate balance correctly
+    transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    // Calculate running balance chronologically (oldest to newest)
+    let balance = 0;
+    const transactionsWithBalance = transactions.map(tx => {
+      if (tx.type === 'credit') {
+        balance += tx.amount;
+      } else {
+        balance -= tx.amount;
+      }
+      return {
+        ...tx,
+        balance: Math.max(0, balance)
+      };
+    });
+
+    // Now sort by date descending (newest first) for display
+    transactionsWithBalance.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    res.json({
+      success: true,
+      transactions: transactionsWithBalance,
+      currentBalance: balance
+    });
+  } catch (error) {
+    console.error('Error fetching admin cash at hand transactions:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to fetch transactions'
     });
   }
 });

@@ -135,7 +135,9 @@ async function getAccessToken() {
  * Even when using sandbox credentials, IPN must be configured in Production section.
  */
 const getIPNCallbackUrl = () => {
-  const PRODUCTION_IPN_URL = 'https://deliveryos-production-backend-805803410802.us-central1.run.app/api/pesapal/ipn';
+  // Production IPN URL must be on the exact same domain as the website (www.ruakadrinksdelivery.co.ke)
+  // PesaPal requires the IPN URL to match the website domain exactly (no subdomains)
+  const PRODUCTION_IPN_URL = 'https://www.ruakadrinksdelivery.co.ke/api/pesapal/ipn';
   const DEV_IPN_URL = 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/pesapal/ipn';
   
   // Priority 1: If PESAPAL_IPN_CALLBACK_URL is explicitly set, use it (for testing/override)

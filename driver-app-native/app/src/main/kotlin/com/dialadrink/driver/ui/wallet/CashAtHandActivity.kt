@@ -8,43 +8,18 @@ import androidx.lifecycle.lifecycleScope
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.databinding.ActivityCashAtHandBinding
-import com.dialadrink.driver.ui.auth.PinVerificationDialog
 import com.dialadrink.driver.utils.SharedPrefs
 import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.launch
 
 class CashAtHandActivity : AppCompatActivity() {
     private lateinit var binding: ActivityCashAtHandBinding
-    private var isContentVisible = false
-    private var pauseTimestamp: Long = 0
-    private val PIN_REQUIRED_AFTER_SECONDS = 10L // Require PIN if away for more than 10 seconds
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCashAtHandBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Hide content initially until PIN is verified
-        binding.root.visibility = android.view.View.GONE
-
-        // Always require PIN verification for Cash at Hand screen on first open
-        showPinVerification()
-    }
-    
-    private fun showPinVerification() {
-        val dialog = PinVerificationDialog()
-        dialog.setOnVerifiedListener {
-            initializeContent()
-        }
-        dialog.setOnCancelledListener {
-            finish()
-        }
-        dialog.show(supportFragmentManager, "PinVerificationDialog")
-    }
-    
-    private fun initializeContent() {
-        isContentVisible = true
-        binding.root.visibility = android.view.View.VISIBLE
         setupToolbar()
         setupSwipeRefresh()
         setupMainTabs()
@@ -61,29 +36,9 @@ class CashAtHandActivity : AppCompatActivity() {
     
     override fun onResume() {
         super.onResume()
-        
-        // Check if PIN is required based on time away
-        if (isContentVisible && pauseTimestamp > 0) {
-            val timeAway = (System.currentTimeMillis() - pauseTimestamp) / 1000 // seconds
-            if (timeAway > PIN_REQUIRED_AFTER_SECONDS) {
-                // User was away for more than 10 seconds - require PIN
-                binding.root.visibility = android.view.View.GONE
-                isContentVisible = false
-                showPinVerification()
-            } else {
-                // User returned within 10 seconds - refresh data but keep content visible
+        // Refresh data when returning to the screen
                 refreshTabs()
                 loadCashAtHand()
-            }
-        }
-    }
-    
-    override fun onPause() {
-        super.onPause()
-        // Record when user left the screen
-        if (isContentVisible) {
-            pauseTimestamp = System.currentTimeMillis()
-        }
     }
 
     private fun setupToolbar() {
@@ -187,28 +142,30 @@ class CashAtHandActivity : AppCompatActivity() {
     private fun handleDeepLink(intent: Intent) {
         val submissionId = intent.getStringExtra("submissionId")
         if (submissionId != null) {
-            // Switch to Transactions tab
+            // Switch to Transactions main tab in CashAtHandActivity (position 1)
             binding.mainViewPager.setCurrentItem(1, true)
             
-            // Switch to appropriate sub-tab based on notification type
+            // Wait a bit for the fragment to be created, then switch to appropriate sub-tab
+            binding.mainViewPager.post {
             val type = intent.getStringExtra("type")
             try {
                 val transactionsFragment = supportFragmentManager.fragments.find { it is TransactionsFragment } as? TransactionsFragment
                 when (type) {
                     "cash_submission_approved" -> {
-                        transactionsFragment?.switchToTab(2) // Approved tab
+                        transactionsFragment?.switchToTransactionsSubTab(2) // Approved tab (Transactions > Approved, position 2)
                         Toast.makeText(this, "Submission approved", Toast.LENGTH_SHORT).show()
                     }
                     "cash_submission_rejected" -> {
-                        transactionsFragment?.switchToTab(3) // Rejected tab
+                        transactionsFragment?.switchToTransactionsSubTab(3) // Rejected tab (Transactions > Rejected, position 3)
                         Toast.makeText(this, "Submission rejected", Toast.LENGTH_SHORT).show()
                     }
                     else -> {
-                        transactionsFragment?.switchToTab(1) // Pending tab
+                        transactionsFragment?.switchToTransactionsSubTab(1) // Pending tab (Transactions > Pending, position 1)
                     }
                 }
             } catch (e: Exception) {
                 // Fragment not found, ignore
+                }
             }
         }
     }

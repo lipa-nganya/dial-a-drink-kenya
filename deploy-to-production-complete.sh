@@ -140,8 +140,17 @@ EXISTING_GOOGLE_CLOUD_PROJECT=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: GOOG
 EXISTING_GCP_PROJECT=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: GCP_PROJECT" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "$PROJECT_ID")
 EXISTING_HOST=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: HOST" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "0.0.0.0")
 
-# Production Payment Credentials - use environment variables or fallback
-# WARNING: These should be set as environment variables before running this script
+# Extract SMTP credentials (preserve from existing deployment)
+EXISTING_SMTP_HOST=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: SMTP_HOST" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "smtp.gmail.com")
+EXISTING_SMTP_PORT=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: SMTP_PORT" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "587")
+EXISTING_SMTP_SECURE=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: SMTP_SECURE" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "false")
+EXISTING_SMTP_USER=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: SMTP_USER" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "")
+EXISTING_SMTP_PASS=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: SMTP_PASS" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "")
+EXISTING_SMTP_FROM=$(echo "$EXISTING_ENV_YAML" | grep -A1 "name: SMTP_FROM" | grep "value:" | sed "s/.*value: //" | tr -d '"' || echo "")
+
+# Production Payment Credentials - REQUIRED FOR PAYMENT FUNCTIONALITY
+# These credentials are ALWAYS included in every deployment to ensure payment initiation works
+# WARNING: These should be set as environment variables before running this script for security
 if [ -z "$MPESA_CONSUMER_KEY" ] || [ -z "$MPESA_CONSUMER_SECRET" ] || [ -z "$MPESA_SHORTCODE" ] || [ -z "$MPESA_PASSKEY" ]; then
   echo "   ⚠️  WARNING: M-Pesa credentials not set in environment. Using defaults. Set MPESA_CONSUMER_KEY, MPESA_CONSUMER_SECRET, MPESA_SHORTCODE, MPESA_PASSKEY environment variables for security."
 fi
@@ -175,7 +184,8 @@ fi
 PRESERVED_ENV_VARS=""
 if [ -n "$EXISTING_ENV_YAML" ]; then
     # Extract all env var names except the ones we're managing
-    PRESERVED_VAR_NAMES=$(echo "$EXISTING_ENV_YAML" | grep "name:" | sed "s/.*name: //" | grep -vE "FRONTEND_URL|ADMIN_URL|GOOGLE_CLOUD_PROJECT|GCP_PROJECT|HOST|NODE_ENV|DATABASE_URL|MPESA_CONSUMER_KEY|MPESA_CONSUMER_SECRET|MPESA_SHORTCODE|MPESA_PASSKEY|MPESA_PAYBILL_ACCOUNT|MPESA_ENVIRONMENT|MPESA_CALLBACK_URL|PESAPAL_CONSUMER_KEY|PESAPAL_CONSUMER_SECRET|PESAPAL_ENVIRONMENT|PESAPAL_IPN_CALLBACK_URL|GOOGLE_MAPS_API_KEY" || echo "")
+    # M-Pesa and SMTP credentials are explicitly set above, so exclude them from preserved vars
+    PRESERVED_VAR_NAMES=$(echo "$EXISTING_ENV_YAML" | grep "name:" | sed "s/.*name: //" | grep -vE "FRONTEND_URL|ADMIN_URL|GOOGLE_CLOUD_PROJECT|GCP_PROJECT|HOST|NODE_ENV|DATABASE_URL|MPESA_CONSUMER_KEY|MPESA_CONSUMER_SECRET|MPESA_SHORTCODE|MPESA_PASSKEY|MPESA_PAYBILL_ACCOUNT|MPESA_ENVIRONMENT|MPESA_CALLBACK_URL|PESAPAL_CONSUMER_KEY|PESAPAL_CONSUMER_SECRET|PESAPAL_ENVIRONMENT|PESAPAL_IPN_CALLBACK_URL|GOOGLE_MAPS_API_KEY|SMTP_HOST|SMTP_PORT|SMTP_SECURE|SMTP_USER|SMTP_PASS|SMTP_FROM" || echo "")
     
     # Build preserved env vars string (we'll update them separately to avoid overwriting)
     for VAR_NAME in $PRESERVED_VAR_NAMES; do
@@ -190,14 +200,19 @@ echo "   Preserving CORS URLs:"
 echo "      FRONTEND_URL=$EXISTING_FRONTEND_URL"
 echo "      ADMIN_URL=$EXISTING_ADMIN_URL"
 echo ""
-echo "   Production Payment Credentials:"
+echo "   Production Payment Credentials (ALWAYS INCLUDED):"
 echo "      M-Pesa Environment: $MPESA_ENVIRONMENT"
 echo "      M-Pesa Callback: $MPESA_CALLBACK_URL"
 echo "      PesaPal Environment: $PESAPAL_ENVIRONMENT"
 echo "      PesaPal IPN Callback: $PESAPAL_IPN_CALLBACK_URL"
 echo ""
+echo "   SMTP Credentials (Preserved):"
+echo "      SMTP Host: $EXISTING_SMTP_HOST"
+echo "      SMTP User: ${EXISTING_SMTP_USER:0:10}..."
+echo ""
 
-# Deploy backend with CORS and credentials preserved
+# Deploy backend with CORS, payment credentials, and SMTP preserved
+# NOTE: M-Pesa credentials are ALWAYS included to ensure payment initiation works
 echo "🚀 Deploying backend..."
 gcloud run deploy "$BACKEND_SERVICE" \
     --image "${BACKEND_IMAGE}:latest" \
@@ -205,7 +220,7 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$PROD_CONNECTION" \
-    --set-env-vars "NODE_ENV=production,DATABASE_URL=$PROD_DATABASE_URL,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$EXISTING_GOOGLE_CLOUD_PROJECT,GCP_PROJECT=$EXISTING_GCP_PROJECT,HOST=$EXISTING_HOST,MPESA_CONSUMER_KEY=$MPESA_CONSUMER_KEY,MPESA_CONSUMER_SECRET=$MPESA_CONSUMER_SECRET,MPESA_SHORTCODE=$MPESA_SHORTCODE,MPESA_PASSKEY=$MPESA_PASSKEY,MPESA_PAYBILL_ACCOUNT=$MPESA_PAYBILL_ACCOUNT,MPESA_ENVIRONMENT=$MPESA_ENVIRONMENT,MPESA_CALLBACK_URL=$MPESA_CALLBACK_URL,PESAPAL_CONSUMER_KEY=$PESAPAL_CONSUMER_KEY,PESAPAL_CONSUMER_SECRET=$PESAPAL_CONSUMER_SECRET,PESAPAL_ENVIRONMENT=$PESAPAL_ENVIRONMENT,PESAPAL_IPN_CALLBACK_URL=$PESAPAL_IPN_CALLBACK_URL,GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY" \
+    --set-env-vars "NODE_ENV=production,DATABASE_URL=$PROD_DATABASE_URL,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$EXISTING_GOOGLE_CLOUD_PROJECT,GCP_PROJECT=$EXISTING_GCP_PROJECT,HOST=$EXISTING_HOST,MPESA_CONSUMER_KEY=$MPESA_CONSUMER_KEY,MPESA_CONSUMER_SECRET=$MPESA_CONSUMER_SECRET,MPESA_SHORTCODE=$MPESA_SHORTCODE,MPESA_PASSKEY=$MPESA_PASSKEY,MPESA_PAYBILL_ACCOUNT=$MPESA_PAYBILL_ACCOUNT,MPESA_ENVIRONMENT=$MPESA_ENVIRONMENT,MPESA_CALLBACK_URL=$MPESA_CALLBACK_URL,PESAPAL_CONSUMER_KEY=$PESAPAL_CONSUMER_KEY,PESAPAL_CONSUMER_SECRET=$PESAPAL_CONSUMER_SECRET,PESAPAL_ENVIRONMENT=$PESAPAL_ENVIRONMENT,PESAPAL_IPN_CALLBACK_URL=$PESAPAL_IPN_CALLBACK_URL,GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY,SMTP_HOST=$EXISTING_SMTP_HOST,SMTP_PORT=$EXISTING_SMTP_PORT,SMTP_SECURE=$EXISTING_SMTP_SECURE,SMTP_USER=$EXISTING_SMTP_USER,SMTP_PASS=$EXISTING_SMTP_PASS,SMTP_FROM=$EXISTING_SMTP_FROM" \
     --memory 512Mi \
     --timeout 300 \
     --max-instances 10 \

@@ -97,10 +97,58 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
       comment: 'Purchase/cost price of the inventory item'
+    },
+    slug: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true
     }
   }, {
     tableName: 'drinks',
-    timestamps: true
+    timestamps: true,
+    hooks: {
+      beforeCreate: async (drink, options) => {
+        // Auto-generate slug if not provided
+        if (!drink.slug) {
+          const { generateDrinkSlug } = require('../utils/slugGenerator');
+          try {
+            // Fetch brand if brandId is provided
+            if (drink.brandId && !drink.brand) {
+              const Brand = options.sequelize.models.Brand;
+              drink.brand = await Brand.findByPk(drink.brandId);
+            }
+            drink.slug = await generateDrinkSlug(drink, options.sequelize);
+          } catch (error) {
+            console.error('Error generating slug:', error);
+            // Fallback to ID-based slug if generation fails
+            drink.slug = `product-${Date.now()}`;
+          }
+        }
+      },
+      beforeUpdate: async (drink, options) => {
+        // Regenerate slug if name, brand, or capacity changed
+        const changedFields = drink.changed();
+        if (changedFields && (
+          changedFields.includes('name') ||
+          changedFields.includes('brandId') ||
+          changedFields.includes('capacity') ||
+          changedFields.includes('capacityPricing')
+        )) {
+          const { generateDrinkSlug } = require('../utils/slugGenerator');
+          try {
+            // Fetch brand if brandId is provided
+            if (drink.brandId && !drink.brand) {
+              const Brand = options.sequelize.models.Brand;
+              drink.brand = await Brand.findByPk(drink.brandId);
+            }
+            drink.slug = await generateDrinkSlug(drink, options.sequelize, drink.id);
+          } catch (error) {
+            console.error('Error regenerating slug:', error);
+            // Keep existing slug if regeneration fails
+          }
+        }
+      }
+    }
   });
 
   return Drink;

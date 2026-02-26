@@ -107,15 +107,25 @@ const Cart = () => {
     // Always fetch fresh settings when Cart component loads (including reorders)
     fetchDeliverySettings();
     
-    // Load saved delivery information from localStorage
-    const loadSavedDeliveryInfo = () => {
+    // Load saved delivery information from localStorage and profile
+    const loadSavedDeliveryInfo = async () => {
       try {
         // Helper function to clean notes from technical details
         // First, try to get from customerDeliveryInfo
         const savedDeliveryInfo = localStorage.getItem('customerDeliveryInfo');
+        let loadedInfo = {
+          name: '',
+          phone: '',
+          email: '',
+          address: '',
+          apartmentHouseNumber: '',
+          floorNumber: '',
+          notes: ''
+        };
+
         if (savedDeliveryInfo) {
           const parsed = JSON.parse(savedDeliveryInfo);
-          setCustomerInfo({
+          loadedInfo = {
             name: parsed.name || '',
             phone: formatPhoneForDisplay(parsed.phone) || '',
             email: parsed.email || '',
@@ -123,21 +133,66 @@ const Cart = () => {
             apartmentHouseNumber: parsed.apartmentHouseNumber || '',
             floorNumber: parsed.floorNumber || '',
             notes: sanitizeCustomerNotes(parsed.notes) // Clean notes from technical details
-          });
-          return;
+          };
         }
         
-        // Fallback: try to get from customerOrder
+        // If user is logged in, try to fetch apartment number from their profile/order history
         const savedOrder = localStorage.getItem('customerOrder');
         if (savedOrder) {
-          const orderData = JSON.parse(savedOrder);
-          setCustomerInfo(prev => ({
-            ...prev,
-            phone: formatPhoneForDisplay(orderData.phone) || prev.phone,
-            email: orderData.email || prev.email,
-            name: orderData.customerName || prev.name
-          }));
+          try {
+            const orderData = JSON.parse(savedOrder);
+            const { email, phone } = orderData;
+            
+            // Update basic info from customerOrder
+            loadedInfo.phone = formatPhoneForDisplay(orderData.phone) || loadedInfo.phone;
+            loadedInfo.email = orderData.email || loadedInfo.email;
+            loadedInfo.name = orderData.customerName || loadedInfo.name;
+            
+            // Try to fetch most recent order to get apartment number from profile
+            if ((email || phone) && !loadedInfo.apartmentHouseNumber) {
+              try {
+                const response = await api.post('/orders/find-all', {
+                  email: email || null,
+                  phone: phone || null
+                });
+                
+                if (response.data.success && response.data.orders && response.data.orders.length > 0) {
+                  const mostRecentOrder = response.data.orders[0];
+                  
+                  // Try to extract apartment number from delivery address
+                  if (mostRecentOrder.deliveryAddress) {
+                    const addressParts = mostRecentOrder.deliveryAddress.split(',');
+                    if (addressParts.length > 1) {
+                      const lastPart = addressParts[addressParts.length - 1].trim();
+                      if (lastPart && !lastPart.includes('Kenya') && !lastPart.includes('Nairobi')) {
+                        loadedInfo.apartmentHouseNumber = lastPart;
+                      }
+                    }
+                  }
+                  
+                  // Also check if address is available
+                  if (mostRecentOrder.deliveryAddress && !loadedInfo.address) {
+                    // Extract base address (everything except the last part which might be apartment)
+                    const addressParts = mostRecentOrder.deliveryAddress.split(',');
+                    if (addressParts.length > 1) {
+                      loadedInfo.address = addressParts.slice(0, -1).join(',').trim();
+                    } else {
+                      loadedInfo.address = mostRecentOrder.deliveryAddress;
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error('Error fetching order history for apartment number:', error);
+                // Continue with existing loadedInfo
+              }
+            }
+          } catch (error) {
+            console.error('Error parsing customerOrder:', error);
+          }
         }
+        
+        // Set the loaded info
+        setCustomerInfo(loadedInfo);
       } catch (error) {
         console.error('Error loading saved delivery info:', error);
       }
@@ -145,6 +200,20 @@ const Cart = () => {
     
     loadSavedDeliveryInfo();
   }, []);
+
+  // Save apartment number to localStorage whenever it changes (including when cleared)
+  useEffect(() => {
+    try {
+      const savedDeliveryInfo = localStorage.getItem('customerDeliveryInfo');
+      const existingInfo = savedDeliveryInfo ? JSON.parse(savedDeliveryInfo) : {};
+      localStorage.setItem('customerDeliveryInfo', JSON.stringify({
+        ...existingInfo,
+        apartmentHouseNumber: customerInfo.apartmentHouseNumber || ''
+      }));
+    } catch (error) {
+      console.error('Error saving apartment number to localStorage:', error);
+    }
+  }, [customerInfo.apartmentHouseNumber]);
 
   // Recalculate road distance when address changes (if in perKm mode)
   useEffect(() => {

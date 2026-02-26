@@ -461,7 +461,7 @@ router.get('/drinks', async (req, res) => {
     
     const drinks = await db.Drink.findAll({
       where: whereClause,
-      attributes: ['id', 'name', 'price', 'stock', 'barcode', 'capacity', 'purchasePrice', 'categoryId'],
+      attributes: ['id', 'name', 'price', 'stock', 'barcode', 'capacity', 'capacityPricing', 'purchasePrice', 'categoryId'],
       include: [{
         model: db.Category,
         as: 'category',
@@ -484,6 +484,19 @@ router.get('/drinks', async (req, res) => {
       if (drinkData.stock === null || drinkData.stock === undefined) {
         drinkData.stock = 0;
       }
+      
+      // Debug logging for first few drinks to verify capacityPricing structure
+      if (drinkData.id && drinkData.id <= 3) {
+        console.log(`[POS /drinks] Drink ${drinkData.id} (${drinkData.name}):`, {
+          hasCapacityPricing: !!drinkData.capacityPricing,
+          capacityPricingType: typeof drinkData.capacityPricing,
+          isArray: Array.isArray(drinkData.capacityPricing),
+          capacityPricingLength: Array.isArray(drinkData.capacityPricing) ? drinkData.capacityPricing.length : 'N/A',
+          capacityPricing: drinkData.capacityPricing,
+          capacity: drinkData.capacity
+        });
+      }
+      
       return drinkData;
     });
 

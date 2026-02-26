@@ -60,6 +60,9 @@ const CashAtHand = () => {
   const [submissions, setSubmissions] = useState([]);
   const [posOrders, setPosOrders] = useState([]);
   const [activeTab, setActiveTab] = useState(0);
+  const [allSubmissionsSubTab, setAllSubmissionsSubTab] = useState(0); // 0 = Transactions, 1 = Logs
+  const [transactions, setTransactions] = useState([]);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
   const { fetchPendingSubmissionsCount } = useAdmin();
   const [mySubmissionsTab, setMySubmissionsTab] = useState('pending');
   const [page, setPage] = useState(0);
@@ -126,6 +129,11 @@ const CashAtHand = () => {
         if (fetchPendingSubmissionsCount) {
           fetchPendingSubmissionsCount();
         }
+        
+        // Fetch transactions if on All Submissions > Transactions tab
+        if (activeTab === 0 && allSubmissionsSubTab === 0) {
+          fetchTransactions();
+        }
       } else {
         setError(response.data.error || 'Failed to load cash at hand data');
       }
@@ -144,6 +152,32 @@ const CashAtHand = () => {
       fetchPendingSubmissionsCount();
     }
   }, [fetchCashAtHand, fetchPendingSubmissionsCount]);
+
+  const fetchTransactions = async () => {
+    try {
+      setLoadingTransactions(true);
+      const response = await api.get('/admin/cash-at-hand/transactions');
+      if (response.data.success) {
+        const txns = response.data.transactions || [];
+        console.log('Fetched transactions:', txns.length, txns);
+        setTransactions(txns);
+      } else {
+        console.error('Failed to fetch transactions:', response.data);
+        setTransactions([]);
+      }
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      setTransactions([]);
+    } finally {
+      setLoadingTransactions(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 0 && allSubmissionsSubTab === 0) {
+      fetchTransactions();
+    }
+  }, [activeTab, allSubmissionsSubTab]);
 
   const fetchOrdersForSelection = async () => {
     try {
@@ -172,19 +206,15 @@ const CashAtHand = () => {
         }
       });
       
-      // Filter to only show POS orders with CASH payment method
-      const isPOSOrder = (order) => {
-        return order.adminOrder === true || 
-               order.status === 'pos_order' ||
-               (order.deliveryAddress && order.deliveryAddress.includes('In-Store Purchase'));
-      };
-
-      // Filter out cancelled orders, non-POS orders, non-cash payment methods, and orders already associated with approved submissions
+      // Filter out cancelled orders, non-cash payment methods, and orders already associated with approved submissions
+      // Allow all order types (POS and delivery orders) with cash payment method
       const availableOrders = allOrders.filter(order => {
         if (order.status === 'cancelled') return false;
-        if (!isPOSOrder(order)) return false;
+        // Allow all orders with cash payment method (POS and delivery orders)
         if (order.paymentMethod !== 'cash') return false;
         if (usedOrderIds.has(order.id)) return false;
+        // Only show paid orders
+        if (order.paymentStatus !== 'paid') return false;
         return true;
       });
       
@@ -354,6 +384,11 @@ const CashAtHand = () => {
     return submissions.filter(s => s.status === 'pending');
   }, [submissions]);
 
+  const getApprovedDriverSubmissions = useMemo(() => {
+    // Only approved driver submissions (for display in transactions/logs)
+    return submissions.filter(s => s.status === 'approved' && s.driver !== null);
+  }, [submissions]);
+
   const getMySubmissions = useMemo(() => {
     if (!user?.id) return [];
     // Filter submissions by current admin
@@ -383,27 +418,30 @@ const CashAtHand = () => {
 
   const displayData = useMemo(() => {
     if (activeTab === 0) {
-      // Show all submissions
-      return submissions;
+      // All Submissions - show submissions (for Logs tab) or transactions (for Transactions tab)
+      if (allSubmissionsSubTab === 0) {
+        // Transactions tab - return empty array, we'll render transactions separately
+        return [];
+      } else {
+        // Logs tab - show all submissions (only approved driver submissions, all admin submissions)
+        return submissions.filter(s => {
+          // For driver submissions, only show approved ones
+          if (s.driver !== null) {
+            return s.status === 'approved';
+          }
+          // For admin submissions, show all
+          return true;
+        });
+      }
     } else if (activeTab === 1) {
       // Show pending submissions from drivers
       return getPendingSubmissions;
     } else if (activeTab === 2) {
       // Show my submissions (admin cash submissions)
       return getMySubmissions;
-    } else if (activeTab === 3) {
-      // Show POS orders
-      return posOrders.map(order => ({
-        id: `pos-${order.id}`,
-        type: 'pos_order',
-        amount: order.totalAmount,
-        customerName: order.customerName,
-        createdAt: order.createdAt,
-        orderId: order.id
-      }));
     }
     return [];
-  }, [activeTab, submissions, getPendingSubmissions, getMySubmissions, posOrders]);
+  }, [activeTab, allSubmissionsSubTab, submissions, getPendingSubmissions, getMySubmissions]);
 
   const paginatedData = useMemo(() => {
     return displayData.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
@@ -474,7 +512,7 @@ const CashAtHand = () => {
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
                 <TrendingDown sx={{ color: colors.error, mr: 1, fontSize: 24 }} />
                 <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                  Cash Spent
+                  Cash Submitted
                 </Typography>
               </Box>
               <Typography variant="h5" sx={{ fontWeight: 600, color: colors.error, flexGrow: 1 }}>
@@ -528,11 +566,36 @@ const CashAtHand = () => {
           }}
         >
           <Tab label={`All Submissions (${submissions.length})`} />
-          <Tab label={`Pending Submissions (${getPendingSubmissions.length})`} />
+          <Tab label={`Pending Approval (${getPendingSubmissions.length})`} />
           <Tab label={`My Submissions (${getMySubmissions.length})`} />
-          <Tab label={`POS Orders (${posOrders.length})`} />
         </Tabs>
       </Paper>
+
+      {/* All Submissions Sub-Tabs */}
+      {activeTab === 0 && (
+        <Paper sx={{ backgroundColor: colors.paper, mb: 2 }}>
+          <Tabs
+            value={allSubmissionsSubTab}
+            onChange={(e, newValue) => {
+              setAllSubmissionsSubTab(newValue);
+              setPage(0);
+            }}
+            sx={{
+              borderBottom: `1px solid ${colors.border}`,
+              '& .MuiTab-root': {
+                color: colors.textSecondary,
+                fontWeight: 600,
+                '&.Mui-selected': {
+                  color: colors.accentText
+                }
+              }
+            }}
+          >
+            <Tab label="Transactions" />
+            <Tab label="Logs" />
+          </Tabs>
+        </Paper>
+      )}
 
       {/* My Submissions Sub-Tabs */}
       {activeTab === 2 && (
@@ -561,62 +624,341 @@ const CashAtHand = () => {
         </Paper>
       )}
 
-      {/* Data Table */}
-      <Paper sx={{ backgroundColor: colors.paper }}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                {activeTab === 2 ? (
-                  <>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order ID</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Customer</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
-                  </>
-                  ) : (
-                  <>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Type</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Source</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Status</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
-                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Actions</TableCell>
-                  </>
-                )}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {paginatedData.length === 0 ? (
+      {/* Transactions View (All Submissions > Transactions) */}
+      {activeTab === 0 && allSubmissionsSubTab === 0 && (
+        <Paper sx={{ backgroundColor: colors.paper }}>
+          {loadingTransactions ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Description</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Amount</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {transactions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
+                          No transactions found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      [...transactions]
+                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // Sort newest first
+                        .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                        .map((tx) => {
+                        // Build description: Order number or driver name
+                        let description = tx.description;
+                        if (tx.source === 'driver_submission') {
+                          // For driver submissions, description already includes driver name and order info
+                          description = tx.description;
+                        } else if (tx.customerName && tx.type === 'credit') {
+                          // For POS/admin cash orders, add customer name
+                          description += ` - ${tx.customerName}`;
+                        } else if (tx.source === 'cash_submission' && tx.submissionType) {
+                          // For admin cash submissions (debits), show submission type
+                          const typeLabels = {
+                            'cash': 'Cash',
+                            'purchases': 'Purchases',
+                            'general_expense': 'General Expense',
+                            'payment_to_office': 'Payment to Office',
+                            'walk_in_sale': 'Walk-in Sale',
+                            'order_payment': 'Order Payment'
+                          };
+                          description = typeLabels[tx.submissionType] || tx.submissionType;
+                        }
+                        
+                        return (
+                          <TableRow key={tx.id} hover>
+                            <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                              {description}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {formatDate(tx.date)}
+                            </TableCell>
+                            <TableCell 
+                              sx={{ 
+                                color: tx.type === 'credit' ? colors.accentText : colors.error, 
+                                fontWeight: 600 
+                              }} 
+                              align="right"
+                            >
+                              {tx.type === 'credit' ? '+' : '-'}{formatCurrency(tx.amount)}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+              <TablePagination
+                component="div"
+                count={transactions.length}
+                page={page}
+                onPageChange={(event, newPage) => setPage(newPage)}
+                rowsPerPage={rowsPerPage}
+                onRowsPerPageChange={(event) => {
+                  setRowsPerPage(parseInt(event.target.value, 10));
+                  setPage(0);
+                }}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                sx={{
+                  borderTop: `1px solid ${colors.border}`,
+                  '& .MuiTablePagination-toolbar': {
+                    color: colors.textPrimary
+                  }
+                }}
+              />
+            </>
+          )}
+        </Paper>
+      )}
+
+      {/* Logs View (All Submissions > Logs) */}
+      {activeTab === 0 && allSubmissionsSubTab === 1 && (
+        <Paper sx={{ backgroundColor: colors.paper }}>
+          <TableContainer>
+            <Table>
+              <TableHead>
                 <TableRow>
-                  <TableCell 
-                    colSpan={activeTab === 3 ? 4 : 6} 
-                    sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}
-                  >
-                    No data found
-                  </TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Description</TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Debit</TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Credit</TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Balance</TableCell>
                 </TableRow>
-              ) : (
-                paginatedData.map((item) => {
-                  if (activeTab === 3) {
-                    // POS orders
+              </TableHead>
+              <TableBody>
+                {(() => {
+                  // Build complete transaction list for logs
+                  const allLogEntries = [];
+                  
+                  // Add POS orders as credits
+                  posOrders.forEach(order => {
+                    allLogEntries.push({
+                      id: `pos-${order.id}`,
+                      date: order.createdAt,
+                      description: `Order #${order.id}${order.customerName ? ` - ${order.customerName}` : ''}`,
+                      debit: order.totalAmount,
+                      credit: 0,
+                      type: 'pos_order'
+                    });
+                  });
+                  
+                  // Add admin cash orders (from mark-payment-cash) as credits
+                  transactions.filter(tx => tx.source === 'admin_cash_order' && tx.type === 'credit').forEach(tx => {
+                    allLogEntries.push({
+                      id: tx.id,
+                      date: tx.date,
+                      description: tx.description + (tx.customerName ? ` - ${tx.customerName}` : ''),
+                      debit: tx.amount,
+                      credit: 0,
+                      type: 'admin_cash_order'
+                    });
+                  });
+                  
+                  // Add approved driver submissions as debits (cash received from drivers increases cash at hand)
+                  getApprovedDriverSubmissions.forEach(submission => {
+                    const orderInfo = submission.orders && submission.orders.length > 0
+                      ? submission.orders.map(o => `Order #${o.id}`).join(', ')
+                      : '';
+                    let description = `${submission.driver?.name || 'Driver'}`;
+                    if (orderInfo) {
+                      description += ` - ${orderInfo}`;
+                    }
+                    description += ` (${getSubmissionTypeLabel(submission.submissionType)})`;
+                    
+                    allLogEntries.push({
+                      id: `driver-submission-${submission.id}`,
+                      date: submission.approvedAt || submission.createdAt,
+                      description: description,
+                      debit: submission.amount, // Debit = cash received (increases balance)
+                      credit: 0,
+                      type: 'driver_submission'
+                    });
+                  });
+                  
+                  // Add approved admin submissions as debits (cash submitted by admin)
+                  submissions
+                    .filter(s => s.status === 'approved' && s.admin !== null && !s.driver)
+                    .forEach(submission => {
+                      const orderInfo = submission.orders && submission.orders.length > 0
+                        ? submission.orders.map(o => `Order #${o.id}`).join(', ')
+                        : '';
+                      let description = getSubmissionTypeLabel(submission.submissionType);
+                      if (orderInfo) {
+                        description += ` - ${orderInfo}`;
+                      }
+                      if (submission.details && typeof submission.details === 'object') {
+                        if (submission.details.recipientName) {
+                          description += ` (${submission.details.recipientName})`;
+                        } else if (submission.details.nature) {
+                          description += ` (${submission.details.nature})`;
+                        }
+                      }
+                      
+                      allLogEntries.push({
+                        id: `submission-${submission.id}`,
+                        date: submission.approvedAt || submission.createdAt,
+                        description: description,
+                        debit: 0,
+                        credit: submission.amount,
+                        type: 'cash_submission'
+                      });
+                    });
+                  
+                  if (allLogEntries.length === 0) {
                     return (
-                      <TableRow key={item.id} hover>
-                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                          #{item.orderId}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textPrimary }}>
-                          {item.customerName || 'Guest'}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                          {formatCurrency(item.amount)}
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textSecondary }}>
-                          {formatDate(item.createdAt)}
+                      <TableRow>
+                        <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
+                          No data found
                         </TableCell>
                       </TableRow>
                     );
-                  } else if (activeTab === 0 || activeTab === 1 || activeTab === 2) {
+                  }
+                  
+                  // Sort by date (newest first) for display - like Driver App
+                  allLogEntries.sort((a, b) => new Date(b.date) - new Date(a.date));
+                  
+                  // Calculate running balance backwards from current total (like Driver App)
+                  // Start with current cash at hand - this is the balance after the newest transaction
+                  let balanceAfter = cashAtHand;
+                  
+                  // Paginate first
+                  const paginatedLogs = allLogEntries.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+                  
+                  // Calculate balance up to the first item in paginated results (going backwards from newest)
+                  // We need to work backwards from the newest transaction to find the starting balance for this page
+                  const firstItemIndex = page * rowsPerPage;
+                  for (let i = 0; i < firstItemIndex; i++) {
+                    // For each entry before the paginated section, subtract its effect
+                    // Debit increases balance, so balance before = balance after - debit
+                    // Credit decreases balance, so balance before = balance after + credit
+                    balanceAfter -= allLogEntries[i].debit;
+                    balanceAfter += allLogEntries[i].credit;
+                  }
+                  
+                  return paginatedLogs.map((entry) => {
+                    // balanceAfter is the balance after this transaction
+                    // Display this balance (it's the balance after the transaction)
+                    const displayBalance = Math.max(0, balanceAfter);
+                    
+                    // Calculate balance before this transaction for next iteration (going to older transactions)
+                    // Debit increases balance, so balance before = balance after - debit
+                    // Credit decreases balance, so balance before = balance after + credit
+                    balanceAfter -= entry.debit;
+                    balanceAfter += entry.credit;
+                    
+                    return (
+                      <TableRow key={entry.id} hover>
+                        <TableCell sx={{ color: colors.textSecondary }}>
+                          {formatDate(entry.date)}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {entry.description}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.error, fontWeight: 600 }} align="right">
+                          {entry.debit > 0 ? formatCurrency(entry.debit) : '—'}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">
+                          {entry.credit > 0 ? formatCurrency(entry.credit) : '—'}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }} align="right">
+                          {formatCurrency(displayBalance)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  });
+                })()}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          <TablePagination
+            component="div"
+            count={(() => {
+              // Calculate total count for pagination
+              const allLogEntries = [];
+              posOrders.forEach(order => {
+                allLogEntries.push({ id: `pos-${order.id}` });
+              });
+              transactions.filter(tx => tx.source === 'admin_cash_order' && tx.type === 'credit').forEach(tx => {
+                allLogEntries.push({ id: tx.id });
+              });
+              getApprovedDriverSubmissions.forEach(submission => {
+                allLogEntries.push({ id: `driver-submission-${submission.id}` });
+              });
+              submissions
+                .filter(s => s.status === 'approved' && s.admin !== null && !s.driver)
+                .forEach(submission => {
+                  allLogEntries.push({ id: `submission-${submission.id}` });
+                });
+              return allLogEntries.length;
+            })()}
+            page={page}
+            onPageChange={(event, newPage) => setPage(newPage)}
+            rowsPerPage={rowsPerPage}
+            onRowsPerPageChange={(event) => {
+              setRowsPerPage(parseInt(event.target.value, 10));
+              setPage(0);
+            }}
+            rowsPerPageOptions={[10, 25, 50, 100]}
+            sx={{
+              borderTop: `1px solid ${colors.border}`,
+              '& .MuiTablePagination-toolbar': {
+                color: colors.textPrimary
+              }
+            }}
+          />
+        </Paper>
+      )}
+
+      {/* Data Table for other tabs */}
+      {!(activeTab === 0 && allSubmissionsSubTab === 0) && !(activeTab === 0 && allSubmissionsSubTab === 1) && (
+        <Paper sx={{ backgroundColor: colors.paper }}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  {activeTab === 2 ? (
+                    <>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order ID</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Customer</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
+                    </>
+                  ) : (
+                    <>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Type</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Source</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Amount</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Status</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
+                      <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Actions</TableCell>
+                    </>
+                  )}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell 
+                      colSpan={activeTab === 2 ? 4 : 6} 
+                      sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}
+                    >
+                      No data found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedData.map((item) => {
+                    if (activeTab === 0 || activeTab === 1 || activeTab === 2) {
                     // Cash submissions
                     const isFromDriver = item.driver !== null;
                     const isAdminSubmission = item.admin !== null;
@@ -723,6 +1065,7 @@ const CashAtHand = () => {
           }}
         />
       </Paper>
+      )}
 
       {/* Create Cash Submission Dialog */}
       <Dialog

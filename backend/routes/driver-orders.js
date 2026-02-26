@@ -901,40 +901,52 @@ router.patch('/:orderId/status', async (req, res) => {
       canUpdateOrders: creditCheck.canUpdateOrders
     });
     
-    // Special check for "out_for_delivery" status: notify driver if cash at hand exceeds limit
-    if (status === 'out_for_delivery' && creditCheck.exceeded) {
-      console.log(`⚠️ [Cash At Hand Limit] Order #${orderId}: Driver ${driverId} attempting to update to 'out_for_delivery' with cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeding limit (KES ${creditCheck.creditLimit.toFixed(2)})`);
+    // Special check for "out_for_delivery" status: check pending cash at hand (effective cash at hand after pending submissions)
+    // Driver can update to "out_for_delivery" if pending cash at hand (after pending submissions are approved) is within limit
+    if (status === 'out_for_delivery') {
+      // Calculate pending cash at hand (effective cash at hand after pending submissions)
+      const pendingCashAtHand = creditCheck.effectiveCashAtHand;
       
-      // Send push notification to driver
-      const driver = await db.Driver.findByPk(driverId);
-      if (driver && driver.pushToken) {
-        try {
-          const pushNotifications = require('../services/pushNotifications');
-          const message = {
-            sound: 'default',
-            title: '⚠️ Cash At Hand Limit Exceeded',
-            body: `Your cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds your limit (KES ${creditCheck.creditLimit.toFixed(2)}). Please submit cash at hand to continue with deliveries.`,
-            data: {
-              type: 'cash_at_hand_limit_exceeded',
-              driverId: String(driverId),
-              cashAtHand: String(creditCheck.cashAtHand),
-              creditLimit: String(creditCheck.creditLimit),
+      // Check if pending cash at hand exceeds limit
+      const pendingExceeded = creditCheck.creditLimit > 0 
+        ? pendingCashAtHand > creditCheck.creditLimit 
+        : pendingCashAtHand > 0;
+      
+      if (pendingExceeded) {
+        console.log(`⚠️ [Cash At Hand Limit] Order #${orderId}: Driver ${driverId} attempting to update to 'out_for_delivery' with pending cash at hand (KES ${pendingCashAtHand.toFixed(2)}) exceeding limit (KES ${creditCheck.creditLimit.toFixed(2)})`);
+        
+        // Send push notification to driver
+        const driver = await db.Driver.findByPk(driverId);
+        if (driver && driver.pushToken) {
+          try {
+            const pushNotifications = require('../services/pushNotifications');
+            const message = {
+              sound: 'default',
+              title: '⚠️ Cash At Hand Limit Exceeded',
+              body: `Your pending cash at hand (KES ${pendingCashAtHand.toFixed(2)}) exceeds your limit (KES ${creditCheck.creditLimit.toFixed(2)}). Please submit cash at hand to continue with deliveries.`,
+              data: {
+                type: 'cash_at_hand_limit_exceeded',
+                driverId: String(driverId),
+                cashAtHand: String(pendingCashAtHand),
+                creditLimit: String(creditCheck.creditLimit),
+                channelId: 'cash-at-hand'
+              },
+              priority: 'high',
+              badge: 1,
               channelId: 'cash-at-hand'
-            },
-            priority: 'high',
-            badge: 1,
-            channelId: 'cash-at-hand'
-          };
-          await pushNotifications.sendFCMNotification(driver.pushToken, message);
-          console.log(`📤 Push notification sent to driver ${driver.name} about cash at hand limit`);
-        } catch (pushError) {
-          console.error(`❌ Error sending push notification:`, pushError);
+            };
+            await pushNotifications.sendFCMNotification(driver.pushToken, message);
+            console.log(`📤 Push notification sent to driver ${driver.name} about cash at hand limit`);
+          } catch (pushError) {
+            console.error(`❌ Error sending push notification:`, pushError);
+          }
         }
+        
+        // Block the update if pending cash at hand exceeds limit
+        return sendError(res, `Cannot update order to "Out for delivery": Your pending cash at hand (KES ${pendingCashAtHand.toFixed(2)}) exceeds your limit of KES ${creditCheck.creditLimit.toFixed(2)}. Please submit cash at hand to continue with deliveries.`, 403);
+      } else {
+        console.log(`✅ [Cash At Hand Limit] Order #${orderId}: Driver ${driverId} can update to 'out_for_delivery' - pending cash at hand (KES ${pendingCashAtHand.toFixed(2)}) is within limit (KES ${creditCheck.creditLimit.toFixed(2)})`);
       }
-      
-      // Still allow the update, but notify the driver
-      // The error message will inform them to submit cash at hand
-      return sendError(res, `Cannot update order to "Out for delivery": Your cash at hand (KES ${creditCheck.cashAtHand.toFixed(2)}) exceeds your limit of KES ${creditCheck.creditLimit.toFixed(2)}. Please submit cash at hand to continue with deliveries.`, 403);
     }
     
     // For other statuses, use the normal credit check

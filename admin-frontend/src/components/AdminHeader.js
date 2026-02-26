@@ -113,7 +113,7 @@ const AdminHeader = () => {
             startIcon={<AccountBalance />}
             sx={buttonStyle('/payables')}
           >
-            Payables
+            Purchases
           </Button>
           <Button
             color="inherit"

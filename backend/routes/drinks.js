@@ -50,12 +50,12 @@ router.get('/', async (req, res) => {
       const drinks = await Promise.race([
         db.Drink.findAll({
           where: whereClause,
-          attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'],
+          attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'],
           include: [{
             model: db.Category,
             as: 'category',
             required: false,
-            attributes: ['id', 'name', 'description', 'image', 'isActive']
+            attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive']
           }, {
             model: db.Brand,
             as: 'brand',
@@ -190,17 +190,32 @@ router.get('/barcode/:barcode', async (req, res) => {
 });
 
 // Get detailed product description (must be before /:id route)
+// Supports both numeric ID and slug
 router.get('/:id/detailed-description', async (req, res) => {
   try {
-    const drink = await db.Drink.findByPk(req.params.id, {
-      include: [{
-        model: db.Category,
-        as: 'category'
-      }, {
-        model: db.SubCategory,
-        as: 'subCategory'
-      }]
-    });
+    const identifier = req.params.id;
+    const isNumeric = /^\d+$/.test(identifier);
+    
+    const drink = isNumeric
+      ? await db.Drink.findByPk(identifier, {
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }, {
+            model: db.SubCategory,
+            as: 'subCategory'
+          }]
+        })
+      : await db.Drink.findOne({
+          where: { slug: identifier },
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }, {
+            model: db.SubCategory,
+            as: 'subCategory'
+          }]
+        });
     
     if (!drink) {
       return res.status(404).json({ error: 'Drink not found' });
@@ -229,17 +244,32 @@ router.get('/:id/detailed-description', async (req, res) => {
 });
 
 // Get testing notes for a product (must be before /:id route)
+// Supports both numeric ID and slug
 router.get('/:id/testing-notes', async (req, res) => {
   try {
-    const drink = await db.Drink.findByPk(req.params.id, {
-      include: [{
-        model: db.Category,
-        as: 'category'
-      }, {
-        model: db.SubCategory,
-        as: 'subCategory'
-      }]
-    });
+    const identifier = req.params.id;
+    const isNumeric = /^\d+$/.test(identifier);
+    
+    const drink = isNumeric
+      ? await db.Drink.findByPk(identifier, {
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }, {
+            model: db.SubCategory,
+            as: 'subCategory'
+          }]
+        })
+      : await db.Drink.findOne({
+          where: { slug: identifier },
+          include: [{
+            model: db.Category,
+            as: 'category'
+          }, {
+            model: db.SubCategory,
+            as: 'subCategory'
+          }]
+        });
     
     if (!drink) {
       return res.status(404).json({ error: 'Drink not found' });
@@ -267,30 +297,80 @@ router.get('/:id/testing-notes', async (req, res) => {
   }
 });
 
-// Get drink by ID (must be after /:id/detailed-description and /:id/testing-notes routes)
+// Get drink by ID or slug (must be after /:id/detailed-description and /:id/testing-notes routes)
+// This route handles old /product/:id URLs and redirects to category-based URLs
 router.get('/:id', async (req, res) => {
   try {
-    const drink = await db.Drink.findByPk(req.params.id, {
-      attributes: [
-        'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
-        'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-        'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
-      ],
-      include: [{
-        model: db.Category,
-        as: 'category',
-        attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
-        required: false
-      }]
-    });
+    const identifier = req.params.id;
+    const isNumeric = /^\d+$/.test(identifier);
     
-    if (!drink) {
-      return res.status(404).json({ error: 'Drink not found' });
+    let drink;
+    
+    if (isNumeric) {
+      // Old format: numeric ID - fetch by ID and redirect to category-based URL
+      drink = await db.Drink.findByPk(identifier, {
+        attributes: [
+          'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+          'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+          'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'
+        ],
+        include: [{
+          model: db.Category,
+          as: 'category',
+          attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
+          required: false
+        }]
+      });
+      
+      if (!drink) {
+        return res.status(404).json({ error: 'Drink not found' });
+      }
+      
+      // If drink has a slug and category has a slug, redirect to category-based URL (301 Permanent Redirect)
+      if (drink.slug && drink.category?.slug) {
+        // Preserve query parameters if any
+        const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+        // Redirect to category-based URL: /{categorySlug}/{productSlug}
+        const newUrl = `/${drink.category.slug}/${drink.slug}${queryString}`;
+        return res.redirect(301, newUrl);
+      }
+      
+      // If no slug exists yet, return the drink (will be handled by frontend)
+      // This should not happen after migration, but handle gracefully
+      return res.json(drink);
+    } else {
+      // Old format: /product/{slug} - redirect to category-based URL
+      drink = await db.Drink.findOne({
+        where: { slug: identifier },
+        attributes: [
+          'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+          'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+          'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'
+        ],
+        include: [{
+          model: db.Category,
+          as: 'category',
+          attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
+          required: false
+        }]
+      });
+      
+      if (!drink) {
+        return res.status(404).json({ error: 'Drink not found' });
+      }
+      
+      // Redirect to category-based URL (301 Permanent Redirect)
+      if (drink.category?.slug) {
+        const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+        const newUrl = `/${drink.category.slug}/${drink.slug}${queryString}`;
+        return res.redirect(301, newUrl);
+      }
+      
+      // Return the drink if category slug is missing
+      res.json(drink);
     }
-    
-    res.json(drink);
   } catch (error) {
-    console.error('❌ Error fetching drink by ID:', error);
+    console.error('❌ Error fetching drink:', error);
     if (!res.headersSent) {
       res.status(500).json({ 
         error: 'Failed to fetch drink',

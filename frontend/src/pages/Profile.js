@@ -392,7 +392,7 @@ const Profile = () => {
           onClick={() => navigate('/orders')}
           sx={{ flex: 1, minWidth: '150px' }}
         >
-          View My Orders
+          Track My Orders
         </Button>
         <Button
           variant="outlined"

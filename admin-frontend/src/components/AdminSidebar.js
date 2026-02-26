@@ -59,7 +59,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
     { path: '/orders', label: 'Orders', icon: Receipt, badge: pendingOrdersCount },
     { path: '/transactions', label: 'Transactions', icon: Receipt },
     { path: '/inventory', label: 'Inventory', icon: Inventory, badge: pendingInventoryChecksCount },
-    { path: '/payables', label: 'Payables', icon: AccountBalance },
+    { path: '/payables', label: 'Purchases', icon: AccountBalance },
     { path: '/cash-at-hand', label: 'Cash at Hand', icon: AttachMoney, badge: pendingSubmissionsCount },
     // { path: '/pos', label: 'POS', icon: PointOfSale }, // Removed
     { path: '/admin/customers', label: 'Customers', icon: People },

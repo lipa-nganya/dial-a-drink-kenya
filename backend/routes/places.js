@@ -29,6 +29,8 @@ router.post('/autocomplete', async (req, res) => {
     // Database will be checked in parallel for exact/starts-with matches only
     if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY.trim() === '') {
       console.error('⚠️  GOOGLE_MAPS_API_KEY is not configured in environment variables');
+      console.error('   Checked: process.env.GOOGLE_MAPS_API_KEY =', process.env.GOOGLE_MAPS_API_KEY ? 'SET (hidden)' : 'NOT SET');
+      console.error('   Checked: process.env.REACT_APP_GOOGLE_MAPS_API_KEY =', process.env.REACT_APP_GOOGLE_MAPS_API_KEY ? 'SET (hidden)' : 'NOT SET');
       // Return empty suggestions instead of 500 error - allows manual typing
       return res.json({ 
         suggestions: [],
@@ -44,21 +46,23 @@ router.post('/autocomplete', async (req, res) => {
       const legacyUrl = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(input)}&key=${GOOGLE_MAPS_API_KEY}&components=country:ke&types=geocode|establishment`;
       
       const legacyResponse = await fetch(legacyUrl);
-      
-      if (legacyResponse.ok) {
         const legacyData = await legacyResponse.json();
         
-        if (legacyData && legacyData.predictions) {
+      // Check for API errors in response
+      if (legacyData.status && legacyData.status !== 'OK' && legacyData.status !== 'ZERO_RESULTS') {
+        console.error('⚠️  Google Places Autocomplete API error:', legacyData.status, legacyData.error_message || '');
+        // Continue even if Google fails - will check database
+      } else if (legacyData && legacyData.predictions) {
           googleSuggestions = legacyData.predictions.map(pred => ({
             placeId: pred.place_id,
             description: pred.description,
             structuredFormat: pred.structured_formatting,
             fromDatabase: false
           }));
-        }
       }
     } catch (googleError) {
-      console.error('Places API failed:', googleError.message);
+      console.error('❌ Places API failed:', googleError.message);
+      console.error('   Stack:', googleError.stack);
       // Continue even if Google fails - will check database
     }
 

@@ -11,12 +11,14 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
+import com.dialadrink.driver.data.model.CapacityPricing
 import com.dialadrink.driver.data.model.PosProduct
 import com.dialadrink.driver.data.model.PosCartItem
 import com.dialadrink.driver.databinding.ActivityPosProductListBinding
@@ -196,6 +198,60 @@ class PosProductListActivity : AppCompatActivity() {
             return
         }
 
+        // Check if product has multiple capacities with pricing
+        // Handle both 'capacity' and 'size' field names, and 'price' field
+        val capacitiesWithPricing = product.capacityPricing
+            ?.filter { 
+                val cap = it.effectiveCapacity
+                val price = it.effectivePrice ?: 0.0
+                cap != null && cap.isNotBlank() && price > 0
+            }
+            ?.distinctBy { it.effectiveCapacity } // Deduplicate by capacity
+            ?: emptyList()
+
+        if (capacitiesWithPricing.size > 1) {
+            // Show capacity selection dialog
+            showCapacitySelectionDialog(product, capacitiesWithPricing, availableStock)
+        } else {
+            // Single capacity or no capacity pricing - add directly
+            addProductToCart(product, availableStock, null, null)
+        }
+    }
+
+    private fun showCapacitySelectionDialog(
+        product: PosProduct,
+        capacities: List<CapacityPricing>,
+        availableStock: Int
+    ) {
+        val capacityOptions = capacities.map { pricing ->
+            val capacity = pricing.effectiveCapacity ?: ""
+            val price = pricing.effectivePrice ?: 0.0
+            "$capacity | KES ${price.toInt()}"
+        }.toTypedArray()
+
+        val selectedIndex = intArrayOf(0) // Default to first option
+
+        AlertDialog.Builder(this)
+            .setTitle("Select Capacity & Price")
+            .setSingleChoiceItems(capacityOptions, 0) { _, which ->
+                selectedIndex[0] = which
+            }
+            .setPositiveButton("Add to Cart") { _, _ ->
+                val selectedPricing = capacities[selectedIndex[0]]
+                val selectedCapacity = selectedPricing.effectiveCapacity ?: ""
+                val selectedPrice = selectedPricing.effectivePrice ?: product.price
+                addProductToCart(product, availableStock, selectedCapacity, selectedPrice)
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun addProductToCart(
+        product: PosProduct,
+        availableStock: Int,
+        selectedCapacity: String?,
+        selectedPrice: Double?
+    ) {
         val existingItem = cart.find { it.drinkId == product.id }
         
         if (existingItem != null) {
@@ -206,11 +262,22 @@ class PosProductListActivity : AppCompatActivity() {
             }
             existingItem.quantity++
         } else {
+            // Determine capacity and price
+            val cartCapacity = selectedCapacity ?: run {
+                if (product.capacityDisplayList.isNotEmpty()) {
+                    product.capacityDisplayList.firstOrNull()?.split(" | ")?.firstOrNull() ?: product.capacityDisplay
+                } else {
+                    product.capacityDisplay
+                }
+            }
+            
+            val cartPrice = selectedPrice ?: product.price
+            
             cart.add(PosCartItem(
                 drinkId = product.id,
                 name = product.name,
-                capacity = product.capacityDisplay,
-                price = product.price,
+                capacity = cartCapacity,
+                price = cartPrice,
                 quantity = 1,
                 availableStock = availableStock,
                 purchasePrice = product.purchasePrice
@@ -341,7 +408,24 @@ class PosProductListActivity : AppCompatActivity() {
         override fun onBindViewHolder(holder: ViewHolder, position: Int) {
             val product = items[position]
             holder.productNameText.text = product.name
-            holder.capacityText.text = "Capacity: ${product.capacityDisplay ?: "N/A"}"
+            
+            // Display capacities with pricing (only shows capacities that have prices)
+            // Each capacity on a separate line with format: "capacity | KES price"
+            val capacityDisplayList = product.capacityDisplayList
+            if (capacityDisplayList.isNotEmpty()) {
+                holder.capacityText.text = capacityDisplayList.joinToString("\n")
+                holder.capacityText.visibility = android.view.View.VISIBLE
+            } else {
+                // Fallback to simple capacity list if no pricing available
+                val simpleCapacity = product.capacity?.joinToString(", ")
+                if (simpleCapacity != null) {
+                    holder.capacityText.text = simpleCapacity
+                    holder.capacityText.visibility = android.view.View.VISIBLE
+                } else {
+                    holder.capacityText.visibility = android.view.View.GONE
+                }
+            }
+            
             holder.quantityText.text = "${product.stock ?: 0}"
             holder.priceText.text = currencyFormatter.format(product.price)
             

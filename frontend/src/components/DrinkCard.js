@@ -14,7 +14,12 @@ import {
   FormControlLabel,
   FormControl,
   IconButton,
-  Tooltip
+  Tooltip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Snackbar
 } from '@mui/material';
 import {
   AddShoppingCart,
@@ -22,13 +27,16 @@ import {
   Cancel,
   LocalOffer,
   LocalBar,
-  Share
+  Share,
+  WhatsApp,
+  Twitter,
+  Facebook,
+  ContentCopy
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getBackendUrl } from '../utils/backendUrl';
-import { shareProduct } from '../utils/generateShareImage';
 
 const DrinkCard = ({ drink }) => {
   const navigate = useNavigate();
@@ -36,6 +44,9 @@ const DrinkCard = ({ drink }) => {
   const { colors } = useTheme();
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   // Helper function to get full image URL
   const getImageUrl = (imagePath) => {
@@ -131,15 +142,89 @@ const DrinkCard = ({ drink }) => {
   };
 
   const handleCardClick = () => {
-    navigate(`/product/${drink.id}`);
+    // Use category-based URL if both category and product slugs are available
+    if (drink.category?.slug && drink.slug) {
+      navigate(`/${drink.category.slug}/${drink.slug}`);
+    } else if (drink.slug) {
+      // Fallback to old format if category slug is missing
+      navigate(`/product/${drink.slug}`);
+    } else {
+      // Last resort: use ID
+      navigate(`/product/${drink.id}`);
+    }
   };
 
-  const handleShare = async (e) => {
+  // Get product URL for sharing
+  const getProductUrl = () => {
+    if (drink.category?.slug && drink.slug) {
+      return `${window.location.origin}/${drink.category.slug}/${drink.slug}`;
+    } else if (drink.slug) {
+      return `${window.location.origin}/product/${drink.slug}`;
+    } else {
+      return `${window.location.origin}/product/${drink.id}`;
+    }
+  };
+
+  // Get share text
+  const getShareText = () => {
+    const brandName = typeof drink.brand === 'object' && drink.brand !== null 
+      ? drink.brand.name 
+      : (drink.brand || drink.name);
+    const price = selectedCapacity 
+      ? getPriceForCapacity(selectedCapacity) 
+      : (drink.price || 0);
+    return `Check out ${drink.name} at Dial A Drink Kenya! ${brandName ? `(${brandName})` : ''} - KES ${Math.round(price)}`;
+  };
+
+  // Handle share menu open
+  const handleShareClick = (e) => {
     e.stopPropagation(); // Prevent card click when clicking share
+    setShareMenuAnchor(e.currentTarget);
+  };
+
+  // Handle share menu close
+  const handleShareMenuClose = () => {
+    setShareMenuAnchor(null);
+  };
+
+  // Share on WhatsApp
+  const handleShareWhatsApp = () => {
+    const url = getProductUrl();
+    const text = getShareText();
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`;
+    window.open(whatsappUrl, '_blank');
+    handleShareMenuClose();
+  };
+
+  // Share on Twitter/X
+  const handleShareTwitter = () => {
+    const url = getProductUrl();
+    const text = getShareText();
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    window.open(twitterUrl, '_blank');
+    handleShareMenuClose();
+  };
+
+  // Share on Facebook
+  const handleShareFacebook = () => {
+    const url = getProductUrl();
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+    window.open(facebookUrl, '_blank');
+    handleShareMenuClose();
+  };
+
+  // Copy link to clipboard
+  const handleCopyLink = async () => {
     try {
-      await shareProduct(drink);
+      const url = getProductUrl();
+      await navigator.clipboard.writeText(url);
+      setSnackbarMessage('Link copied to clipboard!');
+      setSnackbarOpen(true);
+      handleShareMenuClose();
     } catch (error) {
-      console.error('Error sharing product:', error);
+      console.error('Error copying link:', error);
+      setSnackbarMessage('Failed to copy link');
+      setSnackbarOpen(true);
     }
   };
 
@@ -419,10 +504,10 @@ const DrinkCard = ({ drink }) => {
              </CardContent>
 
              <CardActions sx={{ p: 0, px: { xs: 0.5, sm: 1 }, pb: { xs: 0.5, sm: 1 }, pt: 0, display: 'flex', gap: 0.5 }}>
-        <Tooltip title="Share on social media">
+        <Tooltip title="Share">
           <IconButton
             size="small"
-            onClick={handleShare}
+            onClick={handleShareClick}
             sx={{
               color: colors.accentText || '#FF6B6B',
               '&:hover': {
@@ -457,6 +542,55 @@ const DrinkCard = ({ drink }) => {
           Buy Now
         </Button>
       </CardActions>
+
+      {/* Share Menu */}
+      <Menu
+        anchorEl={shareMenuAnchor}
+        open={Boolean(shareMenuAnchor)}
+        onClose={handleShareMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+      >
+        <MenuItem onClick={handleShareWhatsApp}>
+          <ListItemIcon>
+            <WhatsApp fontSize="small" sx={{ color: '#25D366' }} />
+          </ListItemIcon>
+          <ListItemText>Share on WhatsApp</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleShareTwitter}>
+          <ListItemIcon>
+            <Twitter fontSize="small" sx={{ color: '#1DA1F2' }} />
+          </ListItemIcon>
+          <ListItemText>Share on Twitter (X)</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleShareFacebook}>
+          <ListItemIcon>
+            <Facebook fontSize="small" sx={{ color: '#1877F2' }} />
+          </ListItemIcon>
+          <ListItemText>Share on Facebook</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleCopyLink}>
+          <ListItemIcon>
+            <ContentCopy fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Copy Link</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Snackbar for copy link feedback */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Card>
   );
 };

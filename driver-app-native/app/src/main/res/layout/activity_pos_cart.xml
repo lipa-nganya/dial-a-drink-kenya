@@ -123,6 +123,17 @@
                 android:textSize="16sp"
                 android:visibility="gone" />
 
+            <!-- Send SMS Notification Checkbox -->
+            <com.google.android.material.checkbox.MaterialCheckBox
+                android:id="@+id/sendSmsCheckbox"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                android:text="Send SMS notification to customer"
+                android:textColor="@color/text_primary_dark"
+                android:textSize="16sp"
+                android:checked="true" />
+
             <!-- Cart Items List -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/cartItemsRecyclerView"
@@ -225,7 +236,7 @@
                     android:textColorHint="#FFFFFF"
                     android:minHeight="56dp"
                     android:padding="16dp"
-                    android:completionThreshold="2" />
+                    android:completionThreshold="1" />
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Territory Dropdown -->

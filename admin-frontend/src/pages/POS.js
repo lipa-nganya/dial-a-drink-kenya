@@ -20,7 +20,11 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  FormControl,
+  FormControlLabel,
+  RadioGroup,
+  Radio
 } from '@mui/material';
 import {
   Add,
@@ -56,6 +60,7 @@ const POS = () => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [productQty, setProductQty] = useState(1);
   const [productPrice, setProductPrice] = useState('');
+  const [selectedCapacity, setSelectedCapacity] = useState('');
   
   // Cart/Items
   const [items, setItems] = useState([]);
@@ -77,7 +82,28 @@ const POS = () => {
         api.get('/admin/customers').catch(() => ({ data: { customers: [] } }))
       ]);
       
-      setDrinks(drinksResponse.data || []);
+      // Handle POS endpoint response format: { products: [...], total, ... }
+      // or regular drinks endpoint: [...]
+      const drinksData = drinksResponse.data;
+      const drinksArray = Array.isArray(drinksData) 
+        ? drinksData 
+        : (drinksData?.products || []);
+      
+      // Debug logging to verify data structure
+      console.log('[POS] Drinks response:', {
+        isArray: Array.isArray(drinksData),
+        hasProducts: !!drinksData?.products,
+        productsLength: drinksData?.products?.length || 0,
+        drinksArrayLength: drinksArray.length,
+        firstDrink: drinksArray[0] ? {
+          id: drinksArray[0].id,
+          name: drinksArray[0].name,
+          hasCapacityPricing: !!drinksArray[0].capacityPricing,
+          capacityPricing: drinksArray[0].capacityPricing
+        } : null
+      });
+      
+      setDrinks(drinksArray);
       setAccounts(accountsResponse.data || []);
       
       // Handle paginated response from /admin/customers
@@ -178,12 +204,36 @@ const POS = () => {
   const handleProductSelect = (product) => {
     if (product) {
       setSelectedProduct(product);
-      setProductPrice(product.price || '');
+      // Set default capacity and price if capacityPricing exists
+      if (Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0) {
+        const firstPricing = product.capacityPricing[0];
+        const defaultPrice = parseFloat(firstPricing.currentPrice) || parseFloat(firstPricing.originalPrice) || parseFloat(firstPricing.price) || parseFloat(product.price) || 0;
+        setSelectedCapacity((firstPricing.capacity || firstPricing.size || '').trim());
+        setProductPrice(defaultPrice.toString());
+      } else {
+        setSelectedCapacity('');
+        setProductPrice(product.price || '');
+      }
       setProductQty(1);
     } else {
       setSelectedProduct(null);
       setProductPrice('');
+      setSelectedCapacity('');
       setProductQty(1);
+    }
+  };
+
+  const handleCapacityChange = (capacity) => {
+    setSelectedCapacity(capacity);
+    if (selectedProduct && Array.isArray(selectedProduct.capacityPricing)) {
+      const pricing = selectedProduct.capacityPricing.find(p => {
+        const pCapacity = (p.capacity || p.size || '').trim();
+        return pCapacity === capacity;
+      });
+      if (pricing) {
+        const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || parseFloat(selectedProduct.price) || 0;
+        setProductPrice(price.toString());
+      }
     }
   };
 
@@ -650,6 +700,63 @@ const POS = () => {
                         setSelectedProduct(null);
                       }
                     }}
+                    renderOption={(props, option) => {
+                      // Get capacities with pricing - only show capacities that have a price
+                      const capacitiesWithPricing = [];
+                      
+                      if (Array.isArray(option.capacityPricing) && option.capacityPricing.length > 0) {
+                        option.capacityPricing.forEach(pricing => {
+                          if (!pricing || typeof pricing !== 'object') return;
+                          
+                          const capacity = pricing.capacity;
+                          // Backend stores currentPrice and originalPrice - use currentPrice first, fallback to originalPrice
+                          // Handle both string and number types
+                          const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+                          const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+                          const price = (currentPrice != null && !isNaN(currentPrice) && currentPrice > 0) 
+                            ? currentPrice 
+                            : (originalPrice != null && !isNaN(originalPrice) && originalPrice > 0) 
+                              ? originalPrice 
+                              : 0;
+                          
+                          if (capacity && typeof capacity === 'string' && capacity.trim() && price > 0) {
+                            capacitiesWithPricing.push({
+                              capacity: capacity.trim(),
+                              price: price
+                            });
+                          }
+                        });
+                      }
+                      
+                      return (
+                        <li key={option.id} {...props}>
+                          <Box>
+                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                              {option.name}
+                            </Typography>
+                            {capacitiesWithPricing.length > 0 && (
+                              <Box sx={{ mt: 0.5 }}>
+                                {capacitiesWithPricing.map((cap, idx) => (
+                                  <Typography 
+                                    key={idx} 
+                                    variant="caption" 
+                                    color="text.secondary" 
+                                    sx={{ display: 'block' }}
+                                  >
+                                    {cap.capacity} | {Math.round(cap.price)}
+                                  </Typography>
+                                ))}
+                              </Box>
+                            )}
+                            {capacitiesWithPricing.length === 0 && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                KES {Math.round(parseFloat(option.price || 0))}
+                              </Typography>
+                            )}
+                          </Box>
+                        </li>
+                      );
+                    }}
                     renderInput={(params) => (
                       <TextField
                         {...params}
@@ -769,6 +876,98 @@ const POS = () => {
                   </Button>
                 </TableCell>
               </TableRow>
+              {/* Capacity Selection Row */}
+              {selectedProduct && Array.isArray(selectedProduct.capacityPricing) && selectedProduct.capacityPricing.length > 0 && (
+                <TableRow>
+                  <TableCell colSpan={4}>
+                    <Box sx={{ py: 2 }}>
+                      <Typography variant="body2" sx={{ mb: 1.5, color: colors.textPrimary, fontWeight: 600 }}>
+                        Select Capacity & Price:
+                      </Typography>
+                      <FormControl component="fieldset" sx={{ width: '100%' }}>
+                        <RadioGroup
+                          value={selectedCapacity}
+                          onChange={(e) => handleCapacityChange(e.target.value)}
+                          row
+                          sx={{ gap: 2, flexWrap: 'wrap' }}
+                        >
+                          {(() => {
+                            // Deduplicate by capacity, keeping the first occurrence, and filter by valid price
+                            const seen = new Set();
+                            const uniquePricing = selectedProduct.capacityPricing
+                              .filter(pricing => {
+                                if (!pricing || typeof pricing !== 'object') return false;
+                                // Handle both 'capacity' and 'size' field names
+                                const capacity = pricing.capacity || pricing.size;
+                                if (!capacity || typeof capacity !== 'string' || !capacity.trim()) return false;
+                                
+                                // Handle both 'currentPrice'/'originalPrice' and 'price' field names
+                                const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+                                const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+                                const priceField = pricing.price != null ? parseFloat(pricing.price) : null;
+                                const price = (currentPrice != null && !isNaN(currentPrice) && currentPrice > 0) 
+                                  ? currentPrice 
+                                  : (originalPrice != null && !isNaN(originalPrice) && originalPrice > 0) 
+                                    ? originalPrice 
+                                    : (priceField != null && !isNaN(priceField) && priceField > 0)
+                                      ? priceField
+                                      : 0;
+                                
+                                // Only include if price > 0
+                                if (price <= 0) return false;
+                                
+                                const capacityKey = capacity.trim();
+                                if (seen.has(capacityKey)) return false;
+                                seen.add(capacityKey);
+                                return true;
+                              });
+                            
+                            return uniquePricing.map((pricing, index) => {
+                              const capacity = (pricing.capacity || pricing.size || '').trim();
+                              const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || 0;
+                              
+                              return (
+                                <FormControlLabel
+                                  key={`${selectedProduct.id}-${capacity}-${index}`}
+                                  value={capacity}
+                                  control={
+                                    <Radio
+                                      sx={{
+                                        color: colors.textPrimary,
+                                        '&.Mui-checked': { color: colors.accentText }
+                                      }}
+                                    />
+                                  }
+                                  label={
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                      <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 'bold' }}>
+                                        {capacity}
+                                      </Typography>
+                                      <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold' }}>
+                                        KES {Math.round(price)}
+                                      </Typography>
+                                    </Box>
+                                  }
+                                  sx={{
+                                    border: `1px solid ${colors.border}`,
+                                    borderRadius: 1,
+                                    backgroundColor: selectedCapacity === capacity ? (isDarkMode ? 'rgba(0, 224, 184, 0.2)' : 'rgba(0, 224, 184, 0.1)') : 'transparent',
+                                    px: 2,
+                                    py: 0.5,
+                                    '&:hover': {
+                                      backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.04)'
+                                    }
+                                  }}
+                                />
+                              );
+                            });
+                          })()}
+                        </RadioGroup>
+                      </FormControl>
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </TableContainer>

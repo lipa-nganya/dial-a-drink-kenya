@@ -222,6 +222,14 @@ router.get('/ipn', async (req, res) => {
     const paymentStatus = statusResponse.payment_status_description || statusResponse.payment_status;
     const isPaid = paymentStatus === 'COMPLETED' || paymentStatus === 'completed';
 
+    // Log full status response for debugging
+    console.log('📊 Full PesaPal status response for Order #' + order.id + ':', JSON.stringify(statusResponse, null, 2));
+    console.log('   payment_status_description:', statusResponse.payment_status_description);
+    console.log('   payment_status:', statusResponse.payment_status);
+    console.log('   payment_method:', statusResponse.payment_method);
+    console.log('   payment_method_description:', statusResponse.payment_method_description);
+    console.log('   isPaid:', isPaid);
+
     if (isPaid) {
       // Payment completed
       const receiptNumber = statusResponse.payment_method || statusResponse.payment_method_description || statusResponse.payment_reference || `PESAPAL-${OrderTrackingId}`;

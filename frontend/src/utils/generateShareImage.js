@@ -231,7 +231,9 @@ export const shareProduct = async (product) => {
           title: `${product.name} - Dial A Drink Kenya`,
           text: `Check out ${product.name} at Dial A Drink Kenya! ${getPriceText(product)}`,
           files: [file],
-          url: `${window.location.origin}/product/${product.id}`
+          url: product.category?.slug && product.slug
+            ? `${window.location.origin}/${product.category.slug}/${product.slug}`
+            : `${window.location.origin}/product/${product.slug || product.id}`
         });
         return;
       } catch (error) {

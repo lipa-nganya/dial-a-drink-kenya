@@ -24,12 +24,16 @@ const Home = () => {
   const [drinks, setDrinks] = useState([]);
   const [drinksLoading, setDrinksLoading] = useState(true);
   const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
+  const [heroImageUrl, setHeroImageUrl] = useState(null); // Store the base URL to detect changes
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(0);
   const [subcategories, setSubcategories] = useState([]);
   const [selectedSubcategory, setSelectedSubcategory] = useState(0);
   const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
   const [brandFocusLoading, setBrandFocusLoading] = useState(true);
+  const [limitedTimeOffers, setLimitedTimeOffers] = useState([]);
+  const [limitedTimeOffersLoading, setLimitedTimeOffersLoading] = useState(true);
+  const [countdownActive, setCountdownActive] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
   const navigate = useNavigate();
@@ -41,6 +45,29 @@ const Home = () => {
     fetchHeroImage();
     fetchDrinks();
     fetchBrandFocusDrinks();
+    fetchLimitedTimeOffers();
+  }, []);
+
+  // Refetch hero image when page becomes visible (user switches back to tab)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchHeroImage();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Also refetch periodically (every 5 minutes) to catch updates
+    const intervalId = setInterval(() => {
+      fetchHeroImage();
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Scroll detection for collapsing categories and fixing search (throttled to avoid stutter)
@@ -129,10 +156,32 @@ const Home = () => {
 
   const fetchHeroImage = async () => {
     try {
-      const response = await api.get('/settings/heroImage');
+      // Add cache-busting query parameter to prevent browser caching of API response
+      const response = await api.get('/settings/heroImage', {
+        params: { _t: Date.now() }
+      });
       if (response.data && response.data.value) {
         const imageUrl = getImageUrl(response.data.value);
-        setHeroImage(imageUrl);
+        
+        // Use functional update to access current state
+        setHeroImageUrl((currentUrl) => {
+          // Only add cache-busting if the URL has changed (new image uploaded)
+          // This prevents unnecessary reloads while ensuring new images are fetched
+          const urlChanged = currentUrl !== imageUrl;
+          if (urlChanged) {
+            // Add cache-busting to force browser to fetch new image
+            const separator = imageUrl.includes('?') ? '&' : '?';
+            const cacheBustedUrl = `${imageUrl}${separator}_v=${Date.now()}`;
+            setHeroImage(cacheBustedUrl);
+            return imageUrl;
+          } else if (!currentUrl) {
+            // First load - set the URL without cache-busting (browser can cache it)
+            setHeroImage(imageUrl);
+            return imageUrl;
+          }
+          // If URL hasn't changed, keep existing heroImage to avoid unnecessary reloads
+          return currentUrl;
+        });
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
@@ -216,6 +265,33 @@ const Home = () => {
     }
   };
 
+  const fetchLimitedTimeOffers = async () => {
+    try {
+      setLimitedTimeOffersLoading(true);
+      // Check if countdown is active
+      const countdownResponse = await api.get('/countdown/current');
+      const countdownData = countdownResponse.data;
+      
+      if (!countdownData?.active) {
+        setCountdownActive(false);
+        setLimitedTimeOffers([]);
+        return;
+      }
+      
+      setCountdownActive(true);
+      
+      // Fetch limited time offers
+      const response = await api.get('/drinks/offers');
+      setLimitedTimeOffers(Array.isArray(response.data) ? response.data : []);
+    } catch (error) {
+      console.error('Error fetching limited time offers:', error);
+      setLimitedTimeOffers([]);
+      setCountdownActive(false);
+    } finally {
+      setLimitedTimeOffersLoading(false);
+    }
+  };
+
   const normalizedSearch = searchTerm.trim().toLowerCase();
   let filteredDrinks = normalizedSearch
     ? drinks.filter((drink) => {
@@ -295,27 +371,6 @@ const Home = () => {
               }}
             />
           </Box>
-          <Button
-            variant="contained"
-            size="medium"
-            sx={{
-              backgroundColor: '#00E0B8',
-              color: '#0D0D0D',
-              px: { xs: 2.5, sm: 3 },
-              py: { xs: 1, sm: 1.25 },
-              fontSize: { xs: '0.8rem', sm: '0.9rem' },
-              fontWeight: 600,
-              mb: 2,
-              '&:hover': {
-                backgroundColor: '#00C4A3',
-                transform: 'translateY(-2px)',
-                boxShadow: '0 4px 12px rgba(0, 224, 184, 0.3)'
-              }
-            }}
-            onClick={() => navigate('/offers')}
-          >
-            Limited Offers
-          </Button>
 
           {/* Search Bar - Fixed when scrolling */}
           <Box
@@ -571,6 +626,57 @@ const Home = () => {
             )}
           </Box>
 
+          {/* Limited Time Offers Section */}
+          {countdownActive && limitedTimeOffers.length > 0 && (
+            <Box sx={{ mt: 6, mb: 4 }}>
+              <Typography 
+                variant="h4" 
+                component="h2" 
+                textAlign="center" 
+                gutterBottom
+                sx={{ 
+                  fontSize: { xs: '1.75rem', sm: '2.125rem' },
+                  mb: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 1
+                }}
+              >
+                Limited Time Offers
+              </Typography>
+              
+              {limitedTimeOffersLoading ? (
+                <Typography textAlign="center">Loading limited time offers...</Typography>
+              ) : (
+                <Box sx={{ 
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'repeat(2, 1fr)',
+                    sm: 'repeat(2, 1fr)',
+                    md: 'repeat(3, 1fr)',
+                    lg: 'repeat(4, 1fr)'
+                  },
+                  gap: { xs: 1, sm: 2 },
+                  width: '100%'
+                }}>
+                  {[...limitedTimeOffers].sort((a, b) => {
+                    // First sort by availability (available items first)
+                    if (a.isAvailable !== b.isAvailable) {
+                      return b.isAvailable ? 1 : -1;
+                    }
+                    // Then sort by name alphabetically
+                    const nameA = (a.name || '').toLowerCase();
+                    const nameB = (b.name || '').toLowerCase();
+                    return nameA.localeCompare(nameB);
+                  }).map((drink) => (
+                    <DrinkCard key={drink.id} drink={drink} />
+                  ))}
+                </Box>
+              )}
+            </Box>
+          )}
+
           {/* Popular Drinks Section */}
           <Box sx={{ mt: 6, mb: 4 }}>
             <Typography 
@@ -639,63 +745,69 @@ const Home = () => {
           </Box>
 
           {/* Brand Focus Section */}
-          {brandFocusDrinks.length > 0 && (
-            <Box sx={{ mt: 6, mb: 4 }}>
-              <Typography 
-                variant="h4" 
-                component="h2" 
-                textAlign="center" 
-                gutterBottom
-                sx={{ 
-                  fontSize: { xs: '1.75rem', sm: '2.125rem' },
-                  mb: 4,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 1
-                }}
-              >
-                <Star sx={{ color: '#FFA500' }} />
-                Brand Focus
-              </Typography>
-              
-              {brandFocusLoading ? (
-                <Typography textAlign="center">Loading brand focus items...</Typography>
-              ) : (
-                (() => {
-                  // Sort: available items first, then by name
-                  const sortedBrandFocusDrinks = [...brandFocusDrinks].sort((a, b) => {
-                    // First sort by availability (available items first)
-                    if (a.isAvailable !== b.isAvailable) {
-                      return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
-                    }
-                    // Then sort by name alphabetically
-                    const nameA = (a.name || '').toLowerCase();
-                    const nameB = (b.name || '').toLowerCase();
-                    return nameA.localeCompare(nameB);
-                  });
-                  
+          <Box sx={{ mt: 6, mb: 4 }}>
+            <Typography 
+              variant="h4" 
+              component="h2" 
+              textAlign="center" 
+              gutterBottom
+              sx={{ 
+                fontSize: { xs: '1.75rem', sm: '2.125rem' },
+                mb: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1
+              }}
+            >
+              <Star sx={{ color: '#FFA500' }} />
+              Brand Focus
+            </Typography>
+            
+            {brandFocusLoading ? (
+              <Typography textAlign="center">Loading brand focus items...</Typography>
+            ) : (
+              (() => {
+                if (brandFocusDrinks.length === 0) {
                   return (
-                    <Box sx={{ 
-                      display: 'grid',
-                      gridTemplateColumns: {
-                        xs: 'repeat(2, 1fr)',
-                        sm: 'repeat(2, 1fr)',
-                        md: 'repeat(3, 1fr)',
-                        lg: 'repeat(4, 1fr)'
-                      },
-                      gap: { xs: 1, sm: 2 },
-                      width: '100%'
-                    }}>
-                      {sortedBrandFocusDrinks.slice(0, 8).map((drink) => (
-                        <DrinkCard key={drink.id} drink={drink} />
-                      ))}
-                    </Box>
+                    <Typography textAlign="center" color="text.secondary">
+                      No brand focus items available at the moment.
+                    </Typography>
                   );
-                })()
-              )}
-            </Box>
-          )}
+                }
+                
+                // Sort: available items first, then by name
+                const sortedBrandFocusDrinks = [...brandFocusDrinks].sort((a, b) => {
+                  // First sort by availability (available items first)
+                  if (a.isAvailable !== b.isAvailable) {
+                    return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
+                  }
+                  // Then sort by name alphabetically
+                  const nameA = (a.name || '').toLowerCase();
+                  const nameB = (b.name || '').toLowerCase();
+                  return nameA.localeCompare(nameB);
+                });
+                
+                return (
+                  <Box sx={{ 
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: 'repeat(2, 1fr)',
+                      sm: 'repeat(2, 1fr)',
+                      md: 'repeat(3, 1fr)',
+                      lg: 'repeat(4, 1fr)'
+                    },
+                    gap: { xs: 1, sm: 2 },
+                    width: '100%'
+                  }}>
+                    {sortedBrandFocusDrinks.slice(0, 8).map((drink) => (
+                      <DrinkCard key={drink.id} drink={drink} />
+                    ))}
+                  </Box>
+                );
+              })()
+            )}
+          </Box>
         </Container>
       </Box>
     </Box>

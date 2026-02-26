@@ -414,26 +414,29 @@ const InventoryPage = () => {
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-          <Button
-            variant="outlined"
-            startIcon={populatingPurchasePrices ? <CircularProgress size={20} /> : <Calculate />}
-            onClick={handlePopulatePurchasePrices}
-            disabled={populatingPurchasePrices}
-            sx={{
-              borderColor: colors.accentText,
-              color: colors.accentText,
-              '&:hover': {
-                borderColor: '#00C4A3',
-                backgroundColor: 'rgba(0, 224, 184, 0.1)'
-              },
-              '&:disabled': {
-                borderColor: colors.border,
-                color: colors.textSecondary
-              }
-            }}
-          >
-            {populatingPurchasePrices ? 'Populating...' : 'Populate Purchase Prices'}
-          </Button>
+          {/* Hidden: Populate Purchase Prices button */}
+          {false && (
+            <Button
+              variant="outlined"
+              startIcon={populatingPurchasePrices ? <CircularProgress size={20} /> : <Calculate />}
+              onClick={handlePopulatePurchasePrices}
+              disabled={populatingPurchasePrices}
+              sx={{
+                borderColor: colors.accentText,
+                color: colors.accentText,
+                '&:hover': {
+                  borderColor: '#00C4A3',
+                  backgroundColor: 'rgba(0, 224, 184, 0.1)'
+                },
+                '&:disabled': {
+                  borderColor: colors.border,
+                  color: colors.textSecondary
+                }
+              }}
+            >
+              {populatingPurchasePrices ? 'Populating...' : 'Populate Purchase Prices'}
+            </Button>
+          )}
           <Button
             variant="contained"
             startIcon={<Add />}

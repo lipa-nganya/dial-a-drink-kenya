@@ -130,6 +130,9 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       attributes: ['id', 'amount']
     });
     const pendingSubmissionsTotal = pendingCashSubmissions.reduce((sum, s) => sum + parseFloat(s.amount || 0), 0);
+    
+    // Always calculate pending cash at hand if there are any pending submissions
+    const hasPendingSubmissions = pendingCashSubmissions.length > 0;
 
     // Calculate cash remitted (negative cash_settlement transactions)
     const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
@@ -316,7 +319,8 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       cashAtHand: totalCashAtHand, // Alias for consistency (some clients might use this field)
       entries: entries
     };
-    if (pendingSubmissionsTotal > 0) {
+    // Always include pending cash at hand if there are any pending submissions (even if result is negative)
+    if (hasPendingSubmissions) {
       payload.pendingSubmissionsTotal = pendingSubmissionsTotal;
       payload.pendingCashAtHand = totalCashAtHand - pendingSubmissionsTotal;
     }

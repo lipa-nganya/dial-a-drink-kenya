@@ -1259,10 +1259,16 @@ router.get('/', async (req, res) => {
         const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal + cashAdded;
         const storedCashAtHand = parseFloat(driverData.cashAtHand || 0);
         
-        // ALWAYS sync database value to ensure consistency between admin and driver app
-        // Always use calculated value as source of truth and update database
-        // This ensures both endpoints return the same value
-        if (Math.abs(storedCashAtHand - calculatedCashAtHand) > 0.01 || storedCashAtHand === 0 || isNaN(storedCashAtHand)) {
+        // Check if driver has any transactions (indicating they've been active)
+        const hasTransactions = cashCollected > 0 || cashRemitted > 0 || cashAdded > 0 || approvedSubmissionsTotal > 0 || cashDeductionPayNow > 0;
+        
+        // Only sync if:
+        // 1. Driver has transactions (has been active), AND
+        // 2. The stored value is exactly 0 or null/NaN (indicating it hasn't been manually set)
+        // This preserves manual adjustments made by admins - if admin sets a value, it won't be overwritten
+        const shouldSync = hasTransactions && (storedCashAtHand === 0 || storedCashAtHand === null || isNaN(storedCashAtHand));
+        
+        if (shouldSync) {
           await driver.update({ cashAtHand: calculatedCashAtHand });
           // Reload driver to get updated value
           await driver.reload();
@@ -1270,9 +1276,13 @@ router.get('/', async (req, res) => {
           driverData.cashAtHand = updatedValue;
           console.log(`🔄 [Cash At Hand Sync] Driver ${driver.id}: Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (cashCollected: ${cashCollected}, payNowDeduction: ${cashDeductionPayNow}, cashRemitted: ${cashRemitted}, cashAdded: ${cashAdded}, approvedSubmissions: ${approvedSubmissionsTotal})`);
         } else {
-          // Even if values match, use calculated value to ensure consistency
-          driverData.cashAtHand = calculatedCashAtHand;
-          console.log(`✅ [Cash At Hand Sync] Driver ${driver.id}: Value in sync (DB: ${storedCashAtHand}, using calculated: ${calculatedCashAtHand})`);
+          // Use stored value to preserve manual adjustments
+          driverData.cashAtHand = storedCashAtHand;
+          if (hasTransactions && storedCashAtHand > 0) {
+            console.log(`✅ [Cash At Hand Sync] Driver ${driver.id}: Using stored value ${storedCashAtHand} (calculated: ${calculatedCashAtHand}, diff: ${Math.abs(storedCashAtHand - calculatedCashAtHand).toFixed(2)}) - preserving manual adjustment`);
+          } else if (!hasTransactions) {
+            console.log(`✅ [Cash At Hand Sync] Driver ${driver.id}: Using stored value ${storedCashAtHand} (no transactions yet)`);
+          }
         }
       } catch (syncError) {
         // If sync fails, use stored value
@@ -1392,7 +1402,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    const { name, phoneNumber, status } = req.body;
+    const { name, phoneNumber, status, creditLimit, cashAtHand } = req.body;
 
     if (!name || !phoneNumber) {
       return sendError(res, 'Driver name and phone number are required');
@@ -1413,12 +1423,32 @@ router.post('/', async (req, res) => {
       return sendError(res, 'Driver with this phone number already exists');
     }
 
-    const driver = await db.Driver.create({
+    const createData = {
       name: name.trim(),
       phoneNumber: cleanedPhone,
       status: status || 'offline',
       lastActivity: new Date()
-    });
+    };
+
+    // Add creditLimit if provided
+    if (creditLimit !== undefined && creditLimit !== null && creditLimit !== '') {
+      const parsedLimit = parseFloat(creditLimit);
+      if (isNaN(parsedLimit) || parsedLimit < 0) {
+        return sendError(res, 'Credit limit must be a non-negative number');
+      }
+      createData.creditLimit = parsedLimit;
+    }
+
+    // Add cashAtHand if provided
+    if (cashAtHand !== undefined && cashAtHand !== null && cashAtHand !== '') {
+      const parsedCash = parseFloat(cashAtHand);
+      if (isNaN(parsedCash) || parsedCash < 0) {
+        return sendError(res, 'Cash at hand must be a non-negative number');
+      }
+      createData.cashAtHand = parsedCash;
+    }
+
+    const driver = await db.Driver.create(createData);
 
     res.status(201).json(driver);
   } catch (error) {

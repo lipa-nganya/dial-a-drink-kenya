@@ -15,13 +15,24 @@ import {
   Radio,
   RadioGroup,
   FormControlLabel,
-  FormControl
+  FormControl,
+  IconButton,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Snackbar
 } from '@mui/material';
 import {
   AddShoppingCart,
   LocalBar,
   Star,
-  LocalOffer
+  LocalOffer,
+  Share,
+  WhatsApp,
+  Twitter,
+  Facebook,
+  ContentCopy
 } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
@@ -32,7 +43,11 @@ import { stripHtml } from '../utils/stripHtml';
 import DrinkCard from '../components/DrinkCard';
 
 const ProductPage = () => {
-  const { id } = useParams();
+  // Support both URL formats:
+  // New: /:categorySlug/:productSlug (e.g., /wine/1659-sauvignon-blanc-750ml)
+  // Old: /product/:id (e.g., /product/306)
+  const params = useParams();
+  const { categorySlug, productSlug, id } = params;
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { colors } = useTheme();
@@ -47,19 +62,42 @@ const ProductPage = () => {
   const [descriptionLoading, setDescriptionLoading] = useState(false);
   const [testingNotes, setTestingNotes] = useState(null);
   const [testingNotesLoading, setTestingNotesLoading] = useState(false);
+  const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // Determine which URL format is being used
+  const isCategoryBasedUrl = categorySlug && productSlug;
+  const identifier = isCategoryBasedUrl ? `${categorySlug}/${productSlug}` : id;
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // Scroll to top when product ID changes (e.g., when clicking a related product)
+    // Scroll to top when product changes
     window.scrollTo({ top: 0, behavior: 'smooth' });
     fetchProduct();
-  }, [id]);
+  }, [categorySlug, productSlug, id]);
 
   useEffect(() => {
     if (product) {
       fetchRelatedProducts();
       fetchDetailedDescription();
       fetchTestingNotes();
+      
+      // Set canonical URL for SEO (category-based format)
+      const canonicalUrl = (product.slug && product.category?.slug)
+        ? `https://www.ruakadrinksdelivery.co.ke/${product.category.slug}/${product.slug}`
+        : product.slug
+        ? `https://www.ruakadrinksdelivery.co.ke/product/${product.slug}`
+        : `https://www.ruakadrinksdelivery.co.ke/product/${product.id}`;
+      
+      // Remove existing canonical link if any
+      let canonicalLink = document.querySelector('link[rel="canonical"]');
+      if (!canonicalLink) {
+        canonicalLink = document.createElement('link');
+        canonicalLink.setAttribute('rel', 'canonical');
+        document.head.appendChild(canonicalLink);
+      }
+      canonicalLink.setAttribute('href', canonicalUrl);
       
       // Auto-select capacity: if only one option, select it; if multiple, select most expensive
       const availableCapacities = Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0 
@@ -126,8 +164,27 @@ const ProductPage = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await api.get(`/drinks/${id}`);
-      setProduct(response.data);
+      
+      let response;
+      if (isCategoryBasedUrl) {
+        // New format: /:categorySlug/:productSlug
+        // Fetch via API: /api/products/:categorySlug/:productSlug
+        response = await api.get(`/products/${categorySlug}/${productSlug}`);
+      } else {
+        // Old format: /product/:id
+        response = await api.get(`/drinks/${id}`);
+      }
+      
+      const productData = response.data;
+      setProduct(productData);
+      
+      // If we accessed via old URL format, redirect to new category-based URL
+      if (!isCategoryBasedUrl && productData.slug && productData.category?.slug) {
+        // Use window.location.replace for a proper 301-like redirect
+        const newUrl = `/${productData.category.slug}/${productData.slug}`;
+        window.location.replace(newUrl);
+        return; // Exit early since we're redirecting
+      }
     } catch (err) {
       console.error('Error fetching product:', err);
       setError('Product not found');
@@ -166,7 +223,9 @@ const ProductPage = () => {
       setDescriptionLoading(true);
       console.log(`Fetching detailed description for product: ${product.name} (ID: ${product.id})`);
       
-      const response = await api.get(`/drinks/${product.id}/detailed-description`);
+      // Use slug if available, otherwise fall back to ID
+      const identifier = product.slug || product.id;
+      const response = await api.get(`/drinks/${identifier}/detailed-description`);
       
       console.log('Detailed description response:', response.data);
       
@@ -194,7 +253,9 @@ const ProductPage = () => {
       setTestingNotesLoading(true);
       console.log(`Fetching testing notes for product: ${product.name} (ID: ${product.id})`);
       
-      const response = await api.get(`/drinks/${product.id}/testing-notes`);
+      // Use slug if available, otherwise fall back to ID
+      const identifier = product.slug || product.id;
+      const response = await api.get(`/drinks/${identifier}/testing-notes`);
       
       console.log('Testing notes response:', response.data);
       
@@ -249,6 +310,82 @@ const ProductPage = () => {
     };
     
     addToCart(productToAdd, 1);
+  };
+
+  // Get product URL for sharing
+  const getProductUrl = () => {
+    if (!product) return '';
+    if (product.category?.slug && product.slug) {
+      return `${window.location.origin}/${product.category.slug}/${product.slug}`;
+    } else if (product.slug) {
+      return `${window.location.origin}/product/${product.slug}`;
+    } else {
+      return `${window.location.origin}/product/${product.id}`;
+    }
+  };
+
+  // Get share text
+  const getShareText = () => {
+    if (!product) return '';
+    const brandName = typeof product.brand === 'object' && product.brand !== null 
+      ? product.brand.name 
+      : (product.brand || product.name);
+    const price = selectedCapacity 
+      ? getPriceForCapacity(selectedCapacity) 
+      : (product.price || 0);
+    return `Check out ${product.name} at Dial A Drink Kenya! ${brandName ? `(${brandName})` : ''} - KES ${Math.round(price)}`;
+  };
+
+  // Handle share menu open
+  const handleShareClick = (event) => {
+    event.stopPropagation();
+    setShareMenuAnchor(event.currentTarget);
+  };
+
+  // Handle share menu close
+  const handleShareMenuClose = () => {
+    setShareMenuAnchor(null);
+  };
+
+  // Share on WhatsApp
+  const handleShareWhatsApp = () => {
+    const url = getProductUrl();
+    const text = getShareText();
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(`${text}\n${url}`)}`;
+    window.open(whatsappUrl, '_blank');
+    handleShareMenuClose();
+  };
+
+  // Share on Twitter/X
+  const handleShareTwitter = () => {
+    const url = getProductUrl();
+    const text = getShareText();
+    const twitterUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    window.open(twitterUrl, '_blank');
+    handleShareMenuClose();
+  };
+
+  // Share on Facebook
+  const handleShareFacebook = () => {
+    const url = getProductUrl();
+    const facebookUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
+    window.open(facebookUrl, '_blank');
+    handleShareMenuClose();
+  };
+
+  // Copy link to clipboard
+  const handleCopyLink = async () => {
+    try {
+      const url = getProductUrl();
+      await navigator.clipboard.writeText(url);
+      setSnackbarMessage('Link copied to clipboard!');
+      setSnackbarOpen(true);
+      handleShareMenuClose();
+    } catch (error) {
+      console.error('Error copying link:', error);
+      setSnackbarMessage('Failed to copy link');
+      setSnackbarOpen(true);
+    }
   };
 
   const generateProductTitle = () => {
@@ -313,7 +450,10 @@ const ProductPage = () => {
   const getProducer = () => {
     if (!product) return '';
     // Common producers based on brand
-    const brand = (product.brand || product.name || '').toLowerCase();
+    const brandName = typeof product.brand === 'object' && product.brand !== null 
+      ? product.brand.name 
+      : (product.brand || product.name || '');
+    const brand = brandName.toLowerCase();
     if (brand.includes('jameson')) return 'Pernod Ricard';
     if (brand.includes('jack daniel')) return 'Brown-Forman';
     if (brand.includes('johnnie walker')) return 'Diageo';
@@ -345,7 +485,9 @@ const ProductPage = () => {
     if (!description || description.length < 30) {
       const productType = getProductType();
       const origin = product.origin || product.country || '';
-      const brand = product.brand || product.name;
+      const brand = typeof product.brand === 'object' && product.brand !== null 
+        ? product.brand.name 
+        : (product.brand || product.name);
       
       description = `${brand} is a distinguished ${productType.toLowerCase()}`;
       if (origin) {
@@ -445,8 +587,165 @@ const ProductPage = () => {
             </Box>
           </Card>
           
-          {/* Add to Cart Button - Mobile Only (below image) */}
-          <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 2 }}>
+          {/* Capacities and Pricing - Mobile Only (above Buy Now button) */}
+          <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 3 }}>
+            {availableCapacities.length > 0 ? (
+              <FormControl component="fieldset" sx={{ width: '100%', mb: 3 }}>
+                <RadioGroup
+                  value={selectedCapacity}
+                  onChange={(e) => setSelectedCapacity(e.target.value)}
+                  sx={{ gap: 0, width: '100%' }}
+                >
+                  {Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0
+                    ? (() => {
+                        // Deduplicate by capacity, keeping the first occurrence
+                        const seen = new Set();
+                        const uniquePricing = product.capacityPricing.filter(pricing => {
+                          const capacity = pricing.capacity || pricing.size;
+                          if (seen.has(capacity)) {
+                            return false;
+                          }
+                          seen.add(capacity);
+                          return true;
+                        });
+                        
+                        return uniquePricing.map((pricing, index) => {
+                          const capacity = pricing.capacity || pricing.size;
+                          const price = parseFloat(pricing.currentPrice || pricing.price) || 0;
+                          
+                          return (
+                            <FormControlLabel
+                              key={`${product.id}-${capacity}-${index}-mobile`}
+                              value={capacity}
+                              control={
+                                <Radio
+                                  sx={{
+                                    color: colors.textPrimary,
+                                    padding: '8px',
+                                    marginRight: '8px',
+                                    fontSize: '1.5rem',
+                                    '&.Mui-checked': { color: colors.accentText },
+                                    '& .MuiSvgIcon-root': {
+                                      fontSize: '1.5rem'
+                                    }
+                                  }}
+                                />
+                              }
+                              label={
+                                <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                        {capacity}
+                                      </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
+                                      <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                        KES {Math.round(price)}
+                                      </Typography>
+                                    </Box>
+                                  </Box>
+                                </Box>
+                              }
+                              sx={{
+                                border: 'none',
+                                borderRadius: 1,
+                                backgroundColor: selectedCapacity === capacity ? '#f5f5f5' : 'transparent',
+                                p: 0.1,
+                                m: 0,
+                                width: '100%',
+                                marginLeft: 0,
+                                marginRight: 0,
+                                alignItems: 'center',
+                                '& .MuiFormControlLabel-label': {
+                                  marginLeft: '4px',
+                                  width: '100%'
+                                },
+                                '&:hover': {
+                                  backgroundColor: '#f0f0f0'
+                                }
+                              }}
+                            />
+                          );
+                        });
+                      })()
+                    : availableCapacities.map((capacity, index) => {
+                        // Fallback for drinks with capacity array but no capacityPricing
+                        const price = getPriceForCapacity(capacity);
+                        return (
+                          <FormControlLabel
+                            key={`${product.id}-${capacity}-${index}-mobile`}
+                            value={capacity}
+                            control={
+                              <Radio
+                                sx={{
+                                  color: colors.textPrimary,
+                                  padding: '4px',
+                                  marginRight: '4px',
+                                  '&.Mui-checked': { color: colors.accentText }
+                                }}
+                              />
+                            }
+                            label={
+                              <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                      {capacity}
+                                    </Typography>
+                                  </Box>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
+                                    <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                      KES {Math.round(price)}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </Box>
+                            }
+                            sx={{
+                              border: 'none',
+                              borderRadius: 1,
+                              backgroundColor: selectedCapacity === capacity ? '#f5f5f5' : 'transparent',
+                              p: 0.1,
+                              m: 0,
+                              width: '100%',
+                              marginLeft: 0,
+                              marginRight: 0,
+                              alignItems: 'center',
+                              '& .MuiFormControlLabel-label': {
+                                marginLeft: '4px',
+                                width: '100%'
+                              },
+                              '&:hover': {
+                                backgroundColor: '#f0f0f0'
+                              }
+                            }}
+                          />
+                        );
+                      })}
+                </RadioGroup>
+              </FormControl>
+            ) : (
+              <Typography variant="h5" sx={{ fontWeight: 'bold', color: colors.accentText, mb: 3 }}>
+                KES {Math.round(Number(product.price) || 0)}
+              </Typography>
+            )}
+          </Box>
+          
+          {/* Share and Buy Now Buttons - Mobile Only (below capacities) */}
+          <Box sx={{ display: { xs: 'flex', md: 'none' }, mt: 2, gap: 1, alignItems: 'center' }}>
+            <IconButton
+              onClick={handleShareClick}
+              sx={{
+                backgroundColor: colors.paper,
+                border: `1px solid ${colors.border || '#ddd'}`,
+                '&:hover': {
+                  backgroundColor: '#f5f5f5'
+                }
+              }}
+            >
+              <Share />
+            </IconButton>
             <Button
               variant="contained"
               size="large"
@@ -458,6 +757,7 @@ const ProductPage = () => {
                 backgroundColor: '#FF6B6B',
                 py: 1.5,
                 fontSize: '1.1rem',
+                flex: 1,
                 '&:hover': {
                   backgroundColor: '#FF5252'
                 },
@@ -572,7 +872,7 @@ const ProductPage = () => {
                   Brand:
                 </Typography>
                 <Typography variant="body1">
-                  {product.brand || product.name}
+                  {typeof product.brand === 'object' && product.brand !== null ? product.brand.name : (product.brand || product.name)}
                 </Typography>
               </Box>
 
@@ -589,13 +889,14 @@ const ProductPage = () => {
 
           <Divider sx={{ my: 4 }} />
 
-          {/* Capacities and Pricing */}
-          <Box sx={{ mb: 3 }}>
+          {/* Capacities and Pricing - Desktop Only */}
+          <Box sx={{ mb: 3, display: { xs: 'none', md: 'block' } }}>
             {availableCapacities.length > 0 ? (
               <FormControl component="fieldset" sx={{ width: '100%', mb: 3 }}>
                 <RadioGroup
                   value={selectedCapacity}
                   onChange={(e) => setSelectedCapacity(e.target.value)}
+                  sx={{ gap: 0, width: '100%' }}
                 >
                   {Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0
                     ? (() => {
@@ -618,30 +919,55 @@ const ProductPage = () => {
                             <FormControlLabel
                               key={`${product.id}-${capacity}-${index}`}
                               value={capacity}
-                            control={<Radio />}
-                            label={
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                  {capacity}
-                                </Typography>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
-                                    KES {Math.round(price)}
-                                  </Typography>
-                                </Box>
-                              </Box>
-                            }
-                            sx={{
-                              border: '1px solid',
-                              borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
-                              borderRadius: 1,
-                              p: 1.5,
-                              mb: 1,
-                              '&:hover': {
-                                borderColor: colors.accentText
+                              control={
+                                <Radio
+                                  sx={{
+                                    color: colors.textPrimary,
+                                    padding: '8px',
+                                    marginRight: '8px',
+                                    fontSize: '1.5rem',
+                                    '&.Mui-checked': { color: colors.accentText },
+                                    '& .MuiSvgIcon-root': {
+                                      fontSize: '1.5rem'
+                                    }
+                                  }}
+                                />
                               }
-                            }}
-                          />
+                              label={
+                                <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
+                                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                        {capacity}
+                                      </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
+                                      <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                        KES {Math.round(price)}
+                                      </Typography>
+                                    </Box>
+                                  </Box>
+                                </Box>
+                              }
+                              sx={{
+                                border: 'none',
+                                borderRadius: 1,
+                                backgroundColor: selectedCapacity === capacity ? '#f5f5f5' : 'transparent',
+                                p: 0.1,
+                                m: 0,
+                                width: '100%',
+                                marginLeft: 0,
+                                marginRight: 0,
+                                alignItems: 'center',
+                                '& .MuiFormControlLabel-label': {
+                                  marginLeft: '4px',
+                                  width: '100%'
+                                },
+                                '&:hover': {
+                                  backgroundColor: '#f0f0f0'
+                                }
+                              }}
+                            />
                           );
                         });
                       })()
@@ -652,27 +978,48 @@ const ProductPage = () => {
                           <FormControlLabel
                             key={`${product.id}-${capacity}-${index}`}
                             value={capacity}
-                            control={<Radio />}
+                            control={
+                              <Radio
+                                sx={{
+                                  color: colors.textPrimary,
+                                  padding: '4px',
+                                  marginRight: '4px',
+                                  '&.Mui-checked': { color: colors.accentText }
+                                }}
+                              />
+                            }
                             label={
-                              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                                <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                  {capacity}
-                                </Typography>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: colors.accentText }}>
-                                    KES {Math.round(price)}
-                                  </Typography>
+                              <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
+                                    <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                      {capacity}
+                                    </Typography>
+                                  </Box>
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
+                                    <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                      KES {Math.round(price)}
+                                    </Typography>
+                                  </Box>
                                 </Box>
                               </Box>
                             }
                             sx={{
-                              border: '1px solid',
-                              borderColor: selectedCapacity === capacity ? colors.accentText : 'divider',
+                              border: 'none',
                               borderRadius: 1,
-                              p: 1.5,
-                              mb: 1,
+                              backgroundColor: selectedCapacity === capacity ? '#f5f5f5' : 'transparent',
+                              p: 0.1,
+                              m: 0,
+                              width: '100%',
+                              marginLeft: 0,
+                              marginRight: 0,
+                              alignItems: 'center',
+                              '& .MuiFormControlLabel-label': {
+                                marginLeft: '4px',
+                                width: '100%'
+                              },
                               '&:hover': {
-                                borderColor: colors.accentText
+                                backgroundColor: '#f0f0f0'
                               }
                             }}
                           />
@@ -686,8 +1033,20 @@ const ProductPage = () => {
               </Typography>
             )}
 
-            {/* Add to Cart Button - Desktop Only */}
-            <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+            {/* Share and Buy Now Buttons - Desktop Only */}
+            <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, alignItems: 'center', mb: 4 }}>
+              <IconButton
+                onClick={handleShareClick}
+                sx={{
+                  backgroundColor: colors.paper,
+                  border: `1px solid ${colors.border || '#ddd'}`,
+                  '&:hover': {
+                    backgroundColor: '#f5f5f5'
+                  }
+                }}
+              >
+                <Share />
+              </IconButton>
               <Button
                 variant="contained"
                 size="large"
@@ -699,7 +1058,7 @@ const ProductPage = () => {
                   backgroundColor: '#FF6B6B',
                   py: 1.5,
                   fontSize: '1.1rem',
-                  mb: 4,
+                  flex: 1,
                   '&:hover': {
                     backgroundColor: '#FF5252'
                   },
@@ -709,7 +1068,7 @@ const ProductPage = () => {
                   }
                 }}
               >
-                Add to Cart
+                Buy Now
               </Button>
             </Box>
           </Box>
@@ -989,7 +1348,7 @@ const ProductPage = () => {
         <Box sx={{ mt: 6 }}>
           <Divider sx={{ mb: 4 }} />
           <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-            Related {product.brand || product.name} Variants
+            Related {typeof product.brand === 'object' && product.brand !== null ? product.brand.name : (product.brand || product.name)} Variants
           </Typography>
           <Box sx={{ 
             display: 'grid',
@@ -1008,6 +1367,55 @@ const ProductPage = () => {
           </Box>
         </Box>
       )}
+
+      {/* Share Menu */}
+      <Menu
+        anchorEl={shareMenuAnchor}
+        open={Boolean(shareMenuAnchor)}
+        onClose={handleShareMenuClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+      >
+        <MenuItem onClick={handleShareWhatsApp}>
+          <ListItemIcon>
+            <WhatsApp fontSize="small" sx={{ color: '#25D366' }} />
+          </ListItemIcon>
+          <ListItemText>Share on WhatsApp</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleShareTwitter}>
+          <ListItemIcon>
+            <Twitter fontSize="small" sx={{ color: '#1DA1F2' }} />
+          </ListItemIcon>
+          <ListItemText>Share on Twitter (X)</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleShareFacebook}>
+          <ListItemIcon>
+            <Facebook fontSize="small" sx={{ color: '#1877F2' }} />
+          </ListItemIcon>
+          <ListItemText>Share on Facebook</ListItemText>
+        </MenuItem>
+        <MenuItem onClick={handleCopyLink}>
+          <ListItemIcon>
+            <ContentCopy fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Copy Link</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      {/* Snackbar for copy link feedback */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={3000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Container>
   );
 };

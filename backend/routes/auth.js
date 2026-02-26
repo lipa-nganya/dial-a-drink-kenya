@@ -328,30 +328,30 @@ router.post('/send-otp', async (req, res) => {
         email: email
       });
     } else {
-      // Send OTP via SMS (always send, not subject to admin SMS settings)
-      // For shop agents and drivers, force sending via Advanta SMS even in local dev
-      // For PIN reset requests, always force send SMS regardless of user type
-      // For customers in production, also force send SMS
-      // Allow forcing SMS in local dev via ENABLE_SMS_IN_LOCAL_DEV env var
-      const isProduction = process.env.NODE_ENV === 'production' || process.env.K_SERVICE || process.env.RENDER;
-      const enableSmsInLocalDev = process.env.ENABLE_SMS_IN_LOCAL_DEV === 'true';
-      const forceSendSMS = isDriver || isShopAgent || isResetRequest || (isProduction && !isDriver && !isShopAgent) || enableSmsInLocalDev;
-      
-      console.log(`📱 OTP sending configuration:`, {
-        phone: cleanedPhone,
-        userType: isDriver ? 'driver' : (isShopAgent ? 'shopAgent' : 'customer'),
-        isProduction,
-        forceSendSMS,
-        isResetRequest
-      });
-      
+    // Send OTP via SMS (always send, not subject to admin SMS settings)
+    // For shop agents and drivers, force sending via Advanta SMS even in local dev
+    // For PIN reset requests, always force send SMS regardless of user type
+    // For customers in production, also force send SMS
+    // Allow forcing SMS in local dev via ENABLE_SMS_IN_LOCAL_DEV env var
+    const isProduction = process.env.NODE_ENV === 'production' || process.env.K_SERVICE || process.env.RENDER;
+    const enableSmsInLocalDev = process.env.ENABLE_SMS_IN_LOCAL_DEV === 'true';
+    const forceSendSMS = isDriver || isShopAgent || isResetRequest || (isProduction && !isDriver && !isShopAgent) || enableSmsInLocalDev;
+    
+    console.log(`📱 OTP sending configuration:`, {
+      phone: cleanedPhone,
+      userType: isDriver ? 'driver' : (isShopAgent ? 'shopAgent' : 'customer'),
+      isProduction,
+      forceSendSMS,
+      isResetRequest
+    });
+    
       smsResult = await smsService.sendOTP(cleanedPhone, otpCode, forceSendSMS);
-      
-      console.log(`📱 OTP send result:`, {
-        success: smsResult.success,
-        error: smsResult.error,
-        localDev: smsResult.localDev
-      });
+    
+    console.log(`📱 OTP send result:`, {
+      success: smsResult.success,
+      error: smsResult.error,
+      localDev: smsResult.localDev
+    });
     }
 
     // For drivers and shop agents, always return success even if SMS fails
@@ -439,11 +439,11 @@ router.post('/send-otp', async (req, res) => {
             updates.phone = cleanedPhone;
           }
         } else {
-          if (!customerRecord.phone && (normalizedPhone || cleanedPhone)) {
-            updates.phone = normalizedPhone || cleanedPhone;
-          }
-          if (!customerRecord.username && (normalizedPhone || cleanedPhone)) {
-            updates.username = normalizedPhone || cleanedPhone;
+        if (!customerRecord.phone && (normalizedPhone || cleanedPhone)) {
+          updates.phone = normalizedPhone || cleanedPhone;
+        }
+        if (!customerRecord.username && (normalizedPhone || cleanedPhone)) {
+          updates.username = normalizedPhone || cleanedPhone;
           }
         }
         if (!customerRecord.customerName && customerName) {
@@ -541,7 +541,7 @@ router.post('/verify-otp', async (req, res) => {
       typeof rawContext === 'string' ? rawContext.trim().toLowerCase() : '';
     const forceCustomer = normalizedContext === 'customer';
     const forceDriver = normalizedContext === 'driver';
-    
+
     // Check if this is an email-based OTP
     const useEmailOtp = email && email.trim();
 
@@ -579,26 +579,26 @@ router.post('/verify-otp', async (req, res) => {
       });
     } else {
       // Look up OTP by phone number (existing logic)
-      candidatePhones.add(cleanedPhone);
-      if (normalizedPhone) {
-        candidatePhones.add(normalizedPhone.replace(/\D/g, ''));
+    candidatePhones.add(cleanedPhone);
+    if (normalizedPhone) {
+      candidatePhones.add(normalizedPhone.replace(/\D/g, ''));
+    }
+    phoneLookupVariants.forEach((variant) => {
+      const digits = (variant || '').replace(/\D/g, '');
+      if (digits) {
+        candidatePhones.add(digits);
       }
-      phoneLookupVariants.forEach((variant) => {
-        const digits = (variant || '').replace(/\D/g, '');
-        if (digits) {
-          candidatePhones.add(digits);
-        }
-      });
+    });
 
       otpRecord = await db.Otp.findOne({
-        where: {
-          phoneNumber: {
-            [db.Sequelize.Op.in]: Array.from(candidatePhones)
-          },
-          isUsed: false
+      where: {
+        phoneNumber: {
+          [db.Sequelize.Op.in]: Array.from(candidatePhones)
         },
-        order: [['createdAt', 'DESC']]
-      });
+        isUsed: false
+      },
+      order: [['createdAt', 'DESC']]
+    });
     }
 
     if (!otpRecord) {
@@ -654,15 +654,15 @@ router.post('/verify-otp', async (req, res) => {
       // Check if phone number belongs to a shop agent
       const phoneVariations = Array.from(candidatePhones);
       if (phoneVariations.length > 0) {
-        const shopAgent = await db.Admin.findOne({
-          where: {
-            role: 'shop_agent',
-            mobileNumber: {
+      const shopAgent = await db.Admin.findOne({
+        where: {
+          role: 'shop_agent',
+          mobileNumber: {
               [db.Sequelize.Op.in]: phoneVariations
-            }
           }
-        });
-        isShopAgent = !!shopAgent;
+        }
+      });
+      isShopAgent = !!shopAgent;
       }
     }
     
@@ -670,18 +670,18 @@ router.post('/verify-otp', async (req, res) => {
     // Email-based OTPs are for customers only
     let admin = null;
     if (!useEmailOtp) {
-      const phoneVariations = Array.from(candidatePhones);
+    const phoneVariations = Array.from(candidatePhones);
       if (phoneVariations.length > 0) {
         admin = await db.Admin.findOne({
-          where: {
-            mobileNumber: {
-              [db.Sequelize.Op.in]: phoneVariations
-            },
-            role: {
-              [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
-            }
-          }
-        });
+      where: {
+        mobileNumber: {
+          [db.Sequelize.Op.in]: phoneVariations
+        },
+        role: {
+          [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
+        }
+      }
+    });
       }
     }
     const isAdmin = !!admin && !isShopAgent;
@@ -785,37 +785,37 @@ router.post('/verify-otp', async (req, res) => {
       }
     } else {
       // For phone-based OTP, lookup orders by phone
-      const phoneQueryConditions = phoneLookupVariants.length
-        ? phoneLookupVariants.map((variant) => ({
-            customerPhone: {
-              [db.Sequelize.Op.like]: `%${variant}%`
-            }
-          }))
-        : [{
-            customerPhone: {
-              [db.Sequelize.Op.like]: `%${cleanedPhone}%`
-            }
-          }];
+    const phoneQueryConditions = phoneLookupVariants.length
+      ? phoneLookupVariants.map((variant) => ({
+          customerPhone: {
+            [db.Sequelize.Op.like]: `%${variant}%`
+          }
+        }))
+      : [{
+          customerPhone: {
+            [db.Sequelize.Op.like]: `%${cleanedPhone}%`
+          }
+        }];
 
       orders = await db.Order.findAll({
-        where: {
-          [db.Sequelize.Op.or]: phoneQueryConditions
-        },
+      where: {
+        [db.Sequelize.Op.or]: phoneQueryConditions
+      },
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
         include: [{
-          model: db.OrderItem,
-          as: 'items',
-          include: [{
-            model: db.Drink,
-            as: 'drink'
-          }]
-        }],
-        order: [['createdAt', 'DESC']]
-      });
-      
-      if (orders.length > 0) {
-        const mostRecentOrder = orders[0];
-        customerEmail = mostRecentOrder.customerEmail || null;
-        customerName = mostRecentOrder.customerName;
+          model: db.Drink,
+          as: 'drink'
+        }]
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    if (orders.length > 0) {
+      const mostRecentOrder = orders[0];
+      customerEmail = mostRecentOrder.customerEmail || null;
+      customerName = mostRecentOrder.customerName;
       }
     }
     
@@ -826,11 +826,11 @@ router.post('/verify-otp', async (req, res) => {
         where: useEmailOtp
           ? { email: customerEmail }
           : {
-              [db.Sequelize.Op.or]: [
-                { phone: cleanedPhone },
-                { username: cleanedPhone }
-              ]
-            }
+          [db.Sequelize.Op.or]: [
+            { phone: cleanedPhone },
+            { username: cleanedPhone }
+          ]
+        }
       });
       if (existingCustomer) {
         customerEmail = existingCustomer.email || customerEmail;
@@ -857,9 +857,9 @@ router.post('/verify-otp', async (req, res) => {
       }
     } else {
       customerLookupConditions.push(
-        ...phoneLookupVariants.flatMap((variant) => ([
-          { phone: variant },
-          { username: variant }
+      ...phoneLookupVariants.flatMap((variant) => ([
+        { phone: variant },
+        { username: variant }
         ]))
       );
       if (customerEmail) {
