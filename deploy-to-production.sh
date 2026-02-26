@@ -264,6 +264,8 @@ echo "🌐 Step 6: Deploying Customer Frontend to Cloud Run..."
 echo "   Service: deliveryos-customer-frontend"
 echo ""
 
+# Return to project root
+cd /Users/maria/dial-a-drink
 cd frontend
 
 # Get Google Maps API Key (use existing from backend or default)
@@ -296,6 +298,8 @@ echo "🌐 Step 7: Deploying Admin Frontend to Cloud Run..."
 echo "   Service: deliveryos-admin-frontend"
 echo ""
 
+# Return to project root
+cd /Users/maria/dial-a-drink
 cd admin-frontend
 
 echo "🔨 Building and deploying admin frontend..."
