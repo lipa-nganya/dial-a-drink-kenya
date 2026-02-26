@@ -113,13 +113,14 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       // Reset order type to delivery
       setOrderType('delivery');
     }
-  }, [open, initialIsStop]);
+  }, [open, initialIsStop, fetchCustomers, fetchBranches, fetchDrivers, fetchTerritories, fetchProducts]);
 
   // Fetch customers with search query
   useEffect(() => {
     if (open && customerSearchQuery) {
       fetchCustomers();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerSearchQuery, open]);
 
   useEffect(() => {
@@ -179,7 +180,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         setDeliveryLocation(`${branch.name}, ${branch.address}`);
       }
     }
-  }, [orderType, selectedBranch, branches]);
+  }, [orderType, selectedBranch, branches, isWalkIn]);
 
   // Auto-populate M-Pesa phone number when customer is selected
   useEffect(() => {

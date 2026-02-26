@@ -37,14 +37,10 @@ import {
   Edit,
   Delete,
   AccountBalance,
-  Email,
-  Phone,
   AttachMoney,
   List,
   Search,
-  PersonAdd,
   Receipt,
-  ArrowBack,
   CheckCircle,
   ShoppingCart
 } from '@mui/icons-material';
@@ -105,6 +101,7 @@ const Payables = () => {
         fetchSuppliers();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTab]);
 
   useEffect(() => {

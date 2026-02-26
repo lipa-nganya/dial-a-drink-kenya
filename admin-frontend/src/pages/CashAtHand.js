@@ -143,6 +143,7 @@ const CashAtHand = () => {
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchPendingSubmissionsCount]);
 
   useEffect(() => {
