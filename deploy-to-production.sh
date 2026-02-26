@@ -259,34 +259,93 @@ echo ""
 echo "✅ Migrations completed"
 echo ""
 
-# Step 6: Push Android app code to production
-echo "📱 Step 6: Android app code pushed to GitHub"
+# Step 6: Deploy Customer Frontend to Cloud Run
+echo "🌐 Step 6: Deploying Customer Frontend to Cloud Run..."
+echo "   Service: deliveryos-customer-frontend"
+echo ""
+
+cd frontend
+
+# Get Google Maps API Key (use existing from backend or default)
+GOOGLE_MAPS_KEY="${EXISTING_GOOGLE_MAPS_API_KEY:-AIzaSyAM8GoxzNvr0LN2mgVp-mzHzQ_hFIa6AhE}"
+
+# Generate short SHA for image tag
+SHORT_SHA=$(date +%s | sha256sum | head -c 8 2>/dev/null || echo $(date +%s))
+
+echo "🔨 Building and deploying customer frontend..."
+gcloud builds submit \
+    --config cloudbuild.yaml \
+    --substitutions=SHORT_SHA=$SHORT_SHA,_GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_KEY \
+    --project "$PROJECT_ID" 2>&1 || {
+    echo "❌ Customer frontend deployment failed"
+    cd ..
+    exit 1
+}
+
+CUSTOMER_FRONTEND_URL=$(gcloud run services describe "deliveryos-customer-frontend" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --format "value(status.url)" 2>/dev/null || echo "")
+
+echo "✅ Customer frontend deployed: $CUSTOMER_FRONTEND_URL"
+cd ..
+
+# Step 7: Deploy Admin Frontend to Cloud Run
+echo ""
+echo "🌐 Step 7: Deploying Admin Frontend to Cloud Run..."
+echo "   Service: deliveryos-admin-frontend"
+echo ""
+
+cd admin-frontend
+
+echo "🔨 Building and deploying admin frontend..."
+gcloud builds submit \
+    --config cloudbuild.yaml \
+    --substitutions=SHORT_SHA=$SHORT_SHA,_GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_KEY \
+    --project "$PROJECT_ID" 2>&1 || {
+    echo "❌ Admin frontend deployment failed"
+    cd ..
+    exit 1
+}
+
+ADMIN_FRONTEND_URL=$(gcloud run services describe "deliveryos-admin-frontend" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --format "value(status.url)" 2>/dev/null || echo "")
+
+echo "✅ Admin frontend deployed: $ADMIN_FRONTEND_URL"
+cd ..
+
+# Step 8: Push Android app code to production
+echo ""
+echo "📱 Step 8: Android app code pushed to GitHub"
 echo "   Android app code is in driver-app-native/"
 echo "   Code has been pushed to GitHub (develop branch)"
 echo "   Build and deploy Android app separately if needed"
 echo ""
 
-# Step 7: Verify deployment
-echo "✅ Step 7: Verifying deployment..."
+# Step 9: Verify deployment
+echo "✅ Step 9: Verifying deployment..."
 echo "   Testing backend health endpoint..."
 HEALTH_RESPONSE=$(curl -s "$SERVICE_URL/api/health" || echo "Failed")
-echo "   ⚠️  Backend health check returned: $HEALTH_RESPONSE"
+echo "   Backend health check returned: $HEALTH_RESPONSE"
 echo ""
 
 echo "=========================================="
 echo "✅ Production Deployment Summary"
 echo "=========================================="
 echo "🌐 Backend URL: $SERVICE_URL"
-echo "🌐 Frontend: Auto-deployed via Netlify (from GitHub)"
-echo "🌐 Admin: Auto-deployed via Netlify (from GitHub)"
+echo "🌐 Customer Frontend: $CUSTOMER_FRONTEND_URL"
+echo "🌐 Admin Frontend: $ADMIN_FRONTEND_URL"
 echo "📱 Android App: Code pushed to GitHub"
 echo "📝 Migrations: Completed"
 echo "🔒 CORS: Maintained (FRONTEND_URL and ADMIN_URL preserved)"
 echo "🔐 Credentials: Preserved (M-Pesa, SMTP, etc.)"
 echo ""
 echo "📋 Next Steps:"
-echo "1. Verify frontend deployment on Netlify dashboard"
-echo "2. Test backend API: curl $SERVICE_URL/api/health"
-echo "3. Check CORS configuration if frontend has issues"
-echo "4. Build Android app if needed: cd driver-app-native && ./gradlew assembleProductionRelease"
+echo "1. Test backend API: curl $SERVICE_URL/api/health"
+echo "2. Test customer frontend: $CUSTOMER_FRONTEND_URL"
+echo "3. Test admin frontend: $ADMIN_FRONTEND_URL"
+echo "4. Check CORS configuration if frontend has issues"
+echo "5. Build Android app if needed: cd driver-app-native && ./gradlew assembleProductionRelease"
 echo ""
