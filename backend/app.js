@@ -203,6 +203,7 @@ app.use('/images', express.static(path.join(__dirname, 'public/images')));
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
 // Routes
+app.use('/api/migrations', require('./routes/migrations'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
 app.use('/api/brands', require('./routes/brands'));
