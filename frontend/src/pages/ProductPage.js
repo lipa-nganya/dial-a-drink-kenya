@@ -68,7 +68,6 @@ const ProductPage = () => {
 
   // Determine which URL format is being used
   const isCategoryBasedUrl = categorySlug && productSlug;
-  const identifier = isCategoryBasedUrl ? `${categorySlug}/${productSlug}` : id;
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {

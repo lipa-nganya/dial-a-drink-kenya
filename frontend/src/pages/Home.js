@@ -24,7 +24,6 @@ const Home = () => {
   const [drinks, setDrinks] = useState([]);
   const [drinksLoading, setDrinksLoading] = useState(true);
   const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
-  const [heroImageUrl, setHeroImageUrl] = useState(null); // Store the base URL to detect changes
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(0);
   const [subcategories, setSubcategories] = useState([]);
