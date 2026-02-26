@@ -47,33 +47,68 @@ router.get('/', async (req, res) => {
     }, 10000); // 10 second timeout
     
     try {
-      const drinks = await Promise.race([
-        db.Drink.findAll({
-          where: whereClause,
-          attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'],
-          include: [{
-            model: db.Category,
-            as: 'category',
-            required: false,
-            attributes: {
-              include: ['id', 'name', 'description', 'image', 'isActive'],
-              // slug will be included if it exists, otherwise it will be null/undefined
-            }
-          }, {
-            model: db.Brand,
-            as: 'brand',
-            required: false,
-            attributes: ['id', 'name']
-          }],
-          order: [
-            ['isAvailable', 'DESC'], // Available items first (true = 1, false = 0)
-            ['name', 'ASC']
-          ]
-        }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('Query timeout')), 10000)
-        )
-      ]);
+      // Query drinks, handling missing slug column gracefully
+      let drinks;
+      try {
+        drinks = await Promise.race([
+          db.Drink.findAll({
+            where: whereClause,
+            attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'],
+            include: [{
+              model: db.Category,
+              as: 'category',
+              required: false,
+              attributes: {
+                include: ['id', 'name', 'description', 'image', 'isActive'],
+                // slug will be included if it exists, otherwise it will be null/undefined
+              }
+            }, {
+              model: db.Brand,
+              as: 'brand',
+              required: false,
+              attributes: ['id', 'name']
+            }],
+            order: [
+              ['isAvailable', 'DESC'], // Available items first (true = 1, false = 0)
+              ['name', 'ASC']
+            ]
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Query timeout')), 10000)
+          )
+        ]);
+      } catch (error) {
+        // If slug column doesn't exist, query without it
+        if (error.message && (error.message.includes('column') && error.message.includes('slug'))) {
+          console.log('⚠️  slug column not found in drinks table, querying without it...');
+          drinks = await Promise.race([
+            db.Drink.findAll({
+              where: whereClause,
+              attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'], // Exclude slug
+              include: [{
+                model: db.Category,
+                as: 'category',
+                required: false,
+                attributes: ['id', 'name', 'description', 'image', 'isActive'] // Exclude category slug too
+              }, {
+                model: db.Brand,
+                as: 'brand',
+                required: false,
+                attributes: ['id', 'name']
+              }],
+              order: [
+                ['isAvailable', 'DESC'],
+                ['name', 'ASC']
+              ]
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Query timeout')), 10000)
+            )
+          ]);
+        } else {
+          throw error;
+        }
+      }
       
       if (queryTimeout) {
         clearTimeout(queryTimeout);
