@@ -55,7 +55,10 @@ router.get('/', async (req, res) => {
             model: db.Category,
             as: 'category',
             required: false,
-            attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive']
+            attributes: {
+              include: ['id', 'name', 'description', 'image', 'isActive'],
+              // slug will be included if it exists, otherwise it will be null/undefined
+            }
           }, {
             model: db.Brand,
             as: 'brand',

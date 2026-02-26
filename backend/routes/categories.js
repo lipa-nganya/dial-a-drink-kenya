@@ -22,9 +22,25 @@ router.get('/', async (req, res) => {
       'Smokes'
     ];
 
-    const categories = await db.Category.findAll({
-      where: { isActive: true }
-    });
+    // Query categories, handling missing slug column gracefully
+    let categories;
+    try {
+      categories = await db.Category.findAll({
+        where: { isActive: true },
+        attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt', 'slug'] // Explicitly list attributes
+      });
+    } catch (error) {
+      // If slug column doesn't exist, query without it
+      if (error.message && (error.message.includes('column') && error.message.includes('slug'))) {
+        console.log('⚠️  slug column not found, querying without it...');
+        categories = await db.Category.findAll({
+          where: { isActive: true },
+          attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'] // Exclude slug
+        });
+      } else {
+        throw error;
+      }
+    }
 
     // Get counts and first image for each category
     const categoriesWithData = await Promise.all(
