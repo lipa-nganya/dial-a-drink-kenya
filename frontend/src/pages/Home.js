@@ -163,25 +163,21 @@ const Home = () => {
       if (response.data && response.data.value) {
         const imageUrl = getImageUrl(response.data.value);
         
-        // Use functional update to access current state
-        setHeroImageUrl((currentUrl) => {
-          // Only add cache-busting if the URL has changed (new image uploaded)
-          // This prevents unnecessary reloads while ensuring new images are fetched
-          const urlChanged = currentUrl !== imageUrl;
-          if (urlChanged) {
-            // Add cache-busting to force browser to fetch new image
-            const separator = imageUrl.includes('?') ? '&' : '?';
-            const cacheBustedUrl = `${imageUrl}${separator}_v=${Date.now()}`;
-            setHeroImage(cacheBustedUrl);
-            return imageUrl;
-          } else if (!currentUrl) {
-            // First load - set the URL without cache-busting (browser can cache it)
-            setHeroImage(imageUrl);
-            return imageUrl;
-          }
-          // If URL hasn't changed, keep existing heroImage to avoid unnecessary reloads
-          return currentUrl;
-        });
+        // Only add cache-busting if the URL has changed (new image uploaded)
+        // This prevents unnecessary reloads while ensuring new images are fetched
+        const currentUrl = heroImageUrlRef.current;
+        const urlChanged = currentUrl !== imageUrl;
+        if (urlChanged) {
+          // Add cache-busting to force browser to fetch new image
+          const separator = imageUrl.includes('?') ? '&' : '?';
+          const cacheBustedUrl = `${imageUrl}${separator}_v=${Date.now()}`;
+          setHeroImage(cacheBustedUrl);
+        } else if (!currentUrl) {
+          // First load - set the URL without cache-busting (browser can cache it)
+          setHeroImage(imageUrl);
+        }
+        // If URL hasn't changed, keep existing heroImage to avoid unnecessary reloads
+        heroImageUrlRef.current = imageUrl; // Update ref with new URL
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
