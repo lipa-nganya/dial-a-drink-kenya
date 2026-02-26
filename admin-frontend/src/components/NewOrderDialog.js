@@ -113,7 +113,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       // Reset order type to delivery
       setOrderType('delivery');
     }
-  }, [open, initialIsStop, fetchCustomers, fetchBranches, fetchDrivers, fetchTerritories, fetchProducts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initialIsStop]);
 
   // Fetch customers with search query
   useEffect(() => {
