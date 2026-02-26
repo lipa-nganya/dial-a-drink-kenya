@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
-const { verifyAdmin } = require('../middleware/auth');
+const { verifyAdmin } = require('./admin');
 
 // Run slug migrations (admin only)
 router.post('/run-slug-migrations', verifyAdmin, async (req, res) => {
