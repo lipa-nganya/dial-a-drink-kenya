@@ -363,18 +363,7 @@ router.get('/:id', async (req, res) => {
       if (!drink) {
         return res.status(404).json({ error: 'Drink not found' });
       }
-      
-      // If drink has a slug and category has a slug, redirect to category-based URL (301 Permanent Redirect)
-      if (drink.slug && drink.category?.slug) {
-        // Preserve query parameters if any
-        const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
-        // Redirect to category-based URL: /{categorySlug}/{productSlug}
-        const newUrl = `/${drink.category.slug}/${drink.slug}${queryString}`;
-        return res.redirect(301, newUrl);
-      }
-      
-      // If no slug exists yet, return the drink (will be handled by frontend)
-      // This should not happen after migration, but handle gracefully
+      // Return JSON so the frontend can redirect to /{categorySlug}/{productSlug} (API must not 301 redirect or the client gets the wrong response).
       return res.json(drink);
     } else {
       // Old format: /product/{slug} - redirect to category-based URL
@@ -396,15 +385,7 @@ router.get('/:id', async (req, res) => {
       if (!drink) {
         return res.status(404).json({ error: 'Drink not found' });
       }
-      
-      // Redirect to category-based URL (301 Permanent Redirect)
-      if (drink.category?.slug) {
-        const queryString = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
-        const newUrl = `/${drink.category.slug}/${drink.slug}${queryString}`;
-        return res.redirect(301, newUrl);
-      }
-      
-      // Return the drink if category slug is missing
+      // Return JSON; frontend will redirect to /{categorySlug}/{productSlug}.
       res.json(drink);
     }
   } catch (error) {
