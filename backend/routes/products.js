@@ -8,6 +8,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
+const { generateCategorySlugFromName } = require('../utils/slugGenerator');
 
 /**
  * Get product by category slug and product slug
@@ -17,20 +18,13 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
   try {
     const { categorySlug, productSlug } = req.params;
 
-    // Find category by slug
-    const category = await db.Category.findOne({
-      where: { slug: categorySlug, isActive: true }
-    });
-
-    if (!category) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
-
-    // Find product by slug and verify it belongs to the category
+    // Find product by slug and include its category.
+    // We deliberately do NOT depend on Category.slug in the database, because
+    // some legacy rows have null slugs. Instead we compute the slug from the
+    // category name and compare it to :categorySlug.
     const drink = await db.Drink.findOne({
       where: {
-        slug: productSlug,
-        categoryId: category.id
+        slug: productSlug
       },
       attributes: [
         'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
@@ -54,9 +48,19 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
       return res.status(404).json({ error: 'Product not found in this category' });
     }
 
-    // Verify category matches (extra safety check)
-    if (drink.categoryId !== category.id) {
-      return res.status(404).json({ error: 'Product category mismatch' });
+    // If there is a category, compute its slug from the name and verify it matches.
+    if (!drink.category || !drink.category.name) {
+      return res.status(404).json({ error: 'Category not found for this product' });
+    }
+
+    const computedCategorySlug = generateCategorySlugFromName(drink.category.name);
+    if (computedCategorySlug !== categorySlug) {
+      return res.status(404).json({ error: 'Product not found in this category' });
+    }
+
+    // Ensure the response always has a category.slug value, even if the DB column is null
+    if (!drink.category.slug) {
+      drink.category.slug = computedCategorySlug;
     }
 
     res.json(drink);

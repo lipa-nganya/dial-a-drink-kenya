@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
+const { generateCategorySlugFromName } = require('../utils/slugGenerator');
 
 // Get all drinks
 router.get('/', async (req, res) => {
@@ -335,6 +336,18 @@ router.get('/:id/testing-notes', async (req, res) => {
   }
 });
 
+// Helper to ensure category.slug is always populated in API responses, even if DB column is null
+function ensureCategorySlug(drink) {
+  try {
+    if (drink && drink.category && !drink.category.slug && drink.category.name) {
+      drink.category.slug = generateCategorySlugFromName(drink.category.name);
+    }
+  } catch (e) {
+    // Fail silently; this is just for nicer URLs and should not break main response
+    console.error('⚠️ Failed to compute category slug for drink:', drink?.id, e.message);
+  }
+}
+
 // Get drink by ID or slug (must be after /:id/detailed-description and /:id/testing-notes routes)
 // This route handles old /product/:id URLs and redirects to category-based URLs
 router.get('/:id', async (req, res) => {
@@ -363,7 +376,13 @@ router.get('/:id', async (req, res) => {
       if (!drink) {
         return res.status(404).json({ error: 'Drink not found' });
       }
-      // Return JSON so the frontend can redirect to /{categorySlug}/{productSlug} (API must not 301 redirect or the client gets the wrong response).
+
+      // Populate category.slug in the JSON response if it's missing so the frontend
+      // can build /{categorySlug}/{productSlug} URLs even when the DB column is null.
+      ensureCategorySlug(drink);
+
+      // Return JSON so the frontend can redirect to /{categorySlug}/{productSlug}
+      // (API must not 301 redirect or the client gets the wrong response).
       return res.json(drink);
     } else {
       // Old format: /product/{slug} - redirect to category-based URL
@@ -385,6 +404,10 @@ router.get('/:id', async (req, res) => {
       if (!drink) {
         return res.status(404).json({ error: 'Drink not found' });
       }
+
+      // Populate category.slug for slug-based lookups as well
+      ensureCategorySlug(drink);
+
       // Return JSON; frontend will redirect to /{categorySlug}/{productSlug}.
       res.json(drink);
     }
