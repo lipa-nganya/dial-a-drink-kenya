@@ -31,7 +31,8 @@ const limitIndex = args.indexOf('--limit');
 const delayIndex = args.indexOf('--delay');
 const LIMIT = limitIndex >= 0 && args[limitIndex + 1] ? parseInt(args[limitIndex + 1], 10) : null;
 const DELAY_MS = delayIndex >= 0 && args[delayIndex + 1] ? parseInt(args[delayIndex + 1], 10) : 1500;
-const HEADLESS = args.includes('--headless');
+// Default to headless (works on Cloud Run). Use --headed locally if you want to see the browser.
+const HEADLESS = !args.includes('--headed');
 
 function normalizeName(name) {
   if (name == null) return '';
