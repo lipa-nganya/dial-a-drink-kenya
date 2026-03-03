@@ -390,6 +390,7 @@ const Menu = () => {
                   backgroundColor: 'transparent',
                   boxShadow: 'none',
                   border: '2px solid rgba(0, 0, 0, 0.5)',
+                  fontWeight: '500 !important',
                   '&:hover': {
                     backgroundColor: 'rgba(0, 0, 0, 0.04)'
                   }
@@ -397,9 +398,6 @@ const Menu = () => {
                 '&.MuiButton-outlined': {
                   color: '#000000',
                   borderColor: 'rgba(0, 0, 0, 0.23)',
-                  fontWeight: '500 !important'
-                },
-                '&.MuiButton-contained': {
                   fontWeight: '500 !important'
                 }
               }}
