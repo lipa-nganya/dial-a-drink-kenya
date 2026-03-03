@@ -82,9 +82,9 @@ const ProductPage = () => {
       fetchDetailedDescription();
       fetchTestingNotes();
 
-      // If this page was loaded via the old /product/:id route but we now
-      // have proper slugs, redirect to the new category-based URL so that
-      // the browser URL matches local, e.g. /wine/bitola-bitola-white-wine-750ml.
+      // If this page was loaded via the old /product/:id or /product/:slug route
+      // and we now have proper category + product slugs, redirect to the
+      // new category-based URL so dev matches local (e.g. /wine/slug).
       if (!isCategoryBasedUrl && product.category?.slug && product.slug) {
         navigate(`/${product.category.slug}/${product.slug}`, { replace: true });
         return;
