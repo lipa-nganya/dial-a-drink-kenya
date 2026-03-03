@@ -81,6 +81,14 @@ const ProductPage = () => {
       fetchRelatedProducts();
       fetchDetailedDescription();
       fetchTestingNotes();
+
+      // If this page was loaded via the old /product/:id route but we now
+      // have proper slugs, redirect to the new category-based URL so that
+      // the browser URL matches local, e.g. /wine/bitola-bitola-white-wine-750ml.
+      if (!isCategoryBasedUrl && product.category?.slug && product.slug) {
+        navigate(`/${product.category.slug}/${product.slug}`, { replace: true });
+        return;
+      }
       
       // Set canonical URL for SEO (category-based format)
       const canonicalUrl = (product.slug && product.category?.slug)
