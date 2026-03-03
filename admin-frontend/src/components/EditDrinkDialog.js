@@ -26,8 +26,7 @@ import {
   Close,
   CloudUpload,
   AttachMoney,
-  Add,
-  Delete
+  Add
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
