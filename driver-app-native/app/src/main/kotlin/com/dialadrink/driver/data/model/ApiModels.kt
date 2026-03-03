@@ -470,6 +470,7 @@ data class WalletTransaction(
     val id: Int,
     val amount: Double,
     val transactionType: String? = null,
+    val paymentProvider: String? = null,
     val orderId: Int? = null,
     val orderNumber: Int? = null,
     val orderLocation: String? = null,

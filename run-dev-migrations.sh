@@ -1,5 +1,7 @@
 #!/bin/bash
 # Run Database Migrations for Development Environment
+# DATABASE_URL must be set on the Cloud Run service; this script can retrieve it
+# or you can set DATABASE_URL in your environment (e.g. .env, not committed).
 
 set -e
 
@@ -7,11 +9,25 @@ PROJECT_ID="dialadrink-production"
 REGION="us-central1"
 SERVICE_NAME="deliveryos-development-backend"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-dev"
-DATABASE_URL="postgresql://dialadrink_app:o61yqm5fLiTwWnk5@/dialadrink_dev?host=/cloudsql/$CONNECTION_NAME"
 
 echo "🚀 Running Development Database Migrations"
 echo "=========================================="
 echo ""
+
+# DATABASE_URL: use existing env or retrieve from Cloud Run (do not hardcode credentials)
+if [ -z "$DATABASE_URL" ]; then
+  echo "📊 Retrieving DATABASE_URL from Cloud Run service..."
+  DATABASE_URL=$(gcloud run services describe "$SERVICE_NAME" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --format="value(spec.template.spec.containers[0].env)" 2>/dev/null | \
+    grep -oP "DATABASE_URL.*?value': '\K[^']*" || true)
+  if [ -z "$DATABASE_URL" ]; then
+    echo "❌ Could not retrieve DATABASE_URL. Set it in your environment (e.g. .env) and re-run."
+    exit 1
+  fi
+  export DATABASE_URL
+fi
 
 # Set project
 gcloud config set project "$PROJECT_ID" 2>&1

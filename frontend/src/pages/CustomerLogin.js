@@ -56,8 +56,9 @@ const CustomerLogin = () => {
     const timer = setTimeout(async () => {
       setCheckingPin(true);
       try {
-        console.log('🔍 Checking PIN status for phone:', phone);
-        const response = await api.post('/auth/check-pin-status', { phone });
+        const normalizedPhone = normalizePhoneNumber(phone);
+        console.log('🔍 Checking PIN status for phone:', phone, '-> normalized:', normalizedPhone);
+        const response = await api.post('/auth/check-pin-status', { phone: normalizedPhone });
         console.log('📱 PIN status response:', response.data);
         if (response.data.success) {
           const hasPinValue = response.data.hasPin || false;
@@ -81,6 +82,31 @@ const CustomerLogin = () => {
 
   const sanitizePhoneInput = (value) => value.replace(/[^\d+]/g, '');
 
+  // Normalize phone number: convert leading 0 to 254, or if starts with 7 and is 9 digits, add 254
+  const normalizePhoneNumber = (phone) => {
+    if (!phone) return phone;
+    const digits = phone.replace(/\D/g, '');
+    if (!digits) return phone;
+    
+    // If starts with 0 and is 10 digits, convert to 254 format
+    if (digits.startsWith('0') && digits.length === 10) {
+      return `254${digits.slice(1)}`;
+    }
+    
+    // If starts with 7 and is 9 digits, add 254 prefix
+    if (digits.startsWith('7') && digits.length === 9) {
+      return `254${digits}`;
+    }
+    
+    // If already starts with 254, return as is
+    if (digits.startsWith('254') && digits.length === 12) {
+      return digits;
+    }
+    
+    // Otherwise return the digits as entered
+    return digits;
+  };
+
   const handleLoginWithPin = async (e) => {
     e.preventDefault();
     setError('');
@@ -98,8 +124,9 @@ const CustomerLogin = () => {
     setPinLoginLoading(true);
 
     try {
+      const normalizedPhone = normalizePhoneNumber(phone);
       const response = await api.post('/auth/login', {
-        phone,
+        phone: normalizedPhone,
         pin
       });
 
@@ -160,8 +187,10 @@ const CustomerLogin = () => {
     setOtpLoading(true);
 
     try {
+      // Normalize phone number for Kenyan numbers (convert 0 to 254)
+      const normalizedPhone = isKenyanNumber ? normalizePhoneNumber(phone) : `${countryCode}${phone}`;
       const requestData = {
-        phone: isKenyanNumber ? phone : `${countryCode}${phone}`,
+        phone: normalizedPhone,
         userType: 'customer'
       };
       
@@ -173,7 +202,7 @@ const CustomerLogin = () => {
       const response = await api.post('/auth/send-otp', requestData);
 
       const { success, error: responseError, note, message, smsFailed, emailSent } = response.data || {};
-      setOtpPhone(isKenyanNumber ? phone : `${countryCode}${phone}`);
+      setOtpPhone(normalizedPhone);
       if (!isKenyanNumber) {
         setOtpEmail(email);
       }
@@ -208,7 +237,8 @@ const CustomerLogin = () => {
       // Admin can provide the code from dashboard
       if (responseData.otpCode || status === 402) {
         setError('');
-        setOtpPhone(isKenyanNumber ? phone : `${countryCode}${phone}`);
+        const normalizedPhone = isKenyanNumber ? normalizePhoneNumber(phone) : `${countryCode}${phone}`;
+        setOtpPhone(normalizedPhone);
         if (!isKenyanNumber) {
           setOtpEmail(email);
         }
@@ -298,7 +328,7 @@ const CustomerLogin = () => {
               setError('');
             }}
             fullWidth
-              placeholder={isKenyanNumber ? "0712345678 or 254712345678" : "Enter phone number"}
+              placeholder={isKenyanNumber ? "712345678" : "Enter phone number"}
             disabled={pinLoginLoading || otpLoading || checkingPin}
             autoComplete="tel"
           />

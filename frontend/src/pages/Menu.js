@@ -154,13 +154,21 @@ const Menu = () => {
         if (Array.isArray(categoriesResponse.data)) {
           categoriesArray = categoriesResponse.data;
         } else if (categoriesResponse.data.data && Array.isArray(categoriesResponse.data.data)) {
+          // Wrapped response: { data: [...] }
           categoriesArray = categoriesResponse.data.data;
         }
       }
+      
       if (!Array.isArray(categoriesArray)) {
         console.warn('Categories response is not an array:', categoriesResponse.data);
         categoriesArray = [];
       }
+      
+      // Filter out "Test" and "Popular" categories
+      categoriesArray = categoriesArray.filter(cat => 
+        cat.name && cat.name.toLowerCase() !== 'test' && cat.name.toLowerCase() !== 'popular'
+      );
+      
       setCategories(categoriesArray);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -334,59 +342,32 @@ const Menu = () => {
           <Button
             variant={selectedCategory === 0 ? 'contained' : 'outlined'}
             onClick={() => handleCategoryChange(null, 0)}
-            sx={{
-              py: 0.75,
-              fontSize: '0.75rem',
-              fontWeight: selectedCategory === 0 ? 600 : 400,
-              textTransform: 'none',
-              borderRadius: 1.5,
-              minHeight: '36px',
-              color: '#000000',
-              '&.MuiButton-contained': {
+              sx={{
+                py: 0.75,
+                fontSize: '0.75rem',
+                fontWeight: '500 !important', // Same font weight as menu title (h4)
+                textTransform: 'none',
+                borderRadius: 1.5,
+                minHeight: '36px',
                 color: '#000000',
-                backgroundColor: 'transparent',
-                boxShadow: 'none',
-                border: '2px solid rgba(0, 0, 0, 0.5)',
-                '&:hover': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                '&.MuiButton-contained': {
+                  color: '#000000',
+                  backgroundColor: 'transparent',
+                  boxShadow: 'none',
+                  border: '2px solid rgba(0, 0, 0, 0.5)',
+                  fontWeight: '500 !important',
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
+                  }
+                },
+                '&.MuiButton-outlined': {
+                  color: '#000000',
+                  borderColor: 'rgba(0, 0, 0, 0.23)',
+                  fontWeight: '500 !important'
                 }
-              },
-              '&.MuiButton-outlined': {
-                color: '#000000',
-                borderColor: 'rgba(0, 0, 0, 0.23)'
-              }
-            }}
+              }}
           >
             All
-          </Button>
-          <Button
-            variant={selectedCategory === -1 ? 'contained' : 'outlined'}
-            onClick={() => handleCategoryChange(null, -1)}
-            startIcon={<Star sx={{ fontSize: '0.75rem' }} />}
-            sx={{
-              py: 0.75,
-              fontSize: '0.75rem',
-              fontWeight: selectedCategory === -1 ? 600 : 400,
-              textTransform: 'none',
-              borderRadius: 1.5,
-              minHeight: '36px',
-              color: '#000000',
-              '&.MuiButton-contained': {
-                color: '#000000',
-                backgroundColor: 'transparent',
-                boxShadow: 'none',
-                border: '2px solid rgba(0, 0, 0, 0.5)',
-                '&:hover': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                }
-              },
-              '&.MuiButton-outlined': {
-                color: '#000000',
-                borderColor: 'rgba(0, 0, 0, 0.23)'
-              }
-            }}
-          >
-            Popular
           </Button>
           {categories.map((category) => (
             <Button
@@ -396,7 +377,7 @@ const Menu = () => {
               sx={{
                 py: 0.75,
                 fontSize: '0.75rem',
-                fontWeight: selectedCategory === category.id ? 600 : 400,
+                fontWeight: '500 !important', // Same font weight as menu title (h4)
                 textTransform: 'none',
                 borderRadius: 1.5,
                 whiteSpace: 'nowrap',
@@ -415,7 +396,11 @@ const Menu = () => {
                 },
                 '&.MuiButton-outlined': {
                   color: '#000000',
-                  borderColor: 'rgba(0, 0, 0, 0.23)'
+                  borderColor: 'rgba(0, 0, 0, 0.23)',
+                  fontWeight: '500 !important'
+                },
+                '&.MuiButton-contained': {
+                  fontWeight: '500 !important'
                 }
               }}
             >

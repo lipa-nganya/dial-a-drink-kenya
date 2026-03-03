@@ -21,6 +21,31 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
 
   const sanitizePhoneInput = (value) => value.replace(/[^\d+]/g, '');
 
+  // Normalize phone number: convert leading 0 to 254, or if starts with 7 and is 9 digits, add 254
+  const normalizePhoneNumber = (phone) => {
+    if (!phone) return phone;
+    const digits = phone.replace(/\D/g, '');
+    if (!digits) return phone;
+    
+    // If starts with 0 and is 10 digits, convert to 254 format
+    if (digits.startsWith('0') && digits.length === 10) {
+      return `254${digits.slice(1)}`;
+    }
+    
+    // If starts with 7 and is 9 digits, add 254 prefix
+    if (digits.startsWith('7') && digits.length === 9) {
+      return `254${digits}`;
+    }
+    
+    // If already starts with 254, return as is
+    if (digits.startsWith('254') && digits.length === 12) {
+      return digits;
+    }
+    
+    // Otherwise return the digits as entered
+    return digits;
+  };
+
   const handleSendOtp = async () => {
     setError('');
 
@@ -32,13 +57,14 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
     setOtpLoading(true);
 
     try {
+      const normalizedPhone = normalizePhoneNumber(phone);
       const response = await api.post('/auth/send-otp', {
-        phone,
+        phone: normalizedPhone,
         userType: 'customer'
       });
 
       const { success, error: responseError, note, message, smsFailed } = response.data || {};
-      setOtpPhone(phone);
+      setOtpPhone(normalizedPhone);
       
       // Always proceed to OTP entry if OTP was generated (success: true)
       // Even if SMS failed, admin can provide the code
@@ -63,7 +89,8 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
       // Admin can provide the code from dashboard
       if (responseData.otpCode || status === 402) {
         setError('');
-        setOtpPhone(phone);
+        const normalizedPhone = normalizePhoneNumber(phone);
+        setOtpPhone(normalizedPhone);
         setOtpMessage(
           responseData.note || 
           `${apiError} Enter the OTP shared with you by support to continue.`
@@ -150,7 +177,7 @@ const CustomerLogin = ({ onLoginSuccess, orderId }) => {
           }}
           fullWidth
           sx={{ mb: 3 }}
-          placeholder="0712345678 or 254712345678"
+          placeholder="712345678"
           disabled={otpLoading}
           autoComplete="tel"
         />

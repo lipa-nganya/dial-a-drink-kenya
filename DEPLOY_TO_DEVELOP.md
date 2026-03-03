@@ -1,167 +1,63 @@
 # Deploy to Develop Environment
 
-This guide walks through deploying from local to develop environment.
+Deploy local changes to development: backend to existing Cloud Run service, frontend via Netlify (GitHub), Android code pushed to repo. No credentials in scripts.
 
 ## Prerequisites
 
-1. Google Cloud SDK installed and authenticated
-2. Docker installed (for backend deployment)
-3. Android SDK installed (for Android app build)
-4. Git configured with access to repository
+1. **Google Cloud SDK** installed and authenticated  
+   ```bash
+   gcloud auth login dialadrinkkenya254@gmail.com
+   gcloud config set project dialadrink-production
+   ```
+2. **No credentials in repo**  
+   - Do not commit `.env` or any file containing `DATABASE_URL`, API keys, or passwords.  
+   - Ensure `.env` is in `.gitignore`.  
+   - GCloud key/account is set via `gcloud config`; do not commit service account JSON keys.
+3. **Backend**  
+   - `DATABASE_URL` must already be set on the Cloud Run service `deliveryos-development-backend` (e.g. via Console or a one-time secure setup). Deploy scripts only update non-secret env vars (CORS URLs, etc.).
 
-## Step-by-Step Deployment
-
-### 1. Prepare Git Repository
-
-```bash
-# Remove git lock if exists
-rm -f .git/index.lock
-
-# Stage all changes
-git add -A
-
-# Commit changes
-git commit -m "Deploy to develop: Add penalties table, endpoints, and UI improvements"
-
-# Switch to develop branch
-git checkout develop || git checkout -b develop
-
-# Merge main into develop
-git merge main --no-edit
-
-# Push to GitHub (triggers Netlify frontend deployment)
-git push origin develop
-```
-
-### 2. Run Database Migrations
+## Quick deploy
 
 ```bash
-cd backend
-node scripts/create-penalties-table-direct.js
-cd ..
+./deploy-to-development.sh
 ```
 
 This will:
-- Check if `penalties` table exists
-- Create it if missing
-- Also check/create `loans` table if needed
 
-### 3. Deploy Backend to Google Cloud Run
+- Set gcloud account to `dialadrinkkenya254@gmail.com` and project `dialadrink-production`
+- Check that no credentials are committed
+- Push to GitHub `develop` (Netlify auto-deploys frontend; no new GCloud frontend services)
+- Deploy backend to **existing** service `deliveryos-development-backend` (no new backend service)
+- Preserve CORS (`FRONTEND_URL`, `ADMIN_URL`); other env vars (e.g. `DATABASE_URL`) unchanged
+- Run database migrations if `DATABASE_URL` is set or can be read from the dev backend service (adds inventory `tags`, `pageTitle`, `keywords`, `youtubeUrl`)
 
-**Option A: Using Cloud Build (Recommended)**
+## Database migrations (tags, pageTitle, etc.)
 
-```bash
-cd backend
+Migrations add `pageTitle`, `keywords`, `youtubeUrl`, `tags` to `drinks` for inventory SEO.
 
-# Set gcloud project
-gcloud config set project dialadrink-production
+- **Automatic**: If `DATABASE_URL` is in your environment, or gcloud can read it from the development backend service, `deploy-to-development.sh` runs migrations.
+- **Manual**:  
+  1. Start Cloud SQL Proxy:  
+     `cloud_sql_proxy -instances=dialadrink-production:us-central1:dialadrink-db-dev=tcp:5432 &`  
+  2. Set `DATABASE_URL` in `.env` (not committed), e.g.:  
+     `postgresql://USER:PASSWORD@localhost:5432/dialadrink_dev`  
+  3. Run:  
+     `cd backend && NODE_ENV=development ./scripts/run-migrations-cloud-sql.sh`
 
-# Authenticate (if needed)
-gcloud auth login dialadrinkkenya254@gmail.com
+## CORS
 
-# Trigger Cloud Build
-gcloud builds submit --config=cloudbuild-dev.yaml .
-```
+CORS is configured in `backend/app.js` using `FRONTEND_URL` and `ADMIN_URL`. Deploy keeps these on the service; no change needed.
 
-**Option B: Direct Deployment (if Cloud Build fails)**
+## Android app
 
-```bash
-cd backend
+- Code lives in `driver-app-native/` and is pushed to GitHub with the rest of the repo.
+- To build for development:  
+  `cd driver-app-native && ./gradlew assembleDevelopmentDebug`  
+- APK: `app/build/outputs/apk/development/debug/app-development-debug.apk`  
+- No new GCloud frontend services; frontends are on Netlify.
 
-# Build Docker image
-IMAGE_NAME="gcr.io/dialadrink-production/deliveryos-backend:develop-$(date +%s)"
-docker build -t $IMAGE_NAME .
+## Verify
 
-# Push to Container Registry
-docker push $IMAGE_NAME
-
-# Deploy to Cloud Run
-gcloud run deploy deliveryos-development-backend \
-    --image $IMAGE_NAME \
-    --region us-central1 \
-    --platform managed \
-    --allow-unauthenticated \
-    --memory 512Mi \
-    --timeout 300 \
-    --add-cloudsql-instances dialadrink-production:us-central1:dialadrink-db-dev \
-    --update-env-vars NODE_ENV=development,FRONTEND_URL=https://dialadrink.thewolfgang.tech,ADMIN_URL=https://dialadrink-admin.thewolfgang.tech,HOST=0.0.0.0
-```
-
-### 4. Verify CORS Configuration
-
-CORS is already configured in `backend/app.js` with the following allowed origins:
-- `https://dialadrink.thewolfgang.tech` (Customer frontend)
-- `https://dialadrink-admin.thewolfgang.tech` (Admin frontend)
-- `https://*.netlify.app` (Netlify previews)
-- Local development URLs
-
-The deployment maintains CORS settings automatically.
-
-### 5. Build Android App for DevelopDebug
-
-```bash
-cd driver-app-native
-
-# Build developdebug variant
-./gradlew assembleDevelopmentDebug
-
-# APK will be at:
-# app/build/outputs/apk/development/debug/app-development-debug.apk
-```
-
-### 6. Verify Deployment
-
-1. **Backend Health Check:**
-   ```bash
-   curl https://deliveryos-development-backend-805803410802.us-central1.run.app/api/health
-   ```
-
-2. **Check Netlify Deployment:**
-   - Visit Netlify dashboard
-   - Check deployment status for frontend sites
-
-3. **Test Endpoints:**
-   - Test `/api/admin/penalties` endpoint
-   - Test `/api/admin/drivers/:id/penalty-balance` endpoint
-
-## Automated Deployment Script
-
-Run the automated script:
-
-```bash
-./deploy-to-develop.sh
-```
-
-This script handles all steps automatically.
-
-## Troubleshooting
-
-### Git Lock File Error
-```bash
-rm -f .git/index.lock
-```
-
-### Cloud Build Fails
-- Check gcloud authentication: `gcloud auth list`
-- Verify project: `gcloud config get-value project`
-- Check service account permissions
-
-### Database Migration Fails
-- Ensure DATABASE_URL is set correctly
-- Check database connection
-- Verify Cloud SQL instance is accessible
-
-### CORS Issues
-- Verify FRONTEND_URL and ADMIN_URL env vars are set
-- Check backend logs for CORS errors
-- Ensure allowed origins include your frontend URLs
-
-## Service Details
-
-- **Backend Service:** `deliveryos-development-backend`
-- **Region:** `us-central1`
-- **Project:** `dialadrink-production`
-- **Database:** `dialadrink-db-dev` (Cloud SQL)
-- **Frontend URLs:**
-  - Customer: `https://dialadrink.thewolfgang.tech`
-  - Admin: `https://dialadrink-admin.thewolfgang.tech`
+- Backend: `curl https://deliveryos-development-backend-XXXX.run.app/api/health`
+- Frontend: Netlify dashboard (deploys from GitHub)
+- Migrations: Check `drinks` table for `pageTitle`, `keywords`, `youtubeUrl`, `tags` columns

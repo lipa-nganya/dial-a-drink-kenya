@@ -114,7 +114,7 @@ const ProductPage = () => {
           let price = 0;
           if (Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0) {
             const pricing = product.capacityPricing.find(p => String(p.capacity) === String(capacity));
-            price = pricing ? parseFloat(pricing.currentPrice) || 0 : parseFloat(product.price) || 0;
+            price = pricing ? parseFloat(pricing.currentPrice || pricing.price || 0) || 0 : parseFloat(product.price) || 0;
           } else {
             price = parseFloat(product.price) || 0;
           }
@@ -545,21 +545,21 @@ const ProductPage = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       {/* Product Title at Top */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 700 }}>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center' }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 700, textAlign: 'center' }}>
           {generateProductTitle()}
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 4, alignItems: 'flex-start' }}>
-        {/* Product Image */}
-        <Box sx={{ width: { xs: '100%', md: '33.333%' }, flexShrink: 0 }}>
+      <Grid container spacing={3} sx={{ alignItems: 'flex-start', justifyContent: 'center' }}>
+        {/* Product Image - Left Column */}
+        <Grid item xs={12} md={5} sx={{ display: 'flex', justifyContent: 'center' }}>
           <Card sx={{ width: '100%' }}>
             <Box
               sx={{
                 width: '100%',
-                height: '400px',
-                minHeight: '400px',
+                height: { xs: '300px', md: '350px' },
+                minHeight: { xs: '300px', md: '350px' },
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -587,7 +587,7 @@ const ProductPage = () => {
           </Card>
           
           {/* Capacities and Pricing - Mobile Only (above Buy Now button) */}
-          <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 3 }}>
+          <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 2 }}>
             {availableCapacities.length > 0 ? (
               <FormControl component="fieldset" sx={{ width: '100%', mb: 3 }}>
                 <RadioGroup
@@ -617,11 +617,11 @@ const ProductPage = () => {
                               key={`${product.id}-${capacity}-${index}-mobile`}
                               value={capacity}
                               control={
-                                <Radio
+                                  <Radio
                                   sx={{
                                     color: colors.textPrimary,
-                                    padding: '8px',
-                                    marginRight: '8px',
+                                    padding: '4px',
+                                    marginRight: '4px',
                                     fontSize: '1.5rem',
                                     '&.Mui-checked': { color: colors.accentText },
                                     '& .MuiSvgIcon-root': {
@@ -634,12 +634,12 @@ const ProductPage = () => {
                                 <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.9rem', color: colors.accentText, wordBreak: 'break-word' }}>
                                         {capacity}
                                       </Typography>
                                     </Box>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
-                                      <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                      <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.9rem' }}>
                                         KES {Math.round(price)}
                                       </Typography>
                                     </Box>
@@ -747,16 +747,17 @@ const ProductPage = () => {
             </IconButton>
             <Button
               variant="contained"
-              size="large"
-              fullWidth
+              size="medium"
               startIcon={<AddShoppingCart />}
               onClick={handleAddToCart}
               disabled={!product.isAvailable}
               sx={{
                 backgroundColor: '#FF6B6B',
-                py: 1.5,
-                fontSize: '1.1rem',
+                py: 1,
+                px: 2,
+                fontSize: '0.9rem',
                 flex: 1,
+                maxWidth: '350px',
                 '&:hover': {
                   backgroundColor: '#FF5252'
                 },
@@ -769,12 +770,12 @@ const ProductPage = () => {
               Buy Now
             </Button>
           </Box>
-        </Box>
+        </Grid>
 
-        {/* Product Details - Right Side */}
-        <Box sx={{ flex: 1, minWidth: 0, width: { xs: '100%', md: '66.666%' } }}>
+        {/* Product Details - Right Column */}
+        <Grid item xs={12} md={7} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {/* Status Chips */}
-          <Box sx={{ mb: 3, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
             {!product.isAvailable && (
               <Chip label="Out of Stock" color="error" size="small" />
             )}
@@ -787,14 +788,14 @@ const ProductPage = () => {
           </Box>
 
           {/* Product Details */}
-          <Box sx={{ mb: 4, width: '100%', minWidth: 0 }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, width: '100%' }}>
+          <Box sx={{ mb: 2, width: '100%', minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, width: '100%', alignItems: 'flex-start' }}>
               {/* Product name */}
-              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
                   Product name:
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body2" sx={{ fontSize: '0.85rem', textAlign: 'left', flex: 1 }}>
                   {product.name}
                 </Typography>
               </Box>
@@ -804,92 +805,83 @@ const ProductPage = () => {
                 availableCapacities.map((capacity) => {
                   const price = getPriceForCapacity(capacity);
                   return (
-                    <Box key={capacity} sx={{ display: 'flex', flexDirection: 'row' }}>
-                      <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                    <Box key={capacity} sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
                         {capacity} price:
                       </Typography>
-                      <Typography variant="body1">
+                      <Typography variant="body2" sx={{ fontSize: '0.85rem', textAlign: 'left', flex: 1 }}>
                         KES {Math.round(price).toLocaleString('en-KE')}
                       </Typography>
                     </Box>
                   );
                 })
               ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                  <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+                <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
+                  <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
                     Price:
                   </Typography>
-                  <Typography variant="body1">
+                  <Typography variant="body2" sx={{ fontSize: '0.85rem', textAlign: 'left', flex: 1 }}>
                     KES {Math.round(Number(product.price) || 0).toLocaleString('en-KE')}
                   </Typography>
                 </Box>
               )}
 
               {/* Product category */}
-              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
                   Product category:
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body2" sx={{ fontSize: '0.85rem', textAlign: 'left', flex: 1 }}>
                   {getProductType()}
                 </Typography>
               </Box>
 
               {/* Alcohol content (ABV) */}
-              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
                   Alcohol content (ABV):
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body2" sx={{ fontSize: '0.85rem', textAlign: 'left', flex: 1 }}>
                   {product.abv ? `${product.abv}%` : 'N/A'}
                 </Typography>
               </Box>
 
-              {/* Product rating */}
-              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
-                  Product rating:
-                </Typography>
-                <Typography variant="body1">
-                  {product.rating ? product.rating.toFixed(1) : 'N/A'}
-                </Typography>
-              </Box>
-
               {/* Country */}
-              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
                   Country:
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body2" sx={{ fontSize: '0.85rem', textAlign: 'left', flex: 1 }}>
                   {product.origin || product.country || 'N/A'}
                 </Typography>
               </Box>
 
               {/* Brand */}
-              <Box sx={{ display: 'flex', flexDirection: 'row' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
                   Brand:
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body2" sx={{ fontSize: '0.85rem', textAlign: 'left', flex: 1 }}>
                   {typeof product.brand === 'object' && product.brand !== null ? product.brand.name : (product.brand || product.name)}
                 </Typography>
               </Box>
 
-              {/* Testing notes */}
-              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start' }}>
-                <Typography variant="body1" sx={{ fontWeight: 'bold', minWidth: '200px', flexShrink: 0 }}>
-                  Testing notes:
+              {/* Tasting notes */}
+              <Box sx={{ display: 'flex', flexDirection: 'row', alignItems: 'flex-start', width: '100%', maxWidth: '400px' }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', flexShrink: 0, fontSize: '0.85rem', textAlign: 'left' }}>
+                  Tasting notes:
                 </Typography>
-                <Typography variant="body1" sx={{ flex: 1, wordWrap: 'break-word', overflowWrap: 'break-word' }}>
+                <Typography variant="body2" sx={{ flex: 1, wordWrap: 'break-word', overflowWrap: 'break-word', fontSize: '0.85rem', textAlign: 'left' }}>
                   {testingNotesLoading ? 'Loading...' : (testingNotes || 'N/A')}
                 </Typography>
               </Box>
             </Box>
+          </Box>
 
-          <Divider sx={{ my: 4 }} />
+          <Divider sx={{ my: 2, width: '100%' }} />
 
           {/* Capacities and Pricing - Desktop Only */}
-          <Box sx={{ mb: 3, display: { xs: 'none', md: 'block' } }}>
+          <Box sx={{ mb: 2, display: { xs: 'none', md: 'flex' }, justifyContent: 'center', maxWidth: '400px', width: '100%' }}>
             {availableCapacities.length > 0 ? (
               <FormControl component="fieldset" sx={{ width: '100%', mb: 3 }}>
                 <RadioGroup
@@ -919,11 +911,11 @@ const ProductPage = () => {
                               key={`${product.id}-${capacity}-${index}`}
                               value={capacity}
                               control={
-                                <Radio
+                                  <Radio
                                   sx={{
                                     color: colors.textPrimary,
-                                    padding: '8px',
-                                    marginRight: '8px',
+                                    padding: '4px',
+                                    marginRight: '4px',
                                     fontSize: '1.5rem',
                                     '&.Mui-checked': { color: colors.accentText },
                                     '& .MuiSvgIcon-root': {
@@ -936,12 +928,12 @@ const ProductPage = () => {
                                 <Box sx={{ width: '100%', minWidth: 0, flex: 1 }}>
                                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%', gap: 0.5, flexWrap: 'wrap' }}>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: 1, flexWrap: 'wrap' }}>
-                                      <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.7rem', color: colors.accentText, wordBreak: 'break-word' }}>
+                                      <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.9rem', color: colors.accentText, wordBreak: 'break-word' }}>
                                         {capacity}
                                       </Typography>
                                     </Box>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexShrink: 0, flexWrap: 'wrap' }}>
-                                      <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.7rem' }}>
+                                      <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold', fontSize: '0.9rem' }}>
                                         KES {Math.round(price)}
                                       </Typography>
                                     </Box>
@@ -1031,11 +1023,13 @@ const ProductPage = () => {
                 KES {Math.round(Number(product.price) || 0)}
               </Typography>
             )}
+          </Box>
 
-            {/* Share and Buy Now Buttons - Desktop Only */}
-            <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, alignItems: 'center', mb: 4 }}>
+          {/* Share and Buy Now Buttons - Desktop Only */}
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1, alignItems: 'center', mb: 2, maxWidth: '400px', width: '100%', justifyContent: 'center' }}>
               <IconButton
                 onClick={handleShareClick}
+                size="small"
                 sx={{
                   backgroundColor: colors.paper,
                   border: `1px solid ${colors.border || '#ddd'}`,
@@ -1044,20 +1038,21 @@ const ProductPage = () => {
                   }
                 }}
               >
-                <Share />
+                <Share fontSize="small" />
               </IconButton>
               <Button
                 variant="contained"
-                size="large"
-                fullWidth
+                size="medium"
                 startIcon={<AddShoppingCart />}
                 onClick={handleAddToCart}
                 disabled={!product.isAvailable}
                 sx={{
                   backgroundColor: '#FF6B6B',
-                  py: 1.5,
-                  fontSize: '1.1rem',
+                  py: 1,
+                  px: 2,
+                  fontSize: '0.9rem',
                   flex: 1,
+                  maxWidth: '350px',
                   '&:hover': {
                     backgroundColor: '#FF5252'
                   },
@@ -1070,10 +1065,8 @@ const ProductPage = () => {
                 Buy Now
               </Button>
             </Box>
-          </Box>
-          </Box>
-        </Box>
-      </Box>
+        </Grid>
+      </Grid>
 
       {/* Why Buy and How to Order Sections - Side by Side */}
       <Box sx={{ mt: 6, mb: 4 }}>
@@ -1347,7 +1340,7 @@ const ProductPage = () => {
         <Box sx={{ mt: 6 }}>
           <Divider sx={{ mb: 4 }} />
           <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-            Related {typeof product.brand === 'object' && product.brand !== null ? product.brand.name : (product.brand || product.name)} Variants
+            Similar to {typeof product.brand === 'object' && product.brand !== null ? product.brand.name : (product.brand || product.name)}
           </Typography>
           <Box sx={{ 
             display: 'grid',

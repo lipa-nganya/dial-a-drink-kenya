@@ -345,6 +345,65 @@ async function addPurchasePriceToDrinks() {
   }
 }
 
+async function addSeoAndTagsToDrinks() {
+  try {
+    console.log('📦 Running migration: add-seo-and-tags-to-drinks');
+    console.log('   Add pageTitle, keywords, youtubeUrl, tags to drinks table (inventory SEO)');
+    
+    const queryInterface = db.sequelize.getQueryInterface();
+    const table = await queryInterface.describeTable('drinks');
+    
+    if (!table.pageTitle) {
+      await queryInterface.addColumn('drinks', 'pageTitle', {
+        type: db.Sequelize.STRING,
+        allowNull: true
+      });
+      console.log('   ✅ pageTitle column added');
+    } else {
+      console.log('   ⏭️  pageTitle already exists');
+    }
+    if (!table.keywords) {
+      await queryInterface.addColumn('drinks', 'keywords', {
+        type: db.Sequelize.TEXT,
+        allowNull: true
+      });
+      console.log('   ✅ keywords column added');
+    } else {
+      console.log('   ⏭️  keywords already exists');
+    }
+    if (!table.youtubeUrl) {
+      await queryInterface.addColumn('drinks', 'youtubeUrl', {
+        type: db.Sequelize.TEXT,
+        allowNull: true
+      });
+      console.log('   ✅ youtubeUrl column added');
+    } else {
+      console.log('   ⏭️  youtubeUrl already exists');
+    }
+    if (!table.tags) {
+      await queryInterface.addColumn('drinks', 'tags', {
+        type: db.Sequelize.JSONB,
+        allowNull: true
+      });
+      await db.sequelize.query(`ALTER TABLE drinks ALTER COLUMN tags SET DEFAULT '[]'::jsonb`);
+      console.log('   ✅ tags column added');
+    } else {
+      console.log('   ⏭️  tags already exists');
+    }
+    
+    console.log('   ✅ Migration add-seo-and-tags-to-drinks completed\n');
+    return true;
+  } catch (error) {
+    if (error.message.includes('already exists') || error.message.includes('duplicate')) {
+      console.log('   ⏭️  Columns may already exist, skipping...');
+      console.log('   ✅ Migration add-seo-and-tags-to-drinks completed\n');
+      return true;
+    }
+    console.error('   ❌ Migration add-seo-and-tags-to-drinks failed:', error.message);
+    throw error;
+  }
+}
+
 async function runMigrations() {
   try {
     console.log('🚀 Starting Cloud SQL migrations...\n');
@@ -387,7 +446,8 @@ async function runMigrations() {
       { name: 'add-brand-focus', fn: addBrandFocusColumn },
       { name: 'add-driver-location-columns', fn: addDriverLocationColumns },
       { name: 'add-order-adminId-and-cancellation-columns', fn: addOrderAdminIdAndCancellationColumns },
-      { name: 'add-purchase-price-to-drinks', fn: addPurchasePriceToDrinks }
+      { name: 'add-purchase-price-to-drinks', fn: addPurchasePriceToDrinks },
+      { name: 'add-seo-and-tags-to-drinks', fn: addSeoAndTagsToDrinks }
     ];
 
     let successCount = 0;

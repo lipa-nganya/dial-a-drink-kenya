@@ -12,19 +12,23 @@ echo ""
 # Get DATABASE_URL from Cloud Run service if not set
 if [ -z "$DATABASE_URL" ]; then
   echo "📊 Retrieving DATABASE_URL from Cloud Run service..."
-  DATABASE_URL=$(gcloud run services describe deliveryos-backend \
+  CLOUD_RUN_SERVICE="${CLOUD_RUN_SERVICE:-deliveryos-backend}"
+  if [ "$NODE_ENV" = "development" ]; then
+    CLOUD_RUN_SERVICE="deliveryos-development-backend"
+  fi
+  DATABASE_URL=$(gcloud run services describe "$CLOUD_RUN_SERVICE" \
     --region us-central1 \
     --format="value(spec.template.spec.containers[0].env)" 2>/dev/null | \
     grep -oP "DATABASE_URL.*?value': '\K[^']*" || echo "")
   
   if [ -z "$DATABASE_URL" ]; then
-    echo "❌ Could not retrieve DATABASE_URL from Cloud Run service"
-    echo "   Please set DATABASE_URL environment variable manually"
-    echo "   Example: export DATABASE_URL='postgres://user:pass@host/db'"
+    echo "❌ Could not retrieve DATABASE_URL from Cloud Run service ($CLOUD_RUN_SERVICE)"
+    echo "   Set DATABASE_URL in your environment (e.g. .env, not committed) and re-run."
+    echo "   Example: export DATABASE_URL='postgres://user:pass@localhost:5432/db' (with Cloud SQL Proxy)"
     exit 1
   fi
   
-  echo "✅ Retrieved DATABASE_URL from Cloud Run service"
+  echo "✅ Retrieved DATABASE_URL from $CLOUD_RUN_SERVICE"
   export DATABASE_URL
 fi
 

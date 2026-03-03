@@ -1571,7 +1571,7 @@ const Orders = () => {
               '&:hover': { backgroundColor: '#00C4A3' }
             }}
           >
-            NEW ORDER
+            POS
           </Button>
         </Box>
         <Typography variant="h6" color="text.secondary">
@@ -2174,7 +2174,7 @@ const Orders = () => {
                             }}
                             sx={{ mt: 1, mr: 1 }}
                           >
-                            Request Payment
+                            Payment
                           </Button>
                         )}
                         {order.status === 'delivered' && order.paymentStatus === 'unpaid' && (
@@ -3015,7 +3015,7 @@ const Orders = () => {
                 }
               }}
             >
-              Request Payment
+              Payment
             </Button>
           )}
           <Button 
@@ -3264,7 +3264,7 @@ const Orders = () => {
         fullWidth
       >
         <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
-          Request Payment
+          Payment
         </DialogTitle>
         <DialogContent>
           {selectedOrderForPayment && (

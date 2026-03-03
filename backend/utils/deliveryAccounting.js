@@ -2,9 +2,16 @@
  * Delivery Accounting Logic for Dial a Drink
  *
  * No wallet. Only Cash at Hand and Savings.
- * - Savings = 50% of delivery fee (credited on ALL orders).
- * - Pay on Delivery (cash): driver's cash at hand += 50% delivery fee + order total; savings += 50% delivery fee.
- * - Pay Now (M-Pesa/Pesapal): driver's cash at hand -= 50% delivery fee; savings += 50% delivery fee.
+ *
+ * Current rules:
+ * - For PAY_ON_DELIVERY (cash orders where driver receives cash from customer):
+ *   - Driver's cash at hand increases by (order items total + 50% of delivery fee).
+ *   - The remaining 50% of the delivery fee is **not** credited to savings here.
+ *     It is credited to savings later, when the driver submits the cash for that order.
+ *
+ * - For PAY_NOW (M-Pesa/Pesapal where driver does not receive cash from customer):
+ *   - Driver's cash at hand increases by 50% of the delivery fee.
+ *   - Driver's savings also increase by 50% of the delivery fee at completion time.
  */
 
 /**
@@ -35,14 +42,17 @@ function calculateDeliveryAccounting(alcoholCost, deliveryFee, paymentMethod) {
   let savingsChange;
 
   if (paymentMethod === 'PAY_NOW') {
-    // M-Pesa/Pesapal: driver did not receive cash, so credit 50% of delivery fee to cash at hand; 50% credited to savings
-    // CRITICAL: For orders where driver did not receive cash, credit 50% to cash at hand instead of reducing it
+    // M-Pesa/Pesapal: driver did not receive cash, so credit 50% of delivery fee to cash at hand;
+    // the other 50% is credited to savings immediately on order completion.
     cashAtHandChange = withheldAmount; // Credit (add) 50% delivery fee to cash at hand
     savingsChange = withheldAmount;
   } else {
-    // PAY_ON_DELIVERY (cash): cash at hand increases by 50% delivery fee + order total; 50% delivery fee credited to savings
+    // PAY_ON_DELIVERY (cash):
+    // - Driver receives cash from customer (itemsTotal + deliveryFee).
+    // - System tracks driver's cash at hand as itemsTotal + 50% of delivery fee (the remaining 50% is withheld).
+    // - The withheld 50% is later moved into savings when the driver submits cash for the order.
     cashAtHandChange = alcoholCost + withheldAmount;
-    savingsChange = withheldAmount; // 50% of delivery fee credited to savings for all orders
+    savingsChange = 0; // Savings for PAY_ON_DELIVERY are now credited on cash submission, not on completion
   }
 
   return {

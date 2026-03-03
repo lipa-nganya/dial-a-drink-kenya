@@ -62,7 +62,16 @@ function generateReceiptHTML(order) {
     </tr>
   `).join('') || '';
   
-  const subtotal = Number(order.totalAmount || 0) - Number(order.tipAmount || 0);
+  // Calculate items total (sum of all item prices * quantities)
+  const itemsTotal = order.items?.reduce((sum, item) => {
+    return sum + (Number(item.price || 0) * item.quantity);
+  }, 0) || 0;
+  
+  // Calculate delivery fee (totalAmount - tipAmount - itemsTotal)
+  const deliveryFee = Math.max(0, Number(order.totalAmount || 0) - Number(order.tipAmount || 0) - itemsTotal);
+  
+  // Subtotal = itemsTotal + deliveryFee
+  const subtotal = itemsTotal + deliveryFee;
   const tip = Number(order.tipAmount || 0);
   const total = Number(order.totalAmount || 0);
   
@@ -285,6 +294,12 @@ function generateReceiptHTML(order) {
         </div>
         
         <div class="totals">
+          ${deliveryFee > 0 ? `
+          <div class="total-row">
+            <span class="total-label">Delivery Fee:</span>
+            <span class="total-value">KES ${deliveryFee.toFixed(2)}</span>
+          </div>
+          ` : ''}
           <div class="total-row">
             <span class="total-label">Subtotal:</span>
             <span class="total-value">KES ${subtotal.toFixed(2)}</span>

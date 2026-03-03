@@ -1052,7 +1052,11 @@ router.post('/drinks', async (req, res) => {
       capacity,
       capacityPricing,
       abv,
-      purchasePrice
+      purchasePrice,
+      pageTitle,
+      keywords,
+      youtubeUrl,
+      tags
     } = req.body;
 
     const normalizedName = typeof name === 'string' ? name.trim() : '';
@@ -1134,7 +1138,11 @@ router.post('/drinks', async (req, res) => {
       capacity: capacities,
       capacityPricing: normalizedPricing,
       abv: toNumber(abv),
-      purchasePrice: finalPurchasePrice
+      purchasePrice: finalPurchasePrice,
+      pageTitle: typeof pageTitle === 'string' && pageTitle.trim() ? pageTitle.trim() : null,
+      keywords: typeof keywords === 'string' && keywords.trim() ? keywords.trim() : null,
+      youtubeUrl: typeof youtubeUrl === 'string' && youtubeUrl.trim() ? youtubeUrl.trim() : null,
+      tags: Array.isArray(tags) ? tags : (tags ? [tags] : [])
     });
 
     const drinkWithRelations = await db.Drink.findByPk(newDrink.id, {
@@ -1178,7 +1186,11 @@ router.put('/drinks/:id', async (req, res) => {
       capacity,
       capacityPricing,
       abv,
-      purchasePrice
+      purchasePrice,
+      pageTitle,
+      keywords,
+      youtubeUrl,
+      tags
     } = req.body;
 
     const normalizedName = typeof name === 'string' ? name.trim() : '';
@@ -1316,7 +1328,19 @@ router.put('/drinks/:id', async (req, res) => {
       stock: stockValue,
       purchasePrice: finalPurchasePrice !== undefined && finalPurchasePrice !== null 
         ? finalPurchasePrice 
-        : drink.purchasePrice
+        : drink.purchasePrice,
+      pageTitle: pageTitle !== undefined 
+        ? (typeof pageTitle === 'string' && pageTitle.trim() ? pageTitle.trim() : null)
+        : drink.pageTitle,
+      keywords: keywords !== undefined 
+        ? (typeof keywords === 'string' && keywords.trim() ? keywords.trim() : null)
+        : drink.keywords,
+      youtubeUrl: youtubeUrl !== undefined 
+        ? (typeof youtubeUrl === 'string' && youtubeUrl.trim() ? youtubeUrl.trim() : null)
+        : drink.youtubeUrl,
+      tags: tags !== undefined 
+        ? (Array.isArray(tags) ? tags : (tags ? [tags] : []))
+        : drink.tags
       // isAvailable is set above based on stock if stock is being updated
       // brandId is set above
     });
@@ -2191,6 +2215,62 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error updating delivery fee:', error);
     res.status(500).json({ error: 'Failed to update delivery fee' });
+  }
+});
+
+/**
+ * Update order fields (including isStop and stopDeductionAmount)
+ * PATCH /api/admin/orders/:id
+ */
+router.patch('/orders/:id', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isStop, stopDeductionAmount } = req.body;
+
+    const order = await db.Order.findByPk(id);
+    if (!order) {
+      return res.status(404).json({ error: 'Order not found' });
+    }
+
+    const updateData = {};
+    let wasStopBefore = order.isStop;
+    
+    if (isStop !== undefined) {
+      updateData.isStop = isStop === true || isStop === 'true';
+    }
+    
+    if (stopDeductionAmount !== undefined) {
+      updateData.stopDeductionAmount = updateData.isStop && stopDeductionAmount ? parseFloat(stopDeductionAmount) : null;
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ error: 'No valid fields to update' });
+    }
+
+    await order.update(updateData);
+    await order.reload();
+
+    // If order is marked as stop and was not a stop before, and order is completed, apply stop deduction
+    if (updateData.isStop === true && !wasStopBefore && order.status === 'completed' && order.paymentStatus === 'paid' && order.driverId) {
+      try {
+        const { applyStopDeduction } = require('../utils/walletCredits');
+        const result = await applyStopDeduction(order.id);
+        if (result.applied) {
+          console.log(`✅ Stop deduction applied retroactively for Order #${order.id}`);
+        } else {
+          console.log(`ℹ️  Stop deduction not applied for Order #${order.id}: ${result.reason}`);
+        }
+      } catch (stopError) {
+        console.error(`❌ Error applying stop deduction for Order #${order.id}:`, stopError);
+        // Don't fail the update if stop deduction fails
+      }
+    }
+
+    const orderData = order.toJSON();
+    res.json(orderData);
+  } catch (error) {
+    console.error('Error updating order:', error);
+    res.status(500).json({ error: 'Failed to update order' });
   }
 });
 
@@ -3144,6 +3224,86 @@ router.post('/orders/:orderId/repair-cash-at-hand', verifyAdmin, async (req, res
   } catch (error) {
     console.error('Error repairing cash at hand for order:', error);
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// HARD RESET: Delete all cash-at-hand and savings-related transactions and zero out balances.
+// POST /api/admin/maintenance/reset-wallets
+// BODY: { "confirm": "RESET_WALLETS" }
+router.post('/maintenance/reset-wallets', verifyAdmin, async (req, res) => {
+  try {
+    const { confirm } = req.body || {};
+    if (confirm !== 'RESET_WALLETS') {
+      return res.status(400).json({
+        success: false,
+        error: 'Confirmation token missing or invalid. To run this, send { "confirm": "RESET_WALLETS" } in the body.'
+      });
+    }
+
+    console.log('⚠️  HARD RESET requested: deleting cash-at-hand and savings transactions and zeroing balances.');
+
+    const t = await db.sequelize.transaction();
+    try {
+      // Delete savings and cash-at-hand related transactions
+      const transactionTypesToDelete = [
+        'savings_credit',   // savings credits
+        'cash_settlement',  // cash-at-hand credits (e.g. Pay Now 50% delivery fee)
+        'delivery_fee_debit', // stop deductions and Pay Now cash-at-hand reductions
+        'cash_submission'   // cash submission audit transactions
+      ];
+
+      const deletedTransactionsCount = await db.Transaction.destroy({
+        where: {
+          transactionType: {
+            [Op.in]: transactionTypesToDelete
+          }
+        },
+        transaction: t
+      });
+
+      // Zero out all driver cash-at-hand balances
+      const updatedDriversCount = await db.Driver.update(
+        { cashAtHand: 0 },
+        { where: {}, transaction: t }
+      );
+
+      // Zero out all driver wallet savings balances
+      const updatedDriverWalletsCount = await db.DriverWallet.update(
+        { savings: 0 },
+        { where: {}, transaction: t }
+      );
+
+      // Zero out admin wallet cash-at-hand as well (keeps admin view consistent)
+      const updatedAdminWalletsCount = await db.AdminWallet.update(
+        { cashAtHand: 0 },
+        { where: {}, transaction: t }
+      );
+
+      await t.commit();
+
+      console.log('✅ HARD RESET completed:', {
+        deletedTransactionsCount,
+        updatedDriversCount,
+        updatedDriverWalletsCount,
+        updatedAdminWalletsCount
+      });
+
+      return res.json({
+        success: true,
+        message: 'All cash-at-hand and savings-related transactions deleted; driver/admin balances reset to 0.',
+        deletedTransactionsCount,
+        updatedDriversCount: Array.isArray(updatedDriversCount) ? updatedDriversCount[0] : updatedDriversCount,
+        updatedDriverWalletsCount: Array.isArray(updatedDriverWalletsCount) ? updatedDriverWalletsCount[0] : updatedDriverWalletsCount,
+        updatedAdminWalletsCount: Array.isArray(updatedAdminWalletsCount) ? updatedAdminWalletsCount[0] : updatedAdminWalletsCount
+      });
+    } catch (err) {
+      await t.rollback();
+      console.error('❌ Error during HARD RESET of wallets:', err);
+      return res.status(500).json({ success: false, error: err.message || 'Failed to reset wallets' });
+    }
+  } catch (outerErr) {
+    console.error('❌ Unexpected error in /maintenance/reset-wallets:', outerErr);
+    return res.status(500).json({ success: false, error: outerErr.message });
   }
 });
 
@@ -4973,12 +5133,29 @@ router.get('/customers', async (req, res) => {
     const whereClause = {};
     if (searchQuery) {
       const searchPattern = `%${searchQuery}%`;
-      whereClause[Op.or] = [
-        { customerName: { [Op.iLike]: searchPattern } },
-        { phone: { [Op.iLike]: searchPattern } },
-        { email: { [Op.iLike]: searchPattern } },
-        { username: { [Op.iLike]: searchPattern } }
-      ];
+      const whereConditions = [];
+      
+      // Search by name, email, username (text fields)
+      whereConditions.push({ customerName: { [Op.iLike]: searchPattern } });
+      whereConditions.push({ email: { [Op.iLike]: searchPattern } });
+      whereConditions.push({ username: { [Op.iLike]: searchPattern } });
+      
+      // Build phone variants for phone number search
+      const phoneVariants = generatePhoneVariants(searchQuery);
+      
+      // Search by phone (exact match and variants)
+      phoneVariants.forEach(variant => {
+        whereConditions.push({ phone: variant });
+        whereConditions.push({ phone: { [Op.iLike]: `%${variant}%` } });
+        whereConditions.push({ username: variant });
+        whereConditions.push({ username: { [Op.iLike]: `%${variant}%` } });
+      });
+      
+      // Also add the original search pattern for phone (for partial matches)
+      whereConditions.push({ phone: { [Op.iLike]: searchPattern } });
+      whereConditions.push({ username: { [Op.iLike]: searchPattern } });
+      
+      whereClause[Op.or] = whereConditions;
     }
 
     // Get total count for pagination (with search filter if applicable)

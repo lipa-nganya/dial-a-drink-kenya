@@ -133,6 +133,7 @@ echo -e "${GREEN}✅ Image built successfully${NC}"
 echo ""
 
 # Deploy to Cloud Run (existing service)
+# DATABASE_URL must already be set on the service (do not put credentials in this script).
 echo "🚀 Deploying to Cloud Run (existing service: $SERVICE_NAME)..."
 gcloud run deploy "$SERVICE_NAME" \
     --image "$IMAGE_TAG" \
@@ -140,7 +141,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --set-env-vars "NODE_ENV=development,DATABASE_URL=postgresql://dialadrink_app:o61yqm5fLiTwWnk5@/dialadrink_dev?host=/cloudsql/$CONNECTION_NAME,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$EXISTING_GOOGLE_CLOUD_PROJECT,GCP_PROJECT=$EXISTING_GCP_PROJECT,HOST=0.0.0.0" \
+    --update-env-vars "NODE_ENV=development,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$EXISTING_GOOGLE_CLOUD_PROJECT,GCP_PROJECT=$EXISTING_GCP_PROJECT,HOST=0.0.0.0" \
     --memory 512Mi \
     --timeout 300 \
     --max-instances 10 \

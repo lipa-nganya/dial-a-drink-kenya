@@ -492,7 +492,8 @@ const Drivers = () => {
     phoneNumber: '',
     status: 'offline',
     creditLimit: '',
-    cashAtHand: ''
+    cashAtHand: '',
+    savings: ''
   });
   const [driverOtps, setDriverOtps] = useState({}); // Store OTPs for each driver
   const [showOtps, setShowOtps] = useState({}); // Track which OTPs are visible
@@ -639,12 +640,14 @@ const Drivers = () => {
   const handleOpenDialog = (driver = null) => {
     if (driver) {
       setEditingDriver(driver);
+      const savings = driver.savings || driver.wallet?.savings || 0;
       setFormData({
         name: driver.name,
         phoneNumber: driver.phoneNumber,
         status: driver.status,
         creditLimit: driver.creditLimit || '',
-        cashAtHand: driver.cashAtHand || ''
+        cashAtHand: driver.cashAtHand || '',
+        savings: savings || ''
       });
     } else {
       setEditingDriver(null);
@@ -653,7 +656,8 @@ const Drivers = () => {
         phoneNumber: '',
         status: 'offline',
         creditLimit: '',
-        cashAtHand: ''
+        cashAtHand: '',
+        savings: ''
       });
     }
     setOpenDialog(true);
@@ -667,7 +671,8 @@ const Drivers = () => {
       phoneNumber: '',
       status: 'offline',
       creditLimit: '',
-      cashAtHand: ''
+      cashAtHand: '',
+      savings: ''
     });
   };
 
@@ -1362,6 +1367,17 @@ const Drivers = () => {
               helperText="Current cash amount with the driver"
               InputProps={{
                 inputProps: { min: 0, step: 0.01 }
+              }}
+            />
+            <TextField
+              label="Savings (KES)"
+              type="number"
+              value={formData.savings}
+              onChange={(e) => setFormData({ ...formData, savings: e.target.value })}
+              fullWidth
+              helperText="Driver savings (50% of delivery fees withheld)"
+              InputProps={{
+                inputProps: { step: 0.01 }
               }}
             />
           </Box>

@@ -19,12 +19,15 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  InputAdornment
+  InputAdornment,
+  Chip
 } from '@mui/material';
 import {
   Close,
   CloudUpload,
-  AttachMoney
+  AttachMoney,
+  Add,
+  Delete
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -47,8 +50,13 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     capacityPricing: [],
     abv: '',
     stock: 0,
-    purchasePrice: ''
+    purchasePrice: '',
+    pageTitle: '',
+    keywords: '',
+    youtubeUrl: '',
+    tags: []
   });
+  const [newTag, setNewTag] = useState('');
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [brands, setBrands] = useState([]);
@@ -92,7 +100,11 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || '',
         stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0,
-        purchasePrice: purchasePriceValue
+        purchasePrice: purchasePriceValue,
+        pageTitle: drink.pageTitle || '',
+        keywords: drink.keywords || '',
+        youtubeUrl: drink.youtubeUrl || '',
+        tags: Array.isArray(drink.tags) ? drink.tags : (drink.tags ? [drink.tags] : [])
       };
       
       console.log('🔍 FormData being set:', {
@@ -124,7 +136,11 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacityPricing: [],
         abv: '',
         stock: 0,
-        purchasePrice: ''
+        purchasePrice: '',
+        pageTitle: '',
+        keywords: '',
+        youtubeUrl: '',
+        tags: []
       });
       setImagePreview('');
       setSubcategories([]);
@@ -289,7 +305,11 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         // Always include purchasePrice - allow 0 or empty (set to null)
         purchasePrice: formData.purchasePrice && String(formData.purchasePrice).trim() !== '' 
           ? (isNaN(parseFloat(formData.purchasePrice)) ? null : parseFloat(formData.purchasePrice))
-          : null
+          : null,
+        pageTitle: formData.pageTitle ? formData.pageTitle.trim() : null,
+        keywords: formData.keywords ? formData.keywords.trim() : null,
+        youtubeUrl: formData.youtubeUrl ? formData.youtubeUrl.trim() : null,
+        tags: Array.isArray(formData.tags) ? formData.tags : []
       };
 
       if (drink && drink.id) {
@@ -823,6 +843,149 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
             />
           </Grid>
         </Grid>
+
+        <Divider sx={{ my: 3, borderColor: colors.border, width: '100%' }} />
+
+        <Box sx={{ width: '100%' }}>
+          {/* Product SEO Section */}
+          <Typography variant="h6" sx={{ color: colors.accentText, mb: 2 }}>
+            Product SEO
+          </Typography>
+
+          <TextField
+            fullWidth
+            label="Page Title"
+            value={formData.pageTitle}
+            onChange={(e) => handleInputChange('pageTitle', e.target.value)}
+            placeholder="Enter page title for SEO"
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
+              }
+            }}
+          />
+
+          <TextField
+            fullWidth
+            label="Keywords"
+            value={formData.keywords}
+            onChange={(e) => handleInputChange('keywords', e.target.value)}
+            placeholder="Enter keywords separated by commas"
+            helperText="Separate multiple keywords with commas"
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
+              }
+            }}
+          />
+
+          <TextField
+            fullWidth
+            label="YouTube URL"
+            value={formData.youtubeUrl}
+            onChange={(e) => handleInputChange('youtubeUrl', e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=..."
+            helperText="Enter the full YouTube video URL"
+            sx={{
+              mb: 2,
+              '& .MuiOutlinedInput-root': {
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.accent },
+                '&.Mui-focused fieldset': { borderColor: colors.accent }
+              }
+            }}
+          />
+
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ color: colors.textPrimary, mb: 1 }}>
+              Tags
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
+              {formData.tags && formData.tags.length > 0 ? (
+                formData.tags.map((tag, index) => (
+                  <Chip
+                    key={index}
+                    label={tag}
+                    onDelete={() => {
+                      const newTags = formData.tags.filter((_, i) => i !== index);
+                      handleInputChange('tags', newTags);
+                    }}
+                    sx={{
+                      backgroundColor: colors.accent,
+                      color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                      '& .MuiChip-deleteIcon': {
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                        '&:hover': {
+                          color: isDarkMode ? '#333' : '#E0E0E0'
+                        }
+                      }
+                    }}
+                  />
+                ))
+              ) : (
+                <Typography variant="body2" sx={{ color: colors.textSecondary, fontStyle: 'italic' }}>
+                  No tags added yet
+                </Typography>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                fullWidth
+                size="small"
+                label="Add Tag"
+                value={newTag}
+                onChange={(e) => setNewTag(e.target.value)}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && newTag.trim()) {
+                    const trimmedTag = newTag.trim();
+                    if (!formData.tags || !formData.tags.includes(trimmedTag)) {
+                      handleInputChange('tags', [...(formData.tags || []), trimmedTag]);
+                      setNewTag('');
+                    }
+                  }
+                }}
+                placeholder="Enter tag and press Enter"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: colors.border },
+                    '&:hover fieldset': { borderColor: colors.accent },
+                    '&.Mui-focused fieldset': { borderColor: colors.accent }
+                  }
+                }}
+              />
+              <Button
+                variant="outlined"
+                startIcon={<Add />}
+                onClick={() => {
+                  if (newTag.trim()) {
+                    const trimmedTag = newTag.trim();
+                    if (!formData.tags || !formData.tags.includes(trimmedTag)) {
+                      handleInputChange('tags', [...(formData.tags || []), trimmedTag]);
+                      setNewTag('');
+                    }
+                  }
+                }}
+                disabled={!newTag.trim() || (formData.tags && formData.tags.includes(newTag.trim()))}
+                sx={{
+                  borderColor: colors.accent,
+                  color: colors.accentText,
+                  '&:hover': {
+                    borderColor: colors.accent,
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)'
+                  }
+                }}
+              >
+                Add
+              </Button>
+            </Box>
+          </Box>
+        </Box>
       </DialogContent>
 
       <DialogActions sx={{ p: 3 }}>

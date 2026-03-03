@@ -1520,35 +1520,9 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     // For admin wallet, creditWalletsOnDeliveryCompletion handles it when order is completed.
     console.log(`ℹ️  Skipping tip and admin wallet crediting for Order #${order.id} - will be handled by creditWalletsOnDeliveryCompletion when order is completed`);
 
-    const cashSettlementAmount = Math.max(totalAmount - (parseFloat(tipAmount) || 0) - driverPayAmount, 0);
-
-    if (cashSettlementAmount > 0.01 && order.driverId) {
-      try {
-        const driverWallet = await ensureDriverWallet();
-        if (driverWallet) {
-          await driverWallet.update({
-            balance: parseFloat(driverWallet.balance) - cashSettlementAmount
-          });
-
-          await db.Transaction.create({
-            orderId: order.id,
-            transactionType: 'cash_settlement',
-            paymentMethod,
-            paymentProvider,
-            amount: cashSettlementAmount,
-            status: 'completed',
-            paymentStatus: 'paid',
-            receiptNumber: normalizedReceipt,
-            transactionDate: now,
-            driverId: order.driverId,
-            driverWalletId: driverWallet.id,
-            notes: `Cash received (${methodLabel}) for Order #${order.id} debited from driver wallet.`
-          });
-        }
-      } catch (cashDebitError) {
-        console.error('❌ Error recording cash settlement debit:', cashDebitError);
-      }
-    }
+    // REMOVED: Cash settlement transaction creation on payment confirmation
+    // Cash settlement transactions should only be created when driver actually submits cash (via M-Pesa or cash submission),
+    // not when payment is confirmed. This prevents duplicate/incorrect cash at hand transactions.
 
     await order.update({
       paymentStatus: 'paid',

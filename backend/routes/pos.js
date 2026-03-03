@@ -437,12 +437,8 @@ router.get('/drinks', async (req, res) => {
   try {
     const { search, limit = 10, offset = 0 } = req.query;
     
-    // Build where clause
-    const whereClause = {
-      isAvailable: {
-        [Op.ne]: false // Include drinks where isAvailable is not explicitly false
-      }
-    };
+    // Build where clause - show ALL drinks including those with 0 stock
+    const whereClause = {};
     
     // Add search filter if provided
     if (search && search.trim()) {
@@ -455,11 +451,12 @@ router.get('/drinks', async (req, res) => {
     // Get total count for pagination
     const total = await db.Drink.count({ where: whereClause });
     
-    // Get paginated drinks
-    const limitNum = parseInt(limit) || 10;
+    // For POS, return all drinks (no pagination limit) to show all inventory including 0 stock items
+    // If limit is explicitly provided and > 0, use it; otherwise return all
+    const limitNum = limit && parseInt(limit) > 0 ? parseInt(limit) : null;
     const offsetNum = parseInt(offset) || 0;
     
-    const drinks = await db.Drink.findAll({
+    const findAllOptions = {
       where: whereClause,
       attributes: ['id', 'name', 'price', 'stock', 'barcode', 'capacity', 'capacityPricing', 'purchasePrice', 'categoryId'],
       include: [{
@@ -468,10 +465,16 @@ router.get('/drinks', async (req, res) => {
         attributes: ['id', 'name'],
         required: false // Left join - include drinks even if category is missing
       }],
-      order: [['name', 'ASC']],
-      limit: limitNum,
-      offset: offsetNum
-    });
+      order: [['name', 'ASC']]
+    };
+    
+    // Only add limit/offset if limit is specified
+    if (limitNum !== null) {
+      findAllOptions.limit = limitNum;
+      findAllOptions.offset = offsetNum;
+    }
+    
+    const drinks = await db.Drink.findAll(findAllOptions);
 
     // Map drinks to ensure categoryId is included even if category association failed
     const drinksWithCategory = drinks.map(drink => {

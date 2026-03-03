@@ -392,26 +392,44 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     console.log(`✅ Updated driver cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (submission created${isOrderPayment ? ', auto-approved' : ', pending approval'})`);
     console.log(`✅ Updated lastActivity for driver ${driverId} (cash submission created)`);
 
-    // Order payment: credit merchant wallet (order cost) and driver savings (50% delivery fee) immediately
+    // Order payment: credit merchant wallet (order cost) and, for PAY_ON_DELIVERY orders,
+    // credit driver savings with 50% of the delivery fee **once**, when the driver submits cash.
     if (isOrderPayment && orderIdsToLink.length > 0) {
       const firstOrderId = orderIdsToLink[0];
       let merchantCreditAmount = submissionAmount;
       let driverSavingsCreditAmount = 0;
       let breakdownError = null;
+      let paymentType = 'pay_on_delivery';
+
+      try {
+        const order = await db.Order.findByPk(firstOrderId);
+        if (order) {
+          paymentType = (order.paymentType || 'pay_on_delivery').toLowerCase();
+        }
+      } catch (e) {
+        console.error(`⚠️ Could not load order ${firstOrderId} to determine payment type:`, e.message);
+      }
+
       try {
         const breakdown = await getOrderFinancialBreakdown(firstOrderId);
         const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
         const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-        driverSavingsCreditAmount = deliveryFee * 0.5;
+
+        // For PAY_ON_DELIVERY orders, driver receives cash and savings are credited on submission.
+        if (paymentType === 'pay_on_delivery') {
+          driverSavingsCreditAmount = deliveryFee * 0.5;
+        } else {
+          // For PAY_NOW orders, savings are handled on order completion via walletCredits.
+          driverSavingsCreditAmount = 0;
+        }
+
         merchantCreditAmount = itemsTotal;
-        console.log(`   Order payment breakdown for Order #${firstOrderId}: itemsTotal=${itemsTotal.toFixed(2)}, deliveryFee=${deliveryFee.toFixed(2)}, savingsCredit=${driverSavingsCreditAmount.toFixed(2)}`);
+        console.log(`   Order payment breakdown for Order #${firstOrderId}: itemsTotal=${itemsTotal.toFixed(2)}, deliveryFee=${deliveryFee.toFixed(2)}, savingsCredit=${driverSavingsCreditAmount.toFixed(2)}, paymentType=${paymentType}`);
       } catch (e) {
         breakdownError = e;
         console.error(`❌ Order payment create: could not get breakdown for Order #${firstOrderId}:`, e.message);
         console.error(`❌ Stack:`, e.stack);
-        // Try to calculate from submission amount (submissionAmount = itemsTotal + 50% deliveryFee)
-        // If breakdown fails, we can't accurately split, so use full amount for merchant
-        // But we should still try to credit savings if possible
+        // If breakdown fails, we can't accurately split, so use full amount for merchant.
       }
       
       let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
@@ -426,41 +444,57 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       });
       console.log(`   Order payment (auto-approved): merchant wallet +KES ${merchantCreditAmount.toFixed(2)}, driver savings +KES ${driverSavingsCreditAmount.toFixed(2)} (admin cash at hand NOT updated)`);
       
-      // Credit driver savings (50% delivery fee) - ensure this always happens if there's a delivery fee
+      // Credit driver savings (50% delivery fee) for PAY_ON_DELIVERY, but only if not already credited
       if (driverSavingsCreditAmount > 0.009) {
-        let driverWallet = await db.DriverWallet.findOne({ where: { driverId: parseInt(driverId, 10) } });
-        if (!driverWallet) {
-          driverWallet = await db.DriverWallet.create({
-            driverId: parseInt(driverId, 10),
-            balance: 0,
-            totalTipsReceived: 0,
-            totalTipsCount: 0,
-            totalDeliveryPay: 0,
-            totalDeliveryPayCount: 0,
-            savings: 0
-          });
-        }
-        const currentSavings = parseFloat(driverWallet.savings || 0);
-        const newSavings = currentSavings + driverSavingsCreditAmount;
-        await driverWallet.update({ savings: newSavings });
-        
-        // Create savings credit transaction
-        const savingsTransaction = await db.Transaction.create({
-          orderId: firstOrderId,
-          transactionType: 'savings_credit',
-          paymentMethod: 'cash',
-          paymentProvider: 'order_payment_submission',
-          amount: driverSavingsCreditAmount,
-          status: 'completed',
-          paymentStatus: 'paid',
-          driverId: parseInt(driverId, 10),
-          driverWalletId: driverWallet.id,
-          notes: `Savings credit from Order Payment submission #${submission.id} - 50% delivery fee for Order #${firstOrderId} (KES ${driverSavingsCreditAmount.toFixed(2)})`
+        const driverIdInt = parseInt(driverId, 10);
+
+        // Prevent double-crediting if a savings_credit transaction already exists for this order/driver
+        const existingSavingsCredit = await db.Transaction.findOne({
+          where: {
+            orderId: firstOrderId,
+            transactionType: 'savings_credit',
+            driverId: driverIdInt,
+            status: { [db.Sequelize.Op.ne]: 'cancelled' }
+          }
         });
-        console.log(`   ✅ Driver savings credited: ${currentSavings.toFixed(2)} → ${newSavings.toFixed(2)} (+${driverSavingsCreditAmount.toFixed(2)}) for Order #${firstOrderId}`);
-        console.log(`   ✅ Savings transaction created: ID ${savingsTransaction.id}`);
+
+        if (!existingSavingsCredit) {
+          let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverIdInt } });
+          if (!driverWallet) {
+            driverWallet = await db.DriverWallet.create({
+              driverId: driverIdInt,
+              balance: 0,
+              totalTipsReceived: 0,
+              totalTipsCount: 0,
+              totalDeliveryPay: 0,
+              totalDeliveryPayCount: 0,
+              savings: 0
+            });
+          }
+          const currentSavings = parseFloat(driverWallet.savings || 0);
+          const newSavings = currentSavings + driverSavingsCreditAmount;
+          await driverWallet.update({ savings: newSavings });
+          
+          // Create savings credit transaction
+          const savingsTransaction = await db.Transaction.create({
+            orderId: firstOrderId,
+            transactionType: 'savings_credit',
+            paymentMethod: 'cash',
+            paymentProvider: 'order_payment_submission',
+            amount: driverSavingsCreditAmount,
+            status: 'completed',
+            paymentStatus: 'paid',
+            driverId: driverIdInt,
+            driverWalletId: driverWallet.id,
+            notes: `Savings credit from Order Payment submission #${submission.id} - 50% delivery fee for Order #${firstOrderId} (KES ${driverSavingsCreditAmount.toFixed(2)})`
+          });
+          console.log(`   ✅ Driver savings credited: ${currentSavings.toFixed(2)} → ${newSavings.toFixed(2)} (+${driverSavingsCreditAmount.toFixed(2)}) for Order #${firstOrderId}`);
+          console.log(`   ✅ Savings transaction created: ID ${savingsTransaction.id}`);
+        } else {
+          console.log(`   ℹ️ Savings credit already exists for Order #${firstOrderId} and driver ${driverIdInt}, skipping duplicate savings credit.`);
+        }
       } else {
-        console.warn(`   ⚠️ No savings credit for Order #${firstOrderId}: driverSavingsCreditAmount=${driverSavingsCreditAmount.toFixed(2)} (too small or breakdown failed)`);
+        console.warn(`   ⚠️ No savings credit for Order #${firstOrderId}: driverSavingsCreditAmount=${driverSavingsCreditAmount.toFixed(2)} (too small, PAY_NOW order, or breakdown failed)`);
         if (breakdownError) {
           console.error(`   ⚠️ Breakdown error prevented savings credit:`, breakdownError.message);
         }

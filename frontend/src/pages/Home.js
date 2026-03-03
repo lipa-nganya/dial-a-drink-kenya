@@ -207,6 +207,11 @@ const Home = () => {
         categoriesArray = [];
       }
       
+      // Filter out "Test" and "Popular" categories
+      categoriesArray = categoriesArray.filter(cat => 
+        cat.name && cat.name.toLowerCase() !== 'test' && cat.name.toLowerCase() !== 'popular'
+      );
+      
       setCategories(categoriesArray);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -515,7 +520,7 @@ const Home = () => {
                     sx={{
                       py: 0.75,
                       fontSize: '0.75rem',
-                      fontWeight: selectedCategory === 0 ? 600 : 400,
+                      fontWeight: '500 !important', // Same font weight as menu (h4)
                       textTransform: 'none',
                       borderRadius: 1.5,
                       minHeight: '36px',
@@ -525,46 +530,19 @@ const Home = () => {
                         backgroundColor: 'transparent',
                         boxShadow: 'none',
                         border: '2px solid rgba(0, 0, 0, 0.5)',
+                        fontWeight: '500 !important',
                         '&:hover': {
                           backgroundColor: 'rgba(0, 0, 0, 0.04)'
                         }
                       },
                       '&.MuiButton-outlined': {
                         color: '#000000',
-                        borderColor: 'rgba(0, 0, 0, 0.23)'
+                        borderColor: 'rgba(0, 0, 0, 0.23)',
+                        fontWeight: '500 !important'
                       }
                     }}
                   >
                     All
-                  </Button>
-                  <Button
-                    variant={selectedCategory === -1 ? 'contained' : 'outlined'}
-                    onClick={() => handleCategoryChange(-1)}
-                    startIcon={<Star sx={{ fontSize: '0.75rem' }} />}
-                    sx={{
-                      py: 0.75,
-                      fontSize: '0.75rem',
-                      fontWeight: selectedCategory === -1 ? 600 : 400,
-                      textTransform: 'none',
-                      borderRadius: 1.5,
-                      minHeight: '36px',
-                      color: '#000000',
-                      '&.MuiButton-contained': {
-                        color: '#000000',
-                        backgroundColor: 'transparent',
-                        boxShadow: 'none',
-                        border: '2px solid rgba(0, 0, 0, 0.5)',
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                        }
-                      },
-                      '&.MuiButton-outlined': {
-                        color: '#000000',
-                        borderColor: 'rgba(0, 0, 0, 0.23)'
-                      }
-                    }}
-                  >
-                    Popular
                   </Button>
                   {categories.map((category) => (
                     <Button
@@ -574,7 +552,7 @@ const Home = () => {
                       sx={{
                         py: 0.75,
                         fontSize: '0.75rem',
-                        fontWeight: selectedCategory === category.id ? 600 : 400,
+                        fontWeight: '500 !important', // Same font weight as menu (h4)
                         textTransform: 'none',
                         borderRadius: 1.5,
                         whiteSpace: 'nowrap',
@@ -583,11 +561,13 @@ const Home = () => {
                         minHeight: '36px',
                         color: '#000000',
                         '&.MuiButton-contained': {
-                          color: '#000000'
+                          color: '#000000',
+                          fontWeight: '500 !important'
                         },
                         '&.MuiButton-outlined': {
                           color: '#000000',
-                          borderColor: 'rgba(0, 0, 0, 0.23)'
+                          borderColor: 'rgba(0, 0, 0, 0.23)',
+                          fontWeight: '500 !important'
                         }
                       }}
                     >

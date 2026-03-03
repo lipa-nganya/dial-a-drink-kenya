@@ -237,12 +237,20 @@ const InventoryPage = () => {
       }
     }
 
-    // Availability filter - always apply
+    // Availability filter - always show drinks with stock 0, regardless of filter
+    // Only filter drinks with stock > 0 based on availability filter
     if (availabilityFilter !== 'all') {
-      filtered = filtered.filter(drink =>
-        availabilityFilter === 'available' ? drink.isAvailable : !drink.isAvailable
-      );
+      filtered = filtered.filter(drink => {
+        // Always include drinks with stock 0
+        const stock = drink.stock !== undefined && drink.stock !== null ? drink.stock : 0;
+        if (stock === 0) {
+          return true;
+        }
+        // For drinks with stock > 0, apply the availability filter
+        return availabilityFilter === 'available' ? drink.isAvailable : !drink.isAvailable;
+      });
     }
+    // When availabilityFilter is 'all', all drinks are shown (including those with stock 0)
 
     // On Offer filter - always apply
     if (offerFilter !== 'all') {
@@ -895,7 +903,8 @@ const InventoryPage = () => {
                         }}
                       />
                     )}
-                    {!drink.isAvailable && (
+                    {/* Show "Out of Stock" label if stock is 0 (backend automatically sets isAvailable based on stock) */}
+                    {drink.stock !== undefined && drink.stock !== null && drink.stock === 0 && (
                       <Chip
                         icon={<Cancel />}
                         label="Out of Stock"

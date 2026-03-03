@@ -44,7 +44,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [territories, setTerritories] = useState([]);
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState('');
-  const [productSuggestions, setProductSuggestions] = useState([]);
   
   // Form state
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -124,16 +123,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerSearchQuery, open]);
 
-  useEffect(() => {
-    if (productSearch && productSearch.length >= 2) {
-      const filtered = products.filter(p => 
-        p.name.toLowerCase().includes(productSearch.toLowerCase())
-      ).slice(0, 10);
-      setProductSuggestions(filtered);
-    } else {
-      setProductSuggestions([]);
-    }
-  }, [productSearch, products]);
+  // No need to pre-filter - Material-UI Autocomplete's filterOptions will handle it
 
   useEffect(() => {
     // Set current price and capacity when product is selected
@@ -257,8 +247,31 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
   const fetchProducts = async () => {
     try {
-      const response = await api.get('/drinks?available_only=true');
-      setProducts(response.data || []);
+      // Remove available_only filter to include all products (including out of stock)
+      // This ensures products like "Test-Loc" are searchable even if marked as unavailable
+      const response = await api.get('/drinks');
+      const productsData = response.data || [];
+      setProducts(productsData);
+      console.log('Products loaded:', productsData.length);
+      // Log products with "test" or "loc" in name for debugging
+      const testLocProducts = productsData.filter(p => {
+        if (!p || !p.name) return false;
+        const name = p.name.toLowerCase();
+        return name.includes('test') || name.includes('loc');
+      });
+      if (testLocProducts.length > 0) {
+        console.log('Products with "test" or "loc" in name:', testLocProducts.map(p => ({ name: p.name, isAvailable: p.isAvailable, stock: p.stock })));
+      } else {
+        console.log('No products found with "test" or "loc" in name');
+        // Also check for exact match "test-loc"
+        const exactMatch = productsData.filter(p => {
+          if (!p || !p.name) return false;
+          return p.name.toLowerCase() === 'test-loc';
+        });
+        if (exactMatch.length > 0) {
+          console.log('Found exact match "test-loc":', exactMatch.map(p => ({ name: p.name, isAvailable: p.isAvailable, stock: p.stock })));
+        }
+      }
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -1291,6 +1304,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       onClose={handleClose}
       maxWidth={false}
       fullWidth={false}
+      disableScrollLock={true}
       PaperProps={{
         sx: {
           backgroundColor: colors.paper,
@@ -1315,8 +1329,14 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       </DialogTitle>
       <DialogContent sx={{ 
         overflowY: 'auto',
+        overflowX: 'hidden',
         maxHeight: mobileSize ? 'calc(90vh - 180px)' : 'calc(90vh - 120px)',
-        padding: mobileSize ? 1.8 : 3
+        padding: mobileSize ? 1.8 : 3,
+        '& .MuiSelect-root': {
+          '& .MuiMenu-paper': {
+            zIndex: '1400 !important'
+          }
+        }
       }}>
         {error && (
           <Alert 
@@ -1365,7 +1385,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           }
         }}>
           {/* Order Type Dropdown */}
-          <FormControl fullWidth>
+          <FormControl fullWidth sx={{ mt: '20px' }}>
             <InputLabel>Order Type *</InputLabel>
             <Select
               value={orderType}
@@ -1384,6 +1404,26 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   setDeliveryStatus('confirmed');
                 }
               }}
+              MenuProps={{
+                disablePortal: false,
+                PaperProps: {
+                  style: {
+                    maxHeight: 300,
+                    zIndex: 1400
+                  },
+                  sx: {
+                    zIndex: '1400 !important'
+                  }
+                },
+                anchorOrigin: {
+                  vertical: 'bottom',
+                  horizontal: 'left'
+                },
+                transformOrigin: {
+                  vertical: 'top',
+                  horizontal: 'left'
+                }
+              }}
             >
               <MenuItem value="delivery">Delivery</MenuItem>
               <MenuItem value="walk-in">Walk-in</MenuItem>
@@ -1398,6 +1438,29 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 value={selectedTerritory}
                 label="Territory *"
                 onChange={(e) => setSelectedTerritory(e.target.value)}
+                MenuProps={{
+                  disablePortal: false,
+                  PaperProps: {
+                    style: {
+                      maxHeight: 300,
+                      zIndex: 1400
+                    },
+                    sx: {
+                      zIndex: 1400
+                    }
+                  },
+                  anchorOrigin: {
+                    vertical: 'bottom',
+                    horizontal: 'left'
+                  },
+                  transformOrigin: {
+                    vertical: 'top',
+                    horizontal: 'left'
+                  },
+                  style: {
+                    zIndex: 1400
+                  }
+                }}
               >
                 {territories.map((territory) => (
                   <MenuItem key={territory.id} value={territory.id}>
@@ -1616,9 +1679,93 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 value={currentProduct}
                 onChange={(event, newValue) => setCurrentProduct(newValue)}
                 inputValue={productSearch}
-                onInputChange={(event, newInputValue) => setProductSearch(newInputValue)}
-                options={productSuggestions}
-                getOptionLabel={(option) => option?.name || ''}
+                onInputChange={(event, newInputValue, reason) => {
+                  setProductSearch(newInputValue);
+                  // Clear selection if input is cleared
+                  if (!newInputValue) {
+                    setCurrentProduct(null);
+                  }
+                }}
+                options={products}
+                getOptionLabel={(option) => {
+                  if (!option) return '';
+                  return option.name || '';
+                }}
+                isOptionEqualToValue={(option, value) => {
+                  if (!option || !value) return false;
+                  return option.id === value.id;
+                }}
+                filterOptions={(options, { inputValue }) => {
+                  // Return all options if no input
+                  if (!inputValue || inputValue.trim().length === 0) {
+                    return options;
+                  }
+                  
+                  const searchTerm = inputValue.toLowerCase().trim();
+                  
+                  // Split search term by spaces, hyphens, and other separators to allow partial matching
+                  // e.g., "test-loc" will match products with "test" OR "loc" in the name
+                  const searchTerms = searchTerm.split(/[\s\-_]+/).filter(term => term.length > 0);
+                  
+                  // Filter options - handle null/undefined safely
+                  const filtered = options.filter(option => {
+                    if (!option) return false;
+                    const name = option.name;
+                    if (!name || typeof name !== 'string') return false;
+                    const nameLower = name.toLowerCase();
+                    
+                    // If search term has multiple parts (e.g., "test-loc"), match if ANY part is found
+                    if (searchTerms.length > 1) {
+                      return searchTerms.some(term => nameLower.includes(term));
+                    }
+                    
+                    // Single search term - exact substring match
+                    return nameLower.includes(searchTerm);
+                  });
+                  
+                  // Debug logging - explicit values
+                  console.log('=== Product Search Debug ===');
+                  console.log('Search term:', searchTerm);
+                  console.log('Total products:', options.length);
+                  console.log('Filtered count:', filtered.length);
+                  console.log('Sample product names:', options.slice(0, 5).map(o => o?.name));
+                  if (filtered.length > 0) {
+                    console.log('Filtered product names:', filtered.slice(0, 5).map(o => o?.name));
+                  } else {
+                    console.log('No products matched!');
+                    // Check if any product contains the search term (case-insensitive)
+                    const matchingProducts = options.filter(option => {
+                      if (!option || !option.name) return false;
+                      return option.name.toLowerCase().includes(searchTerm);
+                    });
+                    console.log('Products that should match:', matchingProducts.length);
+                    if (matchingProducts.length > 0) {
+                      console.log('Matching product names:', matchingProducts.slice(0, 5).map(o => o?.name));
+                    }
+                    
+                    // If searching for "test", show all products with "test" or "loc" in name
+                    if (searchTerm.includes('test') || searchTerm.includes('loc')) {
+                      const testProducts = options.filter(option => {
+                        if (!option || !option.name) return false;
+                        const name = option.name.toLowerCase();
+                        return name.includes('test') || name.includes('loc');
+                      });
+                      console.log('Products with "test" or "loc" in name:', testProducts.length);
+                      if (testProducts.length > 0) {
+                        console.log('Product names with "test" or "loc":', testProducts.map(o => o?.name));
+                      }
+                    }
+                  }
+                  console.log('===========================');
+                  
+                  return filtered;
+                }}
+                noOptionsText="No products found"
+                openOnFocus={true}
+                disablePortal={false}
+                ListboxProps={{
+                  style: { maxHeight: '300px' }
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -1627,6 +1774,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   />
                 )}
                 renderOption={(props, option) => {
+                  const { key, ...restProps } = props;
                   const stock = option.stock !== undefined && option.stock !== null ? option.stock : 0;
                   const stockColor = stock > 0 ? '#2196F3' : '#F44336';
                   // Get capacities with pricing - only show capacities that have a price
@@ -1657,7 +1805,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   }
                   
                   return (
-                    <li key={option.id} {...props}>
+                    <li key={option.id} {...restProps}>
                       <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>

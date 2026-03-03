@@ -31,7 +31,11 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       return sendError(res, 'Driver not found', 404);
     }
 
-    let totalCashAtHand = parseFloat(driver.cashAtHand || 0);
+    // Use stored cashAtHand as primary source of truth so that admin overrides
+    // made from the dashboard are respected. We'll calculate a derived value
+    // below, but we only sync the stored value in very specific cases.
+    let storedCashAtHand = parseFloat(driver.cashAtHand || 0);
+    let totalCashAtHand = storedCashAtHand;
 
     // Pay on Delivery (cash): cash at hand += 50% delivery fee + order total per order
     const cashOrders = await db.Order.findAll({
@@ -148,26 +152,20 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
 
     const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal + cashAdded;
 
-    // CRITICAL: ALWAYS sync the database value with calculated value to ensure consistency
-    // This ensures both admin and driver app show the same value from the database
-    // Always update if values differ by more than 0.01, or if stored value is 0/null
-    const needsSync = Math.abs(totalCashAtHand - calculatedCashAtHand) > 0.01 || totalCashAtHand === 0 || isNaN(totalCashAtHand);
-    
-    if (needsSync) {
-      // Store old value before update for logging
-      const oldValue = parseFloat(driver.cashAtHand || 0);
-      // Update driver's cashAtHand field to match calculated value
-      await driver.update({ cashAtHand: calculatedCashAtHand });
-      // Reload driver to ensure we have the updated value
-      await driver.reload();
-      totalCashAtHand = parseFloat(driver.cashAtHand || 0);
-      console.log(`🔄 [Cash At Hand Sync] Driver ${driverId}: Updated cashAtHand from ${oldValue} to ${calculatedCashAtHand} (cashCollected: ${cashCollected}, payNowDeduction: ${cashDeductionPayNow}, cashRemitted: ${cashRemitted}, approvedSubmissions: ${approvedSubmissionsTotal})`);
-    } else {
-      // Values match, but always use calculated value to ensure consistency
-      // This ensures both endpoints return the exact same value
-      totalCashAtHand = calculatedCashAtHand;
-      console.log(`✅ [Cash At Hand Sync] Driver ${driverId}: Value in sync (DB: ${parseFloat(driver.cashAtHand || 0)}, using calculated: ${calculatedCashAtHand})`);
-    }
+    // IMPORTANT:
+    // - Admin edits to cashAtHand are the source of truth and MUST NEVER be overwritten here.
+    // - Other parts of the system (order completion, cash submissions, repairs) already maintain
+    //   driver.cashAtHand based on real events.
+    // - This endpoint should only *report* values, not mutate them.
+    //
+    // So we:
+    // - Always keep storedCashAtHand as-is (respecting admin overrides and event-based updates).
+    // - Use it as totalCashAtHand for the driver app.
+    // - Keep calculatedCashAtHand available for debugging if we ever want to log/inspect it.
+    totalCashAtHand = storedCashAtHand;
+    console.log(
+      `✅ [Cash At Hand] Driver ${driverId}: reporting stored value ${storedCashAtHand} (calculated: ${calculatedCashAtHand})`
+    );
 
     // Format entries for response
     const entries = [];
@@ -279,10 +277,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     });
 
     // Add delivery_fee_debit transactions (Pay Now orders - 50% delivery fee reduction)
+    // EXCLUDE stop deductions - those only affect savings, not cash at hand
     const deliveryFeeDebits = await db.Transaction.findAll({
       where: {
         driverId: driverId,
         transactionType: 'delivery_fee_debit',
+        paymentProvider: { [Op.ne]: 'stop_deduction' }, // Exclude stop deductions
         status: 'completed',
         paymentStatus: 'paid'
       },
@@ -706,6 +706,25 @@ router.get('/:driverId', async (req, res) => {
       limit: 50 // Last 50 savings credits
     });
 
+    // Get stop deduction transactions (delivery_fee_debit with paymentProvider = 'stop_deduction')
+    // These should appear in savings, not cash at hand
+    const stopDeductionTransactions = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'delivery_fee_debit',
+        paymentProvider: 'stop_deduction',
+        status: 'completed',
+        paymentStatus: 'paid'
+      },
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: ['id', 'customerName', 'deliveryAddress', 'createdAt', 'status', 'isStop', 'stopDeductionAmount']
+      }],
+      order: [['createdAt', 'DESC']],
+      limit: 50 // Last 50 stop deductions
+    });
+
     // Get cash settlement debits (driver remits collected cash)
     const cashSettlementTransactions = await db.Transaction.findAll({
       where: {
@@ -773,27 +792,47 @@ router.get('/:driverId', async (req, res) => {
         canWithdraw: canWithdraw
       },
       recentDeliveryPayments: [], // No wallet
-      recentSavingsCredits: savingsCreditTransactions.map(tx => {
-        // Format description using delivery address (first 2 words) + "submission"
-        let description = 'submission';
-        if (tx.order && tx.order.deliveryAddress) {
-          description = formatDescriptionFromAddress(tx.order.deliveryAddress);
-        } else {
-          description = tx.notes || `Savings credit from Order #${tx.orderId || 'N/A'}`;
-        }
-        return {
-          id: tx.id,
-          amount: Math.abs(parseFloat(tx.amount)),
-          transactionType: 'savings_credit',
-          orderId: tx.orderId,
-          orderNumber: tx.order?.id,
-          orderLocation: tx.order?.deliveryAddress || null,
-          customerName: tx.order?.customerName,
-          status: tx.order?.status,
-          date: tx.createdAt,
-          notes: description // Use formatted description
-        };
-      }),
+      recentSavingsCredits: [
+        // Savings credits (positive amounts)
+        ...savingsCreditTransactions.map(tx => {
+          // Format description using delivery address (first 2 words) + "submission"
+          let description = 'submission';
+          if (tx.order && tx.order.deliveryAddress) {
+            description = formatDescriptionFromAddress(tx.order.deliveryAddress);
+          } else {
+            description = tx.notes || `Savings credit from Order #${tx.orderId || 'N/A'}`;
+          }
+          return {
+            id: tx.id,
+            amount: Math.abs(parseFloat(tx.amount)),
+            transactionType: 'savings_credit',
+            orderId: tx.orderId,
+            orderNumber: tx.order?.id,
+            orderLocation: tx.order?.deliveryAddress || null,
+            customerName: tx.order?.customerName,
+            status: tx.order?.status,
+            date: tx.createdAt,
+            notes: description // Use formatted description
+          };
+        }),
+        // Stop deductions (negative amounts - debits from savings)
+        ...stopDeductionTransactions.map(tx => {
+          const amount = Math.abs(parseFloat(tx.amount || 0));
+          return {
+            id: tx.id,
+            amount: -amount, // Negative amount to show as debit
+            transactionType: 'delivery_fee_debit',
+            paymentProvider: 'stop_deduction', // This field is used by Android app to identify stop deductions
+            orderId: tx.orderId,
+            orderNumber: tx.order?.id,
+            orderLocation: tx.order?.deliveryAddress || null,
+            customerName: tx.order?.customerName,
+            status: tx.order?.status,
+            date: tx.createdAt,
+            notes: tx.notes || `Stop deduction for Order #${tx.orderId || 'N/A'} - KES ${amount.toFixed(2)}`
+          };
+        })
+      ].sort((a, b) => new Date(b.date) - new Date(a.date)), // Sort by date, newest first
       cashSettlements: cashSettlementTransactions.map(tx => ({
         id: tx.id,
         amount: Math.abs(parseFloat(tx.amount)),

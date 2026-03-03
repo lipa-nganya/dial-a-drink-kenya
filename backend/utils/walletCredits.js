@@ -70,6 +70,8 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     console.log(`   paymentStatus: ${order.paymentStatus}`);
     console.log(`   driverId: ${order.driverId}`);
     console.log(`   tipAmount field: "${order.tipAmount}" (type: ${typeof order.tipAmount})`);
+    console.log(`   isStop: ${order.isStop}`);
+    console.log(`   stopDeductionAmount: ${order.stopDeductionAmount}`);
 
     // Check if wallets have already been credited for this order
     // We check by looking at transactions - if they're already linked to wallets, they've been credited
@@ -732,31 +734,54 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
         }
         
         // Deduct stop amount from driver savings if order is a stop
-        if (order.isStop && order.stopDeductionAmount && order.stopDeductionAmount > 0) {
-          const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
-          const savingsBeforeStop = newSavings;
-          newSavings = Math.max(0, newSavings - stopDeductionAmount);
+        // Use the stopDeductionAmount specified by admin when creating/editing the order
+        console.log(`🔍 Checking stop deduction for Order #${orderId}: isStop=${order.isStop}, stopDeductionAmount=${order.stopDeductionAmount}`);
+        if (order.isStop && order.stopDeductionAmount && parseFloat(order.stopDeductionAmount) > 0) {
+          // Check if stop deduction transaction already exists to prevent duplicates
+          const existingStopDeduction = await db.Transaction.findOne({
+            where: {
+              orderId: orderId,
+              transactionType: 'delivery_fee_debit',
+              paymentProvider: 'stop_deduction',
+              driverId: order.driverId,
+              status: { [Op.ne]: 'cancelled' }
+            },
+            transaction: dbTransaction
+          });
           
-          console.log(`🛑 Stop deduction applied for Order #${orderId}:`);
-          console.log(`   Deduction amount: KES ${stopDeductionAmount.toFixed(2)}`);
-          console.log(`   Driver savings before stop: KES ${savingsBeforeStop.toFixed(2)}`);
-          console.log(`   Driver savings after stop: KES ${newSavings.toFixed(2)}`);
-          
-          // Create transaction record for stop deduction
-          await db.Transaction.create({
-            orderId: orderId,
-            transactionType: 'delivery_fee_debit', // Using existing transaction type
-            paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'cash',
-            paymentProvider: 'stop_deduction',
-            amount: -stopDeductionAmount, // Negative amount for deduction
-            status: 'completed',
-            paymentStatus: 'paid',
-            driverId: order.driverId,
-            driverWalletId: driverWallet.id,
-            notes: `Stop deduction for Order #${orderId} - KES ${stopDeductionAmount.toFixed(2)} deducted from driver savings`
-          }, { transaction: dbTransaction });
-          
-          console.log(`✅ Stop deduction transaction created for Order #${orderId}`);
+          if (existingStopDeduction) {
+            console.log(`ℹ️  Stop deduction already exists for Order #${orderId} (transaction #${existingStopDeduction.id}), skipping creation`);
+            // Still apply the deduction to savings calculation if it wasn't already applied
+            const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
+            const savingsBeforeStop = newSavings;
+            newSavings = newSavings - stopDeductionAmount; // Allow negative savings
+            console.log(`   Adjusting savings calculation: KES ${savingsBeforeStop.toFixed(2)} → KES ${newSavings.toFixed(2)}`);
+          } else {
+            const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
+            const savingsBeforeStop = newSavings;
+            newSavings = newSavings - stopDeductionAmount; // Allow negative savings
+            
+            console.log(`🛑 Stop deduction applied for Order #${orderId}:`);
+            console.log(`   Deduction amount: KES ${stopDeductionAmount.toFixed(2)}`);
+            console.log(`   Driver savings before stop: KES ${savingsBeforeStop.toFixed(2)}`);
+            console.log(`   Driver savings after stop: KES ${newSavings.toFixed(2)}`);
+            
+            // Create transaction record for stop deduction
+            await db.Transaction.create({
+              orderId: orderId,
+              transactionType: 'delivery_fee_debit', // Using existing transaction type
+              paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'cash',
+              paymentProvider: 'stop_deduction',
+              amount: -stopDeductionAmount, // Negative amount for deduction
+              status: 'completed',
+              paymentStatus: 'paid',
+              driverId: order.driverId,
+              driverWalletId: driverWallet.id,
+              notes: `Stop deduction for Order #${orderId} - KES ${stopDeductionAmount.toFixed(2)} deducted from driver savings`
+            }, { transaction: dbTransaction });
+            
+            console.log(`✅ Stop deduction transaction created for Order #${orderId}`);
+          }
         }
         
         // Update driver wallet savings
@@ -1191,7 +1216,7 @@ const repairSavingsForOrder = async (orderId) => {
     const currentSavings = parseFloat(driverWallet.savings || 0);
     let newSavings = currentSavings + accounting.savingsChange;
     if (order.isStop && order.stopDeductionAmount && order.stopDeductionAmount > 0) {
-      newSavings = Math.max(0, newSavings - parseFloat(order.stopDeductionAmount));
+      newSavings = newSavings - parseFloat(order.stopDeductionAmount); // Allow negative savings
     }
 
     await db.Transaction.create({
@@ -1235,9 +1260,132 @@ const repairSavingsForOrder = async (orderId) => {
   }
 };
 
+/**
+ * Apply stop deduction to driver savings for an order
+ * This can be called retroactively when an order is marked as stop after completion
+ * 
+ * @param {number} orderId - The order ID
+ * @returns {Promise<object>} Result object with deduction details
+ */
+const applyStopDeduction = async (orderId) => {
+  console.log(`🛑 applyStopDeduction CALLED for Order #${orderId}`);
+  
+  const order = await db.Order.findByPk(orderId);
+  if (!order) {
+    throw new Error(`Order ${orderId} not found`);
+  }
+  
+  if (!order.isStop || !order.stopDeductionAmount || parseFloat(order.stopDeductionAmount) <= 0) {
+    console.log(`ℹ️  Order #${orderId} is not a stop order or has no stop deduction amount`);
+    return {
+      orderId,
+      applied: false,
+      reason: 'not_a_stop_order'
+    };
+  }
+  
+  if (!order.driverId) {
+    console.log(`⚠️  Order #${orderId} has no driver assigned`);
+    return {
+      orderId,
+      applied: false,
+      reason: 'no_driver'
+    };
+  }
+  
+  const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
+  
+  // Check if stop deduction transaction already exists
+  const existingStopDeduction = await db.Transaction.findOne({
+    where: {
+      orderId: orderId,
+      transactionType: 'delivery_fee_debit',
+      paymentProvider: 'stop_deduction',
+      driverId: order.driverId,
+      status: { [Op.ne]: 'cancelled' }
+    }
+  });
+  
+  if (existingStopDeduction) {
+    console.log(`ℹ️  Stop deduction already applied for Order #${orderId} (transaction #${existingStopDeduction.id})`);
+    return {
+      orderId,
+      applied: false,
+      reason: 'already_applied',
+      transactionId: existingStopDeduction.id
+    };
+  }
+  
+  const dbTransaction = await db.sequelize.transaction();
+  
+  try {
+    let driverWallet = await db.DriverWallet.findOne({
+      where: { driverId: order.driverId },
+      transaction: dbTransaction
+    });
+    
+    if (!driverWallet) {
+      driverWallet = await db.DriverWallet.create({
+        driverId: order.driverId,
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      }, { transaction: dbTransaction });
+    }
+    
+    const currentSavings = parseFloat(driverWallet.savings || 0);
+    const newSavings = currentSavings - stopDeductionAmount; // Allow negative savings
+    
+    console.log(`🛑 Applying stop deduction for Order #${orderId}:`);
+    console.log(`   Deduction amount: KES ${stopDeductionAmount.toFixed(2)}`);
+    console.log(`   Driver savings before stop: KES ${currentSavings.toFixed(2)}`);
+    console.log(`   Driver savings after stop: KES ${newSavings.toFixed(2)}`);
+    
+    // Create transaction record for stop deduction
+    const stopDeductionTransaction = await db.Transaction.create({
+      orderId: orderId,
+      transactionType: 'delivery_fee_debit',
+      paymentMethod: order.paymentMethod || 'cash',
+      paymentProvider: 'stop_deduction',
+      amount: -stopDeductionAmount, // Negative amount for deduction
+      status: 'completed',
+      paymentStatus: 'paid',
+      driverId: order.driverId,
+      driverWalletId: driverWallet.id,
+      notes: `Stop deduction for Order #${orderId} - KES ${stopDeductionAmount.toFixed(2)} deducted from driver savings`
+    }, { transaction: dbTransaction });
+    
+    // Update driver wallet savings
+    await driverWallet.update({
+      savings: newSavings
+    }, { transaction: dbTransaction });
+    
+    await dbTransaction.commit();
+    
+    console.log(`✅ Stop deduction applied successfully for Order #${orderId} (transaction #${stopDeductionTransaction.id})`);
+    
+    return {
+      orderId,
+      applied: true,
+      stopDeductionAmount,
+      savingsBefore: currentSavings,
+      savingsAfter: newSavings,
+      transactionId: stopDeductionTransaction.id
+    };
+  } catch (error) {
+    await dbTransaction.rollback();
+    console.error(`❌ Error applying stop deduction for Order #${orderId}:`, error);
+    throw error;
+  }
+};
+
 module.exports = {
   creditWalletsOnDeliveryCompletion,
   repairSavingsForOrder,
-  repairPayNowCashAtHandOnly
+  repairPayNowCashAtHandOnly,
+  applyStopDeduction
 };
 

@@ -102,6 +102,27 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true,
       unique: true
+    },
+    pageTitle: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      comment: 'SEO page title for the product'
+    },
+    keywords: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'SEO keywords for the product'
+    },
+    youtubeUrl: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'YouTube video URL for the product'
+    },
+    tags: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: [],
+      comment: 'Array of tags for the product'
     }
   }, {
     tableName: 'drinks',

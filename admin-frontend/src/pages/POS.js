@@ -691,6 +691,7 @@ const POS = () => {
                   <Autocomplete
                     options={drinks}
                     getOptionLabel={(option) => option.name || ''}
+                    isOptionEqualToValue={(option, value) => option?.id === value?.id}
                     value={selectedProduct}
                     onChange={(event, newValue) => handleProductSelect(newValue)}
                     inputValue={productSearch}
@@ -700,7 +701,20 @@ const POS = () => {
                         setSelectedProduct(null);
                       }
                     }}
+                    filterOptions={(options, { inputValue }) => {
+                      // Custom filter that handles case-insensitive partial matching
+                      // This ensures products with special characters (like hyphens) are found
+                      if (!inputValue || inputValue.trim().length === 0) {
+                        return options;
+                      }
+                      const searchTerm = inputValue.toLowerCase().trim();
+                      return options.filter(option => {
+                        if (!option || !option.name) return false;
+                        return option.name.toLowerCase().includes(searchTerm);
+                      });
+                    }}
                     renderOption={(props, option) => {
+                      const { key, ...restProps } = props;
                       // Get capacities with pricing - only show capacities that have a price
                       const capacitiesWithPricing = [];
                       
@@ -729,7 +743,7 @@ const POS = () => {
                       }
                       
                       return (
-                        <li key={option.id} {...props}>
+                        <li key={option.id} {...restProps}>
                           <Box>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
                               {option.name}

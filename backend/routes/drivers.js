@@ -1262,28 +1262,22 @@ router.get('/', async (req, res) => {
         // Check if driver has any transactions (indicating they've been active)
         const hasTransactions = cashCollected > 0 || cashRemitted > 0 || cashAdded > 0 || approvedSubmissionsTotal > 0 || cashDeductionPayNow > 0;
         
-        // Only sync if:
-        // 1. Driver has transactions (has been active), AND
-        // 2. The stored value is exactly 0 or null/NaN (indicating it hasn't been manually set)
-        // This preserves manual adjustments made by admins - if admin sets a value, it won't be overwritten
-        const shouldSync = hasTransactions && (storedCashAtHand === 0 || storedCashAtHand === null || isNaN(storedCashAtHand));
-        
-        if (shouldSync) {
-          await driver.update({ cashAtHand: calculatedCashAtHand });
-          // Reload driver to get updated value
-          await driver.reload();
-          const updatedValue = parseFloat(driver.cashAtHand || 0);
-          driverData.cashAtHand = updatedValue;
-          console.log(`🔄 [Cash At Hand Sync] Driver ${driver.id}: Updated from ${storedCashAtHand} to ${calculatedCashAtHand} (cashCollected: ${cashCollected}, payNowDeduction: ${cashDeductionPayNow}, cashRemitted: ${cashRemitted}, cashAdded: ${cashAdded}, approvedSubmissions: ${approvedSubmissionsTotal})`);
+        // IMPORTANT:
+        // - Admin edits to cashAtHand must be respected exactly as stored, including when set to 0.
+        // - We therefore NEVER overwrite driver.cashAtHand here.
+        // - For display/credit status we:
+        //   * Use storedCashAtHand when it has been set (including 0).
+        //   * Optionally fall back to calculatedCashAtHand only when there is activity AND the stored value is null/NaN.
+        let cashAtHandForDisplay = storedCashAtHand;
+        if ((storedCashAtHand === null || isNaN(storedCashAtHand)) && hasTransactions) {
+          cashAtHandForDisplay = calculatedCashAtHand;
+          console.log(`🔄 [Cash At Hand Display Only] Driver ${driver.id}: using calculated value ${calculatedCashAtHand} (stored was null/NaN)`);
         } else {
-          // Use stored value to preserve manual adjustments
-          driverData.cashAtHand = storedCashAtHand;
-          if (hasTransactions && storedCashAtHand > 0) {
-            console.log(`✅ [Cash At Hand Sync] Driver ${driver.id}: Using stored value ${storedCashAtHand} (calculated: ${calculatedCashAtHand}, diff: ${Math.abs(storedCashAtHand - calculatedCashAtHand).toFixed(2)}) - preserving manual adjustment`);
-          } else if (!hasTransactions) {
-            console.log(`✅ [Cash At Hand Sync] Driver ${driver.id}: Using stored value ${storedCashAtHand} (no transactions yet)`);
-          }
+          console.log(`✅ [Cash At Hand Display Only] Driver ${driver.id}: using stored value ${storedCashAtHand} (calculated: ${calculatedCashAtHand}, hasTransactions=${hasTransactions})`);
         }
+        
+        // Use this value for the admin list
+        driverData.cashAtHand = cashAtHandForDisplay;
       } catch (syncError) {
         // If sync fails, use stored value
         console.error(`⚠️ Error syncing cash at hand for driver ${driver.id}:`, syncError);
@@ -1463,7 +1457,7 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
-    const { name, phoneNumber, status, creditLimit, cashAtHand } = req.body;
+    const { name, phoneNumber, status, creditLimit, cashAtHand, savings } = req.body;
     const driver = await db.Driver.findByPk(req.params.id);
 
     if (!driver) {
@@ -1502,14 +1496,38 @@ router.put('/:id', async (req, res) => {
     }
     if (cashAtHand !== undefined && cashAtHand !== null && cashAtHand !== '') {
       const parsedCash = parseFloat(cashAtHand);
-      if (isNaN(parsedCash) || parsedCash < 0) {
-        return sendError(res, 'Cash at hand must be a non-negative number');
+      if (isNaN(parsedCash)) {
+        return sendError(res, 'Cash at hand must be a valid number');
       }
       updateData.cashAtHand = parsedCash;
     }
 
     const oldStatus = driver.status;
     await driver.update(updateData);
+    
+    // Update driver wallet savings if provided
+    if (savings !== undefined && savings !== null && savings !== '') {
+      const parsedSavings = parseFloat(savings);
+      if (isNaN(parsedSavings)) {
+        return sendError(res, 'Savings must be a valid number');
+      }
+      
+      // Get or create driver wallet
+      let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driver.id } });
+      if (!driverWallet) {
+        driverWallet = await db.DriverWallet.create({
+          driverId: driver.id,
+          balance: 0,
+          totalTipsReceived: 0,
+          totalTipsCount: 0,
+          totalDeliveryPay: 0,
+          totalDeliveryPayCount: 0,
+          savings: parsedSavings
+        });
+      } else {
+        await driverWallet.update({ savings: parsedSavings });
+      }
+    }
     
     // Reload driver to get updated data
     await driver.reload();

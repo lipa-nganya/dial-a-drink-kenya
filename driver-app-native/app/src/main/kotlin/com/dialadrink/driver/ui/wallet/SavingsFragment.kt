@@ -357,15 +357,30 @@ class SavingsFragment : Fragment() {
                 when (type) {
                     "credit" -> {
                         val creditTx = tx as WalletTransaction
+                        // Check if this is a stop deduction (negative amount or paymentProvider = 'stop_deduction')
+                        val isStopDeduction = creditTx.amount < 0 || creditTx.paymentProvider == "stop_deduction"
+                        val amountAbs = Math.abs(creditTx.amount)
+                        
                         val orderInfo = buildString {
                             creditTx.orderLocation?.takeIf { it.isNotBlank() }?.let { loc ->
                                 append("$loc")
                             }
-                            append(" · Delivery fee (50% to savings): ${formatter.format(creditTx.amount)}")
+                            if (isStopDeduction) {
+                                append(" · Stop deduction: ${formatter.format(-amountAbs)}")
+                            } else {
+                                append(" · Delivery fee (50% to savings): ${formatter.format(amountAbs)}")
+                            }
                         }
                         cardView.findViewById<TextView>(R.id.typeText).text = "Order #${creditTx.orderNumber ?: creditTx.orderId ?: ""}"
-                        cardView.findViewById<TextView>(R.id.amountText).text = "+${formatter.format(creditTx.amount)}"
-                        cardView.findViewById<TextView>(R.id.amountText).setTextColor(ContextCompat.getColor(requireContext(), R.color.accent))
+                        
+                        // Display negative amounts for stop deductions, positive for credits
+                        if (isStopDeduction) {
+                            cardView.findViewById<TextView>(R.id.amountText).text = "-${formatter.format(amountAbs)}"
+                            cardView.findViewById<TextView>(R.id.amountText).setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary_dark))
+                        } else {
+                            cardView.findViewById<TextView>(R.id.amountText).text = "+${formatter.format(amountAbs)}"
+                            cardView.findViewById<TextView>(R.id.amountText).setTextColor(ContextCompat.getColor(requireContext(), R.color.accent))
+                        }
                         cardView.findViewById<TextView>(R.id.descriptionText).text = orderInfo
                         try {
                             cardView.findViewById<TextView>(R.id.dateText).text = dateFormat.format(parseDate(creditTx.date))
@@ -408,9 +423,16 @@ class SavingsFragment : Fragment() {
         val withdrawals = data.recentWithdrawals.orEmpty()
         
         // Combine and sort by date (newest first)
+        // Separate stop deductions (debits) from regular credits
         val allTransactions = mutableListOf<Pair<String, Any>>()
         credits.forEach { tx ->
-            allTransactions.add(Pair("credit", tx))
+            // Check if this is a stop deduction (negative amount or paymentProvider = 'stop_deduction')
+            val isStopDeduction = tx.amount < 0 || tx.paymentProvider == "stop_deduction"
+            if (isStopDeduction) {
+                allTransactions.add(Pair("debit", tx)) // Stop deductions go in debit column
+            } else {
+                allTransactions.add(Pair("credit", tx)) // Regular credits go in credit column
+            }
         }
         withdrawals.forEach { wd ->
             allTransactions.add(Pair("withdrawal", wd))
@@ -418,7 +440,7 @@ class SavingsFragment : Fragment() {
         
         val sortedTransactions = allTransactions.sortedByDescending { (type, tx) ->
             when (type) {
-                "credit" -> parseDate((tx as WalletTransaction).date).time
+                "credit", "debit" -> parseDate((tx as WalletTransaction).date).time
                 "withdrawal" -> parseDate((tx as WalletWithdrawal).date).time
                 else -> 0L
             }
@@ -469,6 +491,27 @@ class SavingsFragment : Fragment() {
                     balanceText.text = formatter.format(balanceAfter)
                     // Balance before this transaction = balance after - amount
                     balanceAfter -= creditTx.amount
+                }
+                "debit" -> {
+                    // Stop deduction transaction (money out, decreases savings) = Debit column
+                    val debitTx = tx as WalletTransaction
+                    val address = debitTx.orderLocation ?: debitTx.customerName ?: "N/A"
+                    deliveryAddressText.text = address
+                    
+                    try {
+                        val date = parseDate(debitTx.date)
+                        dateText.text = dateFormatShort.format(date)
+                    } catch (e: Exception) {
+                        dateText.text = debitTx.date.substring(0, 10).takeIf { debitTx.date.length >= 10 } ?: debitTx.date
+                    }
+                    
+                    // Debit transaction (money out, decreases savings) = Debit column
+                    val amountAbs = Math.abs(debitTx.amount)
+                    debitText.text = formatter.format(amountAbs)
+                    creditText.text = "0"
+                    balanceText.text = formatter.format(balanceAfter)
+                    // Balance before this transaction = balance after + amount (since we're working backwards)
+                    balanceAfter += amountAbs
                 }
                 "withdrawal" -> {
                     val withdrawalTx = tx as WalletWithdrawal
