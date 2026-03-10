@@ -44,8 +44,9 @@ try {
       // our explicit SSL settings. Strip that query parameter and rely on
       // dialectOptions.ssl (which we force to rejectUnauthorized: false).
       const sanitizedUrl = databaseUrl.replace(/\?sslmode=require/, '');
-      // Preserve SSL settings from config - Sequelize URL parsing can override them
-      const sslConfig = dbConfig.dialectOptions?.ssl;
+      // Preserve SSL settings from config - but disable SSL for Cloud SQL Proxy (localhost/127.0.0.1)
+      const isProxyConnection = /localhost(:\d+)?|127\.0\.0\.1(:\d+)?|\/cloudsql\/|cloud-sql-proxy-dev(:\d+)?/.test(databaseUrl);
+      const sslConfig = isProxyConnection ? null : (dbConfig.dialectOptions?.ssl);
       const baseDialectOptions = dbConfig.dialectOptions || {};
       sequelize = new Sequelize(sanitizedUrl, {
         ...dbConfig,
@@ -61,9 +62,8 @@ try {
           connectTimeout: 10000,
           statement_timeout: 5000,
           query_timeout: 5000,
-          // Force SSL settings to prevent certificate verification errors
-          // Sequelize URL parsing can create empty ssl: {}, so we override it
-          ...(sslConfig ? {
+          // Proxy (localhost/127.0.0.1): no SSL. Otherwise use config SSL.
+          ...(isProxyConnection ? { ssl: false } : sslConfig ? {
             ssl: {
               require: true,
               rejectUnauthorized: false
