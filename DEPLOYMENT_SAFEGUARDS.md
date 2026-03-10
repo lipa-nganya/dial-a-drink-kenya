@@ -22,6 +22,12 @@
    - **Why it happened**: Environment variable set incorrectly in Netlify dashboard
    - **Fix**: Code now hardcodes production URL for Netlify deployments
 
+4. **Production overwritten with sandbox M-Pesa (sync script)**
+   - **Error**: `scripts/sync-production-env-to-cloudrun.sh` pushed local `.env`/`.env.local` to production Cloud Run; when those contained **sandbox** M-Pesa (shortcode 174379), production got sandbox credentials and M-Pesa returned 400 auth.
+   - **Impact**: Live payments broken in front of clients.
+   - **Why it happened**: Sync script did not check for sandbox; production API/callback were forced but consumer key/secret/shortcode were still taken from local env.
+   - **Fix**: Sync script now **refuses** to run when sandbox M-Pesa is detected (shortcode 174379 or `MPESA_ENVIRONMENT=sandbox`), unless `ALLOW_MPESA_SYNC=1` is set. Use that flag only when your env file has real production credentials. See `DEPLOY_PRODUCTION_PROMPT.md` for the pre-deploy credential check.
+
 ## 🛡️ Safeguards Implemented
 
 ### 1. Pre-Deployment Validation Script

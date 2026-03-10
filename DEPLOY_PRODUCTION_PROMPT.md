@@ -23,6 +23,12 @@ Use this prompt when you want to deploy local changes to production. Frontends a
 
 ---
 
+## Before deploying the backend to production
+
+- **M-Pesa / payment credentials:** Confirm that production Cloud Run already has the correct **production** M-Pesa credentials and callback URL. If you run `scripts/sync-production-env-to-cloudrun.sh`, it reads from `backend/.env.local` and `backend/.env`; if those contain **sandbox** values (e.g. shortcode `174379`), the script will now **refuse** to sync unless `ALLOW_MPESA_SYNC=1` is set. Never set that flag unless your env file has real production M-Pesa credentials—otherwise production will get M-Pesa 400 auth errors. Prefer keeping production M-Pesa in GCP (Cloud Run env or Secret Manager) and using the sync script only when your local env is intentionally production-safe.
+
+---
+
 ## One-line summary
 
 Deploy to production: update existing GCloud frontend services (no new ones, frontends are on GCloud not Netlify), deploy backend to existing Cloud Run (preserve CORS), run DB migrations against prod (refresh ADC scopes + verify Cloud SQL access if 403), push Android code to production branch, use gcloud account `dialadrinkkenya254@gmail.com`, no new services, no exposed credentials.
