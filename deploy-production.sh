@@ -112,6 +112,9 @@ echo "✅ Backend: $BACKEND_URL"
 echo ""
 echo "🌐 Step 4: Deploying frontends (GCloud Cloud Run)"
 echo "=================================================="
+echo "   (Each frontend build runs in Cloud Build: npm install + build + deploy. Can take 10–15 min if queue is busy.)"
+echo "   Monitor: https://console.cloud.google.com/cloud-build/builds?project=$PROJECT_ID"
+echo ""
 GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_API_KEY:-$(gcloud secrets versions access latest --secret=google-maps-api-key --project=$PROJECT_ID 2>/dev/null || echo '')}"
 SHORT_SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%s | sha256sum 2>/dev/null | head -c 8)
 

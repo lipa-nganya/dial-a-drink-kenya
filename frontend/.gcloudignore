@@ -1,0 +1,10 @@
+# Exclude deps and build artifacts (Cloud Build runs npm install in Docker)
+node_modules/
+build/
+npm-debug.log
+.git/
+.env
+.env.*
+coverage/
+.DS_Store
+*.log
