@@ -207,8 +207,8 @@ function AppContent() {
           component="main"
           sx={{
             flex: '1 0 auto',
-            // Reserve space for fixed header on desktop (64px); mobile uses sticky so no offset
-            pt: { xs: 0, md: '64px' },
+            // Reserve space for fixed header + categories bar on desktop
+            pt: { xs: 0, md: '104px' },
           }}
         >
         <Routes>
@@ -217,7 +217,7 @@ function AppContent() {
           {/* Old product route - kept for backward compatibility and redirects */}
           <Route path="/product/:id" element={<ProductPage />} />
           <Route path="/brands" element={<Brands />} />
-          <Route path="/brand/:id" element={<BrandDetail />} />
+          <Route path="/brands/:id" element={<BrandDetail />} />
           <Route path="/offers" element={<Offers />} />
           <Route path="/test-offers" element={<TestOffers />} />
           <Route path="/cart" element={<Cart />} />

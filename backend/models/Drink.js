@@ -83,6 +83,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(5, 2),
       allowNull: true
     },
+    nbv: {
+      type: DataTypes.DECIMAL(5, 2),
+      allowNull: true,
+      comment: 'Nicotine by volume: percentage (%) for vapes, milligrams (mg) for pouches'
+    },
     barcode: {
       type: DataTypes.STRING,
       allowNull: true,
@@ -123,6 +128,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: [],
       comment: 'Array of tags for the product'
+    },
+    clicks: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Number of product details page views (product detail clicks)'
     }
   }, {
     tableName: 'drinks',

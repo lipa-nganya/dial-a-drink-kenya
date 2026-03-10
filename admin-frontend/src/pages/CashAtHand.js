@@ -45,10 +45,12 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
+import { useNavigate } from 'react-router-dom';
 
 const CashAtHand = () => {
   const { colors } = useTheme();
   const { user } = useAdmin();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [cashAtHand, setCashAtHand] = useState(0);
@@ -295,22 +297,9 @@ const CashAtHand = () => {
     return { base: 'driver-wallet/admin/cash-submissions', id, isAdmin: true };
   };
 
-  const handleApprove = async (item) => {
-    const { base, driverId, id, isAdmin } = getApproveRejectEndpoint(item);
-    setActionSubmissionId(id);
-    try {
-      const url = isAdmin
-        ? `/${base}/${id}/approve`
-        : `/${base}/${driverId}/cash-submissions/${id}/approve`;
-      await api.post(url);
-      await fetchCashAtHand();
-      if (fetchPendingSubmissionsCount) fetchPendingSubmissionsCount();
-    } catch (err) {
-      console.error('Error approving submission:', err);
-      alert(err.response?.data?.error || err.message || 'Failed to approve');
-    } finally {
-      setActionSubmissionId(null);
-    }
+  const handleApprove = (item) => {
+    // Always go to the detailed approval page so admin can assign an account
+    navigate(`/cash-at-hand/submissions/${item.id}/approve`, { state: { submission: item } });
   };
 
   const handleRejectClick = (item) => {

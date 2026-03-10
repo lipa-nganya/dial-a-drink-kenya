@@ -24,6 +24,51 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Get supplier invoices (purchases linked to this supplier)
+router.get('/:id/invoices', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const supplier = await db.Supplier.findByPk(id);
+    if (!supplier) {
+      return res.status(404).json({ error: 'Supplier not found' });
+    }
+    const supplierName = (supplier.name || '').trim().toLowerCase();
+    const allPurchases = await db.CashSubmission.findAll({
+      where: { submissionType: 'purchases' },
+      include: [
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    const submissions = allPurchases.filter((s) => {
+      const detailSupplier = (s.details && s.details.supplier) ? String(s.details.supplier).trim().toLowerCase() : '';
+      return detailSupplier === supplierName;
+    });
+    const invoices = submissions.map((s) => {
+      const amount = parseFloat(s.amount) || 0;
+      const attachedToAccount = !!(s.details && s.details.assetAccountId != null && s.details.assetAccountId !== '');
+      const amountPaid = (s.details && s.details.amountPaid != null) ? parseFloat(s.details.amountPaid) : 0;
+      const amountRemaining = attachedToAccount ? 0 : Math.max(0, amount - amountPaid);
+      const status = attachedToAccount || amountRemaining <= 0 ? 'Paid' : 'Not Paid';
+      return {
+        id: s.id,
+        transactionNumber: s.id,
+        reference: (s.details && s.details.reference) || null,
+        amount,
+        amountRemaining,
+        status,
+        createdAt: s.createdAt,
+        details: s.details,
+        admin: s.admin
+      };
+    });
+    res.json({ supplier: { id: supplier.id, name: supplier.name }, invoices });
+  } catch (error) {
+    console.error('Error fetching supplier invoices:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get supplier by ID
 router.get('/:id', async (req, res) => {
   try {
@@ -170,10 +215,10 @@ router.get('/:id/details', async (req, res) => {
       }
     });
     
-    // Current balance = opening balance + credits - debits
-    // Credits = money we owe to supplier (increases what we owe)
-    // Debits = money we paid to supplier (decreases what we owe)
-    const currentBalance = openingBalance + totalCredits - totalDebits;
+    // Current balance = opening balance - credits + debits
+    // Credit = payment to supplier (reduces what we owe)
+    // Debit = amount we owe to supplier (increases what we owe)
+    const currentBalance = openingBalance - totalCredits + totalDebits;
     
     res.json({
       supplier,

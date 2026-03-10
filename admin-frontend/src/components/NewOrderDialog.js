@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -21,7 +21,8 @@ import {
   FormControlLabel,
   Checkbox,
   RadioGroup,
-  Radio
+  Radio,
+  Chip
 } from '@mui/material';
 import {
   Add,
@@ -114,6 +115,17 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialIsStop]);
+
+  // Refetch products when tab becomes visible (e.g. after creating a purchase in another tab) so profit/loss uses latest purchase prices
+  useEffect(() => {
+    if (!open) return;
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') fetchProducts();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Fetch customers with search query
   useEffect(() => {
@@ -247,10 +259,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
   const fetchProducts = async () => {
     try {
-      // Remove available_only filter to include all products (including out of stock)
-      // This ensures products like "Test-Loc" are searchable even if marked as unavailable
-      const response = await api.get('/drinks');
-      const productsData = response.data || [];
+      // Use admin drinks endpoint so we get purchasePrice for profit/loss calculation
+      const response = await api.get('/admin/drinks');
+      const raw = response.data;
+      const productsData = Array.isArray(raw) ? raw : (raw?.data || raw?.drinks || []);
       setProducts(productsData);
       console.log('Products loaded:', productsData.length);
       // Log products with "test" or "loc" in name for debugging
@@ -416,6 +428,26 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const calculateTotal = () => {
     return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
+
+  // Profit/loss: total selling price - total cost (purchase price × qty). Only when we have purchase prices.
+  const { totalCost, profitLoss, hasPurchasePriceData } = useMemo(() => {
+    let cost = 0;
+    let hasAny = false;
+    cartItems.forEach((item) => {
+      const product = products.find((p) => p.id === item.drinkId);
+      const pp = product?.purchasePrice != null && product?.purchasePrice !== '' ? parseFloat(product.purchasePrice) : null;
+      if (pp != null && !Number.isNaN(pp) && pp >= 0) {
+        cost += pp * (item.quantity || 0);
+        hasAny = true;
+      }
+    });
+    const total = cartItems.reduce((sum, item) => sum + (item.price || 0) * (item.quantity || 0), 0);
+    return {
+      totalCost: cost,
+      profitLoss: hasAny ? total - cost : null,
+      hasPurchasePriceData: hasAny
+    };
+  }, [cartItems, products]);
 
   const handleSubmit = async () => {
     setError('');
@@ -2141,6 +2173,23 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     KES {Math.round(calculateTotal())}
                   </Typography>
                 </Box>
+                {hasPurchasePriceData && (
+                  <>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+                      <Typography variant="body2" sx={{ color: colors.textSecondary }}>Cost:</Typography>
+                      <Typography variant="body2" sx={{ color: colors.textSecondary }}>KES {Math.round(totalCost)}</Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 0.5 }}>
+                      {profitLoss != null && (
+                        <Chip
+                          size="small"
+                          label={profitLoss >= 0 ? `PROFIT +KES ${Math.round(profitLoss)}` : `LOSS -KES ${Math.round(Math.abs(profitLoss))}`}
+                          sx={{ backgroundColor: profitLoss >= 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)', color: profitLoss >= 0 ? '#2e7d32' : '#c62828', fontWeight: 600 }}
+                        />
+                      )}
+                    </Box>
+                  </>
+                )}
               </Paper>
             </Box>
           )}

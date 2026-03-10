@@ -14,6 +14,13 @@ const formatDescriptionFromAddress = (deliveryAddress) => {
   return firstTwoWords ? `${firstTwoWords} submission` : 'submission';
 };
 
+// Same but without " submission" suffix (for logs display)
+const formatDescriptionFromAddressNoSuffix = (deliveryAddress) => {
+  if (!deliveryAddress) return '';
+  const words = deliveryAddress.trim().split(/\s+/);
+  return words.slice(0, 2).join(' ') || '';
+};
+
 /**
  * Get cash at hand data for driver
  * GET /api/driver-wallet/:driverId/cash-at-hand
@@ -179,11 +186,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       } catch (e) {}
       entries.push({
         type: 'cash_received',
+        logType: 'Payment Received',
         orderId: order.id,
         customerName: order.customerName,
         amount,
         date: order.createdAt,
-        description: formatDescriptionFromAddress(order.deliveryAddress)
+        description: formatDescriptionFromAddressNoSuffix(order.deliveryAddress) || order.deliveryAddress || 'Cash received'
       });
     }
 
@@ -206,9 +214,9 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       if (isSavingsWithdrawal) {
         description = `Savings withdrawal`;
       } else {
-        // For cash settlements with order, use delivery address (first 2 words) + "submission"
+        // For cash settlements with order, use delivery address (first 2 words, no suffix)
         if (tx.order && tx.order.deliveryAddress) {
-          description = formatDescriptionFromAddress(tx.order.deliveryAddress);
+          description = formatDescriptionFromAddressNoSuffix(tx.order.deliveryAddress) || tx.notes || 'Cash remitted to business';
         } else {
           // For other cash settlements, use the notes or default description
           description = tx.notes || `Cash remitted to business`;
@@ -220,10 +228,13 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       // Positive amounts = cash received (e.g., from loan recovery)
       const txAmount = parseFloat(tx.amount) || 0;
       const entryType = txAmount < 0 ? 'cash_sent' : 'cash_received';
-      
+      const logType = entryType === 'cash_received' ? 'Payment Received' : '—';
+
       entries.push({
         type: entryType,
+        logType,
         transactionId: tx.id,
+        orderId: tx.orderId || null,
         amount: Math.abs(txAmount), // Make positive for display
         date: tx.transactionDate || tx.createdAt,
         description: description,
@@ -244,11 +255,9 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         : null;
       
       if (orderWithAddress && orderWithAddress.deliveryAddress) {
-        // Use delivery address (first 2 words) + "submission"
-        description = formatDescriptionFromAddress(orderWithAddress.deliveryAddress);
+        description = formatDescriptionFromAddressNoSuffix(orderWithAddress.deliveryAddress) || 'Cash submission';
       } else if (submissionType === 'purchases' && submission.details?.deliveryLocation) {
-        // For purchases, use deliveryLocation if available
-        description = formatDescriptionFromAddress(submission.details.deliveryLocation);
+        description = formatDescriptionFromAddressNoSuffix(submission.details.deliveryLocation) || submission.details.deliveryLocation;
       } else if (submissionType === 'purchases' && submission.details?.supplier) {
         // Support both old format (single item) and new format (multiple items)
         if (submission.details?.items && Array.isArray(submission.details.items) && submission.details.items.length > 0) {
@@ -267,9 +276,14 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         description = `Order payment #${submission.details.orderId}`;
       }
 
+      const orderIdForSubmission = submission.details?.orderId ?? (submission.orders && submission.orders.length > 0 ? submission.orders[0].id : null);
+
       entries.push({
         type: 'cash_submission',
+        logType: 'Submission',
+        submissionType: submissionType || null,
         transactionId: submission.id,
+        orderId: orderIdForSubmission,
         amount: parseFloat(submission.amount || 0),
         date: submission.createdAt,
         description: description
@@ -297,6 +311,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       const description = tx.notes || (tx.order ? `50% delivery fee order ${tx.order.id}` : '50% delivery fee');
       entries.push({
         type: 'cash_sent', // This is a credit entry (money going out, reducing cash at hand)
+        logType: '—',
         transactionId: tx.id,
         orderId: tx.orderId,
         customerName: tx.order?.customerName || null,
@@ -1125,11 +1140,11 @@ router.post('/:driverId/withdraw', async (req, res) => {
       balance: totalBalance - withdrawalAmount
     });
 
-    // Withdrawing from wallet reduces driver's cash at hand by the amount withdrawn
+    // Withdrawing from wallet reduces driver's cash at hand by the amount withdrawn (may go negative)
     const driver = await db.Driver.findByPk(driverId);
     if (driver) {
       const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-      const newCashAtHand = Math.max(0, currentCashAtHand - withdrawalAmount);
+      const newCashAtHand = currentCashAtHand - withdrawalAmount;
       await driver.update({ cashAtHand: newCashAtHand });
       console.log(`   Driver ${driverId} cash at hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (withdrawal -${withdrawalAmount.toFixed(2)})`);
     }

@@ -701,32 +701,30 @@ const RiderDetails = () => {
                 </TableHead>
                 <TableBody>
                   {(() => {
+                    const entryType = (entry) => {
+                      const t = entry.type ?? entry.transaction_type ?? entry.Type;
+                      return typeof t === 'string' ? t.toLowerCase() : t;
+                    };
                     // Sort entries by date descending (newest first)
                     const sortedEntries = [...(cashAtHandData.entries || [])].sort((a, b) => {
                       const dateA = new Date(a.date);
                       const dateB = new Date(b.date);
                       return dateB - dateA;
                     });
-                    
-                    // Calculate running balance backwards from current total
+                    // Calculate running balance backwards from current total (same logic as Rider Cash at Hand Details)
                     let balanceAfter = parseFloat(cashAtHandData.totalCashAtHand || 0);
-                    
                     return sortedEntries.map((entry, index) => {
-                      const isCredit = entry.type === 'cash_received';
+                      const type = entryType(entry);
+                      const isCredit = type === 'cash_received' || entry.orderId != null || entry.order_id != null;
                       const amount = parseFloat(entry.amount || 0);
-                      
-                      // Current balance is the balance after this transaction
                       const currentBalance = balanceAfter;
-                      
-                      // Move to balance before this transaction for next iteration
                       if (isCredit) {
                         balanceAfter -= amount;
                       } else {
                         balanceAfter += amount;
                       }
-                      
                       return (
-                        <TableRow key={index} hover>
+                        <TableRow key={entry.transactionId ?? entry.id ?? index} hover>
                           <TableCell sx={{ color: colors.textPrimary }}>
                             {new Date(entry.date).toLocaleDateString('en-KE', {
                               year: 'numeric',

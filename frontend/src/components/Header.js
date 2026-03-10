@@ -15,21 +15,51 @@ import {
   Divider,
   useMediaQuery,
   useTheme as useMUITheme,
+  TextField,
+  InputAdornment,
 } from '@mui/material';
-import { ShoppingCart, Menu as MenuIcon, Home, Restaurant, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { ShoppingCart, Menu as MenuIcon, Home, Restaurant, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone, Search } from '@mui/icons-material';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCustomer } from '../contexts/CustomerContext';
+import CategoriesBar from './CategoriesBar';
 
 const Header = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { getTotalItems } = useCart();
   const { isLoggedIn } = useCustomer();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchInput, setSearchInput] = useState('');
   const muiTheme = useMUITheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const { colors } = useTheme();
+
+  const isOnMenu = location.pathname === '/menu';
+  const searchFromUrl = isOnMenu ? (searchParams.get('search') || '') : '';
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    if (isOnMenu) {
+      const next = new URLSearchParams(searchParams);
+      if (value.trim()) next.set('search', value.trim()); else next.delete('search');
+      setSearchParams(next);
+    }
+  };
+
+  const handleSearchSubmit = (e) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const q = (isOnMenu ? searchFromUrl : searchInput) || searchInput;
+    if (q.trim()) {
+      navigate(`/menu?search=${encodeURIComponent(q.trim())}`);
+      setSearchInput('');
+    } else {
+      navigate('/menu');
+    }
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -65,6 +95,23 @@ const Header = () => {
         }}>
           Dial a Drink Kenya
         </Typography>
+        <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSearchSubmit(e); handleDrawerToggle(); }} sx={{ mt: 2 }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search..."
+            value={isOnMenu ? searchFromUrl : searchInput}
+            onChange={(e) => { setSearchInput(e.target.value); if (location.pathname === '/menu') { const next = new URLSearchParams(searchParams); if (e.target.value.trim()) next.set('search', e.target.value.trim()); else next.delete('search'); setSearchParams(next); } }}
+            sx={{
+              '& .MuiOutlinedInput-root': { backgroundColor: colors.background || 'rgba(0,0,0,0.06)', borderRadius: 2 },
+            }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start"><Search sx={{ color: colors.textSecondary, fontSize: '1.2rem' }} /></InputAdornment>
+              ),
+            }}
+          />
+        </Box>
       </Box>
 
       {/* Main Navigation */}
@@ -394,6 +441,36 @@ const Header = () => {
           
           {!isMobile && (
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+              {/* Search in main nav - desktop */}
+              <Box
+                component="form"
+                onSubmit={handleSearchSubmit}
+                sx={{ display: 'flex', alignItems: 'center', mr: 1 }}
+              >
+                <TextField
+                  size="small"
+                  placeholder="Search..."
+                  value={isOnMenu ? searchFromUrl : searchInput}
+                  onChange={handleSearchChange}
+                  onBlur={() => !isOnMenu && setSearchInput((p) => p)}
+                  sx={{
+                    width: 180,
+                    '& .MuiOutlinedInput-root': {
+                      backgroundColor: colors.background || 'rgba(0,0,0,0.04)',
+                      borderRadius: 2,
+                      fontSize: '0.85rem',
+                      '& fieldset': { borderColor: 'rgba(0,0,0,0.12)' },
+                    },
+                  }}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <Search sx={{ color: colors.textSecondary || '#666', fontSize: '1.2rem' }} />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
               <Button
                 color="inherit"
                 onClick={() => navigate('/')}
@@ -481,6 +558,7 @@ const Header = () => {
             </Box>
           )}
         </Toolbar>
+        <CategoriesBar />
       </AppBar>
       
       <Drawer

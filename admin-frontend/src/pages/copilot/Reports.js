@@ -46,7 +46,9 @@ import {
   Add,
   ShoppingCart,
   Search,
-  Clear
+  Clear,
+  Star,
+  StarBorder
 } from '@mui/icons-material';
 import { useTheme } from '../../contexts/ThemeContext';
 import { api } from '../../services/api';
@@ -666,8 +668,22 @@ const Reports = () => {
 
   const handleAddToResupplyCart = (drink) => {
     addToCart(drink);
-    // Show snackbar notification that item was added
     setSnackbar({ open: true, message: `${drink.name} added to Resupply Cart!` });
+  };
+
+  const [updatingPopularId, setUpdatingPopularId] = useState(null);
+  const handleSetPopular = async (drink, isPopular) => {
+    try {
+      setUpdatingPopularId(drink.id);
+      await api.patch(`/admin/drinks/${drink.id}/popular`, { isPopular });
+      setSnackbar({ open: true, message: isPopular ? `${drink.name} set as popular` : `${drink.name} removed from popular` });
+      setAllDrinks(prev => prev.map(d => d.id === drink.id ? { ...d, isPopular } : d));
+      setDrinks(prev => prev.map(d => d.id === drink.id ? { ...d, isPopular } : d));
+    } catch (err) {
+      setSnackbar({ open: true, message: err.response?.data?.error || 'Failed to update popular status' });
+    } finally {
+      setUpdatingPopularId(null);
+    }
   };
 
   const handleCloseSnackbar = () => {
@@ -1605,6 +1621,7 @@ const Reports = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Drink Name</TableCell>
+                    <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Clicks</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}># of Purchases</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Stock Level</TableCell>
                     <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Actions</TableCell>
@@ -1613,13 +1630,13 @@ const Reports = () => {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={4} sx={{ textAlign: 'center', py: 4 }}>
+                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
                         Loading...
                       </TableCell>
                     </TableRow>
                   ) : drinks.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={4} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
+                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
                         {drinkSearchTerm 
                           ? 'No drinks match your search criteria' 
                           : 'No drinks data available'}
@@ -1631,6 +1648,7 @@ const Reports = () => {
                       .map((drink) => (
                       <TableRow key={drink.id}>
                         <TableCell sx={{ color: colors.textPrimary }}>{drink.name}</TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary }}>{drink.clicks ?? 0}</TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>{drink.purchaseCount || 0}</TableCell>
                         <TableCell>
                           <Chip
@@ -1647,6 +1665,21 @@ const Reports = () => {
                           />
                         </TableCell>
                         <TableCell>
+                          <Tooltip title={drink.isPopular ? 'Remove from popular' : 'Set as popular'}>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleSetPopular(drink, !drink.isPopular)}
+                              disabled={updatingPopularId === drink.id}
+                              sx={{
+                                color: drink.isPopular ? '#FFD700' : colors.textSecondary,
+                                '&:hover': {
+                                  backgroundColor: 'rgba(255, 215, 0, 0.1)'
+                                }
+                              }}
+                            >
+                              {drink.isPopular ? <Star /> : <StarBorder />}
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="Add to Resupply Cart">
                             <IconButton
                               size="small"

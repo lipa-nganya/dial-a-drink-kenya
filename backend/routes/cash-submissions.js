@@ -183,6 +183,108 @@ router.post('/admin/cash-submissions', async (req, res) => {
       ]
     });
 
+    // Use the persisted details (from DB) for stock/account and purchase-price updates so we're in sync with what was stored
+    const persistedDetails = submission.get ? submission.get('details') : submission.details;
+    const detailsForUpdates = persistedDetails || details || {};
+
+    // For admin purchases with an associated asset account, update stock and asset account balance
+    if (submissionType === 'purchases' && detailsForUpdates && detailsForUpdates.assetAccountId) {
+      try {
+        const assetAccountId = parseInt(detailsForUpdates.assetAccountId, 10);
+        const account = await db.AssetAccount.findByPk(assetAccountId);
+
+        if (account) {
+          const itemsArray = Array.isArray(detailsForUpdates.items) && detailsForUpdates.items.length > 0
+            ? detailsForUpdates.items
+            : (detailsForUpdates.item && detailsForUpdates.price
+              ? [{ item: detailsForUpdates.item, price: detailsForUpdates.price, quantity: detailsForUpdates.quantity || 1, productId: detailsForUpdates.productId }]
+              : []);
+
+          let totalFromItems = 0;
+
+          for (const item of itemsArray) {
+            const qty = Number(item.quantity || 1);
+            const unitPrice = Number(item.price || 0);
+            if (qty > 0 && unitPrice > 0) {
+              totalFromItems += qty * unitPrice;
+            }
+
+            if (item.productId) {
+              const drink = await db.Drink.findByPk(item.productId);
+              if (drink) {
+                const currentStock = parseFloat(drink.stock || 0);
+                const newStock = currentStock + qty;
+                await drink.update({ stock: newStock });
+                console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
+              }
+            }
+          }
+
+          const totalAmount = totalFromItems > 0 ? totalFromItems : submissionAmount;
+          const today = new Date().toISOString().slice(0, 10);
+
+          await db.AssetAccountTransaction.create({
+            assetAccountId: account.id,
+            amount: totalAmount,
+            reference: detailsForUpdates.reference || `Purchase submission #${submission.id}`,
+            description: detailsForUpdates.supplier ? `Purchase from ${detailsForUpdates.supplier}` : 'Purchase',
+            transactionDate: today,
+            transactionType: 'credit',
+            debitAmount: 0,
+            creditAmount: totalAmount,
+            postedById: adminId,
+            status: 'approved'
+          });
+
+          // Credit entries reduce the asset account balance
+          await account.increment('balance', { by: -totalAmount });
+          console.log(`   Asset account "${account.name}" balance reduced by ${totalAmount.toFixed(2)}`);
+        } else {
+          console.warn(`⚠️ Asset account not found for assetAccountId=${details.assetAccountId}`);
+        }
+      } catch (purchaseError) {
+        console.error('❌ Error updating stock/account for purchase submission:', purchaseError);
+      }
+    }
+
+    // For all purchases with line items: update each product's purchase price in inventory (even when no asset account)
+    if (submissionType === 'purchases' && detailsForUpdates) {
+      const itemsArray = Array.isArray(detailsForUpdates.items) && detailsForUpdates.items.length > 0
+        ? detailsForUpdates.items
+        : (detailsForUpdates.item && detailsForUpdates.price != null
+          ? [{ item: detailsForUpdates.item, price: detailsForUpdates.price, quantity: detailsForUpdates.quantity || 1, productId: detailsForUpdates.productId }]
+          : []);
+      console.log(`   Purchase price update: processing ${itemsArray.length} item(s) from submission #${submission.id}`);
+      for (const item of itemsArray) {
+        const unitPrice = Number(item.price ?? item.purchasePrice ?? 0);
+        const productId = item.productId != null ? parseInt(item.productId, 10) : NaN;
+        const itemName = item.item || item.name || 'Unknown';
+        if (Number.isNaN(productId) || productId <= 0) {
+          console.warn(`   ⚠️ Skipping purchase price update for "${itemName}": invalid or missing productId (got: ${item.productId})`);
+          continue;
+        }
+        if (unitPrice <= 0) {
+          console.warn(`   ⚠️ Skipping purchase price update for productId ${productId} ("${itemName}"): unit price <= 0 (got: ${unitPrice})`);
+          continue;
+        }
+        try {
+          const drink = await db.Drink.findByPk(productId);
+          if (!drink) {
+            console.warn(`   ⚠️ Drink not found for productId ${productId} ("${itemName}")`);
+            continue;
+          }
+          // Use direct SQL update so purchase price is always persisted (avoids any Sequelize hook issues)
+          await db.sequelize.query(
+            'UPDATE drinks SET "purchasePrice" = :unitPrice, "updatedAt" = CURRENT_TIMESTAMP WHERE id = :productId',
+            { replacements: { unitPrice, productId } }
+          );
+          console.log(`   Set purchase price for Drink #${drink.id} (${drink.name}): ${unitPrice}`);
+        } catch (priceErr) {
+          console.error(`   Failed to update purchase price for product ${productId} ("${itemName}"):`, priceErr.message);
+        }
+      }
+    }
+
     console.log(`✅ Admin cash submission created: ID ${submission.id}, Admin ${admin.username || admin.name}, Type: ${submissionType}, Amount: ${submissionAmount}, Orders: ${orderIds?.length || 0}`);
 
     sendSuccess(res, submission, 'Cash submission created successfully');
@@ -382,14 +484,20 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       console.log(`📦 Linked order(s) ${orderIdsToLink.join(', ')} to cash submission ${submission.id}`);
     }
 
-    // Immediately reduce driver's cash at hand (even before approval for other types)
-    const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-    const newCashAtHand = currentCashAtHand - submissionAmount;
-    await driver.update({
-      cashAtHand: newCashAtHand,
-      lastActivity: new Date()
-    });
-    console.log(`✅ Updated driver cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (submission created${isOrderPayment ? ', auto-approved' : ', pending approval'})`);
+    // Only reduce driver's cash at hand when submission is approved (e.g. order_payment auto-approved).
+    // For pending submissions, do NOT deduct yet — actual cash at hand stays unchanged until approval.
+    if (submission.status === 'approved') {
+      const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+      const newCashAtHand = currentCashAtHand - submissionAmount;
+      await driver.update({
+        cashAtHand: newCashAtHand,
+        lastActivity: new Date()
+      });
+      console.log(`✅ Updated driver cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (submission approved on create)`);
+    } else {
+      await driver.update({ lastActivity: new Date() });
+      console.log(`✅ Submission created (pending). Driver cash at hand unchanged until approval.`);
+    }
     console.log(`✅ Updated lastActivity for driver ${driverId} (cash submission created)`);
 
     // Order payment: credit merchant wallet (order cost) and, for PAY_ON_DELIVERY orders,
@@ -660,7 +768,13 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
         { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'] },
         { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
         { model: db.Admin, as: 'rejector', attributes: ['id', 'username', 'name'], required: false },
-        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
+        {
+          model: db.Order,
+          as: 'orders',
+          attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt', 'deliveryAddress'],
+          through: { attributes: [] },
+          required: false
+        }
       ],
       order: [['createdAt', 'DESC']],
       limit: parseInt(limit),
@@ -686,10 +800,59 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
       countMap[c.status] = parseInt(c.get('count'));
     });
 
+    const serialized = submissions.map((sub) => {
+      const s = sub.toJSON ? sub.toJSON() : sub;
+      if (s.orders && Array.isArray(s.orders)) {
+        s.orders = s.orders.map((o) => ({
+          id: o.id,
+          orderNumber: o.orderNumber ?? o.id,
+          customerName: o.customerName,
+          totalAmount: o.totalAmount,
+          status: o.status,
+          createdAt: o.createdAt,
+          deliveryAddress: o.deliveryAddress ?? o.delivery_address ?? null
+        }));
+      }
+      return s;
+    });
+
+    // Ensure deliveryAddress is present: fetch from orders table if missing (e.g. join/select issue)
+    const orderIdsNeedingAddress = [];
+    serialized.forEach((s) => {
+      if (s.orders && Array.isArray(s.orders)) {
+        s.orders.forEach((o) => {
+          if (o.id && (o.deliveryAddress == null || o.deliveryAddress === '')) {
+            orderIdsNeedingAddress.push(o.id);
+          }
+        });
+      }
+    });
+    if (orderIdsNeedingAddress.length > 0) {
+      const uniqueIds = [...new Set(orderIdsNeedingAddress)];
+      const ordersWithAddress = await db.Order.findAll({
+        where: { id: uniqueIds },
+        attributes: ['id', 'deliveryAddress']
+      });
+      const mapById = {};
+      ordersWithAddress.forEach((ord) => {
+        const j = ord.toJSON ? ord.toJSON() : ord;
+        mapById[j.id] = j.deliveryAddress ?? j.delivery_address ?? null;
+      });
+      serialized.forEach((s) => {
+        if (s.orders && Array.isArray(s.orders)) {
+          s.orders.forEach((o) => {
+            if (o.id && (o.deliveryAddress == null || o.deliveryAddress === '') && mapById[o.id] != null) {
+              o.deliveryAddress = mapById[o.id];
+            }
+          });
+        }
+      });
+    }
+
     sendSuccess(res, {
-      submissions,
+      submissions: serialized,
       counts: countMap,
-      total: submissions.length
+      total: serialized.length
     });
   } catch (error) {
     console.error('Error fetching cash submissions:', error);
@@ -807,6 +970,37 @@ router.get('/cash-submissions/pending', async (req, res) => {
   }
 });
 
+/**
+ * Get a single cash submission by ID (admin)
+ * GET /api/driver-wallet/admin/cash-submissions/:id
+ */
+router.get('/admin/cash-submissions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const submission = await db.CashSubmission.findOne({
+      where: { id: parseInt(id, 10) },
+      include: [
+        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber', 'cashAtHand'], required: false },
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'rejector', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
+      ]
+    });
+
+    if (!submission) {
+      return sendError(res, 'Cash submission not found', 404);
+    }
+
+    sendSuccess(res, submission);
+  } catch (error) {
+    console.error('❌ Error fetching cash submission by id:', error);
+    console.error('❌ Error stack:', error.stack);
+    sendError(res, error.message, 500);
+  }
+});
+
 // Shared approval handler function
 const handleApproveSubmission = async (req, res, submissionId, driverIdParam = null) => {
   try {
@@ -874,13 +1068,14 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
       }
     }
 
-    // Note: Driver's cash at hand was already reduced when submission was created
-    // No need to reduce again on approval - just log the current state
+    // Deduct from driver's cash at hand on approval (pending submissions were not deducted on create)
     if (submission.driverId && submission.driver) {
       const driver = await db.Driver.findByPk(submission.driverId);
       if (driver) {
         const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-        console.log(`   Driver cash at hand (already reduced on creation): ${currentCashAtHand.toFixed(2)}`);
+        const newCashAtHand = currentCashAtHand - parseFloat(submission.amount || 0);
+        await driver.update({ cashAtHand: newCashAtHand });
+        console.log(`   Driver cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (deducted on approval)`);
       }
     }
 
@@ -1179,18 +1374,7 @@ const handleRejectSubmission = async (req, res, submissionId, driverIdParam = nu
         : 'Unknown';
     console.log(`✅ Cash submission rejected: ID ${submission.id}, ${submitterName}, Amount: ${submissionAmount}`);
 
-    // Restore driver's cash at hand (since it was reduced when submission was created)
-    if (submission.driverId && submission.driver) {
-      const driver = await db.Driver.findByPk(submission.driverId);
-      if (driver) {
-        const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-        // Restore the amount that was deducted when submission was created
-        const restoredCashAtHand = currentCashAtHand + submissionAmount;
-        
-        await driver.update({ cashAtHand: restoredCashAtHand });
-        console.log(`   Driver cash at hand restored: ${currentCashAtHand.toFixed(2)} → ${restoredCashAtHand.toFixed(2)} (rejected submission)`);
-      }
-    }
+    // Driver cash at hand was not reduced when submission was created (pending), so do not restore on reject
 
     // Send push notification to driver (only if it's a driver submission)
     if (submission.driver && submission.driver.pushToken) {

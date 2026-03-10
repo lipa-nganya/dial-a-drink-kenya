@@ -24,7 +24,9 @@ import {
   Chip,
   Grid,
   InputAdornment,
-  IconButton
+  IconButton,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   ArrowBack,
@@ -69,6 +71,8 @@ const SupplierDetail = () => {
   const [transactionReason, setTransactionReason] = useState('');
   const [transactionReference, setTransactionReference] = useState('');
   const [processingTransaction, setProcessingTransaction] = useState(false);
+
+  const [tabIndex, setTabIndex] = useState(0); // 0: Transactions, 1: Logs
 
   useEffect(() => {
     fetchSupplierDetails();
@@ -179,6 +183,23 @@ const SupplierDetail = () => {
     });
   };
 
+  const buildLogs = () => {
+    if (!supplier) return [];
+    const openingBalance = parseFloat(supplier.openingBalance) || 0;
+    const sorted = [...transactions].sort(
+      (a, b) => new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || b.updatedAt || 0)
+    );
+    let running = openingBalance;
+    return sorted.map((tx) => {
+      const amount = parseFloat(tx.amount) || 0;
+      const isCredit = tx.transactionType === 'credit'; // credit = payment, reduces balance
+      const debit = isCredit ? 0 : amount;
+      const credit = isCredit ? amount : 0;
+      running = running + (isCredit ? -amount : amount);
+      return { ...tx, _debit: debit, _credit: credit, _balance: running };
+    });
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, textAlign: 'center' }}>
@@ -192,7 +213,7 @@ const SupplierDetail = () => {
     return (
       <Container maxWidth="lg" sx={{ py: 4 }}>
         <Alert severity="error">{error}</Alert>
-        <Button startIcon={<ArrowBack />} onClick={() => navigate('/payables')} sx={{ mt: 2 }}>
+        <Button startIcon={<ArrowBack />} onClick={() => navigate('/payables/purchases')} sx={{ mt: 2 }}>
           Back to Suppliers
         </Button>
       </Container>
@@ -202,7 +223,7 @@ const SupplierDetail = () => {
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 4 }}>
-        <IconButton onClick={() => navigate('/payables')} sx={{ color: colors.textSecondary }}>
+        <IconButton onClick={() => navigate('/payables/purchases')} sx={{ color: colors.textSecondary }}>
           <ArrowBack />
         </IconButton>
         <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
@@ -384,17 +405,7 @@ const SupplierDetail = () => {
 
           {financialSummary && (
             <Grid container spacing={3}>
-              <Grid item xs={12} md={3}>
-                <Paper sx={{ p: 2, backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 224, 184, 0.05)' }}>
-                  <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
-                    Opening Balance
-                  </Typography>
-                  <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                    {formatCurrency(financialSummary.openingBalance)}
-                  </Typography>
-                </Paper>
-              </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <Paper sx={{ p: 2, backgroundColor: isDarkMode ? 'rgba(76, 175, 80, 0.1)' : 'rgba(76, 175, 80, 0.05)' }}>
                   <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
                     Total Credits
@@ -402,9 +413,10 @@ const SupplierDetail = () => {
                   <Typography variant="h6" sx={{ color: '#4CAF50', fontWeight: 600 }}>
                     {formatCurrency(financialSummary.totalCredits)}
                   </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>Payments (reduce balance)</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <Paper sx={{ p: 2, backgroundColor: isDarkMode ? 'rgba(255, 152, 0, 0.1)' : 'rgba(255, 152, 0, 0.05)' }}>
                   <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
                     Total Debits
@@ -412,9 +424,10 @@ const SupplierDetail = () => {
                   <Typography variant="h6" sx={{ color: '#FF9800', fontWeight: 600 }}>
                     {formatCurrency(financialSummary.totalDebits)}
                   </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>Amounts owed</Typography>
                 </Paper>
               </Grid>
-              <Grid item xs={12} md={3}>
+              <Grid item xs={12} md={4}>
                 <Paper sx={{ 
                   p: 2, 
                   backgroundColor: financialSummary.currentBalance >= 0 
@@ -440,64 +453,102 @@ const SupplierDetail = () => {
         </CardContent>
       </Card>
 
-      {/* Transactions Table */}
+      {/* Transactions & Logs */}
       <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
         <CardContent>
-          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600, mb: 3 }}>
-            Transaction History
+          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
+            Activity
           </Typography>
+          <Tabs
+            value={tabIndex}
+            onChange={(_, v) => setTabIndex(v)}
+            sx={{ borderBottom: `1px solid ${colors.border}`, mb: 2 }}
+          >
+            <Tab label="Transactions" />
+            <Tab label="Logs" />
+          </Tabs>
 
-          <TableContainer component={Paper} variant="outlined">
-            <Table>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.05)' }}>
-                  <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Type</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Amount</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Reason</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Reference</TableCell>
-                  <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Created By</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {transactions.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 4, color: colors.textSecondary }}>
-                      No transactions yet
-                    </TableCell>
+          {tabIndex === 0 && (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.05)' }}>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Transaction #</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Done By</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Amount</TableCell>
                   </TableRow>
-                ) : (
-                  transactions.map((transaction) => (
-                    <TableRow key={transaction.id} hover>
-                      <TableCell sx={{ color: colors.textPrimary }}>
-                        {formatDate(transaction.createdAt)}
-                      </TableCell>
-                      <TableCell>
-                        <Chip
-                          label={transaction.transactionType === 'credit' ? 'Credit' : 'Debit'}
-                          color={transaction.transactionType === 'credit' ? 'success' : 'warning'}
-                          size="small"
-                          icon={transaction.transactionType === 'credit' ? <TrendingUp /> : <TrendingDown />}
-                        />
-                      </TableCell>
-                      <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                        {formatCurrency(transaction.amount)}
-                      </TableCell>
-                      <TableCell sx={{ color: colors.textPrimary }}>
-                        {transaction.reason || '-'}
-                      </TableCell>
-                      <TableCell sx={{ color: colors.textPrimary }}>
-                        {transaction.reference || '-'}
-                      </TableCell>
-                      <TableCell sx={{ color: colors.textSecondary }}>
-                        {transaction.createdByAdmin?.username || 'System'}
+                </TableHead>
+                <TableBody>
+                  {transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} align="center" sx={{ py: 4, color: colors.textSecondary }}>
+                        No transactions yet
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                  ) : (
+                    transactions.map((tx) => (
+                      <TableRow key={tx.id} hover>
+                        <TableCell sx={{ color: colors.textPrimary }}>#{tx.id}</TableCell>
+                        <TableCell sx={{ color: colors.textSecondary }}>{formatDate(tx.createdAt)}</TableCell>
+                        <TableCell sx={{ color: colors.textSecondary }}>
+                          {tx.createdByAdmin?.username || 'System'}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                          {formatCurrency(tx.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+
+          {tabIndex === 1 && (
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.05)' }}>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Transaction #</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Done By</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Debit</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Credit</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Balance</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center" sx={{ py: 4, color: colors.textSecondary }}>
+                        No logs yet
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    buildLogs().map((tx) => (
+                      <TableRow key={tx.id}>
+                        <TableCell sx={{ color: colors.textPrimary }}>#{tx.id}</TableCell>
+                        <TableCell sx={{ color: colors.textSecondary }}>{formatDate(tx.createdAt)}</TableCell>
+                        <TableCell sx={{ color: colors.textSecondary }}>
+                          {tx.createdByAdmin?.username || 'System'}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                          {formatCurrency(tx._debit)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                          {formatCurrency(tx._credit)}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                          {formatCurrency(tx._balance)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </CardContent>
       </Card>
 

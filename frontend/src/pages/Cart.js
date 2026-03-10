@@ -44,6 +44,8 @@ const Cart = () => {
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [validationErrors, setValidationErrors] = useState([]); // field keys: name, phone, address, apartmentHouseNumber, paymentMethod, mobileMoneyProvider, mpesaPhoneNumber
+  const deliveryFormRef = React.useRef(null);
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
     deliveryFeeMode: 'fixed',
@@ -370,11 +372,29 @@ const Cart = () => {
     }
   };
 
+  const fieldLabels = {
+    name: 'Full Name',
+    phone: 'Phone Number',
+    address: 'Delivery Address',
+    apartmentHouseNumber: 'Apartment/House Number',
+    paymentMethod: 'Payment method (Card or Mobile Money)',
+    mobileMoneyProvider: 'Mobile money provider (M-Pesa or Airtel)',
+    mpesaPhoneNumber: 'Safaricom phone number'
+  };
+
   const handleInputChange = (field, value) => {
     setCustomerInfo(prev => ({
       ...prev,
       [field]: value
     }));
+    setValidationErrors(prev => {
+      const next = prev.filter(k => k !== field);
+      const deliveryFields = ['name', 'phone', 'address', 'apartmentHouseNumber'];
+      const remainingDelivery = next.filter(k => deliveryFields.includes(k));
+      if (next.length === 0) setError('');
+      else if (remainingDelivery.length === next.length) setError(`Please fill in: ${next.map(k => fieldLabels[k]).join(', ')}`);
+      return next;
+    });
   };
 
   // Validate and format Safaricom phone number
@@ -491,19 +511,29 @@ const Cart = () => {
       mobileMoneyProvider: mobileMoneyProvider,
       pesapalRedirectUrl: pesapalRedirectUrl
     });
-    
-    if (!customerInfo.name || !customerInfo.phone || !customerInfo.address || !customerInfo.apartmentHouseNumber) {
-      setError('Please fill in all required fields');
+
+    const missing = [];
+    if (!customerInfo.name?.trim()) missing.push('name');
+    if (!customerInfo.phone?.trim()) missing.push('phone');
+    if (!customerInfo.address?.trim()) missing.push('address');
+    if (!customerInfo.apartmentHouseNumber?.trim()) missing.push('apartmentHouseNumber');
+
+    if (missing.length > 0) {
+      setValidationErrors(missing);
+      setError(`Please fill in: ${missing.map(k => fieldLabels[k]).join(', ')}`);
+      deliveryFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
 
     // Validate payment method if paying now
     if (paymentType === 'pay_now' && !paymentMethod) {
       console.log('❌ Payment method not selected');
+      setValidationErrors(['paymentMethod']);
       setError('Please select a payment method (Card or Mobile Money)');
+      deliveryFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
-    
+
     console.log('✅ Payment validation passed:', {
       paymentType: paymentType,
       paymentMethod: paymentMethod
@@ -512,16 +542,23 @@ const Cart = () => {
     // Validate M-Pesa phone number if paying with M-Pesa
     if (paymentType === 'pay_now' && paymentMethod === 'mobile_money') {
       if (!mobileMoneyProvider) {
+        setValidationErrors(['mobileMoneyProvider']);
         setError('Please select a mobile money provider (M-Pesa or Airtel)');
+        deliveryFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
       if (mobileMoneyProvider === 'mpesa') {
         if (!mpesaPhoneNumber || !validateSafaricomPhone(mpesaPhoneNumber)) {
+          setValidationErrors(['mpesaPhoneNumber']);
           setError('Please enter a valid Safaricom phone number (e.g., 0712345678)');
+          deliveryFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           return;
         }
       }
     }
+
+    // Clear validation errors when proceeding
+    setValidationErrors([]);
 
     // For card payments, we need to get PesaPal redirect URL first
     if (paymentType === 'pay_now' && paymentMethod === 'card' && !pesapalRedirectUrl) {
@@ -885,7 +922,7 @@ const Cart = () => {
     <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 2 } }}>
       {/* Error Display at Top */}
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => { setError(''); setValidationErrors([]); }}>
           {error}
         </Alert>
       )}
@@ -989,7 +1026,7 @@ const Cart = () => {
 
         {/* Order Summary & Checkout */}
         <Grid size={{ xs: 12 }}>
-          <Paper sx={{ p: 3, width: '100%', overflow: 'visible' }}>
+          <Paper ref={deliveryFormRef} sx={{ p: 3, width: '100%', overflow: 'visible' }}>
             <Typography variant="h6" gutterBottom>
               Order Summary
             </Typography>
@@ -1015,8 +1052,9 @@ const Cart = () => {
               Delivery Information
             </Typography>
 
+            {/* Error at top of form - same message as top of page and bottom of form */}
             {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
+              <Alert severity="error" sx={{ mb: 2 }} onClose={() => { setError(''); setValidationErrors([]); }}>
                 {error}
               </Alert>
             )}
@@ -1026,6 +1064,8 @@ const Cart = () => {
                 label="Full Name *"
                 value={customerInfo.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
+                error={validationErrors.includes('name')}
+                helperText={validationErrors.includes('name') ? 'This field is required' : ''}
                 fullWidth
                 size="small"
               />
@@ -1033,6 +1073,8 @@ const Cart = () => {
                 label="Phone Number *"
                 value={customerInfo.phone}
                 onChange={(e) => handleInputChange('phone', e.target.value)}
+                error={validationErrors.includes('phone')}
+                helperText={validationErrors.includes('phone') ? 'This field is required' : ''}
                 fullWidth
                 size="small"
               />
@@ -1054,6 +1096,8 @@ const Cart = () => {
                     setDeliveryCoordinates(null);
                   }
                 }}
+                error={validationErrors.includes('address')}
+                helperText={validationErrors.includes('address') ? 'This field is required' : ''}
                 onPlaceSelect={async (placeData) => {
                   // Capture coordinates when address is selected from autocomplete for fallback distance calculation
                   if (placeData?.geometry?.location) {
@@ -1084,6 +1128,8 @@ const Cart = () => {
                 label="Apartment/House Number *"
                 value={customerInfo.apartmentHouseNumber}
                 onChange={(e) => handleInputChange('apartmentHouseNumber', e.target.value)}
+                error={validationErrors.includes('apartmentHouseNumber')}
+                helperText={validationErrors.includes('apartmentHouseNumber') ? 'This field is required' : ''}
                 fullWidth
                 size="small"
                 placeholder="e.g., Apartment 4B, House 12"
@@ -1122,6 +1168,8 @@ const Cart = () => {
                     setPaymentMethod(null);
                     setMobileMoneyProvider(null);
                     setMpesaPhoneNumber('');
+                    setValidationErrors(prev => prev.filter(k => !['paymentMethod', 'mobileMoneyProvider', 'mpesaPhoneNumber'].includes(k)));
+                    if (error) setError('');
                   }
                 }}
               >
@@ -1159,7 +1207,7 @@ const Cart = () => {
                       flex: 1,
                       cursor: 'pointer',
                       border: paymentMethod === 'card' ? 2 : 1,
-                      borderColor: paymentMethod === 'card' ? 'primary.main' : 'divider',
+                      borderColor: paymentMethod === 'card' ? 'primary.main' : validationErrors.includes('paymentMethod') ? 'error.main' : 'divider',
                       backgroundColor: paymentMethod === 'card' ? 'action.selected' : 'background.paper',
                       '&:hover': {
                         borderColor: 'primary.main',
@@ -1178,6 +1226,8 @@ const Cart = () => {
                       setPaymentMethod('card');
                       setMobileMoneyProvider(null);
                       setMpesaPhoneNumber('');
+                      setValidationErrors(prev => prev.filter(k => !['paymentMethod', 'mobileMoneyProvider', 'mpesaPhoneNumber'].includes(k)));
+                      if (error) setError('');
                       // Reset PesaPal redirect URL when switching payment methods
                       setPesapalRedirectUrl(null);
                       console.log('💳 Card payment method set successfully');
@@ -1195,7 +1245,7 @@ const Cart = () => {
                       flex: 1,
                       cursor: 'pointer',
                       border: paymentMethod === 'mobile_money' ? 2 : 1,
-                      borderColor: paymentMethod === 'mobile_money' ? 'primary.main' : 'divider',
+                      borderColor: paymentMethod === 'mobile_money' ? 'primary.main' : validationErrors.includes('paymentMethod') ? 'error.main' : 'divider',
                       backgroundColor: paymentMethod === 'mobile_money' ? 'action.selected' : 'background.paper',
                       '&:hover': {
                         borderColor: 'primary.main',
@@ -1203,7 +1253,11 @@ const Cart = () => {
                       },
                       transition: 'all 0.2s'
                     }}
-                    onClick={() => setPaymentMethod('mobile_money')}
+                    onClick={() => {
+                      setPaymentMethod('mobile_money');
+                      setValidationErrors(prev => prev.filter(k => !['paymentMethod', 'mobileMoneyProvider', 'mpesaPhoneNumber'].includes(k)));
+                      if (error) setError('');
+                    }}
                   >
                     <CardContent sx={{ textAlign: 'center', py: 2, '&:last-child': { pb: 2 } }}>
                       <PhoneAndroid sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
@@ -1228,7 +1282,7 @@ const Cart = () => {
                       flex: 1,
                       cursor: 'pointer',
                       border: mobileMoneyProvider === 'mpesa' ? 2 : 1,
-                      borderColor: mobileMoneyProvider === 'mpesa' ? 'primary.main' : 'divider',
+                      borderColor: mobileMoneyProvider === 'mpesa' ? 'primary.main' : validationErrors.includes('mobileMoneyProvider') ? 'error.main' : 'divider',
                       backgroundColor: mobileMoneyProvider === 'mpesa' ? 'action.selected' : 'background.paper',
                       '&:hover': {
                         borderColor: 'primary.main',
@@ -1236,7 +1290,11 @@ const Cart = () => {
                       },
                       transition: 'all 0.2s'
                     }}
-                    onClick={() => setMobileMoneyProvider('mpesa')}
+                    onClick={() => {
+                      setMobileMoneyProvider('mpesa');
+                      setValidationErrors(prev => prev.filter(k => k !== 'mobileMoneyProvider'));
+                      if (error) setError('');
+                    }}
                   >
                     <CardContent sx={{ textAlign: 'center', py: 2, '&:last-child': { pb: 2 } }}>
                       <AccountBalanceWallet sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
@@ -1280,11 +1338,14 @@ const Cart = () => {
                     // Allow only digits and common formatting characters
                     const value = e.target.value.replace(/[^\d+\s()-]/g, '');
                     setMpesaPhoneNumber(value);
+                    setValidationErrors(prev => prev.filter(k => k !== 'mpesaPhoneNumber'));
+                    if (error) setError('');
                   }}
+                  error={validationErrors.includes('mpesaPhoneNumber')}
+                  helperText={validationErrors.includes('mpesaPhoneNumber') ? 'Enter a valid Safaricom number (e.g., 0712345678)' : 'Enter your Safaricom M-Pesa registered phone number'}
                   placeholder="0712345678"
                   fullWidth
                   size="small"
-                  helperText="Enter your Safaricom M-Pesa registered phone number"
                   sx={{ mb: 2 }}
                 />
                 <Box sx={{ 
@@ -1419,9 +1480,9 @@ const Cart = () => {
                 : 'Place Order'}
             </Button>
             
-            {/* Error Display at Bottom of Button */}
+            {/* Error Display at Bottom of Form */}
             {error && (
-              <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError('')}>
+              <Alert severity="error" sx={{ mt: 2 }} onClose={() => { setError(''); setValidationErrors([]); }}>
                 {error}
               </Alert>
             )}

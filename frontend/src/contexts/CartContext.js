@@ -1,6 +1,34 @@
-import React, { createContext, useContext, useReducer, useState } from 'react';
+import React, { createContext, useContext, useReducer, useState, useEffect } from 'react';
 
 const CartContext = createContext();
+
+const CART_STORAGE_KEY = 'dialadrink_cart';
+
+function cartItemsToStorage(items) {
+  return items.map(({ drinkId, drink, quantity, price, selectedCapacity }) => ({
+    drinkId,
+    quantity,
+    price,
+    selectedCapacity: selectedCapacity ?? null,
+    drink: drink ? {
+      id: drink.id,
+      name: drink.name,
+      image: drink.image
+    } : { id: drinkId, name: '', image: null }
+  }));
+}
+
+function loadCartFromStorage() {
+  try {
+    const raw = localStorage.getItem(CART_STORAGE_KEY);
+    if (!raw) return { items: [] };
+    const parsed = JSON.parse(raw);
+    const items = Array.isArray(parsed) ? parsed : (parsed.items && Array.isArray(parsed.items) ? parsed.items : []);
+    return { items };
+  } catch {
+    return { items: [] };
+  }
+}
 
 const cartReducer = (state, action) => {
   switch (action.type) {
@@ -61,9 +89,28 @@ const cartReducer = (state, action) => {
 };
 
 export const CartProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(cartReducer, { items: [] });
+  const [state, dispatch] = useReducer(cartReducer, undefined, () => loadCartFromStorage());
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Persist cart to localStorage whenever items change (do not clear on refresh/navigate)
+  useEffect(() => {
+    if (!isHydrated) {
+      setIsHydrated(true);
+      return;
+    }
+    const toStore = cartItemsToStorage(state.items);
+    try {
+      if (toStore.length === 0) {
+        localStorage.removeItem(CART_STORAGE_KEY);
+      } else {
+        localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(toStore));
+      }
+    } catch (e) {
+      console.warn('Could not persist cart to localStorage', e);
+    }
+  }, [state.items]);
 
   const addToCart = (drink, quantity = 1) => {
     dispatch({

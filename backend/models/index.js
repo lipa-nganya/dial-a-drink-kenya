@@ -125,6 +125,8 @@ const NotificationRead = require('./NotificationRead')(sequelize, Sequelize.Data
 const InventoryCheck = require('./InventoryCheck')(sequelize, Sequelize.DataTypes);
 const Loan = require('./Loan')(sequelize, Sequelize.DataTypes);
 const Penalty = require('./Penalty')(sequelize, Sequelize.DataTypes);
+const AssetAccount = require('./AssetAccount')(sequelize, Sequelize.DataTypes);
+const AssetAccountTransaction = require('./AssetAccountTransaction')(sequelize, Sequelize.DataTypes);
 
 // Valkyrie models (conditionally loaded if they exist)
 let ValkyriePartner, ValkyriePartnerUser, ValkyriePartnerDriver, ValkyriePartnerOrder, PartnerGeofence;
@@ -300,6 +302,8 @@ db.NotificationRead = NotificationRead;
 db.InventoryCheck = InventoryCheck;
 db.Loan = Loan;
 db.Penalty = Penalty;
+db.AssetAccount = AssetAccount;
+db.AssetAccountTransaction = AssetAccountTransaction;
 
 // Loan and Penalty associations
 if (Loan && Driver) {
@@ -311,6 +315,16 @@ if (Penalty && Driver) {
   Penalty.belongsTo(Driver, { foreignKey: 'driverId', as: 'driver' });
   Driver.hasMany(Penalty, { foreignKey: 'driverId', as: 'penalties' });
   Penalty.belongsTo(Admin, { foreignKey: 'createdBy', as: 'creator' });
+}
+
+// AssetAccount associations
+if (AssetAccount && AssetAccountTransaction) {
+  AssetAccount.hasMany(AssetAccountTransaction, { foreignKey: 'assetAccountId', as: 'transactions' });
+  AssetAccountTransaction.belongsTo(AssetAccount, { foreignKey: 'assetAccountId', as: 'account' });
+}
+if (AssetAccountTransaction && Admin) {
+  AssetAccountTransaction.belongsTo(Admin, { foreignKey: 'postedById', as: 'postedBy' });
+  Admin.hasMany(AssetAccountTransaction, { foreignKey: 'postedById', as: 'assetAccountTransactions' });
 }
 
 // InventoryCheck associations

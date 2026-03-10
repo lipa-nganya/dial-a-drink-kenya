@@ -82,6 +82,12 @@ router.get('/:key', async (req, res) => {
       if (key === 'heroImage') {
         return res.json({ key: 'heroImage', value: '/assets/images/ads/hero-ad.png' });
       }
+      if (key === 'heroImageLinkType') {
+        return res.json({ key: 'heroImageLinkType', value: 'none' });
+      }
+      if (key === 'heroImageLinkTargetId') {
+        return res.json({ key: 'heroImageLinkTargetId', value: '' });
+      }
       if (key === 'deliveryTestMode') {
         return res.json({ key: 'deliveryTestMode', value: 'false' });
       }

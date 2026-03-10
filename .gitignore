@@ -126,3 +126,12 @@ production-config.env.bak
 # Netlify credentials (if stored locally)
 .netlify/
 netlify.toml.local
+
+# Database and cloud credentials (never commit)
+DATABASE_CREDENTIALS.txt
+DATABASE_CREDENTIALS.md
+*-key.json
+*credentials*.json
+service-account*.json
+gcloud-*.json
+.firebase/

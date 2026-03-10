@@ -345,6 +345,43 @@ async function addPurchasePriceToDrinks() {
   }
 }
 
+async function addNbvToDrinks() {
+  try {
+    console.log('📦 Running migration: add-nbv-to-drinks');
+    console.log('   Add nbv column to drinks table (Nicotine by volume: % for vapes, mg for pouches)');
+    
+    const [results] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drinks' 
+      AND column_name = 'nbv'
+    `);
+    
+    if (results.length > 0) {
+      console.log('   ⏭️  nbv column already exists in drinks table');
+      console.log('   ✅ Migration add-nbv-to-drinks completed (already exists)\n');
+      return true;
+    }
+    
+    await db.sequelize.query(`
+      ALTER TABLE drinks 
+      ADD COLUMN "nbv" DECIMAL(5, 2) NULL
+    `);
+    
+    console.log('   ✅ nbv column added to drinks table');
+    console.log('   ✅ Migration add-nbv-to-drinks completed\n');
+    return true;
+  } catch (error) {
+    if (error.message.includes('already exists') || error.message.includes('duplicate')) {
+      console.log('   ⏭️  nbv column already exists, skipping...');
+      console.log('   ✅ Migration add-nbv-to-drinks completed (already exists)\n');
+      return true;
+    }
+    console.error('   ❌ Migration add-nbv-to-drinks failed:', error.message);
+    throw error;
+  }
+}
+
 async function addSeoAndTagsToDrinks() {
   try {
     console.log('📦 Running migration: add-seo-and-tags-to-drinks');
@@ -447,6 +484,7 @@ async function runMigrations() {
       { name: 'add-driver-location-columns', fn: addDriverLocationColumns },
       { name: 'add-order-adminId-and-cancellation-columns', fn: addOrderAdminIdAndCancellationColumns },
       { name: 'add-purchase-price-to-drinks', fn: addPurchasePriceToDrinks },
+      { name: 'add-nbv-to-drinks', fn: addNbvToDrinks },
       { name: 'add-seo-and-tags-to-drinks', fn: addSeoAndTagsToDrinks }
     ];
 

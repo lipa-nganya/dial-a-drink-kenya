@@ -109,7 +109,7 @@ const AdminHeader = () => {
           </Button>
           <Button
             color="inherit"
-            onClick={() => navigate('/payables')}
+            onClick={() => navigate('/payables/purchases')}
             startIcon={<AccountBalance />}
             sx={buttonStyle('/payables')}
           >

@@ -338,11 +338,6 @@ function generateReceiptHTML(order) {
           ` : ''}
         </div>
         
-        <div class="footer">
-          <p>Thank you for your order!</p>
-          <p>For inquiries, please contact us at your registered phone number.</p>
-          <p style="margin-top: 10px;">This is a computer-generated receipt.</p>
-        </div>
       </div>
     </body>
     </html>

@@ -5,44 +5,33 @@ import {
   Typography,
   Grid,
   Box,
-  Button,
-  TextField,
-  InputAdornment,
-  Chip
 } from '@mui/material';
-import { Search as SearchIcon, Star } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { Star } from '@mui/icons-material';
+import { useTheme } from '../contexts/ThemeContext';
 import DrinkCard from '../components/DrinkCard';
 import CountdownTimer from '../components/CountdownTimer';
-import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
+import { Link } from 'react-router-dom';
 
 const Home = () => {
-  const [categories, setCategories] = useState([]);
-  const [categoriesLoading, setCategoriesLoading] = useState(true);
   const [drinks, setDrinks] = useState([]);
   const [drinksLoading, setDrinksLoading] = useState(true);
   const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
   const heroImageUrlRef = useRef(null); // Store the base URL to detect changes
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(0);
-  const [subcategories, setSubcategories] = useState([]);
-  const [selectedSubcategory, setSelectedSubcategory] = useState(0);
+  const [heroLinkType, setHeroLinkType] = useState('none'); // 'none' | 'product' | 'brand'
+  const [heroLinkTargetId, setHeroLinkTargetId] = useState(''); // product id or brand id
   const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
   const [brandFocusLoading, setBrandFocusLoading] = useState(true);
   const [limitedTimeOffers, setLimitedTimeOffers] = useState([]);
   const [limitedTimeOffersLoading, setLimitedTimeOffersLoading] = useState(true);
   const [countdownActive, setCountdownActive] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
-  const [categoriesCollapsed, setCategoriesCollapsed] = useState(false);
-  const navigate = useNavigate();
   const { colors } = useTheme();
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    fetchCategories();
     fetchHeroImage();
+    fetchHeroLinkSettings();
     fetchDrinks();
     fetchBrandFocusDrinks();
     fetchLimitedTimeOffers();
@@ -53,6 +42,7 @@ const Home = () => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         fetchHeroImage();
+        fetchHeroLinkSettings();
       }
     };
 
@@ -61,6 +51,7 @@ const Home = () => {
     // Also refetch periodically (every 5 minutes) to catch updates
     const intervalId = setInterval(() => {
       fetchHeroImage();
+      fetchHeroLinkSettings();
     }, 5 * 60 * 1000); // 5 minutes
 
     return () => {
@@ -69,72 +60,6 @@ const Home = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Scroll detection for collapsing categories and fixing search (throttled to avoid stutter)
-  useEffect(() => {
-    let rafId = null;
-    let lastScrollY = -1;
-    let lastShouldFix = null;
-    let lastShouldCollapse = null;
-
-    const handleScroll = () => {
-      const scrollY = window.scrollY || window.pageYOffset;
-      if (scrollY === lastScrollY) return;
-      lastScrollY = scrollY;
-      const shouldCollapse = scrollY > 200;
-      const shouldFixSearch = scrollY > 100;
-
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        if (lastShouldFix !== shouldFixSearch) {
-          lastShouldFix = shouldFixSearch;
-          setIsScrolled(shouldFixSearch);
-        }
-        if (lastShouldCollapse !== shouldCollapse) {
-          lastShouldCollapse = shouldCollapse;
-          setCategoriesCollapsed(shouldCollapse);
-        }
-      });
-    };
-
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, []);
-
-  // Fetch subcategories when category changes
-  useEffect(() => {
-    if (selectedCategory > 0) {
-      fetchSubcategories(selectedCategory);
-      setSelectedSubcategory(0);
-    } else {
-      setSubcategories([]);
-      setSelectedSubcategory(0);
-    }
-  }, [selectedCategory]);
-
-  const fetchSubcategories = async (categoryId) => {
-    try {
-      const response = await api.get(`/subcategories?categoryId=${categoryId}`);
-      setSubcategories(response.data);
-    } catch (error) {
-      console.error('Error fetching subcategories:', error);
-      setSubcategories([]);
-    }
-  };
-
-  const handleCategoryChange = (categoryId) => {
-    setSelectedCategory(categoryId);
-    navigate(categoryId > 0 ? `/menu?category=${categoryId}` : '/menu');
-  };
-
-  const handleSubcategoryChange = (subcategoryId) => {
-    setSelectedSubcategory(subcategoryId);
-    navigate(`/menu?category=${selectedCategory}${subcategoryId > 0 ? `&subcategory=${subcategoryId}` : ''}`);
-  };
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '/assets/images/ads/hero-ad.png';
@@ -185,40 +110,16 @@ const Home = () => {
     }
   };
 
-  const fetchCategories = async () => {
+  const fetchHeroLinkSettings = async () => {
     try {
-      // Note: API URL is resolved dynamically in api.js interceptor
-      const response = await api.get('/categories');
-      console.log('Categories response:', response.data);
-      
-      // Defensive: Ensure categories is always an array
-      let categoriesArray = [];
-      if (response.data) {
-        if (Array.isArray(response.data)) {
-          categoriesArray = response.data;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          // Wrapped response: { data: [...] }
-          categoriesArray = response.data.data;
-        }
-      }
-      
-      if (!Array.isArray(categoriesArray)) {
-        console.warn('Categories response is not an array:', response.data);
-        categoriesArray = [];
-      }
-      
-      // Filter out "Test" and "Popular" categories
-      categoriesArray = categoriesArray.filter(cat => 
-        cat.name && cat.name.toLowerCase() !== 'test' && cat.name.toLowerCase() !== 'popular'
-      );
-      
-      setCategories(categoriesArray);
+      const [typeRes, targetRes] = await Promise.all([
+        api.get('/settings/heroImageLinkType').catch(() => ({ data: { value: 'none' } })),
+        api.get('/settings/heroImageLinkTargetId').catch(() => ({ data: { value: '' } }))
+      ]);
+      setHeroLinkType(typeRes.data?.value || 'none');
+      setHeroLinkTargetId(targetRes.data?.value != null ? String(targetRes.data.value) : '');
     } catch (error) {
-      console.error('Error fetching categories:', error);
-      console.error('Error details:', error.response?.data || error.message);
-      setCategories([]); // Ensure categories is always an array even on error
-    } finally {
-      setCategoriesLoading(false);
+      console.error('Error fetching hero link settings:', error);
     }
   };
 
@@ -293,33 +194,6 @@ const Home = () => {
     }
   };
 
-  const normalizedSearch = searchTerm.trim().toLowerCase();
-  let filteredDrinks = normalizedSearch
-    ? drinks.filter((drink) => {
-        if (!drink) return false;
-        const name = typeof drink.name === 'string' ? drink.name.toLowerCase() : '';
-        const description = typeof drink.description === 'string' ? drink.description.toLowerCase() : '';
-        const sku = typeof drink.sku === 'string' ? drink.sku.toLowerCase() : '';
-        return (
-          name.includes(normalizedSearch) ||
-          description.includes(normalizedSearch) ||
-          sku.includes(normalizedSearch)
-        );
-      })
-    : [];
-  
-  // Sort: available items first, then by name
-  filteredDrinks.sort((a, b) => {
-    // First sort by availability (available items first)
-    if (a.isAvailable !== b.isAvailable) {
-      return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
-    }
-    // Then sort by name alphabetically
-    const nameA = (a.name || '').toLowerCase();
-    const nameB = (b.name || '').toLowerCase();
-    return nameA.localeCompare(nameB);
-  });
-
   return (
     <Box
       sx={{
@@ -354,251 +228,61 @@ const Home = () => {
               overflow: 'hidden'
             }}
           >
-            <Box
-              component="img"
-              src={heroImage}
-              alt="Special Offer - Premium Drinks"
-              sx={{
-                maxWidth: { xs: '100%', md: '1400px' },
-                width: { xs: '100%', md: '100%' },
-                maxHeight: { xs: '250px', md: '300px' },
-                height: 'auto',
-                display: 'block',
-                objectFit: 'contain'
-              }}
-              onError={(e) => {
-                // Fallback to default if image doesn't exist
-                e.target.src = '/assets/images/ads/hero-ad.png';
-              }}
-            />
-          </Box>
-
-          {/* Search Bar - Fixed when scrolling */}
-          <Box
-            sx={{
-              mb: 4,
-              maxWidth: 480,
-              mx: 'auto',
-              position: isScrolled ? 'fixed' : 'relative',
-              top: isScrolled ? { xs: '56px', sm: '64px' } : 'auto',
-              left: isScrolled ? '50%' : 'auto',
-              transform: isScrolled ? 'translateX(-50%)' : 'none',
-              zIndex: isScrolled ? 100 : 'auto',
-              width: isScrolled ? '90%' : '100%',
-              backgroundColor: isScrolled ? '#FFFFFF' : 'transparent',
-              boxShadow: isScrolled ? '0 2px 8px rgba(0, 0, 0, 0.1)' : 'none',
-              borderRadius: isScrolled ? 2 : 0,
-              transition: 'all 0.3s ease-in-out'
-            }}
-          >
-            <TextField
-              fullWidth
-              value={searchTerm}
-              onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search drinks"
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon color="action" />
-                  </InputAdornment>
-                )
-              }}
-              variant="outlined"
-              size="medium"
-              sx={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 2,
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2
+            {(heroLinkType === 'product' && heroLinkTargetId) || (heroLinkType === 'brand' && heroLinkTargetId) || heroLinkType === 'brands' ? (
+              <Link
+                to={
+                  heroLinkType === 'product'
+                    ? `/product/${heroLinkTargetId}`
+                    : heroLinkType === 'brand'
+                    ? `/brands/${heroLinkTargetId}`
+                    : '/brands'
                 }
-              }}
-            />
-          </Box>
-
-          {/* Spacer to prevent content jump when search is fixed */}
-          {isScrolled && (
-            <Box sx={{ height: '80px', mb: 2 }} />
-          )}
-
-          {/* Search Results */}
-          {normalizedSearch && (
-            <Box sx={{ mb: 6 }}>
-              <Typography
-                variant="h5"
-                component="h3"
-                sx={{ mb: 2, textAlign: 'center', fontSize: { xs: '1.5rem', sm: '1.75rem' } }}
+                style={{ display: 'block', width: '100%', textAlign: 'center' }}
+                aria-label={
+                  heroLinkType === 'product'
+                    ? 'View product'
+                    : heroLinkType === 'brand'
+                    ? 'View brand'
+                    : 'View all brands'
+                }
               >
-                Search Results
-              </Typography>
-
-              {drinksLoading ? (
-                <Typography textAlign="center">Searching inventory...</Typography>
-              ) : filteredDrinks.length === 0 ? (
-                <Typography textAlign="center">
-                  No drinks found for "{searchTerm}". Try a different search.
-                </Typography>
-              ) : (
-                <Grid
-                  container
-                  spacing={{ xs: 2, sm: 3 }}
+                <Box
+                  component="img"
+                  src={heroImage}
+                  alt="Special Offer - Premium Drinks"
                   sx={{
-                    justifyContent: { xs: 'center', md: 'flex-start' }
+                    maxWidth: { xs: '100%', md: '1400px' },
+                    width: { xs: '100%', md: '100%' },
+                    maxHeight: { xs: '250px', md: '300px' },
+                    height: 'auto',
+                    display: 'block',
+                    objectFit: 'contain',
+                    cursor: 'pointer'
                   }}
-                >
-                  {filteredDrinks.slice(0, 8).map((drink) => (
-                    <Grid
-                      item
-                      xs={6}
-                      sm={6}
-                      md={3}
-                      key={drink.id}
-                      sx={{ display: 'flex' }}
-                    >
-                      <DrinkCard drink={drink} />
-                    </Grid>
-                  ))}
-                </Grid>
-              )}
-
-              {filteredDrinks.length > 8 && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate('/menu')}
-                  >
-                    View all results
-                  </Button>
-                </Box>
-              )}
-            </Box>
-          )}
-
-          {/* Categories Section - Hidden on scroll (no transform when collapsed to avoid scroll lock) */}
-          <Box 
-            sx={{ 
-              position: 'sticky',
-              top: isScrolled ? { xs: '120px', sm: '128px' } : { xs: '56px', sm: '64px' },
-              zIndex: 99,
-              backgroundColor: colors.background,
-              pt: categoriesCollapsed ? 0 : 1,
-              pb: categoriesCollapsed ? 0 : 1,
-              mb: categoriesCollapsed ? 0 : 2,
-              borderBottom: categoriesCollapsed ? 'none' : `1px solid rgba(0, 0, 0, 0.1)`,
-              transition: 'opacity 0.2s ease, max-height 0.2s ease',
-              opacity: categoriesCollapsed ? 0 : 1,
-              maxHeight: categoriesCollapsed ? 0 : 'none',
-              overflow: 'hidden',
-              visibility: categoriesCollapsed ? 'hidden' : 'visible',
-              pointerEvents: categoriesCollapsed ? 'none' : 'auto'
-            }}
-          >
-            <Box
-              sx={{
-                display: 'grid',
-                gridTemplateColumns: {
-                  xs: 'repeat(2, 1fr)',
-                  sm: 'repeat(3, 1fr)',
-                  md: 'repeat(4, 1fr)',
-                  lg: 'repeat(5, 1fr)',
-                  xl: 'repeat(6, 1fr)'
-                },
-                gap: 1,
-                width: '100%'
-              }}
-            >
-              {categoriesLoading ? (
-                <Typography textAlign="center" sx={{ gridColumn: '1 / -1' }}>Loading categories...</Typography>
-              ) : categories.length === 0 ? (
-                <Typography textAlign="center" color="error" sx={{ gridColumn: '1 / -1' }}>
-                  No categories found.
-                </Typography>
-              ) : (
-                <>
-                  <Button
-                    variant={selectedCategory === 0 ? 'contained' : 'outlined'}
-                    onClick={() => handleCategoryChange(0)}
-                    sx={{
-                      py: 0.75,
-                      fontSize: '0.75rem',
-                      fontWeight: '500 !important', // Same font weight as menu (h4)
-                      textTransform: 'none',
-                      borderRadius: 1.5,
-                      minHeight: '36px',
-                      color: '#000000',
-                      '&.MuiButton-contained': {
-                        color: '#000000',
-                        backgroundColor: 'transparent',
-                        boxShadow: 'none',
-                        border: '2px solid rgba(0, 0, 0, 0.5)',
-                        fontWeight: '500 !important',
-                        '&:hover': {
-                          backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                        }
-                      },
-                      '&.MuiButton-outlined': {
-                        color: '#000000',
-                        borderColor: 'rgba(0, 0, 0, 0.23)',
-                        fontWeight: '500 !important'
-                      }
-                    }}
-                  >
-                    All
-                  </Button>
-                  {categories.map((category) => (
-                    <Button
-                      key={category.id}
-                      variant={selectedCategory === category.id ? 'contained' : 'outlined'}
-                      onClick={() => handleCategoryChange(category.id)}
-                      sx={{
-                        py: 0.75,
-                        fontSize: '0.75rem',
-                        fontWeight: '500 !important', // Same font weight as menu (h4)
-                        textTransform: 'none',
-                        borderRadius: 1.5,
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        minHeight: '36px',
-                        color: '#000000',
-                        '&.MuiButton-contained': {
-                          color: '#000000',
-                          fontWeight: '500 !important'
-                        },
-                        '&.MuiButton-outlined': {
-                          color: '#000000',
-                          borderColor: 'rgba(0, 0, 0, 0.23)',
-                          fontWeight: '500 !important'
-                        }
-                      }}
-                    >
-                      {category.name}
-                    </Button>
-                  ))}
-                </>
-              )}
-            </Box>
-
-            {/* Subcategory Chips - Show when a category is selected */}
-            {selectedCategory > 0 && subcategories.length > 0 && (
-              <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                <Chip
-                  label="All"
-                  onClick={() => handleSubcategoryChange(0)}
-                  color={selectedSubcategory === 0 ? 'primary' : 'default'}
-                  variant={selectedSubcategory === 0 ? 'filled' : 'outlined'}
-                  sx={{ cursor: 'pointer' }}
+                  onError={(e) => {
+                    // Fallback to default if image doesn't exist
+                    e.target.src = '/assets/images/ads/hero-ad.png';
+                  }}
                 />
-                {subcategories.map((subcategory) => (
-                  <Chip
-                    key={subcategory.id}
-                    label={subcategory.name}
-                    onClick={() => handleSubcategoryChange(subcategory.id)}
-                    color={selectedSubcategory === subcategory.id ? 'primary' : 'default'}
-                    variant={selectedSubcategory === subcategory.id ? 'filled' : 'outlined'}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                ))}
-              </Box>
+              </Link>
+            ) : (
+              <Box
+                component="img"
+                src={heroImage}
+                alt="Special Offer - Premium Drinks"
+                sx={{
+                  maxWidth: { xs: '100%', md: '1400px' },
+                  width: { xs: '100%', md: '100%' },
+                  maxHeight: { xs: '250px', md: '300px' },
+                  height: 'auto',
+                  display: 'block',
+                  objectFit: 'contain'
+                }}
+                onError={(e) => {
+                  // Fallback to default if image doesn't exist
+                  e.target.src = '/assets/images/ads/hero-ad.png';
+                }}
+              />
             )}
           </Box>
 

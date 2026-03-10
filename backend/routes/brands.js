@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const { Sequelize } = require('sequelize');
 const brandScraper = require('../services/brandScraper');
 
 // Get all brands
@@ -8,9 +9,25 @@ router.get('/', async (req, res) => {
   try {
     const brands = await db.Brand.findAll({
       where: { isActive: true },
-      attributes: ['id', 'name', 'description', 'isActive', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'name', 'description', 'image', 'country', 'isActive', 'createdAt', 'updatedAt'],
       order: [['name', 'ASC']]
     });
+
+    // Get first product image per brand (for brands that don't have their own image)
+    const brandIds = brands.map(b => b.id);
+    if (brandIds.length > 0) {
+      const firstDrinkImages = await db.sequelize.query(
+        `SELECT DISTINCT ON ("brandId") "brandId", image FROM drinks WHERE "brandId" IN (:brandIds) AND image IS NOT NULL AND TRIM(COALESCE(image, '')) != '' ORDER BY "brandId", id`,
+        { replacements: { brandIds }, type: Sequelize.QueryTypes.SELECT }
+      );
+      const imageByBrandId = new Map((firstDrinkImages || []).map(row => [row.brandId, row.image]));
+
+      brands.forEach(brand => {
+        if (!brand.image && imageByBrandId.has(brand.id)) {
+          brand.image = imageByBrandId.get(brand.id);
+        }
+      });
+    }
 
     res.json(brands);
   } catch (error) {

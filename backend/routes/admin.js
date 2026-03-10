@@ -886,14 +886,14 @@ router.get('/transactions', async (req, res) => {
         attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
         include: [{
           model: db.Drink,
-          as: 'drink',
-          required: false,
-          attributes: [
-            'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
-            'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-            'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
-          ]
-        }]
+            as: 'drink',
+            required: false,
+            attributes: [
+              'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+              'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
+            ]
+          }]
       },
       {
         model: db.Driver,
@@ -980,7 +980,7 @@ router.get('/drinks', async (req, res) => {
     let validDrinkAttributes;
     try {
       const [existingDrinkColumns] = await db.sequelize.query(
-        "SELECT column_name FROM information_schema.columns WHERE table_name = 'drinks' ORDER BY column_name"
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
       );
       const drinkColumnNames = new Set(existingDrinkColumns.map(col => col.column_name.toLowerCase()));
       
@@ -1052,6 +1052,7 @@ router.post('/drinks', async (req, res) => {
       capacity,
       capacityPricing,
       abv,
+      nbv,
       purchasePrice,
       pageTitle,
       keywords,
@@ -1116,7 +1117,27 @@ router.post('/drinks', async (req, res) => {
     const summary = summarisePricing(normalizedPricing, finalPrice, originalPrice);
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : false;
 
-    const newDrink = await db.Drink.create({
+    // Resolve which drink columns exist (so we never SELECT nbv if migration not run)
+    let createResponseAttributes;
+    try {
+      const [existingDrinkColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
+      );
+      const drinkColumnNames = new Set((existingDrinkColumns || []).map(col => col.column_name.toLowerCase()));
+      createResponseAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
+        const dbColumnName = (attrDef.field || attrName).toLowerCase();
+        if (drinkColumnNames.has(dbColumnName)) {
+          createResponseAttributes.push(attrName);
+        }
+      }
+    } catch (_) {
+      createResponseAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'slug', 'pageTitle', 'keywords', 'youtubeUrl', 'tags', 'createdAt', 'updatedAt'];
+    }
+
+    let drinksHasNbv = createResponseAttributes && createResponseAttributes.includes('nbv');
+
+    const createPayload = {
       name: normalizedName,
       description:
         typeof description === 'string' && description.trim()
@@ -1143,9 +1164,15 @@ router.post('/drinks', async (req, res) => {
       keywords: typeof keywords === 'string' && keywords.trim() ? keywords.trim() : null,
       youtubeUrl: typeof youtubeUrl === 'string' && youtubeUrl.trim() ? youtubeUrl.trim() : null,
       tags: Array.isArray(tags) ? tags : (tags ? [tags] : [])
-    });
+    };
+    if (drinksHasNbv) {
+      createPayload.nbv = toNumber(nbv);
+    }
+
+    const newDrink = await db.Drink.create(createPayload);
 
     const drinkWithRelations = await db.Drink.findByPk(newDrink.id, {
+      attributes: createResponseAttributes,
       include: [
         { model: db.Category, as: 'category' },
         { model: db.SubCategory, as: 'subCategory' },
@@ -1164,7 +1191,27 @@ router.post('/drinks', async (req, res) => {
 router.put('/drinks/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const drink = await db.Drink.findByPk(id);
+
+    // Load drink with only columns that exist in DB (avoid 500 if nbv migration not run)
+    let drinkAttributes;
+    try {
+      const [existingDrinkColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
+      );
+      const drinkColumnNames = new Set((existingDrinkColumns || []).map(col => col.column_name.toLowerCase()));
+      drinkAttributes = [];
+      for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
+        const dbColumnName = (attrDef.field || attrName).toLowerCase();
+        if (drinkColumnNames.has(dbColumnName)) {
+          drinkAttributes.push(attrName);
+        }
+      }
+    } catch (_) {
+      // Fallback: safe list without nbv so SELECT works before migration
+      drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'slug', 'pageTitle', 'keywords', 'youtubeUrl', 'tags', 'createdAt', 'updatedAt'];
+    }
+
+    const drink = await db.Drink.findByPk(id, drinkAttributes ? { attributes: drinkAttributes } : {});
 
     if (!drink) {
       return res.status(404).json({ error: 'Drink not found' });
@@ -1186,6 +1233,7 @@ router.put('/drinks/:id', async (req, res) => {
       capacity,
       capacityPricing,
       abv,
+      nbv,
       purchasePrice,
       pageTitle,
       keywords,
@@ -1297,7 +1345,10 @@ router.put('/drinks/:id', async (req, res) => {
     const currentStock = parseInt(drink.stock) || 0;
     const isStockBeingUpdated = req.body.stock !== undefined && req.body.stock !== null;
 
-    await drink.update({
+    // Only set nbv if the drinks table has the column (use same attribute list we used to load the drink)
+    const drinksHasNbv = drinkAttributes && drinkAttributes.includes('nbv');
+
+    const updatePayload = {
       name: normalizedName,
       description:
         typeof description === 'string' && description.trim()
@@ -1341,11 +1392,29 @@ router.put('/drinks/:id', async (req, res) => {
       tags: tags !== undefined 
         ? (Array.isArray(tags) ? tags : (tags ? [tags] : []))
         : drink.tags
-      // isAvailable is set above based on stock if stock is being updated
-      // brandId is set above
-    });
+    };
+    // Persist nbv when request sends it, or preserve when we loaded it; if column missing, retry without nbv
+    if (req.body.hasOwnProperty('nbv')) {
+      updatePayload.nbv = toNumber(nbv);
+    } else if (drinksHasNbv) {
+      updatePayload.nbv = drink.nbv;
+    }
+
+    try {
+      await drink.update(updatePayload);
+    } catch (updateErr) {
+      const msg = (updateErr && updateErr.message) ? updateErr.message : '';
+      const isNbvColumnError = /column.*nbv|nbv.*column|does not exist/i.test(msg);
+      if (isNbvColumnError && updatePayload.hasOwnProperty('nbv')) {
+        delete updatePayload.nbv;
+        await drink.update(updatePayload);
+      } else {
+        throw updateErr;
+      }
+    }
 
     const updatedDrink = await db.Drink.findByPk(id, {
+      attributes: drinkAttributes,
       include: [
         { model: db.Category, as: 'category' },
         { model: db.SubCategory, as: 'subCategory' },
@@ -1356,7 +1425,16 @@ router.put('/drinks/:id', async (req, res) => {
     res.json(updatedDrink);
   } catch (error) {
     console.error('Error updating drink:', error);
-    res.status(500).json({ error: 'Failed to update drink' });
+    console.error('Error updating drink - message:', error?.message);
+    console.error('Error updating drink - stack:', error?.stack);
+    if (error?.original) {
+      console.error('Error updating drink - original:', error.original.message);
+      console.error('Error updating drink - original sql:', error.original.sql);
+    }
+    const message = process.env.NODE_ENV !== 'production' && error?.message
+      ? error.message
+      : 'Failed to update drink';
+    res.status(500).json({ error: message });
   }
 });
 
@@ -1370,7 +1448,7 @@ router.patch('/drinks/:id/availability', async (req, res) => {
       return res.status(400).json({ error: 'isAvailable must be a boolean value' });
     }
 
-    const drink = await db.Drink.findByPk(id);
+    const drink = await db.Drink.findByPk(id, { attributes: ['id', 'isAvailable'] });
     if (!drink) {
       return res.status(404).json({ error: 'Drink not found' });
     }
@@ -1381,6 +1459,30 @@ router.patch('/drinks/:id/availability', async (req, res) => {
   } catch (error) {
     console.error('Error updating drink availability:', error);
     res.status(500).json({ error: 'Failed to update drink availability' });
+  }
+});
+
+// Update drink popular flag (admin)
+router.patch('/drinks/:id/popular', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isPopular } = req.body;
+
+    if (typeof isPopular !== 'boolean') {
+      return res.status(400).json({ error: 'isPopular must be a boolean value' });
+    }
+
+    const drink = await db.Drink.findByPk(id, { attributes: ['id', 'isPopular'] });
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+
+    await drink.update({ isPopular });
+
+    res.json({ id: drink.id, isPopular: drink.isPopular });
+  } catch (error) {
+    console.error('Error updating drink popular flag:', error);
+    res.status(500).json({ error: 'Failed to update drink popular status' });
   }
 });
 
@@ -1921,6 +2023,25 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       console.warn('⚠️ Could not query information_schema for orders, using default attributes:', schemaError.message);
       validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'notes', 'createdAt', 'updatedAt'];
     }
+
+    // Get actual columns that exist for Drink (used in order items) so we don't select e.g. nbv if migration not run
+    let validDrinkAttributesForOrders;
+    try {
+      const [existingDrinkColumns] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
+      );
+      const drinkColumnNames = new Set(existingDrinkColumns.map(col => col.column_name.toLowerCase()));
+      validDrinkAttributesForOrders = [];
+      for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
+        const dbColumnName = attrDef.field || attrName;
+        if (drinkColumnNames.has(dbColumnName.toLowerCase())) {
+          validDrinkAttributesForOrders.push(attrName);
+        }
+      }
+    } catch (schemaError) {
+      console.warn('⚠️ Could not query information_schema for drinks (orders include), using default attributes:', schemaError.message);
+      validDrinkAttributesForOrders = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'];
+    }
     
     // Build includes array conditionally
     const orderIncludes = [
@@ -1934,11 +2055,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
             model: db.Drink,
             as: 'drink',
             required: false,
-            attributes: [
-              'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
-              'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
-            ]
+            attributes: validDrinkAttributesForOrders
           }
         ]
       },
@@ -5593,7 +5710,7 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
     let hasPurchasePrice = false;
     try {
       const [existingDrinkColumns] = await db.sequelize.query(
-        "SELECT column_name FROM information_schema.columns WHERE table_name = 'drinks' ORDER BY column_name"
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
       );
       const drinkColumnNames = new Set(existingDrinkColumns.map(col => col.column_name.toLowerCase()));
       hasPurchasePrice = drinkColumnNames.has('purchaseprice');
@@ -7968,6 +8085,174 @@ router.post('/drivers/:driverId/request-payment', verifyAdmin, async (req, res) 
       error: 'Failed to request payment',
       details: error.message 
     });
+  }
+});
+
+// ---------- Asset Accounts (admin only) ----------
+const requireSuperAdmin = (req, res, next) => {
+  if (req.admin && req.admin.role === 'super_admin') return next();
+  return res.status(403).json({ error: 'Only super admin can perform this action' });
+};
+
+// List all asset accounts
+router.get('/accounts', async (req, res) => {
+  try {
+    const accounts = await db.AssetAccount.findAll({
+      order: [['name', 'ASC']],
+      attributes: ['id', 'name', 'description', 'balance', 'limit', 'createdAt', 'updatedAt']
+    });
+    res.json(accounts);
+  } catch (error) {
+    console.error('Error listing asset accounts:', error);
+    res.status(500).json({ error: 'Failed to list accounts', details: error.message });
+  }
+});
+
+// Get most recent asset account transactions (for dashboard widgets)
+router.get('/accounts/recent-transactions', async (req, res) => {
+  try {
+    const limitParam = parseInt(req.query.limit, 10);
+    const limit = Number.isNaN(limitParam) || limitParam <= 0 ? 5 : Math.min(limitParam, 50);
+
+    const transactions = await db.AssetAccountTransaction.findAll({
+      order: [['transactionDate', 'DESC'], ['id', 'DESC']],
+      limit,
+      include: [
+        { model: db.AssetAccount, as: 'account', attributes: ['id', 'name'] },
+        { model: db.Admin, as: 'postedBy', attributes: ['id', 'username'] }
+      ]
+    });
+
+    res.json(transactions);
+  } catch (error) {
+    console.error('Error fetching recent asset account transactions:', error);
+    res.status(500).json({ error: 'Failed to fetch recent account transactions', details: error.message });
+  }
+});
+
+// Get one asset account with optional transaction filters (year, month, status)
+router.get('/accounts/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { year, month, status } = req.query;
+    const account = await db.AssetAccount.findByPk(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    const where = { assetAccountId: id };
+    if (status) where.status = status;
+    if (year) {
+      const start = month
+        ? `${year}-${String(month).padStart(2, '0')}-01`
+        : `${year}-01-01`;
+      const endMonth = month ? Number(month) : 12;
+      const endDay = new Date(Number(year), endMonth, 0).getDate();
+      const end = month
+        ? `${year}-${String(month).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`
+        : `${year}-12-31`;
+      where.transactionDate = { [db.Sequelize.Op.between]: [start, end] };
+    }
+    const transactions = await db.AssetAccountTransaction.findAll({
+      where,
+      order: [['transactionDate', 'DESC'], ['id', 'DESC']],
+      include: [{ model: db.Admin, as: 'postedBy', attributes: ['id', 'username'] }]
+    });
+    const accountJson = account.toJSON();
+    accountJson.transactions = transactions;
+    res.json(accountJson);
+  } catch (error) {
+    console.error('Error fetching asset account:', error);
+    res.status(500).json({ error: 'Failed to fetch account', details: error.message });
+  }
+});
+
+// Get distinct years that have transactions (for filter dropdown)
+router.get('/accounts/:id/transaction-years', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const rows = await db.sequelize.query(
+      `SELECT DISTINCT EXTRACT(YEAR FROM transaction_date)::int AS year
+       FROM asset_account_transactions
+       WHERE asset_account_id = :id
+       ORDER BY year DESC`,
+      { replacements: { id }, type: db.Sequelize.QueryTypes.SELECT }
+    );
+    const years = (rows || []).map(r => r.year);
+    res.json(years);
+  } catch (error) {
+    console.error('Error fetching transaction years:', error);
+    res.status(500).json({ error: 'Failed to fetch years', details: error.message });
+  }
+});
+
+// Update asset account (super_admin only)
+router.put('/accounts/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, balance, limit } = req.body;
+    const account = await db.AssetAccount.findByPk(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    if (name !== undefined) account.name = name;
+    if (description !== undefined) account.description = description;
+    if (balance !== undefined) account.balance = parseFloat(balance);
+    if (limit !== undefined) account.limit = parseFloat(limit);
+    await account.save();
+    res.json(account);
+  } catch (error) {
+    console.error('Error updating asset account:', error);
+    res.status(500).json({ error: 'Failed to update account', details: error.message });
+  }
+});
+
+// Create transaction (post to selected account)
+router.post('/accounts/transactions', async (req, res) => {
+  try {
+    const { amount, reference, transactionDate, accountId, transactionType } = req.body;
+    const postedById = req.admin?.id;
+    if (!accountId || amount == null || amount === '' || !transactionType) {
+      return res.status(400).json({ error: 'Missing required fields: accountId, amount, transactionType' });
+    }
+    const numAmount = parseFloat(amount);
+    if (Number.isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ error: 'Amount must be a positive number' });
+    }
+    const account = await db.AssetAccount.findByPk(accountId);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    const date = transactionDate || new Date().toISOString().slice(0, 10);
+    const isDebit = transactionType.toLowerCase() === 'debit';
+    const debitAmount = isDebit ? numAmount : 0;
+    const creditAmount = isDebit ? 0 : numAmount;
+    const t = await db.sequelize.transaction();
+    try {
+      const tx = await db.AssetAccountTransaction.create({
+        assetAccountId: accountId,
+        amount: numAmount,
+        reference: reference || null,
+        transactionDate: date,
+        transactionType: isDebit ? 'debit' : 'credit',
+        debitAmount,
+        creditAmount,
+        postedById,
+        status: 'approved'
+      }, { transaction: t });
+      const balanceChange = isDebit ? numAmount : -numAmount;
+      await account.increment('balance', { by: balanceChange, transaction: t });
+      await t.commit();
+      const withPostedBy = await db.AssetAccountTransaction.findByPk(tx.id, {
+        include: [{ model: db.Admin, as: 'postedBy', attributes: ['id', 'username'] }]
+      });
+      res.status(201).json(withPostedBy);
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  } catch (error) {
+    console.error('Error creating account transaction:', error);
+    res.status(500).json({ error: 'Failed to create transaction', details: error.message });
   }
 });
 

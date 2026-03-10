@@ -11,7 +11,11 @@ import {
   CircularProgress,
   TextField,
   Chip,
-  Switch
+  Switch,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   Assignment,
@@ -57,6 +61,11 @@ const AdminOverview = () => {
   const [heroImageUploadLoading, setHeroImageUploadLoading] = useState(false);
   const [useHeroImageUrl, setUseHeroImageUrl] = useState(false);
   const [showHeroImageForm, setShowHeroImageForm] = useState(false);
+  const [heroLinkType, setHeroLinkType] = useState('none');
+  const [heroLinkTargetId, setHeroLinkTargetId] = useState('');
+  const [heroLinkDrinks, setHeroLinkDrinks] = useState([]);
+  const [heroLinkBrands, setHeroLinkBrands] = useState([]);
+  const [heroLinkSaving, setHeroLinkSaving] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState({
     isTestMode: false,
     deliveryFeeWithAlcohol: 50,
@@ -119,6 +128,7 @@ const AdminOverview = () => {
     fetchStats();
     fetchCountdowns();
     fetchHeroImage();
+    fetchHeroLinkSettings();
     fetchDeliverySettings();
 
     return () => {
@@ -126,6 +136,20 @@ const AdminOverview = () => {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, []);
+
+  useEffect(() => {
+    if (heroLinkType === 'product' && heroLinkDrinks.length === 0) {
+      api.get('/admin/drinks').then((res) => {
+        const list = res.data?.drinks ?? res.data;
+        setHeroLinkDrinks(Array.isArray(list) ? list : []);
+      }).catch(() => setHeroLinkDrinks([]));
+    }
+    if (heroLinkType === 'brand' && heroLinkBrands.length === 0) {
+      api.get('/brands/all').then((res) => {
+        setHeroLinkBrands(res.data || []);
+      }).catch(() => setHeroLinkBrands([]));
+    }
+  }, [heroLinkType]);
 
   const fetchStats = async () => {
     try {
@@ -331,6 +355,35 @@ const AdminOverview = () => {
   const openHeroImageFilePicker = () => {
     if (heroImageFileInputRef.current) {
       heroImageFileInputRef.current.click();
+    }
+  };
+
+  const fetchHeroLinkSettings = async () => {
+    try {
+      const [typeRes, targetRes] = await Promise.all([
+        api.get('/settings/heroImageLinkType').catch(() => ({ data: { value: 'none' } })),
+        api.get('/settings/heroImageLinkTargetId').catch(() => ({ data: { value: '' } }))
+      ]);
+      setHeroLinkType(typeRes.data?.value || 'none');
+      setHeroLinkTargetId(targetRes.data?.value != null ? String(targetRes.data.value) : '');
+    } catch (error) {
+      console.error('Error fetching hero link settings:', error);
+    }
+  };
+
+  const updateHeroLink = async () => {
+    setHeroLinkSaving(true);
+    try {
+      await Promise.all([
+        api.put('/settings/heroImageLinkType', { value: heroLinkType }),
+        api.put('/settings/heroImageLinkTargetId', { value: heroLinkType === 'none' || heroLinkType === 'brands' ? '' : heroLinkTargetId })
+      ]);
+      setNotification({ message: 'Hero image link updated successfully!' });
+    } catch (error) {
+      console.error('Error updating hero link:', error);
+      setError('Failed to update hero image link. Please try again.');
+    } finally {
+      setHeroLinkSaving(false);
     }
   };
 
@@ -761,6 +814,83 @@ const AdminOverview = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Hero Image Link */}
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#00E0B8', mb: 2 }}>
+            When customer clicks hero image
+          </Typography>
+          <Card sx={{ backgroundColor: '#121212' }}>
+            <CardContent>
+              <FormControl fullWidth sx={{ mb: 2, ...countdownFieldStyles }}>
+                <InputLabel id="hero-link-type-label">Link to</InputLabel>
+                <Select
+                  labelId="hero-link-type-label"
+                  value={heroLinkType}
+                  label="Link to"
+                  onChange={(e) => {
+                    setHeroLinkType(e.target.value);
+                    if (e.target.value === 'none' || e.target.value === 'brands') setHeroLinkTargetId('');
+                  }}
+                >
+                  <MenuItem value="none">No link</MenuItem>
+                  <MenuItem value="product">Product page</MenuItem>
+                  <MenuItem value="brand">Brand page</MenuItem>
+                  <MenuItem value="brands">Brands page (all brands)</MenuItem>
+                </Select>
+              </FormControl>
+              {heroLinkType === 'product' && (
+                <FormControl fullWidth sx={{ mb: 2, ...countdownFieldStyles }}>
+                  <InputLabel id="hero-link-product-label" shrink>Product</InputLabel>
+                  <Select
+                    labelId="hero-link-product-label"
+                    value={heroLinkTargetId}
+                    label="Product"
+                    onChange={(e) => setHeroLinkTargetId(e.target.value)}
+                    displayEmpty
+                    renderValue={(v) => v ? (heroLinkDrinks.find(d => String(d.id) === v)?.name ?? v) : ''}
+                  >
+                    <MenuItem value=""><em>Select a product</em></MenuItem>
+                    {heroLinkDrinks.map((d) => (
+                      <MenuItem key={d.id} value={String(d.id)}>{d.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              {heroLinkType === 'brand' && (
+                <FormControl fullWidth sx={{ mb: 2, ...countdownFieldStyles }}>
+                  <InputLabel id="hero-link-brand-label" shrink>Brand</InputLabel>
+                  <Select
+                    labelId="hero-link-brand-label"
+                    value={heroLinkTargetId}
+                    label="Brand"
+                    onChange={(e) => setHeroLinkTargetId(e.target.value)}
+                    displayEmpty
+                    renderValue={(v) => v ? (heroLinkBrands.filter(b => b.isActive !== false).find(b => String(b.id) === v)?.name ?? v) : ''}
+                  >
+                    <MenuItem value=""><em>Select a brand</em></MenuItem>
+                    {heroLinkBrands.filter(b => b.isActive !== false).map((b) => (
+                      <MenuItem key={b.id} value={String(b.id)}>{b.name}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              )}
+              <Button
+                variant="contained"
+                onClick={updateHeroLink}
+                disabled={heroLinkSaving || (heroLinkType !== 'none' && heroLinkType !== 'brands' && !heroLinkTargetId)}
+                startIcon={<Save />}
+                sx={{
+                  backgroundColor: '#00E0B8',
+                  color: '#0D0D0D',
+                  '&:hover': { backgroundColor: '#00C4A3' }
+                }}
+              >
+                {heroLinkSaving ? 'Saving...' : 'Save hero link'}
+              </Button>
+            </CardContent>
+          </Card>
+        </Box>
       </Box>
 
       {/* Countdown Management */}

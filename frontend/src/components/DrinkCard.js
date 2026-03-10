@@ -501,6 +501,30 @@ const DrinkCard = ({ drink }) => {
                    />
                  </Box>
                )}
+
+               {/* NBV Display (Vapes: %, Pouches / Nicotine pouches: mg) - only when > 0 and not null */}
+               {drink.nbv != null && drink.nbv !== '' && Number(drink.nbv) > 0 && (() => {
+                 const catName = (drink.category?.name || '').toLowerCase();
+                 const subName = (drink.subCategory?.name || '').toLowerCase();
+                 const isVape = catName.includes('vape') || subName.includes('vape');
+                 const isPouch = catName.includes('pouch') || catName.includes('nicotine') || subName.includes('pouch') || subName.includes('nicotine');
+                 if (!isVape && !isPouch) return null;
+                 const label = isVape ? `${Number(drink.nbv)}% NBV` : `${Number(drink.nbv)} mg NBV`;
+                 return (
+                   <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: availableCapacities.length >= 2 ? 1 : 0, mt: 0 }}>
+                     <Chip
+                       label={label}
+                       size="small"
+                       sx={{
+                         backgroundColor: isVape ? '#9C27B0' : '#607D8B',
+                         color: '#F5F5F5',
+                         fontSize: '0.65rem',
+                         height: '20px'
+                       }}
+                     />
+                   </Box>
+                 );
+               })()}
              </CardContent>
 
              <CardActions sx={{ p: 0, px: { xs: 0.5, sm: 1 }, pb: { xs: 0.5, sm: 1 }, pt: 0, display: 'flex', gap: 0.5 }}>

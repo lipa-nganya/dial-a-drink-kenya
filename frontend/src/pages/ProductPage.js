@@ -21,7 +21,9 @@ import {
   MenuItem,
   ListItemIcon,
   ListItemText,
-  Snackbar
+  Snackbar,
+  Breadcrumbs,
+  Link
 } from '@mui/material';
 import {
   AddShoppingCart,
@@ -34,7 +36,7 @@ import {
   Facebook,
   ContentCopy
 } from '@mui/icons-material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
@@ -106,39 +108,39 @@ const ProductPage = () => {
       }
       canonicalLink.setAttribute('href', canonicalUrl);
       
-      // Auto-select capacity: if only one option, select it; if multiple, select most expensive
-      const availableCapacities = Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0 
-        ? product.capacityPricing.map(pricing => pricing.capacity)
-        : Array.isArray(product.capacity) && product.capacity.length > 0 
-        ? product.capacity 
-        : [];
-      
+      // Auto-select capacity: one option → select it; multiple → select the more expensive option
+      const availableCapacities = Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0
+        ? (() => {
+            const seen = new Set();
+            return product.capacityPricing
+              .map(p => p.capacity != null ? p.capacity : p.size)
+              .filter(c => {
+                const key = String(c);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              });
+          })()
+        : Array.isArray(product.capacity) && product.capacity.length > 0
+          ? product.capacity
+          : [];
+
       if (availableCapacities.length === 1) {
-        // Only one capacity - select it
         setSelectedCapacity(availableCapacities[0]);
       } else if (availableCapacities.length > 1) {
-        // Multiple capacities - select the most expensive one
         const capacitiesWithPrices = availableCapacities.map(capacity => {
           let price = 0;
           if (Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0) {
-            const pricing = product.capacityPricing.find(p => String(p.capacity) === String(capacity));
+            const pricing = product.capacityPricing.find(p => String(p.capacity || p.size) === String(capacity));
             price = pricing ? parseFloat(pricing.currentPrice || pricing.price || 0) || 0 : parseFloat(product.price) || 0;
           } else {
             price = parseFloat(product.price) || 0;
           }
           return { capacity, price };
         });
-        
-        // Sort descending by price to get most expensive first
         capacitiesWithPrices.sort((a, b) => b.price - a.price);
-        
-        // Select the most expensive capacity
-        const mostExpensive = capacitiesWithPrices[0];
-        setSelectedCapacity(mostExpensive.capacity);
-        console.log(`[ProductPage] Auto-selected most expensive capacity: ${mostExpensive.capacity} (KES ${Math.round(mostExpensive.price)})`);
-        console.log(`[ProductPage] All capacities with prices:`, capacitiesWithPrices);
+        setSelectedCapacity(capacitiesWithPrices[0].capacity);
       } else {
-        // No capacities - clear selection
         setSelectedCapacity('');
       }
     }
@@ -552,6 +554,31 @@ const ProductPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
+      {/* Breadcrumbs: Home › Menu › Category › Product name */}
+        <Breadcrumbs
+          separator=" › "
+          aria-label="breadcrumb"
+          sx={{ mb: 2 }}
+        >
+          <Link component={RouterLink} to="/" underline="hover" color="inherit">
+            Home
+          </Link>
+          <Link component={RouterLink} to="/menu" underline="hover" color="inherit">
+            Menu
+          </Link>
+        {product.category && (
+          <Link
+            component={RouterLink}
+            to={`/menu?category=${product.categoryId}`}
+            underline="hover"
+            color="inherit"
+          >
+            {product.category.name}
+          </Link>
+        )}
+        <Typography color="text.primary">{product.name}</Typography>
+      </Breadcrumbs>
+
       {/* Product Title at Top */}
       <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center' }}>
         <Typography variant="h4" component="h1" sx={{ fontWeight: 700, textAlign: 'center' }}>
@@ -561,7 +588,7 @@ const ProductPage = () => {
 
       <Grid container spacing={3} sx={{ alignItems: 'flex-start', justifyContent: 'center' }}>
         {/* Product Image - Left Column */}
-        <Grid item xs={12} md={5} sx={{ display: 'flex', justifyContent: 'center' }}>
+        <Grid item xs={12} md={5} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start' }}>
           <Card sx={{ width: '100%' }}>
             <Box
               sx={{
@@ -593,7 +620,27 @@ const ProductPage = () => {
               )}
             </Box>
           </Card>
-          
+          {(() => {
+            const brandId = product.brandId || (product.brand && typeof product.brand === 'object' && product.brand.id) || null;
+            const brandName = product.brand && typeof product.brand === 'object' ? product.brand.name : (typeof product.brand === 'string' ? product.brand : null);
+            if (!brandId || !brandName) return null;
+            return (
+              <Box sx={{ mt: 2, textAlign: 'center' }}>
+                <Link
+                  component={RouterLink}
+                  to={`/brands/${brandId}`}
+                  sx={{
+                    fontSize: '0.95rem',
+                    fontWeight: 500,
+                    color: colors.accentText || '#00E0B8',
+                    '&:hover': { textDecoration: 'underline' }
+                  }}
+                >
+                  More {brandName} products
+                </Link>
+              </Box>
+            );
+          })()}
           {/* Capacities and Pricing - Mobile Only (above Buy Now button) */}
           <Box sx={{ display: { xs: 'block', md: 'none' }, mt: 2 }}>
             {availableCapacities.length > 0 ? (
@@ -853,6 +900,33 @@ const ProductPage = () => {
                   {product.abv ? `${product.abv}%` : 'N/A'}
                 </Typography>
               </Box>
+
+              {/* Nicotine (NBV) - when > 0 and not null, for Vapes (%) and Pouches / Nicotine pouches (mg) */}
+              {product.nbv != null && product.nbv !== '' && Number(product.nbv) > 0 && (() => {
+                const catName = (product.category?.name || '').toLowerCase();
+                const subName = (product.subCategory?.name || '').toLowerCase();
+                const isVape = catName.includes('vape') || subName.includes('vape');
+                const isPouch = catName.includes('pouch') || catName.includes('nicotine') || subName.includes('pouch') || subName.includes('nicotine');
+                if (!isVape && !isPouch) return null;
+                const label = isVape ? `${Number(product.nbv)}% NBV` : `${Number(product.nbv)} mg NBV`;
+                return (
+                  <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', fontSize: '0.85rem', textAlign: 'left' }}>
+                      Nicotine (NBV):
+                    </Typography>
+                    <Chip
+                      label={label}
+                      size="small"
+                      sx={{
+                        backgroundColor: isVape ? '#9C27B0' : '#607D8B',
+                        color: '#F5F5F5',
+                        fontSize: '0.75rem',
+                        height: '22px'
+                      }}
+                    />
+                  </Box>
+                );
+              })()}
 
               {/* Country */}
               <Box sx={{ display: 'flex', flexDirection: 'row', width: '100%', alignItems: 'flex-start' }}>
@@ -1348,7 +1422,7 @@ const ProductPage = () => {
         <Box sx={{ mt: 6 }}>
           <Divider sx={{ mb: 4 }} />
           <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-            Similar to {typeof product.brand === 'object' && product.brand !== null ? product.brand.name : (product.brand || product.name)}
+            Similar to {product.name}
           </Typography>
           <Box sx={{ 
             display: 'grid',

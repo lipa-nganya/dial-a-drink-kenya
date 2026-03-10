@@ -870,8 +870,8 @@ const MyOrders = () => {
                   </Box>
                 )}
 
-                {/* Driver Information - Only show after order is confirmed */}
-                {order.driver && order.status !== 'pending' && (
+                {/* Driver Information - Only show when order is in progress (not completed, delivered, or cancelled) */}
+                {order.driver && order.status !== 'pending' && order.status !== 'completed' && order.status !== 'delivered' && order.status !== 'cancelled' && (
                   <Box sx={{ mb: 2, p: 1.5, backgroundColor: 'rgba(0, 224, 184, 0.1)', borderRadius: 1 }}>
                     <Typography variant="caption" sx={{ color: '#000000', fontWeight: 600, display: 'block', mb: 0.5 }}>
                       Delivery Rider

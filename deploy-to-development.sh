@@ -109,24 +109,22 @@ echo "   ✅ Backend URL: $SERVICE_URL"
 cd ..
 echo ""
 
-# Step 5: Database migrations (tags, pageTitle, etc.)
-echo "🗄️  Step 5: Database migrations (inventory tags, pageTitle)..."
+# Step 5: Database migrations (run with Cloud SQL Proxy + local .env; no credentials in script)
+echo "🗄️  Step 5: Database migrations..."
 if [ -n "$DATABASE_URL" ]; then
-    echo "   Running migrations (DATABASE_URL is set)..."
-    (cd backend && ./scripts/run-migrations-cloud-sql.sh) 2>&1 || {
-        echo "   ⚠️  Migration script failed. Run manually:"
-        echo "      Start Cloud SQL Proxy, set DATABASE_URL, then: cd backend && ./scripts/run-migrations-cloud-sql.sh"
+    echo "   Running migrations (DATABASE_URL is set in your environment; never logged)..."
+    (cd backend && NODE_ENV=development CLOUD_RUN_SERVICE=deliveryos-development-backend ./scripts/run-migrations-cloud-sql.sh) 2>&1 || {
+        echo "   ⚠️  Migration script failed. Check errors above."
     }
 else
-    echo "   Attempting to retrieve DATABASE_URL from development backend service..."
-    export NODE_ENV=development
-    (cd backend && ./scripts/run-migrations-cloud-sql.sh) 2>&1 || {
-        echo "   ⚠️  Could not run migrations (no DATABASE_URL and gcloud may not return it)."
-        echo "   To run migrations manually:"
-        echo "      1. Start Cloud SQL Proxy: cloud_sql_proxy -instances=$CONNECTION_NAME=tcp:5432 &"
-        echo "      2. Set DATABASE_URL in .env (not committed): postgresql://USER:PASSWORD@localhost:5432/dialadrink_dev"
-        echo "      3. Run: cd backend && NODE_ENV=development ./scripts/run-migrations-cloud-sql.sh"
-    }
+    echo "   Migrations require DATABASE_URL (never commit it)."
+    echo "   To run migrations manually:"
+    echo "      1. Start Cloud SQL Proxy:"
+    echo "         cloud_sql_proxy -instances=$CONNECTION_NAME=tcp:5432 &"
+    echo "      2. In another terminal, set DATABASE_URL in .env (do not commit):"
+    echo "         postgresql://USER:PASSWORD@localhost:5432/dialadrink_dev"
+    echo "      3. Run: cd backend && NODE_ENV=development ./scripts/run-cloud-sql-migrations.js"
+    echo "         (or: source .env && ./scripts/run-migrations-cloud-sql.sh)"
 fi
 echo ""
 

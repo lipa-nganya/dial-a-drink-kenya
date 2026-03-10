@@ -48,6 +48,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     capacity: [],
     capacityPricing: [],
     abv: '',
+    nbv: '',
     stock: 0,
     purchasePrice: '',
     pageTitle: '',
@@ -98,6 +99,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
         capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
         abv: drink.abv || '',
+        nbv: drink.nbv !== undefined && drink.nbv !== null && drink.nbv !== '' ? String(drink.nbv) : '',
         stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0,
         purchasePrice: purchasePriceValue,
         pageTitle: drink.pageTitle || '',
@@ -134,6 +136,7 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacity: [],
         capacityPricing: [],
         abv: '',
+        nbv: '',
         stock: 0,
         purchasePrice: '',
         pageTitle: '',
@@ -300,7 +303,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         capacity: formData.capacity,
         capacityPricing: formData.capacityPricing,
         abv: formData.abv ? parseFloat(formData.abv) : null,
-        // Stock is not included - admins cannot update stock quantity
+        nbv: formData.nbv !== undefined && formData.nbv !== null && String(formData.nbv).trim() !== ''
+          ? (isNaN(parseFloat(formData.nbv)) ? null : parseFloat(formData.nbv))
+          : null,
+        // Stock is not included
         // Always include purchasePrice - allow 0 or empty (set to null)
         purchasePrice: formData.purchasePrice && String(formData.purchasePrice).trim() !== '' 
           ? (isNaN(parseFloat(formData.purchasePrice)) ? null : parseFloat(formData.purchasePrice))
@@ -636,6 +642,33 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
               }
             }}
           />
+
+          {(() => {
+            const categoryName = (categories.find(c => Number(c.id) === Number(formData.categoryId))?.name || drink?.category?.name || '').toLowerCase();
+            const subCategoryName = (subcategories.find(s => Number(s.id) === Number(formData.subCategoryId))?.name || drink?.subCategory?.name || '').toLowerCase();
+            const isVape = categoryName.includes('vape') || subCategoryName.includes('vape');
+            const isPouch = categoryName.includes('pouch') || categoryName.includes('nicotine') || subCategoryName.includes('pouch') || subCategoryName.includes('nicotine');
+            if (!isVape && !isPouch) return null;
+            return (
+              <TextField
+                fullWidth
+                label={isVape ? 'NBV (%)' : 'NBV (mg)'}
+                type="number"
+                inputProps={{ step: isVape ? '0.1' : '1', min: '0' }}
+                value={formData.nbv}
+                onChange={(e) => handleInputChange('nbv', e.target.value)}
+                helperText={isVape ? 'Nicotine by volume as percentage' : 'Nicotine in milligrams per pouch'}
+                sx={{
+                  mb: 2,
+                  '& .MuiOutlinedInput-root': {
+                    '& fieldset': { borderColor: colors.border },
+                    '&:hover fieldset': { borderColor: colors.accent },
+                    '&.Mui-focused fieldset': { borderColor: colors.accent }
+                  }
+                }}
+              />
+            );
+          })()}
 
           <TextField
             fullWidth

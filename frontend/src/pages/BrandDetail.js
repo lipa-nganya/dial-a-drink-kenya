@@ -3,20 +3,14 @@ import {
   Container,
   Typography,
   Box,
-  Grid,
-  Card,
-  CardMedia,
   Button,
   CircularProgress,
-  Alert,
-  Divider,
-  Chip
+  Alert
 } from '@mui/material';
-import { ArrowBack, LocalBar } from '@mui/icons-material';
+import { ArrowBack } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
-import { getBackendUrl } from '../utils/backendUrl';
 import DrinkCard from '../components/DrinkCard';
 
 const BrandDetail = () => {
@@ -57,17 +51,6 @@ const BrandDetail = () => {
     }
   };
 
-  const getImageUrl = (imagePath) => {
-    if (!imagePath) return null;
-    
-    if (imagePath.startsWith('http')) {
-      return imagePath;
-    }
-    
-    const backendUrl = getBackendUrl();
-    return `${backendUrl}${imagePath}`;
-  };
-
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -96,60 +79,6 @@ const BrandDetail = () => {
       >
         Back to Brands
       </Button>
-
-      <Box sx={{ mb: 4 }}>
-        <Grid container spacing={4} alignItems="center">
-          <Grid item xs={12} md={4}>
-            {getImageUrl(brand.image) ? (
-              <Card>
-                <CardMedia
-                  component="img"
-                  image={getImageUrl(brand.image)}
-                  alt={brand.name}
-                  sx={{ 
-                    objectFit: 'contain', 
-                    p: 3, 
-                    backgroundColor: '#fff',
-                    height: '300px',
-                    width: '100%'
-                  }}
-                />
-              </Card>
-            ) : (
-              <Box
-                sx={{
-                  height: 300,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  backgroundColor: '#f5f5f5',
-                  color: '#666',
-                  borderRadius: 2
-                }}
-              >
-                <LocalBar sx={{ fontSize: 80 }} />
-              </Box>
-            )}
-          </Grid>
-          <Grid item xs={12} md={8}>
-            <Typography variant="h3" component="h1" sx={{ fontWeight: 700, mb: 2, color: colors.textPrimary }}>
-              {brand.name}
-            </Typography>
-            {brand.description && (
-              <Typography variant="body1" sx={{ color: colors.textSecondary, lineHeight: 1.8, fontSize: '1.1rem' }}>
-                {brand.description}
-              </Typography>
-            )}
-            {brand.country && (
-              <Box sx={{ mt: 2 }}>
-                <Chip label={`From ${brand.country}`} sx={{ mt: 1 }} />
-              </Box>
-            )}
-          </Grid>
-        </Grid>
-      </Box>
-
-      <Divider sx={{ my: 4 }} />
 
       {drinks.length > 0 ? (
         <Box>

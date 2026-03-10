@@ -2863,6 +2863,53 @@ const Orders = () => {
                         KES {Math.round(Number(selectedOrderForDetail.totalAmount))}
                       </Typography>
                     </Box>
+                    {/* Cost & Profit/Loss when we have purchase prices */}
+                    {(() => {
+                      const orderItems = selectedOrderForDetail.items || [];
+                      let totalPurchaseCost = 0;
+                      orderItems.forEach((item) => {
+                        if (item.drink && item.drink.purchasePrice != null && item.drink.purchasePrice !== '') {
+                          const pp = parseFloat(item.drink.purchasePrice);
+                          if (!Number.isNaN(pp) && pp >= 0) {
+                            const qty = parseInt(item.quantity, 10) || 0;
+                            totalPurchaseCost += pp * qty;
+                          }
+                        }
+                      });
+                      const totalAmount = parseFloat(selectedOrderForDetail.totalAmount) || 0;
+                      const deliveryFee = parseFloat(selectedOrderForDetail.deliveryFee) || 0;
+                      const profitLoss = totalAmount - totalPurchaseCost - deliveryFee;
+                      if (totalPurchaseCost > 0) {
+                        return (
+                          <>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <Typography variant="body1">
+                                <strong>Cost:</strong>
+                              </Typography>
+                              <Typography variant="body1" sx={{ color: colors.textSecondary }}>
+                                KES {Math.round(totalPurchaseCost)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <Typography variant="body1">
+                                <strong>Profit / Loss:</strong>
+                              </Typography>
+                              <Chip
+                                size="small"
+                                label={profitLoss >= 0 ? `PROFIT +KES ${Math.round(profitLoss)}` : `LOSS -KES ${Math.round(Math.abs(profitLoss))}`}
+                                sx={{
+                                  backgroundColor: profitLoss >= 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
+                                  color: profitLoss >= 0 ? '#2e7d32' : '#c62828',
+                                  fontWeight: 600,
+                                  fontSize: '0.8rem'
+                                }}
+                              />
+                            </Box>
+                          </>
+                        );
+                      }
+                      return null;
+                    })()}
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="body1">
                         <strong>Payment Type:</strong>

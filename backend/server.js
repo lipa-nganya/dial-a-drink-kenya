@@ -448,6 +448,41 @@ async function addMissingColumns(db) {
     } else {
       console.log('✅ stock column already exists in drinks table');
     }
+
+    // Check if nbv column exists in drinks table (nicotine by volume: % vapes, mg pouches)
+    const [nbvResults] = await db.sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_schema = 'public' AND table_name = 'drinks' AND column_name = 'nbv'
+    `);
+
+    if (nbvResults.length === 0) {
+      console.log('📝 Adding missing nbv column to drinks table...');
+      await db.sequelize.query(`
+        ALTER TABLE drinks 
+        ADD COLUMN "nbv" DECIMAL(5, 2) NULL
+      `);
+      console.log('✅ Added nbv column to drinks table');
+    } else {
+      console.log('✅ nbv column already exists in drinks table');
+    }
+
+    // Check if clicks column exists in drinks table (product details page views)
+    const [clicksResults] = await db.sequelize.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'drinks' AND column_name = 'clicks'
+    `);
+    if (clicksResults.length === 0) {
+      console.log('📝 Adding missing clicks column to drinks table...');
+      await db.sequelize.query(`
+        ALTER TABLE drinks
+        ADD COLUMN "clicks" INTEGER DEFAULT 0
+      `);
+      console.log('✅ Added clicks column to drinks table');
+    } else {
+      console.log('✅ clicks column already exists in drinks table');
+    }
     
     // Check if deliverySequence column exists in orders table
     const [deliverySequenceResults] = await db.sequelize.query(`

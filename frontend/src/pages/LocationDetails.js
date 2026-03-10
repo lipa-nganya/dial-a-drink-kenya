@@ -462,16 +462,9 @@ const LocationDetails = () => {
           
           {/* Results Summary */}
           {filteredDrinks.length > 0 && (
-            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-              <Typography variant="body2" color="text.secondary">
-                {filteredDrinks.filter(d => d.isAvailable).length} available
-              </Typography>
-              {filteredDrinks.filter(d => !d.isAvailable).length > 0 && (
-                <Typography variant="body2" color="error" sx={{ fontWeight: 'bold' }}>
-                  {filteredDrinks.filter(d => !d.isAvailable).length} out of stock
-                </Typography>
-              )}
-            </Box>
+            <Typography variant="body2" color="text.secondary">
+              {filteredDrinks.filter(d => d.isAvailable).length} available
+            </Typography>
           )}
         </Box>
         

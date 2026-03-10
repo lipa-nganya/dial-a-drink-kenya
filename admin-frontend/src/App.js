@@ -28,11 +28,25 @@ import SaveTheFishes from './pages/SaveTheFishes';
 import Customers from './pages/Customers';
 // import POS from './pages/POS'; // Removed
 import Payables from './pages/Payables';
+import Purchases from './pages/Purchases';
+import AddPurchase from './pages/AddPurchase';
+import PayablesDashboard from './pages/PayablesDashboard';
+import Sales from './pages/Sales';
+import RiderProfits from './pages/RiderProfits';
+import RiderSales from './pages/RiderSales';
+import RiderSalesSummary from './pages/RiderSalesSummary';
+import SalesSummary from './pages/SalesSummary';
+import SupplierInvoices from './pages/SupplierInvoices';
 import Copilot from './pages/Copilot';
 import SalesDateDetails from './pages/copilot/SalesDateDetails';
 import RiderDetailsPage from './pages/RiderDetails';
 import CashAtHand from './pages/CashAtHand';
+import PendingSubmissionApproval from './pages/PendingSubmissionApproval';
+import RidersDashboard from './pages/RidersDashboard';
+import RiderCashAtHandDetail from './pages/RiderCashAtHandDetail';
 import ResupplyCart from './pages/ResupplyCart';
+import Accounts from './pages/Accounts';
+import AccountDetail from './pages/AccountDetail';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -267,11 +281,121 @@ function AppContent() {
                 }
               />
               <Route
+                path="/drivers/:riderId/cash-at-hand"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <RiderCashAtHandDetail />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/riders"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <RidersDashboard />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
                 path="/payables"
                 element={
                   <PrivateRoute>
                     <AdminLayout>
+                      <PayablesDashboard />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/sales"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <Sales />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/sales/rider-profits"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <RiderProfits />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/sales/rider-profits/:riderId/sales"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <RiderSales />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/sales/rider-profits/:riderId/summary"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <RiderSalesSummary />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/sales/summary"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <SalesSummary />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/payables/manage"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
                       <Payables />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/payables/purchases"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <Purchases />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/payables/add"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <AddPurchase />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/payables/suppliers/:supplierId/invoices"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <SupplierInvoices />
                     </AdminLayout>
                   </PrivateRoute>
                 }
@@ -282,6 +406,36 @@ function AppContent() {
                   <PrivateRoute>
                     <AdminLayout>
                       <CashAtHand />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/cash-at-hand/submissions/:submissionId/approve"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <PendingSubmissionApproval />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/accounts"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <Accounts />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/accounts/:id"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <AccountDetail />
                     </AdminLayout>
                   </PrivateRoute>
                 }

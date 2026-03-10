@@ -48,21 +48,40 @@ router.get('/', async (req, res) => {
     }, 10000); // 10 second timeout
     
     try {
+      // Resolve drink attributes so we include nbv only when the column exists
+      let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+      try {
+        const [cols] = await db.sequelize.query(
+          "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
+        );
+        const colSet = new Set((cols || []).map(c => c.column_name.toLowerCase()));
+        if (colSet.has('nbv')) {
+          drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+        }
+        if (colSet.has('clicks')) {
+          drinkAttributes = drinkAttributes.concat(['clicks']);
+        }
+      } catch (_) { /* use default without nbv */ }
+
       // Query drinks, handling missing slug column gracefully
       let drinks;
       try {
         drinks = await Promise.race([
           db.Drink.findAll({
             where: whereClause,
-            attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'],
+            attributes: drinkAttributes,
             include: [{
               model: db.Category,
               as: 'category',
               required: false,
               attributes: {
                 include: ['id', 'name', 'description', 'image', 'isActive'],
-                // slug will be included if it exists, otherwise it will be null/undefined
               }
+            }, {
+              model: db.SubCategory,
+              as: 'subCategory',
+              required: false,
+              attributes: ['id', 'name', 'categoryId']
             }, {
               model: db.Brand,
               as: 'brand',
@@ -82,15 +101,21 @@ router.get('/', async (req, res) => {
         // If slug column doesn't exist, query without it
         if (error.message && (error.message.includes('column') && error.message.includes('slug'))) {
           console.log('⚠️  slug column not found in drinks table, querying without it...');
+          const fallbackAttrs = drinkAttributes.filter(a => a !== 'slug');
           drinks = await Promise.race([
             db.Drink.findAll({
               where: whereClause,
-              attributes: ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'], // Exclude slug
+              attributes: fallbackAttrs.length ? fallbackAttrs : ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'],
               include: [{
                 model: db.Category,
                 as: 'category',
                 required: false,
-                attributes: ['id', 'name', 'description', 'image', 'isActive'] // Exclude category slug too
+                attributes: ['id', 'name', 'description', 'image', 'isActive']
+              }, {
+                model: db.SubCategory,
+                as: 'subCategory',
+                required: false,
+                attributes: ['id', 'name', 'categoryId']
               }, {
                 model: db.Brand,
                 as: 'brand',
@@ -354,22 +379,38 @@ router.get('/:id', async (req, res) => {
   try {
     const identifier = req.params.id;
     const isNumeric = /^\d+$/.test(identifier);
+
+    // Resolve attributes so we include nbv only when the column exists
+    let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+    try {
+      const [cols] = await db.sequelize.query(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
+      );
+      const colSet = new Set((cols || []).map(c => c.column_name.toLowerCase()));
+      if (colSet.has('nbv')) {
+        drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+      }
+      if (colSet.has('clicks')) {
+        drinkAttributes = drinkAttributes.concat(['clicks']);
+      }
+    } catch (_) { /* use default */ }
     
     let drink;
     
     if (isNumeric) {
       // Old format: numeric ID - fetch by ID and redirect to category-based URL
       drink = await db.Drink.findByPk(identifier, {
-        attributes: [
-          'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
-          'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-          'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'
-        ],
+        attributes: drinkAttributes,
         include: [{
           model: db.Category,
           as: 'category',
           attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
           required: false
+        }, {
+          model: db.SubCategory,
+          as: 'subCategory',
+          required: false,
+          attributes: ['id', 'name', 'categoryId']
         }]
       });
       
@@ -378,8 +419,23 @@ router.get('/:id', async (req, res) => {
       }
 
       // Populate category.slug in the JSON response if it's missing so the frontend
-      // can build /{categorySlug}/{productSlug} URLs even when the DB column is null.
       ensureCategorySlug(drink);
+
+      // Record product details view (clicks) - fire and forget, raw SQL so it works even if model/column was not migrated yet
+      const drinkIdForClicks = drink.id;
+      Promise.resolve().then(async () => {
+        try {
+          const [cols] = await db.sequelize.query(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' AND column_name = 'clicks'"
+          );
+          if (cols && cols.length > 0) {
+            await db.sequelize.query(
+              'UPDATE drinks SET clicks = COALESCE(clicks, 0) + 1 WHERE id = :id',
+              { replacements: { id: drinkIdForClicks } }
+            );
+          }
+        } catch (_) { /* ignore */ }
+      });
 
       // Return JSON so the frontend can redirect to /{categorySlug}/{productSlug}
       // (API must not 301 redirect or the client gets the wrong response).
@@ -388,16 +444,17 @@ router.get('/:id', async (req, res) => {
       // Old format: /product/{slug} - redirect to category-based URL
       drink = await db.Drink.findOne({
         where: { slug: identifier },
-        attributes: [
-          'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
-          'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-          'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'
-        ],
+        attributes: drinkAttributes,
         include: [{
           model: db.Category,
           as: 'category',
           attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
           required: false
+        }, {
+          model: db.SubCategory,
+          as: 'subCategory',
+          required: false,
+          attributes: ['id', 'name', 'categoryId']
         }]
       });
       
@@ -407,6 +464,22 @@ router.get('/:id', async (req, res) => {
 
       // Populate category.slug for slug-based lookups as well
       ensureCategorySlug(drink);
+
+      // Record product details view (clicks) - fire and forget, raw SQL so it works even if model/column was not migrated yet
+      const drinkIdForClicksSlug = drink.id;
+      Promise.resolve().then(async () => {
+        try {
+          const [cols] = await db.sequelize.query(
+            "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' AND column_name = 'clicks'"
+          );
+          if (cols && cols.length > 0) {
+            await db.sequelize.query(
+              'UPDATE drinks SET clicks = COALESCE(clicks, 0) + 1 WHERE id = :id',
+              { replacements: { id: drinkIdForClicksSlug } }
+            );
+          }
+        } catch (_) { /* ignore */ }
+      });
 
       // Return JSON; frontend will redirect to /{categorySlug}/{productSlug}.
       res.json(drink);

@@ -15,7 +15,8 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Chip
+  Chip,
+  IconButton
 } from '@mui/material';
 import {
   AttachMoney,
@@ -27,7 +28,9 @@ import {
   CheckCircleOutlined,
   Block,
   LocalOffer,
-  Cancel
+  Cancel,
+  ChevronLeft,
+  ChevronRight
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
@@ -58,6 +61,40 @@ const AdminOverview = () => {
   const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
   const navigate = useNavigate();
   const { fetchPendingOrdersCount, setIsAuthenticated } = useAdmin();
+
+  // View date for "past 1 week" scroll (default: today). Range: today - 6 days through today.
+  const toLocalDateString = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
+  const getTodayStart = () => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  };
+  const getMinViewDate = () => {
+    const d = getTodayStart();
+    d.setDate(d.getDate() - 6);
+    return d;
+  };
+  const [viewDate, setViewDate] = useState(() => toLocalDateString(getTodayStart()));
+  const viewDateObj = new Date(viewDate + 'T12:00:00');
+  const isMinDate = viewDate === toLocalDateString(getMinViewDate());
+  const isMaxDate = viewDate === toLocalDateString(getTodayStart());
+  const handlePrevDate = () => {
+    if (isMinDate) return;
+    const d = new Date(viewDate + 'T12:00:00');
+    d.setDate(d.getDate() - 1);
+    setViewDate(toLocalDateString(d));
+  };
+  const handleNextDate = () => {
+    if (isMaxDate) return;
+    const d = new Date(viewDate + 'T12:00:00');
+    d.setDate(d.getDate() + 1);
+    setViewDate(toLocalDateString(d));
+  };
 
   useEffect(() => {
     // Check authentication on mount
@@ -95,12 +132,15 @@ const AdminOverview = () => {
     fetchLatestOrders();
     fetchTopInventoryItems();
     fetchLatestTransactions();
-    fetchTodayCompletedOrders();
 
     return () => {
       newSocket.close();
     };
   }, [fetchPendingOrdersCount]);
+
+  useEffect(() => {
+    fetchTodayCompletedOrders(viewDate);
+  }, [viewDate]);
 
   const fetchStats = async () => {
     try {
@@ -145,42 +185,36 @@ const AdminOverview = () => {
     }
   };
 
-  const fetchTodayCompletedOrders = async () => {
+  const fetchTodayCompletedOrders = async (dateStr) => {
     try {
       setLoadingTodayOrders(true);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      const target = new Date(dateStr + 'T12:00:00');
+      target.setHours(0, 0, 0, 0);
+      const nextDay = new Date(target);
+      nextDay.setDate(nextDay.getDate() + 1);
 
-      // Fetch all orders and filter on frontend
       const response = await api.get('/admin/orders');
-      
       const orders = response.data || [];
-      
-      // Filter to only completed/delivered orders that were completed today
+
       const completedOrders = orders.filter(order => {
         const isCompleted = order.status === 'completed' || order.status === 'delivered';
         if (!isCompleted) return false;
-        
-        // Check if order was completed today (use updatedAt as completion time)
         const completedAt = new Date(order.updatedAt || order.createdAt);
         completedAt.setHours(0, 0, 0, 0);
-        const isToday = completedAt.getTime() === today.getTime();
-        
-        return isToday;
+        const targetTime = target.getTime();
+        const nextTime = nextDay.getTime();
+        return completedAt.getTime() >= targetTime && completedAt.getTime() < nextTime;
       });
-      
-      // Sort by completion time (most recent first)
+
       completedOrders.sort((a, b) => {
         const timeA = new Date(a.updatedAt || a.createdAt).getTime();
         const timeB = new Date(b.updatedAt || b.createdAt).getTime();
         return timeB - timeA;
       });
-      
+
       setTodayCompletedOrders(completedOrders);
     } catch (error) {
-      console.error('Error fetching today completed orders:', error);
+      console.error('Error fetching completed orders:', error);
       setTodayCompletedOrders([]);
     } finally {
       setLoadingTodayOrders(false);
@@ -380,22 +414,49 @@ const AdminOverview = () => {
     day: 'numeric' 
   });
 
+  // Display strings for the selected view date (past week)
+  const viewDayName = viewDateObj.toLocaleDateString('en-US', { weekday: 'long' });
+  const viewDateString = viewDateObj.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  });
+  const isViewDateToday = viewDate === getTodayStart().toISOString().slice(0, 10);
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       {/* Quick Panel */}
       <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}`, mb: 4 }}>
         <CardContent>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-            <Box>
-              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700, mb: 0.5 }}>
-                {dayName}
-              </Typography>
-              <Typography variant="body1" sx={{ color: colors.textSecondary }}>
-                {dateString}
-              </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <IconButton
+                onClick={handlePrevDate}
+                disabled={isMinDate}
+                aria-label="Previous day"
+                sx={{ color: colors.accentText, '&.Mui-disabled': { color: colors.textSecondary } }}
+              >
+                <ChevronLeft />
+              </IconButton>
+              <Box sx={{ textAlign: 'center', minWidth: 200 }}>
+                <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700, mb: 0.5 }}>
+                  {viewDayName}
+                </Typography>
+                <Typography variant="body1" sx={{ color: colors.textSecondary }}>
+                  {viewDateString}
+                </Typography>
+              </Box>
+              <IconButton
+                onClick={handleNextDate}
+                disabled={isMaxDate}
+                aria-label="Next day"
+                sx={{ color: colors.accentText, '&.Mui-disabled': { color: colors.textSecondary } }}
+              >
+                <ChevronRight />
+              </IconButton>
             </Box>
             <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-              {todayCompletedOrders.length} {todayCompletedOrders.length === 1 ? 'Order' : 'Orders'} Completed Today
+              {todayCompletedOrders.length} {todayCompletedOrders.length === 1 ? 'Order' : 'Orders'} Completed {isViewDateToday ? 'Today' : `on ${viewDayName}`}
             </Typography>
           </Box>
 
@@ -406,7 +467,7 @@ const AdminOverview = () => {
           ) : todayCompletedOrders.length === 0 ? (
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                No orders completed today
+                No orders completed {isViewDateToday ? 'today' : `on ${viewDayName}`}
               </Typography>
             </Box>
           ) : (

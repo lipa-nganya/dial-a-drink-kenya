@@ -1063,6 +1063,30 @@ const InventoryPage = () => {
                     </Box>
                   )}
 
+                  {/* NBV Display (Vapes: %, Pouches / Nicotine pouches: mg) */}
+                  {drink.nbv != null && drink.nbv !== '' && (() => {
+                    const catName = (drink.category?.name || '').toLowerCase();
+                    const subName = (drink.subCategory?.name || '').toLowerCase();
+                    const isVape = catName.includes('vape') || subName.includes('vape');
+                    const isPouch = catName.includes('pouch') || catName.includes('nicotine') || subName.includes('pouch') || subName.includes('nicotine');
+                    if (!isVape && !isPouch) return null;
+                    const label = isVape ? `${Number(drink.nbv)}% NBV` : `${Number(drink.nbv)} mg NBV`;
+                    return (
+                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1, mt: 0 }}>
+                        <Chip
+                          label={label}
+                          size="small"
+                          sx={{
+                            backgroundColor: isVape ? '#9C27B0' : '#607D8B',
+                            color: '#F5F5F5',
+                            fontSize: '0.65rem',
+                            height: '20px'
+                          }}
+                        />
+                      </Box>
+                    );
+                  })()}
+
                   {/* Category */}
                   {drink.category && (
                     <Box sx={{ mb: 1 }}>

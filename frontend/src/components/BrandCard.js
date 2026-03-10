@@ -34,7 +34,7 @@ const BrandCard = ({ brand }) => {
   };
 
   const handleCardClick = () => {
-    navigate(`/brand/${brand.id}`);
+    navigate(`/brands/${brand.id}`);
   };
 
   return (

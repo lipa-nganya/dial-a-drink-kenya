@@ -31,7 +31,8 @@ import {
   MenuItem,
   ToggleButton,
   ToggleButtonGroup,
-  InputAdornment
+  InputAdornment,
+  Snackbar
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -191,6 +192,13 @@ const Settings = () => {
   const [useHeroImageUrl, setUseHeroImageUrl] = useState(false);
   const [showHeroImageForm, setShowHeroImageForm] = useState(false);
   const heroImageFileInputRef = useRef(null);
+
+  // Hero image link (where customer goes when clicking hero)
+  const [heroLinkType, setHeroLinkType] = useState('none');
+  const [heroLinkTargetId, setHeroLinkTargetId] = useState('');
+  const [heroLinkDrinks, setHeroLinkDrinks] = useState([]);
+  const [heroLinkLoading, setHeroLinkLoading] = useState(false);
+  const [heroLinkSaving, setHeroLinkSaving] = useState(false);
   
   // Brand Focus state
   const [brands, setBrands] = useState([]);
@@ -235,6 +243,15 @@ const Settings = () => {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, []);
+
+  useEffect(() => {
+    if (heroLinkType === 'product' && heroLinkDrinks.length === 0) {
+      api.get('/admin/drinks').then((response) => {
+        const list = response.data?.drinks ?? response.data;
+        setHeroLinkDrinks(Array.isArray(list) ? list : []);
+      }).catch(() => setHeroLinkDrinks([]));
+    }
+  }, [heroLinkType]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -390,6 +407,7 @@ const Settings = () => {
         fetchDeliverySettings(),
         fetchCountdowns(),
         fetchHeroImage(),
+        fetchHeroLinkSettings(),
         fetchBrandFocus(),
         fetchBrands(),
         fetchUsers(),
@@ -1004,6 +1022,49 @@ Welcome aboard! 🎉`;
     }
   };
 
+  const fetchHeroLinkSettings = async () => {
+    setHeroLinkLoading(true);
+    try {
+      const [typeRes, targetRes] = await Promise.all([
+        api.get('/settings/heroImageLinkType').catch(() => ({ data: { value: 'none' } })),
+        api.get('/settings/heroImageLinkTargetId').catch(() => ({ data: { value: '' } }))
+      ]);
+      setHeroLinkType(typeRes.data?.value || 'none');
+      setHeroLinkTargetId(targetRes.data?.value != null ? String(targetRes.data.value) : '');
+    } catch (error) {
+      console.error('Error fetching hero link settings:', error);
+    } finally {
+      setHeroLinkLoading(false);
+    }
+  };
+
+  const fetchHeroLinkDrinks = async () => {
+    try {
+      const response = await api.get('/admin/drinks');
+      const list = response.data?.drinks ?? response.data;
+      setHeroLinkDrinks(Array.isArray(list) ? list : []);
+    } catch (error) {
+      console.error('Error fetching drinks for hero link:', error);
+      setHeroLinkDrinks([]);
+    }
+  };
+
+  const updateHeroLink = async () => {
+    setHeroLinkSaving(true);
+    try {
+      await Promise.all([
+        api.put('/settings/heroImageLinkType', { value: heroLinkType }),
+        api.put('/settings/heroImageLinkTargetId', { value: heroLinkType === 'none' || heroLinkType === 'brands' ? '' : heroLinkTargetId })
+      ]);
+      setNotification({ message: 'Hero image link updated successfully!' });
+    } catch (error) {
+      console.error('Error updating hero link:', error);
+      setError('Failed to update hero image link. Please try again.');
+    } finally {
+      setHeroLinkSaving(false);
+    }
+  };
+
   // Brand Focus functions
   const fetchBrands = async () => {
     try {
@@ -1069,22 +1130,37 @@ Welcome aboard! 🎉`;
         </Typography>
       </Box>
 
-      {/* Notification Alert */}
-      {notification && (
-        <Alert 
-          severity="success" 
-          sx={{ mb: 3 }}
-          onClose={() => setNotification(null)}
+      {/* Success and error toasts - fixed position so visible without scrolling */}
+      <Snackbar
+        open={!!notification || !!error}
+        autoHideDuration={error ? 8000 : 5000}
+        onClose={() => {
+          setNotification(null);
+          setError(null);
+        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        sx={{ '&.MuiSnackbar-root': { bottom: 24, right: 24 } }}
+      >
+        <Alert
+          severity={error ? 'error' : 'success'}
+          onClose={() => {
+            setNotification(null);
+            setError(null);
+          }}
+          sx={{
+            width: '100%',
+            minWidth: 320,
+            maxWidth: 420,
+            ...(notification && !error && {
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '& .MuiAlert-icon': { color: isDarkMode ? '#0D0D0D' : '#FFFFFF' }
+            })
+          }}
         >
-          {notification.message}
+          {error || notification?.message}
         </Alert>
-      )}
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-          {error}
-        </Alert>
-      )}
+      </Snackbar>
 
       {/* User Management Module - Admin and Super Admin Only */}
       {(currentUserRole === 'admin' || currentUserRole === 'super_admin') && (
@@ -2958,6 +3034,91 @@ Welcome aboard! 🎉`;
               </CardContent>
             </Card>
           )}
+
+          {/* Hero Image Link - Where customer goes when clicking hero */}
+          <Box sx={{ mt: 3, mb: 2 }}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2 }}>
+              When customer clicks hero image
+            </Typography>
+            {heroLinkLoading ? (
+              <CircularProgress size={24} />
+            ) : (
+              <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
+                <CardContent>
+                  <FormControl fullWidth sx={{ mb: 2, ...countdownFieldStyles }}>
+                    <InputLabel id="hero-link-type-label">Link to</InputLabel>
+                    <Select
+                      labelId="hero-link-type-label"
+                      value={heroLinkType}
+                      label="Link to"
+                      onChange={(e) => {
+                        setHeroLinkType(e.target.value);
+                        if (e.target.value === 'none' || e.target.value === 'brands') setHeroLinkTargetId('');
+                      }}
+                    >
+                      <MenuItem value="none">No link</MenuItem>
+                      <MenuItem value="product">Product page</MenuItem>
+                      <MenuItem value="brand">Brand page</MenuItem>
+                      <MenuItem value="brands">Brands page (all brands)</MenuItem>
+                    </Select>
+                  </FormControl>
+                  {heroLinkType === 'product' && (
+                    <FormControl fullWidth sx={{ mb: 2, ...countdownFieldStyles }}>
+                      <InputLabel id="hero-link-product-label" shrink>Product</InputLabel>
+                      <Select
+                        labelId="hero-link-product-label"
+                        value={heroLinkTargetId}
+                        label="Product"
+                        onChange={(e) => setHeroLinkTargetId(e.target.value)}
+                        displayEmpty
+                        renderValue={(v) => v ? (heroLinkDrinks.find(d => String(d.id) === v)?.name ?? v) : ''}
+                      >
+                        <MenuItem value="">
+                          <em>Select a product</em>
+                        </MenuItem>
+                        {heroLinkDrinks.map((d) => (
+                          <MenuItem key={d.id} value={String(d.id)}>{d.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                  {heroLinkType === 'brand' && (
+                    <FormControl fullWidth sx={{ mb: 2, ...countdownFieldStyles }}>
+                      <InputLabel id="hero-link-brand-label" shrink>Brand</InputLabel>
+                      <Select
+                        labelId="hero-link-brand-label"
+                        value={heroLinkTargetId}
+                        label="Brand"
+                        onChange={(e) => setHeroLinkTargetId(e.target.value)}
+                        displayEmpty
+                        renderValue={(v) => v ? (brands.filter(b => b.isActive !== false).find(b => String(b.id) === v)?.name ?? v) : ''}
+                      >
+                        <MenuItem value="">
+                          <em>Select a brand</em>
+                        </MenuItem>
+                        {brands.filter(b => b.isActive !== false).map((b) => (
+                          <MenuItem key={b.id} value={String(b.id)}>{b.name}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  )}
+                  <Button
+                    variant="contained"
+                    onClick={updateHeroLink}
+                    disabled={heroLinkSaving || (heroLinkType !== 'none' && heroLinkType !== 'brands' && !heroLinkTargetId)}
+                    startIcon={<Save />}
+                    sx={{
+                      backgroundColor: colors.accentText,
+                      color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                      '&:hover': { backgroundColor: '#00C4A3' }
+                    }}
+                  >
+                    {heroLinkSaving ? 'Saving...' : 'Save hero link'}
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </Box>
           </Box>
 
           {/* Brand Focus Section */}
