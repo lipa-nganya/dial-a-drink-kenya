@@ -39,7 +39,7 @@ const DRAWER_WIDTH = 260;
 const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { pendingOrdersCount, pendingSubmissionsCount, pendingInventoryChecksCount, logout, user } = useAdmin();
+  const { pendingOrdersCount, pendingInventoryChecksCount, logout, user } = useAdmin();
   const { isDarkMode, colors } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
 

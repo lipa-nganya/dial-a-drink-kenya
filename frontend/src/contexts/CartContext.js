@@ -110,7 +110,7 @@ export const CartProvider = ({ children }) => {
     } catch (e) {
       console.warn('Could not persist cart to localStorage', e);
     }
-  }, [state.items]);
+  }, [state.items, isHydrated]);
 
   const addToCart = (drink, quantity = 1) => {
     dispatch({

@@ -44,10 +44,10 @@ docker run -d \
   -e GOOGLE_APPLICATION_CREDENTIALS=/creds/adc.json \
   --user root \
   gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.8.0 \
-  "$CONNECTION" --port 5432
+  "$CONNECTION" --port 5432 --address 0.0.0.0
 
-echo "✅ Proxy started (host port 5434). Waiting..."
-sleep 4
+echo "✅ Proxy started (host port 5434). Waiting for proxy to connect to Cloud SQL..."
+sleep 8
 
 get_db_url() {
   local host_port="$1"

@@ -405,15 +405,6 @@ const AdminOverview = () => {
     }
   ];
  
-  // Get today's date and day
-  const today = new Date();
-  const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
-  const dateString = today.toLocaleDateString('en-US', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
-
   // Display strings for the selected view date (past week)
   const viewDayName = viewDateObj.toLocaleDateString('en-US', { weekday: 'long' });
   const viewDateString = viewDateObj.toLocaleDateString('en-US', {

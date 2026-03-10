@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
-  Grid,
   Box,
 } from '@mui/material';
 import { Star } from '@mui/icons-material';

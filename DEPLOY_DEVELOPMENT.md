@@ -61,6 +61,22 @@ gcloud config set project dialadrink-production
 
 Migrations run only when **you** set `DATABASE_URL` in your environment (e.g. from a local `.env` that is **not** committed). The script never logs or passes `DATABASE_URL` on the command line.
 
+**Verify Cloud SQL access (proxy / migrations):**  
+The identity in `application_default_credentials.json` (used by Cloud SQL Proxy) must have **Cloud SQL Client** so the proxy can connect. IAM DB auth is optional (dev uses password auth).
+
+If the proxy logs **403 NOT_AUTHORIZED** or "missing permission cloudsql.instances.get", refresh ADC with Cloud SQL scopes:
+
+```bash
+gcloud auth application-default login --scopes=https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/sqlservice.admin
+```
+
+Then run:
+
+```bash
+./scripts/verify-cloud-sql-dev-access.sh        # check
+./scripts/verify-cloud-sql-dev-access.sh --fix # grant Cloud SQL Client / Viewer if missing
+```
+
 **Option A – Run during deploy**
 
 1. Start Cloud SQL Proxy (in a separate terminal):
@@ -80,13 +96,23 @@ Migrations run only when **you** set `DATABASE_URL` in your environment (e.g. fr
 
 **Option B – Run after deploy**
 
-1. Start Cloud SQL Proxy as above.
+1. Start Cloud SQL Proxy as above (or use Docker option below).
 2. Set `DATABASE_URL` in backend `.env` (or export it).
 3. From `backend`:
    ```bash
    NODE_ENV=development ./scripts/run-cloud-sql-migrations.js
    ```
    Or: `./scripts/run-migrations-cloud-sql.sh` (same script the deploy uses when `DATABASE_URL` is set).
+
+**Option C – Migrations via Docker (proxy + migrations in containers)**
+
+If you get "Connection terminated unexpectedly" from the host, run migrations inside Docker on the same network as the proxy:
+
+```bash
+./scripts/run-dev-migrations-docker.sh --in-container
+```
+
+Ensure Cloud SQL access first: `./scripts/verify-cloud-sql-dev-access.sh --fix`.
 
 ---
 

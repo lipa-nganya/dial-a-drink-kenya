@@ -251,7 +251,7 @@ const Settings = () => {
         setHeroLinkDrinks(Array.isArray(list) ? list : []);
       }).catch(() => setHeroLinkDrinks([]));
     }
-  }, [heroLinkType]);
+  }, [heroLinkType, heroLinkDrinks]);
 
   const fetchCurrentUser = async () => {
     try {
@@ -1035,17 +1035,6 @@ Welcome aboard! 🎉`;
       console.error('Error fetching hero link settings:', error);
     } finally {
       setHeroLinkLoading(false);
-    }
-  };
-
-  const fetchHeroLinkDrinks = async () => {
-    try {
-      const response = await api.get('/admin/drinks');
-      const list = response.data?.drinks ?? response.data;
-      setHeroLinkDrinks(Array.isArray(list) ? list : []);
-    } catch (error) {
-      console.error('Error fetching drinks for hero link:', error);
-      setHeroLinkDrinks([]);
     }
   };
 

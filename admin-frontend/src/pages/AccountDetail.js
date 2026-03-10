@@ -42,7 +42,7 @@ const AccountDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { colors } = useTheme();
-  const { user } = useAdmin();
+  useAdmin(); // auth context
   const [account, setAccount] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);

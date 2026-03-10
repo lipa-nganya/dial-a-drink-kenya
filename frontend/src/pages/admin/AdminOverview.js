@@ -149,7 +149,7 @@ const AdminOverview = () => {
         setHeroLinkBrands(res.data || []);
       }).catch(() => setHeroLinkBrands([]));
     }
-  }, [heroLinkType]);
+  }, [heroLinkType, heroLinkBrands, heroLinkDrinks]);
 
   const fetchStats = async () => {
     try {
