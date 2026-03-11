@@ -563,12 +563,12 @@ const ProductPage = () => {
   const imageUrl = getImageUrl(product.image);
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ py: 4, overflowX: 'hidden', maxWidth: '100%' }}>
       {/* Breadcrumbs: Home › Menu › Category › Product name */}
         <Breadcrumbs
           separator=" › "
           aria-label="breadcrumb"
-          sx={{ mb: 2 }}
+          sx={{ mb: 2, minWidth: 0, flexWrap: 'wrap' }}
         >
           <Link component={RouterLink} to="/" underline="hover" color="inherit">
             Home
@@ -590,21 +590,22 @@ const ProductPage = () => {
       </Breadcrumbs>
 
       {/* Product Title at Top */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center' }}>
-        <Typography variant="h4" component="h1" sx={{ fontWeight: 700, textAlign: 'center' }}>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center', width: '100%', minWidth: 0 }}>
+        <Typography variant="h4" component="h1" sx={{ fontWeight: 700, textAlign: 'center', wordBreak: 'break-word', maxWidth: '100%' }}>
           {generateProductTitle()}
         </Typography>
       </Box>
 
-      <Grid container spacing={3} sx={{ alignItems: 'flex-start', justifyContent: 'center' }}>
+      <Grid container spacing={3} sx={{ alignItems: 'flex-start', justifyContent: 'center', minWidth: 0 }}>
         {/* Product Image - Left Column */}
-        <Grid item xs={12} md={5} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start' }}>
-          <Card sx={{ width: '100%' }}>
+        <Grid item xs={12} md={5} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', minWidth: 0 }}>
+          <Card sx={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>
             <Box
               sx={{
                 width: '100%',
-                height: { xs: '300px', md: '350px' },
-                minHeight: { xs: '300px', md: '350px' },
+                height: { xs: 300, md: 350 },
+                minHeight: { xs: 300, md: 350 },
+                maxHeight: { xs: 300, md: 350 },
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -621,6 +622,8 @@ const ProductPage = () => {
                     objectFit: 'contain', 
                     width: '100%',
                     height: '100%',
+                    maxWidth: '100%',
+                    maxHeight: '100%',
                     p: 2
                   }}
                   onError={() => setImageError(true)}
@@ -838,7 +841,7 @@ const ProductPage = () => {
         </Grid>
 
         {/* Product Details - Right Column */}
-        <Grid item xs={12} md={7} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Grid item xs={12} md={7} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
           {/* Status Chips */}
           <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
             {!product.isAvailable && (
