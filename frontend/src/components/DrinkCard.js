@@ -251,7 +251,6 @@ const DrinkCard = ({ drink }) => {
       }}
     >
       <Box
-        onClick={handleCardClick}
         sx={{
           width: '100%',
           height: { xs: 180, sm: 220, md: 260 },

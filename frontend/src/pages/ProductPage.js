@@ -77,7 +77,21 @@ const ProductPage = () => {
   useEffect(() => {
     // Scroll to top when product changes
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    fetchProduct();
+
+    // If we already have a matching product from navigation state,
+    // don't refetch immediately – this avoids a quick layout "stutter".
+    const hasInitialMatchingProduct = initialProduct && (
+      (isCategoryBasedUrl &&
+        initialProduct.slug === productSlug &&
+        initialProduct.category?.slug === categorySlug) ||
+      (!isCategoryBasedUrl &&
+        (String(initialProduct.slug) === String(id) ||
+         String(initialProduct.id) === String(id)))
+    );
+
+    if (!hasInitialMatchingProduct) {
+      fetchProduct();
+    }
   }, [categorySlug, productSlug, id]);
 
   useEffect(() => {
