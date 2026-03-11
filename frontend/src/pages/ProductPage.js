@@ -63,9 +63,9 @@ const ProductPage = () => {
   const [imageError, setImageError] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [detailedDescription, setDetailedDescription] = useState(null);
-  const [descriptionLoading, setDescriptionLoading] = useState(false);
+  const [descriptionLoading, setDescriptionLoading] = useState(!!initialProduct);
   const [testingNotes, setTestingNotes] = useState(null);
-  const [testingNotesLoading, setTestingNotesLoading] = useState(false);
+  const [testingNotesLoading, setTestingNotesLoading] = useState(!!initialProduct);
   const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
@@ -204,6 +204,8 @@ const ProductPage = () => {
       
       const productData = response.data;
       setProduct(productData);
+      setDescriptionLoading(true);
+      setTestingNotesLoading(true);
     } catch (err) {
       console.error('Error fetching product:', err);
       setError('Product not found');
@@ -555,6 +557,15 @@ const ProductPage = () => {
         <Button onClick={() => navigate('/menu')} sx={{ mt: 2 }}>
           Back to Menu
         </Button>
+      </Container>
+    );
+  }
+
+  // Wait for description and testing notes so the first paint is the final layout (no shift).
+  if (descriptionLoading || testingNotesLoading) {
+    return (
+      <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+        <CircularProgress />
       </Container>
     );
   }
