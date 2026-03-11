@@ -36,7 +36,7 @@ import {
   Facebook,
   ContentCopy
 } from '@mui/icons-material';
-import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
+import { useParams, useNavigate, Link as RouterLink, useLocation } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
@@ -50,12 +50,14 @@ const ProductPage = () => {
   // Old: /product/:id (e.g., /product/306)
   const params = useParams();
   const { categorySlug, productSlug, id } = params;
+  const location = useLocation();
+  const initialProduct = location.state?.drink || null;
   const navigate = useNavigate();
   const { addToCart } = useCart();
   const { colors } = useTheme();
-  const [product, setProduct] = useState(null);
+  const [product, setProduct] = useState(initialProduct);
   const [relatedProducts, setRelatedProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!initialProduct);
   const [error, setError] = useState(null);
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [imageError, setImageError] = useState(false);
@@ -522,7 +524,7 @@ const ProductPage = () => {
     };
   };
 
-  if (loading) {
+  if (loading && !product) {
     return (
       <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
         <CircularProgress />

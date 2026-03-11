@@ -143,14 +143,16 @@ const DrinkCard = ({ drink }) => {
 
   const handleCardClick = () => {
     // Use category-based URL if both category and product slugs are available
+    // Pass the full drink object via router state so the ProductPage
+    // can render immediately without a blank loading state.
     if (drink.category?.slug && drink.slug) {
-      navigate(`/${drink.category.slug}/${drink.slug}`);
+      navigate(`/${drink.category.slug}/${drink.slug}`, { state: { drink } });
     } else if (drink.slug) {
       // Fallback to old format if category slug is missing
-      navigate(`/product/${drink.slug}`);
+      navigate(`/product/${drink.slug}`, { state: { drink } });
     } else {
       // Last resort: use ID
-      navigate(`/product/${drink.id}`);
+      navigate(`/product/${drink.id}`, { state: { drink } });
     }
   };
 
