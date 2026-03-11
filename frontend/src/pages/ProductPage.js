@@ -186,14 +186,6 @@ const ProductPage = () => {
       
       const productData = response.data;
       setProduct(productData);
-      
-      // If we accessed via old URL format, redirect to new category-based URL
-      if (!isCategoryBasedUrl && productData.slug && productData.category?.slug) {
-        // Use window.location.replace for a proper 301-like redirect
-        const newUrl = `/${productData.category.slug}/${productData.slug}`;
-        window.location.replace(newUrl);
-        return; // Exit early since we're redirecting
-      }
     } catch (err) {
       console.error('Error fetching product:', err);
       setError('Product not found');
