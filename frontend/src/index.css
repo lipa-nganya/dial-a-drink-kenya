@@ -1,5 +1,8 @@
 html {
   overflow-x: hidden;
+  /* Always reserve vertical scrollbar space to avoid horizontal shift
+     when page content crosses the fold between routes */
+  overflow-y: scroll;
   min-height: 100%;
 }
 
