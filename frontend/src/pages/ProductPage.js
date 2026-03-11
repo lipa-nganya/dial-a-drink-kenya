@@ -75,11 +75,8 @@ const ProductPage = () => {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // Scroll to top when product changes
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-
     // If we already have a matching product from navigation state,
-    // don't refetch immediately – this avoids a quick layout "stutter".
+    // don't refetch and don't scroll – keeps first paint stable (no movement).
     const hasInitialMatchingProduct = initialProduct && (
       (isCategoryBasedUrl &&
         initialProduct.slug === productSlug &&
@@ -89,9 +86,14 @@ const ProductPage = () => {
          String(initialProduct.id) === String(id)))
     );
 
-    if (!hasInitialMatchingProduct) {
-      fetchProduct();
+    if (hasInitialMatchingProduct) {
+      // No scroll: user just navigated from menu, avoid any movement.
+      return;
     }
+
+    // Instant scroll only when we need to (e.g. direct link / refresh).
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    fetchProduct();
   }, [categorySlug, productSlug, id]);
 
   useEffect(() => {
@@ -961,7 +963,7 @@ const ProductPage = () => {
                 <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', flexShrink: 0, fontSize: '0.85rem', textAlign: 'left' }}>
                   Tasting notes:
                 </Typography>
-                <Typography variant="body2" sx={{ flex: 1, wordWrap: 'break-word', overflowWrap: 'break-word', fontSize: '0.85rem', textAlign: 'left' }}>
+                <Typography variant="body2" sx={{ flex: 1, wordWrap: 'break-word', overflowWrap: 'break-word', fontSize: '0.85rem', textAlign: 'left', minHeight: '1.5em' }}>
                   {testingNotesLoading ? 'Loading...' : (testingNotes || 'N/A')}
                 </Typography>
               </Box>
@@ -1169,6 +1171,7 @@ const ProductPage = () => {
               sx={{ 
                 width: '100%',
                 height: '100%',
+                minHeight: 200,
                 p: 3,
                 backgroundColor: '#f8f9fa',
                 border: `1px solid #e0e0e0`,
@@ -1425,30 +1428,39 @@ const ProductPage = () => {
         </Box>
       </Box>
 
-      {/* Related Products */}
-      {relatedProducts.length > 0 && (
-        <Box sx={{ mt: 6 }}>
-          <Divider sx={{ mb: 4 }} />
-          <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-            Similar to {product.name}
-          </Typography>
-          <Box sx={{ 
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: 'repeat(2, 1fr)',
-              sm: 'repeat(2, 1fr)',
-              md: 'repeat(3, 1fr)',
-              lg: 'repeat(4, 1fr)'
-            },
-            gap: { xs: 1, sm: 2 },
-            width: '100%'
-          }}>
-            {relatedProducts.map((relatedProduct) => (
-              <DrinkCard key={relatedProduct.id} drink={relatedProduct} />
-            ))}
-          </Box>
+      {/* Related Products – reserve space from first paint to avoid layout shift */}
+      <Box sx={{ mt: 6, minHeight: 420 }}>
+        <Divider sx={{ mb: 4 }} />
+        <Typography variant="h4" component="h2" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
+          Similar to {product.name}
+        </Typography>
+        <Box sx={{ 
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'repeat(2, 1fr)',
+            sm: 'repeat(2, 1fr)',
+            md: 'repeat(3, 1fr)',
+            lg: 'repeat(4, 1fr)'
+          },
+          gap: { xs: 1, sm: 2 },
+          width: '100%'
+        }}>
+          {relatedProducts.length > 0
+            ? relatedProducts.map((relatedProduct) => (
+                <DrinkCard key={relatedProduct.id} drink={relatedProduct} />
+              ))
+            : [...Array(4)].map((_, i) => (
+                <Box
+                  key={`placeholder-${i}`}
+                  sx={{
+                    minHeight: { xs: 350, sm: 450, md: 500 },
+                    backgroundColor: 'rgba(0,0,0,0.04)',
+                    borderRadius: 1
+                  }}
+                />
+              ))}
         </Box>
-      )}
+      </Box>
 
       {/* Share Menu */}
       <Menu
