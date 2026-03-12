@@ -1,5 +1,6 @@
 firebase-service-account.json
 .env
+.env.production
 .env.bak
 .env.*.bak
 *.env.bak

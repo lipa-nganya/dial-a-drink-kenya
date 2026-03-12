@@ -160,7 +160,7 @@ if [ -n "$EXISTING_MPESA_CALLBACK_URL" ]; then
     ENV_VARS="$ENV_VARS,MPESA_CALLBACK_URL=$EXISTING_MPESA_CALLBACK_URL"
 fi
 
-# Add SMTP credentials if they exist
+# Add SMTP credentials if they exist (same as M-Pesa: read from existing service and re-pass)
 if [ -n "$EXISTING_SMTP_HOST" ]; then
     ENV_VARS="$ENV_VARS,SMTP_HOST=$EXISTING_SMTP_HOST"
 fi
