@@ -139,9 +139,12 @@ class CashTransactionsFragment : Fragment() {
             
             val deliveryAddressText = row.findViewById<TextView>(R.id.deliveryAddressText)
             val dateText = row.findViewById<TextView>(R.id.dateText)
+            val orderNumText = row.findViewById<TextView>(R.id.orderNumText)
             val debitText = row.findViewById<TextView>(R.id.debitText)
             val creditText = row.findViewById<TextView>(R.id.creditText)
             val balanceText = row.findViewById<TextView>(R.id.balanceText)
+            
+            orderNumText.text = entry.orderId?.let { "#$it" } ?: "—"
             
             // Extract delivery address from description
             // Description format might be: "Cash received for Order #123 - [Address]" or similar

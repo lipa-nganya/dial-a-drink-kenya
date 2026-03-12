@@ -32,6 +32,37 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import CapacityPricingCombined from './CapacityPricingCombined';
 
+// Normalize capacityPricing from API (may have price only, or originalPrice/currentPrice)
+function normalizeCapacityPricingForForm(capacityPricing) {
+  const raw = capacityPricing ?? null;
+  if (!raw) return [];
+  const arr = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && !Array.isArray(raw) ? [raw] : []);
+  return arr.filter(Boolean).map((entry) => {
+    const capacity = (entry.capacity ?? entry.size ?? '').toString().trim();
+    if (!capacity) return null;
+    const price = parseFloat(entry.price ?? entry.currentPrice ?? entry.originalPrice);
+    const originalPrice = entry.originalPrice != null ? parseFloat(entry.originalPrice) : (Number.isFinite(price) ? price : 0);
+    const currentPrice = entry.currentPrice != null ? parseFloat(entry.currentPrice) : (Number.isFinite(price) ? price : originalPrice);
+    return {
+      capacity,
+      originalPrice: Number.isFinite(originalPrice) ? originalPrice : 0,
+      currentPrice: Number.isFinite(currentPrice) ? currentPrice : originalPrice
+    };
+  }).filter(Boolean);
+}
+
+// Derive capacity array from drink (capacity or capacityPricing)
+function deriveCapacitiesForForm(drink) {
+  const cap = drink.capacity;
+  if (Array.isArray(cap) && cap.length > 0) return cap.map(c => (c != null ? String(c).trim() : '')).filter(Boolean);
+  if (cap != null && cap !== '') return [String(cap).trim()];
+  const pricing = drink.capacityPricing ?? drink.capacity_pricing;
+  if (Array.isArray(pricing) && pricing.length > 0) {
+    return pricing.map(p => (p?.capacity ?? p?.size ?? '').toString().trim()).filter(Boolean);
+  }
+  return [];
+}
+
 const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
   const { isDarkMode, colors } = useTheme();
   const [formData, setFormData] = useState({
@@ -85,6 +116,16 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       
       console.log('🔍 PurchasePrice value to set:', purchasePriceValue);
       
+      const capacityPricingRaw = drink.capacityPricing ?? drink.capacity_pricing ?? null;
+      let capacityPricingNormalized = normalizeCapacityPricingForForm(capacityPricingRaw);
+      let capacityDerived = deriveCapacitiesForForm(drink);
+      // If no capacities/pricing from API but drink has price, show at least one row so price is visible
+      if (capacityPricingNormalized.length === 0 && (drink.price != null || drink.originalPrice != null)) {
+        const p = Number(drink.price ?? drink.originalPrice) || 0;
+        const op = Number(drink.originalPrice ?? drink.price) || p;
+        capacityPricingNormalized = [{ capacity: 'Default', originalPrice: op, currentPrice: p }];
+        if (capacityDerived.length === 0) capacityDerived = ['Default'];
+      }
       const newFormData = {
         name: drink.name || '',
         description: drink.description || '',
@@ -96,8 +137,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         categoryId: drink.categoryId || '',
         subCategoryId: drink.subCategoryId || '',
         brandId: brandId ? brandId.toString() : '',
-        capacity: Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []),
-        capacityPricing: Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [],
+        capacity: capacityDerived,
+        capacityPricing: capacityPricingNormalized,
         abv: drink.abv || '',
         nbv: drink.nbv !== undefined && drink.nbv !== null && drink.nbv !== '' ? String(drink.nbv) : '',
         stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0,

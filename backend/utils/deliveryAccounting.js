@@ -10,8 +10,8 @@
  *     It is credited to savings later, when the driver submits the cash for that order.
  *
  * - For PAY_NOW (M-Pesa/Pesapal where driver does not receive cash from customer):
- *   - Driver's cash at hand increases by 50% of the delivery fee.
- *   - Driver's savings also increase by 50% of the delivery fee at completion time.
+ *   - 50% of the delivery fee is credited to driver's savings.
+ *   - 50% of the delivery fee reduces the driver's cash at hand (company holds it; driver did not receive cash).
  */
 
 /**
@@ -42,10 +42,9 @@ function calculateDeliveryAccounting(alcoholCost, deliveryFee, paymentMethod) {
   let savingsChange;
 
   if (paymentMethod === 'PAY_NOW') {
-    // M-Pesa/Pesapal: driver did not receive cash, so credit 50% of delivery fee to cash at hand;
-    // the other 50% is credited to savings immediately on order completion.
-    cashAtHandChange = withheldAmount; // Credit (add) 50% delivery fee to cash at hand
-    savingsChange = withheldAmount;
+    // M-Pesa/Pesapal: driver did not receive cash. 50% delivery fee → savings; 50% → reduce driver cash at hand.
+    cashAtHandChange = -withheldAmount; // Reduce driver cash at hand by 50% (company holds; driver did not receive)
+    savingsChange = withheldAmount;     // Credit 50% to driver savings
   } else {
     // PAY_ON_DELIVERY (cash):
     // - Driver receives cash from customer (itemsTotal + deliveryFee).

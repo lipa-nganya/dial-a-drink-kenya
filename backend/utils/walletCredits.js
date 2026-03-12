@@ -126,13 +126,22 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
                                  existingTipTxn.paymentStatus === 'paid';
     
     // Only skip if BOTH driver and tip transactions are fully credited (if applicable)
-    // AND for orders with a driver, savings_credit must exist if we would have created one (PAY_NOW).
+    // AND for orders with a driver, savings_credit must exist if we would have created one (PAY_NOW or M-Pesa).
     // If savings_credit is missing, fall through so we create it (breakdown/accounting run later).
     const orderTipAmount = parseFloat(order.tipAmount || '0') || 0;
     const hasTip = orderTipAmount > 0.009;
     const paymentType = order.paymentType || 'pay_on_delivery';
     const isPayNow = paymentType === 'pay_now';
-    const needsSavingsCheck = order.driverId && isPayNow;
+    // Load payment transaction to detect M-Pesa: pay_on_delivery + M-Pesa also gets 50/50 savings and cash-at-hand reduction
+    const paymentTxnForSkip = await db.Transaction.findOne({
+      where: { orderId: orderId, transactionType: 'payment', status: 'completed', paymentStatus: 'paid' },
+      order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']],
+      transaction: dbTransaction
+    });
+    const isMpesaForSkip = paymentTxnForSkip &&
+      (paymentTxnForSkip.paymentMethod === 'mobile_money' || paymentTxnForSkip.paymentMethod === 'card') &&
+      (String(paymentTxnForSkip.paymentProvider || '').toLowerCase() === 'mpesa' || String(paymentTxnForSkip.paymentProvider || '').toLowerCase() === 'pesapal');
+    const needsSavingsCheck = order.driverId && (isPayNow || isMpesaForSkip);
     const savingsAlreadyDone = !needsSavingsCheck || (existingSavingsCreditForOrder && existingSavingsCreditForOrder.status !== 'cancelled');
     
     if (driverTxnFullyCredited && (!hasTip || tipTxnFullyCredited) && savingsAlreadyDone) {
@@ -295,8 +304,22 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     // Use the MAXIMUM of all sources - this ensures we never miss a tip
     const tipAmount = Math.max(tipAmountFromBreakdown, tipAmountFromOrder);
     
-    // Calculate delivery accounting using the new logic (paymentType already set above for early-return check)
-    const paymentTypeForAccounting = paymentType === 'pay_now' ? 'PAY_NOW' : 'PAY_ON_DELIVERY';
+    // Get payment transaction early so we can use PAY_NOW accounting when customer paid by M-Pesa (whether pay_now or pay_on_delivery)
+    const paymentTransactionForAccounting = await db.Transaction.findOne({
+      where: {
+        orderId: orderId,
+        transactionType: 'payment',
+        status: 'completed',
+        paymentStatus: 'paid'
+      },
+      order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']],
+      transaction: dbTransaction
+    });
+    const isMpesaPayment = paymentTransactionForAccounting &&
+      (paymentTransactionForAccounting.paymentMethod === 'mobile_money' || paymentTransactionForAccounting.paymentMethod === 'card') &&
+      (String(paymentTransactionForAccounting.paymentProvider || '').toLowerCase() === 'mpesa' || String(paymentTransactionForAccounting.paymentProvider || '').toLowerCase() === 'pesapal');
+    // Use PAY_NOW accounting (50% savings, 50% reduce cash at hand) when order is pay_now OR when customer paid by M-Pesa prompt (pay_on_delivery + M-Pesa)
+    const paymentTypeForAccounting = (paymentType === 'pay_now' || isMpesaPayment) ? 'PAY_NOW' : 'PAY_ON_DELIVERY';
     
     // Calculate delivery accounting values (alcoholCost = itemsTotal)
     const accounting = calculateDeliveryAccounting(itemsTotal, deliveryFee, paymentTypeForAccounting);
@@ -803,34 +826,35 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             cashAtHand: newCashAtHand
           }, { transaction: dbTransaction });
           
-          // Log cash-at-hand transaction for Pay Now (50% delivery fee credit)
-          // CRITICAL: For orders where driver did not receive cash, credit 50% to cash at hand
-          if (paymentTypeForAccounting === 'PAY_NOW' && accounting.cashAtHandChange > 0.009) {
-            const existingCashAtHandLog = await db.Transaction.findOne({
+          // Log cash-at-hand REDUCTION for Pay Now / M-Pesa (50% delivery fee reduces driver cash at hand)
+          // CRITICAL: When customer pays by M-Pesa, driver did not receive cash; 50% delivery fee reduces driver's cash at hand
+          if (paymentTypeForAccounting === 'PAY_NOW' && accounting.cashAtHandChange < -0.009) {
+            const reductionAmount = -accounting.cashAtHandChange; // positive amount for the debit
+            const existingCashAtHandReduction = await db.Transaction.findOne({
               where: {
                 orderId: orderId,
                 driverId: order.driverId,
-                transactionType: 'cash_settlement',
-                notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand credit%' }
+                transactionType: 'delivery_fee_debit',
+                notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand reduction%' }
               },
               transaction: dbTransaction
             });
-            if (!existingCashAtHandLog) {
+            if (!existingCashAtHandReduction) {
               await db.Transaction.create({
                 orderId: orderId,
                 driverId: order.driverId,
                 driverWalletId: driverWallet.id,
-                transactionType: 'cash_settlement', // Positive amount = cash credit
+                transactionType: 'delivery_fee_debit',
                 paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
                 paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
-                amount: accounting.cashAtHandChange, // Positive amount for credit
+                amount: -reductionAmount, // Negative amount = cash at hand reduction
                 status: 'completed',
                 paymentStatus: 'paid',
                 receiptNumber: paymentTransaction?.receiptNumber || null,
                 transactionDate: paymentTransaction?.transactionDate || new Date(),
-                notes: `Pay Now: 50% delivery fee - cash at hand credit for Order #${orderId} (driver did not receive cash)`
+                notes: `Pay Now: 50% delivery fee - cash at hand reduction for Order #${orderId} (driver did not receive cash)`
               }, { transaction: dbTransaction });
-              console.log(`   Cash at hand credit transaction logged for Order #${orderId}: +KES ${accounting.cashAtHandChange.toFixed(2)}`);
+              console.log(`   Cash at hand reduction logged for Order #${orderId}: -KES ${reductionAmount.toFixed(2)}`);
             }
           }
           
@@ -1074,34 +1098,38 @@ const repairPayNowCashAtHandOnly = async (orderId) => {
     throw new Error(`Order ${orderId} has no driver`);
   }
   const paymentType = (order.paymentType || 'pay_on_delivery').toLowerCase();
-  if (paymentType !== 'pay_now') {
-    return { orderId, skipped: true, reason: 'not_pay_now', message: 'Cash at hand credit only applies to Pay Now orders (where driver did not receive cash).' };
+  const paymentTxn = await db.Transaction.findOne({
+    where: { orderId, transactionType: 'payment', status: 'completed', paymentStatus: 'paid' },
+    order: [['createdAt', 'DESC']]
+  });
+  const isMpesa = paymentTxn &&
+    (paymentTxn.paymentMethod === 'mobile_money' || paymentTxn.paymentMethod === 'card') &&
+    (String(paymentTxn.paymentProvider || '').toLowerCase() === 'mpesa' || String(paymentTxn.paymentProvider || '').toLowerCase() === 'pesapal');
+  if (paymentType !== 'pay_now' && !isMpesa) {
+    return { orderId, skipped: true, reason: 'not_mpesa', message: 'Cash at hand reduction only applies to Pay Now / M-Pesa orders (where driver did not receive cash).' };
   }
 
   const breakdown = await getOrderFinancialBreakdown(orderId);
   const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
   const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
   const accounting = calculateDeliveryAccounting(itemsTotal, deliveryFee, 'PAY_NOW');
-  if (accounting.cashAtHandChange < 0.009) {
-    return { orderId, skipped: true, reason: 'no_credit', cashAtHandChange: accounting.cashAtHandChange };
+  // PAY_NOW: cashAtHandChange is negative (reduction). Need at least 0.01 to apply.
+  if (accounting.cashAtHandChange > -0.009) {
+    return { orderId, skipped: true, reason: 'no_reduction', cashAtHandChange: accounting.cashAtHandChange };
   }
 
-  const existingCredit = await db.Transaction.findOne({
+  const existingReduction = await db.Transaction.findOne({
     where: {
       orderId,
       driverId: order.driverId,
-      transactionType: 'cash_settlement',
-      notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand credit%' }
+      transactionType: 'delivery_fee_debit',
+      notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand reduction%' }
     }
   });
-  if (existingCredit) {
-    return { orderId, skipped: true, reason: 'already_applied', transactionId: existingCredit.id };
+  if (existingReduction) {
+    return { orderId, skipped: true, reason: 'already_applied', transactionId: existingReduction.id };
   }
 
-  const paymentTransaction = await db.Transaction.findOne({
-    where: { orderId, transactionType: 'payment', status: 'completed', paymentStatus: 'paid' },
-    order: [['createdAt', 'DESC']]
-  });
   let driverWallet = await db.DriverWallet.findOne({ where: { driverId: order.driverId } });
   if (!driverWallet) {
     driverWallet = await db.DriverWallet.create({
@@ -1120,7 +1148,7 @@ const repairPayNowCashAtHandOnly = async (orderId) => {
     throw new Error(`Driver ${order.driverId} not found`);
   }
   const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-  const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange;
+  const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange; // cashAtHandChange is negative
   await driver.update({ cashAtHand: newCashAtHand });
 
   await db.Transaction.create({
@@ -1128,17 +1156,17 @@ const repairPayNowCashAtHandOnly = async (orderId) => {
     driverId: order.driverId,
     driverWalletId: driverWallet.id,
     transactionType: 'delivery_fee_debit',
-    paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
-    paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
-    amount: accounting.cashAtHandChange,
+    paymentMethod: paymentTxn?.paymentMethod || order.paymentMethod || 'mobile_money',
+    paymentProvider: paymentTxn?.paymentProvider || 'mpesa',
+    amount: accounting.cashAtHandChange, // Negative amount = reduction
     status: 'completed',
     paymentStatus: 'paid',
-    receiptNumber: paymentTransaction?.receiptNumber || null,
-    transactionDate: paymentTransaction?.transactionDate || new Date(),
-      notes: `50% delivery fee order ${orderId}`
+    receiptNumber: paymentTxn?.receiptNumber || null,
+    transactionDate: paymentTxn?.transactionDate || new Date(),
+    notes: `Pay Now: 50% delivery fee - cash at hand reduction for Order #${orderId} (driver did not receive cash)`
   });
 
-  console.log(`✅ Repair Pay Now cash at hand for Order #${orderId}: driver ${order.driverId} cash at hand ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (${accounting.cashAtHandChange.toFixed(2)})`);
+  console.log(`✅ Repair Pay Now cash at hand reduction for Order #${orderId}: driver ${order.driverId} cash at hand ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (${accounting.cashAtHandChange.toFixed(2)})`);
   return {
     orderId,
     repaired: true,
@@ -1166,8 +1194,15 @@ const repairSavingsForOrder = async (orderId) => {
     throw new Error(`Order ${orderId} has no driver`);
   }
   const paymentType = order.paymentType || 'pay_on_delivery';
-  if (paymentType !== 'pay_now') {
-    return { orderId, skipped: true, reason: 'not_pay_now', message: 'Savings only apply to Pay Now orders.' };
+  const paymentTxn = await db.Transaction.findOne({
+    where: { orderId, transactionType: 'payment', status: 'completed', paymentStatus: 'paid' },
+    order: [['createdAt', 'DESC']]
+  });
+  const isMpesa = paymentTxn &&
+    (paymentTxn.paymentMethod === 'mobile_money' || paymentTxn.paymentMethod === 'card') &&
+    (String(paymentTxn.paymentProvider || '').toLowerCase() === 'mpesa' || String(paymentTxn.paymentProvider || '').toLowerCase() === 'pesapal');
+  if (paymentType !== 'pay_now' && !isMpesa) {
+    return { orderId, skipped: true, reason: 'not_mpesa', message: 'Savings/cash-at-hand repair only applies to Pay Now or M-Pesa-paid orders.' };
   }
 
   const breakdown = await getOrderFinancialBreakdown(orderId);
@@ -1177,11 +1212,6 @@ const repairSavingsForOrder = async (orderId) => {
   if (accounting.savingsChange < 0.009) {
     return { orderId, skipped: true, reason: 'no_savings', savingsChange: accounting.savingsChange };
   }
-
-  const paymentTransaction = await db.Transaction.findOne({
-    where: { orderId, transactionType: 'payment', status: 'completed', paymentStatus: 'paid' },
-    order: [['createdAt', 'DESC']]
-  });
 
   const existingSavingsCredit = await db.Transaction.findOne({
     where: {
@@ -1222,16 +1252,16 @@ const repairSavingsForOrder = async (orderId) => {
     await db.Transaction.create({
       orderId,
       transactionType: 'savings_credit',
-      paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
-      paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
+      paymentMethod: paymentTxn?.paymentMethod || order.paymentMethod || 'mobile_money',
+      paymentProvider: paymentTxn?.paymentProvider || 'mpesa',
       amount: accounting.savingsChange,
       status: 'completed',
       paymentStatus: 'paid',
-      receiptNumber: paymentTransaction?.receiptNumber || null,
-      checkoutRequestID: paymentTransaction?.checkoutRequestID || null,
-      merchantRequestID: paymentTransaction?.merchantRequestID || null,
-      phoneNumber: paymentTransaction?.phoneNumber || null,
-      transactionDate: paymentTransaction?.transactionDate || new Date(),
+      receiptNumber: paymentTxn?.receiptNumber || null,
+      checkoutRequestID: paymentTxn?.checkoutRequestID || null,
+      merchantRequestID: paymentTxn?.merchantRequestID || null,
+      phoneNumber: paymentTxn?.phoneNumber || null,
+      transactionDate: paymentTxn?.transactionDate || new Date(),
       driverId: order.driverId,
       driverWalletId: driverWallet.id,
       notes: `50% delivery fee order ${orderId}`
@@ -1240,18 +1270,56 @@ const repairSavingsForOrder = async (orderId) => {
     await driverWallet.update({ savings: newSavings }, { transaction: dbTransaction });
 
     const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction });
+    let cashAtHandCorrection = accounting.cashAtHandChange; // PAY_NOW: negative (e.g. -5)
+    // If old flow already ran (delivery_pay exists), driver was wrongly credited with PAY_ON_DELIVERY amount (itemsTotal + 50% deliveryFee). Undo that then apply correct reduction.
+    const existingDeliveryPay = await db.Transaction.findOne({
+      where: { orderId, driverId: order.driverId, transactionType: 'delivery_pay', status: { [Op.ne]: 'cancelled' } },
+      transaction: dbTransaction
+    });
+    if (existingDeliveryPay) {
+      const wrongAmountAdded = itemsTotal + deliveryFee * 0.5;
+      cashAtHandCorrection = -wrongAmountAdded + accounting.cashAtHandChange; // undo wrong add, apply correct reduction
+    }
     if (driver) {
       const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-      const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange;
+      const newCashAtHand = currentCashAtHand + cashAtHandCorrection;
       await driver.update({ cashAtHand: newCashAtHand }, { transaction: dbTransaction });
     }
 
+    // Create delivery_fee_debit for the 50% cash-at-hand reduction (audit trail)
+    const existingReduction = await db.Transaction.findOne({
+      where: {
+        orderId,
+        driverId: order.driverId,
+        transactionType: 'delivery_fee_debit',
+        notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand reduction%' }
+      },
+      transaction: dbTransaction
+    });
+    if (!existingReduction && accounting.cashAtHandChange < -0.009) {
+      await db.Transaction.create({
+        orderId,
+        driverId: order.driverId,
+        driverWalletId: driverWallet.id,
+        transactionType: 'delivery_fee_debit',
+        paymentMethod: paymentTxn?.paymentMethod || order.paymentMethod || 'mobile_money',
+        paymentProvider: paymentTxn?.paymentProvider || 'mpesa',
+        amount: accounting.cashAtHandChange,
+        status: 'completed',
+        paymentStatus: 'paid',
+        receiptNumber: paymentTxn?.receiptNumber || null,
+        transactionDate: paymentTxn?.transactionDate || new Date(),
+        notes: `Pay Now: 50% delivery fee - cash at hand reduction for Order #${orderId} (driver did not receive cash)`
+      }, { transaction: dbTransaction });
+    }
+
     await dbTransaction.commit();
-    console.log(`✅ Repair savings for Order #${orderId}: credited KES ${accounting.savingsChange.toFixed(2)} to driver savings`);
+    console.log(`✅ Repair savings for Order #${orderId}: savings +KES ${accounting.savingsChange.toFixed(2)}, cash at hand ${cashAtHandCorrection >= 0 ? '+' : ''}${cashAtHandCorrection.toFixed(2)}`);
     return {
       orderId,
       repaired: true,
       savingsCredited: accounting.savingsChange,
+      cashAtHandCorrection,
       driverId: order.driverId
     };
   } catch (err) {

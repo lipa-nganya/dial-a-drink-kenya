@@ -720,6 +720,7 @@ const CashAtHand = () => {
               <TableHead>
                 <TableRow>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order #</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Description</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Debit</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Credit</TableCell>
@@ -739,7 +740,8 @@ const CashAtHand = () => {
                       description: `Order #${order.id}${order.customerName ? ` - ${order.customerName}` : ''}`,
                       debit: order.totalAmount,
                       credit: 0,
-                      type: 'pos_order'
+                      type: 'pos_order',
+                      orderId: order.id
                     });
                   });
                   
@@ -751,7 +753,8 @@ const CashAtHand = () => {
                       description: tx.description + (tx.customerName ? ` - ${tx.customerName}` : ''),
                       debit: tx.amount,
                       credit: 0,
-                      type: 'admin_cash_order'
+                      type: 'admin_cash_order',
+                      orderId: tx.orderId ?? tx.order_id
                     });
                   });
                   
@@ -772,7 +775,8 @@ const CashAtHand = () => {
                       description: description,
                       debit: submission.amount, // Debit = cash received (increases balance)
                       credit: 0,
-                      type: 'driver_submission'
+                      type: 'driver_submission',
+                      orderIds: submission.orders?.map(o => o.id) || []
                     });
                   });
                   
@@ -801,14 +805,15 @@ const CashAtHand = () => {
                         description: description,
                         debit: 0,
                         credit: submission.amount,
-                        type: 'cash_submission'
+                        type: 'cash_submission',
+                        orderIds: submission.orders?.map(o => o.id) || []
                       });
                     });
                   
                   if (allLogEntries.length === 0) {
                     return (
                       <TableRow>
-                        <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
+                        <TableCell colSpan={6} sx={{ textAlign: 'center', py: 4, color: colors.textSecondary }}>
                           No data found
                         </TableCell>
                       </TableRow>
@@ -851,6 +856,13 @@ const CashAtHand = () => {
                       <TableRow key={entry.id} hover>
                         <TableCell sx={{ color: colors.textSecondary }}>
                           {formatDate(entry.date)}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {entry.orderIds?.length
+                            ? entry.orderIds.map(id => `#${id}`).join(', ')
+                            : entry.orderId != null
+                              ? `#${entry.orderId}`
+                              : '—'}
                         </TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>
                           {entry.description}

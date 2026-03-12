@@ -16,9 +16,9 @@ PROD_DB_PASSWORD="E7A3IIa60hFD3bkGH1XAiryvB"
 PROD_CONNECTION="dialadrink-production:us-central1:dialadrink-db-prod"
 PROD_DATABASE_URL="postgresql://${PROD_DB_USER}:${PROD_DB_PASSWORD}@/${PROD_DB_NAME}?host=/cloudsql/${PROD_CONNECTION}"
 
-# Production Frontend URLs (for CORS)
-PROD_FRONTEND_URL="https://ruakadrinksdelivery.co.ke"
-PROD_ADMIN_URL="https://admin.ruakadrinksdelivery.co.ke"
+# Production Frontend URLs (for CORS) - defaults from Cloud Run; override in GCP if using custom domains
+CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
+ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 
 echo "🚀 Deploying to Production Environment"
 echo "======================================"
@@ -87,33 +87,38 @@ echo "📊 Retrieving existing environment variables..."
 EXISTING_ENV=$(gcloud run services describe "$BACKEND_SERVICE" \
     --region "$REGION" \
     --project "$PROJECT_ID" \
-    --format="get(spec.template.spec.containers[0].env)" 2>/dev/null || echo "")
+    --format="yaml(spec.template.spec.containers[0].env)" 2>/dev/null || echo "")
+
+# Default FRONTEND_URL/ADMIN_URL from Cloud Run frontend services (CORS for *.run.app)
+PROD_FRONTEND_URL=$(gcloud run services describe "$CUSTOMER_FRONTEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format "value(status.url)" 2>/dev/null || echo "https://ruakadrinksdelivery.co.ke")
+PROD_ADMIN_URL=$(gcloud run services describe "$ADMIN_FRONTEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format "value(status.url)" 2>/dev/null || echo "https://admin.ruakadrinksdelivery.co.ke")
 
 # Extract existing URLs and credentials (maintain CORS and secrets)
-# Use sed instead of grep -P for macOS compatibility
-EXISTING_FRONTEND_URL=$(echo "$EXISTING_ENV" | grep "FRONTEND_URL" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "$PROD_FRONTEND_URL")
-EXISTING_ADMIN_URL=$(echo "$EXISTING_ENV" | grep "ADMIN_URL" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "$PROD_ADMIN_URL")
+EXISTING_FRONTEND_URL=$(echo "$EXISTING_ENV" | grep -A1 "name: FRONTEND_URL" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1)
+EXISTING_FRONTEND_URL=${EXISTING_FRONTEND_URL:-$PROD_FRONTEND_URL}
+EXISTING_ADMIN_URL=$(echo "$EXISTING_ENV" | grep -A1 "name: ADMIN_URL" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1)
+EXISTING_ADMIN_URL=${EXISTING_ADMIN_URL:-$PROD_ADMIN_URL}
 
 # Extract M-Pesa credentials (preserve them)
-EXISTING_MPESA_CONSUMER_KEY=$(echo "$EXISTING_ENV" | grep "MPESA_CONSUMER_KEY" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_MPESA_CONSUMER_SECRET=$(echo "$EXISTING_ENV" | grep "MPESA_CONSUMER_SECRET" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_MPESA_SHORTCODE=$(echo "$EXISTING_ENV" | grep "MPESA_SHORTCODE" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_MPESA_PASSKEY=$(echo "$EXISTING_ENV" | grep "MPESA_PASSKEY" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_MPESA_PAYBILL_ACCOUNT=$(echo "$EXISTING_ENV" | grep "MPESA_PAYBILL_ACCOUNT" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_MPESA_ENVIRONMENT=$(echo "$EXISTING_ENV" | grep "MPESA_ENVIRONMENT" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "production")
+EXISTING_MPESA_CONSUMER_KEY=$(echo "$EXISTING_ENV" | grep -A1 "name: MPESA_CONSUMER_KEY" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_MPESA_CONSUMER_SECRET=$(echo "$EXISTING_ENV" | grep -A1 "name: MPESA_CONSUMER_SECRET" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_MPESA_SHORTCODE=$(echo "$EXISTING_ENV" | grep -A1 "name: MPESA_SHORTCODE" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_MPESA_PASSKEY=$(echo "$EXISTING_ENV" | grep -A1 "name: MPESA_PASSKEY" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_MPESA_PAYBILL_ACCOUNT=$(echo "$EXISTING_ENV" | grep -A1 "name: MPESA_PAYBILL_ACCOUNT" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_MPESA_ENVIRONMENT=$(echo "$EXISTING_ENV" | grep -A1 "name: MPESA_ENVIRONMENT" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "production")
 EXISTING_BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format "value(status.url)" 2>/dev/null || echo "")
 EXISTING_MPESA_CALLBACK_URL="${EXISTING_BACKEND_URL}/api/mpesa/callback"
 
 # Extract SMTP credentials
-EXISTING_SMTP_HOST=$(echo "$EXISTING_ENV" | grep "SMTP_HOST" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_SMTP_PORT=$(echo "$EXISTING_ENV" | grep "SMTP_PORT" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_SMTP_SECURE=$(echo "$EXISTING_ENV" | grep "SMTP_SECURE" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_SMTP_USER=$(echo "$EXISTING_ENV" | grep "SMTP_USER" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_SMTP_PASS=$(echo "$EXISTING_ENV" | grep "SMTP_PASS" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
-EXISTING_SMTP_FROM=$(echo "$EXISTING_ENV" | grep "SMTP_FROM" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
+EXISTING_SMTP_HOST=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_HOST" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_SMTP_PORT=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_PORT" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_SMTP_SECURE=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_SECURE" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_SMTP_USER=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_USER" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_SMTP_PASS=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_PASS" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
+EXISTING_SMTP_FROM=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_FROM" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
 
 # Extract Google Maps API Key
-EXISTING_GOOGLE_MAPS_API_KEY=$(echo "$EXISTING_ENV" | grep "GOOGLE_MAPS_API_KEY" | sed "s/.*'value': '\([^']*\).*/\1/" | head -1 || echo "")
+EXISTING_GOOGLE_MAPS_API_KEY=$(echo "$EXISTING_ENV" | grep -A1 "name: GOOGLE_MAPS_API_KEY" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
 
 echo "   FRONTEND_URL: $EXISTING_FRONTEND_URL"
 echo "   ADMIN_URL: $EXISTING_ADMIN_URL"

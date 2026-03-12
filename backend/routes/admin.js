@@ -993,6 +993,13 @@ router.get('/drinks', async (req, res) => {
           validDrinkAttributes.push(attrName);
         }
       }
+      // Ensure capacity and capacityPricing are included when columns exist (Sequelize default column names are camelCase, lowercased in PG)
+      if (!validDrinkAttributes.includes('capacity') && drinkColumnNames.has('capacity')) {
+        validDrinkAttributes.push('capacity');
+      }
+      if (!validDrinkAttributes.includes('capacityPricing') && drinkColumnNames.has('capacitypricing')) {
+        validDrinkAttributes.push('capacityPricing');
+      }
     } catch (schemaError) {
       // Fallback: use a safe default set of attributes if schema query fails (exclude purchasePrice)
       console.warn('⚠️ Could not query information_schema for drinks, using default attributes:', schemaError.message);
@@ -8208,6 +8215,48 @@ router.put('/accounts/:id', requireSuperAdmin, async (req, res) => {
   } catch (error) {
     console.error('Error updating asset account:', error);
     res.status(500).json({ error: 'Failed to update account', details: error.message });
+  }
+});
+
+// Create asset account (super_admin only)
+router.post('/accounts', requireSuperAdmin, async (req, res) => {
+  try {
+    const { name, description, balance, limit } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Account name is required' });
+    }
+    const account = await db.AssetAccount.create({
+      name: name.trim(),
+      description: (description && typeof description === 'string' ? description.trim() : null) || null,
+      balance: balance != null && balance !== '' ? parseFloat(balance) : 0,
+      limit: limit != null && limit !== '' ? parseFloat(limit) : 0
+    });
+    res.status(201).json(account);
+  } catch (error) {
+    console.error('Error creating asset account:', error);
+    res.status(500).json({ error: 'Failed to create account', details: error.message });
+  }
+});
+
+// Delete asset account (super_admin only). Allowed only when account has no transactions.
+router.delete('/accounts/:id', requireSuperAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const account = await db.AssetAccount.findByPk(id);
+    if (!account) {
+      return res.status(404).json({ error: 'Account not found' });
+    }
+    const txCount = await db.AssetAccountTransaction.count({ where: { assetAccountId: id } });
+    if (txCount > 0) {
+      return res.status(400).json({
+        error: `Cannot delete account with existing transactions (${txCount}). Remove or reassign transactions first.`
+      });
+    }
+    await account.destroy();
+    res.status(204).send();
+  } catch (error) {
+    console.error('Error deleting asset account:', error);
+    res.status(500).json({ error: 'Failed to delete account', details: error.message });
   }
 });
 

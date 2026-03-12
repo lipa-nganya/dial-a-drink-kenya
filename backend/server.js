@@ -761,7 +761,7 @@ async function syncPendingTransactions() {
       where: {
         transactionType: 'payment',
         status: {
-          [Op.in]: ['pending', 'processing']
+          [Op.in]: ['pending']
         },
         checkoutRequestID: {
           [Op.ne]: null

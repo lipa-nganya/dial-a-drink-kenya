@@ -693,6 +693,7 @@ const RiderDetails = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order #</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Description</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Debit</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Credit</TableCell>
@@ -731,6 +732,11 @@ const RiderDetails = () => {
                               month: 'short',
                               day: 'numeric'
                             })}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {entry.orderId != null || entry.order_id != null
+                              ? `#${entry.orderId ?? entry.order_id}`
+                              : '—'}
                           </TableCell>
                           <TableCell sx={{ color: colors.textPrimary }}>
                             {entry.description || entry.customerName || 'N/A'}
@@ -777,6 +783,7 @@ const RiderDetails = () => {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order #</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Description</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Debit</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Credit</TableCell>
@@ -807,7 +814,7 @@ const RiderDetails = () => {
                     if (sortedTransactions.length === 0) {
                       return (
                         <TableRow>
-                          <TableCell colSpan={5} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                          <TableCell colSpan={6} align="center" sx={{ py: 3, color: colors.textSecondary }}>
                             No savings transactions found
                           </TableCell>
                         </TableRow>
@@ -844,6 +851,11 @@ const RiderDetails = () => {
                               month: 'short',
                               day: 'numeric'
                             })}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {isCredit && (tx.orderId != null || tx.orderNumber != null)
+                              ? `#${tx.orderId ?? tx.orderNumber}`
+                              : '—'}
                           </TableCell>
                           <TableCell sx={{ color: colors.textPrimary }}>
                             {description}

@@ -931,6 +931,49 @@ router.patch('/:driverId/cash-submissions/:id', async (req, res) => {
   }
 });
 
+/**
+ * Update purchase approval status for a cash submission (admin-only, purchase-only flag)
+ * This does NOT change the cash submission status/balance; it only tags the submission's details.
+ *
+ * POST /api/driver-wallet/admin/cash-submissions/:id/purchase-status
+ * body: { purchaseStatus: 'rejected' | 'approved' | 'pending' }
+ */
+router.post('/admin/cash-submissions/:id/purchase-status', verifyAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { purchaseStatus } = req.body || {};
+
+    if (!purchaseStatus || !['approved', 'rejected', 'pending'].includes(purchaseStatus)) {
+      return sendError(res, 'purchaseStatus must be one of: approved, rejected, pending', 400);
+    }
+
+    const submission = await db.CashSubmission.findByPk(parseInt(id, 10));
+    if (!submission) {
+      return sendError(res, 'Cash submission not found', 404);
+    }
+
+    if (submission.submissionType !== 'purchases') {
+      return sendError(res, 'Purchase status can only be set for purchase submissions', 400);
+    }
+
+    // Do NOT change submission.status here – only tag the purchase side
+    const existingDetails = submission.details || {};
+    const updatedDetails = {
+      ...existingDetails,
+      purchaseStatus,
+      purchaseApproved: purchaseStatus === 'approved',
+      purchaseRejected: purchaseStatus === 'rejected'
+    };
+
+    await submission.update({ details: updatedDetails });
+
+    return sendSuccess(res, submission);
+  } catch (error) {
+    console.error('Error updating purchase status on cash submission:', error);
+    return sendError(res, error.message || 'Failed to update purchase status', 500);
+  }
+});
+
 
 /**
  * Get all pending cash submissions (admin)

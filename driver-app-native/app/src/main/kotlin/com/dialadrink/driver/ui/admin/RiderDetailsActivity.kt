@@ -390,8 +390,8 @@ class RiderDetailsActivity : AppCompatActivity() {
             setPadding(12, 12, 12, 12)
         }
         
-        val columns = listOf("Date & Time", "Description", "Debit", "Credit", "Balance")
-        val weights = listOf(1.5f, 2f, 1f, 1f, 1f)
+        val columns = listOf("Date & Time", "Order #", "Description", "Debit", "Credit", "Balance")
+        val weights = listOf(1.5f, 1f, 2f, 1f, 1f, 1f)
         
         columns.forEachIndexed { index, columnName ->
             val textView = TextView(this).apply {
@@ -400,7 +400,7 @@ class RiderDetailsActivity : AppCompatActivity() {
                 textSize = 12f
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 gravity = when (index) {
-                    0, 1 -> android.view.Gravity.START
+                    0, 1, 2 -> android.view.Gravity.START
                     else -> android.view.Gravity.END
                 }
                 setPadding(8, 8, 8, 8)
@@ -430,6 +430,11 @@ class RiderDetailsActivity : AppCompatActivity() {
         }
         val dateView = createTableCell(dateText, android.view.Gravity.START)
         row.addView(dateView, TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1.5f))
+        
+        // Order #
+        val orderNum = entry.orderId?.let { "#$it" } ?: "—"
+        val orderView = createTableCell(orderNum, android.view.Gravity.START)
+        row.addView(orderView, TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1f))
         
         // Description - clean up for Savings Recovery transactions
         var description = entry.description
@@ -483,6 +488,11 @@ class RiderDetailsActivity : AppCompatActivity() {
         }
         val dateView = createTableCell(dateText, android.view.Gravity.START)
         row.addView(dateView, TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1.5f))
+        
+        // Order # (credits often have orderId/orderNumber)
+        val orderNum = (transaction.orderId ?: transaction.orderNumber)?.let { "#$it" } ?: "—"
+        val orderView = createTableCell(orderNum, android.view.Gravity.START)
+        row.addView(orderView, TableRow.LayoutParams(0, TableRow.LayoutParams.WRAP_CONTENT, 1f))
         
         // Description - clean up for Savings Recovery transactions
         var description = transaction.notes?.takeIf { it.contains("Savings Recovery", ignoreCase = true) } ?: "Loan Recovery"

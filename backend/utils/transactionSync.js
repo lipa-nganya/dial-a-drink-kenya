@@ -18,7 +18,7 @@ const syncPendingTransactionsForOrder = async (orderId) => {
         orderId: orderId,
         transactionType: 'payment',
         status: {
-          [Op.in]: ['pending', 'processing']
+          [Op.in]: ['pending']
         }
       },
       order: [['createdAt', 'DESC']]
@@ -60,7 +60,7 @@ const syncPendingTransactionsForOrder = async (orderId) => {
             orderId: orderId,
             transactionType: 'delivery_pay',
             status: {
-              [Op.in]: ['pending', 'processing']
+              [Op.in]: ['pending']
             }
           }
         });

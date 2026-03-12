@@ -16,9 +16,9 @@ function createTransporter() {
   const smtpHost = process.env.SMTP_HOST || process.env.EMAIL_HOST || 'smtp.gmail.com';
   let smtpPort = process.env.SMTP_PORT || process.env.EMAIL_PORT || 587;
   const smtpSecure = process.env.SMTP_SECURE === 'true';
-  const smtpUser = process.env.SMTP_USER || process.env.EMAIL_USER;
-  const smtpPass = process.env.SMTP_PASS || process.env.EMAIL_PASSWORD;
-  const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || smtpUser;
+  const smtpUser = (process.env.SMTP_USER || process.env.EMAIL_USER || '').trim();
+  const smtpPass = (process.env.SMTP_PASS || process.env.EMAIL_PASSWORD || '').trim();
+  const smtpFrom = (process.env.SMTP_FROM || process.env.EMAIL_FROM || smtpUser || '').trim();
 
   if (!smtpHost || !smtpPort) {
     console.warn('⚠️  SMTP configuration not found (SMTP_HOST or SMTP_PORT missing). Email sending will be disabled.');

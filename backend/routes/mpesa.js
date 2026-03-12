@@ -6,6 +6,7 @@ const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
+const { calculateDeliveryAccounting } = require('../utils/deliveryAccounting');
 const pushNotifications = require('../services/pushNotifications');
 const whatsappService = require('../services/whatsapp');
 const { getOrCreateHoldDriver } = require('../utils/holdDriver');
@@ -198,6 +199,71 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
   // Update order within the transaction to ensure it's committed atomically
   await orderInstance.update(orderUpdatePayload, { transaction: dbTransaction });
   console.log(`✅ Updated order #${effectiveOrderId} status to '${orderUpdatePayload.status}', paymentStatus to 'paid'${isPOSOrder ? ' (POS Order)' : ''}`);
+
+  // When customer pays by M-Pesa (pay now or pay on delivery): 50% delivery fee → savings, 50% → reduce driver cash at hand
+  if (!isPOSOrder && orderInstance.driverId && deliveryFee > 0.009) {
+    const accounting = calculateDeliveryAccounting(itemsTotal, deliveryFee, 'PAY_NOW');
+    const existingSavings = await db.Transaction.findOne({
+      where: {
+        orderId: effectiveOrderId,
+        driverId: orderInstance.driverId,
+        transactionType: 'savings_credit',
+        status: { [Op.ne]: 'cancelled' }
+      },
+      transaction: dbTransaction
+    });
+    if (!existingSavings && accounting.savingsChange > 0.009) {
+      let driverWallet = await db.DriverWallet.findOne({ where: { driverId: orderInstance.driverId }, transaction: dbTransaction });
+      if (!driverWallet) {
+        driverWallet = await db.DriverWallet.create({
+          driverId: orderInstance.driverId,
+          balance: 0,
+          totalTipsReceived: 0,
+          totalTipsCount: 0,
+          totalDeliveryPay: 0,
+          totalDeliveryPayCount: 0,
+          savings: 0
+        }, { transaction: dbTransaction });
+      }
+      const currentSavings = parseFloat(driverWallet.savings || 0);
+      await driverWallet.update({ savings: currentSavings + accounting.savingsChange }, { transaction: dbTransaction });
+      await db.Transaction.create({
+        orderId: effectiveOrderId,
+        driverId: orderInstance.driverId,
+        driverWalletId: driverWallet.id,
+        transactionType: 'savings_credit',
+        paymentMethod: paymentMethod || 'mobile_money',
+        paymentProvider: paymentProvider || 'mpesa',
+        amount: accounting.savingsChange,
+        status: 'completed',
+        paymentStatus: 'paid',
+        receiptNumber: normalizedReceipt,
+        transactionDate: transactionTimestamp,
+        notes: `50% delivery fee order ${effectiveOrderId} (M-Pesa payment)`
+      }, { transaction: dbTransaction });
+      const driver = await db.Driver.findByPk(orderInstance.driverId, { transaction: dbTransaction });
+      if (driver) {
+        const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+        const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange; // cashAtHandChange is negative
+        await driver.update({ cashAtHand: newCashAtHand }, { transaction: dbTransaction });
+        await db.Transaction.create({
+          orderId: effectiveOrderId,
+          driverId: orderInstance.driverId,
+          driverWalletId: driverWallet.id,
+          transactionType: 'delivery_fee_debit',
+          paymentMethod: paymentMethod || 'mobile_money',
+          paymentProvider: paymentProvider || 'mpesa',
+          amount: accounting.cashAtHandChange,
+          status: 'completed',
+          paymentStatus: 'paid',
+          receiptNumber: normalizedReceipt,
+          transactionDate: transactionTimestamp,
+          notes: `Pay Now: 50% delivery fee - cash at hand reduction for Order #${effectiveOrderId} (driver did not receive cash)`
+        }, { transaction: dbTransaction });
+        console.log(`✅ M-Pesa payment: 50% delivery fee (KES ${accounting.savingsChange.toFixed(2)}) → savings, 50% (KES ${(-accounting.cashAtHandChange).toFixed(2)}) → reduced driver cash at hand for Order #${effectiveOrderId}`);
+      }
+    }
+  }
 
   // Decrease inventory stock for completed orders
   if (orderUpdatePayload.status === 'completed' && orderUpdatePayload.paymentStatus === 'paid') {

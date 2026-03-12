@@ -63,6 +63,8 @@ const Purchases = () => {
   const [loading, setLoading] = useState(true);
   const [purchasesLoading, setPurchasesLoading] = useState(true);
   const [error, setError] = useState(null);
+  // 0 = Admin purchases, 1 = Rider purchases
+  const [purchasesSubTab, setPurchasesSubTab] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [purchaseSearchTerm, setPurchaseSearchTerm] = useState('');
   const [page, setPage] = useState(0);
@@ -193,6 +195,9 @@ const Purchases = () => {
   };
 
   const unpaidPurchases = purchases.filter(p => getPurchaseStatus(p) === 'Unpaid');
+
+  const isAdminPurchase = (p) => !p.driverId && !p.driver;
+  const isRiderPurchase = (p) => !!(p.driverId || p.driver);
 
   const getAssetAccountName = (accountId) => {
     if (accountId == null || accountId === '') return '—';
@@ -350,7 +355,12 @@ const Purchases = () => {
   };
 
   const renderPurchasesTab = () => {
-    const paginated = filteredPurchases.slice(
+    const sourcePurchases = (purchasesSubTab === 0
+      ? filteredPurchases.filter(isAdminPurchase)
+      : filteredPurchases.filter(isRiderPurchase)
+    );
+
+    const paginated = sourcePurchases.slice(
       purchasePage * purchaseRowsPerPage,
       purchasePage * purchaseRowsPerPage + purchaseRowsPerPage
     );
@@ -379,6 +389,24 @@ const Purchases = () => {
         {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
         <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
           <CardContent>
+              <Box sx={{ mb: 2 }}>
+                <Tabs
+                  value={purchasesSubTab}
+                  onChange={(e, v) => {
+                    setPurchasesSubTab(v);
+                    setPurchasePage(0);
+                  }}
+                  sx={{
+                    minHeight: 36,
+                    '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontWeight: 600, fontSize: '0.9rem' },
+                    '& .Mui-selected': { color: colors.accentText },
+                    '& .MuiTabs-indicator': { backgroundColor: colors.accentText }
+                  }}
+                >
+                  <Tab label="Admin Purchases" />
+                  <Tab label="Rider Purchases" />
+                </Tabs>
+              </Box>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Typography variant="body2" sx={{ color: colors.textSecondary }}>Show</Typography>
@@ -415,42 +443,165 @@ const Purchases = () => {
                     <TableHead>
                       <TableRow sx={{ backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.05)' }}>
                         <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Received By</TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Supplier</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Amount</TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Account</TableCell>
-                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Status</TableCell>
+                        {purchasesSubTab === 0 ? (
+                          <>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Received By</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Supplier</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Account</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Status</TableCell>
+                          </>
+                        ) : (
+                          <>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Rider</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Description</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Amount</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Purchase Status</TableCell>
+                            <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
+                          </>
+                        )}
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {paginated.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={6} align="center" sx={{ color: colors.textSecondary, py: 4 }}>
+                          <TableCell colSpan={purchasesSubTab === 0 ? 6 : 6} align="center" sx={{ color: colors.textSecondary, py: 4 }}>
                             {purchaseSearchTerm ? 'No purchases found matching your search.' : 'No purchases found.'}
                           </TableCell>
                         </TableRow>
                       ) : (
                         paginated.map((purchase) => {
-                          const accountDisplay = getAssetAccountName(purchase.details?.assetAccountId);
-                          const adminName = purchase.admin?.name || purchase.admin?.username || 'N/A';
-                          const status = getPurchaseStatus(purchase);
-                          const supplierName = purchase.details?.supplier || '';
-                          const supplierMatch = suppliers.find(s => (s.name || '').trim().toLowerCase() === (supplierName || '').trim().toLowerCase());
+                          if (purchasesSubTab === 0) {
+                            const accountDisplay = getAssetAccountName(purchase.details?.assetAccountId);
+                            const adminName = purchase.admin?.name || purchase.admin?.username || 'N/A';
+                            const status = getPurchaseStatus(purchase);
+                            const supplierName = purchase.details?.supplier || '';
+                            const supplierMatch = suppliers.find(s => (s.name || '').trim().toLowerCase() === (supplierName || '').trim().toLowerCase());
+                            return (
+                              <TableRow key={purchase.id} hover onClick={() => handleOpenPurchaseDetails(purchase)} sx={{ cursor: 'pointer' }}>
+                                <TableCell sx={{ color: colors.textPrimary }}>{formatDate(purchase.createdAt)}</TableCell>
+                                <TableCell sx={{ color: colors.textPrimary }}>{adminName}</TableCell>
+                                <TableCell sx={{ color: colors.textPrimary, fontWeight: 500 }}>
+                                  {supplierMatch ? (
+                                    <Typography component="span" onClick={(e) => { e.stopPropagation(); navigate(`/payables/suppliers/${supplierMatch.id}/invoices`); }} sx={{ color: colors.accentText, cursor: 'pointer', textDecoration: 'underline' }}>
+                                      {supplierName || '—'}
+                                    </Typography>
+                                  ) : supplierName || '—'}
+                                </TableCell>
+                                <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 500 }}>{formatCurrency(purchase.amount)}</TableCell>
+                                <TableCell sx={{ color: colors.textPrimary }}>{accountDisplay}</TableCell>
+                                <TableCell>
+                                  <Chip label={status} color={status === 'Paid' ? 'success' : 'default'} size="small" sx={status === 'Unpaid' ? { backgroundColor: '#FF3366', color: '#FFFFFF', '& .MuiChip-label': { color: '#FFFFFF' } } : undefined} />
+                                </TableCell>
+                              </TableRow>
+                            );
+                          }
+
+                          const riderName = purchase.driver?.name || purchase.driver?.phoneNumber || `Rider #${purchase.driverId || '—'}`;
+                          const description = purchase.details?.items && Array.isArray(purchase.details.items) && purchase.details.items.length > 0
+                            ? purchase.details.items.map(i => i.item || i.name || '').filter(Boolean).join(', ')
+                            : (purchase.details?.item || purchase.details?.supplier || purchase.details?.deliveryLocation || 'Rider purchase');
+                          const purchaseStatus = purchase.details?.purchaseStatus;
+                          const purchaseApproved = purchaseStatus === 'approved' || (!!purchase.details?.purchaseApproved && purchaseStatus !== 'rejected');
+                          const purchaseRejected = purchaseStatus === 'rejected' || !!purchase.details?.purchaseRejected;
                           return (
-                            <TableRow key={purchase.id} hover onClick={() => handleOpenPurchaseDetails(purchase)} sx={{ cursor: 'pointer' }}>
+                            <TableRow key={purchase.id} hover>
                               <TableCell sx={{ color: colors.textPrimary }}>{formatDate(purchase.createdAt)}</TableCell>
-                              <TableCell sx={{ color: colors.textPrimary }}>{adminName}</TableCell>
-                              <TableCell sx={{ color: colors.textPrimary, fontWeight: 500 }}>
-                                {supplierMatch ? (
-                                  <Typography component="span" onClick={(e) => { e.stopPropagation(); navigate(`/payables/suppliers/${supplierMatch.id}/invoices`); }} sx={{ color: colors.accentText, cursor: 'pointer', textDecoration: 'underline' }}>
-                                    {supplierName || '—'}
-                                  </Typography>
-                                ) : supplierName || '—'}
+                              <TableCell sx={{ color: colors.textPrimary }}>{riderName}</TableCell>
+                              <TableCell sx={{ color: colors.textPrimary }}>{description}</TableCell>
+                              <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 500 }}>
+                                {formatCurrency(purchase.amount)}
                               </TableCell>
-                              <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 500 }}>{formatCurrency(purchase.amount)}</TableCell>
-                              <TableCell sx={{ color: colors.textPrimary }}>{accountDisplay}</TableCell>
                               <TableCell>
-                                <Chip label={status} color={status === 'Paid' ? 'success' : 'default'} size="small" sx={status === 'Unpaid' ? { backgroundColor: '#FF3366', color: '#FFFFFF', '& .MuiChip-label': { color: '#FFFFFF' } } : undefined} />
+                                <Chip
+                                  label={
+                                    purchaseRejected
+                                      ? 'Rejected purchase'
+                                      : purchaseApproved
+                                      ? 'Purchase approved'
+                                      : 'Pending purchase approval'
+                                  }
+                                  color={purchaseRejected ? 'error' : (purchaseApproved ? 'success' : 'default')}
+                                  size="small"
+                                  sx={
+                                    !purchaseApproved && !purchaseRejected
+                                      ? { backgroundColor: '#FF9800', color: '#FFFFFF', '& .MuiChip-label': { color: '#FFFFFF' } }
+                                      : undefined
+                                  }
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ borderColor: colors.accentText, color: colors.accentText }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Navigate to Add Purchase and prefill via state with this rider purchase
+                                    navigate('/payables/add', {
+                                      state: {
+                                        riderPurchaseId: purchase.id,
+                                        riderId: purchase.driverId,
+                                        amount: purchase.amount,
+                                        details: purchase.details
+                                      }
+                                    });
+                                  }}
+                                >
+                                  Approve Purchase
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="text"
+                                  sx={{ ml: 1, color: colors.error }}
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (!window.confirm('Reject this purchase request?\nThis will not affect the rider\'s cash submission, only the purchase tracking.')) {
+                                      return;
+                                    }
+                                    try {
+                                      await api.post(`/driver-wallet/admin/cash-submissions/${purchase.id}/purchase-status`, {
+                                        purchaseStatus: 'rejected'
+                                      });
+                                      // Update local state so UI reflects rejection without full refetch
+                                      setPurchases((prev) =>
+                                        prev.map((p) =>
+                                          p.id === purchase.id
+                                            ? {
+                                                ...p,
+                                                details: {
+                                                  ...(p.details || {}),
+                                                  purchaseStatus: 'rejected',
+                                                  purchaseRejected: true,
+                                                  purchaseApproved: false
+                                                }
+                                              }
+                                            : p
+                                        )
+                                      );
+                                      setFilteredPurchases((prev) =>
+                                        prev.map((p) =>
+                                          p.id === purchase.id
+                                            ? {
+                                                ...p,
+                                                details: {
+                                                  ...(p.details || {}),
+                                                  purchaseStatus: 'rejected',
+                                                  purchaseRejected: true,
+                                                  purchaseApproved: false
+                                                }
+                                              }
+                                            : p
+                                        )
+                                      );
+                                    } catch (err) {
+                                      console.error('Error rejecting purchase:', err);
+                                      alert(err.response?.data?.error || err.message || 'Failed to reject purchase');
+                                    }
+                                  }}
+                                >
+                                  Reject Purchase
+                                </Button>
                               </TableCell>
                             </TableRow>
                           );
@@ -459,7 +610,16 @@ const Purchases = () => {
                     </TableBody>
                   </Table>
                 </TableContainer>
-                <TablePagination component="div" count={filteredPurchases.length} page={purchasePage} onPageChange={handlePurchaseChangePage} rowsPerPage={purchaseRowsPerPage} onRowsPerPageChange={handlePurchaseChangeRowsPerPage} rowsPerPageOptions={[10, 25, 50, 100]} sx={{ color: colors.textPrimary, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { color: colors.textPrimary } }} />
+                <TablePagination
+                  component="div"
+                  count={sourcePurchases.length}
+                  page={purchasePage}
+                  onPageChange={handlePurchaseChangePage}
+                  rowsPerPage={purchaseRowsPerPage}
+                  onRowsPerPageChange={handlePurchaseChangeRowsPerPage}
+                  rowsPerPageOptions={[10, 25, 50, 100]}
+                  sx={{ color: colors.textPrimary, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { color: colors.textPrimary } }}
+                />
               </>
             )}
           </CardContent>

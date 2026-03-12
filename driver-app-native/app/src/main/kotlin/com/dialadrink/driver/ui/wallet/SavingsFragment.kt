@@ -468,6 +468,7 @@ class SavingsFragment : Fragment() {
             
             val deliveryAddressText = row.findViewById<TextView>(R.id.deliveryAddressText)
             val dateText = row.findViewById<TextView>(R.id.dateText)
+            val orderNumText = row.findViewById<TextView>(R.id.orderNumText)
             val debitText = row.findViewById<TextView>(R.id.debitText)
             val creditText = row.findViewById<TextView>(R.id.creditText)
             val balanceText = row.findViewById<TextView>(R.id.balanceText)
@@ -475,6 +476,7 @@ class SavingsFragment : Fragment() {
             when (type) {
                 "credit" -> {
                     val creditTx = tx as WalletTransaction
+                    orderNumText.text = (creditTx.orderId ?: creditTx.orderNumber)?.let { "#$it" } ?: "—"
                     val address = creditTx.orderLocation ?: creditTx.customerName ?: "N/A"
                     deliveryAddressText.text = address
                     
@@ -495,6 +497,7 @@ class SavingsFragment : Fragment() {
                 "debit" -> {
                     // Stop deduction transaction (money out, decreases savings) = Debit column
                     val debitTx = tx as WalletTransaction
+                    orderNumText.text = (debitTx.orderId ?: debitTx.orderNumber)?.let { "#$it" } ?: "—"
                     val address = debitTx.orderLocation ?: debitTx.customerName ?: "N/A"
                     deliveryAddressText.text = address
                     
@@ -515,6 +518,7 @@ class SavingsFragment : Fragment() {
                 }
                 "withdrawal" -> {
                     val withdrawalTx = tx as WalletWithdrawal
+                    orderNumText.text = "—"
                     deliveryAddressText.text = "Withdrawal"
                     
                     try {

@@ -14,7 +14,11 @@ import {
   Alert,
   TextField,
   IconButton,
-  InputAdornment
+  InputAdornment,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { Link as RouterLink } from 'react-router-dom';
 import Visibility from '@mui/icons-material/Visibility';
@@ -22,6 +26,8 @@ import Edit from '@mui/icons-material/Edit';
 import Check from '@mui/icons-material/Check';
 import Close from '@mui/icons-material/Close';
 import Search from '@mui/icons-material/Search';
+import Delete from '@mui/icons-material/Delete';
+import Add from '@mui/icons-material/Add';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
@@ -33,9 +39,19 @@ const Accounts = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
   const [editBalance, setEditBalance] = useState('');
   const [editLimit, setEditLimit] = useState('');
   const [saving, setSaving] = useState(false);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addDescription, setAddDescription] = useState('');
+  const [addBalance, setAddBalance] = useState('0');
+  const [addLimit, setAddLimit] = useState('0');
+  const [addSaving, setAddSaving] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const [recentTransactions, setRecentTransactions] = useState([]);
   const [recentLoading, setRecentLoading] = useState(true);
   const [accountSearch, setAccountSearch] = useState('');
@@ -76,18 +92,27 @@ const Accounts = () => {
 
   const startEdit = (account) => {
     setEditingId(account.id);
+    setEditName(account.name ?? '');
+    setEditDescription(account.description ?? '');
     setEditBalance(String(account.balance ?? 0));
     setEditLimit(String(account.limit ?? 0));
   };
 
   const cancelEdit = () => {
     setEditingId(null);
+    setEditName('');
+    setEditDescription('');
     setEditBalance('');
     setEditLimit('');
   };
 
   const saveEdit = async () => {
     if (editingId == null) return;
+    const name = (editName || '').trim();
+    if (!name) {
+      setError('Account name is required');
+      return;
+    }
     const balance = parseFloat(editBalance);
     const limit = parseFloat(editLimit);
     if (Number.isNaN(balance) || Number.isNaN(limit)) {
@@ -95,10 +120,17 @@ const Accounts = () => {
     }
     setSaving(true);
     try {
-      await api.put(`/admin/accounts/${editingId}`, { balance, limit });
+      await api.put(`/admin/accounts/${editingId}`, {
+        name,
+        description: (editDescription || '').trim() || null,
+        balance,
+        limit
+      });
       setAccounts((prev) =>
         prev.map((a) =>
-          a.id === editingId ? { ...a, balance, limit } : a
+          a.id === editingId
+            ? { ...a, name, description: (editDescription || '').trim() || null, balance, limit }
+            : a
         )
       );
       cancelEdit();
@@ -106,6 +138,61 @@ const Accounts = () => {
       setError(err.response?.data?.error || err.message || 'Failed to update account');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const openAddDialog = () => {
+    setAddName('');
+    setAddDescription('');
+    setAddBalance('0');
+    setAddLimit('0');
+    setAddDialogOpen(true);
+  };
+
+  const handleAddAccount = async () => {
+    const name = (addName || '').trim();
+    if (!name) {
+      setError('Account name is required');
+      return;
+    }
+    const balance = addBalance === '' || addBalance == null ? 0 : parseFloat(addBalance);
+    const limit = addLimit === '' || addLimit == null ? 0 : parseFloat(addLimit);
+    if (Number.isNaN(balance) || Number.isNaN(limit)) {
+      setError('Balance and limit must be numbers');
+      return;
+    }
+    setAddSaving(true);
+    setError(null);
+    try {
+      const res = await api.post('/admin/accounts', {
+        name,
+        description: (addDescription || '').trim() || null,
+        balance,
+        limit
+      });
+      setAccounts((prev) => [...prev, res.data]);
+      setAddDialogOpen(false);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to create account');
+    } finally {
+      setAddSaving(false);
+    }
+  };
+
+  const handleDeleteClick = (account) => setDeleteConfirmId(account.id);
+
+  const handleDeleteConfirm = async () => {
+    if (deleteConfirmId == null) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.delete(`/admin/accounts/${deleteConfirmId}`);
+      setAccounts((prev) => prev.filter((a) => a.id !== deleteConfirmId));
+      setDeleteConfirmId(null);
+    } catch (err) {
+      setError(err.response?.data?.error || err.message || 'Failed to delete account');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -134,7 +221,7 @@ const Accounts = () => {
       <Typography variant="h5" sx={{ mb: 1, color: colors.textPrimary, fontWeight: 600 }}>
         Asset Accounts
       </Typography>
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, mb: 2 }}>
         <TextField
           size="small"
           placeholder="Search accounts..."
@@ -160,6 +247,20 @@ const Accounts = () => {
             }
           }}
         />
+        {isSuperAdmin && (
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={openAddDialog}
+            sx={{
+              backgroundColor: colors.accent,
+              color: colors.accentText,
+              '&:hover': { backgroundColor: colors.accentHover }
+            }}
+          >
+            Add account
+          </Button>
+        )}
       </Box>
       <Paper sx={{ mb: 3, p: 2, backgroundColor: colors.paper }}>
         <Typography variant="subtitle1" sx={{ mb: 1, fontWeight: 600, color: colors.textPrimary }}>
@@ -270,9 +371,31 @@ const Accounts = () => {
             <TableBody>
               {filteredAccounts.map((account) => (
                 <TableRow key={account.id}>
-                  <TableCell sx={{ color: colors.textPrimary }}>{account.name}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary }}>
+                    {editingId === account.id ? (
+                      <TextField
+                        size="small"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        placeholder="Name"
+                        sx={{ width: '100%', minWidth: 140 }}
+                      />
+                    ) : (
+                      account.name
+                    )}
+                  </TableCell>
                   <TableCell sx={{ color: colors.textSecondary }}>
-                    {account.description || '—'}
+                    {editingId === account.id ? (
+                      <TextField
+                        size="small"
+                        value={editDescription}
+                        onChange={(e) => setEditDescription(e.target.value)}
+                        placeholder="Description"
+                        sx={{ width: '100%', minWidth: 140 }}
+                      />
+                    ) : (
+                      account.description || '—'
+                    )}
                   </TableCell>
                   <TableCell align="right" sx={{ color: colors.textPrimary }}>
                     {editingId === account.id ? (
@@ -320,14 +443,24 @@ const Accounts = () => {
                     ) : (
                       <>
                         {isSuperAdmin && (
-                          <IconButton
-                            size="small"
-                            onClick={() => startEdit(account)}
-                            title="Edit balance and limit"
-                            sx={{ color: colors.textSecondary }}
-                          >
-                            <Edit />
-                          </IconButton>
+                          <>
+                            <IconButton
+                              size="small"
+                              onClick={() => startEdit(account)}
+                              title="Edit account"
+                              sx={{ color: colors.textSecondary }}
+                            >
+                              <Edit />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={() => handleDeleteClick(account)}
+                              title="Delete account"
+                              sx={{ color: colors.textSecondary }}
+                            >
+                              <Delete />
+                            </IconButton>
+                          </>
                         )}
                         <Button
                           component={RouterLink}
@@ -347,6 +480,83 @@ const Accounts = () => {
           </Table>
         </TableContainer>
       )}
+
+      <Dialog
+        open={addDialogOpen}
+        onClose={() => !addSaving && setAddDialogOpen(false)}
+        PaperProps={{ sx: { backgroundColor: colors.paper } }}
+      >
+        <DialogTitle sx={{ color: colors.textPrimary }}>Add asset account</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Account name"
+            fullWidth
+            required
+            value={addName}
+            onChange={(e) => setAddName(e.target.value)}
+            sx={{ mt: 1, '& .MuiInputBase-input': { color: colors.textPrimary } }}
+          />
+          <TextField
+            margin="dense"
+            label="Description"
+            fullWidth
+            value={addDescription}
+            onChange={(e) => setAddDescription(e.target.value)}
+            sx={{ '& .MuiInputBase-input': { color: colors.textPrimary } }}
+          />
+          <TextField
+            margin="dense"
+            label="Initial balance"
+            type="number"
+            fullWidth
+            value={addBalance}
+            onChange={(e) => setAddBalance(e.target.value)}
+            inputProps={{ step: 0.01 }}
+            sx={{ '& .MuiInputBase-input': { color: colors.textPrimary } }}
+          />
+          <TextField
+            margin="dense"
+            label="Limit"
+            type="number"
+            fullWidth
+            value={addLimit}
+            onChange={(e) => setAddLimit(e.target.value)}
+            inputProps={{ step: 0.01, min: 0 }}
+            sx={{ '& .MuiInputBase-input': { color: colors.textPrimary } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddDialogOpen(false)} disabled={addSaving} sx={{ color: colors.textSecondary }}>
+            Cancel
+          </Button>
+          <Button onClick={handleAddAccount} disabled={addSaving} sx={{ color: colors.accent }}>
+            {addSaving ? 'Adding…' : 'Add account'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={deleteConfirmId != null}
+        onClose={() => !deleting && setDeleteConfirmId(null)}
+        PaperProps={{ sx: { backgroundColor: colors.paper } }}
+      >
+        <DialogTitle sx={{ color: colors.textPrimary }}>Delete account?</DialogTitle>
+        <DialogContent>
+          <Typography sx={{ color: colors.textSecondary }}>
+            This will permanently delete the account. Accounts with transactions cannot be deleted.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmId(null)} disabled={deleting} sx={{ color: colors.textSecondary }}>
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteConfirm} disabled={deleting} color="error">
+            {deleting ? 'Deleting…' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
