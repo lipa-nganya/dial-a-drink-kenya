@@ -161,8 +161,10 @@ if [ -n "$EXISTING_MPESA_CALLBACK_URL" ]; then
 fi
 
 # Add SMTP credentials if they exist (same as M-Pesa: read from existing service and re-pass)
+# Quote values that contain space or comma so gcloud parses them correctly (e.g. Gmail app password with spaces)
+quote_env_val() { if echo "$1" | grep -q '[ ,]'; then echo "\"$1\""; else echo "$1"; fi; }
 if [ -n "$EXISTING_SMTP_HOST" ]; then
-    ENV_VARS="$ENV_VARS,SMTP_HOST=$EXISTING_SMTP_HOST"
+    ENV_VARS="$ENV_VARS,SMTP_HOST=$(quote_env_val "$EXISTING_SMTP_HOST")"
 fi
 if [ -n "$EXISTING_SMTP_PORT" ]; then
     ENV_VARS="$ENV_VARS,SMTP_PORT=$EXISTING_SMTP_PORT"
@@ -171,13 +173,16 @@ if [ -n "$EXISTING_SMTP_SECURE" ]; then
     ENV_VARS="$ENV_VARS,SMTP_SECURE=$EXISTING_SMTP_SECURE"
 fi
 if [ -n "$EXISTING_SMTP_USER" ]; then
-    ENV_VARS="$ENV_VARS,SMTP_USER=$EXISTING_SMTP_USER"
+    ENV_VARS="$ENV_VARS,SMTP_USER=$(quote_env_val "$EXISTING_SMTP_USER")"
 fi
 if [ -n "$EXISTING_SMTP_PASS" ]; then
-    ENV_VARS="$ENV_VARS,SMTP_PASS=$EXISTING_SMTP_PASS"
+    ENV_VARS="$ENV_VARS,SMTP_PASS=$(quote_env_val "$EXISTING_SMTP_PASS")"
 fi
 if [ -n "$EXISTING_SMTP_FROM" ]; then
-    ENV_VARS="$ENV_VARS,SMTP_FROM=$EXISTING_SMTP_FROM"
+    ENV_VARS="$ENV_VARS,SMTP_FROM=$(quote_env_val "$EXISTING_SMTP_FROM")"
+fi
+if [ -z "$EXISTING_SMTP_HOST" ] && [ -z "$EXISTING_SMTP_USER" ]; then
+    echo "   ⚠️  SMTP not set on service: OTP emails will fail. Add SMTP_* in GCP Console → Cloud Run → $BACKEND_SERVICE → Edit → Variables."
 fi
 
 # Add Google Maps API Key if it exists

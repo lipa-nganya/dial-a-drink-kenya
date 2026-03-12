@@ -21,12 +21,16 @@ function createTransporter() {
   const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || smtpUser;
 
   if (!smtpHost || !smtpPort) {
-    console.warn('⚠️  SMTP configuration not found. Email sending will be disabled.');
+    console.warn('⚠️  SMTP configuration not found (SMTP_HOST or SMTP_PORT missing). Email sending will be disabled.');
     return null;
   }
 
   if (!smtpUser || !smtpPass) {
-    console.warn('⚠️  SMTP credentials not configured. Email sending will be disabled.');
+    console.warn('⚠️  SMTP credentials not configured. Email sending will be disabled.', {
+      hasUser: Boolean(smtpUser),
+      hasPass: Boolean(smtpPass),
+      hint: 'Set SMTP_USER and SMTP_PASS on the Cloud Run service (e.g. GCP Console → Cloud Run → service → Edit → Variables).'
+    });
     return null;
   }
 
