@@ -225,7 +225,7 @@ function AppContent() {
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/order-tracking" element={<OrderTracking />} />
           <Route path="/profile" element={<CustomerPrivateRoute><Profile /></CustomerPrivateRoute>} />
-          <Route path="/orders" element={<MyOrders />} />
+          <Route path="/orders" element={<CustomerPrivateRoute><MyOrders /></CustomerPrivateRoute>} />
           <Route path="/login" element={<CustomerLogin />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/suggest-drink" element={<SuggestDrink />} />

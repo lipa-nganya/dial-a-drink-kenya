@@ -40,15 +40,27 @@ const CustomerLogin = () => {
   // Check if country code is Kenyan (+254)
   const isKenyanNumber = countryCode === '+254';
 
+  // Build full international phone (digits only) for API calls
+  const getFullInternationalPhone = () => {
+    const ccDigits = (countryCode || '').replace(/\D/g, '');
+    const phoneDigits = (phone || '').replace(/\D/g, '');
+    if (!phoneDigits) return '';
+    if (isKenyanNumber) return normalizePhoneNumber(phone);
+    return ccDigits + phoneDigits;
+  };
+
   useEffect(() => {
-    // Only check PIN status for Kenyan numbers
-    if (!isKenyanNumber || !phone) {
+    if (!phone) {
       setHasPin(false);
       return;
     }
 
     const digits = phone.replace(/\D/g, '');
-    if (digits.length < 9) {
+    if (isKenyanNumber && digits.length < 9) {
+      setHasPin(false);
+      return;
+    }
+    if (!isKenyanNumber && digits.length < 6) {
       setHasPin(false);
       return;
     }
@@ -56,8 +68,12 @@ const CustomerLogin = () => {
     const timer = setTimeout(async () => {
       setCheckingPin(true);
       try {
-        const normalizedPhone = normalizePhoneNumber(phone);
-        console.log('🔍 Checking PIN status for phone:', phone, '-> normalized:', normalizedPhone);
+        const normalizedPhone = getFullInternationalPhone();
+        if (!normalizedPhone) {
+          setHasPin(false);
+          return;
+        }
+        console.log('🔍 Checking PIN status for phone:', phone, 'country:', countryCode, '-> normalized:', normalizedPhone);
         const response = await api.post('/auth/check-pin-status', { phone: normalizedPhone });
         console.log('📱 PIN status response:', response.data);
         if (response.data.success) {
@@ -78,7 +94,7 @@ const CustomerLogin = () => {
     }, 600); // debounce to avoid excessive requests
 
     return () => clearTimeout(timer);
-  }, [phone, isKenyanNumber]);
+  }, [phone, countryCode, isKenyanNumber]);
 
   const sanitizePhoneInput = (value) => value.replace(/[^\d+]/g, '');
 
@@ -124,7 +140,12 @@ const CustomerLogin = () => {
     setPinLoginLoading(true);
 
     try {
-      const normalizedPhone = normalizePhoneNumber(phone);
+      const normalizedPhone = getFullInternationalPhone();
+      if (!normalizedPhone) {
+        setError('Please enter your phone number');
+        setPinLoginLoading(false);
+        return;
+      }
       const response = await api.post('/auth/login', {
         phone: normalizedPhone,
         pin
@@ -334,7 +355,7 @@ const CustomerLogin = () => {
           />
           </Box>
           
-          {!isKenyanNumber && (
+          {!isKenyanNumber && !hasPin && (
             <TextField
               label="Email Address"
               type="email"
@@ -391,8 +412,7 @@ const CustomerLogin = () => {
               otpLoading ||
               checkingPin ||
               pin.length !== 4 ||
-              !phone ||
-              !isKenyanNumber
+              !phone
             }
             sx={{
               backgroundColor: '#00E0B8',

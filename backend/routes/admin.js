@@ -2210,19 +2210,24 @@ router.patch('/orders/:orderId/items/:itemId/price', verifyAdmin, async (req, re
       return res.status(404).json({ error: 'Order item not found' });
     }
 
+    // Get breakdown BEFORE updating the item so we preserve the current delivery fee.
+    // After changing item price, new total = newItemsTotal + sameDeliveryFee + tipAmount.
+    const breakdownBefore = await getOrderFinancialBreakdown(orderId);
+    const previousDeliveryFee = breakdownBefore.deliveryFee;
+    const tipAmount = breakdownBefore.tipAmount;
+
     // Update the item price
     await orderItem.update({ price: newPrice });
 
-    // Recalculate order total using getOrderFinancialBreakdown (will use updated price)
-    const breakdown = await getOrderFinancialBreakdown(orderId);
-    
-    // Calculate new total: itemsTotal + deliveryFee + tipAmount
-    const newTotalAmount = breakdown.itemsTotal + breakdown.deliveryFee + breakdown.tipAmount;
+    // Recalculate items total from updated items (getOrderFinancialBreakdown now has new item price)
+    const breakdownAfter = await getOrderFinancialBreakdown(orderId);
+    const newItemsTotal = breakdownAfter.itemsTotal;
+    const newTotalAmount = newItemsTotal + previousDeliveryFee + tipAmount;
 
     // Update order totalAmount
     const oldNotes = order.notes || '';
     const priceUpdateNote = `[${new Date().toISOString()}] Price updated for item #${itemId} (${orderItem.drinkId}): KES ${newPrice.toFixed(2)}`;
-    await order.update({ 
+    await order.update({
       totalAmount: newTotalAmount,
       notes: oldNotes ? `${oldNotes}\n${priceUpdateNote}` : priceUpdateNote
     });
@@ -2244,9 +2249,9 @@ router.patch('/orders/:orderId/items/:itemId/price', verifyAdmin, async (req, re
       message: 'Item price updated successfully',
       order: updatedOrder,
       breakdown: {
-        itemsTotal: breakdown.itemsTotal,
-        deliveryFee: breakdown.deliveryFee,
-        tipAmount: breakdown.tipAmount,
+        itemsTotal: newItemsTotal,
+        deliveryFee: previousDeliveryFee,
+        tipAmount,
         totalAmount: newTotalAmount
       }
     });

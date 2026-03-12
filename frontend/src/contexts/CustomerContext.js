@@ -68,6 +68,7 @@ export const CustomerProvider = ({ children }) => {
 
   const logout = () => {
     localStorage.removeItem('customerOrder');
+    localStorage.removeItem('customerLoggedIn');
     setCustomer(null);
     setIsLoggedIn(false);
   };

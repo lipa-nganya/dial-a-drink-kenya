@@ -1112,9 +1112,15 @@ const Orders = () => {
       );
 
       if (response.data.success) {
-        // Update the order detail with the new data
-        setSelectedOrderForDetail(response.data.order);
-        
+        // Update the order detail with the new data and breakdown so total/delivery fee display correctly
+        const { order, breakdown } = response.data;
+        setSelectedOrderForDetail(prev => ({
+          ...(order || prev),
+          totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? prev?.totalAmount,
+          deliveryFee: breakdown?.deliveryFee ?? prev?.deliveryFee,
+          itemsTotal: breakdown?.itemsTotal ?? prev?.itemsTotal
+        }));
+
         // Refresh the orders list to reflect the change
         await fetchOrders();
         
