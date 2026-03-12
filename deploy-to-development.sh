@@ -2,6 +2,8 @@
 # Deploy local changes to Development
 #
 # - Maintains CORS (FRONTEND_URL, ADMIN_URL preserved on existing service)
+# - SMTP: reads backend/.env.local (and .env) and syncs SMTP_* to the dev backend so
+#   international customers receive OTP emails (same as local). No need to set SMTP in GCP manually.
 # - No new backend service (updates deliveryos-development-backend)
 # - No new frontend services (Netlify picks up from GitHub)
 # - Pushes Android app code to GitHub (develop); build separately if needed
@@ -12,6 +14,7 @@
 #   gcloud auth login dialadrinkkenya254@gmail.com
 #   gcloud config set project dialadrink-production
 #   Do not commit .env or any file containing DATABASE_URL or API keys.
+#   For OTP emails on dev: set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM in backend/.env.local
 
 set -e
 
@@ -60,9 +63,8 @@ echo ""
 
 # Step 4: Deploy backend to existing Cloud Run service (no new service)
 echo "☁️  Step 4: Deploy backend to existing Cloud Run service..."
-cd backend
 
-# Preserve existing env vars from service (do not overwrite DATABASE_URL or secrets)
+# Preserve existing env vars from service (fetch first so we can use in UPDATE_ENV_VARS)
 EXISTING_ENV=$(gcloud run services describe "$SERVICE_NAME" \
     --region "$REGION" \
     --project "$PROJECT_ID" \
@@ -71,16 +73,60 @@ EXISTING_ENV=$(gcloud run services describe "$SERVICE_NAME" \
 EXISTING_FRONTEND_URL="https://dialadrink.thewolfgang.tech"
 EXISTING_ADMIN_URL="https://dialadrink-admin.thewolfgang.tech"
 if [ -n "$EXISTING_ENV" ]; then
-    F=$(echo "$EXISTING_ENV" | grep -A1 "FRONTEND_URL" | grep "value:" | sed "s/.*value: *//" | tr -d '"')
-    A=$(echo "$EXISTING_ENV" | grep -A1 "ADMIN_URL" | grep "value:" | sed "s/.*value: *//" | tr -d '"')
-    [ -n "$F" ] && EXISTING_FRONTEND_URL="$F"
-    [ -n "$A" ] && EXISTING_ADMIN_URL="$A"
+  F=$(echo "$EXISTING_ENV" | grep -A1 "FRONTEND_URL" | grep "value:" | sed "s/.*value: *//" | tr -d '"')
+  A=$(echo "$EXISTING_ENV" | grep -A1 "ADMIN_URL" | grep "value:" | sed "s/.*value: *//" | tr -d '"')
+  [ -n "$F" ] && EXISTING_FRONTEND_URL="$F"
+  [ -n "$A" ] && EXISTING_ADMIN_URL="$A"
 fi
 
 echo "   FRONTEND_URL: $EXISTING_FRONTEND_URL"
 echo "   ADMIN_URL: $EXISTING_ADMIN_URL"
+
+# Load SMTP (and other) settings from local backend env so dev uses same as local (e.g. OTP emails for international numbers)
+ENV_DIR="backend"
+if [ -f "$ENV_DIR/.env.local" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ENV_DIR/.env.local"
+  set +a
+  echo "   Loaded backend/.env.local (SMTP etc.)"
+fi
+if [ -f "$ENV_DIR/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ENV_DIR/.env"
+  set +a
+  echo "   Loaded backend/.env"
+fi
+
 echo "   (DATABASE_URL and other secrets remain unchanged on the service)"
 echo ""
+
+# Build update-env-vars: base vars + SMTP from local (so dev sends OTP emails like local)
+UPDATE_ENV_VARS="NODE_ENV=development,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID,HOST=0.0.0.0"
+if [ -n "${SMTP_HOST:-}" ]; then
+  UPDATE_ENV_VARS="${UPDATE_ENV_VARS},SMTP_HOST=${SMTP_HOST}"
+fi
+if [ -n "${SMTP_PORT:-}" ]; then
+  UPDATE_ENV_VARS="${UPDATE_ENV_VARS},SMTP_PORT=${SMTP_PORT}"
+fi
+if [ -n "${SMTP_SECURE:-}" ]; then
+  UPDATE_ENV_VARS="${UPDATE_ENV_VARS},SMTP_SECURE=${SMTP_SECURE}"
+fi
+if [ -n "${SMTP_USER:-}" ]; then
+  UPDATE_ENV_VARS="${UPDATE_ENV_VARS},SMTP_USER=${SMTP_USER}"
+fi
+if [ -n "${SMTP_PASS:-}" ]; then
+  UPDATE_ENV_VARS="${UPDATE_ENV_VARS},SMTP_PASS=${SMTP_PASS}"
+fi
+if [ -n "${SMTP_FROM:-}" ]; then
+  UPDATE_ENV_VARS="${UPDATE_ENV_VARS},SMTP_FROM=${SMTP_FROM}"
+fi
+if [ -n "${SMTP_HOST:-}" ]; then
+  echo "   SMTP: using same settings as local (SMTP_HOST, SMTP_USER, SMTP_FROM set; SMTP_PASS never logged)"
+fi
+
+cd backend
 
 IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-backend-dev:$(date +%s)"
 echo "   Building image: $IMAGE_TAG"
@@ -93,7 +139,7 @@ gcloud run deploy "$SERVICE_NAME" \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --update-env-vars "NODE_ENV=development,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID,HOST=0.0.0.0" \
+    --update-env-vars "$UPDATE_ENV_VARS" \
     --memory 512Mi \
     --timeout 300 \
     --max-instances 10 \
