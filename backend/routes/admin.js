@@ -715,6 +715,95 @@ router.post('/auth/login', async (req, res) => {
   }
 });
 
+/**
+ * Set password for invited admin users (from email invite)
+ * Public endpoint (no JWT) – secured by one-time invite token.
+ *
+ * POST /api/admin/setup-password
+ * body: { token, password }
+ */
+router.post('/setup-password', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token and password are required'
+      });
+    }
+
+    // Find admin by invite token
+    const adminUser = await db.Admin.findOne({
+      where: {
+        inviteToken: token
+      }
+    });
+
+    if (!adminUser) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired invite link. Please ask an admin to resend your invitation.'
+      });
+    }
+
+    // Check token expiry if present
+    if (adminUser.inviteTokenExpiry) {
+      const now = new Date();
+      if (now > adminUser.inviteTokenExpiry) {
+        return res.status(400).json({
+          success: false,
+          error: 'This invite link has expired. Please ask an admin to resend your invitation.'
+        });
+      }
+    }
+
+    // Hash new password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+    // Update admin: set password, clear invite token + expiry
+    adminUser.password = hashedPassword;
+    adminUser.inviteToken = null;
+    adminUser.inviteTokenExpiry = null;
+    await adminUser.save();
+
+    // Issue JWT so user is logged in immediately
+    const tokenPayload = {
+      id: adminUser.id,
+      username: adminUser.username,
+      role: adminUser.role || 'admin'
+    };
+
+    const jwtToken = jwt.sign(tokenPayload, JWT_SECRET, {
+      expiresIn: ADMIN_TOKEN_TTL
+    });
+
+    return res.json({
+      success: true,
+      message: 'Password set successfully',
+      token: jwtToken,
+      user: {
+        id: adminUser.id,
+        username: adminUser.username,
+        email: adminUser.email,
+        role: adminUser.role || 'admin',
+        name: adminUser.name || null,
+        mobileNumber: adminUser.mobileNumber || null,
+        createdAt: adminUser.createdAt || null,
+        updatedAt: adminUser.updatedAt || null
+      }
+    });
+  } catch (error) {
+    console.error('Error setting admin password from invite:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to set password. Please try again.',
+      ...(process.env.NODE_ENV === 'development' && { details: error.message })
+    });
+  }
+});
+
 router.use(verifyAdmin);
 
 // Get admin stats

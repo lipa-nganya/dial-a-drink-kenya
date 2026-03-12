@@ -156,8 +156,18 @@ async function sendAdminInvite(email, token, username) {
       };
     }
 
-    const adminUrl = process.env.ADMIN_URL || 'http://localhost:3001';
-    const inviteUrl = `${adminUrl}/setup-password?token=${token}`;
+    // Determine the public admin URL:
+    // - Prefer ADMIN_URL when it's a real frontend domain
+    // - If ADMIN_URL points at a Cloud Run service (*.run.app) and FRONTEND_URL is set,
+    //   prefer FRONTEND_URL so emails use the public domain, not the service URL.
+    // - Fallback to localhost for local development.
+    let baseAdminUrl = process.env.ADMIN_URL || process.env.FRONTEND_URL || 'http://localhost:3001';
+    if (baseAdminUrl.includes('.run.app') && process.env.FRONTEND_URL) {
+      baseAdminUrl = process.env.FRONTEND_URL;
+    }
+    // Strip trailing slashes
+    baseAdminUrl = baseAdminUrl.replace(/\/+$/, '');
+    const inviteUrl = `${baseAdminUrl}/setup-password?token=${token}`;
 
     const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER;
     const mailOptions = {
