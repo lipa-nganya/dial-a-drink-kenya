@@ -141,16 +141,34 @@ class ShopAgentInventoryCheckActivity : AppCompatActivity() {
     }
     
     private fun addToCheckedItems(item: ShopAgentInventoryItem) {
-        val existingItem = checkedItems.find { it.item.id == item.id }
-        
+        val capacities = item.capacity?.filter { it.isNotBlank() }
+            ?: item.capacityPricing?.mapNotNull { it.effectiveCapacity }?.distinct()
+            ?: emptyList()
+
+        if (capacities.isNotEmpty()) {
+            val options = capacities.toTypedArray()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Select capacity")
+                .setItems(options) { _, which ->
+                    val selectedCapacity = options[which]
+                    addCountedItem(item, selectedCapacity)
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        } else {
+            addCountedItem(item, null)
+        }
+    }
+
+    private fun addCountedItem(item: ShopAgentInventoryItem, capacity: String?) {
+        val existingItem = checkedItems.find { it.item.id == item.id && it.capacity == capacity }
         if (existingItem != null) {
             existingItem.count++
-            Toast.makeText(this, "Count increased for ${item.name}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Count increased for ${item.name}${capacity?.let { " ($it)" } ?: ""}", Toast.LENGTH_SHORT).show()
         } else {
-            checkedItems.add(CountedInventoryItem(item, 1))
-            Toast.makeText(this, "${item.name} added to checked items", Toast.LENGTH_SHORT).show()
+            checkedItems.add(CountedInventoryItem(item, 1, capacity))
+            Toast.makeText(this, "${item.name}${capacity?.let { " ($it)" } ?: ""} added to checked items", Toast.LENGTH_SHORT).show()
         }
-        
         saveCheckedItems()
         updateCheckedItemsButton()
     }
@@ -265,8 +283,15 @@ class ShopAgentInventoryCheckActivity : AppCompatActivity() {
             fun bind(item: ShopAgentInventoryItem) {
                 binding.itemNameText.text = item.name
                 binding.itemCategoryText.text = item.category?.name ?: "No category"
-                binding.stockText.text = "Stock: ${item.currentStock}"
-                
+                val caps = item.capacity
+                val stockByCap = item.stockByCapacity
+                val stockText = if (!caps.isNullOrEmpty() && stockByCap != null) {
+                    caps.joinToString(", ") { cap -> "$cap: ${stockByCap[cap] ?: 0}" }
+                } else {
+                    "Stock: ${item.currentStock}"
+                }
+                binding.stockText.text = stockText
+
                 binding.addButton.setOnClickListener {
                     onItemClick(item)
                 }

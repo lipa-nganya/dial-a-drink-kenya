@@ -32,6 +32,22 @@ const formatCurrency = (value) => {
   return `KES ${Math.round(n).toLocaleString()}`;
 };
 
+// Capacity options from product: capacity array or capacityPricing effective capacity
+const getCapacityOptions = (product) => {
+  if (!product) return [];
+  const cap = product.capacity;
+  const pricing = product.capacityPricing;
+  if (Array.isArray(pricing) && pricing.length > 0) {
+    return pricing
+      .map((p) => p.capacity || p.size || p.effectiveCapacity)
+      .filter(Boolean)
+      .filter((c, i, a) => a.indexOf(c) === i);
+  }
+  if (Array.isArray(cap) && cap.length > 0) return cap;
+  if (typeof cap === 'string' && cap.trim()) return [cap.trim()];
+  return [];
+};
+
 const AddPurchase = () => {
   const navigate = useNavigate();
   const { colors, isDarkMode } = useTheme();
@@ -52,7 +68,8 @@ const AddPurchase = () => {
   const [newItem, setNewItem] = useState({
     productId: '',
     quantity: '1',
-    unitPrice: ''
+    unitPrice: '',
+    capacity: ''
   });
   const [productSearch, setProductSearch] = useState('');
 
@@ -105,7 +122,7 @@ const AddPurchase = () => {
 
   const handleNewItemProductChange = (value) => {
     setNewItem((prev) => {
-      const next = { ...prev, productId: value };
+      const next = { ...prev, productId: value, capacity: '' };
       const product = productsById.get(value);
       if (product) {
         const defaultPrice =
@@ -154,13 +171,15 @@ const AddPurchase = () => {
       {
         productId,
         quantity: quantityNum,
-        unitPrice: unitPriceNum
+        unitPrice: unitPriceNum,
+        ...(newItem.capacity ? { capacity: newItem.capacity } : {})
       }
     ]);
     setNewItem({
       productId: '',
       quantity: '1',
-      unitPrice: ''
+      unitPrice: '',
+      capacity: ''
     });
   };
 
@@ -196,12 +215,14 @@ const AddPurchase = () => {
       const detailsItems = items.map((item) => {
         const product = productsById.get(item.productId);
         const name = product?.name || 'Item';
-        return {
+        const out = {
           item: name,
           price: Number(item.unitPrice),
           quantity: Number(item.quantity),
           productId: Number(item.productId)
         };
+        if (item.capacity) out.capacity = item.capacity;
+        return out;
       });
 
       const payload = {
@@ -405,6 +426,32 @@ const AddPurchase = () => {
               }}
             />
           </Grid>
+          {getCapacityOptions(productsById.get(newItem.productId)).length > 0 && (
+            <Grid item xs={12} md={3}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Capacity (stock)</InputLabel>
+                <Select
+                  label="Capacity (stock)"
+                  value={newItem.capacity || ''}
+                  onChange={(e) => setNewItem((prev) => ({ ...prev, capacity: e.target.value }))}
+                  sx={{
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.accentText },
+                    '& .MuiInputBase-input': { color: colors.textPrimary },
+                    '& .MuiInputLabel-root': { color: colors.textSecondary }
+                  }}
+                >
+                  <MenuItem value="">—</MenuItem>
+                  {getCapacityOptions(productsById.get(newItem.productId)).map((cap) => (
+                    <MenuItem key={cap} value={cap}>
+                      {cap}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          )}
           <Grid item xs={12} md={3}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <IconButton
@@ -482,6 +529,7 @@ const AddPurchase = () => {
             <TableHead>
               <TableRow>
                 <TableCell>Product</TableCell>
+                <TableCell>Capacity</TableCell>
                 <TableCell align="right">Quantity</TableCell>
                 <TableCell align="right">Purchase price</TableCell>
                 <TableCell align="right">Total</TableCell>
@@ -491,7 +539,7 @@ const AddPurchase = () => {
             <TableBody>
               {items.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 2, color: colors.textSecondary }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 2, color: colors.textSecondary }}>
                     No items added yet.
                   </TableCell>
                 </TableRow>
@@ -500,9 +548,12 @@ const AddPurchase = () => {
                   const product = productsById.get(item.productId);
                   const lineTotal = Number(item.quantity || 0) * Number(item.unitPrice || 0);
                   return (
-                    <TableRow key={`${item.productId}-${index}`}>
+                    <TableRow key={`${item.productId}-${index}-${item.capacity || ''}`}>
                       <TableCell sx={{ color: colors.textPrimary }}>
                         {product?.name || '—'}
+                      </TableCell>
+                      <TableCell sx={{ color: colors.textSecondary }}>
+                        {item.capacity || '—'}
                       </TableCell>
                       <TableCell align="right" sx={{ color: colors.textPrimary }}>
                         {item.quantity}
@@ -524,7 +575,7 @@ const AddPurchase = () => {
               )}
               {items.length > 0 && (
                 <TableRow>
-                  <TableCell colSpan={3} align="right" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                  <TableCell colSpan={4} align="right" sx={{ fontWeight: 600, color: colors.textPrimary }}>
                     Subtotal
                   </TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>

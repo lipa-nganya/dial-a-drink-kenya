@@ -6017,7 +6017,7 @@ router.get('/inventory-checks', verifyAdmin, async (req, res) => {
         {
           model: db.Drink,
           as: 'drink',
-          attributes: ['id', 'name', 'barcode', 'stock'],
+          attributes: ['id', 'name', 'barcode', 'stock', 'stockByCapacity'],
           include: [{
             model: db.Category,
             as: 'category',
@@ -6048,11 +6048,13 @@ router.get('/inventory-checks', verifyAdmin, async (req, res) => {
           name: check.drink.name,
           barcode: check.drink.barcode,
           currentStock: check.drink.stock || 0,
+          stockByCapacity: check.drink.stockByCapacity || null,
           category: check.drink.category ? {
             id: check.drink.category.id,
             name: check.drink.category.name
           } : null
         } : null,
+        capacity: check.capacity || null,
         agentCount: check.agentCount,
         databaseCount: check.databaseCount,
         status: check.status,
@@ -6115,11 +6117,22 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
       notes: notes || inventoryCheck.notes
     });
 
-    // If updateStock is true, update the drink stock to match agent count
+    // If updateStock is true, update the drink stock to match agent count (only the selected capacity when capacity is set)
     if (updateStock === true && inventoryCheck.drink) {
-      await inventoryCheck.drink.update({
-        stock: inventoryCheck.agentCount
-      });
+      const capacity = inventoryCheck.capacity && String(inventoryCheck.capacity).trim() !== ''
+        ? String(inventoryCheck.capacity).trim()
+        : null;
+      if (capacity) {
+        const byCap = inventoryCheck.drink.stockByCapacity && typeof inventoryCheck.drink.stockByCapacity === 'object'
+          ? { ...inventoryCheck.drink.stockByCapacity }
+          : {};
+        byCap[capacity] = inventoryCheck.agentCount;
+        await inventoryCheck.drink.update({ stockByCapacity: byCap });
+      } else {
+        await inventoryCheck.drink.update({
+          stock: inventoryCheck.agentCount
+        });
+      }
     }
 
     // Send push notification to shop agent

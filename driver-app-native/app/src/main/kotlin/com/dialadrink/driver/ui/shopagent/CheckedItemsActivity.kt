@@ -124,7 +124,8 @@ class CheckedItemsActivity : AppCompatActivity() {
         val itemsToSubmit = checkedItems.map { countedItem ->
             InventoryCheckItem(
                 drinkId = countedItem.item.id,
-                count = countedItem.count
+                count = countedItem.count,
+                capacity = countedItem.capacity?.takeIf { it.isNotBlank() }
             )
         }
         
@@ -234,7 +235,13 @@ class CheckedItemsActivity : AppCompatActivity() {
                 binding.itemNameText.text = item.item.name
                 binding.itemCategoryText.text = item.item.category?.name ?: "No category"
                 binding.countText.text = item.count.toString()
-                
+                if (!item.capacity.isNullOrBlank()) {
+                    binding.capacityText.visibility = View.VISIBLE
+                    binding.capacityText.text = "Capacity: ${item.capacity}"
+                } else {
+                    binding.capacityText.visibility = View.GONE
+                }
+
                 binding.increaseButton.setOnClickListener {
                     onAction(item, CheckedItemAction.INCREASE)
                 }

@@ -226,13 +226,30 @@ const POS = () => {
   const handleCapacityChange = (capacity) => {
     setSelectedCapacity(capacity);
     if (selectedProduct && Array.isArray(selectedProduct.capacityPricing)) {
-      const pricing = selectedProduct.capacityPricing.find(p => {
-        const pCapacity = (p.capacity || p.size || '').trim();
-        return pCapacity === capacity;
+      const normalizeCapacity = (value) =>
+        (value || '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '');
+
+      const target = normalizeCapacity(capacity);
+
+      const pricing = selectedProduct.capacityPricing.find((p) => {
+        const raw = (p && (p.capacity || p.size)) || '';
+        return normalizeCapacity(raw) === target;
       });
+
       if (pricing) {
-        const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || parseFloat(selectedProduct.price) || 0;
-        setProductPrice(price.toString());
+        const price =
+          parseFloat(pricing.currentPrice) ||
+          parseFloat(pricing.originalPrice) ||
+          parseFloat(pricing.price) ||
+          parseFloat(selectedProduct.price) ||
+          0;
+        if (!Number.isNaN(price) && price > 0) {
+          setProductPrice(price.toString());
+        }
       }
     }
   };
@@ -715,56 +732,80 @@ const POS = () => {
                     }}
                     renderOption={(props, option) => {
                       const { key, ...restProps } = props;
-                      // Get capacities with pricing - only show capacities that have a price
-                      const capacitiesWithPricing = [];
-                      
+
+                      // Build capacity-level rows with price and stock (if available)
+                      const rows = [];
+                      const stockByCapacity =
+                        option.stockByCapacity && typeof option.stockByCapacity === 'object'
+                          ? option.stockByCapacity
+                          : null;
+
                       if (Array.isArray(option.capacityPricing) && option.capacityPricing.length > 0) {
-                        option.capacityPricing.forEach(pricing => {
+                        option.capacityPricing.forEach((pricing) => {
                           if (!pricing || typeof pricing !== 'object') return;
-                          
-                          const capacity = pricing.capacity;
-                          // Backend stores currentPrice and originalPrice - use currentPrice first, fallback to originalPrice
-                          // Handle both string and number types
-                          const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
-                          const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
-                          const price = (currentPrice != null && !isNaN(currentPrice) && currentPrice > 0) 
-                            ? currentPrice 
-                            : (originalPrice != null && !isNaN(originalPrice) && originalPrice > 0) 
-                              ? originalPrice 
-                              : 0;
-                          
-                          if (capacity && typeof capacity === 'string' && capacity.trim() && price > 0) {
-                            capacitiesWithPricing.push({
-                              capacity: capacity.trim(),
-                              price: price
-                            });
-                          }
+
+                          const rawCapacity = pricing.capacity || pricing.size;
+                          if (!rawCapacity || typeof rawCapacity !== 'string' || !rawCapacity.trim()) return;
+                          const capacity = rawCapacity.trim();
+
+                          const currentPrice =
+                            pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+                          const originalPrice =
+                            pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+                          const priceField =
+                            pricing.price != null ? parseFloat(pricing.price) : null;
+                          const price =
+                            (currentPrice != null && !Number.isNaN(currentPrice) && currentPrice > 0
+                              ? currentPrice
+                              : originalPrice != null && !Number.isNaN(originalPrice) && originalPrice > 0
+                              ? originalPrice
+                              : priceField != null && !Number.isNaN(priceField) && priceField > 0
+                              ? priceField
+                              : 0);
+
+                          if (price <= 0) return;
+
+                          const capStock =
+                            stockByCapacity && stockByCapacity[capacity] != null
+                              ? stockByCapacity[capacity]
+                              : option.stock ?? 0;
+
+                          rows.push({
+                            capacity,
+                            price,
+                            stock: capStock
+                          });
                         });
                       }
-                      
+
                       return (
                         <li key={option.id} {...restProps}>
                           <Box>
                             <Typography variant="body2" sx={{ fontWeight: 600 }}>
                               {option.name}
                             </Typography>
-                            {capacitiesWithPricing.length > 0 && (
+                            {rows.length > 0 && (
                               <Box sx={{ mt: 0.5 }}>
-                                {capacitiesWithPricing.map((cap, idx) => (
-                                  <Typography 
-                                    key={idx} 
-                                    variant="caption" 
-                                    color="text.secondary" 
+                                {rows.map((row, idx) => (
+                                  <Typography
+                                    key={idx}
+                                    variant="caption"
+                                    color="text.secondary"
                                     sx={{ display: 'block' }}
                                   >
-                                    {cap.capacity} | {Math.round(cap.price)}
+                                    {row.capacity} | {Math.round(row.price)} (Stock: {row.stock})
                                   </Typography>
                                 ))}
                               </Box>
                             )}
-                            {capacitiesWithPricing.length === 0 && (
-                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                                KES {Math.round(parseFloat(option.price || 0))}
+                            {rows.length === 0 && (
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ display: 'block' }}
+                              >
+                                KES {Math.round(parseFloat(option.price || 0))} (Stock:{' '}
+                                {option.stock ?? 0})
                               </Typography>
                             )}
                           </Box>

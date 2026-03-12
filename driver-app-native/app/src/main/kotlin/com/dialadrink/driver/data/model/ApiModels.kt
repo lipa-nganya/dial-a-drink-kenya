@@ -123,7 +123,10 @@ data class ShopAgentInventoryItem(
     val barcode: String?,
     val currentStock: Int,
     val isAvailable: Boolean,
-    val category: InventoryCategory?
+    val category: InventoryCategory?,
+    val capacity: List<String>? = null,
+    val capacityPricing: List<CapacityPricing>? = null,
+    val stockByCapacity: Map<String, Int>? = null
 ) : Parcelable
 
 @Parcelize
@@ -143,7 +146,8 @@ data class InventoryCheckRequest(
 
 data class InventoryCheckItem(
     val drinkId: Int,
-    val count: Int
+    val count: Int,
+    val capacity: String? = null
 )
 
 data class InventoryCheckResponse(
@@ -202,7 +206,8 @@ data class InventoryCheckHistoryResponse(
 @Parcelize
 data class CountedInventoryItem(
     val item: ShopAgentInventoryItem,
-    var count: Int
+    var count: Int,
+    var capacity: String? = null
 ) : Parcelable
 
 data class AdminUser(

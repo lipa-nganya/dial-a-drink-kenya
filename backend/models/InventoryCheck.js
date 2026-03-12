@@ -23,6 +23,11 @@ module.exports = (sequelize, DataTypes) => {
       },
       comment: 'Drink/item being checked'
     },
+    capacity: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'Capacity/size checked e.g. "250ml". When set, only this capacity stock is updated on approve.'
+    },
     agentCount: {
       type: DataTypes.INTEGER,
       allowNull: false,

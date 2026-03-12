@@ -441,6 +441,44 @@ async function addSeoAndTagsToDrinks() {
   }
 }
 
+async function addStockByCapacityAndInventoryCheckCapacity() {
+  try {
+    console.log('📦 Running migration: add-stock-by-capacity-and-inventory-check-capacity');
+    console.log('   Add stockByCapacity to drinks, capacity to inventory_checks');
+    
+    const queryInterface = db.sequelize.getQueryInterface();
+    
+    const drinkTable = await queryInterface.describeTable('drinks');
+    if (!drinkTable.stockByCapacity) {
+      await queryInterface.addColumn('drinks', 'stockByCapacity', {
+        type: db.Sequelize.JSON,
+        allowNull: true,
+        defaultValue: null
+      });
+      console.log('   ✅ stockByCapacity column added to drinks table');
+    } else {
+      console.log('   ⏭️  drinks.stockByCapacity already exists');
+    }
+    
+    const checkTable = await queryInterface.describeTable('inventory_checks');
+    if (!checkTable.capacity) {
+      await queryInterface.addColumn('inventory_checks', 'capacity', {
+        type: db.Sequelize.STRING(100),
+        allowNull: true
+      });
+      console.log('   ✅ capacity column added to inventory_checks table');
+    } else {
+      console.log('   ⏭️  inventory_checks.capacity already exists');
+    }
+    
+    console.log('   ✅ Migration add-stock-by-capacity-and-inventory-check-capacity completed\n');
+    return true;
+  } catch (error) {
+    console.error('   ❌ Migration add-stock-by-capacity-and-inventory-check-capacity failed:', error.message);
+    throw error;
+  }
+}
+
 async function runMigrations() {
   try {
     console.log('🚀 Starting Cloud SQL migrations...\n');
@@ -485,7 +523,8 @@ async function runMigrations() {
       { name: 'add-order-adminId-and-cancellation-columns', fn: addOrderAdminIdAndCancellationColumns },
       { name: 'add-purchase-price-to-drinks', fn: addPurchasePriceToDrinks },
       { name: 'add-nbv-to-drinks', fn: addNbvToDrinks },
-      { name: 'add-seo-and-tags-to-drinks', fn: addSeoAndTagsToDrinks }
+      { name: 'add-seo-and-tags-to-drinks', fn: addSeoAndTagsToDrinks },
+      { name: 'add-stock-by-capacity-and-inventory-check-capacity', fn: addStockByCapacityAndInventoryCheckCapacity }
     ];
 
     let successCount = 0;

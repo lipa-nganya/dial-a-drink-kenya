@@ -212,10 +212,20 @@ router.post('/admin/cash-submissions', async (req, res) => {
             if (item.productId) {
               const drink = await db.Drink.findByPk(item.productId);
               if (drink) {
-                const currentStock = parseFloat(drink.stock || 0);
-                const newStock = currentStock + qty;
-                await drink.update({ stock: newStock });
-                console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
+                const qtyToAdd = qty;
+                const capacity = item.capacity != null && String(item.capacity).trim() !== '' ? String(item.capacity).trim() : null;
+                if (capacity) {
+                  const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? { ...drink.stockByCapacity } : {};
+                  const current = parseInt(byCap[capacity], 10) || 0;
+                  byCap[capacity] = current + qtyToAdd;
+                  await drink.update({ stockByCapacity: byCap });
+                  console.log(`   Updated stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]}`);
+                } else {
+                  const currentStock = parseFloat(drink.stock || 0);
+                  const newStock = currentStock + qtyToAdd;
+                  await drink.update({ stock: newStock });
+                  console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
+                }
               }
             }
           }

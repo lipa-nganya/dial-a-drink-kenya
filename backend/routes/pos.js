@@ -458,7 +458,7 @@ router.get('/drinks', async (req, res) => {
     
     const findAllOptions = {
       where: whereClause,
-      attributes: ['id', 'name', 'price', 'stock', 'barcode', 'capacity', 'capacityPricing', 'purchasePrice', 'categoryId'],
+      attributes: ['id', 'name', 'price', 'stock', 'stockByCapacity', 'barcode', 'capacity', 'capacityPricing', 'purchasePrice', 'categoryId'],
       include: [{
         model: db.Category,
         as: 'category',

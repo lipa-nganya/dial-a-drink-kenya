@@ -529,9 +529,9 @@ router.get('/inventory-items', async (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      // Get all drinks with their current stock
+      // Get all drinks with their current stock and capacity info
       const drinks = await db.Drink.findAll({
-        attributes: ['id', 'name', 'barcode', 'stock', 'isAvailable'],
+        attributes: ['id', 'name', 'barcode', 'stock', 'stockByCapacity', 'capacity', 'capacityPricing', 'isAvailable'],
         include: [{
           model: db.Category,
           as: 'category',
@@ -544,17 +544,26 @@ router.get('/inventory-items', async (req, res) => {
         success: true,
         data: {
           success: true,
-          items: drinks.map(drink => ({
-            id: drink.id,
-            name: drink.name,
-            barcode: drink.barcode,
-            currentStock: drink.stock || 0,
-            isAvailable: drink.isAvailable,
-            category: drink.category ? {
-              id: drink.category.id,
-              name: drink.category.name
-            } : null
-          }))
+          items: drinks.map(drink => {
+            const capacities = Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []);
+            const capacityPricing = Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [];
+            const stockByCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? drink.stockByCapacity : {};
+            const hasCapacities = capacities.length > 0 || capacityPricing.length > 0;
+            return {
+              id: drink.id,
+              name: drink.name,
+              barcode: drink.barcode,
+              currentStock: drink.stock || 0,
+              stockByCapacity: hasCapacities ? stockByCap : null,
+              capacity: hasCapacities ? capacities : null,
+              capacityPricing: hasCapacities ? capacityPricing : null,
+              isAvailable: drink.isAvailable,
+              category: drink.category ? {
+                id: drink.category.id,
+                name: drink.category.name
+              } : null
+            };
+          })
         }
       });
     } catch (jwtError) {
@@ -587,7 +596,7 @@ router.post('/inventory-check', async (req, res) => {
         return res.status(403).json({ error: 'Access denied' });
       }
 
-      const { items } = req.body; // Array of { drinkId, count }
+      const { items } = req.body; // Array of { drinkId, count, capacity? }
 
       if (!items || !Array.isArray(items) || items.length === 0) {
         return res.status(400).json({
@@ -603,7 +612,7 @@ router.post('/inventory-check', async (req, res) => {
       // Process each item
       for (const item of items) {
         try {
-          const { drinkId, count } = item;
+          const { drinkId, count, capacity } = item;
 
           if (!drinkId || count === undefined || count === null) {
             errors.push({
@@ -623,9 +632,16 @@ router.post('/inventory-check', async (req, res) => {
             continue;
           }
 
-          const databaseCount = drink.stock || 0;
+          let databaseCount;
+          if (capacity != null && String(capacity).trim() !== '') {
+            const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? drink.stockByCapacity : {};
+            databaseCount = parseInt(byCap[String(capacity).trim()], 10) || 0;
+          } else {
+            databaseCount = drink.stock || 0;
+          }
           const agentCount = parseInt(count) || 0;
           const isFlagged = agentCount !== databaseCount;
+          const capacityValue = capacity != null && String(capacity).trim() !== '' ? String(capacity).trim() : null;
 
           // Create inventory check record
           const inventoryCheck = await db.InventoryCheck.create({
@@ -634,7 +650,8 @@ router.post('/inventory-check', async (req, res) => {
             agentCount,
             databaseCount,
             isFlagged,
-            status: 'pending'
+            status: 'pending',
+            capacity: capacityValue
           });
 
           results.push({
@@ -788,7 +805,7 @@ router.get('/inventory-check-history', async (req, res) => {
           {
             model: db.Drink,
             as: 'drink',
-            attributes: ['id', 'name', 'barcode', 'stock'],
+            attributes: ['id', 'name', 'barcode', 'stock', 'stockByCapacity'],
             include: [{
               model: db.Category,
               as: 'category',
@@ -823,6 +840,7 @@ router.get('/inventory-check-history', async (req, res) => {
             } : null,
             agentCount: check.agentCount,
             databaseCount: check.databaseCount,
+            capacity: check.capacity || null,
             status: check.status,
             isFlagged: check.isFlagged,
             approvedBy: check.approver ? {

@@ -158,13 +158,38 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const handleCapacityChange = (capacity) => {
     setSelectedCapacity(capacity);
     if (currentProduct && Array.isArray(currentProduct.capacityPricing)) {
-      const pricing = currentProduct.capacityPricing.find(p => {
-        const pCapacity = (p.capacity || p.size || '').trim();
-        return pCapacity === capacity;
+      const normalizeCapacity = (value) =>
+        (value || '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '');
+
+      const target = normalizeCapacity(capacity);
+
+      const pricing = currentProduct.capacityPricing.find((p) => {
+        const raw = (p && (p.capacity || p.size)) || '';
+        return normalizeCapacity(raw) === target;
       });
+
       if (pricing) {
-        const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || parseFloat(currentProduct.price) || 0;
-        setCurrentPrice(Math.round(price).toString());
+        const currentPrice =
+          pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+        const originalPrice =
+          pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+        const priceField = pricing.price != null ? parseFloat(pricing.price) : null;
+        const price =
+          (currentPrice != null && !Number.isNaN(currentPrice) && currentPrice > 0
+            ? currentPrice
+            : originalPrice != null && !Number.isNaN(originalPrice) && originalPrice > 0
+            ? originalPrice
+            : priceField != null && !Number.isNaN(priceField) && priceField > 0
+            ? priceField
+            : parseFloat(currentProduct.price) || 0);
+
+        if (!Number.isNaN(price) && price > 0) {
+          setCurrentPrice(Math.round(price).toString());
+        }
       }
     }
   };
@@ -295,7 +320,48 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
-    const originalPrice = Math.round(parseFloat(currentProduct.price) || 0);
+    // Determine reference/original price based on selected capacity (if any)
+    let originalPrice = Math.round(parseFloat(currentProduct.price) || 0);
+    if (
+      selectedCapacity &&
+      currentProduct &&
+      Array.isArray(currentProduct.capacityPricing) &&
+      currentProduct.capacityPricing.length > 0
+    ) {
+      const normalizeCapacity = (value) =>
+        (value || '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '');
+
+      const target = normalizeCapacity(selectedCapacity);
+
+      const match = currentProduct.capacityPricing.find((p) => {
+        const raw = (p && (p.capacity || p.size)) || '';
+        return normalizeCapacity(raw) === target;
+      });
+
+      if (match) {
+        const currentP =
+          match.currentPrice != null ? parseFloat(match.currentPrice) : null;
+        const originalP =
+          match.originalPrice != null ? parseFloat(match.originalPrice) : null;
+        const priceField =
+          match.price != null ? parseFloat(match.price) : null;
+        const effective =
+          (currentP != null && !Number.isNaN(currentP) && currentP > 0
+            ? currentP
+            : originalP != null && !Number.isNaN(originalP) && originalP > 0
+            ? originalP
+            : priceField != null && !Number.isNaN(priceField) && priceField > 0
+            ? priceField
+            : originalPrice);
+        if (!Number.isNaN(effective) && effective > 0) {
+          originalPrice = Math.round(effective);
+        }
+      }
+    }
     const newPrice = currentPrice ? Math.round(parseFloat(currentPrice)) : originalPrice;
 
     // If price is different from original, show confirmation dialog
@@ -317,7 +383,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   };
 
   const addItemToCart = (price, originalPrice) => {
-    const existingItemIndex = cartItems.findIndex(item => item.drinkId === currentProduct.id);
+    const existingItemIndex = cartItems.findIndex(
+      (item) =>
+        item.drinkId === currentProduct.id &&
+        (item.capacity || '') === (selectedCapacity || '')
+    );
     
     if (existingItemIndex >= 0) {
       // Update quantity if item already exists
@@ -329,6 +399,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       setCartItems([...cartItems, {
         drinkId: currentProduct.id,
         name: currentProduct.name,
+        capacity: selectedCapacity || null,
         quantity: currentQuantity,
         price: price,
         originalPrice: originalPrice
@@ -415,7 +486,44 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     } else {
       // If canceling while adding new item, revert price to original
       if (currentProduct) {
-        setCurrentPrice(Math.round(parseFloat(currentProduct.price || 0)).toString());
+        let originalPrice = Math.round(parseFloat(currentProduct.price) || 0);
+        if (
+          selectedCapacity &&
+          Array.isArray(currentProduct.capacityPricing) &&
+          currentProduct.capacityPricing.length > 0
+        ) {
+          const normalizeCapacity = (value) =>
+            (value || '')
+              .toString()
+              .trim()
+              .toLowerCase()
+              .replace(/\s+/g, '');
+          const target = normalizeCapacity(selectedCapacity);
+          const match = currentProduct.capacityPricing.find((p) => {
+            const raw = (p && (p.capacity || p.size)) || '';
+            return normalizeCapacity(raw) === target;
+          });
+          if (match) {
+            const currentP =
+              match.currentPrice != null ? parseFloat(match.currentPrice) : null;
+            const originalP =
+              match.originalPrice != null ? parseFloat(match.originalPrice) : null;
+            const priceField =
+              match.price != null ? parseFloat(match.price) : null;
+            const effective =
+              (currentP != null && !Number.isNaN(currentP) && currentP > 0
+                ? currentP
+                : originalP != null && !Number.isNaN(originalP) && originalP > 0
+                ? originalP
+                : priceField != null && !Number.isNaN(priceField) && priceField > 0
+                ? priceField
+                : originalPrice);
+            if (!Number.isNaN(effective) && effective > 0) {
+              originalPrice = Math.round(effective);
+            }
+          }
+        }
+        setCurrentPrice(originalPrice.toString());
       }
     }
     setPriceChangeDialog({ open: false, itemIndex: null, newPrice: '', oldPrice: '', drinkId: null, drinkName: '', originalPrice: '', quantity: null });
@@ -519,20 +627,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setLoading(true);
 
     try {
-      // Get branch info for walk-in orders
-      let finalDeliveryAddress = deliveryLocation;
+      // Walk-in orders are not delivery; use placeholder. Delivery orders use delivery location.
+      let finalDeliveryAddress = isWalkIn ? 'In-Store Purchase' : deliveryLocation;
       let branchId = null;
-      
-      // For non-walk-in orders, still assign a branch for proper distance calculation
+
       if (isWalkIn && selectedBranch) {
         const branch = branches.find(b => b.id === parseInt(selectedBranch));
-        if (branch) {
-          finalDeliveryAddress = `${branch.name}, ${branch.address}`;
-          branchId = branch.id;
-        } else {
-          // Fallback if branch not found
-          finalDeliveryAddress = 'In-Store Purchase';
-        }
+        if (branch) branchId = branch.id;
       } else if (!isWalkIn && branches.length > 0) {
         // For non-walk-in orders, use first active branch (usually branch 4) for distance calculation
         const activeBranch = branches.find(b => b.isActive) || branches[0];
@@ -557,9 +658,14 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         }
       }
 
+      // For walk-in (POS) orders, disallow pay_on_delivery at data level as well
+      const effectivePaymentMethod = isWalkIn && paymentMethod === 'pay_on_delivery'
+        ? 'cash'
+        : paymentMethod;
+
       const orderData = {
         customerName: isWalkIn ? 'POS' : (finalCustomer.customerName || finalCustomer.name || ''),
-        customerPhone: isWalkIn ? null : (paymentMethod === 'mobile_money' && mpesaPhoneNumber.trim() ? mpesaPhoneNumber.trim() : (finalCustomer.phone || null)),
+        customerPhone: isWalkIn ? null : (effectivePaymentMethod === 'mobile_money' && mpesaPhoneNumber.trim() ? mpesaPhoneNumber.trim() : (finalCustomer.phone || null)),
         customerEmail: isWalkIn ? null : (finalCustomer.email || null),
         deliveryAddress: finalDeliveryAddress,
         items: cartItems.map(item => ({
@@ -567,11 +673,19 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           quantity: item.quantity,
           selectedPrice: item.price
         })),
-        paymentType: paymentMethod === 'cash' ? 'pay_now' : (paymentMethod === 'pay_on_delivery' ? 'pay_on_delivery' : (paymentMethod === 'mobile_money' ? 'pay_on_delivery' : (paymentMethod === 'card' ? 'pay_now' : 'pay_on_delivery'))),
-        paymentMethod: paymentMethod || null,
+        paymentType: effectivePaymentMethod === 'cash'
+          ? 'pay_now'
+          : (effectivePaymentMethod === 'pay_on_delivery'
+            ? 'pay_on_delivery'
+            : (effectivePaymentMethod === 'mobile_money'
+              ? 'pay_on_delivery'
+              : (effectivePaymentMethod === 'card'
+                ? 'pay_now'
+                : 'pay_on_delivery'))),
+        paymentMethod: effectivePaymentMethod || null,
         paymentStatus: isWalkIn 
-          ? ((paymentMethod === 'cash' || paymentMethod === 'card') ? 'paid' : 'unpaid')
-          : ((paymentMethod === 'mobile_money' && !transactionCode.trim()) ? 'unpaid' : (paymentMethod === 'pay_on_delivery' ? 'unpaid' : (paymentMethod ? 'paid' : 'unpaid'))),
+          ? ((effectivePaymentMethod === 'cash' || effectivePaymentMethod === 'card') ? 'paid' : 'unpaid')
+          : ((effectivePaymentMethod === 'mobile_money' && !transactionCode.trim()) ? 'unpaid' : (effectivePaymentMethod === 'pay_on_delivery' ? 'unpaid' : (effectivePaymentMethod ? 'paid' : 'unpaid'))),
         status: isWalkIn 
           ? ((paymentMethod === 'cash' || paymentMethod === 'card') ? 'completed' : 'in_progress') // Walk-in: 'completed' if paid, 'in_progress' if unpaid
           : deliveryStatus,
@@ -647,8 +761,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   }, [paymentPollingInterval]);
 
   const handlePromptPayment = async () => {
+    // For M-Pesa we need a phone number to send the STK push to (walk-in: payer's phone; delivery: customer phone)
     if (!mpesaPhoneNumber || !mpesaPhoneNumber.trim()) {
-      setError('Please enter customer phone number');
+      setError(isWalkIn
+        ? 'Please enter the phone number to send the M-Pesa payment request to'
+        : 'Please enter customer phone number');
       return;
     }
 
@@ -673,16 +790,12 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     try {
       // First, create the order without transaction code (pending payment)
-      let finalDeliveryAddress = deliveryLocation;
+      // Walk-in orders are not delivery; use placeholder. Branch is for reference only.
+      let finalDeliveryAddress = isWalkIn ? 'In-Store Purchase' : deliveryLocation;
       let branchId = null;
       if (isWalkIn && selectedBranch) {
         const branch = branches.find(b => b.id === parseInt(selectedBranch));
-        if (branch) {
-          finalDeliveryAddress = `${branch.name}, ${branch.address}`;
-          branchId = branch.id;
-        } else {
-          finalDeliveryAddress = 'In-Store Purchase';
-        }
+        if (branch) branchId = branch.id;
       }
 
       if (!finalDeliveryAddress || !finalDeliveryAddress.trim()) {
@@ -729,9 +842,17 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         ? 'POS'
         : (finalCustomer?.customerName || finalCustomer?.name || '');
       
-      const customerPhoneForOrder = isWalkIn 
-        ? null
+      // Backend treats order as walk-in when customerPhone === 'POS' or deliveryAddress === 'In-Store Purchase'. Send 'POS' for walk-in so backend does not require a real phone.
+      const customerPhoneForOrder = isWalkIn
+        ? 'POS'
         : (finalCustomer?.phone || mpesaPhoneNumber.trim() || null);
+
+      // Default territory for walk-in (backend may use for delivery fee logic)
+      let defaultTerritoryId = null;
+      if (isWalkIn) {
+        const defaultTerritory = territories.find(t => t.name === '1Default' || t.name === '1 Default');
+        if (defaultTerritory) defaultTerritoryId = defaultTerritory.id;
+      }
 
       const orderData = {
         customerName: customerNameForOrder,
@@ -750,6 +871,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         adminOrder: true,
         branchId: branchId,
         driverId: selectedDriver ? parseInt(selectedDriver) : null,
+        territoryId: isWalkIn ? defaultTerritoryId : (selectedTerritory ? parseInt(selectedTerritory) : null),
         transactionCode: null, // Will be populated after payment
         isStop: isStop,
         stopDeductionAmount: isStop ? parseFloat(stopDeductionAmount) || 100 : null,
@@ -760,9 +882,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       const orderResponse = await api.post('/orders', orderData);
       const orderId = orderResponse.data.id;
 
-      // Now prompt for payment
-      // For walk-in orders, send customerPhone in request body if provided
-      const promptPayload = !isWalkIn && mpesaPhoneNumber.trim() 
+      // Now prompt for payment. For walk-in, order.customerPhone is 'POS' so backend requires customerPhone in body (payer's phone for STK push).
+      const promptPayload = mpesaPhoneNumber.trim()
         ? { customerPhone: mpesaPhoneNumber.trim() }
         : {};
       const promptResponse = await api.post(`/admin/orders/${orderId}/prompt-payment`, promptPayload);
@@ -944,16 +1065,12 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     try {
       // First, create the order without transaction code (pending payment)
-      let finalDeliveryAddress = deliveryLocation;
+      // Walk-in orders are not delivery; use placeholder. Branch is for reference only.
+      let finalDeliveryAddress = isWalkIn ? 'In-Store Purchase' : deliveryLocation;
       let branchId = null;
       if (isWalkIn && selectedBranch) {
         const branch = branches.find(b => b.id === parseInt(selectedBranch));
-        if (branch) {
-          finalDeliveryAddress = `${branch.name}, ${branch.address}`;
-          branchId = branch.id;
-        } else {
-          finalDeliveryAddress = 'In-Store Purchase';
-        }
+        if (branch) branchId = branch.id;
       }
 
       if (!finalDeliveryAddress || !finalDeliveryAddress.trim()) {
@@ -1211,16 +1328,12 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     try {
       // First, create the order
-      let finalDeliveryAddress = deliveryLocation;
+      // Walk-in orders are not delivery; use placeholder. Branch is for reference only.
+      let finalDeliveryAddress = isWalkIn ? 'In-Store Purchase' : deliveryLocation;
       let branchId = null;
       if (isWalkIn && selectedBranch) {
         const branch = branches.find(b => b.id === parseInt(selectedBranch));
-        if (branch) {
-          finalDeliveryAddress = `${branch.name}, ${branch.address}`;
-          branchId = branch.id;
-        } else {
-          finalDeliveryAddress = 'In-Store Purchase';
-        }
+        if (branch) branchId = branch.id;
       }
 
       if (!finalDeliveryAddress || !finalDeliveryAddress.trim()) {
@@ -1425,11 +1538,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
               onChange={(e) => {
                 const newOrderType = e.target.value;
                 setOrderType(newOrderType);
+
                 if (newOrderType === 'walk-in') {
                   setSelectedCustomer(null);
                   setCustomerSearch('');
                   setDeliveryStatus('completed');
                   setSelectedDriver(''); // Clear driver assignment for walk-in orders
+                  // Pay on delivery is not valid for walk-in/POS orders
+                  if (paymentMethod === 'pay_on_delivery') {
+                    setPaymentMethod('cash');
+                  }
                 } else {
                   setSelectedBranch('');
                   setDeliveryLocation('');
@@ -1807,71 +1925,104 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 )}
                 renderOption={(props, option) => {
                   const { key, ...restProps } = props;
-                  const stock = option.stock !== undefined && option.stock !== null ? option.stock : 0;
-                  const stockColor = stock > 0 ? '#2196F3' : '#F44336';
-                  // Get capacities with pricing - only show capacities that have a price
-                  const capacitiesWithPricing = [];
-                  
+
+                  const totalStock =
+                    option.stock !== undefined && option.stock !== null ? option.stock : 0;
+                  const stockColor = totalStock > 0 ? '#2196F3' : '#F44336';
+
+                  const stockByCapacity =
+                    option.stockByCapacity && typeof option.stockByCapacity === 'object'
+                      ? option.stockByCapacity
+                      : null;
+
+                  const rows = [];
+
                   if (Array.isArray(option.capacityPricing) && option.capacityPricing.length > 0) {
-                    option.capacityPricing.forEach(pricing => {
+                    option.capacityPricing.forEach((pricing) => {
                       if (!pricing || typeof pricing !== 'object') return;
-                      
-                      const capacity = pricing.capacity;
-                      // Backend stores currentPrice and originalPrice - use currentPrice first, fallback to originalPrice
-                      // Handle both string and number types
-                      const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
-                      const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
-                      const price = (currentPrice != null && !isNaN(currentPrice) && currentPrice > 0) 
-                        ? currentPrice 
-                        : (originalPrice != null && !isNaN(originalPrice) && originalPrice > 0) 
-                          ? originalPrice 
-                          : 0;
-                      
-                      if (capacity && typeof capacity === 'string' && capacity.trim() && price > 0) {
-                        capacitiesWithPricing.push({
-                          capacity: capacity.trim(),
-                          price: price
-                        });
-                      }
+
+                      const rawCapacity = pricing.capacity || pricing.size;
+                      if (!rawCapacity || typeof rawCapacity !== 'string' || !rawCapacity.trim())
+                        return;
+                      const capacity = rawCapacity.trim();
+
+                      const currentPrice =
+                        pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+                      const originalPrice =
+                        pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+                      const priceField =
+                        pricing.price != null ? parseFloat(pricing.price) : null;
+                      const price =
+                        (currentPrice != null && !Number.isNaN(currentPrice) && currentPrice > 0
+                          ? currentPrice
+                          : originalPrice != null && !Number.isNaN(originalPrice) && originalPrice > 0
+                          ? originalPrice
+                          : priceField != null && !Number.isNaN(priceField) && priceField > 0
+                          ? priceField
+                          : 0);
+
+                      if (price <= 0) return;
+
+                      const capStock =
+                        stockByCapacity && stockByCapacity[capacity] != null
+                          ? stockByCapacity[capacity]
+                          : totalStock;
+
+                      rows.push({
+                        capacity,
+                        price,
+                        stock: capStock
+                      });
                     });
                   }
-                  
+
                   return (
                     <li key={option.id} {...restProps}>
-                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Box
+                        sx={{
+                          width: '100%',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start'
+                        }}
+                      >
                         <Box sx={{ flex: 1 }}>
                           <Typography variant="body2" sx={{ fontWeight: 600 }}>
                             {option.name}
                           </Typography>
-                          {capacitiesWithPricing.length > 0 && (
+                          {rows.length > 0 && (
                             <Box sx={{ mt: 0.5 }}>
-                              {capacitiesWithPricing.map((cap, idx) => (
-                                <Typography 
-                                  key={idx} 
-                                  variant="caption" 
-                                  color="text.secondary" 
+                              {rows.map((row, idx) => (
+                                <Typography
+                                  key={idx}
+                                  variant="caption"
+                                  color="text.secondary"
                                   sx={{ display: 'block' }}
                                 >
-                                  {cap.capacity} | {Math.round(cap.price)}
+                                  {row.capacity} | {Math.round(row.price)} (Stock: {row.stock})
                                 </Typography>
                               ))}
                             </Box>
                           )}
-                          {capacitiesWithPricing.length === 0 && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                              KES {Math.round(parseFloat(option.price || 0))}
+                          {rows.length === 0 && (
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ display: 'block' }}
+                            >
+                              KES {Math.round(parseFloat(option.price || 0))} (Stock: {totalStock})
                             </Typography>
                           )}
                         </Box>
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
+                        <Typography
+                          variant="caption"
+                          sx={{
                             color: stockColor,
                             fontWeight: 600,
                             ml: 2
                           }}
                         >
-                          Stock: {stock}
+                          Stock: {totalStock}
                         </Typography>
                       </Box>
                     </li>
@@ -2210,14 +2361,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
               }}
             >
               <MenuItem value="cash">Cash Received</MenuItem>
-              <MenuItem value="pay_on_delivery">Pay on Delivery</MenuItem>
+              {!isWalkIn && (
+                <MenuItem value="pay_on_delivery">Pay on Delivery</MenuItem>
+              )}
               <MenuItem value="mobile_money">Mpesa</MenuItem>
               <MenuItem value="card">Card</MenuItem>
             </Select>
           </FormControl>
 
-          {/* M-Pesa Payment Section - Hidden for walk-in orders */}
-          {paymentMethod === 'mobile_money' && !isWalkIn && (
+          {/* M-Pesa Payment Section */}
+          {paymentMethod === 'mobile_money' && (
             <Box>
               <TextField
                 fullWidth
@@ -2549,7 +2702,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             <Button
               onClick={handleSubmit}
               variant="contained"
-              disabled={loading || promptingPayment || (paymentMethod === 'mobile_money' && isWalkIn)}
+              disabled={loading || promptingPayment}
               sx={{
                 backgroundColor: colors.accentText,
                 color: isDarkMode ? '#0D0D0D' : '#FFFFFF',

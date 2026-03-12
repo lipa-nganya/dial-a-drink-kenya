@@ -98,6 +98,12 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: 0
     },
+    stockByCapacity: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Per-capacity stock e.g. {"250ml": 10, "500ml": 5}. When set, capacity-specific updates use this.'
+    },
     purchasePrice: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,

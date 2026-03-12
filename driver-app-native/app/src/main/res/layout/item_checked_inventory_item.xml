@@ -40,6 +40,16 @@
                 android:textColor="@color/text_secondary_dark"
                 android:textSize="14sp" />
 
+            <TextView
+                android:id="@+id/capacityText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text=""
+                android:textColor="@color/accent"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
         </LinearLayout>
 
         <LinearLayout
