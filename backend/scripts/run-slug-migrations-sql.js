@@ -76,6 +76,43 @@ async function runMigrations() {
       console.log('   ⚠️  Column slug already exists in categories table');
     }
 
+    // Add stockByCapacity to drinks (per-capacity stock) and capacity to inventory_checks
+    console.log('\n📝 Checking drinks.stockByCapacity...');
+    const [stockByCapCheck] = await sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'drinks' 
+      AND column_name = 'stockByCapacity'
+    `);
+    if (stockByCapCheck.length === 0) {
+      console.log('   Adding stockByCapacity column to drinks table...');
+      await sequelize.query(`
+        ALTER TABLE drinks 
+        ADD COLUMN "stockByCapacity" JSON DEFAULT NULL
+      `);
+      console.log('   ✅ Added stockByCapacity to drinks');
+    } else {
+      console.log('   ⚠️  drinks.stockByCapacity already exists');
+    }
+
+    console.log('\n📝 Checking inventory_checks.capacity...');
+    const [capacityCheck] = await sequelize.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'inventory_checks' 
+      AND column_name = 'capacity'
+    `);
+    if (capacityCheck.length === 0) {
+      console.log('   Adding capacity column to inventory_checks table...');
+      await sequelize.query(`
+        ALTER TABLE inventory_checks 
+        ADD COLUMN capacity VARCHAR(100)
+      `);
+      console.log('   ✅ Added capacity to inventory_checks');
+    } else {
+      console.log('   ⚠️  inventory_checks.capacity already exists');
+    }
+
     console.log('\n✅ All migrations completed');
     await sequelize.close();
     process.exit(0);

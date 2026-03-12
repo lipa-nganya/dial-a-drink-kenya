@@ -5,6 +5,7 @@ import com.google.gson.*
 import com.google.gson.annotations.JsonAdapter
 import com.google.gson.annotations.SerializedName
 import kotlinx.parcelize.Parcelize
+import kotlinx.parcelize.RawValue
 import java.lang.reflect.Type
 
 // Generic API Response
@@ -126,7 +127,7 @@ data class ShopAgentInventoryItem(
     val category: InventoryCategory?,
     val capacity: List<String>? = null,
     val capacityPricing: List<CapacityPricing>? = null,
-    val stockByCapacity: Map<String, Int>? = null
+    val stockByCapacity: @RawValue Map<String, Int>? = null
 ) : Parcelable
 
 @Parcelize
@@ -683,13 +684,14 @@ class PriceDeserializer : JsonDeserializer<Double> {
 }
 
 // POS Models
+@Parcelize
 data class CapacityPricing(
     @SerializedName("capacity") val capacity: String? = null, // Primary field name
     @SerializedName("size") val size: String? = null, // Alternative field name (used by some products)
     @SerializedName("originalPrice") val originalPrice: Double? = null,
     @SerializedName("currentPrice") val currentPrice: Double? = null,
     @SerializedName("price") val price: Double? = null // Fallback field name
-) {
+) : Parcelable {
     // Get the effective capacity (capacity > size)
     val effectiveCapacity: String?
         get() = capacity?.takeIf { it.isNotBlank() } ?: size?.takeIf { it.isNotBlank() }
