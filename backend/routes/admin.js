@@ -4839,15 +4839,11 @@ router.post('/users', async (req, res) => {
     // Create user
     const user = await db.Admin.create(createData);
 
-    // Send invite email (use current request host as preferred admin URL when not localhost)
+    // Send invite email
+    // NOTE: Email URL is derived from ADMIN_FRONTEND_URL / ADMIN_URL only (see email service),
+    // not from the backend host, so multiple admin frontends can safely share this API.
     const emailService = require('../services/email');
-    const forwardedProto = req.headers['x-forwarded-proto'] || 'https';
-    const forwardedHost = req.headers['x-forwarded-host'] || req.headers.host || '';
-    let requestBaseUrl = '';
-    if (forwardedHost && !forwardedHost.includes('localhost')) {
-      requestBaseUrl = `${forwardedProto}://${forwardedHost}`;
-    }
-    const emailResult = await emailService.sendAdminInvite(email, inviteToken, username, requestBaseUrl || undefined);
+    const emailResult = await emailService.sendAdminInvite(email, inviteToken, username);
 
     if (!emailResult.success) {
       console.error('Failed to send invite email:', emailResult.error);

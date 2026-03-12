@@ -145,7 +145,7 @@ async function sendEmailConfirmation(email, token) {
  * @param {string} username - Username for the invite
  * @returns {Promise<Object>} Result of email sending
  */
-async function sendAdminInvite(email, token, username, baseUrlOverride) {
+async function sendAdminInvite(email, token, username) {
   try {
     const transporter = createTransporter();
     
@@ -160,8 +160,12 @@ async function sendAdminInvite(email, token, username, baseUrlOverride) {
     // - Prefer ADMIN_FRONTEND_URL when set (explicit public admin domain)
     // - Otherwise use ADMIN_URL (Cloud Run or domain)
     // - Fallback to localhost for local development.
+    // IMPORTANT:
+    // - Always use ADMIN_FRONTEND_URL (public admin domain for this environment)
+    // - Fallback to ADMIN_URL only if ADMIN_FRONTEND_URL is not set
+    // - Never derive from the backend host, because multiple admin frontends
+    //   can share the same API service.
     let baseAdminUrl =
-      baseUrlOverride ||
       process.env.ADMIN_FRONTEND_URL ||
       process.env.ADMIN_URL ||
       'http://localhost:3001';
