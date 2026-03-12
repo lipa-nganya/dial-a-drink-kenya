@@ -6117,7 +6117,9 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
       notes: notes || inventoryCheck.notes
     });
 
-    // If updateStock is true, update the drink stock to match agent count (only the selected capacity when capacity is set)
+    // If updateStock is true, update the drink stock to match agent count
+    // - When capacity is set: update only that capacity in stockByCapacity, and keep aggregate stock in sync for legacy views
+    // - When capacity is not set: update the main stock field
     if (updateStock === true && inventoryCheck.drink) {
       const capacity = inventoryCheck.capacity && String(inventoryCheck.capacity).trim() !== ''
         ? String(inventoryCheck.capacity).trim()
@@ -6127,7 +6129,12 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
           ? { ...inventoryCheck.drink.stockByCapacity }
           : {};
         byCap[capacity] = inventoryCheck.agentCount;
-        await inventoryCheck.drink.update({ stockByCapacity: byCap });
+        // Keep overall stock in sync so existing inventory views that rely on drink.stock still show correct totals
+        const totalStock = Object.values(byCap).reduce((sum, value) => {
+          const n = typeof value === 'number' ? value : parseInt(value, 10);
+          return sum + (Number.isNaN(n) ? 0 : n);
+        }, 0);
+        await inventoryCheck.drink.update({ stockByCapacity: byCap, stock: totalStock });
       } else {
         await inventoryCheck.drink.update({
           stock: inventoryCheck.agentCount
