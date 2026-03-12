@@ -68,7 +68,14 @@ const CustomerLogin = () => {
     const timer = setTimeout(async () => {
       setCheckingPin(true);
       try {
-        const normalizedPhone = getFullInternationalPhone();
+        // Build full international phone (same logic as getFullInternationalPhone)
+        const ccDigits = (countryCode || '').replace(/\D/g, '');
+        const phoneDigits = (phone || '').replace(/\D/g, '');
+        const normalizedPhone = !phoneDigits
+          ? ''
+          : isKenyanNumber
+            ? normalizePhoneNumber(phone)
+            : ccDigits + phoneDigits;
         if (!normalizedPhone) {
           setHasPin(false);
           return;
@@ -94,6 +101,7 @@ const CustomerLogin = () => {
     }, 600); // debounce to avoid excessive requests
 
     return () => clearTimeout(timer);
+    // normalizePhoneNumber is stable (Kenyan-only logic); effect runs when phone/country change
   }, [phone, countryCode, isKenyanNumber]);
 
   const sanitizePhoneInput = (value) => value.replace(/[^\d+]/g, '');
