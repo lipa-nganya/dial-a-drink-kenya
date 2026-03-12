@@ -145,7 +145,7 @@ async function sendEmailConfirmation(email, token) {
  * @param {string} username - Username for the invite
  * @returns {Promise<Object>} Result of email sending
  */
-async function sendAdminInvite(email, token, username) {
+async function sendAdminInvite(email, token, username, baseUrlOverride) {
   try {
     const transporter = createTransporter();
     
@@ -157,14 +157,14 @@ async function sendAdminInvite(email, token, username) {
     }
 
     // Determine the public admin URL:
-    // - Prefer ADMIN_URL when it's a real frontend domain
-    // - If ADMIN_URL points at a Cloud Run service (*.run.app) and FRONTEND_URL is set,
-    //   prefer FRONTEND_URL so emails use the public domain, not the service URL.
+    // - Prefer ADMIN_FRONTEND_URL when set (explicit public admin domain)
+    // - Otherwise use ADMIN_URL (Cloud Run or domain)
     // - Fallback to localhost for local development.
-    let baseAdminUrl = process.env.ADMIN_URL || process.env.FRONTEND_URL || 'http://localhost:3001';
-    if (baseAdminUrl.includes('.run.app') && process.env.FRONTEND_URL) {
-      baseAdminUrl = process.env.FRONTEND_URL;
-    }
+    let baseAdminUrl =
+      baseUrlOverride ||
+      process.env.ADMIN_FRONTEND_URL ||
+      process.env.ADMIN_URL ||
+      'http://localhost:3001';
     // Strip trailing slashes
     baseAdminUrl = baseAdminUrl.replace(/\/+$/, '');
     const inviteUrl = `${baseAdminUrl}/setup-password?token=${token}`;
