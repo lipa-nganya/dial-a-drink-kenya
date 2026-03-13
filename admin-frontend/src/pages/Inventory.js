@@ -76,25 +76,36 @@ const InventoryPage = () => {
   
   const itemsPerPage = 16; // 4 rows × 4 columns
 
-  // Helper to summarise capacities for display next to stock
-  const getCapacitySummary = (drink) => {
-    // Prefer capacityPricing (includes capacity labels)
-    if (Array.isArray(drink?.capacityPricing) && drink.capacityPricing.length > 0) {
-      const caps = drink.capacityPricing
+  // Helper to build per-capacity stock rows, e.g. "Stock 6: 1.5 litre"
+  const getCapacityStockRows = (drink) => {
+    if (!drink) return [];
+
+    const stockByCapacity =
+      drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
+        ? drink.stockByCapacity
+        : null;
+
+    // Prefer capacities from capacityPricing (they are normalized labels)
+    let capacities = [];
+    if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
+      capacities = drink.capacityPricing
         .map(p => p && p.capacity)
         .filter(Boolean);
-      const uniqueCaps = Array.from(new Set(caps));
-      if (uniqueCaps.length === 1) return uniqueCaps[0];
-      if (uniqueCaps.length > 1) return uniqueCaps.join(', ');
+    } else if (Array.isArray(drink.capacity) && drink.capacity.length > 0) {
+      capacities = drink.capacity.filter(Boolean);
     }
-    // Fallback to capacity array if available
-    if (Array.isArray(drink?.capacity) && drink.capacity.length > 0) {
-      const caps = drink.capacity.filter(Boolean);
-      const uniqueCaps = Array.from(new Set(caps));
-      if (uniqueCaps.length === 1) return uniqueCaps[0];
-      if (uniqueCaps.length > 1) return uniqueCaps.join(', ');
-    }
-    return null;
+
+    const uniqueCaps = Array.from(new Set(capacities));
+    if (uniqueCaps.length === 0) return [];
+
+    return uniqueCaps.map(cap => {
+      const raw = stockByCapacity && stockByCapacity[cap] != null
+        ? stockByCapacity[cap]
+        : null;
+      const parsed = typeof raw === 'number' ? raw : parseInt(raw, 10);
+      const stock = Number.isNaN(parsed) || parsed == null ? 0 : parsed;
+      return { capacity: cap, stock };
+    });
   };
 
   // Helper function to get full image URL
@@ -914,12 +925,7 @@ const InventoryPage = () => {
                     {drink.stock !== undefined && drink.stock !== null && (
                       <Chip
                         icon={<Inventory />}
-                        label={() => {
-                          const capacitySummary = getCapacitySummary(drink);
-                          return capacitySummary
-                            ? `Stock: ${drink.stock} (${capacitySummary})`
-                            : `Stock: ${drink.stock}`;
-                        }}
+                        label={`Stock: ${drink.stock}`}
                         size="small"
                         sx={{ 
                           fontSize: '0.65rem', 
@@ -1068,15 +1074,26 @@ const InventoryPage = () => {
                           fontSize: '0.75rem'
                         }}
                       >
-                        {(() => {
-                          const stockValue = drink.stock !== undefined && drink.stock !== null ? drink.stock : 0;
-                          const capacitySummary = getCapacitySummary(drink);
-                          return capacitySummary
-                            ? `Stock: ${stockValue} (${capacitySummary})`
-                            : `Stock: ${stockValue}`;
-                        })()}
+                        Stock: {drink.stock !== undefined && drink.stock !== null ? drink.stock : 0}
                       </Typography>
                     </Box>
+                    {(() => {
+                      const rows = getCapacityStockRows(drink);
+                      if (!rows.length) return null;
+                      return (
+                        <Box sx={{ mt: 0.25, ml: 3, display: 'flex', flexDirection: 'column', gap: 0.1 }}>
+                          {rows.map(({ capacity, stock }, idx) => (
+                            <Typography
+                              key={`${capacity}-${idx}`}
+                              variant="caption"
+                              sx={{ color: '#666', fontSize: '0.7rem' }}
+                            >
+                              Stock {stock}: {capacity}
+                            </Typography>
+                          ))}
+                        </Box>
+                      );
+                    })()}
                   </Box>
 
                   {/* ABV Display */}
