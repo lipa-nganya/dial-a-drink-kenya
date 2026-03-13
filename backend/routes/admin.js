@@ -1213,21 +1213,23 @@ router.post('/drinks', async (req, res) => {
     const summary = summarisePricing(normalizedPricing, finalPrice, originalPrice);
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : false;
 
-    // Resolve which drink columns exist (so we never SELECT nbv if migration not run)
+    // Resolve which drink columns exist (so we never SELECT or INSERT columns that aren't in the DB)
     let createResponseAttributes;
+    let drinkColumnNamesSet;
     try {
       const [existingDrinkColumns] = await db.sequelize.query(
         "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
       );
-      const drinkColumnNames = new Set((existingDrinkColumns || []).map(col => col.column_name.toLowerCase()));
+      drinkColumnNamesSet = new Set((existingDrinkColumns || []).map(col => col.column_name.toLowerCase()));
       createResponseAttributes = [];
       for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
         const dbColumnName = (attrDef.field || attrName).toLowerCase();
-        if (drinkColumnNames.has(dbColumnName)) {
+        if (drinkColumnNamesSet.has(dbColumnName)) {
           createResponseAttributes.push(attrName);
         }
       }
     } catch (_) {
+      // Fallback if information_schema query fails - assume a conservative attribute list.
       createResponseAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'slug', 'pageTitle', 'keywords', 'youtubeUrl', 'tags', 'createdAt', 'updatedAt'];
     }
 
@@ -1265,7 +1267,23 @@ router.post('/drinks', async (req, res) => {
       createPayload.nbv = toNumber(nbv);
     }
 
-    const newDrink = await db.Drink.create(createPayload);
+    // IMPORTANT:
+    // Only include attributes that actually have backing columns in the DB.
+    // This avoids 500s in production when migrations (e.g. purchasePrice / nbv) are not yet applied.
+    let safeCreatePayload = createPayload;
+    if (drinkColumnNamesSet && drinkColumnNamesSet.size > 0) {
+      safeCreatePayload = {};
+      for (const [attrName, value] of Object.entries(createPayload)) {
+        const attrDef = db.Drink.rawAttributes[attrName];
+        if (!attrDef) continue;
+        const dbColumnName = (attrDef.field || attrName).toLowerCase();
+        if (drinkColumnNamesSet.has(dbColumnName)) {
+          safeCreatePayload[attrName] = value;
+        }
+      }
+    }
+
+    const newDrink = await db.Drink.create(safeCreatePayload);
 
     const drinkWithRelations = await db.Drink.findByPk(newDrink.id, {
       attributes: createResponseAttributes,
