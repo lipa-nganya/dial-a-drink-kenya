@@ -76,6 +76,27 @@ const InventoryPage = () => {
   
   const itemsPerPage = 16; // 4 rows × 4 columns
 
+  // Helper to summarise capacities for display next to stock
+  const getCapacitySummary = (drink) => {
+    // Prefer capacityPricing (includes capacity labels)
+    if (Array.isArray(drink?.capacityPricing) && drink.capacityPricing.length > 0) {
+      const caps = drink.capacityPricing
+        .map(p => p && p.capacity)
+        .filter(Boolean);
+      const uniqueCaps = Array.from(new Set(caps));
+      if (uniqueCaps.length === 1) return uniqueCaps[0];
+      if (uniqueCaps.length > 1) return uniqueCaps.join(', ');
+    }
+    // Fallback to capacity array if available
+    if (Array.isArray(drink?.capacity) && drink.capacity.length > 0) {
+      const caps = drink.capacity.filter(Boolean);
+      const uniqueCaps = Array.from(new Set(caps));
+      if (uniqueCaps.length === 1) return uniqueCaps[0];
+      if (uniqueCaps.length > 1) return uniqueCaps.join(', ');
+    }
+    return null;
+  };
+
   // Helper function to get full image URL
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '';
@@ -893,7 +914,12 @@ const InventoryPage = () => {
                     {drink.stock !== undefined && drink.stock !== null && (
                       <Chip
                         icon={<Inventory />}
-                        label={`Stock: ${drink.stock}`}
+                        label={() => {
+                          const capacitySummary = getCapacitySummary(drink);
+                          return capacitySummary
+                            ? `Stock: ${drink.stock} (${capacitySummary})`
+                            : `Stock: ${drink.stock}`;
+                        }}
                         size="small"
                         sx={{ 
                           fontSize: '0.65rem', 
@@ -1042,7 +1068,13 @@ const InventoryPage = () => {
                           fontSize: '0.75rem'
                         }}
                       >
-                        Stock: {drink.stock !== undefined && drink.stock !== null ? drink.stock : 0}
+                        {(() => {
+                          const stockValue = drink.stock !== undefined && drink.stock !== null ? drink.stock : 0;
+                          const capacitySummary = getCapacitySummary(drink);
+                          return capacitySummary
+                            ? `Stock: ${stockValue} (${capacitySummary})`
+                            : `Stock: ${stockValue}`;
+                        })()}
                       </Typography>
                     </Box>
                   </Box>

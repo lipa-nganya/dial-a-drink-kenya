@@ -17,6 +17,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const CAPACITY_OPTIONS = [
   '1 litre',
+  '1.5 litre',
   '750ml',
   '700ml',
   '6pack',
@@ -24,6 +25,7 @@ const CAPACITY_OPTIONS = [
   '12 pack',
   '300ml',
   '330ml',
+  '1 can',
   'Packet',
   'Kingsize Slim',
   'Single Wide',
