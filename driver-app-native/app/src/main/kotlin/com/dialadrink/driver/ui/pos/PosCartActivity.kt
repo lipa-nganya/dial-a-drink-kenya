@@ -1498,25 +1498,6 @@ class PosCartActivity : AppCompatActivity() {
         val phone = binding.customerPhoneEditText.text.toString().trim()
         val deliveryAddress = if (isWalkIn) "In-Store Purchase" else binding.deliveryAddressEditText.text.toString().trim()
         
-        // For delivery orders, phone is required
-        if (!isWalkIn && phone.isEmpty()) {
-            Toast.makeText(this, "Please enter customer phone number", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        // For delivery orders, address is required
-        if (!isWalkIn && deliveryAddress.isEmpty()) {
-            Toast.makeText(this, "Please enter delivery address", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
-        // For delivery orders, customer must exist or be created
-        // For walk-in orders, customer is not required
-        if (!isWalkIn && !customerExists && customerName.isEmpty()) {
-            Toast.makeText(this, "Please create customer first", Toast.LENGTH_SHORT).show()
-            return
-        }
-        
         if (cart.isEmpty()) {
             Toast.makeText(this, "Cart is empty", Toast.LENGTH_SHORT).show()
             return

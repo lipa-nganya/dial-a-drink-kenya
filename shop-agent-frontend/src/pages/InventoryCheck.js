@@ -21,11 +21,14 @@ const InventoryCheck = () => {
   }, []);
 
   useEffect(() => {
-    if (searchTerm.trim()) {
-      const filtered = items.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (item.barcode && item.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
+    const query = searchTerm.trim().toLowerCase();
+
+    if (query) {
+      const filtered = items.filter(item => {
+        const name = (item.name || '').toLowerCase();
+        const barcode = (item.barcode || '').toLowerCase();
+        return name.includes(query) || barcode.includes(query);
+      });
       setSearchResults(filtered.slice(0, 10)); // Limit to 10 results
     } else {
       setSearchResults([]);

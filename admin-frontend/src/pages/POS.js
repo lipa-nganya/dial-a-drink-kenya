@@ -328,11 +328,6 @@ const POS = () => {
       return;
     }
 
-    if (!selectedCustomer && !customerPhone) {
-      setError('Please select or enter a customer phone number');
-      return;
-    }
-
     setProcessing(true);
     setError(null);
     setOrderSuccess(null);

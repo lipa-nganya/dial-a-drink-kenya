@@ -440,11 +440,12 @@ router.get('/drinks', async (req, res) => {
     // Build where clause - show ALL drinks including those with 0 stock
     const whereClause = {};
     
-    // Add search filter if provided
+    // Add search filter if provided (case-insensitive match on name or barcode)
     if (search && search.trim()) {
+      const term = search.trim();
       whereClause[Op.or] = [
-        { name: { [Op.like]: `%${search.trim()}%` } },
-        { barcode: { [Op.like]: `%${search.trim()}%` } }
+        { name: { [Op.iLike]: `%${term}%` } },
+        { barcode: { [Op.iLike]: `%${term}%` } }
       ];
     }
     
@@ -535,10 +536,10 @@ router.post('/order/cash', verifyAdmin, async (req, res) => {
   try {
     const { customerName, customerPhone, customerEmail, items, notes, branchId, amountPaid } = req.body;
 
-    // Validation
-    if (!customerName || !customerPhone || !Array.isArray(items) || items.length === 0) {
+    // Validation: only items are required; customer fields are optional and can be edited later
+    if (!Array.isArray(items) || items.length === 0) {
       await transaction.rollback();
-      return res.status(400).json({ error: 'Missing required fields: customerName, customerPhone, and items are required' });
+      return res.status(400).json({ error: 'Missing required fields: items are required' });
     }
 
     // Calculate totals
@@ -571,7 +572,7 @@ router.post('/order/cash', verifyAdmin, async (req, res) => {
     
     // Create order (POS orders don't have delivery address or delivery fee)
     const order = await db.Order.create({
-      customerName,
+      customerName: customerName && customerName.trim() ? customerName.trim() : 'POS Customer',
       customerPhone,
       customerEmail: customerEmail || null,
       deliveryAddress: 'In-Store Purchase', // POS orders don't need delivery address
@@ -598,9 +599,12 @@ router.post('/order/cash', verifyAdmin, async (req, res) => {
     }
 
     // Create cash payment transaction
+    const safeCustomerName = (customerName && customerName.trim()) || order.customerName || 'Customer';
+    const safeCustomerPhone = customerPhone && customerPhone.trim() ? customerPhone.trim() : (order.customerPhone || null);
+    const phonePart = safeCustomerPhone ? ` (${safeCustomerPhone})` : '';
     const cashNotes = amountPaid && parseFloat(amountPaid) > totalAmount
-      ? `Cash payment for POS order #${order.id}. Customer: ${customerName} (${customerPhone}). Amount received: KES ${parseFloat(amountPaid).toFixed(2)}, Change given: KES ${(parseFloat(amountPaid) - totalAmount).toFixed(2)}`
-      : `Cash payment for POS order #${order.id}. Customer: ${customerName} (${customerPhone})${amountPaid ? `. Amount received: KES ${parseFloat(amountPaid).toFixed(2)}` : ''}`;
+      ? `Cash payment for POS order #${order.id}. Customer: ${safeCustomerName}${phonePart}. Amount received: KES ${parseFloat(amountPaid).toFixed(2)}, Change given: KES ${(parseFloat(amountPaid) - totalAmount).toFixed(2)}`
+      : `Cash payment for POS order #${order.id}. Customer: ${safeCustomerName}${phonePart}${amountPaid ? `. Amount received: KES ${parseFloat(amountPaid).toFixed(2)}` : ''}`;
     
     await db.Transaction.create({
       orderId: order.id,
@@ -718,8 +722,8 @@ router.post('/order/mpesa', verifyAdmin, async (req, res) => {
 
     // Create order (pending payment)
     const order = await db.Order.create({
-      customerName,
-      customerPhone,
+      customerName: customerName && customerName.trim() ? customerName.trim() : 'POS Customer',
+      customerPhone: customerPhone && customerPhone.trim() ? customerPhone.trim() : null,
       customerEmail: customerEmail || null,
       deliveryAddress: 'In-Store Purchase',
       totalAmount,

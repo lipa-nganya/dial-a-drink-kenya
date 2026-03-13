@@ -560,56 +560,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const handleSubmit = async () => {
     setError('');
 
-    // Validation and auto-create customer if phone number doesn't exist
-    let finalCustomer = selectedCustomer;
-    if (!isWalkIn && !selectedCustomer) {
-      // Check if customerSearch contains a phone number
-      const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
-      if (phoneMatch) {
-        const phoneNumber = phoneMatch[1];
-        try {
-          // Try to create customer with phone number
-          const createResponse = await api.post('/admin/customers', {
-            phone: phoneNumber,
-            customerName: 'Online Customer'
-          });
-          
-          if (createResponse.data?.success && createResponse.data?.customer) {
-            finalCustomer = createResponse.data.customer;
-            // Refresh customers list
-            await fetchCustomers();
-          } else {
-            setError('Please select a customer or enter a valid phone number');
-            setLoading(false);
-            return;
-          }
-        } catch (error) {
-          console.error('Error creating customer:', error);
-          setError('Please select a customer or enter a valid phone number');
-          setLoading(false);
-          return;
-        }
-      } else {
-        setError('Please select a customer');
-        setLoading(false);
-        return;
-      }
-    }
-
-    if (isWalkIn && !selectedBranch) {
-      setError('Please select a branch for walk-in order');
-      return;
-    }
-
-    if (!isWalkIn && (!deliveryLocation || !deliveryLocation.trim())) {
-      setError('Please enter a delivery location');
-      return;
-    }
-
-    if (!isWalkIn && !selectedTerritory) {
-      setError('Please select a territory for delivery orders');
-      return;
-    }
+    // Validation: only order type/payment and cart items are required.
+    // Customer, phone, delivery location, branch, and territory are optional and can be edited after creation.
+    let finalCustomer = selectedCustomer || {};
 
     if (cartItems.length === 0) {
       setError('Please add at least one item to the cart');
@@ -627,8 +580,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setLoading(true);
 
     try {
-      // Walk-in orders are not delivery; use placeholder. Delivery orders use delivery location.
-      let finalDeliveryAddress = isWalkIn ? 'In-Store Purchase' : deliveryLocation;
+      // Walk-in orders are not delivery; use placeholder. Delivery orders may have TBD address initially.
+      let finalDeliveryAddress = isWalkIn ? 'In-Store Purchase' : (deliveryLocation && deliveryLocation.trim() ? deliveryLocation : 'TBD');
       let branchId = null;
 
       if (isWalkIn && selectedBranch) {
@@ -642,13 +595,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         }
       }
       
-      // Ensure deliveryAddress is never empty
-      if (!finalDeliveryAddress || !finalDeliveryAddress.trim()) {
-        setError('Delivery address is required');
-        setLoading(false);
-        return;
-      }
-
       // Find "1Default" territory for walk-in orders
       let defaultTerritoryId = null;
       if (isWalkIn) {
@@ -838,9 +784,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       }
 
       // For walk-in orders, always use 'POS' as customer name
-      const customerNameForOrder = isWalkIn 
+      const customerNameForOrder = isWalkIn
         ? 'POS'
-        : (finalCustomer?.customerName || finalCustomer?.name || '');
+        : (finalCustomer?.customerName || finalCustomer?.name || 'Customer');
       
       // Backend treats order as walk-in when customerPhone === 'POS' or deliveryAddress === 'In-Store Purchase'. Send 'POS' for walk-in so backend does not require a real phone.
       const customerPhoneForOrder = isWalkIn
@@ -1113,9 +1059,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       }
 
       // For walk-in orders, always use 'POS' as customer name
-      const customerNameForOrder = isWalkIn 
+      const customerNameForOrder = isWalkIn
         ? 'POS'
-        : (finalCustomer?.customerName || finalCustomer?.name || '');
+        : (finalCustomer?.customerName || finalCustomer?.name || 'Customer');
       
       const customerPhoneForOrder = isWalkIn 
         ? null
@@ -1375,9 +1321,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         }
       }
 
-      const customerNameForOrder = isWalkIn 
+      const customerNameForOrder = isWalkIn
         ? 'POS'
-        : (finalCustomer?.customerName || finalCustomer?.name || '');
+        : (finalCustomer?.customerName || finalCustomer?.name || 'Customer');
       
       const customerPhoneForOrder = isWalkIn 
         ? null
@@ -1580,13 +1526,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             </Select>
           </FormControl>
 
-          {/* Territory Selection - Only shown for delivery orders */}
+          {/* Territory Selection - Only shown for delivery orders (optional) */}
           {!isWalkIn && (
             <FormControl fullWidth>
-              <InputLabel>Territory *</InputLabel>
+              <InputLabel>Territory</InputLabel>
               <Select
                 value={selectedTerritory}
-                label="Territory *"
+                label="Territory"
                 onChange={(e) => setSelectedTerritory(e.target.value)}
                 MenuProps={{
                   disablePortal: false,
@@ -1621,7 +1567,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             </FormControl>
           )}
 
-          {/* Customer Selection - Hidden when walk-in is enabled */}
+          {/* Customer Selection - Hidden when walk-in is enabled (optional for admin orders) */}
           {!isWalkIn && (
             <Autocomplete
               value={selectedCustomer}
@@ -1704,7 +1650,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 return (
                   <TextField
                     {...inputParams}
-                    label="Customer *"
+                    label="Customer"
                     placeholder={!selectedCustomer ? "Search by name or phone number" : undefined}
                     sx={{
                       '& .MuiInputLabel-root': {
@@ -1775,13 +1721,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             />
           )}
 
-          {/* Branch Selection - Only shown when walk-in is enabled */}
+          {/* Branch Selection - Only shown when walk-in is enabled (optional) */}
           {isWalkIn && (
             <FormControl fullWidth>
-              <InputLabel>Branch *</InputLabel>
+              <InputLabel>Branch</InputLabel>
               <Select
                 value={selectedBranch}
-                label="Branch *"
+                label="Branch"
                 onChange={(e) => setSelectedBranch(e.target.value)}
               >
                 {branches.map((branch) => (
@@ -1794,10 +1740,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           )}
 
 
-          {/* Delivery Location - Only shown when walk-in is disabled */}
+          {/* Delivery Location - Only shown when walk-in is disabled (optional, can be set later) */}
           {!isWalkIn && (
             <AddressAutocomplete
-              label="Delivery Location *"
+              label="Delivery Location"
               value={deliveryLocation}
               onChange={(e) => setDeliveryLocation(e.target.value)}
               placeholder="Start typing the delivery address..."

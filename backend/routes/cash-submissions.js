@@ -257,40 +257,81 @@ router.post('/admin/cash-submissions', async (req, res) => {
       }
     }
 
-    // For all purchases with line items: update each product's purchase price in inventory (even when no asset account)
+    // For all purchases with line items:
+    // - Always update each product's purchase price in inventory
+    // - Always update stock (per-capacity when available), regardless of whether the purchase is already paid or unpaid
     if (submissionType === 'purchases' && detailsForUpdates) {
       const itemsArray = Array.isArray(detailsForUpdates.items) && detailsForUpdates.items.length > 0
         ? detailsForUpdates.items
         : (detailsForUpdates.item && detailsForUpdates.price != null
-          ? [{ item: detailsForUpdates.item, price: detailsForUpdates.price, quantity: detailsForUpdates.quantity || 1, productId: detailsForUpdates.productId }]
+          ? [{ item: detailsForUpdates.item, price: detailsForUpdates.price, quantity: detailsForUpdates.quantity || 1, productId: detailsForUpdates.productId, capacity: detailsForUpdates.capacity }]
           : []);
-      console.log(`   Purchase price update: processing ${itemsArray.length} item(s) from submission #${submission.id}`);
+
+      console.log(`   Purchase inventory update: processing ${itemsArray.length} item(s) from submission #${submission.id}`);
+
       for (const item of itemsArray) {
         const unitPrice = Number(item.price ?? item.purchasePrice ?? 0);
         const productId = item.productId != null ? parseInt(item.productId, 10) : NaN;
         const itemName = item.item || item.name || 'Unknown';
+        const qty = Number(item.quantity || 1);
+
         if (Number.isNaN(productId) || productId <= 0) {
-          console.warn(`   ⚠️ Skipping purchase price update for "${itemName}": invalid or missing productId (got: ${item.productId})`);
+          console.warn(`   ⚠️ Skipping inventory update for "${itemName}": invalid or missing productId (got: ${item.productId})`);
           continue;
         }
-        if (unitPrice <= 0) {
-          console.warn(`   ⚠️ Skipping purchase price update for productId ${productId} ("${itemName}"): unit price <= 0 (got: ${unitPrice})`);
-          continue;
-        }
+
         try {
           const drink = await db.Drink.findByPk(productId);
           if (!drink) {
             console.warn(`   ⚠️ Drink not found for productId ${productId} ("${itemName}")`);
             continue;
           }
-          // Use direct SQL update so purchase price is always persisted (avoids any Sequelize hook issues)
-          await db.sequelize.query(
-            'UPDATE drinks SET "purchasePrice" = :unitPrice, "updatedAt" = CURRENT_TIMESTAMP WHERE id = :productId',
-            { replacements: { unitPrice, productId } }
-          );
-          console.log(`   Set purchase price for Drink #${drink.id} (${drink.name}): ${unitPrice}`);
-        } catch (priceErr) {
-          console.error(`   Failed to update purchase price for product ${productId} ("${itemName}"):`, priceErr.message);
+
+          // 1) Update purchase price when we have a positive unit price
+          if (unitPrice > 0) {
+            try {
+              await db.sequelize.query(
+                'UPDATE drinks SET "purchasePrice" = :unitPrice, "updatedAt" = CURRENT_TIMESTAMP WHERE id = :productId',
+                { replacements: { unitPrice, productId } }
+              );
+              console.log(`   Set purchase price for Drink #${drink.id} (${drink.name}): ${unitPrice}`);
+            } catch (priceErr) {
+              console.error(`   Failed to update purchase price for product ${productId} ("${itemName}"):`, priceErr.message);
+            }
+          } else {
+            console.warn(`   ⚠️ Skipping purchase price update for productId ${productId} ("${itemName}"): unit price <= 0 (got: ${unitPrice})`);
+          }
+
+          // 2) Update stock (supports per-capacity stock when capacity is provided)
+          if (qty > 0) {
+            const capacity = item.capacity != null && String(item.capacity).trim() !== ''
+              ? String(item.capacity).trim()
+              : null;
+
+            if (capacity) {
+              const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
+                ? { ...drink.stockByCapacity }
+                : {};
+              const current = parseInt(byCap[capacity], 10) || 0;
+              byCap[capacity] = current + qty;
+
+              // Keep overall stock in sync with per-capacity totals
+              const totalStock = Object.values(byCap).reduce((sum, value) => {
+                const n = typeof value === 'number' ? value : parseInt(value, 10);
+                return sum + (Number.isNaN(n) ? 0 : n);
+              }, 0);
+
+              await drink.update({ stockByCapacity: byCap, stock: totalStock });
+              console.log(`   Updated per-capacity stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]} (total: ${totalStock})`);
+            } else {
+              const currentStock = parseFloat(drink.stock || 0);
+              const newStock = currentStock + qty;
+              await drink.update({ stock: newStock });
+              console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
+            }
+          }
+        } catch (invErr) {
+          console.error(`   Failed to update inventory for product ${productId} ("${itemName}") from purchase submission #${submission.id}:`, invErr.message);
         }
       }
     }

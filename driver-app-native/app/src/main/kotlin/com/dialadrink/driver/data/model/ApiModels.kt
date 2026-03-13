@@ -809,8 +809,8 @@ data class CreateLoanRequest(
 )
 
 data class CreatePosOrderRequest(
-    val customerName: String,
-    val customerPhone: String,
+    val customerName: String? = null,
+    val customerPhone: String? = null,
     val customerEmail: String? = null,
     val items: List<PosOrderItem>,
     val notes: String? = null,

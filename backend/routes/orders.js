@@ -242,9 +242,25 @@ router.post('/', async (req, res) => {
     // Check if this is a walk-in order (deliveryAddress is "In-Store Purchase" or customerPhone is "POS")
     const isWalkInOrder = deliveryAddress === 'In-Store Purchase' || customerPhone === 'POS' || 
                          (adminOrder && customerPhone && customerPhone.trim() === 'POS');
-    
-    // For walk-in orders, customerPhone can be "POS" placeholder. For delivery orders, it's required.
-    if (!customerName || (!isWalkInOrder && !customerPhone) || !deliveryAddress || !Array.isArray(items) || items.length === 0) {
+
+    // Normalize required-but-editable fields so we can allow creating orders without full customer details
+    const safeCustomerName =
+      customerName && customerName.trim()
+        ? customerName.trim()
+        : (isWalkInOrder ? 'POS' : 'Customer');
+
+    const safeCustomerPhone =
+      customerPhone && customerPhone.trim()
+        ? customerPhone.trim()
+        : (isWalkInOrder ? 'POS' : 'UNKNOWN');
+
+    const safeDeliveryAddress =
+      deliveryAddress && deliveryAddress.trim()
+        ? deliveryAddress.trim()
+        : (isWalkInOrder ? 'In-Store Purchase' : 'TBD');
+
+    // Only enforce that there is at least one item in the cart
+    if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ error: 'Missing required fields or empty cart' });
     }
 
@@ -539,16 +555,16 @@ router.post('/', async (req, res) => {
       
       // Only normalize phone if it exists (walk-in orders use "POS" placeholder)
       // For walk-in orders, use "POS" as placeholder since customerPhone cannot be null in the database
-      const normalizedCustomerPhone = customerPhone 
-        ? normalizePhoneForStorage(customerPhone) 
-        : (isWalkInOrder ? 'POS' : null);
+      const normalizedCustomerPhone = customerPhone
+        ? normalizePhoneForStorage(customerPhone)
+        : (isWalkInOrder ? 'POS' : 'UNKNOWN');
       console.log(`📱 Phone normalization: "${customerPhone}" -> "${normalizedCustomerPhone}"`);
       
       const order = await db.Order.create({
-        customerName,
-        customerPhone: normalizedCustomerPhone || (isWalkInOrder ? 'POS' : ''),
+        customerName: safeCustomerName,
+        customerPhone: normalizedCustomerPhone,
         customerEmail,
-        deliveryAddress,
+        deliveryAddress: safeDeliveryAddress,
         totalAmount: finalTotal,
         tipAmount: tip,
         notes: (() => {

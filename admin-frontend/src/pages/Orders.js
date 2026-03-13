@@ -114,7 +114,7 @@ const Orders = () => {
   const [selectedTerritoryId, setSelectedTerritoryId] = useState('');
   const [updatingTerritory, setUpdatingTerritory] = useState(false);
   const [applyingTerritoryFee, setApplyingTerritoryFee] = useState(false);
-  const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ deliveryFee: false, territory: false });
+  const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ customer: false, deliveryFee: false, territory: false });
   const updatedFeeTimeoutRef = useRef(null);
   const updatedTerritoryTimeoutRef = useRef(null);
   const [adminDeliveryFees, setAdminDeliveryFees] = useState({
@@ -2580,14 +2580,27 @@ const Orders = () => {
                   <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
                     Customer Information
                   </Typography>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    <Typography variant="body1">
-                      <strong>Name:</strong> {selectedOrderForDetail.customerName || 'N/A'}
-                    </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <TextField
+                      label="Customer Name"
+                      value={selectedOrderForDetail.customerName || ''}
+                      onChange={(e) => {
+                        setSelectedOrderForDetail(prev => prev ? { ...prev, customerName: e.target.value } : prev);
+                      }}
+                      size="small"
+                      fullWidth
+                      sx={{ maxWidth: 400 }}
+                    />
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body1">
-                        <strong>Phone:</strong> {selectedOrderForDetail.customerPhone || 'N/A'}
-                      </Typography>
+                      <TextField
+                        label="Customer Phone"
+                        value={selectedOrderForDetail.customerPhone || ''}
+                        onChange={(e) => {
+                          setSelectedOrderForDetail(prev => prev ? { ...prev, customerPhone: e.target.value } : prev);
+                        }}
+                        size="small"
+                        sx={{ maxWidth: 300 }}
+                      />
                       {selectedOrderForDetail.customerPhone && selectedOrderForDetail.customerPhone !== 'POS' && (
                         <Button
                           size="small"
@@ -2612,14 +2625,47 @@ const Orders = () => {
                         <strong>Email:</strong> {selectedOrderForDetail.customerEmail}
                       </Typography>
                     )}
-                    {selectedOrderForDetail.deliveryAddress && (
-                      <Typography variant="body1">
-                        <strong>Delivery Address:</strong> {selectedOrderForDetail.deliveryAddress}
-                      </Typography>
-                    )}
+                    <TextField
+                      label="Delivery Address"
+                      value={selectedOrderForDetail.deliveryAddress || ''}
+                      onChange={(e) => {
+                        setSelectedOrderForDetail(prev => prev ? { ...prev, deliveryAddress: e.target.value } : prev);
+                      }}
+                      size="small"
+                      fullWidth
+                      multiline
+                      minRows={2}
+                    />
                     <Typography variant="body1">
                       <strong>Delivery Notes:</strong> {selectedOrderForDetail.notes?.trim() ? selectedOrderForDetail.notes : '—'}
                     </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={async () => {
+                          try {
+                            const name = (selectedOrderForDetail.customerName || '').trim();
+                            const phone = (selectedOrderForDetail.customerPhone || '').trim();
+                            const address = (selectedOrderForDetail.deliveryAddress || '').trim();
+                            await api.patch(`/admin/orders/${selectedOrderForDetail.id}`, {
+                              customerName: name || null,
+                              customerPhone: phone || null,
+                              deliveryAddress: address || null
+                            });
+                            setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, customer: true }));
+                          } catch (err) {
+                            console.error('Error saving customer details:', err);
+                          }
+                        }}
+                        sx={{ mt: 1 }}
+                      >
+                        Save details
+                      </Button>
+                      {recentlyUpdatedInOrderDetail.customer && (
+                        <CheckCircle sx={{ color: '#2e7d32', fontSize: 20 }} aria-label="Updated" />
+                      )}
+                    </Box>
                   </Box>
                 </CardContent>
               </Card>

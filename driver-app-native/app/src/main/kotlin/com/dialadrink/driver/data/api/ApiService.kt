@@ -347,7 +347,15 @@ interface ApiService {
     suspend fun updateOrderPaymentStatus(
         @Path("orderId") orderId: Int,
         @Body request: UpdatePaymentStatusRequest
-    ): Response<ApiResponse<Order>>    @POST("admin/orders/{orderId}/prompt-payment")
+    ): Response<ApiResponse<Order>>
+
+    @PATCH("admin/orders/{orderId}")
+    suspend fun updateOrderCustomerDetails(
+        @Path("orderId") orderId: Int,
+        @Body request: UpdateOrderCustomerDetailsRequest
+    ): Response<ApiResponse<Order>>
+
+    @POST("admin/orders/{orderId}/prompt-payment")
     suspend fun promptOrderPayment(
         @Path("orderId") orderId: Int,
         @Body request: PromptOrderPaymentRequest? = null

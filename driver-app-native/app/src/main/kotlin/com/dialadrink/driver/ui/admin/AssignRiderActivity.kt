@@ -199,11 +199,14 @@ class AssignRiderActivity : AppCompatActivity() {
         
         // Populate order details
         dialogView.findViewById<android.widget.TextView>(R.id.orderNumberText).text = "Order #${order.id}"
-        dialogView.findViewById<android.widget.TextView>(R.id.customerPhoneText).text = order.customerPhone
-        dialogView.findViewById<android.widget.TextView>(R.id.customerNameText).text = order.customerName
+        val customerPhoneEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.customerPhoneEditText)
+        val customerNameEditText = dialogView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.customerNameEditText)
         dialogView.findViewById<android.widget.TextView>(R.id.territoryText).text = order.territory?.name ?: "N/A"
         dialogView.findViewById<android.widget.TextView>(R.id.deliveryLocationText).text = order.deliveryAddress
         dialogView.findViewById<android.widget.TextView>(R.id.orderDateText).text = order.createdAt ?: "N/A"
+
+        customerPhoneEditText.setText(order.customerPhone ?: "")
+        customerNameEditText.setText(order.customerName ?: "")
         
         // Setup rider dropdown with order counts
         val riderSpinnerLayout = dialogView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.riderSpinnerLayout)
@@ -415,7 +418,7 @@ class AssignRiderActivity : AppCompatActivity() {
                 null
             }
             val newDeliveryFee = deliveryFeeEditText.text.toString().toDoubleOrNull() ?: order.deliveryFee ?: 0.0
-            
+
             // Update item prices if changed
             val itemsToUpdate = mutableListOf<Pair<Int, Double>>() // itemId to newPrice
             for (i in 0 until itemsRecyclerView.childCount) {
@@ -430,8 +433,38 @@ class AssignRiderActivity : AppCompatActivity() {
                     }
                 }
             }
-            
-            updateOrder(order, selectedDriver, newDeliveryFee, itemsToUpdate, dialog)
+
+            val newPhone = customerPhoneEditText.text?.toString()?.trim()
+            val newName = customerNameEditText.text?.toString()?.trim()
+
+            lifecycleScope.launch {
+                try {
+                    if (!ApiClient.isInitialized()) {
+                        ApiClient.init(this@AssignRiderActivity)
+                    }
+
+                    if (!newPhone.isNullOrEmpty() || !newName.isNullOrEmpty()) {
+                        val request = UpdateOrderCustomerDetailsRequest(
+                            customerName = newName,
+                            customerPhone = newPhone,
+                            deliveryAddress = null
+                        )
+                        try {
+                            val updateResponse = ApiClient.getApiService().updateOrderCustomerDetails(order.id, request)
+                            if (!updateResponse.isSuccessful) {
+                                android.util.Log.e("AssignRiderActivity", "Failed to update customer details: ${updateResponse.code()}")
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("AssignRiderActivity", "Error updating customer details: ${e.message}", e)
+                        }
+                    }
+
+                    updateOrder(order, selectedDriver, newDeliveryFee, itemsToUpdate, dialog)
+                } catch (e: Exception) {
+                    android.util.Log.e("AssignRiderActivity", "Error during update: ${e.message}", e)
+                    Toast.makeText(this@AssignRiderActivity, "Error updating order", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
         
         dialog.show()

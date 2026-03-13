@@ -269,20 +269,22 @@ const InventoryPage = () => {
       }
     }
 
-    // Availability filter - always show drinks with stock 0, regardless of filter
-    // Only filter drinks with stock > 0 based on availability filter
+    // Availability filter
+    // - "available": only items with stock > 0
+    // - "out-of-stock": only items with stock === 0
+    // - "all": no stock-based filtering
     if (availabilityFilter !== 'all') {
       filtered = filtered.filter(drink => {
-        // Always include drinks with stock 0
-        const stock = drink.stock !== undefined && drink.stock !== null ? drink.stock : 0;
-        if (stock === 0) {
-          return true;
+        const stock = drink.stock !== undefined && drink.stock !== null ? Number(drink.stock) : 0;
+        if (availabilityFilter === 'available') {
+          return stock > 0;
         }
-        // For drinks with stock > 0, apply the availability filter
-        return availabilityFilter === 'available' ? drink.isAvailable : !drink.isAvailable;
+        if (availabilityFilter === 'out-of-stock') {
+          return stock === 0;
+        }
+        return true;
       });
     }
-    // When availabilityFilter is 'all', all drinks are shown (including those with stock 0)
 
     // On Offer filter - always apply
     if (offerFilter !== 'all') {

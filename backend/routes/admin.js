@@ -2455,13 +2455,13 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
 });
 
 /**
- * Update order fields (including isStop and stopDeductionAmount)
+ * Update order fields (including customer details and stop fields)
  * PATCH /api/admin/orders/:id
  */
 router.patch('/orders/:id', verifyAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    const { isStop, stopDeductionAmount } = req.body;
+    const { isStop, stopDeductionAmount, customerName, customerPhone, deliveryAddress } = req.body;
 
     const order = await db.Order.findByPk(id);
     if (!order) {
@@ -2477,6 +2477,22 @@ router.patch('/orders/:id', verifyAdmin, async (req, res) => {
     
     if (stopDeductionAmount !== undefined) {
       updateData.stopDeductionAmount = updateData.isStop && stopDeductionAmount ? parseFloat(stopDeductionAmount) : null;
+    }
+
+    // Optional editable customer fields
+    if (customerName !== undefined) {
+      const trimmed = typeof customerName === 'string' ? customerName.trim() : '';
+      updateData.customerName = trimmed || null;
+    }
+
+    if (customerPhone !== undefined) {
+      const trimmed = typeof customerPhone === 'string' ? customerPhone.trim() : '';
+      updateData.customerPhone = trimmed || null;
+    }
+
+    if (deliveryAddress !== undefined) {
+      const trimmed = typeof deliveryAddress === 'string' ? deliveryAddress.trim() : '';
+      updateData.deliveryAddress = trimmed || null;
     }
 
     if (Object.keys(updateData).length === 0) {
