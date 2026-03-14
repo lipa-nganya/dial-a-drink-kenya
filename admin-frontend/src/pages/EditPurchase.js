@@ -59,7 +59,7 @@ const normalizePaymentMethod = (v) => {
 const EditPurchase = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
 
   const [purchase, setPurchase] = useState(null);
   const [suppliers, setSuppliers] = useState([]);
