@@ -30,6 +30,7 @@ import Customers from './pages/Customers';
 import Payables from './pages/Payables';
 import Purchases from './pages/Purchases';
 import AddPurchase from './pages/AddPurchase';
+import EditPurchase from './pages/EditPurchase';
 import PayablesDashboard from './pages/PayablesDashboard';
 import Sales from './pages/Sales';
 import RiderProfits from './pages/RiderProfits';
@@ -386,6 +387,16 @@ function AppContent() {
                   <PrivateRoute>
                     <AdminLayout>
                       <AddPurchase />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/payables/purchases/:id/edit"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <EditPurchase />
                     </AdminLayout>
                   </PrivateRoute>
                 }

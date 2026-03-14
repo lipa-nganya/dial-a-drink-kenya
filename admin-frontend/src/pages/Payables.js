@@ -26,7 +26,7 @@ import {
   Tabs,
   Tab
 } from '@mui/material';
-import { Receipt, Search } from '@mui/icons-material';
+import { Receipt, Search, Edit as EditIcon } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -46,6 +46,7 @@ const Payables = () => {
   const [purchaseDetailsOpen, setPurchaseDetailsOpen] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState(null);
   const [assetAccounts, setAssetAccounts] = useState([]);
+  const [markingPaid, setMarkingPaid] = useState(false);
 
   useEffect(() => {
     if (location.state) {
@@ -190,6 +191,56 @@ const Payables = () => {
   const handleClosePurchaseDetails = () => {
     setPurchaseDetailsOpen(false);
     setSelectedPurchase(null);
+    setMarkingPaid(false);
+  };
+
+  const handleEditPurchase = () => {
+    if (!selectedPurchase || selectedPurchase.id == null) return;
+    navigate(`/payables/purchases/${selectedPurchase.id}/edit`);
+    handleClosePurchaseDetails();
+  };
+
+  const handleMarkPurchasePaid = async () => {
+    if (!selectedPurchase || selectedPurchase.id == null) return;
+    const amount = parseFloat(selectedPurchase.amount) || 0;
+    if (amount <= 0) return;
+    setMarkingPaid(true);
+    setError(null);
+    try {
+      const res = await api.patch(`/driver-wallet/admin/cash-submissions/${selectedPurchase.id}`, {
+        details: {
+          ...(selectedPurchase.details || {}),
+          amountPaid: amount
+        }
+      });
+      const updated = res.data?.data ?? res.data;
+      if (updated) setSelectedPurchase(updated);
+      await fetchPurchases();
+    } catch (err) {
+      console.error('Error marking payable as paid:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to mark as paid.');
+    } finally {
+      setMarkingPaid(false);
+    }
+  };
+
+  const handleMarkPurchaseUnpaid = async () => {
+    if (!selectedPurchase || selectedPurchase.id == null) return;
+    setMarkingPaid(true);
+    setError(null);
+    try {
+      const details = { ...(selectedPurchase.details || {}) };
+      delete details.amountPaid;
+      const res = await api.patch(`/driver-wallet/admin/cash-submissions/${selectedPurchase.id}`, { details });
+      const updated = res.data?.data ?? res.data;
+      if (updated) setSelectedPurchase(updated);
+      await fetchPurchases();
+    } catch (err) {
+      console.error('Error marking payable as unpaid:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to mark as unpaid.');
+    } finally {
+      setMarkingPaid(false);
+    }
   };
 
 
@@ -355,7 +406,14 @@ const Payables = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle>Purchase Details</DialogTitle>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          Purchase Details
+          {selectedPurchase && (
+            <Button startIcon={<EditIcon />} size="small" onClick={handleEditPurchase}>
+              Edit
+            </Button>
+          )}
+        </DialogTitle>
         <DialogContent dividers>
           {selectedPurchase && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -407,6 +465,19 @@ const Payables = () => {
                           selectedPurchase.details?.recipientName || 'N/A'
                         }`}
                   </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" color="text.secondary">
+                    Status
+                  </Typography>
+                  <Box component="span" sx={{ display: 'inline-block', mt: 0.5 }}>
+                    <Chip
+                      label={getPurchaseStatus(selectedPurchase)}
+                      color={getPurchaseStatus(selectedPurchase) === 'Paid' ? 'success' : 'default'}
+                      size="small"
+                      sx={getPurchaseStatus(selectedPurchase) === 'Unpaid' ? { backgroundColor: '#FF3366', color: '#FFF' } : undefined}
+                    />
+                  </Box>
                 </Box>
               </Box>
 
@@ -470,6 +541,26 @@ const Payables = () => {
           )}
         </DialogContent>
         <DialogActions>
+          {selectedPurchase && getPurchaseStatus(selectedPurchase) === 'Unpaid' && (
+                <Button
+                  color="primary"
+                  variant="contained"
+                  onClick={handleMarkPurchasePaid}
+                  disabled={markingPaid}
+                >
+                  {markingPaid ? 'Updating…' : 'Mark as paid'}
+                </Button>
+              )}
+              {selectedPurchase && getPurchaseStatus(selectedPurchase) === 'Paid' && (
+                <Button
+                  color="secondary"
+                  variant="outlined"
+                  onClick={handleMarkPurchaseUnpaid}
+                  disabled={markingPaid}
+                >
+                  {markingPaid ? 'Updating…' : 'Mark as unpaid'}
+                </Button>
+              )}
           <Button onClick={handleClosePurchaseDetails}>Close</Button>
         </DialogActions>
       </Dialog>

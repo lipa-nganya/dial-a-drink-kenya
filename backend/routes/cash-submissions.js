@@ -354,7 +354,8 @@ router.post('/admin/cash-submissions', async (req, res) => {
  */
 router.get('/admin/cash-submissions/all', async (req, res) => {
   try {
-    const { limit = 1000, offset = 0 } = req.query;
+    const limit = Math.min(1000, Math.max(0, parseInt(req.query.limit, 10) || 1000));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
     console.log('📋 Fetching all cash submissions...');
 
@@ -368,8 +369,8 @@ router.get('/admin/cash-submissions/all', async (req, res) => {
         { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
       ],
       order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
+      limit,
+      offset
     });
 
     console.log(`✅ Found ${submissions.length} cash submissions`);
@@ -798,7 +799,9 @@ router.get('/:driverId/orders-for-order-payment', async (req, res) => {
 router.get('/:driverId/cash-submissions', async (req, res) => {
   try {
     const { driverId } = req.params;
-    const { status, limit = 50, offset = 0 } = req.query;
+    const limit = Math.min(500, Math.max(0, parseInt(req.query.limit, 10) || 50));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const status = req.query.status;
 
     // Validate driver exists
     const driver = await db.Driver.findByPk(driverId);
@@ -828,8 +831,8 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
         }
       ],
       order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
+      limit,
+      offset
     });
 
     // Get counts
@@ -908,6 +911,94 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
   } catch (error) {
     console.error('Error fetching cash submissions:', error);
     sendError(res, error.message, 500);
+  }
+});
+
+/**
+ * Update cash submission details (admin) – e.g. mark payable as paid
+ * PATCH /api/driver-wallet/admin/cash-submissions/:id
+ * Must be defined BEFORE /:driverId/cash-submissions/:id so "admin" is not parsed as driverId.
+ */
+function sanitizeDetailsForJsonb(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return (typeof obj === 'number' && Number.isNaN(obj)) ? null : obj;
+  }
+  if (Array.isArray(obj)) return obj.map(sanitizeDetailsForJsonb);
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    const key = (typeof k === 'number' && Number.isNaN(k)) ? 'nan_key' : String(k);
+    out[key] = v === undefined || (typeof v === 'number' && Number.isNaN(v))
+      ? null
+      : sanitizeDetailsForJsonb(v);
+  }
+  return out;
+}
+
+router.patch('/admin/cash-submissions/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const submissionId = parseInt(id, 10);
+    if (Number.isNaN(submissionId) || submissionId < 1) {
+      return sendError(res, 'Invalid submission ID', 400);
+    }
+    const { details: bodyDetails, amount: bodyAmount } = req.body || {};
+
+    const submission = await db.CashSubmission.findByPk(submissionId, {
+      include: [
+        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false },
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false }
+      ]
+    });
+    if (!submission) {
+      return sendError(res, 'Cash submission not found', 404);
+    }
+
+    if (bodyDetails === undefined || bodyDetails === null) {
+      return sendError(res, 'details object is required', 400);
+    }
+
+    const rawDetails = submission.get ? submission.get('details') : submission.details;
+    const existingDetails =
+      typeof rawDetails === 'object' && rawDetails !== null
+        ? JSON.parse(JSON.stringify(rawDetails))
+        : {};
+    const cleanBody = Object.fromEntries(
+      Object.entries(bodyDetails).filter(([, v]) => v !== undefined)
+    );
+    const merged = { ...existingDetails, ...cleanBody };
+    const updatedDetails = sanitizeDetailsForJsonb(merged);
+
+    const updatePayload = { details: updatedDetails };
+    if (bodyAmount !== undefined && bodyAmount !== null) {
+      const newAmount = parseFloat(bodyAmount);
+      if (!Number.isNaN(newAmount) && newAmount > 0) updatePayload.amount = newAmount;
+    }
+    const dialect = db.sequelize.getDialect();
+    if (dialect === 'postgres') {
+      const setClauses = ['details = CAST(:details AS jsonb)', '"updatedAt" = CURRENT_TIMESTAMP'];
+      const replacements = { details: JSON.stringify(updatedDetails), id: submissionId };
+      if (updatePayload.amount != null) {
+        setClauses.push('amount = :amount');
+        replacements.amount = updatePayload.amount;
+      }
+      await db.sequelize.query(
+        `UPDATE cash_submissions SET ${setClauses.join(', ')} WHERE id = :id`,
+        { replacements }
+      );
+    } else {
+      await submission.update(updatePayload);
+    }
+
+    const updated = await db.CashSubmission.findByPk(submissionId, {
+      include: [
+        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false },
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false }
+      ]
+    });
+    return sendSuccess(res, updated || submission, 'Cash submission updated successfully');
+  } catch (error) {
+    console.error('Error updating admin cash submission details:', error);
+    return sendError(res, error.message || 'Failed to update cash submission', 500);
   }
 });
 
@@ -1025,14 +1116,14 @@ router.post('/admin/cash-submissions/:id/purchase-status', verifyAdmin, async (r
   }
 });
 
-
 /**
  * Get all pending cash submissions (admin)
  * GET /api/driver-wallet/cash-submissions/pending
  */
 router.get('/cash-submissions/pending', async (req, res) => {
   try {
-    const { limit = 100, offset = 0 } = req.query;
+    const limit = Math.min(500, Math.max(0, parseInt(req.query.limit, 10) || 100));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
 
     console.log('📋 Fetching pending cash submissions...');
 
@@ -1047,8 +1138,8 @@ router.get('/cash-submissions/pending', async (req, res) => {
         { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
       ],
       order: [['createdAt', 'DESC']],
-      limit: parseInt(limit),
-      offset: parseInt(offset)
+      limit,
+      offset
     });
 
     console.log(`✅ Found ${submissions.length} pending cash submissions`);
