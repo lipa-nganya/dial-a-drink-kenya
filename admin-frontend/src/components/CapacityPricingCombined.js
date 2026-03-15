@@ -23,6 +23,7 @@ const CAPACITY_OPTIONS = [
   '6pack',
   'twin pack',
   '12 pack',
+  '24 pack',
   '300ml',
   '330ml',
   '1 can',
