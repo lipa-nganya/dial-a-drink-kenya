@@ -225,11 +225,11 @@ const InventoryPage = () => {
   const filterDrinks = () => {
     let filtered = [...drinks];
 
-    // Search filter
+    // Search filter - match product name only
     if (searchTerm) {
+      const term = searchTerm.toLowerCase();
       filtered = filtered.filter(drink =>
-        (drink.name && drink.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
-        (drink.description && drink.description.toLowerCase().includes(searchTerm.toLowerCase()))
+        drink.name && drink.name.toLowerCase().includes(term)
       );
     }
 
