@@ -2281,7 +2281,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                         <Chip
                           size="small"
                           label={profitLoss >= 0 ? `PROFIT +KES ${Math.round(profitLoss)}` : `LOSS -KES ${Math.round(Math.abs(profitLoss))}`}
-                          sx={{ backgroundColor: profitLoss >= 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)', color: profitLoss >= 0 ? '#2e7d32' : '#c62828', fontWeight: 600 }}
+                          sx={{
+                            backgroundColor: profitLoss >= 0 ? 'rgba(76, 175, 80, 0.2)' : '#e0e0e0',
+                            color: profitLoss >= 0 ? '#2e7d32' : '#000000',
+                            fontWeight: 600
+                          }}
                         />
                       )}
                     </Box>

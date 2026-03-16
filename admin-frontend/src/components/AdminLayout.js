@@ -6,11 +6,11 @@ import QuickActionsMenu from './QuickActionsMenu';
 import { useTheme } from '../contexts/ThemeContext';
 import { useMobileView } from '../contexts/MobileViewContext';
 
-const DRAWER_WIDTH = 260;
+const DRAWER_WIDTH = 220;
 
 const AdminLayout = ({ children }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { colors } = useTheme();
   const { isMobileView } = useMobileView();
 

@@ -121,6 +121,7 @@ const Orders = () => {
     deliveryFeeWithAlcohol: 50,
     deliveryFeeWithoutAlcohol: 30
   });
+  const [savingOrderDetails, setSavingOrderDetails] = useState(false);
   
   // Payment dialog state
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -129,6 +130,36 @@ const Orders = () => {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+
+  const openOrderDetails = (order) => {
+    let orderWithBreakdown = { ...order };
+
+    if (orderWithBreakdown.deliveryFee === undefined || orderWithBreakdown.itemsTotal === undefined) {
+      const itemsTotal =
+        orderWithBreakdown.items?.reduce(
+          (sum, item) =>
+            sum +
+            (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)),
+          0
+        ) || 0;
+
+      const tipAmount = parseFloat(orderWithBreakdown.tipAmount || 0);
+      const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
+      const deliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
+
+      orderWithBreakdown.itemsTotal = Math.round(Number(itemsTotal));
+      orderWithBreakdown.deliveryFee = Math.round(Number(deliveryFee));
+    }
+
+    setSelectedOrderForDetail(orderWithBreakdown);
+    setSelectedTerritoryId(
+      orderWithBreakdown.territoryId ??
+        orderWithBreakdown.territory?.id ??
+        ''
+    );
+    setRecentlyUpdatedInOrderDetail({ deliveryFee: false, territory: false });
+    setOrderDetailDialogOpen(true);
+  };
   
   // Route Optimisation state (kept for fetchRiderRoutes function which is still called)
   const [orderTab, setOrderTab] = useState('all'); // 'all', 'completed', 'pending', 'unassigned', 'confirmed', 'cancelled', 'cancellation-requests'
@@ -793,6 +824,8 @@ const Orders = () => {
 
     try {
       const response = await api.patch(`/admin/orders/${orderId}/status`, { status: newStatus });
+
+      // Update orders list
       setOrders(prevOrders => {
         const updated = prevOrders.map(order => 
           order.id === orderId ? { ...order, status: newStatus, paymentStatus: response.data.paymentStatus } : order
@@ -800,6 +833,13 @@ const Orders = () => {
         // Re-sort after status update
         return sortOrdersByStatus(updated);
       });
+
+      // Update currently viewed order details if it matches
+      setSelectedOrderForDetail(prev =>
+        prev && prev.id === orderId
+          ? { ...prev, status: newStatus, paymentStatus: response.data.paymentStatus }
+          : prev
+      );
     } catch (error) {
       console.error('Error updating order status:', error);
       setError(error.response?.data?.error || error.message);
@@ -1193,6 +1233,143 @@ const Orders = () => {
       alert(`Error: ${errorMessage} (Status: ${error.response?.status || 'N/A'})`);
     } finally {
       setUpdatingDeliveryFee(false);
+    }
+  };
+
+  const handleSaveOrderDetails = async () => {
+    if (!selectedOrderForDetail) return;
+    setSavingOrderDetails(true);
+
+    try {
+      const id = selectedOrderForDetail.id;
+
+      // 1) Save customer + delivery address
+      const name = (selectedOrderForDetail.customerName || '').trim();
+      const phone = (selectedOrderForDetail.customerPhone || '').trim();
+      const address = (selectedOrderForDetail.deliveryAddress || '').trim();
+
+      await api.patch(`/admin/orders/${id}`, {
+        customerName: name || null,
+        customerPhone: phone || null,
+        deliveryAddress: address || null
+      });
+
+      // 2) Save driver
+      const driverIdPayload =
+        selectedOrderForDetail.driverId == null ||
+        selectedOrderForDetail.driverId === ''
+          ? null
+          : parseInt(selectedOrderForDetail.driverId, 10);
+
+      if (driverIdPayload === null || !Number.isNaN(driverIdPayload)) {
+        await api.patch(`/admin/orders/${id}/driver`, {
+          driverId: driverIdPayload
+        });
+      }
+
+      // 3) Save territory
+      const territoryId =
+        selectedTerritoryId === '' || selectedTerritoryId == null
+          ? null
+          : parseInt(selectedTerritoryId, 10);
+
+      if (territoryId === null || !Number.isNaN(territoryId)) {
+        const territoryPayload =
+          territoryId === null ? { territoryId: null } : { territoryId };
+
+        const territoryResponse = await api.patch(
+          `/admin/orders/${id}/territory`,
+          territoryPayload
+        );
+
+        const updatedOrder = territoryResponse.data;
+        const territory =
+          territoryId && territories.find((t) => t.id === territoryId);
+
+        setSelectedOrderForDetail((prev) => ({
+          ...prev,
+          territoryId: updatedOrder.territoryId,
+          territory: territory
+            ? { id: territory.id, name: territory.name }
+            : null
+        }));
+
+        setOrders((prev) =>
+          prev.map((o) =>
+            o.id === updatedOrder.id
+              ? {
+                  ...o,
+                  territoryId: updatedOrder.territoryId,
+                  territory: territory
+                    ? { id: territory.id, name: territory.name }
+                    : null
+                }
+              : o
+          )
+        );
+
+        setFilteredOrders((prev) =>
+          prev.map((o) =>
+            o.id === updatedOrder.id
+              ? {
+                  ...o,
+                  territoryId: updatedOrder.territoryId,
+                  territory: territory
+                    ? { id: territory.id, name: territory.name }
+                    : null
+                }
+              : o
+          )
+        );
+      }
+
+      // 4) Save delivery fee
+      const rawFee = selectedOrderForDetail.deliveryFee;
+      const deliveryFeeValue =
+        rawFee === '' || rawFee == null ? null : parseFloat(rawFee);
+
+      if (deliveryFeeValue != null) {
+        if (Number.isNaN(deliveryFeeValue) || deliveryFeeValue < 0) {
+          alert('Please enter a valid delivery fee');
+        } else {
+          const feeResponse = await api.patch(
+            `/admin/orders/${id}/delivery-fee`,
+            { deliveryFee: deliveryFeeValue }
+          );
+
+          if (feeResponse.data && feeResponse.data.success) {
+            const { order, breakdown } = feeResponse.data;
+            setSelectedOrderForDetail((prev) => ({
+              ...(order || prev),
+              deliveryFee:
+                breakdown?.deliveryFee ??
+                order?.deliveryFee ??
+                prev.deliveryFee,
+              totalAmount:
+                breakdown?.totalAmount ??
+                order?.totalAmount ??
+                prev.totalAmount,
+              itemsTotal:
+                breakdown?.itemsTotal ??
+                order?.itemsTotal ??
+                prev.itemsTotal
+            }));
+
+            // We'll refresh once at the end
+          }
+        }
+      }
+      // Single refresh after all saves
+      await fetchOrders();
+    } catch (error) {
+      console.error('Error saving order details:', error);
+      alert(
+        error.response?.data?.error ||
+          error.message ||
+          'Failed to save order details'
+      );
+    } finally {
+      setSavingOrderDetails(false);
     }
   };
 
@@ -1767,7 +1944,7 @@ const Orders = () => {
         )}
 
         <Box sx={{ ml: 'auto' }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2">
             Showing {filteredOrders.length} of {orders.length} orders
           </Typography>
         </Box>
@@ -1790,7 +1967,6 @@ const Orders = () => {
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Total Amount</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Payment Status</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Territory</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Driver</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
@@ -1807,30 +1983,7 @@ const Orders = () => {
                 return (
                   <TableRow
                     key={order.id}
-                    onClick={async () => {
-                      // Calculate deliveryFee and itemsTotal if not present
-                      let orderWithBreakdown = { ...order };
-                      
-                      if (orderWithBreakdown.deliveryFee === undefined || orderWithBreakdown.itemsTotal === undefined) {
-                        // Calculate itemsTotal
-                        const itemsTotal = orderWithBreakdown.items?.reduce((sum, item) => 
-                          sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
-                        ) || 0;
-                        
-                        // Calculate deliveryFee: totalAmount - tipAmount - itemsTotal
-                        const tipAmount = parseFloat(orderWithBreakdown.tipAmount || 0);
-                        const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
-                        const deliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
-                        
-                        orderWithBreakdown.itemsTotal = Math.round(Number(itemsTotal));
-                        orderWithBreakdown.deliveryFee = Math.round(Number(deliveryFee));
-                      }
-                      
-                      setSelectedOrderForDetail(orderWithBreakdown);
-                      setSelectedTerritoryId(orderWithBreakdown.territoryId ?? orderWithBreakdown.territory?.id ?? '');
-                      setRecentlyUpdatedInOrderDetail({ deliveryFee: false, territory: false });
-                      setOrderDetailDialogOpen(true);
-                    }}
+                    onClick={() => openOrderDetails(order)}
                     sx={{
                       backgroundColor: hasPendingCancellation 
                         ? 'rgba(255, 193, 7, 0.2)' 
@@ -1858,11 +2011,11 @@ const Orders = () => {
                         <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.95rem' }}>
                           {order.customerName}
                         </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                        <Typography variant="caption">
                           {order.customerPhone || 'N/A'}
                         </Typography>
                         {order.customerEmail && (
-                          <Typography variant="caption" color="text.secondary" display="block" sx={{ fontSize: '0.85rem' }}>
+                          <Typography variant="caption" display="block">
                             {order.customerEmail}
                           </Typography>
                         )}
@@ -1870,11 +2023,11 @@ const Orders = () => {
                     </TableCell>
                     <TableCell>
                       <Box>
-                        <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366', fontSize: '1rem' }}>
+                        <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '1rem' }}>
                           KES {Math.round(Number(order.totalAmount))}
                         </Typography>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.85rem' }}>
+                          <Typography variant="caption">
                             {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
                           </Typography>
                           {(() => {
@@ -1910,8 +2063,8 @@ const Orders = () => {
                                   label={profitLabel}
                                   size="small"
                                   sx={{
-                                    backgroundColor: profit >= 0 ? '#4caf50' : '#f44336',
-                                    color: '#ffffff',
+                                    backgroundColor: profit >= 0 ? 'rgba(76, 175, 80, 0.2)' : '#e0e0e0',
+                                    color: profit >= 0 ? '#2e7d32' : '#000000',
                                     fontWeight: 600,
                                     fontSize: '0.7rem',
                                     height: '20px'
@@ -1971,8 +2124,8 @@ const Orders = () => {
                             label="POS"
                             size="small"
                             sx={{
-                              backgroundColor: '#00E0B8',
-                              color: '#003B2F',
+                              backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                              color: '#2e7d32',
                               fontWeight: 600,
                               fontSize: '0.65rem',
                               height: '20px'
@@ -1984,8 +2137,8 @@ const Orders = () => {
                             label="Admin Order"
                             size="small"
                             sx={{
-                              backgroundColor: '#9C27B0',
-                              color: '#FFFFFF',
+                              backgroundColor: '#e0e0e0',
+                              color: '#000000',
                               fontWeight: 600,
                               fontSize: '0.65rem',
                               height: '20px'
@@ -1993,19 +2146,6 @@ const Orders = () => {
                           />
                         )}
                       </Box>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={order.territory?.name || 'No territory'}
-                        size="small"
-                        sx={{
-                          backgroundColor: '#9e9e9e',
-                          color: '#fff',
-                          fontWeight: 500,
-                          borderRadius: '16px',
-                          '& .MuiChip-label': { px: 1.25 }
-                        }}
-                      />
                     </TableCell>
                     <TableCell>
                       {order.driverId && order.driver ? (
@@ -2019,25 +2159,37 @@ const Orders = () => {
                           {order.driverAccepted === true && (
                             <Chip 
                               label="Accepted" 
-                              color="success" 
                               size="small" 
-                              sx={{ mt: 0.5 }}
+                              sx={{ 
+                                mt: 0.5,
+                                backgroundColor: 'rgba(76, 175, 80, 0.2)',
+                                color: '#2e7d32',
+                                fontWeight: 600
+                              }}
                             />
                           )}
                           {order.driverAccepted === false && (
                             <Chip 
                               label="Rejected" 
-                              color="error" 
                               size="small" 
-                              sx={{ mt: 0.5 }}
+                              sx={{ 
+                                mt: 0.5,
+                                backgroundColor: '#e0e0e0',
+                                color: '#000000',
+                                fontWeight: 600
+                              }}
                             />
                           )}
                           {order.driverAccepted === null && order.driverId && (
                             <Chip 
                               label="Pending Response" 
-                              color="warning" 
                               size="small" 
-                              sx={{ mt: 0.5 }}
+                              sx={{ 
+                                mt: 0.5,
+                                backgroundColor: '#e0e0e0',
+                                color: '#000000',
+                                fontWeight: 600
+                              }}
                             />
                           )}
                           {hasPendingCancellation && (
@@ -2057,8 +2209,11 @@ const Orders = () => {
                       ) : !order.driverId ? (
                         <Box>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                            <Person fontSize="small" color="error" />
-                            <Typography variant="body2" sx={{ fontWeight: 600, color: 'error.main', fontSize: '0.95rem' }}>
+                            <Person fontSize="small" color="disabled" />
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 600, color: '#000000', fontSize: '0.95rem' }}
+                            >
                               Unassigned
                             </Typography>
                           </Box>
@@ -2070,186 +2225,34 @@ const Orders = () => {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.95rem' }}>
+                      <Typography variant="body2">
                         {new Date(order.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption">
                         {new Date(order.createdAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }} onClick={(e) => e.stopPropagation()}>
+                      <Box
+                        sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <Button
                           variant="outlined"
                           size="small"
                           startIcon={<Edit />}
-                          onClick={() => handleOpenDriverDialog(order)}
-                          disabled={order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled'}
+                          onClick={() => openOrderDetails(order)}
                           sx={{
-                            borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : colors.accentText,
-                            color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.textSecondary : colors.accentText,
+                            borderColor: '#000000',
+                            color: '#000000',
                             '&:hover': {
-                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : '#00C4A3',
-                              backgroundColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? 'transparent' : 'rgba(0, 224, 184, 0.1)'
-                            },
-                            '&.Mui-disabled': {
-                              borderColor: colors.border,
-                              color: colors.textSecondary
+                              borderColor: '#000000',
+                              backgroundColor: 'rgba(0,0,0,0.04)'
                             }
                           }}
                         >
-                          {order.driver ? 'Change Driver' : 'Assign Driver'}
+                          Details
                         </Button>
-                        {order.driver && (
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<Delete />}
-                            onClick={() => handleRemoveDriver(order)}
-                            disabled={order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled'}
-                            sx={{
-                            borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : '#FF3366',
-                            color: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.textSecondary : '#FF3366',
-                            '&:hover': {
-                              borderColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? colors.border : '#FF1744',
-                              backgroundColor: (order.status === 'delivered' || order.status === 'completed' || order.status === 'cancelled') ? 'transparent' : 'rgba(255, 51, 102, 0.1)'
-                            },
-                            '&.Mui-disabled': {
-                              borderColor: colors.border,
-                              color: colors.textSecondary
-                            }
-                            }}
-                          >
-                            Remove Driver
-                          </Button>
-                        )}
-                        {nextStatusOptions.length > 0 && (
-                          <FormControl size="small" sx={{ minWidth: 150 }}>
-                            <InputLabel>Update Status</InputLabel>
-                            <Select
-                              value=""
-                              label="Update Status"
-                              onChange={(e) => handleStatusUpdate(order.id, e.target.value)}
-                            >
-                              {nextStatusOptions.map(option => (
-                                <MenuItem key={option.value} value={option.value}>
-                                  {option.label}
-                                </MenuItem>
-                              ))}
-                            </Select>
-                          </FormControl>
-                        )}
-                        
-                        {hasPendingCancellation && (
-                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                            <Button
-                              variant="contained"
-                              size="small"
-                              color="success"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleApproveCancellation(order.id);
-                              }}
-                              sx={{ flex: 1 }}
-                            >
-                              Approve
-                            </Button>
-                            <Button
-                              variant="contained"
-                              size="small"
-                              color="error"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleRejectCancellation(order.id);
-                              }}
-                              sx={{ flex: 1 }}
-                            >
-                              Reject
-                            </Button>
-                          </Box>
-                        )}
-                        {order.paymentStatus !== 'paid' && order.status !== 'cancelled' && (
-                          <Button
-                            variant="contained"
-                            size="small"
-                            color="primary"
-                            startIcon={<Payment />}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenPaymentDialog(order);
-                            }}
-                            sx={{ mt: 1, mr: 1 }}
-                          >
-                            Payment
-                          </Button>
-                        )}
-                        {order.status === 'delivered' && order.paymentStatus === 'unpaid' && (
-                          <Button
-                            variant="contained"
-                            size="small"
-                            color="success"
-                            onClick={async () => {
-                              await handlePaymentStatusUpdate(order.id, 'paid');
-                              // This will automatically update order to completed
-                            }}
-                            sx={{ mt: 1 }}
-                          >
-                            Mark Payment Received
-                          </Button>
-                        )}
-                        
-                        {/* Manual payment verification for M-Pesa orders that are still pending */}
-                        {order.paymentMethod === 'mobile_money' && 
-                         order.paymentStatus === 'pending' && 
-                         order.status === 'pending' &&
-                         getOrderTransactionStatus(order) !== 'completed' && (
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            color="primary"
-                            onClick={async () => {
-                              if (window.confirm(`Verify payment for Order #${order.id}?\n\nThis will mark the order as paid and confirmed.`)) {
-                                try {
-                                  const response = await api.post(`/admin/orders/${order.id}/verify-payment`, {
-                                    receiptNumber: prompt('Enter M-Pesa receipt number (optional):') || null
-                                  });
-                                  if (response.data.success) {
-                                    // Refresh orders to show updated status
-                                    await fetchOrders();
-                                    alert('Payment verified successfully!');
-                                  }
-                                } catch (error) {
-                                  console.error('Error verifying payment:', error);
-                                  alert('Failed to verify payment: ' + (error.response?.data?.error || error.message));
-                                }
-                              }
-                            }}
-                            sx={{ mt: 1, borderColor: colors.accentText, color: colors.accentText }}
-                          >
-                            Verify Payment
-                          </Button>
-                        )}
-                        
-                        {/* Download Receipt button for complete orders */}
-                        {(order.status === 'completed' || order.status === 'delivered' || order.paymentStatus === 'paid') && (
-                          <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={<PictureAsPdf />}
-                            onClick={() => handleDownloadReceipt(order.id)}
-                            sx={{ 
-                              mt: 1, 
-                              borderColor: colors.accentText, 
-                              color: colors.accentText,
-                              '&:hover': {
-                                borderColor: '#00C4A3',
-                                backgroundColor: 'rgba(0, 224, 184, 0.08)'
-                              }
-                            }}
-                          >
-                            RECEIPT
-                          </Button>
-                        )}
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -2561,12 +2564,12 @@ const Orders = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Order Details Dialog */}
+      {/* Order Details Dialog - now full screen */}
       <Dialog
         open={orderDetailDialogOpen}
         onClose={() => setOrderDetailDialogOpen(false)}
-        maxWidth="md"
-        fullWidth
+        fullScreen
+        scroll="paper"
       >
         <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
           Order Details #{selectedOrderForDetail?.id}
@@ -2625,86 +2628,151 @@ const Orders = () => {
                         <strong>Email:</strong> {selectedOrderForDetail.customerEmail}
                       </Typography>
                     )}
-                    <TextField
+                    <AddressAutocomplete
                       label="Delivery Address"
                       value={selectedOrderForDetail.deliveryAddress || ''}
                       onChange={(e) => {
-                        setSelectedOrderForDetail(prev => prev ? { ...prev, deliveryAddress: e.target.value } : prev);
+                        const newValue = e?.target?.value ?? '';
+                        setSelectedOrderForDetail(prev =>
+                          prev ? { ...prev, deliveryAddress: newValue } : prev
+                        );
                       }}
                       size="small"
                       fullWidth
-                      multiline
-                      minRows={2}
                     />
                     <Typography variant="body1">
                       <strong>Delivery Notes:</strong> {selectedOrderForDetail.notes?.trim() ? selectedOrderForDetail.notes : '—'}
                     </Typography>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Button
-                        variant="contained"
-                        size="small"
-                        onClick={async () => {
-                          try {
-                            const name = (selectedOrderForDetail.customerName || '').trim();
-                            const phone = (selectedOrderForDetail.customerPhone || '').trim();
-                            const address = (selectedOrderForDetail.deliveryAddress || '').trim();
-                            await api.patch(`/admin/orders/${selectedOrderForDetail.id}`, {
-                              customerName: name || null,
-                              customerPhone: phone || null,
-                              deliveryAddress: address || null
-                            });
-                            setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, customer: true }));
-                          } catch (err) {
-                            console.error('Error saving customer details:', err);
-                          }
-                        }}
-                        sx={{ mt: 1 }}
-                      >
-                        Save details
-                      </Button>
-                      {recentlyUpdatedInOrderDetail.customer && (
+                    {recentlyUpdatedInOrderDetail.customer && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <CheckCircle sx={{ color: '#2e7d32', fontSize: 20 }} aria-label="Updated" />
-                      )}
-                    </Box>
+                      </Box>
+                    )}
                   </Box>
                 </CardContent>
               </Card>
 
-              {/* Delivery fee (includes territory and set-fee options) */}
+              {/* Delivery Details (territory, driver, fee) */}
               {selectedOrderForDetail && selectedOrderForDetail.deliveryFee !== undefined && (
                 <Card sx={{ mb: 2 }}>
                   <CardContent>
                     <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.accentText }}>
-                      Delivery fee
+                      Delivery Details
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant="body2" sx={{ color: colors.textPrimary }}>
-                          <strong>Current delivery fee:</strong> KES {Math.round(Number(selectedOrderForDetail.deliveryFee ?? 0))}
-                        </Typography>
-                        {recentlyUpdatedInOrderDetail.deliveryFee && (
-                          <CheckCircle sx={{ color: '#2e7d32', fontSize: 20 }} aria-label="Updated" />
-                        )}
-                        {selectedOrderForDetail.status !== 'completed' && selectedOrderForDetail.status !== 'cancelled' && selectedOrderForDetail.paymentStatus !== 'paid' && (
-                          <IconButton
-                            size="small"
-                            onClick={() => {
-                              setNewDeliveryFee(Math.round(Number(selectedOrderForDetail.deliveryFee ?? 0)));
-                              setEditDeliveryFeeDialogOpen(true);
-                            }}
-                            sx={{ color: colors.accentText }}
-                            aria-label="Edit delivery fee"
-                          >
-                            <Edit fontSize="small" />
-                          </IconButton>
-                        )}
-                        <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block', width: '100%' }}>
-                          Fee set when order was placed (admin or customer). Click edit to change.
-                        </Typography>
-                      </Box>
-
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-                        <FormControl size="small" sx={{ minWidth: 220 }}>
+                        <FormControl size="small" sx={{ minWidth: 200 }}>
+                          <InputLabel>Driver</InputLabel>
+                          <Select
+                            label="Driver"
+                            value={selectedOrderForDetail.driverId || ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              const driverId = value === '' ? null : parseInt(value, 10);
+                              const driver =
+                                driverId && drivers.find((d) => d.id === driverId);
+                              setSelectedOrderForDetail((prev) =>
+                                prev
+                                  ? {
+                                      ...prev,
+                                      driverId: driverId,
+                                      driver: driver
+                                        ? { id: driver.id, name: driver.name }
+                                        : null
+                                    }
+                                  : prev
+                              );
+                            }}
+                          >
+                            <MenuItem value="">
+                              <em>No Driver (Unassign)</em>
+                            </MenuItem>
+                            {drivers.map((driver) => {
+                              const statusLabel =
+                                driver.status === 'active'
+                                  ? 'On Shift'
+                                  : driver.status === 'offline'
+                                  ? 'Off Shift'
+                                  : driver.status === 'on_delivery'
+                                  ? 'On Delivery'
+                                  : driver.status || 'Unknown';
+                              const cashAtHand = Math.round(
+                                parseFloat(driver.cashAtHand || 0)
+                              );
+                              return (
+                                <MenuItem key={driver.id} value={driver.id}>
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      flexDirection: 'column',
+                                      width: '100%'
+                                    }}
+                                  >
+                                    <Box
+                                      sx={{
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        width: '100%'
+                                      }}
+                                    >
+                                      <Typography
+                                        variant="body2"
+                                        sx={{ fontWeight: 600 }}
+                                      >
+                                        {driver.name}
+                                      </Typography>
+                                      <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                      >
+                                        {statusLabel}
+                                      </Typography>
+                                    </Box>
+                                    <Typography
+                                      variant="caption"
+                                      color="text.secondary"
+                                    >
+                                      Cash at Hand: KES {cashAtHand}
+                                    </Typography>
+                                  </Box>
+                                </MenuItem>
+                              );
+                            })}
+                          </Select>
+                        </FormControl>
+                        {(() => {
+                          const options = getNextStatusOptions(
+                            selectedOrderForDetail.status,
+                            selectedOrderForDetail.paymentType,
+                            selectedOrderForDetail.paymentStatus
+                          );
+                          if (!options || options.length === 0) return null;
+                          return (
+                            <FormControl size="small" sx={{ minWidth: 200 }}>
+                              <InputLabel>Update Status</InputLabel>
+                              <Select
+                                value={selectedOrderForDetail.status || ''}
+                                label="Update Status"
+                                onChange={(e) =>
+                                  handleStatusUpdate(
+                                    selectedOrderForDetail.id,
+                                    e.target.value
+                                  )
+                                }
+                              >
+                                {options.map((option) => (
+                                  <MenuItem
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </MenuItem>
+                                ))}
+                              </Select>
+                            </FormControl>
+                          );
+                        })()}
+                        <FormControl size="small" sx={{ minWidth: 200 }}>
                           <InputLabel>Territory</InputLabel>
                           <Select
                             value={selectedTerritoryId}
@@ -2722,25 +2790,26 @@ const Orders = () => {
                             ))}
                           </Select>
                         </FormControl>
-                        <Button
-                          variant="contained"
+                        <TextField
+                          label="Delivery Fee (KES)"
+                          type="number"
                           size="small"
-                          onClick={handleUpdateOrderTerritory}
-                          disabled={updatingTerritory}
-                          sx={{
-                            backgroundColor: colors.accentText,
-                            color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                            '&:hover': { backgroundColor: '#00C4A3' }
+                          value={
+                            selectedOrderForDetail.deliveryFee ?? ''
+                          }
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setSelectedOrderForDetail((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    deliveryFee: value
+                                  }
+                                : prev
+                            );
                           }}
-                        >
-                          {updatingTerritory ? <CircularProgress size={20} /> : 'Save'}
-                        </Button>
-                        <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          {selectedOrderForDetail.territory?.name || 'No territory assigned'}
-                          {recentlyUpdatedInOrderDetail.territory && (
-                            <CheckCircle sx={{ color: '#2e7d32', fontSize: 18 }} aria-label="Updated" />
-                          )}
-                        </Typography>
+                          sx={{ maxWidth: 200 }}
+                        />
                       </Box>
 
                       {(() => {
@@ -2950,8 +3019,8 @@ const Orders = () => {
                                 size="small"
                                 label={profitLoss >= 0 ? `PROFIT +KES ${Math.round(profitLoss)}` : `LOSS -KES ${Math.round(Math.abs(profitLoss))}`}
                                 sx={{
-                                  backgroundColor: profitLoss >= 0 ? 'rgba(76, 175, 80, 0.2)' : 'rgba(244, 67, 54, 0.2)',
-                                  color: profitLoss >= 0 ? '#2e7d32' : '#c62828',
+                                  backgroundColor: profitLoss >= 0 ? 'rgba(76, 175, 80, 0.2)' : '#e0e0e0',
+                                  color: profitLoss >= 0 ? '#2e7d32' : '#000000',
                                   fontWeight: 600,
                                   fontSize: '0.8rem'
                                 }}
@@ -3096,26 +3165,53 @@ const Orders = () => {
           )}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
-          {selectedOrderForDetail && 
-           selectedOrderForDetail.paymentStatus !== 'paid' && 
-           selectedOrderForDetail.status !== 'cancelled' && (
-            <Button
-              variant="contained"
-              startIcon={<Payment />}
-              onClick={() => {
-                handleOpenPaymentDialog(selectedOrderForDetail);
-              }}
-              sx={{
-                backgroundColor: colors.accentText,
-                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                mr: 1,
-                '&:hover': {
-                  backgroundColor: '#00C4A3'
+          {selectedOrderForDetail && (
+            <>
+              <Button
+                variant="contained"
+                startIcon={<Payment />}
+                onClick={() => {
+                  handleOpenPaymentDialog(selectedOrderForDetail);
+                }}
+                disabled={
+                  selectedOrderForDetail.paymentStatus === 'paid' ||
+                  selectedOrderForDetail.status === 'cancelled'
                 }
-              }}
-            >
-              Payment
-            </Button>
+                sx={{
+                  backgroundColor: colors.accentText,
+                  color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                  mr: 1,
+                  '&:hover': {
+                    backgroundColor: '#00C4A3'
+                  },
+                  '&.Mui-disabled': {
+                    backgroundColor: colors.border,
+                    color: colors.textSecondary
+                  }
+                }}
+              >
+                Payment
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleSaveOrderDetails}
+                disabled={savingOrderDetails}
+                sx={{
+                  backgroundColor: colors.accentText,
+                  color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                  mr: 1,
+                  '&:hover': {
+                    backgroundColor: '#00C4A3'
+                  },
+                  '&:disabled': {
+                    backgroundColor: colors.border,
+                    color: colors.textSecondary
+                  }
+                }}
+              >
+                {savingOrderDetails ? 'Saving...' : 'Save'}
+              </Button>
+            </>
           )}
           <Button 
             onClick={() => {

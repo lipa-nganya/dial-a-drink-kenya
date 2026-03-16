@@ -12,20 +12,48 @@ export const getOrderStatusChipProps = (status) => {
   const normalized = (status || '').toLowerCase();
   switch (normalized) {
     case 'pending':
-      return { label: 'Pending', color: 'warning', icon: <AccessTime fontSize="small" /> };
+      return {
+        label: 'Pending',
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
+        icon: <AccessTime fontSize="small" />
+      };
     case 'confirmed':
-      return { label: 'Confirmed', color: 'info', icon: <CheckCircle fontSize="small" /> };
+      return {
+        label: 'Confirmed',
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
+        icon: <CheckCircle fontSize="small" />
+      };
     case 'out_for_delivery':
-      return { label: 'On the Way', color: 'secondary', icon: <LocalShipping fontSize="small" /> };
+      return {
+        label: 'On the Way',
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
+        icon: <LocalShipping fontSize="small" />
+      };
     case 'delivered':
     case 'completed':
-      return { label: normalized === 'completed' ? 'Completed' : 'Delivered', color: 'success', icon: <DoneAll fontSize="small" /> };
+      return {
+        label: normalized === 'completed' ? 'Completed' : 'Delivered',
+        sx: { backgroundColor: 'rgba(76, 175, 80, 0.2)', color: '#2e7d32', fontWeight: 600 },
+        icon: <DoneAll fontSize="small" />
+      };
     case 'pos_order':
-      return { label: 'POS Order', color: 'success', icon: <ShoppingCart fontSize="small" /> };
+      return {
+        label: 'POS Order',
+        sx: { backgroundColor: 'rgba(76, 175, 80, 0.2)', color: '#2e7d32', fontWeight: 600 },
+        icon: <ShoppingCart fontSize="small" />
+      };
     case 'cancelled':
-      return { label: 'Cancelled', color: 'error', icon: <Cancel fontSize="small" /> };
+      return {
+        label: 'Cancelled',
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
+        icon: <Cancel fontSize="small" />
+      };
     default:
-      return { label: status || '—', color: 'default', icon: <ShoppingCart fontSize="small" /> };
+      return {
+        label: status || '—',
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
+        icon: <ShoppingCart fontSize="small" />
+      };
   }
 };
 
@@ -38,20 +66,39 @@ export const getPaymentStatusChipProps = (paymentStatus, orderStatus) => {
   if (orderStatus === 'delivered' && normalized === 'unpaid') {
     return {
       label: 'Unpaid (Delivered)',
-      color: 'error',
+      sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
       icon: <Cancel fontSize="small" />
     };
   }
 
   switch (normalized) {
     case 'paid':
-      return { label: 'Paid', color: 'success', icon: <CheckCircle fontSize="small" /> };
+      return {
+        label: 'Paid',
+        sx: {
+          backgroundColor: 'rgba(76, 175, 80, 0.2)',
+          color: '#2e7d32',
+          fontWeight: 600
+        },
+        icon: <CheckCircle fontSize="small" />
+      };
     case 'unpaid':
-      return { label: 'Unpaid', color: 'warning', icon: <AccessTime fontSize="small" /> };
+      return {
+        label: 'Unpaid',
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
+        icon: <AccessTime fontSize="small" />
+      };
     case 'pending':
-      return { label: 'Pending', color: 'default', icon: <AccessTime fontSize="small" /> };
+      return {
+        label: 'Pending',
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 },
+        icon: <AccessTime fontSize="small" />
+      };
     default:
-      return { label: paymentStatus, color: 'default' };
+      return {
+        label: paymentStatus,
+        sx: { backgroundColor: '#e0e0e0', color: '#000000', fontWeight: 600 }
+      };
   }
 };
 
@@ -65,8 +112,8 @@ export const getPaymentMethodChipProps = (method) => {
     return {
       label: 'Mobile Money',
       sx: {
-        backgroundColor: '#00E0B8',
-        color: '#003B2F',
+        backgroundColor: '#e0e0e0',
+        color: '#000000',
         fontWeight: 700
       }
     };
@@ -76,8 +123,8 @@ export const getPaymentMethodChipProps = (method) => {
     return {
       label: 'Card',
       sx: {
-        backgroundColor: '#2196F3',
-        color: '#002A54',
+        backgroundColor: '#e0e0e0',
+        color: '#000000',
         fontWeight: 700
       }
     };
@@ -87,8 +134,8 @@ export const getPaymentMethodChipProps = (method) => {
     return {
       label: 'Cash',
       sx: {
-        backgroundColor: '#4CAF50',
-        color: '#FFFFFF',
+        backgroundColor: 'rgba(76, 175, 80, 0.2)',
+        color: '#2e7d32',
         fontWeight: 700
       }
     };

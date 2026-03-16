@@ -33,7 +33,7 @@ import { useAdmin } from '../contexts/AdminContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useEasterEgg } from '../contexts/EasterEggContext';
 
-const DRAWER_WIDTH = 260;
+const DRAWER_WIDTH = 220;
 
 const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
   const navigate = useNavigate();
