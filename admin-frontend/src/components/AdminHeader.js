@@ -184,7 +184,6 @@ const AdminHeader = () => {
           >
             Settings
           </Button>
-          <ThemeSwitcher />
         </Box>
       </Toolbar>
       {/* User Info and Logout Section */}

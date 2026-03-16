@@ -23,7 +23,8 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
+  TablePagination
 } from '@mui/material';
 import {
   CheckCircle,
@@ -41,6 +42,9 @@ const InventoryChecks = () => {
   const [error, setError] = useState(null);
   const [statusFilter, setStatusFilter] = useState('pending'); // all, pending, approved, recount_requested
   const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [recountDialogOpen, setRecountDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState(null);
@@ -63,8 +67,21 @@ const InventoryChecks = () => {
       filtered = filtered.filter(check => check.isFlagged);
     }
 
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(check => {
+        const name = check.drink?.name || '';
+        const agentName = check.shopAgent?.name || '';
+        return (
+          name.toLowerCase().includes(term) ||
+          agentName.toLowerCase().includes(term)
+        );
+      });
+    }
+
     setFilteredChecks(filtered);
-  }, [checks, statusFilter, flaggedOnly]);
+    setPage(0);
+  }, [checks, statusFilter, flaggedOnly, searchTerm]);
 
   useEffect(() => {
     filterChecks();
@@ -187,6 +204,13 @@ const InventoryChecks = () => {
           }
           label="Show flagged items only"
         />
+        <TextField
+          size="small"
+          label="Search by item or agent"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          sx={{ minWidth: 240 }}
+        />
         <Box sx={{ flexGrow: 1 }} />
         <Chip
           label={`Total: ${filteredChecks.length}`}
@@ -215,7 +239,9 @@ const InventoryChecks = () => {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredChecks.map((check) => (
+              filteredChecks
+                .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
+                .map((check) => (
                 <TableRow
                   key={check.id}
                   sx={{
@@ -306,6 +332,21 @@ const InventoryChecks = () => {
           </TableBody>
         </Table>
       </TableContainer>
+
+      {filteredChecks.length > 0 && (
+        <TablePagination
+          component="div"
+          count={filteredChecks.length}
+          page={page}
+          onPageChange={(_, newPage) => setPage(newPage)}
+          rowsPerPage={rowsPerPage}
+          onRowsPerPageChange={(e) => {
+            setRowsPerPage(parseInt(e.target.value, 10));
+            setPage(0);
+          }}
+          rowsPerPageOptions={[10, 25, 50]}
+        />
+      )}
 
       {/* Approve Dialog */}
       <Dialog open={approveDialogOpen} onClose={() => setApproveDialogOpen(false)}>

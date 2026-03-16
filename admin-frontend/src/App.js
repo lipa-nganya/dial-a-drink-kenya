@@ -192,12 +192,12 @@ const getMUITheme = (isDarkMode) => {
 function AppContent() {
   const { isDarkMode } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
-  const muiTheme = getMUITheme(isDarkMode);
+  const muiTheme = getMUITheme(false);
 
   return (
     <MUIThemeProvider theme={muiTheme}>
       <CssBaseline />
-      <div className="App" style={{ backgroundColor: isDarkMode ? '#0D0D0D' : '#FFFFFF', minHeight: '100vh' }}>
+      <div className="App" style={{ backgroundColor: '#FFFFFF', minHeight: '100vh' }}>
         <AdminProvider>
           <MobileViewProvider>
             <ResupplyCartProvider>

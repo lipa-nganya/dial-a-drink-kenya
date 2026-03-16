@@ -32,7 +32,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAdmin } from '../contexts/AdminContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useEasterEgg } from '../contexts/EasterEggContext';
-import ThemeSwitcher from './ThemeSwitcher';
 
 const DRAWER_WIDTH = 260;
 
@@ -188,10 +187,6 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
           </Typography>
         </Box>
         
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-          <ThemeSwitcher />
-        </Box>
-
         <ListItemButton
           onClick={handleLogout}
           sx={{
