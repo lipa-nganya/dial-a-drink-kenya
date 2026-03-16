@@ -113,7 +113,6 @@ const Orders = () => {
   const [applyingTerritoryFee, setApplyingTerritoryFee] = useState(false);
   const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ customer: false, deliveryFee: false, territory: false });
   const updatedFeeTimeoutRef = useRef(null);
-  const updatedTerritoryTimeoutRef = useRef(null);
   const [adminDeliveryFees, setAdminDeliveryFees] = useState({
     deliveryFeeWithAlcohol: 50,
     deliveryFeeWithoutAlcohol: 30
@@ -217,9 +216,9 @@ const Orders = () => {
   }, []);
 
   useEffect(() => {
+    const feeTimeoutRef = updatedFeeTimeoutRef;
     return () => {
-      if (updatedFeeTimeoutRef.current) clearTimeout(updatedFeeTimeoutRef.current);
-      if (updatedTerritoryTimeoutRef.current) clearTimeout(updatedTerritoryTimeoutRef.current);
+      if (feeTimeoutRef.current) clearTimeout(feeTimeoutRef.current);
     };
   }, []);
 
@@ -886,97 +885,6 @@ const Orders = () => {
     }
   };
 
-  const handleDownloadReceipt = async (orderId) => {
-    try {
-      const response = await api.get(`/orders/${orderId}/receipt`, {
-        responseType: 'blob', // Important for downloading files
-      });
-
-      // Create a blob from the response data
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-
-      // Create a link element, set the download attribute, and click it
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `receipt-order-${orderId}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.parentNode.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Error downloading receipt:', error);
-      alert('Failed to download receipt: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  const handleApproveCancellation = async (orderId) => {
-    try {
-      const response = await api.patch(`/admin/orders/${orderId}/cancellation-request`, { approved: true });
-      setOrders(prevOrders => {
-        const updated = prevOrders.map(order => 
-          order.id === orderId ? { ...order, ...response.data } : order
-        );
-        const sorted = sortOrdersByStatus(updated);
-        // If we're on cancellation-requests tab and order is now cancelled, switch to cancelled tab
-        if (orderTab === 'cancellation-requests' && response.data.status === 'cancelled') {
-          setOrderTab('cancelled');
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled');
-        } else {
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
-        }
-        return sorted;
-      });
-      setError(null);
-    } catch (error) {
-      console.error('Error approving cancellation:', error);
-      setError(error.response?.data?.error || error.message);
-    }
-  };
-
-  const handleRejectCancellation = async (orderId) => {
-    try {
-      const response = await api.patch(`/admin/orders/${orderId}/cancellation-request`, { approved: false });
-      setOrders(prevOrders => {
-        const updated = prevOrders.map(order => 
-          order.id === orderId ? { ...order, ...response.data } : order
-        );
-        const sorted = sortOrdersByStatus(updated);
-        // If we're on cancellation-requests tab and cancellation was rejected, switch to pending tab
-        if (orderTab === 'cancellation-requests') {
-          setOrderTab('pending');
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'pending');
-        } else {
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
-        }
-        return sorted;
-      });
-      setError(null);
-    } catch (error) {
-      console.error('Error rejecting cancellation:', error);
-      setError(error.response?.data?.error || error.message);
-    }
-  };
-
-  const handlePaymentStatusUpdate = async (orderId, paymentStatus) => {
-    try {
-      const response = await api.patch(`/admin/orders/${orderId}/payment-status`, { paymentStatus });
-      setOrders(prevOrders => {
-        const updated = prevOrders.map(order => 
-          order.id === orderId ? { ...order, paymentStatus, status: response.data.status } : order
-        );
-        // Re-sort after payment status update (status might have changed to completed)
-        const sorted = sortOrdersByStatus(updated);
-        // Apply filters to updated orders
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
-        return sorted;
-      });
-    } catch (error) {
-      console.error('Error updating payment status:', error);
-      setError(error.response?.data?.error || error.message);
-    }
-  };
-
   // Phone number formatting and validation
   const formatMpesaPhoneNumber = (phone) => {
     if (!phone) return '';
@@ -1404,12 +1312,6 @@ const Orders = () => {
     }
   };
 
-  const handleOpenDriverDialog = (order) => {
-    setSelectedOrder(order);
-    setSelectedDriverId(order.driverId || '');
-    setDriverDialogOpen(true);
-  };
-
   const handleCloseDriverDialog = () => {
     setDriverDialogOpen(false);
     setSelectedOrder(null);
@@ -1486,22 +1388,6 @@ const Orders = () => {
       handleCloseBranchDialog();
     } catch (error) {
       console.error('Error assigning branch:', error);
-      setError(error.response?.data?.error || error.message);
-    }
-  };
-
-  const handleRemoveDriver = async (order) => {
-    if (!window.confirm(`Are you sure you want to remove ${order.driver?.name || 'the driver'} from Order #${order.id}?`)) {
-      return;
-    }
-    
-    try {
-      await api.patch(`/admin/orders/${order.id}/driver`, { driverId: null });
-      
-      // Refresh orders to get updated data
-      await fetchOrders();
-    } catch (error) {
-      console.error('Error removing driver:', error);
       setError(error.response?.data?.error || error.message);
     }
   };
@@ -1947,7 +1833,6 @@ const Orders = () => {
                 const hasPendingCancellation = order.cancellationRequested && order.cancellationApproved === null;
                 const statusChip = getOrderStatusChipProps(order.status);
                 const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
-                const nextStatusOptions = getNextStatusOptions(order.status, order.paymentType, order.paymentStatus);
                 
                 return (
                   <TableRow
