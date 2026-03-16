@@ -40,10 +40,8 @@ import {
   Assignment,
   Edit,
   Person,
-  Delete,
   Search,
   Clear,
-  PictureAsPdf,
   AutoAwesome,
   Phone,
   Payment,
@@ -112,7 +110,6 @@ const Orders = () => {
   const [newDeliveryFee, setNewDeliveryFee] = useState('');
   const [updatingDeliveryFee, setUpdatingDeliveryFee] = useState(false);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState('');
-  const [updatingTerritory, setUpdatingTerritory] = useState(false);
   const [applyingTerritoryFee, setApplyingTerritoryFee] = useState(false);
   const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ customer: false, deliveryFee: false, territory: false });
   const updatedFeeTimeoutRef = useRef(null);
@@ -1370,34 +1367,6 @@ const Orders = () => {
       );
     } finally {
       setSavingOrderDetails(false);
-    }
-  };
-
-  const handleUpdateOrderTerritory = async () => {
-    if (!selectedOrderForDetail) return;
-    const territoryId = selectedTerritoryId === '' ? null : parseInt(selectedTerritoryId, 10);
-    if (territoryId !== null && isNaN(territoryId)) return;
-    setUpdatingTerritory(true);
-    try {
-      const response = await api.patch(`/admin/orders/${selectedOrderForDetail.id}/territory`, { territoryId });
-      const updatedOrder = response.data;
-      const territory = territoryId ? territories.find(t => t.id === territoryId) : null;
-      setSelectedOrderForDetail(prev => ({ ...prev, territoryId: updatedOrder.territoryId, territory: territory ? { id: territory.id, name: territory.name } : null }));
-      setOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, territoryId: updatedOrder.territoryId, territory: territory ? { id: territory.id, name: territory.name } : null } : o));
-      setFilteredOrders(prev => prev.map(o => o.id === updatedOrder.id ? { ...o, territoryId: updatedOrder.territoryId, territory: territory ? { id: territory.id, name: territory.name } : null } : o));
-      if (response.data) {
-        if (updatedTerritoryTimeoutRef.current) clearTimeout(updatedTerritoryTimeoutRef.current);
-        setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, territory: true }));
-        updatedTerritoryTimeoutRef.current = setTimeout(() => {
-          setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, territory: false }));
-          updatedTerritoryTimeoutRef.current = null;
-        }, 4000);
-      }
-    } catch (error) {
-      console.error('Error updating order territory:', error);
-      alert(error.response?.data?.error || error.message || 'Failed to update territory');
-    } finally {
-      setUpdatingTerritory(false);
     }
   };
 

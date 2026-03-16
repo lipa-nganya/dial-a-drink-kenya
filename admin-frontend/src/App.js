@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import { AdminProvider } from './contexts/AdminContext';
-import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 import { EasterEggProvider, useEasterEgg } from './contexts/EasterEggContext';
 import { ResupplyCartProvider } from './contexts/ResupplyCartContext';
 import { MobileViewProvider } from './contexts/MobileViewContext';
@@ -190,7 +190,6 @@ const getMUITheme = (isDarkMode) => {
 };
 
 function AppContent() {
-  const { isDarkMode } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
   const muiTheme = getMUITheme(false);
 
