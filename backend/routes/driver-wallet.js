@@ -67,29 +67,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       }
     }
 
-    // Pay Now (M-Pesa/Pesapal): cash at hand -= 50% delivery fee per order
-    const payNowOrders = await db.Order.findAll({
-      where: {
-        driverId: driverId,
-        paymentType: 'pay_now',
-        paymentStatus: 'paid',
-        status: { [Op.in]: ['delivered', 'completed'] }
-      },
-      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status'],
-      order: [['createdAt', 'DESC']]
-    });
-
-    let cashDeductionPayNow = 0;
-    for (const order of payNowOrders) {
-      try {
-        const breakdown = await getOrderFinancialBreakdown(order.id);
-        cashDeductionPayNow += (breakdown.deliveryFee || 0) * 0.5;
-      } catch (e) {
-        console.warn(`Cash at hand: could not get breakdown for pay_now order ${order.id}:`, e.message);
-      }
-    }
-
-    // Get negative cash_settlement transactions (cash remitted)
+    // Get negative cash_settlement transactions (cash remitted; includes Pay Now "cash at hand − 50% delivery fee" when stored as negative)
     const cashSettlementsNegative = await db.Transaction.findAll({
       where: {
         driverId: driverId,
@@ -145,34 +123,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     // Always calculate pending cash at hand if there are any pending submissions
     const hasPendingSubmissions = pendingCashSubmissions.length > 0;
 
-    // Calculate cash remitted (negative cash_settlement transactions)
-    const cashRemitted = Math.abs(cashSettlementsNegative.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0));
-    
-    // Calculate cash added (positive cash_settlement transactions, e.g., from loan recovery)
-    const cashAdded = cashSettlementsPositive.reduce((sum, tx) => sum + (parseFloat(tx.amount) || 0), 0);
-    
-    // Include approved submissions; for order_payment, skip if already counted via cash_settlement (negative amount)
-    const approvedSubmissionsTotal = approvedCashSubmissions.reduce((sum, s) => {
-      if (s.submissionType === 'order_payment' && s.details?.orderId != null && orderIdsWithSettlementFromTx.has(s.details.orderId)) return sum;
-      return sum + parseFloat(s.amount || 0);
-    }, 0);
-
-    const calculatedCashAtHand = cashCollected - cashDeductionPayNow - cashRemitted - approvedSubmissionsTotal + cashAdded;
-
     // IMPORTANT:
-    // - Admin edits to cashAtHand are the source of truth and MUST NEVER be overwritten here.
-    // - Other parts of the system (order completion, cash submissions, repairs) already maintain
-    //   driver.cashAtHand based on real events.
-    // - This endpoint should only *report* values, not mutate them.
-    //
-    // So we:
-    // - Always keep storedCashAtHand as-is (respecting admin overrides and event-based updates).
-    // - Use it as totalCashAtHand for the driver app.
-    // - Keep calculatedCashAtHand available for debugging if we ever want to log/inspect it.
+    // - Admin edits to cashAtHand and event-based updates (orders, submissions, repairs)
+    //   already maintain driver.cashAtHand.
+    // - This endpoint should only *report* that stored value and show a log of entries.
+    // - Do NOT try to reconstruct theoretical balances here.
     totalCashAtHand = storedCashAtHand;
-    console.log(
-      `✅ [Cash At Hand] Driver ${driverId}: reporting stored value ${storedCashAtHand} (calculated: ${calculatedCashAtHand})`
-    );
 
     // Format entries for response
     const entries = [];
@@ -196,38 +152,34 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     }
 
     // Add cash settlement entries (remittances to business and savings withdrawals)
-    // Combine negative and positive cash_settlement transactions for display
-    const allCashSettlements = [...cashSettlementsNegative, ...cashSettlementsPositive].sort((a, b) => 
+    const allCashSettlements = [...cashSettlementsNegative, ...cashSettlementsPositive].sort((a, b) =>
       new Date(b.createdAt) - new Date(a.createdAt)
     );
-    
+    const isPayNowDeliveryFeeSettlement = (tx) => {
+      const n = (tx.notes || '');
+      return n.includes('Cash at hand − 50% delivery fee') || n.includes('Pay Now: 50% delivery fee - cash at hand');
+    };
+
     allCashSettlements.forEach(tx => {
-      // Check if this is a savings withdrawal by paymentProvider
-      // Savings withdrawals have paymentProvider = 'savings_withdrawal_record' or 'mpesa' with notes containing 'Savings withdrawal'
-      const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' || 
-                                  (tx.paymentProvider === 'mpesa' && tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal'))) ||
-                                  (tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal')));
-      
+      const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' ||
+        (tx.paymentProvider === 'mpesa' && tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal'))) ||
+        (tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal')));
+
       let description;
-      
-      // Always format savings withdrawals with the proper format
       if (isSavingsWithdrawal) {
         description = `Savings withdrawal`;
+      } else if (isPayNowDeliveryFeeSettlement(tx)) {
+        description = tx.orderId ? `Cash at hand − 50% delivery fee (Order #${tx.orderId})` : 'Cash at hand − 50% delivery fee';
+      } else if (tx.order && tx.order.deliveryAddress) {
+        description = formatDescriptionFromAddressNoSuffix(tx.order.deliveryAddress) || tx.notes || 'Cash remitted to business';
       } else {
-        // For cash settlements with order, use delivery address (first 2 words, no suffix)
-        if (tx.order && tx.order.deliveryAddress) {
-          description = formatDescriptionFromAddressNoSuffix(tx.order.deliveryAddress) || tx.notes || 'Cash remitted to business';
-        } else {
-          // For other cash settlements, use the notes or default description
-          description = tx.notes || `Cash remitted to business`;
-        }
+        description = tx.notes || `Cash remitted to business`;
       }
-      
-      // Determine entry type based on transaction amount
-      // Negative amounts = cash sent (remitted)
-      // Positive amounts = cash received (e.g., from loan recovery)
+
       const txAmount = parseFloat(tx.amount) || 0;
-      const entryType = txAmount < 0 ? 'cash_sent' : 'cash_received';
+      // Cash at hand − 50% delivery fee should always be displayed as cash_sent (a debit),
+      // even though its stored amount is positive.
+      const entryType = txAmount < 0 || isPayNowDeliveryFeeSettlement(tx) ? 'cash_sent' : 'cash_received';
       const logType = entryType === 'cash_received' ? 'Payment Received' : '—';
 
       entries.push({
@@ -235,7 +187,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         logType,
         transactionId: tx.id,
         orderId: tx.orderId || null,
-        amount: Math.abs(txAmount), // Make positive for display
+        amount: Math.abs(txAmount),
         date: tx.transactionDate || tx.createdAt,
         description: description,
         receiptNumber: tx.receiptNumber
@@ -287,38 +239,6 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         amount: parseFloat(submission.amount || 0),
         date: submission.createdAt,
         description: description
-      });
-    });
-
-    // Add delivery_fee_debit transactions (Pay Now orders - 50% delivery fee reduction)
-    // EXCLUDE stop deductions - those only affect savings, not cash at hand
-    const deliveryFeeDebits = await db.Transaction.findAll({
-      where: {
-        driverId: driverId,
-        transactionType: 'delivery_fee_debit',
-        paymentProvider: { [Op.ne]: 'stop_deduction' }, // Exclude stop deductions
-        status: 'completed',
-        paymentStatus: 'paid'
-      },
-      include: [
-        { model: db.Order, as: 'order', attributes: ['id', 'customerName'], required: false }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    deliveryFeeDebits.forEach(tx => {
-      const amount = Math.abs(parseFloat(tx.amount || 0)); // Make positive for display
-      const description = tx.notes || (tx.order ? `50% delivery fee order ${tx.order.id}` : '50% delivery fee');
-      entries.push({
-        type: 'cash_sent', // This is a credit entry (money going out, reducing cash at hand)
-        logType: '—',
-        transactionId: tx.id,
-        orderId: tx.orderId,
-        customerName: tx.order?.customerName || null,
-        amount: amount,
-        date: tx.transactionDate || tx.createdAt,
-        description: description,
-        receiptNumber: tx.receiptNumber
       });
     });
 

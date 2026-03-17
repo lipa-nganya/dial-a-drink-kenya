@@ -231,6 +231,83 @@ async function sendAdminInvite(email, token, username) {
 }
 
 /**
+ * Send admin password reset email.
+ * Reuses the setup-password page with a short-lived token.
+ */
+async function sendAdminPasswordReset(email, token, username) {
+  try {
+    const transporter = createTransporter();
+
+    if (!transporter) {
+      return {
+        success: false,
+        error: 'Email service not configured'
+      };
+    }
+
+    let baseAdminUrl =
+      process.env.ADMIN_FRONTEND_URL ||
+      process.env.ADMIN_URL ||
+      'http://localhost:3001';
+    baseAdminUrl = baseAdminUrl.replace(/\/+$/, '');
+    const resetUrl = `${baseAdminUrl}/setup-password?token=${token}`;
+
+    const smtpFrom = process.env.SMTP_FROM || process.env.EMAIL_FROM || process.env.SMTP_USER || process.env.EMAIL_USER;
+    const mailOptions = {
+      from: `"Dial A Drink Admin" <${smtpFrom}>`,
+      to: email,
+      subject: 'Reset your Dial A Drink Admin password',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #00E0B8;">Reset your Admin password</h2>
+          <p>We received a request to reset the password for your Dial A Drink Admin account.</p>
+          <p><strong>Username:</strong> ${username}</p>
+          <p>Click the button below to set a new password:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}"
+               style="background-color: #00E0B8; color: #0D0D0D; padding: 12px 24px;
+                      text-decoration: none; border-radius: 4px; font-weight: bold;
+                      display: inline-block;">
+              Reset Password
+            </a>
+          </div>
+          <p style="color: #666; font-size: 12px;">
+            Or copy and paste this link into your browser:<br>
+            <a href="${resetUrl}" style="color: #00E0B8; word-break: break-all;">${resetUrl}</a>
+          </p>
+          <p style="color: #666; font-size: 12px; margin-top: 30px;">
+            This link will expire soon. If you didn’t request a password reset, you can ignore this email.
+          </p>
+        </div>
+      `,
+      text: `
+Reset your Dial A Drink Admin password
+
+Username: ${username}
+
+Open this link to set a new password:
+${resetUrl}
+
+If you didn’t request this, you can ignore this email.
+      `.trim()
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Admin password reset email sent to ${email}`);
+    return {
+      success: true,
+      messageId: info.messageId
+    };
+  } catch (error) {
+    console.error(`❌ Error sending admin password reset email to ${email}:`, error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+/**
  * Send partner invitation email for sandbox account
  * @param {string} email - Recipient email address
  * @param {string} token - Invitation token
@@ -443,6 +520,7 @@ module.exports = {
   generateEmailToken,
   createTransporter,
   sendAdminInvite,
+  sendAdminPasswordReset,
   sendPartnerInvite,
   sendOtpEmail
 };

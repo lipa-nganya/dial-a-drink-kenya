@@ -29,6 +29,7 @@ import {
   InputAdornment,
   Tabs,
   Tab,
+  Badge,
   Card,
   CardContent,
   Divider,
@@ -106,6 +107,9 @@ const Orders = () => {
   const [editingItem, setEditingItem] = useState(null);
   const [newPrice, setNewPrice] = useState('');
   const [updatingPrice, setUpdatingPrice] = useState(false);
+  const [editItemsSubtotalDialogOpen, setEditItemsSubtotalDialogOpen] = useState(false);
+  const [newItemsSubtotal, setNewItemsSubtotal] = useState('');
+  const [updatingItemsSubtotal, setUpdatingItemsSubtotal] = useState(false);
   const [editDeliveryFeeDialogOpen, setEditDeliveryFeeDialogOpen] = useState(false);
   const [newDeliveryFee, setNewDeliveryFee] = useState('');
   const [updatingDeliveryFee, setUpdatingDeliveryFee] = useState(false);
@@ -118,6 +122,7 @@ const Orders = () => {
     deliveryFeeWithoutAlcohol: 30
   });
   const [savingOrderDetails, setSavingOrderDetails] = useState(false);
+  const originalOrderDetailRef = useRef(null);
   
   // Payment dialog state
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
@@ -148,6 +153,10 @@ const Orders = () => {
     }
 
     setSelectedOrderForDetail(orderWithBreakdown);
+    originalOrderDetailRef.current = {
+      id: orderWithBreakdown.id,
+      driverId: orderWithBreakdown.driverId ?? orderWithBreakdown.driver?.id ?? null
+    };
     setSelectedTerritoryId(
       orderWithBreakdown.territoryId ??
         orderWithBreakdown.territory?.id ??
@@ -158,7 +167,8 @@ const Orders = () => {
   };
   
   // Route Optimisation state (kept for fetchRiderRoutes function which is still called)
-  const [orderTab, setOrderTab] = useState('all'); // 'all', 'completed', 'pending', 'unassigned', 'confirmed', 'cancelled', 'cancellation-requests'
+  const [orderTab, setOrderTab] = useState('unassigned'); // 'completed', 'pending', 'unassigned', 'confirmed', 'out_for_delivery', 'cancelled'
+  const [cancelledSubTab, setCancelledSubTab] = useState('cancelled'); // 'cancelled' | 'cancellation-requests'
   // eslint-disable-next-line no-unused-vars
   const [riderRoutes, setRiderRoutes] = useState([]);
   // eslint-disable-next-line no-unused-vars
@@ -484,8 +494,9 @@ const Orders = () => {
       const driverName = data.order?.driver?.name || 'Driver';
       alert(`⚠️ CANCELLATION REQUEST: ${driverName} has requested cancellation for Order #${data.orderId}.\nReason: ${data.reason || 'N/A'}\n\nPlease review and approve or reject the request.`);
       
-      // Switch to cancellation-requests tab to show the new request
-      setOrderTab('cancellation-requests');
+      // Switch to Cancelled tab + Cancellation Requests sub-tab to show the new request
+      setOrderTab('cancelled');
+      setCancelledSubTab('cancellation-requests');
       
       // Update order in list
       if (data.order) {
@@ -501,7 +512,7 @@ const Orders = () => {
           }
           
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancellation-requests');
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
           return sorted;
         });
       } else {
@@ -521,16 +532,16 @@ const Orders = () => {
           );
           const sorted = sortOrdersByStatus(updated);
           
-          // If cancellation was approved and we're on cancellation-requests tab, switch to cancelled tab
-          if (data.approved && orderTab === 'cancellation-requests' && data.order.status === 'cancelled') {
+          // If cancellation was approved and we're viewing cancellation requests, switch to cancelled orders
+          if (data.approved && orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && data.order.status === 'cancelled') {
             setOrderTab('cancelled');
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled');
-          } else if (!data.approved && orderTab === 'cancellation-requests') {
-            // If cancellation was rejected and we're on cancellation-requests tab, switch to pending tab
-            setOrderTab('pending');
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'pending');
+            setCancelledSubTab('cancelled');
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
+          } else if (!data.approved && orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
+            // If cancellation was rejected and we're viewing cancellation requests, stay on requests view
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
           } else {
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
           }
           return sorted;
         });
@@ -716,23 +727,26 @@ const Orders = () => {
   };
 
   // Apply filters to orders
-  const applyFilters = (ordersList, orderStatus, transactionStatus, search, customFilter, tabFilter) => {
+  const applyFilters = (ordersList, orderStatus, transactionStatus, search, customFilter, tabFilter, cancelledView = cancelledSubTab) => {
     let filtered = [...ordersList];
 
     // Apply tab-based filtering first
     if (tabFilter === 'pending') {
       filtered = filtered.filter(order => (order.status === 'pending' || order.status === 'confirmed') && !(order.cancellationRequested && order.cancellationApproved === null));
-    } else if (tabFilter === 'cancellation-requests') {
-      // Show only orders with pending cancellation requests
-      filtered = filtered.filter(order => order.cancellationRequested && order.cancellationApproved === null);
     } else if (tabFilter === 'completed') {
       filtered = filtered.filter(order => order.status === 'completed');
     } else if (tabFilter === 'unassigned') {
       filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
     } else if (tabFilter === 'confirmed') {
       filtered = filtered.filter(order => order.status === 'confirmed');
+    } else if (tabFilter === 'out_for_delivery') {
+      filtered = filtered.filter(order => order.status === 'out_for_delivery');
     } else if (tabFilter === 'cancelled') {
-      filtered = filtered.filter(order => order.status === 'cancelled');
+      if (cancelledView === 'cancellation-requests') {
+        filtered = filtered.filter(order => order.cancellationRequested && order.cancellationApproved === null);
+      } else {
+        filtered = filtered.filter(order => order.status === 'cancelled');
+      }
     }
 
     // Apply custom filters from URL params
@@ -804,9 +818,9 @@ const Orders = () => {
 
   // Update filters when filter values change
   useEffect(() => {
-    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderStatusFilter, transactionStatusFilter, searchQuery, orders, customFilter, orderTab]);
+  }, [orderStatusFilter, transactionStatusFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     if (newStatus === 'cancelled') {
@@ -1141,6 +1155,45 @@ const Orders = () => {
     }
   };
 
+  const handleUpdateItemsSubtotal = async () => {
+    if (!selectedOrderForDetail) return;
+
+    const subtotalValue = parseFloat(newItemsSubtotal);
+    if (isNaN(subtotalValue) || subtotalValue < 0) {
+      alert('Please enter a valid items subtotal');
+      return;
+    }
+
+    setUpdatingItemsSubtotal(true);
+    try {
+      const response = await api.patch(
+        `/admin/orders/${selectedOrderForDetail.id}/items-subtotal`,
+        { itemsSubtotal: subtotalValue }
+      );
+
+      if (response.data?.success) {
+        const { order, breakdown } = response.data;
+        setSelectedOrderForDetail(prev => ({
+          ...(order || prev),
+          deliveryFee: breakdown?.deliveryFee ?? prev?.deliveryFee,
+          totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? prev?.totalAmount,
+          itemsTotal: breakdown?.itemsTotal ?? prev?.itemsTotal
+        }));
+        await fetchOrders();
+        setEditItemsSubtotalDialogOpen(false);
+        setNewItemsSubtotal('');
+        alert('Items subtotal updated successfully');
+      } else {
+        alert(response.data?.error || 'Failed to update items subtotal');
+      }
+    } catch (error) {
+      console.error('Error updating items subtotal:', error);
+      alert(error.response?.data?.error || error.message || 'Failed to update items subtotal');
+    } finally {
+      setUpdatingItemsSubtotal(false);
+    }
+  };
+
   const handleSaveOrderDetails = async () => {
     if (!selectedOrderForDetail) return;
     setSavingOrderDetails(true);
@@ -1166,10 +1219,49 @@ const Orders = () => {
           ? null
           : parseInt(selectedOrderForDetail.driverId, 10);
 
-      if (driverIdPayload === null || !Number.isNaN(driverIdPayload)) {
-        await api.patch(`/admin/orders/${id}/driver`, {
-          driverId: driverIdPayload
-        });
+      const originalDriverId =
+        originalOrderDetailRef.current &&
+        originalOrderDetailRef.current.id === id
+          ? originalOrderDetailRef.current.driverId
+          : null;
+
+      const normalizedOriginalDriverId =
+        originalDriverId == null || originalDriverId === ''
+          ? null
+          : parseInt(originalDriverId, 10);
+
+      const normalizedDriverIdPayload =
+        driverIdPayload == null ? null : driverIdPayload;
+
+      const driverChanged =
+        (normalizedOriginalDriverId == null ? null : normalizedOriginalDriverId) !==
+        (normalizedDriverIdPayload == null ? null : normalizedDriverIdPayload);
+
+      // CRITICAL: Don't call driver assignment endpoint unless driver actually changed.
+      // This prevents noisy errors when order is already delivered/completed.
+      const orderIsDeliveredOrCompleted =
+        selectedOrderForDetail.status === 'delivered' ||
+        selectedOrderForDetail.status === 'completed';
+
+      if (
+        driverChanged &&
+        !orderIsDeliveredOrCompleted &&
+        (normalizedDriverIdPayload === null || !Number.isNaN(normalizedDriverIdPayload))
+      ) {
+        try {
+          await api.patch(`/admin/orders/${id}/driver`, {
+            driverId: normalizedDriverIdPayload
+          });
+          // Keep baseline in sync so subsequent saves don't re-fire
+          originalOrderDetailRef.current = { id, driverId: normalizedDriverIdPayload };
+        } catch (driverErr) {
+          const backendError = driverErr?.response?.data?.error;
+          // If status just became delivered/completed, backend will reject driver mutation.
+          // Don't block saving other fields.
+          if (!String(backendError || '').includes('Cannot modify driver assignment')) {
+            throw driverErr;
+          }
+        }
       }
 
       // 3) Save territory
@@ -1228,39 +1320,46 @@ const Orders = () => {
         );
       }
 
-      // 4) Save delivery fee
-      const rawFee = selectedOrderForDetail.deliveryFee;
-      const deliveryFeeValue =
-        rawFee === '' || rawFee == null ? null : parseFloat(rawFee);
+      // 4) Save delivery fee (only if it was explicitly changed and order is still editable)
+      if (
+        recentlyUpdatedInOrderDetail.deliveryFee &&
+        selectedOrderForDetail.status !== 'completed' &&
+        selectedOrderForDetail.status !== 'cancelled' &&
+        selectedOrderForDetail.paymentStatus !== 'paid'
+      ) {
+        const rawFee = selectedOrderForDetail.deliveryFee;
+        const deliveryFeeValue =
+          rawFee === '' || rawFee == null ? null : parseFloat(rawFee);
 
-      if (deliveryFeeValue != null) {
-        if (Number.isNaN(deliveryFeeValue) || deliveryFeeValue < 0) {
-          alert('Please enter a valid delivery fee');
-        } else {
-          const feeResponse = await api.patch(
-            `/admin/orders/${id}/delivery-fee`,
-            { deliveryFee: deliveryFeeValue }
-          );
+        if (deliveryFeeValue != null) {
+          if (Number.isNaN(deliveryFeeValue) || deliveryFeeValue < 0) {
+            alert('Please enter a valid delivery fee');
+          } else {
+            const feeResponse = await api.patch(
+              `/admin/orders/${id}/delivery-fee`,
+              { deliveryFee: deliveryFeeValue }
+            );
 
-          if (feeResponse.data && feeResponse.data.success) {
-            const { order, breakdown } = feeResponse.data;
-            setSelectedOrderForDetail((prev) => ({
-              ...(order || prev),
-              deliveryFee:
-                breakdown?.deliveryFee ??
-                order?.deliveryFee ??
-                prev.deliveryFee,
-              totalAmount:
-                breakdown?.totalAmount ??
-                order?.totalAmount ??
-                prev.totalAmount,
-              itemsTotal:
-                breakdown?.itemsTotal ??
-                order?.itemsTotal ??
-                prev.itemsTotal
-            }));
+            if (feeResponse.data && feeResponse.data.success) {
+              const { order, breakdown } = feeResponse.data;
+              setSelectedOrderForDetail((prev) => ({
+                ...(order || prev),
+                deliveryFee:
+                  breakdown?.deliveryFee ??
+                  order?.deliveryFee ??
+                  prev.deliveryFee,
+                totalAmount:
+                  breakdown?.totalAmount ??
+                  order?.totalAmount ??
+                  prev.totalAmount,
+                itemsTotal:
+                  breakdown?.itemsTotal ??
+                  order?.itemsTotal ??
+                  prev.itemsTotal
+              }));
 
-            // We'll refresh once at the end
+              // We'll refresh once at the end
+            }
           }
         }
       }
@@ -1589,6 +1688,10 @@ const Orders = () => {
     );
   }
 
+  const pendingCancellationRequestsCount = orders.filter(
+    (order) => order.cancellationRequested && order.cancellationApproved === null
+  ).length;
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
@@ -1625,8 +1728,11 @@ const Orders = () => {
           value={orderTab}
           onChange={(event, newValue) => {
             setOrderTab(newValue);
+            if (newValue !== 'cancelled') {
+              setCancelledSubTab('cancelled');
+            }
             setPage(0);
-            applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, newValue);
+            applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, newValue, cancelledSubTab);
           }}
           sx={{
             '& .MuiTab-root': {
@@ -1644,36 +1750,71 @@ const Orders = () => {
             }
           }}
         >
-          <Tab label="All Orders" value="all" />
-          <Tab label="Pending" value="pending" />
-          <Tab 
-            label={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <span>Cancellation Requests</span>
-                {orders.filter(o => o.cancellationRequested && o.cancellationApproved === null).length > 0 && (
-                  <Chip 
-                    label={orders.filter(o => o.cancellationRequested && o.cancellationApproved === null).length}
-                    size="small"
-                    sx={{
-                      backgroundColor: '#FFC107',
-                      color: '#000',
-                      fontWeight: 700,
-                      height: 20,
-                      minWidth: 20,
-                      fontSize: '0.7rem'
-                    }}
-                  />
-                )}
-              </Box>
-            } 
-            value="cancellation-requests" 
-          />
-          <Tab label="Confirmed" value="confirmed" />
-          <Tab label="Completed" value="completed" />
           <Tab label="Unassigned" value="unassigned" />
-          <Tab label="Cancelled" value="cancelled" />
+          <Tab label="Pending" value="pending" />
+          <Tab label="In Progress" value="confirmed" />
+          <Tab label="Out for Delivery" value="out_for_delivery" />
+          <Tab label="Completed" value="completed" />
+          <Tab
+            value="cancelled"
+            label={
+              <Badge
+                color="warning"
+                variant="dot"
+                invisible={pendingCancellationRequestsCount === 0}
+                sx={{
+                  '& .MuiBadge-badge': {
+                    right: -6,
+                    top: 4
+                  }
+                }}
+              >
+                Cancelled
+              </Badge>
+            }
+          />
         </Tabs>
       </Paper>
+
+      {orderTab === 'cancelled' && (
+        <Paper sx={{ mb: 3, backgroundColor: colors.paper }}>
+          <Tabs
+            value={cancelledSubTab}
+            onChange={(event, newValue) => {
+              setCancelledSubTab(newValue);
+              setPage(0);
+              applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', newValue);
+            }}
+            variant="scrollable"
+            scrollButtons="auto"
+            sx={{
+              '& .MuiTab-root': {
+                minHeight: 44,
+                color: colors.textSecondary,
+                fontSize: '0.9rem',
+                '&.Mui-selected': {
+                  color: colors.accentText,
+                  fontWeight: 600
+                }
+              },
+              '& .MuiTabs-indicator': {
+                backgroundColor: colors.accentText,
+                height: 3
+              }
+            }}
+          >
+            <Tab label="Cancelled Orders" value="cancelled" />
+            <Tab
+              value="cancellation-requests"
+              label={
+                pendingCancellationRequestsCount > 0
+                  ? `Cancellation Requests (${pendingCancellationRequestsCount})`
+                  : 'Cancellation Requests'
+              }
+            />
+          </Tabs>
+        </Paper>
+      )}
 
       {/* Filters */}
       <Box sx={{ mb: 3, display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -1744,7 +1885,7 @@ const Orders = () => {
           >
             <MenuItem value="all">All Statuses</MenuItem>
             <MenuItem value="pending">Pending</MenuItem>
-            <MenuItem value="confirmed">Confirmed</MenuItem>
+            <MenuItem value="confirmed">In Progress</MenuItem>
             <MenuItem value="out_for_delivery">On the Way</MenuItem>
             <MenuItem value="delivered">Delivered</MenuItem>
             <MenuItem value="completed">Completed</MenuItem>
@@ -1821,7 +1962,7 @@ const Orders = () => {
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Customer</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Total Amount</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Payment Status</TableCell>
-                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order Status</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Delivery Address</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Driver</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Actions</TableCell>
@@ -1831,8 +1972,13 @@ const Orders = () => {
               {filteredOrders.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((order) => {
                 const isUnpaidDelivered = order.status === 'delivered' && order.paymentStatus === 'unpaid';
                 const hasPendingCancellation = order.cancellationRequested && order.cancellationApproved === null;
-                const statusChip = getOrderStatusChipProps(order.status);
                 const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
+                const deliveryAddressShort = (order.deliveryAddress || '')
+                  .trim()
+                  .split(/\s+/)
+                  .filter(Boolean)
+                  .slice(0, 2)
+                  .join(' ');
                 
                 return (
                   <TableRow
@@ -1969,10 +2115,9 @@ const Orders = () => {
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                        <Chip
-                          size="small"
-                          {...statusChip}
-                        />
+                        <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.9rem' }}>
+                          {deliveryAddressShort || '—'}
+                        </Typography>
                         {order.deliveryAddress === 'In-Store Purchase' && (
                           <Chip
                             label="POS"
@@ -2791,30 +2936,65 @@ const Orders = () => {
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                     {/* Items Subtotal */}
                     {selectedOrderForDetail.items && selectedOrderForDetail.items.length > 0 && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body1">
                           <strong>Items Subtotal:</strong>
                         </Typography>
-                        <Typography variant="body1">
-                          KES {(() => {
-                            const itemsTotal = selectedOrderForDetail.itemsTotal || 
-                              selectedOrderForDetail.items.reduce((sum, item) => 
-                                sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
-                              );
-                            return Math.round(Number(itemsTotal));
-                          })()}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body1">
+                            KES {(() => {
+                              const itemsTotal = selectedOrderForDetail.itemsTotal ||
+                                selectedOrderForDetail.items.reduce((sum, item) =>
+                                  sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
+                                );
+                              return Math.round(Number(itemsTotal));
+                            })()}
+                          </Typography>
+                          {selectedOrderForDetail.status !== 'completed' &&
+                            selectedOrderForDetail.status !== 'cancelled' &&
+                            selectedOrderForDetail.paymentStatus !== 'paid' && (
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  const current =
+                                    selectedOrderForDetail.itemsTotal ||
+                                    selectedOrderForDetail.items.reduce((sum, item) =>
+                                      sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
+                                    );
+                                  setNewItemsSubtotal(String(Math.round(Number(current))));
+                                  setEditItemsSubtotalDialogOpen(true);
+                                }}
+                              >
+                                <Edit fontSize="small" />
+                              </IconButton>
+                            )}
+                        </Box>
                       </Box>
                     )}
                     {/* Delivery Fee in Summary */}
                     {selectedOrderForDetail.deliveryFee !== undefined && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body1">
                           <strong>Delivery Fee:</strong>
                         </Typography>
-                        <Typography variant="body1">
-                          KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body1">
+                            KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
+                          </Typography>
+                          {selectedOrderForDetail.status !== 'completed' &&
+                            selectedOrderForDetail.status !== 'cancelled' &&
+                            selectedOrderForDetail.paymentStatus !== 'paid' && (
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setNewDeliveryFee(String(selectedOrderForDetail.deliveryFee ?? ''));
+                                  setEditDeliveryFeeDialogOpen(true);
+                                }}
+                              >
+                                <Edit fontSize="small" />
+                              </IconButton>
+                            )}
+                        </Box>
                       </Box>
                     )}
                     {/* Tip Amount */}
@@ -3015,6 +3195,16 @@ const Orders = () => {
                   </Typography>
                 </CardContent>
               </Card>
+
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  <strong>Posted by:</strong>{' '}
+                  {selectedOrderForDetail.servicedByAdmin?.username ||
+                    selectedOrderForDetail.servicedByAdmin?.name ||
+                    selectedOrderForDetail.servicedByAdmin?.email ||
+                    '—'}
+                </Typography>
+              </Box>
             </Box>
           )}
         </DialogContent>
@@ -3224,6 +3414,79 @@ const Orders = () => {
             }}
           >
             {updatingDeliveryFee ? 'Updating...' : 'Update Delivery Fee'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Items Subtotal Dialog */}
+      <Dialog
+        open={editItemsSubtotalDialogOpen}
+        onClose={() => {
+          setEditItemsSubtotalDialogOpen(false);
+          setNewItemsSubtotal('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Edit Items Subtotal
+        </DialogTitle>
+        <DialogContent>
+          {selectedOrderForDetail && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Current Items Subtotal: KES {Math.round(Number(selectedOrderForDetail.itemsTotal || 0))}
+              </Typography>
+              <TextField
+                autoFocus
+                fullWidth
+                label="New Items Subtotal"
+                type="number"
+                value={newItemsSubtotal}
+                onChange={(e) => setNewItemsSubtotal(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">KES</InputAdornment>
+                }}
+                inputProps={{
+                  min: 0,
+                  step: 0.01
+                }}
+                sx={{ mt: 2 }}
+              />
+              <Alert severity="info" sx={{ mt: 2 }}>
+                This will adjust item prices proportionally to match the subtotal.
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setEditItemsSubtotalDialogOpen(false);
+              setNewItemsSubtotal('');
+            }}
+            disabled={updatingItemsSubtotal}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUpdateItemsSubtotal}
+            variant="contained"
+            disabled={updatingItemsSubtotal}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              },
+              '&:disabled': {
+                backgroundColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {updatingItemsSubtotal ? 'Updating...' : 'Update Items Subtotal'}
           </Button>
         </DialogActions>
       </Dialog>

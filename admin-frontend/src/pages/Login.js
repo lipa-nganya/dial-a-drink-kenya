@@ -9,7 +9,8 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
-  IconButton
+  IconButton,
+  Link
 } from '@mui/material';
 import { Lock, Dashboard, Visibility, VisibilityOff } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
@@ -158,6 +159,18 @@ const Login = () => {
           >
             {loading ? 'Logging in...' : 'Login'}
           </Button>
+
+          <Box sx={{ mt: 2, textAlign: 'center' }}>
+            <Link
+              component="button"
+              type="button"
+              onClick={() => navigate('/reset-password')}
+              sx={{ color: colors.accentText, fontWeight: 600, textDecoration: 'none' }}
+              disabled={loading}
+            >
+              Forgot password?
+            </Link>
+          </Box>
         </Box>
       </Paper>
     </Container>

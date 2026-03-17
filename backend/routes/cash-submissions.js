@@ -11,6 +11,14 @@ const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 // Admin routes - require admin authentication
 router.use('/admin', verifyAdmin);
 
+const requireSuperAdmin = (req, res, next) => {
+  const role = req.admin?.role || req.admin?.user?.role || null;
+  if (role !== 'super_admin') {
+    return sendError(res, 'Forbidden: super admin only', 403);
+  }
+  return next();
+};
+
 /**
  * Create cash submission (admin)
  * POST /api/driver-wallet/admin/cash-submissions
@@ -25,9 +33,11 @@ router.post('/admin/cash-submissions', async (req, res) => {
     const { submissionType, amount, details, orderIds } = req.body;
 
     // Validate required fields
-    if (!submissionType || !['purchases', 'cash', 'general_expense', 'payment_to_office', 'walk_in_sale'].includes(submissionType)) {
+    // Admin submissions are requests from an admin user to a super admin.
+    // Purchases are handled via the payables/purchases flows, not via admin cash submissions.
+    if (!submissionType || !['cash', 'general_expense', 'payment_to_office', 'walk_in_sale'].includes(submissionType)) {
       console.log('❌ Invalid submission type:', submissionType);
-      return sendError(res, 'Invalid submission type. Must be one of: purchases, cash, general_expense, payment_to_office, walk_in_sale', 400);
+      return sendError(res, 'Invalid submission type. Must be one of: cash, general_expense, payment_to_office, walk_in_sale', 400);
     }
 
     if (!amount || parseFloat(amount) <= 0) {
@@ -96,6 +106,39 @@ router.post('/admin/cash-submissions', async (req, res) => {
     }
 
     const submissionAmount = parseFloat(amount);
+
+    // Guard: admin cannot submit more than available cash at hand.
+    // Per-admin cash at hand is derived ONLY from approved walk_in_sale credits minus approved spend submissions.
+    // Pending spend submissions also reserve cash.
+    if (submissionType !== 'walk_in_sale') {
+      const approved = await db.CashSubmission.findAll({
+        where: { adminId: parseInt(adminId, 10), driverId: null, status: 'approved' },
+        attributes: ['amount', 'submissionType']
+      });
+      const walkInCredits = approved
+        .filter((s) => s.submissionType === 'walk_in_sale')
+        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+      const approvedSpends = approved
+        .filter((s) => s.submissionType !== 'walk_in_sale')
+        .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+      const actualCashAtHand = Math.max(0, walkInCredits - approvedSpends);
+
+      const pendingSpendSubs = await db.CashSubmission.findAll({
+        where: {
+          adminId: parseInt(adminId, 10),
+          driverId: null,
+          status: 'pending',
+          submissionType: { [Op.ne]: 'walk_in_sale' }
+        },
+        attributes: ['amount']
+      });
+      const pendingReserved = pendingSpendSubs.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+      const available = Math.max(0, actualCashAtHand - pendingReserved);
+
+      if (submissionAmount - available > 0.01) {
+        return sendError(res, `Amount exceeds available cash at hand (available: ${available.toFixed(2)})`, 400);
+      }
+    }
 
     // Validate orderIds if provided
     if (orderIds && Array.isArray(orderIds) && orderIds.length > 0) {
@@ -349,18 +392,68 @@ router.post('/admin/cash-submissions', async (req, res) => {
 });
 
 /**
+ * Get admin cash submissions created by logged-in admin
+ * GET /api/driver-wallet/admin/cash-submissions/mine?status=pending|approved|rejected
+ */
+router.get('/admin/cash-submissions/mine', async (req, res) => {
+  try {
+    const adminId = req.admin.id;
+    const { status } = req.query;
+
+    const where = {
+      adminId: parseInt(adminId, 10),
+      driverId: null,
+      // Backward compatibility: older admin submissions may include purchases.
+      // Purchases are not part of the "admin → super admin submission" workflow, so exclude them.
+      submissionType: { [Op.ne]: 'purchases' }
+    };
+    if (status && ['pending', 'approved', 'rejected'].includes(status)) {
+      where.status = status;
+    }
+
+    const submissions = await db.CashSubmission.findAll({
+      where,
+      include: [
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'rejector', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit: 500
+    });
+
+    return sendSuccess(res, { submissions, total: submissions.length });
+  } catch (error) {
+    console.error('❌ Error fetching admin submissions (mine):', error);
+    return sendError(res, error.message || 'Failed to fetch submissions', 500);
+  }
+});
+
+/**
  * Get all cash submissions (admin) - all statuses
  * GET /api/driver-wallet/admin/cash-submissions/all
  */
-router.get('/admin/cash-submissions/all', async (req, res) => {
+router.get('/admin/cash-submissions/all', requireSuperAdmin, async (req, res) => {
   try {
     const limit = Math.min(1000, Math.max(0, parseInt(req.query.limit, 10) || 1000));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    const status = (req.query.status || '').toString().trim();
 
     console.log('📋 Fetching all cash submissions...');
 
-    // Get all submissions (both driver and admin)
+    // For Admin Cash At Hand approvals, super admin should see admin submissions (not driver submissions).
+    const where = {
+      driverId: null,
+      submissionType: { [Op.ne]: 'purchases' }
+    };
+    if (status) {
+      where.status = status;
+    }
+
+    // Get admin submissions
     const submissions = await db.CashSubmission.findAll({
+      where,
       include: [
         { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber', 'cashAtHand'], required: false },
         { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
@@ -552,12 +645,12 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     }
     console.log(`✅ Updated lastActivity for driver ${driverId} (cash submission created)`);
 
-    // Order payment: credit merchant wallet (order cost) and, for PAY_ON_DELIVERY orders,
-    // credit driver savings with 50% of the delivery fee **once**, when the driver submits cash.
+    // Order payment: credit merchant wallet (order cost).
+    // Driver savings (50% of the delivery fee) are now credited when the order is completed,
+    // via creditWalletsOnDeliveryCompletion, not when the driver submits cash.
     if (isOrderPayment && orderIdsToLink.length > 0) {
       const firstOrderId = orderIdsToLink[0];
       let merchantCreditAmount = submissionAmount;
-      let driverSavingsCreditAmount = 0;
       let breakdownError = null;
       let paymentType = 'pay_on_delivery';
 
@@ -575,16 +668,9 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
         const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
         const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
 
-        // For PAY_ON_DELIVERY orders, driver receives cash and savings are credited on submission.
-        if (paymentType === 'pay_on_delivery') {
-          driverSavingsCreditAmount = deliveryFee * 0.5;
-        } else {
-          // For PAY_NOW orders, savings are handled on order completion via walletCredits.
-          driverSavingsCreditAmount = 0;
-        }
-
+        // Savings (50% delivery fee) are credited on order completion, not on submission.
         merchantCreditAmount = itemsTotal;
-        console.log(`   Order payment breakdown for Order #${firstOrderId}: itemsTotal=${itemsTotal.toFixed(2)}, deliveryFee=${deliveryFee.toFixed(2)}, savingsCredit=${driverSavingsCreditAmount.toFixed(2)}, paymentType=${paymentType}`);
+        console.log(`   Order payment breakdown for Order #${firstOrderId}: itemsTotal=${itemsTotal.toFixed(2)}, deliveryFee=${deliveryFee.toFixed(2)}, paymentType=${paymentType}`);
       } catch (e) {
         breakdownError = e;
         console.error(`❌ Order payment create: could not get breakdown for Order #${firstOrderId}:`, e.message);
@@ -599,66 +685,10 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       await adminWallet.update({
         balance: parseFloat(adminWallet.balance || 0) + merchantCreditAmount,
         totalRevenue: parseFloat(adminWallet.totalRevenue || 0) + merchantCreditAmount
-        // CRITICAL: Do NOT update cashAtHand - driver cash submissions go to merchant wallet and driver savings only
-        // Admin cash at hand is only for POS orders where customer paid cash or orders where admin received cash directly
+        // CRITICAL: Do NOT update cashAtHand - driver cash submissions go to merchant wallet only.
+        // Admin cash at hand is only for POS orders where customer paid cash or orders where admin received cash directly.
       });
-      console.log(`   Order payment (auto-approved): merchant wallet +KES ${merchantCreditAmount.toFixed(2)}, driver savings +KES ${driverSavingsCreditAmount.toFixed(2)} (admin cash at hand NOT updated)`);
-      
-      // Credit driver savings (50% delivery fee) for PAY_ON_DELIVERY, but only if not already credited
-      if (driverSavingsCreditAmount > 0.009) {
-        const driverIdInt = parseInt(driverId, 10);
-
-        // Prevent double-crediting if a savings_credit transaction already exists for this order/driver
-        const existingSavingsCredit = await db.Transaction.findOne({
-          where: {
-            orderId: firstOrderId,
-            transactionType: 'savings_credit',
-            driverId: driverIdInt,
-            status: { [db.Sequelize.Op.ne]: 'cancelled' }
-          }
-        });
-
-        if (!existingSavingsCredit) {
-          let driverWallet = await db.DriverWallet.findOne({ where: { driverId: driverIdInt } });
-          if (!driverWallet) {
-            driverWallet = await db.DriverWallet.create({
-              driverId: driverIdInt,
-              balance: 0,
-              totalTipsReceived: 0,
-              totalTipsCount: 0,
-              totalDeliveryPay: 0,
-              totalDeliveryPayCount: 0,
-              savings: 0
-            });
-          }
-          const currentSavings = parseFloat(driverWallet.savings || 0);
-          const newSavings = currentSavings + driverSavingsCreditAmount;
-          await driverWallet.update({ savings: newSavings });
-          
-          // Create savings credit transaction
-          const savingsTransaction = await db.Transaction.create({
-            orderId: firstOrderId,
-            transactionType: 'savings_credit',
-            paymentMethod: 'cash',
-            paymentProvider: 'order_payment_submission',
-            amount: driverSavingsCreditAmount,
-            status: 'completed',
-            paymentStatus: 'paid',
-            driverId: driverIdInt,
-            driverWalletId: driverWallet.id,
-            notes: `Savings credit from Order Payment submission #${submission.id} - 50% delivery fee for Order #${firstOrderId} (KES ${driverSavingsCreditAmount.toFixed(2)})`
-          });
-          console.log(`   ✅ Driver savings credited: ${currentSavings.toFixed(2)} → ${newSavings.toFixed(2)} (+${driverSavingsCreditAmount.toFixed(2)}) for Order #${firstOrderId}`);
-          console.log(`   ✅ Savings transaction created: ID ${savingsTransaction.id}`);
-        } else {
-          console.log(`   ℹ️ Savings credit already exists for Order #${firstOrderId} and driver ${driverIdInt}, skipping duplicate savings credit.`);
-        }
-      } else {
-        console.warn(`   ⚠️ No savings credit for Order #${firstOrderId}: driverSavingsCreditAmount=${driverSavingsCreditAmount.toFixed(2)} (too small, PAY_NOW order, or breakdown failed)`);
-        if (breakdownError) {
-          console.error(`   ⚠️ Breakdown error prevented savings credit:`, breakdownError.message);
-        }
-      }
+      console.log(`   Order payment (auto-approved): merchant wallet +KES ${merchantCreditAmount.toFixed(2)} (admin cash at hand NOT updated; savings handled on order completion)`);
       await db.Transaction.create({
         orderId: firstOrderId,
         driverId: parseInt(driverId, 10),
@@ -934,7 +964,7 @@ function sanitizeDetailsForJsonb(obj) {
   return out;
 }
 
-router.patch('/admin/cash-submissions/:id', async (req, res) => {
+router.patch('/admin/cash-submissions/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const submissionId = parseInt(id, 10);
@@ -1264,7 +1294,7 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
       }
     }
 
-    // Credit merchant wallet (and for order_payment: credit driver savings with 50% delivery fee)
+    // Credit merchant wallet (for order_payment, driver savings are handled on order completion)
     let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
     if (!adminWallet) {
       adminWallet = await db.AdminWallet.create({
@@ -1278,7 +1308,6 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
 
     const submissionAmount = parseFloat(submission.amount);
     let merchantCreditAmount = submissionAmount;
-    let driverSavingsCreditAmount = 0;
     let orderIdForSavings = null;
 
     if (submission.submissionType === 'order_payment' && submission.driverId) {
@@ -1292,10 +1321,9 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
           const breakdown = await getOrderFinancialBreakdown(firstOrderId);
           const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
           const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-          driverSavingsCreditAmount = deliveryFee * 0.5;
           merchantCreditAmount = itemsTotal;
           orderIdForSavings = firstOrderId;
-          console.log(`   Order payment: merchant gets KES ${merchantCreditAmount.toFixed(2)}, driver savings +KES ${driverSavingsCreditAmount.toFixed(2)}`);
+          console.log(`   Order payment: merchant gets KES ${merchantCreditAmount.toFixed(2)} (savings handled on order completion)`);
         } catch (e) {
           console.warn('Order payment approval: could not get breakdown, using full amount for merchant:', e.message);
         }
@@ -1308,35 +1336,7 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
       totalRevenue: parseFloat(adminWallet.totalRevenue) + merchantCreditAmount
     });
 
-    if (driverSavingsCreditAmount > 0.009 && submission.driverId && orderIdForSavings) {
-      let driverWallet = await db.DriverWallet.findOne({ where: { driverId: submission.driverId } });
-      if (!driverWallet) {
-        driverWallet = await db.DriverWallet.create({
-          driverId: submission.driverId,
-          balance: 0,
-          totalTipsReceived: 0,
-          totalTipsCount: 0,
-          totalDeliveryPay: 0,
-          totalDeliveryPayCount: 0,
-          savings: 0
-        });
-      }
-      const currentSavings = parseFloat(driverWallet.savings || 0);
-      await driverWallet.update({ savings: currentSavings + driverSavingsCreditAmount });
-      await db.Transaction.create({
-        orderId: orderIdForSavings,
-        transactionType: 'savings_credit',
-        paymentMethod: 'cash',
-        paymentProvider: 'order_payment_submission',
-        amount: driverSavingsCreditAmount,
-        status: 'completed',
-        paymentStatus: 'paid',
-        driverId: submission.driverId,
-        driverWalletId: driverWallet.id,
-        notes: `Savings credit from Order Payment submission #${submission.id} - 50% delivery fee for Order #${orderIdForSavings} (KES ${driverSavingsCreditAmount.toFixed(2)})`
-      });
-      console.log(`   Driver savings credited: +KES ${driverSavingsCreditAmount.toFixed(2)} for Order #${orderIdForSavings}`);
-    }
+    // NOTE: Savings for order_payment submissions are now handled exclusively when the order is completed.
 
     // Update admin cash at hand based on submission type
     // CRITICAL: Driver cash submissions do NOT go to admin cash at hand
@@ -1479,7 +1479,7 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
  * Approve admin cash submission (admin or super_admin) - must be before generic route
  * POST /api/driver-wallet/admin/cash-submissions/:id/approve
  */
-router.post('/admin/cash-submissions/:id/approve', async (req, res) => {
+router.post('/admin/cash-submissions/:id/approve', requireSuperAdmin, async (req, res) => {
   return handleApproveSubmission(req, res, req.params.id, 'admin');
 });
 
@@ -1598,7 +1598,7 @@ const handleRejectSubmission = async (req, res, submissionId, driverIdParam = nu
  * Reject admin cash submission (admin or super_admin) - must be before generic route
  * POST /api/driver-wallet/admin/cash-submissions/:id/reject
  */
-router.post('/admin/cash-submissions/:id/reject', async (req, res) => {
+router.post('/admin/cash-submissions/:id/reject', requireSuperAdmin, async (req, res) => {
   return handleRejectSubmission(req, res, req.params.id, 'admin');
 });
 

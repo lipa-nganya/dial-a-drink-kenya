@@ -4,51 +4,7 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
 const { verifyAdmin } = require('./admin');
-
-/**
- * Credit merchant wallet for POS order
- * POS orders don't have delivery fees, so we only credit the order total
- */
-const creditMerchantWalletForPOSOrder = async (orderId, totalAmount, transaction = null) => {
-  try {
-    let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } }, { transaction });
-    if (!adminWallet) {
-      adminWallet = await db.AdminWallet.create({
-        id: 1,
-        balance: 0,
-        totalRevenue: 0,
-        totalOrders: 0
-      }, { transaction });
-    }
-
-    const oldBalance = parseFloat(adminWallet.balance) || 0;
-    const oldTotalRevenue = parseFloat(adminWallet.totalRevenue) || 0;
-    const oldTotalOrders = adminWallet.totalOrders || 0;
-
-    await adminWallet.update({
-      balance: oldBalance + totalAmount,
-      totalRevenue: oldTotalRevenue + totalAmount,
-      totalOrders: oldTotalOrders + 1
-    }, { transaction });
-
-    await adminWallet.reload({ transaction });
-
-    console.log(`✅ Credited merchant wallet for POS Order #${orderId}:`);
-    console.log(`   Order total: KES ${totalAmount.toFixed(2)}`);
-    console.log(`   Wallet balance: ${oldBalance.toFixed(2)} → ${parseFloat(adminWallet.balance).toFixed(2)}`);
-    console.log(`   Total revenue: ${oldTotalRevenue.toFixed(2)} → ${parseFloat(adminWallet.totalRevenue).toFixed(2)}`);
-    console.log(`   Total orders: ${oldTotalOrders} → ${adminWallet.totalOrders}`);
-
-    return {
-      success: true,
-      merchantCreditAmount: totalAmount,
-      walletBalance: parseFloat(adminWallet.balance)
-    };
-  } catch (error) {
-    console.error(`❌ Error crediting merchant wallet for POS Order #${orderId}:`, error);
-    throw error;
-  }
-};
+const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
 
 // In-memory cart storage (in production, use Redis or database)
 // Key: 'pos_cart', Value: Array of cart items
@@ -618,9 +574,6 @@ router.post('/order/cash', verifyAdmin, async (req, res) => {
       notes: cashNotes
     }, { transaction });
 
-    // Credit merchant wallet with order total
-    await creditMerchantWalletForPOSOrder(order.id, totalAmount, transaction);
-
     // Decrease inventory stock for POS cash orders
     try {
       const { decreaseInventoryForOrder } = require('../utils/inventory');
@@ -632,6 +585,15 @@ router.post('/order/cash', verifyAdmin, async (req, res) => {
     }
 
     await transaction.commit();
+
+    // Wallet engine: credit merchant wallet + admin cash at hand (runs on completion)
+    // Must run after commit so creditWalletsOnDeliveryCompletion sees committed data
+    try {
+      await creditWalletsOnDeliveryCompletion(order.id, req);
+    } catch (walletError) {
+      console.error(`❌ Error crediting wallets for POS Order #${order.id}:`, walletError);
+      // Don't fail the response - order is already created and committed
+    }
 
     // Emit socket event for admin dashboard
     const io = req.app.get('io');

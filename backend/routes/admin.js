@@ -716,6 +716,57 @@ router.post('/auth/login', async (req, res) => {
 });
 
 /**
+ * Request admin password reset (logged out flow)
+ * Public endpoint (no JWT) – secured by short-lived token emailed to admin.
+ *
+ * POST /api/admin/auth/request-password-reset
+ * body: { usernameOrEmail }
+ */
+router.post('/auth/request-password-reset', async (req, res) => {
+  try {
+    const { usernameOrEmail } = req.body || {};
+    const identifier = typeof usernameOrEmail === 'string' ? usernameOrEmail.trim() : '';
+
+    if (!identifier) {
+      return res.status(400).json({ success: false, error: 'Username or email is required' });
+    }
+
+    const adminUser = await db.Admin.findOne({
+      where: {
+        [Op.or]: [
+          { username: identifier },
+          { email: identifier }
+        ]
+      }
+    });
+
+    // Always return success to avoid account enumeration
+    if (!adminUser) {
+      return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
+    }
+
+    const crypto = require('crypto');
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    adminUser.inviteToken = resetToken;
+    adminUser.inviteTokenExpiry = resetExpiry;
+    await adminUser.save();
+
+    const emailService = require('../services/email');
+    const emailResult = await emailService.sendAdminPasswordReset(adminUser.email, resetToken, adminUser.username);
+    if (!emailResult.success) {
+      console.warn('Password reset email not sent (email service not configured):', emailResult.error);
+    }
+
+    return res.json({ success: true, message: 'If an account exists, a reset link has been sent.' });
+  } catch (error) {
+    console.error('Error requesting admin password reset:', error);
+    return res.status(500).json({ success: false, error: 'Failed to request password reset' });
+  }
+});
+
+/**
  * Set password for invited admin users (from email invite)
  * Public endpoint (no JWT) – secured by one-time invite token.
  *
@@ -2190,11 +2241,16 @@ router.get('/orders', verifyAdmin, async (req, res) => {
         as: 'territory',
         required: false,
         attributes: ['id', 'name']
+      },
+      {
+        model: db.Admin,
+        as: 'servicedByAdmin',
+        required: false,
+        attributes: ['id', 'username', 'email', 'name']
       }
     ];
     
     // Branch association removed - no longer relevant/displayed
-    // Admin association (servicedByAdmin) removed - not needed for orders list, same as transactions endpoint
     
     const orders = await db.Order.findAll({
       attributes: validOrderAttributes,
@@ -2372,6 +2428,102 @@ router.patch('/orders/:orderId/items/:itemId/price', verifyAdmin, async (req, re
   } catch (error) {
     console.error('Error updating order item price:', error);
     res.status(500).json({ error: 'Failed to update item price' });
+  }
+});
+
+/**
+ * Update order items subtotal by scaling item prices.
+ * PATCH /api/admin/orders/:orderId/items-subtotal
+ * body: { itemsSubtotal }
+ *
+ * This adjusts order item prices proportionally to reach the desired subtotal,
+ * while preserving the current delivery fee and tip amount (totalAmount is updated accordingly).
+ */
+router.patch('/orders/:orderId/items-subtotal', verifyAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { itemsSubtotal } = req.body || {};
+
+    const targetSubtotal = parseFloat(itemsSubtotal);
+    if (!Number.isFinite(targetSubtotal) || targetSubtotal < 0) {
+      return res.status(400).json({ error: 'Valid itemsSubtotal is required' });
+    }
+
+    const order = await db.Order.findByPk(orderId);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit items subtotal for completed or cancelled orders' });
+    }
+    if (order.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Cannot edit items subtotal for orders that have been paid' });
+    }
+
+    const t = await db.sequelize.transaction();
+    try {
+      const breakdownBefore = await getOrderFinancialBreakdown(orderId);
+      const prevDeliveryFee = breakdownBefore.deliveryFee;
+      const tipAmount = breakdownBefore.tipAmount;
+      const currentItemsTotal = breakdownBefore.itemsTotal;
+
+      const items = await db.OrderItem.findAll({ where: { orderId }, transaction: t, lock: t.LOCK.UPDATE });
+      if (!items.length) {
+        await t.rollback();
+        return res.status(400).json({ error: 'Order has no items' });
+      }
+      if (currentItemsTotal < 0.01) {
+        // Avoid divide-by-zero scaling; if current subtotal is 0, set all prices to 0.
+        for (const item of items) {
+          await item.update({ price: 0 }, { transaction: t });
+        }
+      } else {
+        const factor = targetSubtotal / currentItemsTotal;
+        for (const item of items) {
+          const oldPrice = parseFloat(item.price || 0) || 0;
+          const newPrice = Number((oldPrice * factor).toFixed(2));
+          await item.update({ price: newPrice }, { transaction: t });
+        }
+      }
+
+      const breakdownAfter = await getOrderFinancialBreakdown(orderId);
+      const newItemsTotal = breakdownAfter.itemsTotal;
+      const newTotalAmount = newItemsTotal + prevDeliveryFee + tipAmount;
+
+      const oldNotes = order.notes || '';
+      const note = `[${new Date().toISOString()}] Items subtotal updated: KES ${currentItemsTotal.toFixed(2)} → KES ${newItemsTotal.toFixed(2)} (target: ${targetSubtotal.toFixed(2)})`;
+      await order.update(
+        { totalAmount: newTotalAmount, notes: oldNotes ? `${oldNotes}\n${note}` : note },
+        { transaction: t }
+      );
+
+      await t.commit();
+
+      const updatedOrder = await db.Order.findByPk(orderId, {
+        include: [{
+          model: db.OrderItem,
+          as: 'items',
+          include: [{ model: db.Drink, as: 'drink' }]
+        }]
+      });
+
+      return res.json({
+        success: true,
+        message: 'Items subtotal updated successfully',
+        order: updatedOrder,
+        breakdown: {
+          itemsTotal: newItemsTotal,
+          deliveryFee: prevDeliveryFee,
+          tipAmount,
+          totalAmount: newTotalAmount
+        }
+      });
+    } catch (err) {
+      await t.rollback();
+      throw err;
+    }
+  } catch (error) {
+    console.error('Error updating items subtotal:', error);
+    return res.status(500).json({ error: 'Failed to update items subtotal' });
   }
 });
 
@@ -3136,80 +3288,8 @@ router.post('/orders/:id/mark-payment-cash', verifyAdmin, async (req, res) => {
         console.error(`❌ WARNING: Admin cash at hand update mismatch! Expected ${newAdminCashAtHand.toFixed(2)}, got ${verifiedCashAtHand.toFixed(2)}`);
       }
 
-      // If order is a delivery order with a driver, credit driver 50% cash at hand and 50% savings
-      if (order.driverId && deliveryFee > 0) {
-        const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction });
-        if (driver) {
-          // Get or create driver wallet
-          let driverWallet = await db.DriverWallet.findOne({
-            where: { driverId: order.driverId },
-            transaction: dbTransaction
-          });
-          if (!driverWallet) {
-            driverWallet = await db.DriverWallet.create({
-              driverId: order.driverId,
-              balance: 0,
-              totalTipsReceived: 0,
-              totalTipsCount: 0,
-              totalDeliveryPay: 0,
-              totalDeliveryPayCount: 0,
-              savings: 0
-            }, { transaction: dbTransaction });
-          }
-
-          // Calculate 50% of delivery fee
-          const driverCashAtHandCredit = deliveryFee * 0.5;
-          const driverSavingsCredit = deliveryFee * 0.5;
-
-          // Credit driver cash at hand (50% delivery fee)
-          const currentDriverCashAtHand = parseFloat(driver.cashAtHand || 0);
-          const newDriverCashAtHand = currentDriverCashAtHand + driverCashAtHandCredit;
-          await driver.update({
-            cashAtHand: newDriverCashAtHand
-          }, { transaction: dbTransaction });
-
-          // Credit driver savings (50% delivery fee)
-          const currentSavings = parseFloat(driverWallet.savings || 0);
-          const newSavings = currentSavings + driverSavingsCredit;
-          await driverWallet.update({
-            savings: newSavings
-          }, { transaction: dbTransaction });
-
-          // Create cash settlement transaction for driver cash at hand credit
-          await db.Transaction.create({
-            orderId: order.id,
-            driverId: order.driverId,
-            driverWalletId: driverWallet.id,
-            transactionType: 'cash_settlement',
-            paymentMethod: 'cash',
-            paymentProvider: 'admin_cash_at_hand',
-            amount: driverCashAtHandCredit, // Positive amount = credit
-            status: 'completed',
-            paymentStatus: 'paid',
-            receiptNumber: `CASH-ADMIN-${order.id}-${Date.now()}`,
-            transactionDate: new Date(),
-            notes: `Admin cash at hand payment: 50% delivery fee credit for Order #${order.id}`
-          }, { transaction: dbTransaction });
-
-          // Create savings credit transaction
-          await db.Transaction.create({
-            orderId: order.id,
-            driverId: order.driverId,
-            driverWalletId: driverWallet.id,
-            transactionType: 'savings_credit',
-            paymentMethod: 'cash',
-            paymentProvider: 'admin_cash_at_hand',
-            amount: driverSavingsCredit,
-            status: 'completed',
-            paymentStatus: 'paid',
-            receiptNumber: `CASH-ADMIN-${order.id}-${Date.now()}`,
-            transactionDate: new Date(),
-            notes: `Admin cash at hand payment: 50% delivery fee to savings for Order #${order.id}`
-          }, { transaction: dbTransaction });
-
-          console.log(`✅ Driver ${order.driverId} credited: Cash at hand +${driverCashAtHandCredit.toFixed(2)}, Savings +${driverSavingsCredit.toFixed(2)} for Order #${order.id}`);
-        }
-      }
+      // Driver savings and cash-at-hand for delivery fee are now handled when the order is completed
+      // via creditWalletsOnDeliveryCompletion. Do not credit driver here to avoid double-crediting.
 
       // If order is delivered and paid, mark as completed
       if (order.status === 'delivered' || order.status === 'completed') {
@@ -6587,12 +6667,15 @@ router.get('/sales-analytics', verifyAdmin, async (req, res) => {
 });
 
 /**
- * Get cash at hand for logged-in admin
+ * Get cash at hand for logged-in admin (or company-wide when ?scope=company)
  * GET /api/admin/cash-at-hand
+ * GET /api/admin/cash-at-hand?scope=company
  */
 router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
   try {
     const adminId = req.admin.id;
+    const scope = (req.query.scope || '').toLowerCase();
+    const isCompanyScope = scope === 'company';
 
     // Get admin wallet
     let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
@@ -6606,110 +6689,135 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
       });
     }
 
-    // Get cash from POS orders serviced by this admin
-    const posCashOrders = await db.Order.findAll({
-      where: {
-        adminId: adminId,
+    // NOTE: Per-admin "actual cash at hand" should ONLY increase from walk-in sales.
+    // POS cash orders and "admin_cash_at_hand" delivery cash are company cash-at-hand concepts.
+    let cashFromPOS = 0;
+    let cashFromAdminCashOrders = 0;
+    let posCashOrders = [];
+
+    if (isCompanyScope) {
+      const posWhere = {
         adminOrder: true,
         paymentMethod: 'cash',
         paymentStatus: 'paid',
-        status: {
-          [Op.in]: ['completed', 'delivered']
-        }
-      },
-      attributes: ['id', 'totalAmount', 'createdAt', 'customerName']
-    });
+        status: { [Op.in]: ['completed', 'delivered'] }
+      };
 
-    const cashFromPOS = posCashOrders.reduce((sum, order) => {
-      return sum + (parseFloat(order.totalAmount) || 0);
-    }, 0);
+      posCashOrders = await db.Order.findAll({
+        where: posWhere,
+        attributes: ['id', 'totalAmount', 'createdAt', 'customerName', 'adminId']
+      });
 
-    // Get orders where admin received cash directly (via mark-payment-cash endpoint)
-    // These are identified by payment transactions with provider 'admin_cash_at_hand'
-    const adminCashReceivedTransactions = await db.Transaction.findAll({
-      where: {
-        transactionType: 'payment',
-        paymentProvider: 'admin_cash_at_hand',
-        status: 'completed',
-        paymentStatus: 'paid'
-      },
-      attributes: ['id', 'orderId', 'amount', 'createdAt'],
-      include: [
-        {
-          model: db.Order,
-          as: 'order',
-          attributes: ['id', 'totalAmount', 'adminId'],
-          required: true
-        }
-      ]
-    });
+      cashFromPOS = posCashOrders.reduce((sum, order) => sum + (parseFloat(order.totalAmount) || 0), 0);
 
-    // Filter to only orders serviced by this admin and calculate cash received
-    const cashFromAdminCashOrders = adminCashReceivedTransactions.reduce((sum, tx) => {
-      if (tx.order && tx.order.adminId === adminId) {
-        const amount = parseFloat(tx.order.totalAmount || 0);
-        return sum + amount;
-      }
-      return sum;
-    }, 0);
-
-    // Get admin cash submissions created by this admin (cash spent)
-    const adminSubmissions = await db.CashSubmission.findAll({
-      where: {
-        adminId: adminId,
-        driverId: null, // Admin submissions
-        status: 'approved'
-      },
-      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt', 'approvedBy']
-    });
-
-    const cashSpent = adminSubmissions.reduce((sum, submission) => {
-      return sum + (parseFloat(submission.amount) || 0);
-    }, 0);
-
-    // Get approved driver cash submissions (cash received from drivers)
-    // These increase admin cash at hand when approved
-    const approvedDriverSubmissions = await db.CashSubmission.findAll({
-      where: {
-        driverId: { [Op.ne]: null }, // Driver submissions
-        status: 'approved'
-      },
-      attributes: ['id', 'amount', 'createdAt', 'approvedAt', 'approvedBy']
-    });
-
-    const cashFromDrivers = approvedDriverSubmissions.reduce((sum, submission) => {
-      return sum + (parseFloat(submission.amount) || 0);
-    }, 0);
-
-    // Calculate cash at hand for this admin
-    // Admin cash at hand = Cash from POS orders + Cash from orders where admin received cash directly + Cash from approved driver submissions - Cash spent by admin
-    const calculatedCashAtHand = Math.max(0, cashFromPOS + cashFromAdminCashOrders + cashFromDrivers - cashSpent);
-    
-    // Always sync the database value with calculated value to ensure consistency
-    // This ensures cash at hand is always up-to-date with POS orders, admin cash orders, driver submissions, and admin submissions
-    const storedCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
-    
-    // Update database if values differ significantly (more than 0.01)
-    if (Math.abs(storedCashAtHand - calculatedCashAtHand) > 0.01) {
-      await adminWallet.update({ cashAtHand: calculatedCashAtHand });
-      console.log(`💰 Synced admin cash at hand: ${storedCashAtHand.toFixed(2)} → ${calculatedCashAtHand.toFixed(2)} (POS: ${cashFromPOS.toFixed(2)}, Admin Cash Orders: ${cashFromAdminCashOrders.toFixed(2)}, Driver Submissions: ${cashFromDrivers.toFixed(2)}, Admin Submissions: ${cashSpent.toFixed(2)})`);
-    }
-    
-    // Reload to get the updated value
-    await adminWallet.reload();
-    const cashAtHand = parseFloat(adminWallet.cashAtHand || 0);
-
-    // Get all submissions (for display): include pending (so any admin can approve) plus approved/rejected tied to this admin
-    // For driver submissions, only show approved ones (not pending or rejected)
-    const allSubmissions = await db.CashSubmission.findAll({
-      where: {
-        [Op.or]: [
-          { status: 'pending' }, // All pending submissions so any admin can see and approve
-          { status: 'approved', driverId: { [Op.ne]: null } }, // Approved driver submissions (any admin can see approved ones)
-          { status: 'rejected', approvedBy: adminId, driverId: { [Op.ne]: null } }, // Rejected driver submissions approved by this admin
-          { adminId: adminId, driverId: null } // Admin submissions created by this admin (all statuses)
+      const adminCashReceivedTransactions = await db.Transaction.findAll({
+        where: {
+          transactionType: 'payment',
+          paymentProvider: 'admin_cash_at_hand',
+          status: 'completed',
+          paymentStatus: 'paid'
+        },
+        attributes: ['id', 'orderId', 'amount', 'createdAt'],
+        include: [
+          {
+            model: db.Order,
+            as: 'order',
+            attributes: ['id', 'totalAmount', 'adminId'],
+            required: true
+          }
         ]
-      },
+      });
+
+      cashFromAdminCashOrders = adminCashReceivedTransactions.reduce((sum, tx) => {
+        if (tx.order) {
+          const amount = parseFloat(tx.order.totalAmount || 0);
+          return sum + amount;
+        }
+        return sum;
+      }, 0);
+    }
+
+    // Admin cash submissions:
+    // - walk_in_sale is CASH RECEIVED (credit)
+    // - all other approved admin submissions are CASH SPENT (debit)
+    const adminSubWhere = {
+      driverId: null,
+      status: 'approved'
+    };
+    if (!isCompanyScope) adminSubWhere.adminId = adminId;
+
+    const adminSubmissions = await db.CashSubmission.findAll({
+      where: adminSubWhere,
+      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt', 'approvedBy', 'adminId']
+    });
+
+    const cashFromWalkInSales = adminSubmissions
+      .filter((s) => s.submissionType === 'walk_in_sale')
+      .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+
+    const cashSpent = adminSubmissions
+      .filter((s) => s.submissionType !== 'walk_in_sale')
+      .reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+
+    // Approved driver cash submissions are company-wide only.
+    let cashFromDrivers = 0;
+    if (isCompanyScope) {
+      const approvedDriverSubmissions = await db.CashSubmission.findAll({
+        where: {
+          driverId: { [Op.ne]: null },
+          status: 'approved'
+        },
+        attributes: ['id', 'amount', 'createdAt', 'approvedAt', 'approvedBy']
+      });
+      cashFromDrivers = approvedDriverSubmissions.reduce((sum, submission) => sum + (parseFloat(submission.amount) || 0), 0);
+    }
+
+    // Calculate cash at hand
+    // Per-admin scope: ONLY walk-in sales increase actual cash at hand.
+    const calculatedCashAtHand = isCompanyScope
+      ? Math.max(0, cashFromPOS + cashFromAdminCashOrders + cashFromDrivers - cashSpent)
+      : Math.max(0, cashFromWalkInSales - cashSpent);
+    
+    // Sync database only for company-wide scope (per-admin would overwrite global with partial data)
+    const storedCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
+    if (isCompanyScope && Math.abs(storedCashAtHand - calculatedCashAtHand) > 0.01) {
+      await adminWallet.update({ cashAtHand: calculatedCashAtHand });
+      console.log(`💰 Synced admin cash at hand (company): ${storedCashAtHand.toFixed(2)} → ${calculatedCashAtHand.toFixed(2)}`);
+    }
+    await adminWallet.reload();
+    const cashAtHand = isCompanyScope ? calculatedCashAtHand : Math.max(0, calculatedCashAtHand);
+
+    // Pending admin submissions should reduce "pending cash at hand" (like driver app).
+    // Only relevant for per-admin scope.
+    let pendingSubmissionsTotal = 0;
+    let pendingCashAtHand = null;
+    if (!isCompanyScope) {
+      const pendingSubs = await db.CashSubmission.findAll({
+        where: {
+          adminId: adminId,
+          driverId: null,
+          status: 'pending',
+          submissionType: { [Op.ne]: 'walk_in_sale' } // walk_in_sale is a credit, not a spend request
+        },
+        attributes: ['id', 'amount']
+      });
+      pendingSubmissionsTotal = pendingSubs.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
+      const rawPending = cashAtHand - pendingSubmissionsTotal;
+      pendingCashAtHand = Math.max(0, rawPending);
+    }
+
+    const allSubmissionsWhere = isCompanyScope
+      ? undefined // Company: show all submissions
+      : {
+          [Op.or]: [
+            { status: 'pending' },
+            { status: 'approved', driverId: { [Op.ne]: null } },
+            { status: 'rejected', approvedBy: adminId, driverId: { [Op.ne]: null } },
+            { adminId: adminId, driverId: null }
+          ]
+        };
+    const allSubmissions = await db.CashSubmission.findAll({
+      ...(allSubmissionsWhere && { where: allSubmissionsWhere }),
       include: [
         { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false },
         { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
@@ -6722,12 +6830,17 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
     res.json({
       success: true,
       cashAtHand: cashAtHand,
+      pendingSubmissionsTotal,
+      ...(pendingCashAtHand !== null ? { pendingCashAtHand } : {}),
       breakdown: {
         cashFromPOS: cashFromPOS,
+        cashFromAdminCashOrders: cashFromAdminCashOrders,
         cashFromDrivers: cashFromDrivers,
+        cashFromWalkInSales: cashFromWalkInSales,
         cashSpent: cashSpent
       },
-      posOrders: posCashOrders.map(order => ({
+      scope: isCompanyScope ? 'company' : 'admin',
+      posOrders: (posCashOrders || []).map(order => ({
         id: order.id,
         customerName: order.customerName,
         totalAmount: parseFloat(order.totalAmount) || 0,
@@ -6760,148 +6873,149 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
 /**
  * Get admin cash at hand transactions (credits and debits)
  * GET /api/admin/cash-at-hand/transactions
+ * GET /api/admin/cash-at-hand/transactions?scope=company
  */
 router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
   try {
     const adminId = req.admin.id;
+    const isCompanyScope = (req.query.scope || '').toLowerCase() === 'company';
     const transactions = [];
 
-    // Get cash from POS orders serviced by this admin (CREDITS)
-    const posCashOrders = await db.Order.findAll({
-      where: {
-        adminId: adminId,
+    // Per-admin cash-at-hand transactions should be based ONLY on walk-in sales (credits) and admin submissions (debits).
+    // Company scope includes POS cash + admin cash orders + driver submissions.
+    if (isCompanyScope) {
+      const posWhere = {
         adminOrder: true,
         paymentMethod: 'cash',
         paymentStatus: 'paid',
-        status: {
-          [Op.in]: ['completed', 'delivered']
-        }
-      },
-      attributes: ['id', 'totalAmount', 'createdAt', 'customerName', 'orderNumber'],
-      order: [['createdAt', 'DESC']]
-    });
+        status: { [Op.in]: ['completed', 'delivered'] }
+      };
 
-    posCashOrders.forEach(order => {
-      transactions.push({
-        id: `pos-${order.id}`,
-        type: 'credit',
-        amount: parseFloat(order.totalAmount) || 0,
-        description: `Order #${order.orderNumber || order.id}`,
-        customerName: order.customerName || 'Customer',
-        date: order.createdAt,
-        source: 'pos_order',
-        orderId: order.id,
-        orderNumber: order.orderNumber
+      const posCashOrders = await db.Order.findAll({
+        where: posWhere,
+        attributes: ['id', 'totalAmount', 'createdAt', 'customerName'],
+        order: [['createdAt', 'DESC']]
       });
-    });
 
-    // Get orders where admin received cash directly (via mark-payment-cash) (CREDITS)
-    const adminCashReceivedTransactions = await db.Transaction.findAll({
-      where: {
-        transactionType: 'payment',
-        paymentProvider: 'admin_cash_at_hand',
-        status: 'completed',
-        paymentStatus: 'paid'
-      },
-      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes'],
-      include: [
-        {
-          model: db.Order,
-          as: 'order',
-          attributes: ['id', 'totalAmount', 'adminId', 'customerName', 'orderNumber'],
-          required: true
-        }
-      ],
-      order: [['createdAt', 'DESC']]
-    });
-
-    adminCashReceivedTransactions.forEach(tx => {
-      if (tx.order && tx.order.adminId === adminId) {
+      posCashOrders.forEach(order => {
         transactions.push({
-          id: `admin-cash-${tx.id}`,
+          id: `pos-${order.id}`,
           type: 'credit',
-          amount: parseFloat(tx.order.totalAmount || 0),
-          description: `Order #${tx.order.orderNumber || tx.order.id}`,
-          customerName: tx.order.customerName || 'Customer',
-          date: tx.createdAt,
-          source: 'admin_cash_order',
-          orderId: tx.order.id,
-          orderNumber: tx.order.orderNumber,
-          notes: tx.notes
+          amount: parseFloat(order.totalAmount) || 0,
+          description: `Order #${order.id}`,
+          customerName: order.customerName || 'Customer',
+          date: order.createdAt,
+          source: 'pos_order',
+          orderId: order.id,
+          orderNumber: order.id
         });
-      }
-    });
-
-    // Get approved driver cash submissions (DEBITS - cash received from drivers increases admin cash at hand)
-    const approvedDriverSubmissions = await db.CashSubmission.findAll({
-      where: {
-        driverId: { [Op.ne]: null }, // Driver submissions
-        status: 'approved'
-      },
-      attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt'],
-      include: [
-        {
-          model: db.Driver,
-          as: 'driver',
-          attributes: ['id', 'name', 'phoneNumber'],
-          required: false
-        },
-        {
-          model: db.Order,
-          as: 'orders',
-          attributes: ['id', 'orderNumber', 'customerName'],
-          required: false
-        }
-      ],
-      order: [['approvedAt', 'DESC'], ['createdAt', 'DESC']]
-    });
-
-    approvedDriverSubmissions.forEach(submission => {
-      const orderInfo = submission.orders && submission.orders.length > 0
-        ? submission.orders.map(o => `Order #${o.orderNumber || o.id}`).join(', ')
-        : '';
-      
-      const typeLabel = {
-        'cash': 'Cash',
-        'purchases': 'Purchases',
-        'general_expense': 'General Expense',
-        'payment_to_office': 'Payment to Office',
-        'walk_in_sale': 'Walk-in Sale',
-        'order_payment': 'Order Payment'
-      }[submission.submissionType] || submission.submissionType;
-
-      let description = submission.driver?.name || 'Driver';
-      if (orderInfo) {
-        description += ` - ${orderInfo}`;
-      }
-      description += ` (${typeLabel})`;
-
-      transactions.push({
-        id: `driver-submission-${submission.id}`,
-        type: 'credit', // In accounting: cash received = debit (increases cash at hand), but we use 'credit' here to mean "credit to admin"
-        amount: parseFloat(submission.amount) || 0,
-        description: description,
-        date: submission.approvedAt || submission.createdAt,
-        source: 'driver_submission',
-        submissionId: submission.id,
-        submissionType: submission.submissionType,
-        driverName: submission.driver?.name || 'Driver'
       });
-    });
 
-    // Get admin cash submissions (DEBITS)
+      // Orders where admin received cash directly (via mark-payment-cash) (CREDITS)
+      const adminCashReceivedTransactions = await db.Transaction.findAll({
+        where: {
+          transactionType: 'payment',
+          paymentProvider: 'admin_cash_at_hand',
+          status: 'completed',
+          paymentStatus: 'paid'
+        },
+        attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes'],
+        include: [
+          {
+            model: db.Order,
+            as: 'order',
+            attributes: ['id', 'totalAmount', 'adminId', 'customerName'],
+            required: true
+          }
+        ],
+        order: [['createdAt', 'DESC']]
+      });
+
+      adminCashReceivedTransactions.forEach(tx => {
+        if (tx.order) {
+          transactions.push({
+            id: `admin-cash-${tx.id}`,
+            type: 'credit',
+            amount: parseFloat(tx.order.totalAmount || 0),
+            description: `Order #${tx.order.id}`,
+            customerName: tx.order.customerName || 'Customer',
+            date: tx.createdAt,
+            source: 'admin_cash_order',
+            orderId: tx.order.id,
+            orderNumber: tx.order.id,
+            notes: tx.notes
+          });
+        }
+      });
+
+      // Approved driver cash submissions (credits to company cash at hand)
+      const approvedDriverSubmissions = await db.CashSubmission.findAll({
+        where: {
+          driverId: { [Op.ne]: null }, // Driver submissions
+          status: 'approved'
+        },
+        attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt'],
+        include: [
+          {
+            model: db.Driver,
+            as: 'driver',
+            attributes: ['id', 'name', 'phoneNumber'],
+            required: false
+          },
+          {
+            model: db.Order,
+            as: 'orders',
+            attributes: ['id', 'customerName'],
+            required: false
+          }
+        ],
+        order: [['approvedAt', 'DESC'], ['createdAt', 'DESC']]
+      });
+
+      approvedDriverSubmissions.forEach(submission => {
+        const orderInfo = submission.orders && submission.orders.length > 0
+          ? submission.orders.map(o => `Order #${o.id}`).join(', ')
+          : '';
+        const typeLabel = {
+          'cash': 'Cash',
+          'general_expense': 'General Expense',
+          'payment_to_office': 'Payment to Office',
+          'walk_in_sale': 'Walk-in Sale',
+          'order_payment': 'Order Payment'
+        }[submission.submissionType] || submission.submissionType;
+
+        let description = submission.driver?.name || 'Driver';
+        if (orderInfo) description += ` - ${orderInfo}`;
+        description += ` (${typeLabel})`;
+
+        transactions.push({
+          id: `driver-submission-${submission.id}`,
+          type: 'credit',
+          amount: parseFloat(submission.amount) || 0,
+          description,
+          date: submission.approvedAt || submission.createdAt,
+          source: 'driver_submission',
+          submissionId: submission.id,
+          submissionType: submission.submissionType,
+          driverName: submission.driver?.name || 'Driver'
+        });
+      });
+    }
+
+    const adminSubWhere = {
+      driverId: null,
+      status: 'approved'
+    };
+    if (!isCompanyScope) adminSubWhere.adminId = adminId;
+
     const adminSubmissions = await db.CashSubmission.findAll({
-      where: {
-        adminId: adminId,
-        driverId: null, // Admin submissions
-        status: 'approved'
-      },
+      where: adminSubWhere,
       attributes: ['id', 'amount', 'submissionType', 'details', 'createdAt', 'approvedAt'],
       include: [
         {
           model: db.Order,
           as: 'orders',
-          attributes: ['id', 'orderNumber', 'customerName'],
+          attributes: ['id', 'customerName'],
           required: false
         }
       ],
@@ -6910,7 +7024,7 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
 
     adminSubmissions.forEach(submission => {
       const orderInfo = submission.orders && submission.orders.length > 0
-        ? submission.orders.map(o => `Order #${o.orderNumber || o.id}`).join(', ')
+        ? submission.orders.map(o => `Order #${o.id}`).join(', ')
         : '';
       
       const typeLabel = {
@@ -6936,13 +7050,14 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
         }
       }
 
+      const isWalkInSale = submission.submissionType === 'walk_in_sale';
       transactions.push({
         id: `submission-${submission.id}`,
-        type: 'debit',
+        type: isWalkInSale ? 'credit' : 'debit',
         amount: parseFloat(submission.amount) || 0,
         description: description,
         date: submission.approvedAt || submission.createdAt,
-        source: 'cash_submission',
+        source: isWalkInSale ? 'walk_in_sale' : 'cash_submission',
         submissionId: submission.id,
         submissionType: submission.submissionType
       });
@@ -6979,6 +7094,76 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
       success: false,
       error: error.message || 'Failed to fetch transactions'
     });
+  }
+});
+
+/**
+ * Get "cash orders" for admin cash at hand
+ * - POS cash orders (adminOrder=true, paymentMethod=cash, paid)
+ * - Delivery orders where admin marked payment as cash (paymentProvider=admin_cash_at_hand)
+ *
+ * GET /api/admin/cash-at-hand/cash-orders
+ * GET /api/admin/cash-at-hand/cash-orders?scope=company
+ */
+router.get('/cash-at-hand/cash-orders', verifyAdmin, async (req, res) => {
+  try {
+    const adminId = req.admin.id;
+    const scope = (req.query.scope || '').toLowerCase();
+    const isCompanyScope = scope === 'company';
+
+    const posWhere = {
+      adminOrder: true,
+      paymentMethod: 'cash',
+      paymentStatus: 'paid',
+      status: { [Op.in]: ['completed', 'delivered'] }
+    };
+    if (!isCompanyScope) posWhere.adminId = adminId;
+
+    const posOrders = await db.Order.findAll({
+      where: posWhere,
+      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'adminId', 'deliveryAddress', 'status']
+    });
+
+    const adminCashReceivedTransactions = await db.Transaction.findAll({
+      where: {
+        transactionType: 'payment',
+        paymentProvider: 'admin_cash_at_hand',
+        status: 'completed',
+        paymentStatus: 'paid'
+      },
+      attributes: ['id', 'orderId', 'createdAt'],
+      include: [{
+        model: db.Order,
+        as: 'order',
+        attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'adminId', 'deliveryAddress', 'status'],
+        required: true
+      }],
+      order: [['createdAt', 'DESC']]
+    });
+
+    const markedCashOrders = adminCashReceivedTransactions
+      .map((tx) => tx.order)
+      .filter((o) => o && (isCompanyScope || o.adminId === adminId));
+
+    const toRow = (order, source) => ({
+      id: order.id,
+      customerName: order.customerName,
+      totalAmount: parseFloat(order.totalAmount) || 0,
+      deliveryAddress: order.deliveryAddress || null,
+      status: order.status || null,
+      createdAt: order.createdAt,
+      source
+    });
+
+    const combined = [
+      ...posOrders.map((o) => toRow(o, 'pos_cash')),
+      ...markedCashOrders.map((o) => toRow(o, 'admin_cash_at_hand'))
+    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    return res.json({ success: true, orders: combined });
+  } catch (error) {
+    console.error('Error fetching admin cash orders:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to fetch cash orders' });
   }
 });
 

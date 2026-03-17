@@ -45,9 +45,12 @@ import CashAtHand from './pages/CashAtHand';
 import PendingSubmissionApproval from './pages/PendingSubmissionApproval';
 import RidersDashboard from './pages/RidersDashboard';
 import RiderCashAtHandDetail from './pages/RiderCashAtHandDetail';
+import ResetPasswordRequest from './pages/ResetPasswordRequest';
 import ResupplyCart from './pages/ResupplyCart';
 import Accounts from './pages/Accounts';
 import AccountDetail from './pages/AccountDetail';
+import AdminCashAtHand from './pages/AdminCashAtHand';
+import AdminSubmissionApproval from './pages/AdminSubmissionApproval';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -203,6 +206,7 @@ function AppContent() {
               <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/reset-password" element={<ResetPasswordRequest />} />
               <Route path="/setup-password" element={<SetupPassword />} />
               <Route
                 path="/dashboard"
@@ -416,6 +420,26 @@ function AppContent() {
                   <PrivateRoute>
                     <AdminLayout>
                       <CashAtHand />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin-cash-at-hand"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <AdminCashAtHand />
+                    </AdminLayout>
+                  </PrivateRoute>
+                }
+              />
+              <Route
+                path="/admin-cash-at-hand/submissions/:submissionId/approve"
+                element={
+                  <PrivateRoute>
+                    <AdminLayout>
+                      <AdminSubmissionApproval />
                     </AdminLayout>
                   </PrivateRoute>
                 }

@@ -58,7 +58,7 @@ const RidersDashboard = () => {
 
   const fetchTotalCashAtHand = useCallback(async () => {
     try {
-      const res = await api.get('/admin/cash-at-hand');
+      const res = await api.get('/admin/cash-at-hand', { params: { scope: 'company' } });
       if (res.data?.success) {
         setTotalCashAtHand(res.data.cashAtHand ?? 0);
       }

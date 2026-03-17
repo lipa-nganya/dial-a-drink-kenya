@@ -104,13 +104,6 @@ const OrdersWithoutDriver = () => {
     try {
       setUpdating(true);
       setError(null);
-      
-      // Check if order is delivered or completed - backend doesn't allow driver changes
-      if (selectedOrder.status === 'delivered' || selectedOrder.status === 'completed') {
-        setError('Cannot modify driver assignment for delivered or completed orders.');
-        setUpdating(false);
-        return;
-      }
 
       // Parse driverId - handle empty string case
       let parsedDriverId = null;
@@ -136,8 +129,17 @@ const OrdersWithoutDriver = () => {
       setError(null);
     } catch (err) {
       console.error('Error updating order:', err);
-      const errorMessage = err.response?.data?.error || err.message || 'Failed to update order. Please try again.';
-      setError(errorMessage);
+      const backendError = err.response?.data?.error;
+      // Suppress the noisy backend message for completed/delivered orders
+      if (backendError === 'Cannot modify driver assignment for delivered/completed orders') {
+        setUpdateDialogOpen(false);
+        setSelectedOrder(null);
+        setSelectedDriverId('');
+        setError(null);
+      } else {
+        const errorMessage = backendError || err.message || 'Failed to update order. Please try again.';
+        setError(errorMessage);
+      }
     } finally {
       setUpdating(false);
     }

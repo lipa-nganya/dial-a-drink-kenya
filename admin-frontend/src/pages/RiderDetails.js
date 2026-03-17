@@ -603,9 +603,10 @@ const RiderDetails = () => {
             <Table size="small">
               <TableHead>
                 <TableRow>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order #</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Customer name</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Delivery address</TableCell>
-                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order number</TableCell>
+                  <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order Value</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order status</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Payment status</TableCell>
                   <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Driver response</TableCell>
@@ -614,16 +615,24 @@ const RiderDetails = () => {
               <TableBody>
                 {orders.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                    <TableCell colSpan={7} align="center" sx={{ py: 3, color: colors.textSecondary }}>
                       No orders assigned to this rider.
                     </TableCell>
                   </TableRow>
                 ) : (
                   paginatedOrders.map((order) => (
                     <TableRow key={order.id} hover>
+                      <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>#{order.id}</TableCell>
                       <TableCell sx={{ color: colors.textPrimary }}>{order.customerName || '—'}</TableCell>
                       <TableCell sx={{ color: colors.textPrimary, maxWidth: 280 }}>{order.deliveryAddress || '—'}</TableCell>
-                      <TableCell sx={{ color: colors.textPrimary, fontWeight: 500 }}>#{order.id}</TableCell>
+                      <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                        {(() => {
+                          const totalAmount = Number(order.totalAmount || 0);
+                          const deliveryFee = Number(order.deliveryFee || 0);
+                          const value = totalAmount - deliveryFee;
+                          return `KES ${Math.round(value > 0 ? value : 0)}`;
+                        })()}
+                      </TableCell>
                       <TableCell>
                         <Chip
                           label={order.status || '—'}
@@ -716,7 +725,9 @@ const RiderDetails = () => {
                     let balanceAfter = parseFloat(cashAtHandData.totalCashAtHand || 0);
                     return sortedEntries.map((entry, index) => {
                       const type = entryType(entry);
-                      const isCredit = type === 'cash_received' || entry.orderId != null || entry.order_id != null;
+                      // IMPORTANT: treat debits/credits based on entry.type from the API.
+                      // Do NOT infer credit purely from having an orderId; many debits are order-linked.
+                      const isCredit = type === 'cash_received';
                       const amount = parseFloat(entry.amount || 0);
                       const currentBalance = balanceAfter;
                       if (isCredit) {
@@ -742,10 +753,10 @@ const RiderDetails = () => {
                             {entry.description || entry.customerName || 'N/A'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {isCredit ? `KES ${Math.round(amount)}` : '—'}
+                            {!isCredit ? `KES ${Math.round(amount)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {!isCredit ? `KES ${Math.round(amount)}` : '—'}
+                            {isCredit ? `KES ${Math.round(amount)}` : '—'}
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                             KES {Math.round(currentBalance)}

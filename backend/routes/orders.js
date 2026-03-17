@@ -9,6 +9,9 @@ const { findClosestBranch } = require('../utils/branchAssignment');
 const { generateReceiptPDF } = require('../services/pdfReceipt');
 const pushNotifications = require('../services/pushNotifications');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
+const jwt = require('jsonwebtoken');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 
 // Ensure dotenv is loaded for Google Maps API key
 if (!process.env.GOOGLE_MAPS_API_KEY && !process.env.REACT_APP_GOOGLE_MAPS_API_KEY) {
@@ -224,6 +227,28 @@ router.post('/', async (req, res) => {
       sendSmsToCustomer,
       deliveryFee: providedDeliveryFee
     } = req.body;
+
+    // Admin attribution (Posted by)
+    // Admin Web creates orders via this route; attach adminId only when a valid admin JWT is present.
+    let effectiveAdminOrder = adminOrder === true;
+    let effectiveAdminId = null;
+    if (effectiveAdminOrder) {
+      const authHeader = req.headers.authorization || req.headers.Authorization;
+      if (authHeader && typeof authHeader === 'string' && authHeader.toLowerCase().startsWith('bearer ')) {
+        const token = authHeader.split(' ')[1];
+        try {
+          const decoded = jwt.verify(token, JWT_SECRET);
+          effectiveAdminId = decoded?.id ?? decoded?.adminId ?? null;
+        } catch (e) {
+          effectiveAdminId = null;
+        }
+      }
+
+      if (!effectiveAdminId) {
+        // Safety: do not accept adminOrder=true without a valid admin token
+        effectiveAdminOrder = false;
+      }
+    }
     
     console.log('🔍 DESTRUCTURED paymentMethod:', paymentMethod);
     console.log('🔍 DESTRUCTURED paymentType:', paymentType);
@@ -240,8 +265,8 @@ router.post('/', async (req, res) => {
     }, null, 2));
     
     // Check if this is a walk-in order (deliveryAddress is "In-Store Purchase" or customerPhone is "POS")
-    const isWalkInOrder = deliveryAddress === 'In-Store Purchase' || customerPhone === 'POS' || 
-                         (adminOrder && customerPhone && customerPhone.trim() === 'POS');
+    const isWalkInOrder = deliveryAddress === 'In-Store Purchase' || customerPhone === 'POS' ||
+                         (effectiveAdminOrder && customerPhone && customerPhone.trim() === 'POS');
 
     // Normalize required-but-editable fields so we can allow creating orders without full customer details
     const safeCustomerName =
@@ -305,14 +330,14 @@ router.post('/', async (req, res) => {
     // Determine allowed payment methods based on order source
     // For admin orders (especially walk-in), allow cash and cash_at_hand in addition to card and mobile_money
     // For customer orders, only allow card and mobile_money
-    const allowedPaymentMethods = adminOrder 
+    const allowedPaymentMethods = effectiveAdminOrder
       ? ['card', 'mobile_money', 'cash', 'cash_at_hand'] 
       : ['card', 'mobile_money'];
     
     console.log('💳 Payment validation check:', {
       paymentType,
       paymentMethod,
-      adminOrder,
+      adminOrder: effectiveAdminOrder,
       allowedPaymentMethods,
       isPayNow: paymentType === 'pay_now',
       hasPaymentMethod: !!paymentMethod
@@ -331,7 +356,7 @@ router.post('/', async (req, res) => {
         console.error('❌ Payment validation failed:', {
           paymentMethod: normalizedPaymentMethod,
           allowedMethods: allowedPaymentMethods,
-          adminOrder: adminOrder
+          adminOrder: effectiveAdminOrder
         });
         return res.status(400).json({ error: 'Payment method required when paying now' });
       }
@@ -484,7 +509,7 @@ router.post('/', async (req, res) => {
       let deliveryDistance = null;
       
       // For admin orders, if deliveryFee is explicitly provided, use it instead of recalculating
-      if (adminOrder && providedDeliveryFee != null && providedDeliveryFee !== undefined) {
+      if (effectiveAdminOrder && providedDeliveryFee != null && providedDeliveryFee !== undefined) {
         deliveryFee = parseFloat(providedDeliveryFee) || 0;
         console.log(`✅ Admin order: Using provided delivery fee from mobile app: KES ${deliveryFee}`);
       } else if (!isWalkInOrder) {
@@ -501,7 +526,7 @@ router.post('/', async (req, res) => {
 
       // Only assign driver if explicitly provided (for admin orders)
       // Automatic driver assignment has been removed - drivers must be manually assigned
-      if (adminOrder && driverId) {
+      if (effectiveAdminOrder && driverId) {
         assignedDriver = await db.Driver.findByPk(driverId, { transaction });
         if (assignedDriver) {
           console.log(`✅ Admin order: Using provided driver ${assignedDriver.name} (ID: ${assignedDriver.id})`);
@@ -514,7 +539,7 @@ router.post('/', async (req, res) => {
 
       // Determine final payment status and order status
       // For admin orders, allow setting paymentStatus to 'paid' if provided
-      const finalPaymentStatus = (adminOrder && paymentStatus && ['pending', 'paid', 'unpaid'].includes(paymentStatus)) 
+      const finalPaymentStatus = (effectiveAdminOrder && paymentStatus && ['pending', 'paid', 'unpaid'].includes(paymentStatus)) 
         ? paymentStatus 
         : 'pending';
       
@@ -523,14 +548,14 @@ router.post('/', async (req, res) => {
       let finalOrderStatus;
       if (isWalkInOrder) {
         // Walk-in orders: 'in_progress' if unpaid, 'completed' if paid
-        if (adminOrder && status && ['in_progress', 'completed'].includes(status)) {
+        if (effectiveAdminOrder && status && ['in_progress', 'completed'].includes(status)) {
           finalOrderStatus = status;
         } else {
           finalOrderStatus = (finalPaymentStatus === 'paid') ? 'completed' : 'in_progress';
         }
       } else {
         // Delivery orders: use provided status or default to 'pending'
-        finalOrderStatus = (adminOrder && status && ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'].includes(status))
+        finalOrderStatus = (effectiveAdminOrder && status && ['pending', 'confirmed', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order'].includes(status))
           ? status
           : 'pending';
       }
@@ -571,7 +596,7 @@ router.post('/', async (req, res) => {
           let noteParts = [];
           if (notes) noteParts.push(notes);
           if (!isWalkInOrder && deliveryFee > 0) {
-            const deliveryFeeNote = adminOrder && providedDeliveryFee != null 
+            const deliveryFeeNote = effectiveAdminOrder && providedDeliveryFee != null 
               ? `Delivery Fee: KES ${deliveryFee.toFixed(2)} (set via Admin Mobile App)`
               : `Delivery Fee: KES ${deliveryFee.toFixed(2)}`;
             noteParts.push(deliveryFeeNote);
@@ -580,13 +605,14 @@ router.post('/', async (req, res) => {
           return noteParts.join('\n') || null;
         })(),
         paymentType: paymentType || 'pay_on_delivery',
-        paymentMethod: paymentType === 'pay_now' || (adminOrder && finalPaymentStatus === 'paid') ? paymentMethod : null,
+        paymentMethod: paymentType === 'pay_now' || (effectiveAdminOrder && finalPaymentStatus === 'paid') ? paymentMethod : null,
         paymentStatus: finalPaymentStatus,
         status: finalOrderStatus,
         driverId: assignedDriver ? assignedDriver.id : null, // Only assign driver if explicitly provided
         driverAccepted: null, // Explicitly set to null so order appears as pending
         branchId: branchId, // Assign closest branch
-        adminOrder: adminOrder || false,
+        adminOrder: effectiveAdminOrder,
+        adminId: effectiveAdminId,
         territoryId: territoryId ? parseInt(territoryId) : null,
         isStop: isStop || false,
         stopDeductionAmount: isStop && stopDeductionAmount ? parseFloat(stopDeductionAmount) : null,
@@ -607,7 +633,7 @@ router.post('/', async (req, res) => {
       }
 
       // For admin orders with paid mobile money payment, create transaction record
-      if (adminOrder && finalPaymentStatus === 'paid' && paymentMethod === 'mobile_money' && transactionCode) {
+      if (effectiveAdminOrder && finalPaymentStatus === 'paid' && paymentMethod === 'mobile_money' && transactionCode) {
         const tipAmount = parseFloat(tip) || 0;
         const itemsTotal = totalAmount; // Items total without delivery fee and tip
         
@@ -806,7 +832,7 @@ router.post('/', async (req, res) => {
       // Send SMS confirmation to customer with tracking link
       // For customer orders: always send (unless explicitly disabled)
       // For admin orders: only send if sendSmsToCustomer is true (defaults to true if not specified)
-      const shouldSendSms = !adminOrder || (adminOrder && (sendSmsToCustomer !== false));
+      const shouldSendSms = !effectiveAdminOrder || (effectiveAdminOrder && (sendSmsToCustomer !== false));
       if (shouldSendSms && completeOrder.trackingToken && completeOrder.customerPhone) {
         try {
           // Determine frontend URL based on environment

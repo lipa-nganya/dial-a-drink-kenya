@@ -1215,13 +1215,15 @@ Welcome aboard! 🎉`;
                         <TableCell>
                           <Chip
                             label={
-                              user.role === 'admin' ? 'Admin' : 
-                              user.role === 'shop_agent' ? 'Shop Agent' : 
+                              user.role === 'super_admin' ? 'Super Admin' :
+                              user.role === 'admin' ? 'Admin' :
+                              user.role === 'shop_agent' ? 'Shop Agent' :
                               'Manager'
                             }
                             color={
-                              user.role === 'admin' ? 'primary' : 
-                              user.role === 'shop_agent' ? 'secondary' : 
+                              user.role === 'super_admin' ? 'warning' :
+                              user.role === 'admin' ? 'primary' :
+                              user.role === 'shop_agent' ? 'secondary' :
                               'default'
                             }
                             size="small"
