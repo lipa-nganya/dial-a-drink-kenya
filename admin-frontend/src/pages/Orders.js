@@ -1972,7 +1972,6 @@ const Orders = () => {
               {filteredOrders.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((order) => {
                 const isUnpaidDelivered = order.status === 'delivered' && order.paymentStatus === 'unpaid';
                 const hasPendingCancellation = order.cancellationRequested && order.cancellationApproved === null;
-                const statusChip = getOrderStatusChipProps(order.status);
                 const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
                 const deliveryAddressShort = (order.deliveryAddress || '')
                   .trim()
