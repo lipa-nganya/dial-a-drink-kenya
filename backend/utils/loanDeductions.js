@@ -195,6 +195,8 @@ async function processLoanDeductions() {
           const newSavings = currentSavings + deductionAmount;
           
           // Current cash at hand
+          // Business rule: savings recovery reduces the loan (negative savings moves toward 0)
+          // AND increases cash at hand (driver now owes/remits that recovered amount).
           const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
           const newCashAtHand = currentCashAtHand + deductionAmount;
           
@@ -251,7 +253,7 @@ async function processLoanDeductions() {
               driverWalletId: wallet.id,
               transactionType: 'savings_withdrawal', // Using same type for consistency
               paymentMethod: 'cash',
-              paymentProvider: 'loan_recovery',
+              paymentProvider: 'savings_recovery',
               amount: deductionAmount, // Positive amount - increases savings (makes it less negative)
               status: 'completed',
               paymentStatus: 'paid',
@@ -273,8 +275,8 @@ async function processLoanDeductions() {
               driverWalletId: wallet.id,
               transactionType: 'cash_settlement',
               paymentMethod: 'cash',
-              paymentProvider: 'loan_recovery',
-              amount: deductionAmount, // Positive amount for cash at hand increase
+              paymentProvider: 'savings_recovery',
+              amount: deductionAmount, // Positive amount for cash-at-hand increase
               status: 'completed',
               paymentStatus: 'paid',
               notes: cashNotes

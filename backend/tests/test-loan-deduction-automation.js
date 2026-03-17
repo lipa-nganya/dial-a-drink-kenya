@@ -67,11 +67,15 @@ async function testLoanDeductionAutomation() {
       throw new Error('No loans were processed');
     }
     
-    // Test 12.3: Verify savings reduced by 150
-    console.log('\nTest 12.3: Verifying savings reduction...');
+    // Read deduction amount from settings (defaults to 150 if not present)
+    const amountSetting = await db.Settings.findOne({ where: { key: 'loanDeductionAmount' } });
+    const deductionAmount = amountSetting?.value ? parseFloat(amountSetting.value) : 150;
+
+    // Test 12.3: Verify savings recovery moves savings toward 0 (+deductionAmount)
+    console.log('\nTest 12.3: Verifying savings recovery...');
     await wallet.reload();
     const newSavings = parseFloat(wallet.savings || 0);
-    const expectedSavings = initialSavings - 150;
+    const expectedSavings = initialSavings + deductionAmount;
     
     console.log(`   Initial: ${initialSavings}`);
     console.log(`   New: ${newSavings}`);
@@ -80,13 +84,13 @@ async function testLoanDeductionAutomation() {
     if (Math.abs(newSavings - expectedSavings) > 0.01) {
       throw new Error(`Savings not reduced correctly. Expected: ${expectedSavings}, Got: ${newSavings}`);
     }
-    console.log('✅ Savings correctly reduced by 150');
+    console.log(`✅ Savings correctly increased by ${deductionAmount} (towards 0)`);
     
-    // Test 12.4: Verify cash at hand increased by 150
+    // Test 12.4: Verify cash at hand increased by deductionAmount (recovered amount to remit)
     console.log('\nTest 12.4: Verifying cash at hand increase...');
     await driver.reload();
     const newCashAtHand = parseFloat(driver.cashAtHand || 0);
-    const expectedCashAtHand = initialCashAtHand + 150;
+    const expectedCashAtHand = initialCashAtHand + deductionAmount;
     
     console.log(`   Initial: ${initialCashAtHand}`);
     console.log(`   New: ${newCashAtHand}`);
@@ -95,7 +99,7 @@ async function testLoanDeductionAutomation() {
     if (Math.abs(newCashAtHand - expectedCashAtHand) > 0.01) {
       throw new Error(`Cash at hand not increased correctly. Expected: ${expectedCashAtHand}, Got: ${newCashAtHand}`);
     }
-    console.log('✅ Cash at hand correctly increased by 150');
+    console.log(`✅ Cash at hand correctly increased by ${deductionAmount}`);
     
     // Test 12.5: Verify Savings Recovery transactions created
     console.log('\nTest 12.5: Verifying Savings Recovery transactions...');
@@ -126,16 +130,16 @@ async function testLoanDeductionAutomation() {
     console.log(`   Savings Withdrawal: Transaction #${savingsTx.id}, Amount: ${savingsTx.amount}`);
     console.log(`   Cash Settlement: Transaction #${cashTx.id}, Amount: ${cashTx.amount}`);
     
-    // Test 12.6: Verify loan balance reduced
-    console.log('\nTest 12.6: Verifying loan balance reduction...');
+    // Test 12.6: Verify loan remains active and nextDeductionDate updated (balance is no longer tracked)
+    console.log('\nTest 12.6: Verifying loan scheduling update...');
     await loan.reload();
-    const newBalance = parseFloat(loan.balance || 0);
-    const expectedBalance = 1000 - 150;
-    
-    if (Math.abs(newBalance - expectedBalance) > 0.01) {
-      throw new Error(`Loan balance not reduced correctly. Expected: ${expectedBalance}, Got: ${newBalance}`);
+    if (loan.status !== 'active') {
+      throw new Error(`Loan status not updated correctly. Expected: active, Got: ${loan.status}`);
     }
-    console.log(`✅ Loan balance reduced: 1000 → ${newBalance}`);
+    if (!loan.nextDeductionDate) {
+      throw new Error('Loan nextDeductionDate was not set');
+    }
+    console.log(`✅ Loan scheduling updated: nextDeductionDate=${loan.nextDeductionDate}`);
     
     // Cleanup
     if (savingsTx) await savingsTx.destroy();

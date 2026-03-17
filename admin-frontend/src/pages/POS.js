@@ -48,6 +48,7 @@ const POS = () => {
   const [customers, setCustomers] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [accounts, setAccounts] = useState([]);
+  const [selectedAccount, setSelectedAccount] = useState(null);
   
   // Create customer dialog
   const [createCustomerDialogOpen, setCreateCustomerDialogOpen] = useState(false);
@@ -374,6 +375,7 @@ const POS = () => {
         setCustomerSearch('');
         setSelectedCustomer(null);
         setAccountId('');
+        setSelectedAccount(null);
         setSelectedProduct(null);
         setProductSearch('');
         setProductPrice('');
@@ -533,30 +535,41 @@ const POS = () => {
                   </Box>
                 </TableCell>
                 <TableCell>
-                  <TextField
-                    type="number"
-                    value={accountId}
-                    onChange={(e) => setAccountId(e.target.value)}
-                    placeholder="Account ID"
-                    size="small"
-                    sx={{ 
-                      width: 150,
-                      '& .MuiOutlinedInput-root': {
-                        backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                        '& fieldset': { borderColor: colors.border },
-                        '&:hover fieldset': { borderColor: colors.accentText },
-                        '&.Mui-focused fieldset': { borderColor: colors.accentText }
-                      },
-                      '& .MuiInputBase-input': {
-                        color: colors.textPrimary
-                      },
-                      '& .MuiInputLabel-root': {
-                        color: colors.textSecondary
-                      },
-                      '& .MuiInputLabel-root.Mui-focused': {
-                        color: colors.accentText
-                      }
+                  <Autocomplete
+                    options={accounts}
+                    value={selectedAccount}
+                    onChange={(event, newValue) => {
+                      setSelectedAccount(newValue);
+                      const id = newValue?.id ?? '';
+                      setAccountId(id ? String(id) : '');
                     }}
+                    getOptionLabel={(option) => {
+                      if (!option) return '';
+                      const id = option.id != null ? `#${option.id}` : '';
+                      const name = option.name || option.accountName || option.title || 'Account';
+                      return `${id} ${name}`.trim();
+                    }}
+                    isOptionEqualToValue={(option, value) => option?.id === value?.id}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        placeholder={accounts.length ? 'Select account (optional)' : 'No accounts yet'}
+                        helperText={accounts.length ? 'Optional: select an account for the sale' : 'Create an account first, or leave blank'}
+                        size="small"
+                        fullWidth
+                        sx={{
+                          minWidth: 220,
+                          '& .MuiOutlinedInput-root': {
+                            backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                            '& fieldset': { borderColor: colors.border },
+                            '&:hover fieldset': { borderColor: colors.accentText },
+                            '&.Mui-focused fieldset': { borderColor: colors.accentText }
+                          },
+                          '& .MuiInputBase-input': { color: colors.textPrimary },
+                          '& .MuiFormHelperText-root': { color: colors.textSecondary }
+                        }}
+                      />
+                    )}
                   />
                 </TableCell>
                 <TableCell>
@@ -1095,7 +1108,7 @@ const POS = () => {
                       <Typography variant="h6">Total:</Typography>
                     </TableCell>
                     <TableCell sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
-                      KES {getTotal()Math.round(}
+                      KES {Math.round(getTotal())}
                     </TableCell>
                     <TableCell></TableCell>
                   </TableRow>

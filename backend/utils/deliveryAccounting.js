@@ -6,8 +6,9 @@
  * Current rules:
  * - For PAY_ON_DELIVERY (cash orders where driver receives cash from customer):
  *   - Driver's cash at hand increases by (order items total + 50% of delivery fee).
- *   - The remaining 50% of the delivery fee is **not** credited to savings here.
- *     It is credited to savings later, when the driver submits the cash for that order.
+ *   - The remaining 50% of the delivery fee (50%) is credited to savings
+ *     when the order is completed (via creditWalletsOnDeliveryCompletion),
+ *     not when the driver submits cash.
  *
  * - For PAY_NOW (M-Pesa/Pesapal where driver does not receive cash from customer):
  *   - 50% of the delivery fee is credited to driver's savings.
@@ -42,16 +43,17 @@ function calculateDeliveryAccounting(alcoholCost, deliveryFee, paymentMethod) {
   let savingsChange;
 
   if (paymentMethod === 'PAY_NOW') {
-    // M-Pesa/Pesapal: driver did not receive cash. 50% delivery fee → savings; 50% → reduce driver cash at hand.
-    cashAtHandChange = -withheldAmount; // Reduce driver cash at hand by 50% (company holds; driver did not receive)
+    // M-Pesa/Pesapal: driver did not receive cash from customer.
+    // Business rule: 50% delivery fee → savings AND 50% delivery fee REDUCES cash at hand.
+    cashAtHandChange = -withheldAmount; // Reduce driver cash at hand by 50%
     savingsChange = withheldAmount;     // Credit 50% to driver savings
   } else {
     // PAY_ON_DELIVERY (cash):
     // - Driver receives cash from customer (itemsTotal + deliveryFee).
-    // - System tracks driver's cash at hand as itemsTotal + 50% of delivery fee (the remaining 50% is withheld).
-    // - The withheld 50% is later moved into savings when the driver submits cash for the order.
+    // - System tracks driver's cash at hand as itemsTotal + 50% of delivery fee.
+    // - The remaining 50% is credited to savings immediately when the order is completed.
     cashAtHandChange = alcoholCost + withheldAmount;
-    savingsChange = 0; // Savings for PAY_ON_DELIVERY are now credited on cash submission, not on completion
+    savingsChange = withheldAmount;
   }
 
   return {

@@ -62,6 +62,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
     { path: '/sales', label: 'Sales', icon: AttachMoney },
     { path: '/payables/purchases', label: 'Purchases', icon: AccountBalance },
     { path: '/accounts', label: 'Accounts', icon: AccountBalance },
+    { path: '/admin-cash-at-hand', label: 'Admin Cash At Hand', icon: AttachMoney },
     // { path: '/pos', label: 'POS', icon: PointOfSale }, // Removed
     { path: '/admin/customers', label: 'Customers', icon: People },
     { path: '/riders', label: 'Riders', icon: LocalShipping },

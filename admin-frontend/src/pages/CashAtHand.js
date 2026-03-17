@@ -88,7 +88,7 @@ const CashAtHand = () => {
       setLoading(true);
       setError(null);
 
-      const response = await api.get('/admin/cash-at-hand');
+      const response = await api.get('/admin/cash-at-hand', { params: { scope: 'company' } });
       
       if (response.data.success) {
         setCashAtHand(response.data.cashAtHand || 0);
@@ -159,7 +159,7 @@ const CashAtHand = () => {
   const fetchTransactions = async () => {
     try {
       setLoadingTransactions(true);
-      const response = await api.get('/admin/cash-at-hand/transactions');
+      const response = await api.get('/admin/cash-at-hand/transactions', { params: { scope: 'company' } });
       if (response.data.success) {
         const txns = response.data.transactions || [];
         console.log('Fetched transactions:', txns.length, txns);
@@ -456,7 +456,7 @@ const CashAtHand = () => {
   return (
     <Box>
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 700, color: colors.textPrimary }}>
-        Cash at Hand
+        Admin Cash at Hand
       </Typography>
 
       {/* Summary Cards */}
@@ -487,10 +487,10 @@ const CashAtHand = () => {
                 </Typography>
               </Box>
               <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 0.5 }}>
-                {formatCurrency(breakdown.cashFromPOS + breakdown.cashFromDrivers)}
+                {formatCurrency((breakdown.cashFromPOS || 0) + (breakdown.cashFromAdminCashOrders || 0) + (breakdown.cashFromDrivers || 0))}
               </Typography>
               <Typography variant="caption" sx={{ color: colors.textSecondary, mt: 'auto' }}>
-                POS: {formatCurrency(breakdown.cashFromPOS)} • Drivers: {formatCurrency(breakdown.cashFromDrivers)}
+                POS: {formatCurrency(breakdown.cashFromPOS)} • Admin: {formatCurrency(breakdown.cashFromAdminCashOrders || 0)} • Drivers: {formatCurrency(breakdown.cashFromDrivers)}
               </Typography>
             </CardContent>
           </Card>
