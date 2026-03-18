@@ -24,6 +24,17 @@ class CashAtHandActivity : AppCompatActivity() {
         setupSwipeRefresh()
         setupMainTabs()
         loadCashAtHand()
+
+        // Default: show Transactions > Logs when opening this screen
+        binding.mainViewPager.setCurrentItem(0, false)
+        binding.mainViewPager.post {
+            try {
+                val transactionsFragment = supportFragmentManager.fragments.find { it is TransactionsFragment } as? TransactionsFragment
+                transactionsFragment?.switchToMainSubTab(0) // Logs tab
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
         
         // Handle deep linking from push notifications
         handleDeepLink(intent)
@@ -65,8 +76,8 @@ class CashAtHandActivity : AppCompatActivity() {
         
         TabLayoutMediator(binding.mainTabLayout, binding.mainViewPager) { tab, position ->
             when (position) {
-                0 -> tab.text = "Cash At Hand"
-                1 -> tab.text = "Transactions"
+                0 -> tab.text = "Transactions"
+                1 -> tab.text = "Create Submission"
             }
         }.attach()
     }
@@ -142,8 +153,8 @@ class CashAtHandActivity : AppCompatActivity() {
     private fun handleDeepLink(intent: Intent) {
         val submissionId = intent.getStringExtra("submissionId")
         if (submissionId != null) {
-            // Switch to Transactions main tab in CashAtHandActivity (position 1)
-            binding.mainViewPager.setCurrentItem(1, true)
+            // Switch to Transactions main tab in CashAtHandActivity (position 0)
+            binding.mainViewPager.setCurrentItem(0, true)
             
             // Wait a bit for the fragment to be created, then switch to appropriate sub-tab
             binding.mainViewPager.post {
@@ -176,8 +187,8 @@ class MainPagerAdapter(activity: AppCompatActivity) : androidx.viewpager2.adapte
     
     override fun createFragment(position: Int): androidx.fragment.app.Fragment {
         return when (position) {
-            0 -> CashAtHandFormFragment()
-            1 -> TransactionsFragment()
+            0 -> TransactionsFragment()
+            1 -> CashAtHandFormFragment()
             else -> throw IllegalArgumentException("Invalid position: $position")
         }
     }

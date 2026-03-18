@@ -579,7 +579,8 @@ data class OrdersForOrderPaymentResponse(
 
 data class OrderPaymentStkPushRequest(
     val orderId: Int,
-    val phoneNumber: String? = null
+    val phoneNumber: String? = null,
+    val orderIds: List<Int>? = null
 )
 
 data class OrderPaymentStkPushResponse(

@@ -374,6 +374,69 @@
 
                     </com.google.android.material.textfield.TextInputLayout>
 
+                    <!-- Order Payment: Multi-order selection (shown for Orders submissions) -->
+                    <LinearLayout
+                        android:id="@+id/orderPaymentOrdersSection"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Select orders to submit"
+                            android:textColor="@color/text_secondary_dark"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="8dp" />
+
+                        <LinearLayout
+                            android:id="@+id/orderPaymentOrdersList"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical" />
+
+                        <TextView
+                            android:id="@+id/orderPaymentOrdersEmptyText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="No eligible completed cash orders pending submission."
+                            android:textColor="@color/text_secondary_dark"
+                            android:textSize="12sp"
+                            android:visibility="gone"
+                            android:layout_marginTop="8dp" />
+                    </LinearLayout>
+
+                    <!-- Order Payment: Phone number for M-Pesa prompt -->
+                    <com.google.android.material.textfield.TextInputLayout
+                        android:id="@+id/orderPaymentPhoneLayout"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp"
+                        android:hint="Phone Number"
+                        android:visibility="gone"
+                        app:boxBackgroundMode="outline"
+                        app:boxBackgroundColor="@color/paper_dark"
+                        app:boxStrokeColor="@color/form_field_border_light_green"
+                        app:hintTextColor="#FFFFFF"
+                        app:hintEnabled="true"
+                        app:boxStrokeWidth="2dp"
+                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                        <com.google.android.material.textfield.TextInputEditText
+                            android:id="@+id/orderPaymentPhoneEditText"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="phone"
+                            android:textColor="#FFFFFF"
+                            android:textColorHint="#FFFFFF"
+                            android:minHeight="56dp"
+                            android:padding="16dp"
+                            android:textSize="16sp" />
+
+                    </com.google.android.material.textfield.TextInputLayout>
+
                     <!-- Payment to Office Fields -->
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/accountTypeLayout"

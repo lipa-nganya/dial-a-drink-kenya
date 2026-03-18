@@ -46,10 +46,10 @@
                 app:tabBackground="@color/paper_dark">
 
                 <com.google.android.material.tabs.TabItem
-                    android:text="Cash At Hand" />
+                    android:text="Transactions" />
 
                 <com.google.android.material.tabs.TabItem
-                    android:text="Transactions" />
+                    android:text="Create Submission" />
 
             </com.google.android.material.tabs.TabLayout>
 

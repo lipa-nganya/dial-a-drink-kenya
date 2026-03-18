@@ -174,8 +174,11 @@ app.use((req, res, next) => {
   req.on('error', (err) => { console.error('❌ M-Pesa callback body read error:', err); next(err); });
 });
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Increase request body limits (Admin inventory item creation can include large payloads)
+// Cloud Run max request size is limited; keep this reasonable and configurable.
+const bodyLimit = process.env.BODY_LIMIT || '10mb';
+app.use(express.json({ limit: bodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: bodyLimit }));
 
 // Restore M-Pesa callback body so the route sees it (express.json() would get empty stream)
 app.use((req, res, next) => {
@@ -343,6 +346,13 @@ app.use((err, req, res, next) => {
   // Don't send response if headers have already been sent
   if (res.headersSent) {
     return next(err);
+  }
+  // Return correct status for oversized request bodies
+  if (err?.type === 'entity.too.large' || err?.name === 'PayloadTooLargeError') {
+    return res.status(413).json({
+      error: 'Request payload too large',
+      message: 'Please reduce the size of the uploaded data (e.g., image) and try again.'
+    });
   }
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });

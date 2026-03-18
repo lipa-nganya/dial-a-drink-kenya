@@ -39,14 +39,46 @@ class TransactionsFragment : Fragment() {
         
         TabLayoutMediator(binding.mainTabsLayout, binding.mainViewPager) { tab, position ->
             when (position) {
-                0 -> tab.text = "Transactions"
-                1 -> tab.text = "Logs"
+                0 -> tab.text = "Logs"
+                1 -> tab.text = "Transactions"
             }
         }.attach()
-        
-        // Setup cash at hand summary button
-        binding.cashAtHandSummaryButton.setOnClickListener {
-            showCashAtHandSummary()
+
+        // Default: open Logs tab
+        binding.mainViewPager.setCurrentItem(0, false)
+
+        // Load current cash at hand balance for header card
+        loadCurrentCashAtHand()
+    }
+
+    private fun loadCurrentCashAtHand() {
+        val driverId = SharedPrefs.getDriverId(requireContext()) ?: return
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.getApiService().getCashAtHand(driverId)
+                if (response.isSuccessful && response.body()?.success == true) {
+                    val data = response.body()?.data
+                    val actualCashAtHand = data?.totalCashAtHand ?: 0.0
+                    val pendingSubmissionsTotal = data?.pendingSubmissionsTotal
+                    val pendingCashAtHand = data?.pendingCashAtHand
+                    val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
+                        maximumFractionDigits = 0
+                        minimumFractionDigits = 0
+                    }
+                    binding.currentCashAtHandText.text = currencyFormat.format(actualCashAtHand).replace("KES", "KES")
+
+                    val hasPending = (pendingSubmissionsTotal != null && pendingSubmissionsTotal > 0.0009) || pendingCashAtHand != null
+                    if (hasPending) {
+                        val computedPending = pendingCashAtHand ?: (actualCashAtHand - (pendingSubmissionsTotal ?: 0.0))
+                        binding.pendingCashAtHandSection.visibility = View.VISIBLE
+                        binding.pendingCashAtHandText.text = currencyFormat.format(computedPending).replace("KES", "KES")
+                    } else {
+                        binding.pendingCashAtHandSection.visibility = View.GONE
+                    }
+                }
+            } catch (_: Exception) {
+                // ignore - keep last value
+            }
         }
     }
     
@@ -96,8 +128,18 @@ class TransactionsFragment : Fragment() {
             }
         }
     }
+
+    /**
+     * Switch to Transactions main sub-tab (0=Transactions, 1=Logs)
+     */
+    fun switchToMainSubTab(position: Int) {
+        if (_binding == null) return
+        binding.mainViewPager.setCurrentItem(position, true)
+        refresh()
+    }
     
     fun refresh() {
+        loadCurrentCashAtHand()
         // Refresh all child fragments
         try {
             val fragments = childFragmentManager.fragments
@@ -118,7 +160,7 @@ class TransactionsFragment : Fragment() {
      */
     fun switchToTransactionsSubTab(position: Int) {
         // First switch to Transactions main tab
-        binding.mainViewPager.setCurrentItem(0, true)
+        binding.mainViewPager.setCurrentItem(1, true)
         
         // Then switch to the sub-tab
         try {
@@ -131,7 +173,7 @@ class TransactionsFragment : Fragment() {
     
     fun switchToTab(position: Int) {
         // Switch to Transactions tab (main tab 0)
-        binding.mainViewPager.setCurrentItem(0, true)
+        binding.mainViewPager.setCurrentItem(1, true)
         
         // Then switch to the sub-tab within Transactions
         try {
@@ -159,8 +201,8 @@ class MainTabsPagerAdapter(fragment: Fragment) : androidx.viewpager2.adapter.Fra
     
     override fun createFragment(position: Int): Fragment {
         return when (position) {
-            0 -> CashTransactionsTabsFragment() // Transactions tab (with sub-tabs)
-            1 -> CashTransactionsFragment() // Logs tab (shows all cash submissions)
+            0 -> CashTransactionsFragment() // Logs tab (shows all cash submissions)
+            1 -> CashTransactionsTabsFragment() // Transactions tab (with sub-tabs)
             else -> throw IllegalArgumentException("Invalid position: $position")
         }
     }

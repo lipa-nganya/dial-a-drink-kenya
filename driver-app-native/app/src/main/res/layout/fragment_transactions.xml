@@ -6,18 +6,79 @@
     android:orientation="vertical"
     android:background="@color/background_dark">
 
-    <!-- View Summary Button -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/cashAtHandSummaryButton"
+    <!-- Current Cash At Hand -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/currentCashAtHandCard"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:layout_marginBottom="8dp"
-        android:text="View Summary"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        app:backgroundTint="@color/accent"
-        app:cornerRadius="8dp" />
+        app:cardBackgroundColor="@color/paper_dark"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="2dp"
+        app:strokeWidth="1dp"
+        app:strokeColor="@color/border_dark">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Current Cash At Hand"
+                android:textColor="@color/text_secondary_dark"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/currentCashAtHandText"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="KES 0"
+                android:textColor="@color/accent"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:layout_marginTop="6dp" />
+
+            <!-- Pending Cash At Hand (shown when there are pending submissions) -->
+            <LinearLayout
+                android:id="@+id/pendingCashAtHandSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Pending Cash At Hand"
+                    android:textColor="@color/text_secondary_dark"
+                    android:textSize="12sp" />
+
+                <TextView
+                    android:id="@+id/pendingCashAtHandText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="KES 0"
+                    android:textColor="@color/accent"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:layout_marginTop="4dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="If pending submissions are approved"
+                    android:textColor="@color/text_secondary_dark"
+                    android:textSize="11sp"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 
     <!-- Main Tabs: Transactions and Logs -->
     <com.google.android.material.tabs.TabLayout

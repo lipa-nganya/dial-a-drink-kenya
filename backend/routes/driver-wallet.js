@@ -274,11 +274,22 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
 router.post('/:driverId/order-payment-stk-push', async (req, res) => {
   try {
     const { driverId } = req.params;
-    const { orderId: bodyOrderId, phoneNumber: bodyPhone } = req.body;
-    const orderId = bodyOrderId != null ? parseInt(bodyOrderId, 10) : null;
+    const { orderId: bodyOrderId, orderIds: bodyOrderIds, phoneNumber: bodyPhone } = req.body;
+    const derivedOrderIdsRaw = Array.isArray(bodyOrderIds) ? bodyOrderIds : null;
+    let orderIds = [];
+    if (derivedOrderIdsRaw && derivedOrderIdsRaw.length > 0) {
+      orderIds = derivedOrderIdsRaw
+        .map(v => parseInt(v, 10))
+        .filter(v => Number.isFinite(v) && v > 0);
+    } else {
+      const orderId = bodyOrderId != null ? parseInt(bodyOrderId, 10) : null;
+      if (orderId && orderId > 0) {
+        orderIds = [orderId];
+      }
+    }
 
-    if (!orderId || orderId < 1) {
-      return sendError(res, 'orderId is required', 400);
+    if (!orderIds || orderIds.length === 0) {
+      return sendError(res, 'orderId or orderIds is required', 400);
     }
 
     const driver = await db.Driver.findByPk(driverId);
@@ -286,35 +297,39 @@ router.post('/:driverId/order-payment-stk-push', async (req, res) => {
       return sendError(res, 'Driver not found', 404);
     }
 
-    const order = await db.Order.findOne({
-      where: {
-        id: orderId,
-        driverId: parseInt(driverId, 10),
-        status: 'completed',
-        paymentStatus: 'paid',
-        paymentType: 'pay_on_delivery',
-        paymentMethod: 'cash'
+    // Validate each order is eligible and compute total amount
+    let submitAmount = 0;
+    for (const orderId of orderIds) {
+      const order = await db.Order.findOne({
+        where: {
+          id: orderId,
+          driverId: parseInt(driverId, 10),
+          status: 'completed',
+          paymentStatus: 'paid',
+          paymentType: 'pay_on_delivery',
+          paymentMethod: 'cash'
+        }
+      });
+      if (!order) {
+        return sendError(res, `Order #${orderId} not found or not eligible for order payment submission`, 404);
       }
-    });
-    if (!order) {
-      return sendError(res, 'Order not found or not eligible for order payment submission', 404);
-    }
 
-    const existingLinks = await db.sequelize.query(
-      `SELECT cs.id FROM cash_submissions cs
-       INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
-       WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')`,
-      { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId: parseInt(driverId, 10), orderId } }
-    ).catch(() => []);
-    if (existingLinks && existingLinks.length > 0) {
-      return sendError(res, 'This order has already been submitted for order payment', 400);
-    }
+      const existingLinks = await db.sequelize.query(
+        `SELECT cs.id FROM cash_submissions cs
+         INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+         WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')`,
+        { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId: parseInt(driverId, 10), orderId } }
+      ).catch(() => []);
+      if (existingLinks && existingLinks.length > 0) {
+        return sendError(res, `Order #${orderId} has already been submitted for order payment`, 400);
+      }
 
-    const breakdown = await getOrderFinancialBreakdown(orderId);
-    const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-    const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-    const savings = deliveryFee * 0.5;
-    const submitAmount = itemsTotal + savings;
+      const breakdown = await getOrderFinancialBreakdown(orderId);
+      const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+      const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+      const savings = deliveryFee * 0.5;
+      submitAmount += (itemsTotal + savings);
+    }
 
     if (submitAmount < 0.01) {
       return sendError(res, 'Order amount is too small', 400);
@@ -345,8 +360,11 @@ router.post('/:driverId/order-payment-stk-push', async (req, res) => {
       });
     }
 
-    const accountReference = `ORDER-PAY-${orderId}`;
-    const transactionDesc = `Order payment #${orderId} - KES ${submitAmount.toFixed(2)}`;
+    const firstOrderId = orderIds[0];
+    const accountReference = orderIds.length === 1 ? `ORDER-PAY-${firstOrderId}` : `ORDER-PAY-MULTI-${firstOrderId}`;
+    const transactionDesc = orderIds.length === 1
+      ? `Order payment #${firstOrderId} - KES ${submitAmount.toFixed(2)}`
+      : `Order payment (${orderIds.length} orders) - KES ${submitAmount.toFixed(2)}`;
 
     let stkResponse;
     try {
@@ -370,7 +388,7 @@ router.post('/:driverId/order-payment-stk-push', async (req, res) => {
     }
 
     const pendingTransaction = await db.Transaction.create({
-      orderId: orderId,
+      orderId: firstOrderId,
       driverId: parseInt(driverId, 10),
       driverWalletId: wallet.id,
       transactionType: 'cash_settlement',
@@ -382,14 +400,15 @@ router.post('/:driverId/order-payment-stk-push', async (req, res) => {
       phoneNumber: formattedPhone,
       checkoutRequestID: checkoutRequestID || null,
       merchantRequestID: stkResponse.merchantRequestID || stkResponse.MerchantRequestID || null,
-      notes: `order_payment_submission|orderId=${orderId}|driverId=${driverId}|amount=${submitAmount.toFixed(2)}`
+      notes: `order_payment_submission|orderIds=${orderIds.join(',')}|driverId=${driverId}|amount=${submitAmount.toFixed(2)}`
     });
 
-    console.log(`✅ Order payment STK push initiated for Order #${orderId}, CheckoutRequestID: ${checkoutRequestID}`);
+    console.log(`✅ Order payment STK push initiated for Order(s) [${orderIds.join(',')}], CheckoutRequestID: ${checkoutRequestID}`);
 
     sendSuccess(res, {
       checkoutRequestID: checkoutRequestID,
-      orderId: orderId,
+      orderId: firstOrderId,
+      orderIds,
       amount: submitAmount,
       message: 'Enter your M-Pesa PIN on your phone to complete the payment.'
     }, 'M-Pesa prompt sent');
