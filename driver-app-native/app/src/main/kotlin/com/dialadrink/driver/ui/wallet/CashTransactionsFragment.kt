@@ -81,14 +81,10 @@ class CashTransactionsFragment : Fragment() {
     }
     
     private fun displayTransactions(data: CashAtHandResponse) {
-        // Hide container, show table and balance card
+        // Hide container, show table
         binding.transactionsContainer.visibility = View.GONE
         val tableContainer = binding.root.findViewById<View>(R.id.tableContainer)
         tableContainer?.visibility = View.VISIBLE
-        
-        // Show balance card
-        val balanceCard = binding.root.findViewById<View>(R.id.balanceCard)
-        balanceCard?.visibility = View.VISIBLE
         
         val tableLayout = binding.transactionsTable
         tableLayout.removeAllViews()
@@ -98,12 +94,7 @@ class CashTransactionsFragment : Fragment() {
             maximumFractionDigits = 0
         }
         
-        // Display current balance at the top
-        val currentBalanceText = binding.root.findViewById<TextView>(R.id.currentBalanceText)
-        if (currentBalanceText != null) {
-            val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
-            currentBalanceText.text = currencyFormatter.format(data.totalCashAtHand)
-        }
+        // Current cash at hand is already shown above the Transactions | Logs tabs.
         
         if (data.entries.isEmpty()) {
             binding.emptyStateText.visibility = View.VISIBLE

@@ -9,6 +9,8 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.AutoCompleteTextView
+import android.os.Handler
+import android.os.Looper
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -16,6 +18,8 @@ import androidx.lifecycle.lifecycleScope
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.CreateCashSubmissionRequest
+import com.dialadrink.driver.data.model.OrderForOrderPayment
+import com.dialadrink.driver.data.model.OrderPaymentStkPushRequest
 import com.dialadrink.driver.databinding.FragmentCashAtHandFormBinding
 import com.dialadrink.driver.utils.SharedPrefs
 import kotlinx.coroutines.launch
@@ -31,9 +35,12 @@ class CashAtHandFormFragment : Fragment() {
     private val binding get() = _binding!!
     
     private var selectedSubmissionType: String? = null
-    private val submissionTypes = listOf("Purchases", "Cash", "General Expense", "Payment to Office")
+    private val submissionTypes = listOf("Orders", "Purchases", "Cash", "General Expense", "Payment to Office")
     private val accountTypes = listOf("cash", "mpesa", "till", "bank", "paybill", "pdq")
     private val submissionItems = mutableListOf<PurchaseItem>()
+    private var eligibleOrderPayments: List<OrderForOrderPayment> = emptyList()
+    private val selectedOrderIds = linkedSetOf<Int>()
+    private val orderPaymentMethods = listOf("CASH", "MPESA PROMPT", "CUSTOMER PAID TO OFFICE")
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -49,6 +56,7 @@ class CashAtHandFormFragment : Fragment() {
         
         setupSubmissionTypeDropdown()
         setupAccountTypeDropdown()
+        setupPaymentTypeDropdown()
         setupSubmitButton()
         setupAmountInput()
         setupAddItemButton()
@@ -153,11 +161,13 @@ class CashAtHandFormFragment : Fragment() {
             minimumFractionDigits = 0
         }
         binding.totalCashText.text = currencyFormat.format(actualCashAtHand).replace("KES", "KES")
-        // Show pending cash at hand if it's provided (even if negative)
-        // This shows the projected balance after pending submissions are approved
-        if (pendingCashAtHand != null) {
+        // Always show pending cash at hand when there are pending submissions.
+        // If backend doesn't send pendingCashAtHand for some reason, compute it from actual - pendingSubmissionsTotal.
+        val hasPending = (pendingSubmissionsTotal != null && pendingSubmissionsTotal > 0.0009) || pendingCashAtHand != null
+        if (hasPending) {
+            val computedPending = pendingCashAtHand ?: (actualCashAtHand - (pendingSubmissionsTotal ?: 0.0))
             binding.pendingCashAtHandSection.visibility = View.VISIBLE
-            binding.pendingCashAtHandText.text = currencyFormat.format(pendingCashAtHand).replace("KES", "KES")
+            binding.pendingCashAtHandText.text = currencyFormat.format(computedPending).replace("KES", "KES")
         } else {
             binding.pendingCashAtHandSection.visibility = View.GONE
         }
@@ -197,10 +207,11 @@ class CashAtHandFormFragment : Fragment() {
             
             autoComplete.setOnItemClickListener { _, _, position, _ ->
                 selectedSubmissionType = when (position) {
-                    0 -> "purchases"
-                    1 -> "cash"
-                    2 -> "general_expense"
-                    3 -> "payment_to_office"
+                    0 -> "order_payment"
+                    1 -> "purchases"
+                    2 -> "cash"
+                    3 -> "general_expense"
+                    4 -> "payment_to_office"
                     else -> null
                 }
                 updateDynamicFields()
@@ -227,6 +238,19 @@ class CashAtHandFormFragment : Fragment() {
             )
         }
     }
+
+    private fun setupPaymentTypeDropdown() {
+        val adapter = ArrayAdapter(requireContext(), R.layout.item_dropdown_dark, orderPaymentMethods)
+        (binding.paymentTypeLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
+            autoComplete.setAdapter(adapter)
+            val drawable = android.graphics.drawable.ColorDrawable(resources.getColor(R.color.paper_dark, null))
+            autoComplete.setDropDownBackgroundDrawable(drawable)
+            autoComplete.setTextColor(Color.parseColor("#FFFFFF"))
+            autoComplete.setHintTextColor(Color.parseColor("#B0B0B0"))
+            applyGreenBorderToLayout(binding.paymentTypeLayout)
+            binding.paymentTypeLayout.defaultHintTextColor = android.content.res.ColorStateList.valueOf(Color.parseColor("#FFFFFF"))
+        }
+    }
     
     private fun updateDynamicFields() {
         binding.supplierLayout.visibility = View.GONE
@@ -236,6 +260,14 @@ class CashAtHandFormFragment : Fragment() {
         binding.recipientNameLayout.visibility = View.GONE
         binding.natureLayout.visibility = View.GONE
         binding.accountTypeLayout.visibility = View.GONE
+        binding.orderPaymentOrderLayout.visibility = View.GONE
+        binding.orderPaymentOrdersSection.visibility = View.GONE
+        binding.orderPaymentPhoneLayout.visibility = View.GONE
+
+        // Reset amount field defaults (order_payment may disable it)
+        binding.amountEditText.isEnabled = true
+        binding.amountEditText.isFocusable = true
+        binding.amountEditText.isClickable = true
         
         // Hide Amount and Payment Type fields by default - they'll be shown only when needed
         binding.amountLayout.visibility = View.GONE
@@ -243,11 +275,63 @@ class CashAtHandFormFragment : Fragment() {
         
         binding.dynamicFieldsContainer.visibility = View.VISIBLE
         submissionItems.clear()
+        eligibleOrderPayments = emptyList()
+        selectedOrderIds.clear()
         binding.itemEditText.text?.clear()
         binding.priceEditText.text?.clear()
         binding.amountEditText.text?.clear()
+        binding.orderPaymentPhoneEditText.text?.clear()
+        binding.paymentTypeLayout.editText?.text?.clear()
         
         when (selectedSubmissionType) {
+            "order_payment" -> {
+                // Orders: show eligible orders list + payment method + computed total (read-only)
+                binding.dynamicFieldsContainer.visibility = View.VISIBLE
+                binding.addItemButton.visibility = View.GONE
+                binding.itemsListText.visibility = View.GONE
+
+                // Hide non-orders fields inside the container
+                binding.supplierLayout.visibility = View.GONE
+                binding.itemLayout.visibility = View.GONE
+                binding.priceLayout.visibility = View.GONE
+                binding.deliveryLocationLayout.visibility = View.GONE
+                binding.natureLayout.visibility = View.GONE
+                binding.accountTypeLayout.visibility = View.GONE
+                binding.orderPaymentOrderLayout.visibility = View.GONE // legacy single-order dropdown
+
+                binding.orderPaymentOrdersSection.visibility = View.VISIBLE
+                binding.paymentTypeLayout.visibility = View.VISIBLE
+                binding.amountLayout.visibility = View.VISIBLE
+                binding.amountEditText.isEnabled = false
+                binding.amountEditText.isFocusable = false
+                binding.amountEditText.isClickable = false
+                binding.amountEditText.setText("0.00")
+
+                // Default phone number for M-Pesa prompt (editable)
+                val driverPhone = SharedPrefs.getDriverPhone(requireContext())
+                if (!driverPhone.isNullOrBlank()) {
+                    binding.orderPaymentPhoneEditText.setText(driverPhone)
+                }
+
+                loadEligibleOrdersForOrderPayment()
+
+                // React to payment method selection
+                (binding.paymentTypeLayout.editText as? AutoCompleteTextView)?.setOnItemClickListener { _, _, pos, _ ->
+                    val method = orderPaymentMethods.getOrNull(pos)
+                    if (method == "CASH") {
+                        binding.recipientNameLayout.visibility = View.VISIBLE
+                        binding.recipientNameLayout.hint = "Recipient"
+                        binding.orderPaymentPhoneLayout.visibility = View.GONE
+                    } else if (method == "MPESA PROMPT") {
+                        binding.recipientNameLayout.visibility = View.GONE
+                        binding.orderPaymentPhoneLayout.visibility = View.VISIBLE
+                    } else if (method == "CUSTOMER PAID TO OFFICE") {
+                        binding.recipientNameLayout.visibility = View.GONE
+                        binding.orderPaymentPhoneLayout.visibility = View.GONE
+                    }
+                    updateOrderPaymentTotal()
+                }
+            }
             "purchases" -> {
                 binding.supplierLayout.visibility = View.VISIBLE
                 binding.itemLayout.hint = "Item Purchased"
@@ -285,6 +369,53 @@ class CashAtHandFormFragment : Fragment() {
         
         updateItemsListDisplay()
         applyFieldColors()
+    }
+
+    private fun loadEligibleOrdersForOrderPayment() {
+        val driverId = SharedPrefs.getDriverId(requireContext()) ?: return
+        binding.orderPaymentOrdersList.removeAllViews()
+        binding.orderPaymentOrdersEmptyText.visibility = View.GONE
+
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.getApiService().getOrdersForOrderPayment(driverId)
+                if (!response.isSuccessful || response.body()?.success != true) {
+                    binding.orderPaymentOrdersEmptyText.visibility = View.VISIBLE
+                    return@launch
+                }
+                val orders = response.body()?.data?.orders ?: emptyList()
+                eligibleOrderPayments = orders
+                if (orders.isEmpty()) {
+                    binding.orderPaymentOrdersEmptyText.visibility = View.VISIBLE
+                    updateOrderPaymentTotal()
+                    return@launch
+                }
+
+                orders.forEach { order ->
+                    val cb = com.google.android.material.checkbox.MaterialCheckBox(requireContext()).apply {
+                        text = "Order #${order.orderId} • ${order.customerName} • KES ${String.format("%.0f", order.totalToSubmit)}"
+                        setTextColor(Color.parseColor("#FFFFFF"))
+                        isChecked = false
+                        setOnCheckedChangeListener { _, isChecked ->
+                            if (isChecked) selectedOrderIds.add(order.orderId) else selectedOrderIds.remove(order.orderId)
+                            updateOrderPaymentTotal()
+                        }
+                    }
+                    binding.orderPaymentOrdersList.addView(cb)
+                }
+
+                updateOrderPaymentTotal()
+            } catch (_: Exception) {
+                binding.orderPaymentOrdersEmptyText.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    private fun updateOrderPaymentTotal() {
+        val total = eligibleOrderPayments
+            .filter { selectedOrderIds.contains(it.orderId) }
+            .sumOf { it.totalToSubmit }
+        binding.amountEditText.setText(String.format("%.2f", total))
     }
     
     
@@ -373,6 +504,65 @@ class CashAtHandFormFragment : Fragment() {
         }
         
         val (amount, details) = when (selectedSubmissionType) {
+            "order_payment" -> {
+                if (selectedOrderIds.isEmpty()) {
+                    binding.errorText.text = "Please select at least one order"
+                    binding.errorText.visibility = View.VISIBLE
+                    return
+                }
+
+                val paymentMethodRaw = (binding.paymentTypeLayout.editText as? AutoCompleteTextView)?.text?.toString()?.trim()
+                if (paymentMethodRaw.isNullOrBlank()) {
+                    binding.errorText.text = "Please select payment option"
+                    binding.errorText.visibility = View.VISIBLE
+                    return
+                }
+                val paymentMethod = paymentMethodRaw.trim().uppercase()
+
+                val totalAmount = eligibleOrderPayments
+                    .filter { selectedOrderIds.contains(it.orderId) }
+                    .sumOf { it.totalToSubmit }
+
+                if (totalAmount <= 0.0) {
+                    binding.errorText.text = "Total amount must be greater than 0"
+                    binding.errorText.visibility = View.VISIBLE
+                    return
+                }
+
+                if (paymentMethod == "CUSTOMER PAID TO OFFICE") {
+                    val detailsMap = mutableMapOf<String, Any>(
+                        "orderIds" to selectedOrderIds.toList(),
+                        "paymentMethod" to "customer_paid_to_office"
+                    )
+                    Pair(totalAmount, detailsMap)
+                } else
+                if (paymentMethod == "MPESA PROMPT") {
+                    val phone = binding.orderPaymentPhoneEditText.text.toString().trim()
+                    if (phone.isEmpty()) {
+                        binding.errorText.text = "Please enter phone number for M-Pesa prompt"
+                        binding.errorText.visibility = View.VISIBLE
+                        return
+                    }
+                    // Initiate STK push; successful payment will auto-approve and link orders via callback/poll.
+                    initiateOrderPaymentStkPush(driverId, selectedOrderIds.toList(), phone)
+                    return
+                }
+
+                // CASH: requires approval, requires recipient field
+                val recipient = binding.recipientNameEditText.text.toString().trim()
+                if (recipient.isEmpty()) {
+                    binding.errorText.text = "Please enter recipient"
+                    binding.errorText.visibility = View.VISIBLE
+                    return
+                }
+
+                val detailsMap = mutableMapOf<String, Any>(
+                    "orderIds" to selectedOrderIds.toList(),
+                    "recipientName" to recipient,
+                    "paymentMethod" to "cash"
+                )
+                Pair(totalAmount, detailsMap)
+            }
             "purchases" -> {
                 val supplier = binding.supplierEditText.text.toString().trim()
                 val location = binding.deliveryLocationEditText.text.toString().trim()
@@ -507,12 +697,19 @@ class CashAtHandFormFragment : Fragment() {
         binding.natureEditText.text?.clear()
         binding.accountTypeLayout.editText?.text?.clear()
         binding.amountEditText.text?.clear()
+        binding.paymentTypeLayout.editText?.text?.clear()
+        binding.orderPaymentPhoneEditText.text?.clear()
         binding.errorText.visibility = View.GONE
         selectedSubmissionType = null
         submissionItems.clear()
+        eligibleOrderPayments = emptyList()
+        selectedOrderIds.clear()
         binding.dynamicFieldsContainer.visibility = View.GONE
         binding.addItemButton.visibility = View.GONE
         binding.itemsListText.visibility = View.GONE
+        binding.orderPaymentOrdersList.removeAllViews()
+        binding.orderPaymentOrdersSection.visibility = View.GONE
+        binding.orderPaymentPhoneLayout.visibility = View.GONE
     }
     
     private fun applyFieldColors() {
@@ -542,7 +739,9 @@ class CashAtHandFormFragment : Fragment() {
             binding.recipientNameLayout,
             binding.natureLayout,
             binding.accountTypeLayout,
-            binding.amountLayout
+            binding.amountLayout,
+            binding.paymentTypeLayout,
+            binding.orderPaymentPhoneLayout
         )
         
         layouts.forEach { layout ->
@@ -562,7 +761,8 @@ class CashAtHandFormFragment : Fragment() {
             binding.deliveryLocationEditText,
             binding.recipientNameEditText,
             binding.natureEditText,
-            binding.amountEditText
+            binding.amountEditText,
+            binding.orderPaymentPhoneEditText
         )
         
         editTexts.forEach { editText ->
@@ -582,6 +782,86 @@ class CashAtHandFormFragment : Fragment() {
             autoComplete.setHintTextColor(textSecondary)
             autoComplete.invalidate()
         }
+
+        (binding.paymentTypeLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
+            autoComplete.setTextColor(textPrimary)
+            autoComplete.setHintTextColor(textSecondary)
+            autoComplete.invalidate()
+        }
+    }
+
+    private fun initiateOrderPaymentStkPush(driverId: Int, orderIds: List<Int>, phoneNumber: String) {
+        binding.submitButton.isEnabled = false
+        binding.loadingProgress.visibility = View.VISIBLE
+        binding.errorText.visibility = View.GONE
+
+        lifecycleScope.launch {
+            try {
+                val response = ApiClient.getApiService().orderPaymentStkPush(
+                    driverId,
+                    OrderPaymentStkPushRequest(orderId = orderIds.first(), phoneNumber = phoneNumber, orderIds = orderIds)
+                )
+                if (!response.isSuccessful || response.body()?.success != true) {
+                    val errorMsg = response.body()?.error ?: response.errorBody()?.string() ?: "Failed to send M-Pesa prompt"
+                    binding.errorText.text = errorMsg
+                    binding.errorText.visibility = View.VISIBLE
+                    return@launch
+                }
+                val checkoutRequestID = response.body()?.data?.checkoutRequestID
+                Toast.makeText(requireContext(), "Enter your M-Pesa PIN on your phone", Toast.LENGTH_LONG).show()
+                if (!checkoutRequestID.isNullOrBlank()) {
+                    pollOrderPaymentResult(checkoutRequestID)
+                } else {
+                    Toast.makeText(requireContext(), "Payment initiated. Check your phone for M-Pesa prompt.", Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: Exception) {
+                binding.errorText.text = "Error: ${e.message}"
+                binding.errorText.visibility = View.VISIBLE
+            } finally {
+                binding.submitButton.isEnabled = true
+                binding.loadingProgress.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun pollOrderPaymentResult(checkoutRequestID: String) {
+        var pollCount = 0
+        val maxPolls = 40
+        val handler = Handler(Looper.getMainLooper())
+
+        fun poll() {
+            pollCount++
+            lifecycleScope.launch {
+                try {
+                    val response = ApiClient.getApiService().pollMpesaTransaction(checkoutRequestID)
+                    val status = response.body()?.status
+                    val paymentStatus = response.body()?.paymentStatus
+                    if (status == "completed" || paymentStatus == "paid") {
+                        handler.removeCallbacksAndMessages(null)
+                        Toast.makeText(requireContext(), "Order payment submitted successfully", Toast.LENGTH_LONG).show()
+                        clearForm()
+                        loadTotalCash()
+                        (activity as? CashAtHandActivity)?.refreshTabs()
+                        return@launch
+                    }
+                    if (pollCount >= maxPolls) {
+                        handler.removeCallbacksAndMessages(null)
+                        Toast.makeText(requireContext(), "Payment status unknown. Check your wallet or try again.", Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+                    handler.postDelayed({ poll() }, 3000)
+                } catch (_: Exception) {
+                    if (pollCount >= maxPolls) {
+                        handler.removeCallbacksAndMessages(null)
+                        Toast.makeText(requireContext(), "Payment check failed. Refresh to see status.", Toast.LENGTH_SHORT).show()
+                    } else {
+                        handler.postDelayed({ poll() }, 3000)
+                    }
+                }
+            }
+        }
+
+        handler.postDelayed({ poll() }, 3000)
     }
     
     override fun onDestroyView() {

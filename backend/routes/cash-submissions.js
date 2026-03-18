@@ -766,7 +766,7 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     console.log('   Body:', JSON.stringify(req.body, null, 2));
     
     const { driverId } = req.params;
-    const { submissionType, amount, details, orderId: bodyOrderId } = req.body;
+    const { submissionType, amount, details, orderId: bodyOrderId, orderIds: bodyOrderIds } = req.body;
 
     // Validate required fields
     if (!submissionType || !['purchases', 'cash', 'general_expense', 'payment_to_office', 'walk_in_sale', 'order_payment'].includes(submissionType)) {
@@ -778,38 +778,77 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     let orderIdsToLink = [];
 
     if (submissionType === 'order_payment') {
-      const orderId = bodyOrderId != null ? parseInt(bodyOrderId, 10) : (details && details.orderId != null ? parseInt(details.orderId, 10) : null);
-      if (!orderId || orderId < 1) {
-        return sendError(res, 'For Order Payment, orderId is required', 400);
-      }
-      const order = await db.Order.findOne({
-        where: {
-          id: orderId,
-          driverId: parseInt(driverId, 10),
-          status: 'completed',
-          paymentStatus: 'paid',
-          paymentType: 'pay_on_delivery',
-          paymentMethod: 'cash'
+      // Support both single orderId and multiple orderIds (array)
+      const derivedOrderIdsRaw =
+        (Array.isArray(bodyOrderIds) ? bodyOrderIds : null) ||
+        (details && Array.isArray(details.orderIds) ? details.orderIds : null) ||
+        null;
+
+      if (derivedOrderIdsRaw && derivedOrderIdsRaw.length > 0) {
+        orderIdsToLink = derivedOrderIdsRaw
+          .map(v => parseInt(v, 10))
+          .filter(v => Number.isFinite(v) && v > 0);
+      } else {
+        const singleOrderId = bodyOrderId != null
+          ? parseInt(bodyOrderId, 10)
+          : (details && details.orderId != null ? parseInt(details.orderId, 10) : null);
+        if (singleOrderId && singleOrderId > 0) {
+          orderIdsToLink = [singleOrderId];
         }
-      });
-      if (!order) {
-        return sendError(res, 'Order not found or not eligible for order payment submission', 404);
       }
-      const existingLinks = await db.sequelize.query(
-        `SELECT cs.id FROM cash_submissions cs
-         INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
-         WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')`,
-        { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId: parseInt(driverId, 10), orderId } }
-      ).catch(() => []);
-      if (existingLinks && existingLinks.length > 0) {
-        return sendError(res, 'This order has already been submitted for order payment', 400);
+
+      if (!orderIdsToLink || orderIdsToLink.length === 0) {
+        return sendError(res, 'For Order Payment, orderId or orderIds is required', 400);
       }
-      const breakdown = await getOrderFinancialBreakdown(orderId);
-      const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-      const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-      const savings = deliveryFee * 0.5;
-      submissionAmount = itemsTotal + savings;
-      orderIdsToLink = [orderId];
+
+      const paymentMethodLower = String(details?.paymentMethod || '').toLowerCase();
+
+      // Validate each order is eligible and not already submitted, and compute expected amount from breakdowns.
+      // For "customer_paid_to_office", we still compute the expected total, but the submission amount recorded is 0.
+      let expectedTotal = 0;
+      for (const orderId of orderIdsToLink) {
+        const order = await db.Order.findOne({
+          where: {
+            id: orderId,
+            driverId: parseInt(driverId, 10),
+            status: 'completed',
+            paymentStatus: 'paid',
+            paymentType: 'pay_on_delivery',
+            paymentMethod: 'cash'
+          }
+        });
+        if (!order) {
+          return sendError(res, `Order #${orderId} not found or not eligible for order payment submission`, 404);
+        }
+        const existingLinks = await db.sequelize.query(
+          `SELECT cs.id FROM cash_submissions cs
+           INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+           WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')`,
+          { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId: parseInt(driverId, 10), orderId } }
+        ).catch(() => []);
+        if (existingLinks && existingLinks.length > 0) {
+          return sendError(res, `Order #${orderId} has already been submitted for order payment`, 400);
+        }
+
+        const breakdown = await getOrderFinancialBreakdown(orderId);
+        const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+        const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+        const savings = deliveryFee * 0.5;
+        expectedTotal += (itemsTotal + savings);
+      }
+
+      if (paymentMethodLower === 'customer_paid_to_office') {
+        // Customer already paid to office: still remove this value from driver's cash-at-hand
+        // so orders stop prompting and driver's balance reflects reality.
+        submissionAmount = expectedTotal;
+      } else {
+        // For cash order payment submissions, require a recipient
+        const recipientName = details && (details.recipientName || details.recipient);
+        if (!recipientName || String(recipientName).trim().length < 2) {
+          return sendError(res, 'For Order Payment (cash), recipient is required', 400);
+        }
+        submissionAmount = expectedTotal;
+      }
     } else if (!amount || parseFloat(amount) <= 0) {
       console.log('❌ Invalid amount:', amount);
       return sendError(res, 'Amount must be greater than 0', 400);
@@ -880,17 +919,20 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     }
 
     // Allow negative cash at hand - driver can submit more than they have
-    const detailsForSubmission = submissionType === 'order_payment' ? (details || { orderId: orderIdsToLink[0] }) : (details || {});
+    const detailsForSubmission = submissionType === 'order_payment'
+      ? (details || { orderIds: orderIdsToLink })
+      : (details || {});
 
-    // Order payment submissions are auto-approved (evidence only; no admin approval needed)
+    // Order payment (cash) submissions require approval.
+    // M-Pesa prompt order payments are handled via /order-payment-stk-push + callback, which auto-approves on success.
     const isOrderPayment = submissionType === 'order_payment';
     const submission = await db.CashSubmission.create({
       driverId: parseInt(driverId),
       submissionType,
       amount: submissionAmount,
       details: detailsForSubmission,
-      status: isOrderPayment ? 'approved' : 'pending',
-      approvedAt: isOrderPayment ? new Date() : null
+      status: isOrderPayment && String(detailsForSubmission?.paymentMethod || '').toLowerCase() === 'customer_paid_to_office' ? 'approved' : 'pending',
+      approvedAt: isOrderPayment && String(detailsForSubmission?.paymentMethod || '').toLowerCase() === 'customer_paid_to_office' ? new Date() : null
     });
 
     if (orderIdsToLink.length > 0) {
@@ -905,7 +947,7 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       console.log(`📦 Linked order(s) ${orderIdsToLink.join(', ')} to cash submission ${submission.id}`);
     }
 
-    // Only reduce driver's cash at hand when submission is approved (e.g. order_payment auto-approved).
+    // Only reduce driver's cash at hand when submission is approved.
     // For pending submissions, do NOT deduct yet — actual cash at hand stays unchanged until approval.
     if (submission.status === 'approved') {
       const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
@@ -921,64 +963,6 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     }
     console.log(`✅ Updated lastActivity for driver ${driverId} (cash submission created)`);
 
-    // Order payment: credit merchant wallet (order cost).
-    // Driver savings (50% of the delivery fee) are now credited when the order is completed,
-    // via creditWalletsOnDeliveryCompletion, not when the driver submits cash.
-    if (isOrderPayment && orderIdsToLink.length > 0) {
-      const firstOrderId = orderIdsToLink[0];
-      let merchantCreditAmount = submissionAmount;
-      let breakdownError = null;
-      let paymentType = 'pay_on_delivery';
-
-      try {
-        const order = await db.Order.findByPk(firstOrderId);
-        if (order) {
-          paymentType = (order.paymentType || 'pay_on_delivery').toLowerCase();
-        }
-      } catch (e) {
-        console.error(`⚠️ Could not load order ${firstOrderId} to determine payment type:`, e.message);
-      }
-
-      try {
-        const breakdown = await getOrderFinancialBreakdown(firstOrderId);
-        const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-        const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-
-        // Savings (50% delivery fee) are credited on order completion, not on submission.
-        merchantCreditAmount = itemsTotal;
-        console.log(`   Order payment breakdown for Order #${firstOrderId}: itemsTotal=${itemsTotal.toFixed(2)}, deliveryFee=${deliveryFee.toFixed(2)}, paymentType=${paymentType}`);
-      } catch (e) {
-        breakdownError = e;
-        console.error(`❌ Order payment create: could not get breakdown for Order #${firstOrderId}:`, e.message);
-        console.error(`❌ Stack:`, e.stack);
-        // If breakdown fails, we can't accurately split, so use full amount for merchant.
-      }
-      
-      let adminWallet = await db.AdminWallet.findOne({ where: { id: 1 } });
-      if (!adminWallet) {
-        adminWallet = await db.AdminWallet.create({ id: 1, balance: 0, totalRevenue: 0, totalOrders: 0, cashAtHand: 0 });
-      }
-      await adminWallet.update({
-        balance: parseFloat(adminWallet.balance || 0) + merchantCreditAmount,
-        totalRevenue: parseFloat(adminWallet.totalRevenue || 0) + merchantCreditAmount
-        // CRITICAL: Do NOT update cashAtHand - driver cash submissions go to merchant wallet only.
-        // Admin cash at hand is only for POS orders where customer paid cash or orders where admin received cash directly.
-      });
-      console.log(`   Order payment (auto-approved): merchant wallet +KES ${merchantCreditAmount.toFixed(2)} (admin cash at hand NOT updated; savings handled on order completion)`);
-      await db.Transaction.create({
-        orderId: firstOrderId,
-        driverId: parseInt(driverId, 10),
-        transactionType: 'cash_submission',
-        paymentMethod: 'cash',
-        paymentProvider: 'order_payment_submission',
-        amount: submissionAmount,
-        status: 'completed',
-        paymentStatus: 'paid',
-        notes: `Cash submission (order payment) auto-approved - Order #${firstOrderId}`,
-        receiptNumber: `CASH-SUB-${submission.id}`
-      });
-    }
-
     // Reload with associations
     await submission.reload({
       include: [
@@ -986,9 +970,9 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
       ]
     });
 
-    console.log(`✅ Cash submission created: ID ${submission.id}, Driver ${driver.name}, Type: ${submissionType}, Amount: ${submissionAmount}${isOrderPayment ? ' (auto-approved)' : ''}`);
+    console.log(`✅ Cash submission created: ID ${submission.id}, Driver ${driver.name}, Type: ${submissionType}, Amount: ${submissionAmount}`);
 
-    sendSuccess(res, submission, isOrderPayment ? 'Order payment submission created and auto-approved' : 'Cash submission created successfully');
+    sendSuccess(res, submission, 'Cash submission created successfully');
   } catch (error) {
     console.error('❌ Error creating cash submission:', error);
     console.error('❌ Error stack:', error.stack);
@@ -1441,7 +1425,7 @@ router.get('/cash-submissions/pending', async (req, res) => {
         { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
         { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
         { model: db.Admin, as: 'rejector', attributes: ['id', 'username', 'name'], required: false },
-        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
+        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt', 'deliveryAddress'], required: false }
       ],
       order: [['createdAt', 'DESC']],
       limit,
@@ -1476,7 +1460,7 @@ router.get('/admin/cash-submissions/:id', async (req, res) => {
         { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
         { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
         { model: db.Admin, as: 'rejector', attributes: ['id', 'username', 'name'], required: false },
-        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
+        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt', 'deliveryAddress'], required: false }
       ]
     });
 
@@ -1586,7 +1570,11 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
     let merchantCreditAmount = submissionAmount;
     let orderIdForSavings = null;
 
-    if (submission.submissionType === 'order_payment' && submission.driverId) {
+    const isCustomerPaidToOfficeApproved =
+      submission.submissionType === 'order_payment' &&
+      String(submission.details?.paymentMethod || '').toLowerCase() === 'customer_paid_to_office';
+
+    if (submission.submissionType === 'order_payment' && submission.driverId && !isCustomerPaidToOfficeApproved) {
       const subWithOrders = await db.CashSubmission.findByPk(submission.id, {
         include: [{ model: db.Order, as: 'orders', attributes: ['id'], required: false }]
       });
@@ -1594,10 +1582,15 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
       const firstOrderId = linkedOrders[0]?.id;
       if (firstOrderId) {
         try {
-          const breakdown = await getOrderFinancialBreakdown(firstOrderId);
-          const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-          const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-          merchantCreditAmount = itemsTotal;
+          // Multi-order submissions: credit merchant for the sum of items totals across all linked orders.
+          // Savings are handled on order completion, not on submission approval.
+          let itemsTotalSum = 0;
+          for (const o of linkedOrders) {
+            const breakdown = await getOrderFinancialBreakdown(o.id);
+            const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+            itemsTotalSum += itemsTotal;
+          }
+          merchantCreditAmount = itemsTotalSum;
           orderIdForSavings = firstOrderId;
           console.log(`   Order payment: merchant gets KES ${merchantCreditAmount.toFixed(2)} (savings handled on order completion)`);
         } catch (e) {
@@ -1607,10 +1600,14 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
     }
 
     const oldBalance = parseFloat(adminWallet.balance) || 0;
-    await adminWallet.update({
-      balance: oldBalance + merchantCreditAmount,
-      totalRevenue: parseFloat(adminWallet.totalRevenue) + merchantCreditAmount
-    });
+    if (!isCustomerPaidToOfficeApproved) {
+      await adminWallet.update({
+        balance: oldBalance + merchantCreditAmount,
+        totalRevenue: parseFloat(adminWallet.totalRevenue) + merchantCreditAmount
+      });
+    } else {
+      console.log(`   Order payment: customer paid to office (no merchant wallet credit on approval)`);
+    }
 
     // NOTE: Savings for order_payment submissions are now handled exclusively when the order is completed.
 
@@ -1621,7 +1618,7 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
     const currentCashAtHand = parseFloat(adminWallet.cashAtHand || 0);
     let newCashAtHand = currentCashAtHand;
     
-    if (submission.driverId && !submission.adminId) {
+    if (submission.driverId && !submission.adminId && !isCustomerPaidToOfficeApproved) {
       // Driver submission approved = cash received from driver
       // This cash goes to merchant wallet (order cost) and driver savings (50% delivery fee)
       // ALSO increase admin cash at hand (admin received the cash from driver)

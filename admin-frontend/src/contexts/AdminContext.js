@@ -16,6 +16,7 @@ export const useAdmin = () => {
 export const AdminProvider = ({ children }) => {
   const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
   const [pendingSubmissionsCount, setPendingSubmissionsCount] = useState(0);
+  const [pendingRiderCashSubmissionsCount, setPendingRiderCashSubmissionsCount] = useState(0);
   const [pendingInventoryChecksCount, setPendingInventoryChecksCount] = useState(0);
   const [socket, setSocket] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -175,13 +176,17 @@ export const AdminProvider = ({ children }) => {
       if (!token) {
         return;
       }
-      const response = await api.get('/driver-wallet/admin/cash-submissions/all');
-      const allSubmissions = response.data?.data?.submissions || response.data?.submissions || [];
-      // Count all pending submissions (driver and admin) that need approval
-      const pendingCount = allSubmissions.filter(s => s.status === 'pending');
+      // Use pending endpoint (doesn't require super admin)
+      const response = await api.get('/driver-wallet/cash-submissions/pending', { params: { limit: 500 } });
+      const pendingSubmissions = response.data?.data?.submissions || response.data?.submissions || [];
+      // Count all pending submissions (driver + admin)
+      const pendingCount = pendingSubmissions;
+      // Count only rider/driver pending submissions (for Riders menu badges)
+      const pendingDriverCount = pendingSubmissions.filter((s) => s.driverId != null || s.driver?.id != null);
       const previousCount = pendingSubmissionsCount;
       const newCount = pendingCount.length;
       setPendingSubmissionsCount(newCount);
+      setPendingRiderCashSubmissionsCount(pendingDriverCount.length);
       
       // Play notification sound if count increased
       if (newCount > previousCount && previousCount > 0) {
@@ -330,6 +335,7 @@ export const AdminProvider = ({ children }) => {
       fetchPendingOrdersCount,
       pendingSubmissionsCount,
       fetchPendingSubmissionsCount,
+      pendingRiderCashSubmissionsCount,
       pendingInventoryChecksCount,
       fetchPendingInventoryChecksCount,
       isAuthenticated,

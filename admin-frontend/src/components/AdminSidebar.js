@@ -38,7 +38,7 @@ const DRAWER_WIDTH = 220;
 const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { pendingOrdersCount, pendingInventoryChecksCount, logout, user } = useAdmin();
+  const { pendingOrdersCount, pendingInventoryChecksCount, pendingRiderCashSubmissionsCount, logout, user } = useAdmin();
   const { isDarkMode, colors } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
 
@@ -65,7 +65,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
     { path: '/admin-cash-at-hand', label: 'Admin Cash At Hand', icon: AttachMoney },
     // { path: '/pos', label: 'POS', icon: PointOfSale }, // Removed
     { path: '/admin/customers', label: 'Customers', icon: People },
-    { path: '/riders', label: 'Riders', icon: LocalShipping },
+    { path: '/riders', label: 'Riders', icon: LocalShipping, badge: pendingRiderCashSubmissionsCount },
     { path: '/branches', label: 'Branches', icon: Store },
     { path: '/territories', label: 'Territories', icon: Map },
     { path: '/copilot', label: 'Copilot', icon: Psychology },

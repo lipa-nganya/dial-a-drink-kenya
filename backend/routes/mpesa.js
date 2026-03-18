@@ -541,7 +541,13 @@ const processOrderPaymentSubmission = async (cashSettlementTransaction, { receip
   if (notes.indexOf('order_payment_submission') === -1 || !cashSettlementTransaction.orderId) {
     return null;
   }
-  const orderId = cashSettlementTransaction.orderId;
+  // Support single-order and multi-order submissions.
+  // Notes format: order_payment_submission|orderIds=1,2,3|driverId=...|amount=...
+  const match = notes.match(/orderIds=([0-9,\s]+)/i);
+  const orderIds = (match && match[1])
+    ? match[1].split(',').map(v => parseInt(v.trim(), 10)).filter(v => Number.isFinite(v) && v > 0)
+    : [cashSettlementTransaction.orderId];
+  const orderId = orderIds[0];
   const driverId = cashSettlementTransaction.driverId;
   const submissionAmount = parseFloat(cashSettlementTransaction.amount) || 0;
 
@@ -570,51 +576,59 @@ const processOrderPaymentSubmission = async (cashSettlementTransaction, { receip
   }
 
   // Idempotency: if already processed (e.g. by callback and poll both), just update the settlement transaction and return
-  const existing = await db.sequelize.query(
-    `SELECT cs.id FROM cash_submissions cs
-     INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
-     WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')
-     LIMIT 1`,
-    { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId, orderId } }
-  ).catch(() => []);
-  if (existing && existing.length > 0) {
-    console.log(`   [processOrderPaymentSubmission] Order #${orderId} already has cash submission, updating settlement transaction only`);
-    await cashSettlementTransaction.update({
-      status: 'completed',
-      paymentStatus: 'paid',
-      receiptNumber: receiptNumber || null,
-      transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-      phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
-      notes: `Order payment #${orderId} via M-Pesa - Receipt: ${receiptNumber || 'N/A'}`
-    });
-    return { submission: null, receiptNumber };
+  for (const oid of orderIds) {
+    const existing = await db.sequelize.query(
+      `SELECT cs.id FROM cash_submissions cs
+       INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+       WHERE cs."driverId" = :driverId AND cs."submissionType" = 'order_payment' AND cso."orderId" = :orderId AND cs.status IN ('pending', 'approved')
+       LIMIT 1`,
+      { type: db.sequelize.QueryTypes.SELECT, replacements: { driverId, orderId: oid } }
+    ).catch(() => []);
+    if (existing && existing.length > 0) {
+      console.log(`   [processOrderPaymentSubmission] Order #${oid} already has cash submission, updating settlement transaction only`);
+      await cashSettlementTransaction.update({
+        status: 'completed',
+        paymentStatus: 'paid',
+        receiptNumber: receiptNumber || null,
+        transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
+        phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
+        notes: `Order payment ${orderIds.length > 1 ? `(${orderIds.length} orders)` : `#${orderId}`} via M-Pesa - Receipt: ${receiptNumber || 'N/A'}`
+      });
+      return { submission: null, receiptNumber };
+    }
   }
 
-  let breakdown;
-  try {
-    breakdown = await getOrderFinancialBreakdown(orderId);
-  } catch (breakdownErr) {
-    console.error(`   [processOrderPaymentSubmission] getOrderFinancialBreakdown failed for Order #${orderId}:`, breakdownErr.message);
-    const order = await db.Order.findByPk(orderId, { attributes: ['id', 'totalAmount'] });
-    const totalAmount = order ? parseFloat(order.totalAmount || 0) : 0;
-    breakdown = { itemsTotal: totalAmount, deliveryFee: 0 };
+  let merchantCreditAmount = 0;
+  for (const oid of orderIds) {
+    let breakdown;
+    try {
+      breakdown = await getOrderFinancialBreakdown(oid);
+    } catch (breakdownErr) {
+      console.error(`   [processOrderPaymentSubmission] getOrderFinancialBreakdown failed for Order #${oid}:`, breakdownErr.message);
+      const o = await db.Order.findByPk(oid, { attributes: ['id', 'totalAmount'] });
+      const totalAmount = o ? parseFloat(o.totalAmount || 0) : 0;
+      breakdown = { itemsTotal: totalAmount, deliveryFee: 0 };
+    }
+    const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+    merchantCreditAmount += itemsTotal;
   }
-  const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-  const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-  const driverSavingsCreditAmount = deliveryFee * 0.5;
-  const merchantCreditAmount = itemsTotal;
 
   const submission = await db.CashSubmission.create({
     driverId,
     submissionType: 'order_payment',
     amount: submissionAmount,
-    details: { orderId },
+    details: { orderIds },
     status: 'approved',
     approvedAt: new Date()
   });
   await db.sequelize.query(
-    `INSERT INTO cash_submission_orders ("cashSubmissionId", "orderId", "createdAt", "updatedAt") VALUES (:id, :orderId, NOW(), NOW())`,
-    { replacements: { id: submission.id, orderId } }
+    `INSERT INTO cash_submission_orders ("cashSubmissionId", "orderId", "createdAt", "updatedAt") VALUES ${orderIds.map((_, i) => `(:id, :orderId${i}, NOW(), NOW())`).join(', ')}`,
+    {
+      replacements: Object.assign(
+        { id: submission.id },
+        Object.fromEntries(orderIds.map((id, i) => [`orderId${i}`, id]))
+      )
+    }
   );
 
   const driver = await db.Driver.findByPk(driverId);
@@ -648,7 +662,7 @@ const processOrderPaymentSubmission = async (cashSettlementTransaction, { receip
     receiptNumber: receiptNumber || `CASH-SUB-${submission.id}`,
     phoneNumber: phoneNumber || driver?.phoneNumber,
     transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
-    notes: `Cash submission (order payment) approved - Order #${orderId}`
+    notes: `Cash submission (order payment) approved - ${orderIds.length > 1 ? `Orders [${orderIds.join(',')}]` : `Order #${orderId}`}`
   });
 
   // Store as negative so it appears in cash-at-hand "cash sent" list (driver-wallet filters amount < 0)
@@ -659,9 +673,9 @@ const processOrderPaymentSubmission = async (cashSettlementTransaction, { receip
     receiptNumber: receiptNumber || null,
     transactionDate: transactionDate ? new Date(transactionDate) : new Date(),
     phoneNumber: phoneNumber || cashSettlementTransaction.phoneNumber,
-    notes: `Order payment #${orderId} via M-Pesa - Receipt: ${receiptNumber || 'N/A'}`
+    notes: `Order payment ${orderIds.length > 1 ? `Orders [${orderIds.join(',')}]` : `#${orderId}`} via M-Pesa - Receipt: ${receiptNumber || 'N/A'}`
   });
-  console.log(`✅✅✅ Order payment submission for Order #${orderId} processed successfully (cash at hand + savings logged)`);
+  console.log(`✅✅✅ Order payment submission for Order(s) [${orderIds.join(',')}] processed successfully (cash at hand + savings logged)`);
   return { submission, receiptNumber };
 };
 

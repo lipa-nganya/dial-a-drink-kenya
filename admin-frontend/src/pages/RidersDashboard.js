@@ -80,7 +80,8 @@ const RidersDashboard = () => {
 
   const fetchSubmissionsByDriver = useCallback(async () => {
     try {
-      const res = await api.get('/driver-wallet/admin/cash-submissions/all');
+      // Use pending endpoint (doesn't require super admin) for per-rider pending counts
+      const res = await api.get('/driver-wallet/cash-submissions/pending', { params: { limit: 500 } });
       const raw = res.data?.data?.submissions ?? res.data?.submissions ?? [];
       const byDriver = {};
       raw.forEach((s) => {
@@ -288,7 +289,17 @@ const RidersDashboard = () => {
                           const pending = pendingCount(rider.id);
                           return (
                             <TableRow key={rider.id}>
-                              <TableCell sx={{ color: colors.textPrimary }}>{rider.name || '—'}</TableCell>
+                              <TableCell sx={{ color: colors.textPrimary }}>
+                                <Badge
+                                  badgeContent={pending}
+                                  color="error"
+                                  max={99}
+                                  invisible={!pending || pending < 1}
+                                  sx={{ '& .MuiBadge-badge': { right: -8 } }}
+                                >
+                                  <span>{rider.name || '—'}</span>
+                                </Badge>
+                              </TableCell>
                               <TableCell align="right" sx={{ color: colors.textPrimary }}>
                                 {formatCurrency(rider.creditLimit ?? rider.creditStatus?.creditLimit ?? 0)}
                               </TableCell>
@@ -299,9 +310,6 @@ const RidersDashboard = () => {
                                 <Chip size="small" label={status.label} color={status.color} />
                               </TableCell>
                               <TableCell align="center">
-                                <Badge badgeContent={pending} color="error" max={99}>
-                                  <span style={{ marginRight: 8 }} />
-                                </Badge>
                                 <IconButton
                                   size="small"
                                   onClick={() => openEdit(rider)}
