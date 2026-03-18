@@ -319,8 +319,8 @@ class CashAtHandFormFragment : Fragment() {
                 (binding.paymentTypeLayout.editText as? AutoCompleteTextView)?.setOnItemClickListener { _, _, pos, _ ->
                     val method = orderPaymentMethods.getOrNull(pos)
                     if (method == "CASH") {
-                        binding.recipientNameLayout.visibility = View.VISIBLE
-                        binding.recipientNameLayout.hint = "Recipient"
+                        // Orders submissions never require a recipient
+                        binding.recipientNameLayout.visibility = View.GONE
                         binding.orderPaymentPhoneLayout.visibility = View.GONE
                     } else if (method == "MPESA PROMPT") {
                         binding.recipientNameLayout.visibility = View.GONE
@@ -548,17 +548,8 @@ class CashAtHandFormFragment : Fragment() {
                     return
                 }
 
-                // CASH: requires approval, requires recipient field
-                val recipient = binding.recipientNameEditText.text.toString().trim()
-                if (recipient.isEmpty()) {
-                    binding.errorText.text = "Please enter recipient"
-                    binding.errorText.visibility = View.VISIBLE
-                    return
-                }
-
                 val detailsMap = mutableMapOf<String, Any>(
                     "orderIds" to selectedOrderIds.toList(),
-                    "recipientName" to recipient,
                     "paymentMethod" to "cash"
                 )
                 Pair(totalAmount, detailsMap)

@@ -131,6 +131,7 @@ const Orders = () => {
   const [processingPayment, setProcessingPayment] = useState(false);
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [processingCancellationRequest, setProcessingCancellationRequest] = useState(false);
 
   const openOrderDetails = (order) => {
     let orderWithBreakdown = { ...order };
@@ -238,6 +239,79 @@ const Orders = () => {
       setTerritories(response.data || []);
     } catch (error) {
       console.error('Error fetching territories:', error);
+    }
+  };
+
+  const handleApproveCancellation = async (orderId) => {
+    if (!orderId) return;
+    try {
+      setProcessingCancellationRequest(true);
+      const response = await api.patch(`/admin/orders/${orderId}/cancellation-request`, { approved: true });
+      const updatedOrder = response?.data?.order || response?.data;
+
+      setOrders((prevOrders) => {
+        const updated = prevOrders.map((order) =>
+          order.id === orderId ? { ...order, ...updatedOrder } : order
+        );
+        const sorted = sortOrdersByStatus(updated);
+        // If we're viewing cancellation requests and the order is now cancelled, show cancelled orders
+        if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && updatedOrder?.status === 'cancelled') {
+          setCancelledSubTab('cancelled');
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
+        } else {
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+        }
+        return sorted;
+      });
+
+      setError(null);
+      setToastMessage('Cancellation approved');
+      setToastOpen(true);
+    } catch (error) {
+      console.error('Error approving cancellation:', error);
+      const message = error?.response?.data?.error || error?.message || 'Failed to approve cancellation';
+      setError(message);
+      setToastMessage(message);
+      setToastOpen(true);
+    } finally {
+      setProcessingCancellationRequest(false);
+    }
+  };
+
+  const handleRejectCancellation = async (orderId) => {
+    if (!orderId) return;
+    try {
+      setProcessingCancellationRequest(true);
+      const response = await api.patch(`/admin/orders/${orderId}/cancellation-request`, { approved: false });
+      const updatedOrder = response?.data?.order || response?.data;
+
+      setOrders((prevOrders) => {
+        const updated = prevOrders.map((order) =>
+          order.id === orderId ? { ...order, ...updatedOrder } : order
+        );
+        const sorted = sortOrdersByStatus(updated);
+        // If we're viewing cancellation requests and it was rejected, send back to pending (original behavior)
+        if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
+          setOrderTab('pending');
+          setCancelledSubTab('cancelled');
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'pending');
+        } else {
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+        }
+        return sorted;
+      });
+
+      setError(null);
+      setToastMessage('Cancellation rejected');
+      setToastOpen(true);
+    } catch (error) {
+      console.error('Error rejecting cancellation:', error);
+      const message = error?.response?.data?.error || error?.message || 'Failed to reject cancellation';
+      setError(message);
+      setToastMessage(message);
+      setToastOpen(true);
+    } finally {
+      setProcessingCancellationRequest(false);
     }
   };
 
@@ -2236,6 +2310,41 @@ const Orders = () => {
                         sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
                         onClick={(e) => e.stopPropagation()}
                       >
+                        {cancelledSubTab === 'cancellation-requests' && hasPendingCancellation && (
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handleApproveCancellation(order.id)}
+                              disabled={processingCancellationRequest}
+                              sx={{
+                                backgroundColor: colors.accentText,
+                                color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                                '&:hover': { backgroundColor: '#00C4A3' },
+                                '&.Mui-disabled': { backgroundColor: colors.border, color: colors.textSecondary }
+                              }}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              onClick={() => handleRejectCancellation(order.id)}
+                              disabled={processingCancellationRequest}
+                              sx={{
+                                borderColor: '#000000',
+                                color: '#000000',
+                                '&:hover': {
+                                  borderColor: '#000000',
+                                  backgroundColor: 'rgba(0,0,0,0.04)'
+                                },
+                                '&.Mui-disabled': { borderColor: colors.border, color: colors.textSecondary }
+                              }}
+                            >
+                              Reject
+                            </Button>
+                          </Box>
+                        )}
                         <Button
                           variant="outlined"
                           size="small"
@@ -3211,6 +3320,45 @@ const Orders = () => {
         <DialogActions sx={{ p: 2 }}>
           {selectedOrderForDetail && (
             <>
+              {selectedOrderForDetail.cancellationRequested &&
+                selectedOrderForDetail.cancellationApproved === null && (
+                  <>
+                    <Button
+                      variant="contained"
+                      onClick={() => handleApproveCancellation(selectedOrderForDetail.id)}
+                      disabled={processingCancellationRequest}
+                      sx={{
+                        backgroundColor: colors.accentText,
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                        mr: 1,
+                        '&:hover': { backgroundColor: '#00C4A3' },
+                        '&.Mui-disabled': {
+                          backgroundColor: colors.border,
+                          color: colors.textSecondary
+                        }
+                      }}
+                    >
+                      Approve Cancellation
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      onClick={() => handleRejectCancellation(selectedOrderForDetail.id)}
+                      disabled={processingCancellationRequest}
+                      sx={{
+                        borderColor: '#000000',
+                        color: '#000000',
+                        mr: 1,
+                        '&:hover': {
+                          borderColor: '#000000',
+                          backgroundColor: 'rgba(0,0,0,0.04)'
+                        },
+                        '&.Mui-disabled': { borderColor: colors.border, color: colors.textSecondary }
+                      }}
+                    >
+                      Reject Cancellation
+                    </Button>
+                  </>
+                )}
               <Button
                 variant="contained"
                 startIcon={<Payment />}
