@@ -177,15 +177,13 @@ const Purchases = () => {
     try {
       setPurchasesLoading(true);
       setError(null);
-      const response = await api.get('/driver-wallet/admin/cash-submissions/all', { params: { limit: 1000 } });
-      const submissions = response.data?.data?.submissions || response.data?.submissions || [];
-      const purchaseSubmissions = Array.isArray(submissions)
-        ? submissions
-            .filter(s => s.submissionType === 'purchases')
-            .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      const response = await api.get('/driver-wallet/admin/purchases', { params: { limit: 1000 } });
+      const list = response.data?.data?.purchases || response.data?.purchases || [];
+      const purchaseRows = Array.isArray(list)
+        ? list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
         : [];
-      setPurchases(purchaseSubmissions);
-      setFilteredPurchases(purchaseSubmissions);
+      setPurchases(purchaseRows);
+      setFilteredPurchases(purchaseRows);
     } catch (err) {
       console.error('Error fetching purchases:', err);
       setError('Failed to fetch purchases. Please try again.');

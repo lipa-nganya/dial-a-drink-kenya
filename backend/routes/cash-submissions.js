@@ -19,6 +19,282 @@ const requireSuperAdmin = (req, res, next) => {
   return next();
 };
 
+async function applyPurchaseInventoryAndAccountSideEffects({
+  submission,
+  adminId,
+  submissionAmount
+}) {
+  // Use persisted details (from DB) so we update based on what was stored
+  const persistedDetails = submission.get ? submission.get('details') : submission.details;
+  const detailsForUpdates = persistedDetails || {};
+
+  // For purchases with an associated asset account, update stock and asset account balance
+  if (detailsForUpdates && detailsForUpdates.assetAccountId) {
+    try {
+      const assetAccountId = parseInt(detailsForUpdates.assetAccountId, 10);
+      const account = await db.AssetAccount.findByPk(assetAccountId);
+
+      if (account) {
+        const itemsArray = Array.isArray(detailsForUpdates.items) && detailsForUpdates.items.length > 0
+          ? detailsForUpdates.items
+          : (detailsForUpdates.item && detailsForUpdates.price
+            ? [{ item: detailsForUpdates.item, price: detailsForUpdates.price, quantity: detailsForUpdates.quantity || 1, productId: detailsForUpdates.productId }]
+            : []);
+
+        let totalFromItems = 0;
+
+        for (const item of itemsArray) {
+          const qty = Number(item.quantity || 1);
+          const unitPrice = Number(item.price || 0);
+          if (qty > 0 && unitPrice > 0) {
+            totalFromItems += qty * unitPrice;
+          }
+
+          if (item.productId) {
+            const drink = await db.Drink.findByPk(item.productId);
+            if (drink) {
+              const qtyToAdd = qty;
+              const capacity = item.capacity != null && String(item.capacity).trim() !== '' ? String(item.capacity).trim() : null;
+              if (capacity) {
+                const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? { ...drink.stockByCapacity } : {};
+                const current = parseInt(byCap[capacity], 10) || 0;
+                byCap[capacity] = current + qtyToAdd;
+                await drink.update({ stockByCapacity: byCap });
+                console.log(`   Updated stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]}`);
+              } else {
+                const currentStock = parseFloat(drink.stock || 0);
+                const newStock = currentStock + qtyToAdd;
+                await drink.update({ stock: newStock });
+                console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
+              }
+            }
+          }
+        }
+
+        const totalAmount = totalFromItems > 0 ? totalFromItems : Number(submissionAmount || 0);
+        const today = new Date().toISOString().slice(0, 10);
+
+        await db.AssetAccountTransaction.create({
+          assetAccountId: account.id,
+          amount: totalAmount,
+          reference: detailsForUpdates.reference || `Purchase submission #${submission.id}`,
+          description: detailsForUpdates.supplier ? `Purchase from ${detailsForUpdates.supplier}` : 'Purchase',
+          transactionDate: today,
+          transactionType: 'credit',
+          debitAmount: 0,
+          creditAmount: totalAmount,
+          postedById: adminId,
+          status: 'approved'
+        });
+
+        // Credit entries reduce the asset account balance
+        await account.increment('balance', { by: -totalAmount });
+        console.log(`   Asset account "${account.name}" balance reduced by ${totalAmount.toFixed(2)}`);
+      } else {
+        console.warn(`⚠️ Asset account not found for assetAccountId=${detailsForUpdates.assetAccountId}`);
+      }
+    } catch (purchaseError) {
+      console.error('❌ Error updating stock/account for purchase submission:', purchaseError);
+    }
+  }
+
+  // For all purchases with line items:
+  // - Always update each product's purchase price in inventory
+  // - Always update stock (per-capacity when available), regardless of whether the purchase is already paid or unpaid
+  if (detailsForUpdates) {
+    const itemsArray = Array.isArray(detailsForUpdates.items) && detailsForUpdates.items.length > 0
+      ? detailsForUpdates.items
+      : (detailsForUpdates.item && detailsForUpdates.price != null
+        ? [{ item: detailsForUpdates.item, price: detailsForUpdates.price, quantity: detailsForUpdates.quantity || 1, productId: detailsForUpdates.productId, capacity: detailsForUpdates.capacity }]
+        : []);
+
+    console.log(`   Purchase inventory update: processing ${itemsArray.length} item(s) from submission #${submission.id}`);
+
+    for (const item of itemsArray) {
+      const unitPrice = Number(item.price ?? item.purchasePrice ?? 0);
+      const productId = item.productId != null ? parseInt(item.productId, 10) : NaN;
+      const itemName = item.item || item.name || 'Unknown';
+      const qty = Number(item.quantity || 1);
+
+      if (Number.isNaN(productId) || productId <= 0) {
+        console.warn(`   ⚠️ Skipping inventory update for "${itemName}": invalid or missing productId (got: ${item.productId})`);
+        continue;
+      }
+
+      try {
+        const drink = await db.Drink.findByPk(productId);
+        if (!drink) {
+          console.warn(`   ⚠️ Drink not found for productId ${productId} ("${itemName}")`);
+          continue;
+        }
+
+        // 1) Update purchase price when we have a positive unit price
+        if (unitPrice > 0) {
+          try {
+            await db.sequelize.query(
+              'UPDATE drinks SET "purchasePrice" = :unitPrice, "updatedAt" = CURRENT_TIMESTAMP WHERE id = :productId',
+              { replacements: { unitPrice, productId } }
+            );
+            console.log(`   Set purchase price for Drink #${drink.id} (${drink.name}): ${unitPrice}`);
+          } catch (priceErr) {
+            console.error(`   Failed to update purchase price for product ${productId} ("${itemName}"):`, priceErr.message);
+          }
+        } else {
+          console.warn(`   ⚠️ Skipping purchase price update for productId ${productId} ("${itemName}"): unit price <= 0 (got: ${unitPrice})`);
+        }
+
+        // 2) Update stock (supports per-capacity stock when capacity is provided)
+        if (qty > 0) {
+          const capacity = item.capacity != null && String(item.capacity).trim() !== ''
+            ? String(item.capacity).trim()
+            : null;
+
+          if (capacity) {
+            const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
+              ? { ...drink.stockByCapacity }
+              : {};
+            const current = parseInt(byCap[capacity], 10) || 0;
+            byCap[capacity] = current + qty;
+
+            // Keep overall stock in sync with per-capacity totals
+            const totalStock = Object.values(byCap).reduce((sum, value) => {
+              const n = typeof value === 'number' ? value : parseInt(value, 10);
+              return sum + (Number.isNaN(n) ? 0 : n);
+            }, 0);
+
+            await drink.update({ stockByCapacity: byCap, stock: totalStock });
+            console.log(`   Updated per-capacity stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]} (total: ${totalStock})`);
+          } else {
+            const currentStock = parseFloat(drink.stock || 0);
+            const newStock = currentStock + qty;
+            await drink.update({ stock: newStock });
+            console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
+          }
+        }
+      } catch (invErr) {
+        console.error(`   Failed to update inventory for product ${productId} ("${itemName}") from purchase submission #${submission.id}:`, invErr.message);
+      }
+    }
+  }
+}
+
+/**
+ * Purchases (Admin UI)
+ * Purchases are stored in cash_submissions for legacy reasons, but they are NOT part of
+ * the Admin Cash-at-Hand submissions flow.
+ */
+
+/**
+ * List purchases (admin + rider purchases)
+ * GET /api/driver-wallet/admin/purchases?limit=&offset=
+ */
+router.get('/admin/purchases', async (req, res) => {
+  try {
+    const limit = Math.min(2000, Math.max(0, parseInt(req.query.limit, 10) || 1000));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const purchases = await db.CashSubmission.findAll({
+      where: { submissionType: 'purchases' },
+      include: [
+        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false },
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'rejector', attributes: ['id', 'username', 'name'], required: false }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
+    });
+
+    return sendSuccess(res, { purchases, total: purchases.length });
+  } catch (error) {
+    console.error('❌ Error fetching purchases:', error);
+    return sendError(res, error.message || 'Failed to fetch purchases', 500);
+  }
+});
+
+/**
+ * Get a single purchase by id
+ * GET /api/driver-wallet/admin/purchases/:id
+ */
+router.get('/admin/purchases/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id) || id < 1) return sendError(res, 'Invalid purchase id', 400);
+
+    const purchase = await db.CashSubmission.findByPk(id, {
+      include: [
+        { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false },
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
+        { model: db.Admin, as: 'rejector', attributes: ['id', 'username', 'name'], required: false }
+      ]
+    });
+
+    if (!purchase || purchase.submissionType !== 'purchases') {
+      return sendError(res, 'Purchase not found', 404);
+    }
+
+    return sendSuccess(res, purchase);
+  } catch (error) {
+    console.error('❌ Error fetching purchase:', error);
+    return sendError(res, error.message || 'Failed to fetch purchase', 500);
+  }
+});
+
+/**
+ * Create a purchase (admin)
+ * POST /api/driver-wallet/admin/purchases
+ * body: { amount, details }
+ */
+router.post('/admin/purchases', async (req, res) => {
+  try {
+    const adminId = req.admin.id;
+    const { amount, details } = req.body || {};
+
+    const submissionAmount = parseFloat(amount);
+    if (!submissionAmount || Number.isNaN(submissionAmount) || submissionAmount <= 0) {
+      return sendError(res, 'Amount must be greater than 0', 400);
+    }
+
+    const hasItems = details?.items && Array.isArray(details.items) && details.items.length > 0;
+    const hasSingleItem = details?.item && details?.price !== undefined && details?.price !== null;
+    if (!details || !details.supplier || (!hasItems && !hasSingleItem) || !details.deliveryLocation) {
+      return sendError(res, 'For purchases, supplier, items (array) or item+price, and deliveryLocation are required', 400);
+    }
+    if (hasItems) {
+      for (let i = 0; i < details.items.length; i++) {
+        const item = details.items[i];
+        if (!item.item || item.price === undefined || item.price === null || Number(item.price) <= 0) {
+          return sendError(res, `Item ${i + 1} is invalid. Each item must have a name and a valid price > 0`, 400);
+        }
+      }
+    }
+
+    const submission = await db.CashSubmission.create({
+      driverId: null,
+      adminId,
+      amount: submissionAmount,
+      submissionType: 'purchases',
+      status: 'pending',
+      paymentMethod: 'cash',
+      details: details || {}
+    });
+
+    // Apply inventory side-effects immediately (stock increases even if unpaid/pending)
+    await applyPurchaseInventoryAndAccountSideEffects({
+      submission,
+      adminId,
+      submissionAmount
+    });
+
+    return sendSuccess(res, submission, 'Purchase submitted');
+  } catch (error) {
+    console.error('❌ Error creating purchase:', error);
+    return sendError(res, error.message || 'Failed to create purchase', 500);
+  }
+});
+
 /**
  * Create cash submission (admin)
  * POST /api/driver-wallet/admin/cash-submissions
