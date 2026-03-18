@@ -226,7 +226,6 @@ const AddPurchase = () => {
       });
 
       const payload = {
-        submissionType: 'purchases',
         amount: totalAmount,
         details: {
           supplier: supplier.name,
@@ -238,7 +237,7 @@ const AddPurchase = () => {
         }
       };
 
-      await api.post('/driver-wallet/admin/cash-submissions', payload);
+      await api.post('/driver-wallet/admin/purchases', payload);
       navigate('/payables/purchases', { replace: true });
     } catch (err) {
       console.error('Error posting purchase', err);

@@ -93,7 +93,7 @@ const EditPurchase = () => {
         setLoading(true);
         setError(null);
         const [subRes, supRes, accRes, prodRes] = await Promise.all([
-          api.get(`/driver-wallet/admin/cash-submissions/${id}`),
+          api.get(`/driver-wallet/admin/purchases/${id}`),
           api.get('/suppliers'),
           api.get('/admin/accounts'),
           api.get('/admin/drinks')
