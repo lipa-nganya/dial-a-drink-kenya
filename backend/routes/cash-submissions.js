@@ -842,11 +842,7 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
         // so orders stop prompting and driver's balance reflects reality.
         submissionAmount = expectedTotal;
       } else {
-        // For cash order payment submissions, require a recipient
-        const recipientName = details && (details.recipientName || details.recipient);
-        if (!recipientName || String(recipientName).trim().length < 2) {
-          return sendError(res, 'For Order Payment (cash), recipient is required', 400);
-        }
+        // Cash order payment submissions do NOT require a recipient (driver is remitting/order payment evidence).
         submissionAmount = expectedTotal;
       }
     } else if (!amount || parseFloat(amount) <= 0) {
