@@ -7,6 +7,27 @@ const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
 const { finalizeOrderPayment } = require('./mpesa'); // Reuse payment finalization logic
 
+const ALLOWED_PAYMENT_REDIRECT_HOSTS = new Set([
+  'ruakadrinksdelivery.co.ke',
+  'www.ruakadrinksdelivery.co.ke',
+  'dialadrinkkenya.com',
+  'www.dialadrinkkenya.com',
+  'localhost',
+  '127.0.0.1'
+]);
+
+const sanitizeRedirectUrl = (candidateUrl) => {
+  if (!candidateUrl || typeof candidateUrl !== 'string') return null;
+  try {
+    const parsed = new URL(candidateUrl);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
+    if (!ALLOWED_PAYMENT_REDIRECT_HOSTS.has(parsed.hostname)) return null;
+    return parsed.toString();
+  } catch (error) {
+    return null;
+  }
+};
+
 /**
  * Initiate PesaPal card payment for an order
  * POST /api/pesapal/initiate-payment
@@ -50,6 +71,16 @@ router.post('/initiate-payment', async (req, res) => {
       return res.status(400).json({ error: 'Order is already paid' });
     }
 
+    const safeCallbackUrl = sanitizeRedirectUrl(callbackUrl);
+    const safeCancellationUrl = sanitizeRedirectUrl(cancellationUrl);
+
+    if (!safeCallbackUrl || !safeCancellationUrl) {
+      return res.status(400).json({
+        error: 'Invalid callback or cancellation URL',
+        message: 'Allowed domains: dialadrinkkenya.com and ruakadrinksdelivery.co.ke'
+      });
+    }
+
     // Prepare order data for PesaPal
     const orderData = {
       id: `ORDER-${orderId}-${Date.now()}`, // Unique tracking ID
@@ -60,8 +91,8 @@ router.post('/initiate-payment', async (req, res) => {
       customerEmail: order.customerEmail || '',
       customerPhone: order.customerPhone || '',
       deliveryAddress: order.deliveryAddress || '',
-      callbackUrl: callbackUrl,
-      cancellationUrl: cancellationUrl
+      callbackUrl: safeCallbackUrl,
+      cancellationUrl: safeCancellationUrl
     };
 
     console.log('🚀 Initiating PesaPal payment:', {

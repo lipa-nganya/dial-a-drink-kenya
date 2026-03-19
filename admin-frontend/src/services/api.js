@@ -30,6 +30,7 @@ const resolveApiBaseUrl = () => {
   // Production sites (ruakadrinksdelivery.co.ke, drinksdeliverykenya.com)
   const isProductionSite = 
     hostname.includes('ruakadrinksdelivery.co.ke') ||
+    hostname.includes('dialadrinkkenya.com') ||
     hostname.includes('drinksdeliverykenya.com');
   if (isProductionSite) {
     // Production sites always use production backend

@@ -30,6 +30,9 @@ const resolveApiBaseUrl = () => {
   if (hostname === 'ruakadrinksdelivery.co.ke' || 
       hostname === 'www.ruakadrinksdelivery.co.ke' ||
       hostname.includes('ruakadrinksdelivery.co.ke') ||
+      hostname === 'dialadrinkkenya.com' ||
+      hostname === 'www.dialadrinkkenya.com' ||
+      hostname.includes('dialadrinkkenya.com') ||
       hostname === 'drinksdeliverykenya.com' ||
       hostname === 'www.drinksdeliverykenya.com' ||
       hostname.includes('drinksdeliverykenya.com')) {

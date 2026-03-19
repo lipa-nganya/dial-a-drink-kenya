@@ -110,12 +110,12 @@ const ProductPage = () => {
         return;
       }
       
-      // Set canonical URL for SEO (category-based format)
+      // Set canonical URL for SEO (always dialadrinkkenya.com as canonical domain)
       const canonicalUrl = (product.slug && product.category?.slug)
-        ? `https://www.ruakadrinksdelivery.co.ke/${product.category.slug}/${product.slug}`
+        ? `https://dialadrinkkenya.com/${product.category.slug}/${product.slug}`
         : product.slug
-        ? `https://www.ruakadrinksdelivery.co.ke/product/${product.slug}`
-        : `https://www.ruakadrinksdelivery.co.ke/product/${product.id}`;
+        ? `https://dialadrinkkenya.com/product/${product.slug}`
+        : `https://dialadrinkkenya.com/product/${product.id}`;
       
       // Remove existing canonical link if any
       let canonicalLink = document.querySelector('link[rel="canonical"]');
