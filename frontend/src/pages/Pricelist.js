@@ -76,20 +76,105 @@ const Pricelist = () => {
     }).format(amount);
   };
 
-  const formatCapacity = (drink) => {
-    if (drink.capacity) {
-      return drink.capacity;
-    }
-    return 'N/A';
+  const parseNumber = (value) => {
+    const n = parseFloat(value);
+    return Number.isNaN(n) ? 0 : n;
   };
 
-  // Group drinks by category for better organization
-  const groupedDrinks = filteredDrinks.reduce((acc, drink) => {
-    const categoryName = drink.category?.name || 'Other';
-    if (!acc[categoryName]) {
-      acc[categoryName] = [];
+  const getCapacityLabelFromEntry = (entry) => {
+    if (!entry) return null;
+    return entry.capacity ?? entry.size ?? entry.effectiveCapacity ?? null;
+  };
+
+  // Flatten a single drink into "one row per available capacity"
+  // so the customer pricelist matches the admin price list behavior.
+  const getCapacityRows = (drink) => {
+    if (!drink) return [];
+
+    const capacityPricing = Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [];
+
+    // Prefer capacityPricing (it already has per-capacity selling prices)
+    if (capacityPricing.length > 0) {
+      const rows = capacityPricing
+        .map((entry) => {
+          const cap = getCapacityLabelFromEntry(entry);
+          if (!cap) return null;
+
+          const sellingPriceRaw =
+            entry.currentPrice ??
+            entry.price ??
+            entry.originalPrice ??
+            drink.price ??
+            drink.originalPrice ??
+            0;
+
+          const price = parseNumber(sellingPriceRaw);
+          if (price <= 0) return null;
+
+          const originalPriceRaw = entry.originalPrice ?? drink.originalPrice ?? price;
+          const originalPrice = parseNumber(originalPriceRaw);
+
+          return {
+            drinkId: drink.id,
+            productName: drink.name,
+            categoryName: drink.category?.name || 'Other',
+            brandName: drink.brand?.name || '',
+            abv: drink.abv,
+            capacity: String(cap),
+            price,
+            originalPrice
+          };
+        })
+        .filter(Boolean);
+
+      if (rows.length > 0) return rows;
     }
-    acc[categoryName].push(drink);
+
+    // Fallback: use the legacy `capacity` / `price` fields.
+    const basePrice = parseNumber(drink.price ?? drink.originalPrice ?? 0);
+    if (basePrice <= 0) return [];
+
+    const capacities = Array.isArray(drink.capacity)
+      ? Array.from(new Set(drink.capacity.map((c) => String(c || '').trim()).filter(Boolean)))
+      : drink.capacity
+      ? [String(drink.capacity)]
+      : [];
+
+    if (capacities.length === 0) {
+      return [
+        {
+          drinkId: drink.id,
+          productName: drink.name,
+          categoryName: drink.category?.name || 'Other',
+          brandName: drink.brand?.name || '',
+          abv: drink.abv,
+          capacity: 'N/A',
+          price: basePrice,
+          originalPrice: parseNumber(drink.originalPrice ?? basePrice)
+        }
+      ];
+    }
+
+    return capacities.map((cap) => ({
+      drinkId: drink.id,
+      productName: drink.name,
+      categoryName: drink.category?.name || 'Other',
+      brandName: drink.brand?.name || '',
+      abv: drink.abv,
+      capacity: cap,
+      price: basePrice,
+      originalPrice: parseNumber(drink.originalPrice ?? basePrice)
+    }));
+  };
+
+  // Flatten drinks into capacity-rows and group by category.
+  // Each capacity is its own row (matches admin price list).
+  const groupedCapacityRows = filteredDrinks.reduce((acc, drink) => {
+    const rows = getCapacityRows(drink);
+    const categoryName = drink.category?.name || 'Other';
+
+    if (!acc[categoryName]) acc[categoryName] = [];
+    acc[categoryName].push(...rows);
     return acc;
   }, {});
 
@@ -145,7 +230,7 @@ const Pricelist = () => {
         </Box>
       ) : (
         <Box>
-          {Object.keys(groupedDrinks).map((categoryName) => (
+          {Object.keys(groupedCapacityRows).map((categoryName) => (
             <Box key={categoryName} sx={{ mb: 4 }}>
               <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary, mb: 2 }}>
                 {categoryName}
@@ -163,21 +248,21 @@ const Pricelist = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {groupedDrinks[categoryName].map((drink) => (
-                      <TableRow key={drink.id} hover>
+                    {groupedCapacityRows[categoryName].map((row) => (
+                      <TableRow key={`${row.drinkId}-${row.capacity}`} hover>
                         <TableCell sx={{ color: colors.textPrimary }}>
-                          {drink.name}
-                          {drink.abv && (
+                          {row.productName}
+                          {row.abv && (
                             <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
-                              ABV: {drink.abv}%
+                              ABV: {row.abv}%
                             </Typography>
                           )}
                         </TableCell>
                         <TableCell sx={{ color: colors.textSecondary }}>
-                          {formatCapacity(drink)}
+                          {row.capacity}
                         </TableCell>
                         <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                          {drink.originalPrice && parseFloat(drink.originalPrice) > parseFloat(drink.price) ? (
+                          {row.originalPrice > row.price ? (
                             <Box>
                               <Typography
                                 variant="body2"
@@ -188,19 +273,19 @@ const Pricelist = () => {
                                   mr: 1
                                 }}
                               >
-                                {formatCurrency(drink.originalPrice)}
+                                {formatCurrency(row.originalPrice)}
                               </Typography>
                               <Typography variant="body1" sx={{ color: colors.accentText, display: 'inline' }}>
-                                {formatCurrency(drink.price)}
+                                {formatCurrency(row.price)}
                               </Typography>
                             </Box>
                           ) : (
-                            formatCurrency(drink.price)
+                            formatCurrency(row.price)
                           )}
                         </TableCell>
                         {searchTerm === '' && (
                           <TableCell sx={{ color: colors.textSecondary }}>
-                            {drink.brand?.name || 'N/A'}
+                            {row.brandName || 'N/A'}
                           </TableCell>
                         )}
                       </TableRow>
