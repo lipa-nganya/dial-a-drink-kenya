@@ -890,18 +890,18 @@ const Cart = () => {
     return (
       <Container maxWidth="md" sx={{ py: { xs: 2, sm: 4 }, px: { xs: 1, sm: 2 } }}>
         <Box textAlign="center">
-          <ShoppingCart sx={{ fontSize: { xs: 60, sm: 80 }, color: 'text.secondary', mb: 2 }} />
+          <ShoppingCart sx={{ fontSize: { xs: 58, sm: 80 }, color: 'text.secondary', mb: 2 }} />
           <Typography 
             variant="h5" 
             gutterBottom
-            sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+            sx={{ fontSize: { xs: '1.125rem', sm: '1.5rem' } }}
           >
             Your cart is empty
           </Typography>
           <Typography 
             variant="body1" 
             color="text.secondary" 
-            sx={{ mb: 3, fontSize: { xs: '0.9rem', sm: '1rem' } }}
+            sx={{ mb: 3, fontSize: { xs: '0.775rem', sm: '1rem' } }}
           >
             Add some drinks to get started!
           </Typography>
@@ -932,7 +932,7 @@ const Cart = () => {
         component="h1" 
         gutterBottom
         sx={{ 
-          fontSize: { xs: '1.75rem', sm: '2.125rem' },
+          fontSize: { xs: '1.625rem', sm: '2.125rem' },
           textAlign: { xs: 'center', sm: 'left' }
         }}
       >
@@ -943,7 +943,7 @@ const Cart = () => {
         {/* Cart Items */}
         <Grid size={{ xs: 12 }}>
           <Paper sx={{ p: 3, width: '100%' }}>
-            <Typography variant="h6" gutterBottom>
+            <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
               Cart Items ({items.length})
             </Typography>
             
@@ -951,7 +951,7 @@ const Cart = () => {
               <Box key={item.drinkId}>
                 <Box sx={{ display: 'flex', alignItems: 'center', py: 2 }}>
                   <Box sx={{ flexGrow: 1 }}>
-                    <Typography variant="h6">
+                    <Typography variant="h6" sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
                       {item.drink.name}
                     </Typography>
                     {item.selectedCapacity && (
@@ -972,7 +972,7 @@ const Cart = () => {
                       <Remove />
                     </IconButton>
                     
-                    <Typography variant="h6" sx={{ minWidth: 40, textAlign: 'center' }}>
+                    <Typography variant="h6" sx={{ minWidth: 40, textAlign: 'center', fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
                       {item.quantity}
                     </Typography>
                     
@@ -992,7 +992,7 @@ const Cart = () => {
                     </IconButton>
                   </Box>
 
-                  <Typography variant="h6" sx={{ minWidth: 80, textAlign: 'right' }}>
+                  <Typography variant="h6" sx={{ minWidth: 80, textAlign: 'right', fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
                     KES {Math.round(Number(item.price) * item.quantity)}
                   </Typography>
                 </Box>
