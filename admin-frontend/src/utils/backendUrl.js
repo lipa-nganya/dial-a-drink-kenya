@@ -16,6 +16,7 @@ export const getBackendUrl = () => {
   // Production sites (ruakadrinksdelivery.co.ke, drinksdeliverykenya.com)
   const isProductionSite = 
     hostname.includes('ruakadrinksdelivery.co.ke') ||
+    hostname.includes('dialadrinkkenya.com') ||
     hostname.includes('drinksdeliverykenya.com');
   if (isProductionSite) {
     return 'https://deliveryos-production-backend-805803410802.us-central1.run.app';

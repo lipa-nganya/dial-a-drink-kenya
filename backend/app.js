@@ -71,6 +71,8 @@ const allowedOrigins = [
   // Production customer sites
   'https://ruakadrinksdelivery.co.ke',
   'https://www.ruakadrinksdelivery.co.ke',
+  'https://dialadrinkkenya.com',
+  'https://www.dialadrinkkenya.com',
   'https://drinksdeliverykenya.com',
   'https://www.drinksdeliverykenya.com',
   // Admin production sites
@@ -95,6 +97,7 @@ app.use((req, res, next) => {
       originToCheck.includes('.netlify.app') ||
       originToCheck.includes('.thewolfgang.tech') ||
       originToCheck.includes('.ruakadrinksdelivery.co.ke') ||
+      originToCheck.includes('.dialadrinkkenya.com') ||
       originToCheck.includes('.drinksdeliverykenya.com') ||
       originToCheck.includes('.run.app') || // Cloud Run services (e.g., deliveryos-admin-frontend-*.run.app)
       originToCheck === 'https://thewolfgang.tech'

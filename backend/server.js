@@ -207,6 +207,8 @@ async function loadFullApplication() {
             // Production customer sites
             'https://ruakadrinksdelivery.co.ke',
             'https://www.ruakadrinksdelivery.co.ke',
+            'https://dialadrinkkenya.com',
+            'https://www.dialadrinkkenya.com',
             'https://drinksdeliverykenya.com',
             'https://www.drinksdeliverykenya.com',
             // Admin production sites
@@ -226,6 +228,11 @@ async function loadFullApplication() {
           
           // Check ruakadrinksdelivery.co.ke subdomains
           if (origin.includes('.ruakadrinksdelivery.co.ke')) {
+            return callback(null, true);
+          }
+
+          // Check dialadrinkkenya.com subdomains
+          if (origin.includes('.dialadrinkkenya.com')) {
             return callback(null, true);
           }
           
