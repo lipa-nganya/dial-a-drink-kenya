@@ -116,7 +116,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="0.8"
-                            android:text="Order #"
+                            android:text="Del Fee"
                             android:textColor="@android:color/white"
                             android:textSize="12sp"
                             android:textStyle="bold"

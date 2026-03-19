@@ -6104,6 +6104,423 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
   }
 });
 
+// Inventory category summary with drink counts
+router.get('/inventory/categories-summary', verifyAdmin, async (req, res) => {
+  try {
+    const categories = await db.Category.findAll({
+      attributes: ['id', 'name', 'isActive'],
+      order: [['name', 'ASC']]
+    });
+
+    const data = await Promise.all(
+      categories.map(async (category) => {
+        const drinksCount = await db.Drink.count({ where: { categoryId: category.id } });
+        return {
+          id: category.id,
+          name: category.name,
+          isActive: category.isActive,
+          drinksCount
+        };
+      })
+    );
+
+    res.json({ success: true, categories: data });
+  } catch (error) {
+    console.error('Error fetching inventory categories summary:', error);
+    res.status(500).json({ error: 'Failed to fetch categories summary' });
+  }
+});
+
+// Inventory subcategory summary with drink counts
+router.get('/inventory/subcategories-summary', verifyAdmin, async (req, res) => {
+  try {
+    const subcategories = await db.SubCategory.findAll({
+      attributes: ['id', 'name', 'categoryId', 'isActive'],
+      include: [{ model: db.Category, as: 'category', attributes: ['id', 'name'], required: false }],
+      order: [['name', 'ASC']]
+    });
+
+    const data = await Promise.all(
+      subcategories.map(async (subcategory) => {
+        const drinksCount = await db.Drink.count({ where: { subCategoryId: subcategory.id } });
+        return {
+          id: subcategory.id,
+          name: subcategory.name,
+          categoryId: subcategory.categoryId,
+          categoryName: subcategory.category?.name || null,
+          isActive: subcategory.isActive,
+          drinksCount
+        };
+      })
+    );
+
+    res.json({ success: true, subcategories: data });
+  } catch (error) {
+    console.error('Error fetching inventory subcategories summary:', error);
+    res.status(500).json({ error: 'Failed to fetch subcategories summary' });
+  }
+});
+
+// Inventory brand summary with drink counts
+router.get('/inventory/brands-summary', verifyAdmin, async (req, res) => {
+  try {
+    const brands = await db.Brand.findAll({
+      attributes: ['id', 'name', 'isActive'],
+      order: [['name', 'ASC']]
+    });
+
+    const data = await Promise.all(
+      brands.map(async (brand) => {
+        const drinksCount = await db.Drink.count({ where: { brandId: brand.id } });
+        return {
+          id: brand.id,
+          name: brand.name,
+          isActive: brand.isActive,
+          drinksCount
+        };
+      })
+    );
+
+    res.json({ success: true, brands: data });
+  } catch (error) {
+    console.error('Error fetching inventory brands summary:', error);
+    res.status(500).json({ error: 'Failed to fetch brands summary' });
+  }
+});
+
+// Rename a capacity label across drinks
+router.post('/inventory/capacities/rename', verifyAdmin, async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const oldCapacity = String(req.body?.oldCapacity || '').trim();
+    const newCapacity = String(req.body?.newCapacity || '').trim();
+
+    if (!oldCapacity || !newCapacity) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'oldCapacity and newCapacity are required' });
+    }
+
+    if (oldCapacity.toLowerCase() === newCapacity.toLowerCase()) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'newCapacity must be different from oldCapacity' });
+    }
+
+    const drinks = await db.Drink.findAll({
+      attributes: ['id', 'capacity', 'capacityPricing', 'stockByCapacity'],
+      transaction
+    });
+
+    let updatedDrinks = 0;
+
+    for (const drink of drinks) {
+      const currentCapacity = Array.isArray(drink.capacity) ? drink.capacity : [];
+      const currentPricing = Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [];
+      const currentStockByCapacity =
+        drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? { ...drink.stockByCapacity } : null;
+
+      const nextCapacity = currentCapacity.map((cap) =>
+        String(cap || '').trim().toLowerCase() === oldCapacity.toLowerCase() ? newCapacity : cap
+      );
+
+      const nextPricing = currentPricing.map((entry) => {
+        if (!entry || typeof entry !== 'object') return entry;
+        const entryCapacity = String(entry.capacity || '').trim();
+        if (entryCapacity.toLowerCase() !== oldCapacity.toLowerCase()) return entry;
+        return { ...entry, capacity: newCapacity };
+      });
+
+      let nextStockByCapacity = currentStockByCapacity;
+      if (nextStockByCapacity && Object.keys(nextStockByCapacity).length > 0) {
+        const matchedKey = Object.keys(nextStockByCapacity).find(
+          (key) => String(key || '').trim().toLowerCase() === oldCapacity.toLowerCase()
+        );
+        if (matchedKey) {
+          const existingValue = nextStockByCapacity[newCapacity];
+          const oldValue = nextStockByCapacity[matchedKey];
+          nextStockByCapacity[newCapacity] =
+            existingValue == null ? oldValue : (parseInt(existingValue, 10) || 0) + (parseInt(oldValue, 10) || 0);
+          delete nextStockByCapacity[matchedKey];
+        }
+      }
+
+      const changed =
+        JSON.stringify(nextCapacity) !== JSON.stringify(currentCapacity) ||
+        JSON.stringify(nextPricing) !== JSON.stringify(currentPricing) ||
+        JSON.stringify(nextStockByCapacity) !== JSON.stringify(currentStockByCapacity);
+
+      if (!changed) continue;
+
+      await drink.update(
+        {
+          capacity: nextCapacity,
+          capacityPricing: nextPricing,
+          stockByCapacity: nextStockByCapacity
+        },
+        { transaction }
+      );
+      updatedDrinks += 1;
+    }
+
+    await transaction.commit();
+    return res.json({
+      success: true,
+      message: `Capacity renamed from "${oldCapacity}" to "${newCapacity}"`,
+      updatedDrinks
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error renaming capacity:', error);
+    return res.status(500).json({ error: 'Failed to rename capacity' });
+  }
+});
+
+// Delete a capacity label and transfer values to another capacity label
+router.post('/inventory/capacities/delete-with-transfer', verifyAdmin, async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const sourceCapacity = String(req.body?.sourceCapacity || '').trim();
+    const targetCapacity = String(req.body?.targetCapacity || '').trim();
+
+    if (!sourceCapacity || !targetCapacity) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'sourceCapacity and targetCapacity are required' });
+    }
+
+    if (sourceCapacity.toLowerCase() === targetCapacity.toLowerCase()) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'targetCapacity must be different from sourceCapacity' });
+    }
+
+    const drinks = await db.Drink.findAll({
+      attributes: ['id', 'capacity', 'capacityPricing', 'stockByCapacity'],
+      transaction
+    });
+
+    let updatedDrinks = 0;
+
+    for (const drink of drinks) {
+      const currentCapacity = Array.isArray(drink.capacity) ? drink.capacity : [];
+      const currentPricing = Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [];
+      const currentStockByCapacity =
+        drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? { ...drink.stockByCapacity } : null;
+
+      const mergedCapacity = Array.from(
+        new Set(
+          currentCapacity.map((cap) => {
+            const normalized = String(cap || '').trim();
+            return normalized.toLowerCase() === sourceCapacity.toLowerCase() ? targetCapacity : normalized;
+          })
+        )
+      ).filter(Boolean);
+
+      const pricingMap = new Map();
+      currentPricing.forEach((entry) => {
+        if (!entry || typeof entry !== 'object') return;
+        const cap = String(entry.capacity || '').trim();
+        if (!cap) return;
+        const isFromSource = cap.toLowerCase() === sourceCapacity.toLowerCase();
+        const normalizedCap = isFromSource ? targetCapacity : cap;
+
+        if (!pricingMap.has(normalizedCap)) {
+          pricingMap.set(normalizedCap, { ...entry, capacity: normalizedCap, __fromSource: isFromSource });
+          return;
+        }
+
+        const existing = pricingMap.get(normalizedCap);
+        const preferred = isFromSource ? entry : existing.__fromSource ? existing : entry;
+        const fallback = preferred === entry ? existing : entry;
+
+        pricingMap.set(normalizedCap, {
+          ...existing,
+          ...preferred,
+          capacity: normalizedCap,
+          __fromSource: existing.__fromSource || isFromSource,
+          // keep transferred/source pricing when available, otherwise fallback
+          currentPrice: preferred.currentPrice ?? preferred.price ?? fallback.currentPrice ?? fallback.price,
+          originalPrice:
+            preferred.originalPrice ??
+            fallback.originalPrice ??
+            preferred.currentPrice ??
+            preferred.price ??
+            fallback.currentPrice ??
+            fallback.price,
+          price: preferred.price ?? fallback.price
+        });
+      });
+      const mergedPricing = Array.from(pricingMap.values()).map(({ __fromSource, ...entry }) => entry);
+
+      let mergedStockByCapacity = currentStockByCapacity;
+      if (mergedStockByCapacity && Object.keys(mergedStockByCapacity).length > 0) {
+        const sourceKey = Object.keys(mergedStockByCapacity).find(
+          (key) => String(key || '').trim().toLowerCase() === sourceCapacity.toLowerCase()
+        );
+
+        if (sourceKey) {
+          const sourceQty = parseInt(mergedStockByCapacity[sourceKey], 10) || 0;
+          const targetQty = parseInt(mergedStockByCapacity[targetCapacity], 10) || 0;
+          mergedStockByCapacity[targetCapacity] = targetQty + sourceQty;
+          delete mergedStockByCapacity[sourceKey];
+        }
+      }
+
+      const changed =
+        JSON.stringify(mergedCapacity) !== JSON.stringify(currentCapacity) ||
+        JSON.stringify(mergedPricing) !== JSON.stringify(currentPricing) ||
+        JSON.stringify(mergedStockByCapacity) !== JSON.stringify(currentStockByCapacity);
+
+      if (!changed) continue;
+
+      await drink.update(
+        {
+          capacity: mergedCapacity,
+          capacityPricing: mergedPricing,
+          stockByCapacity: mergedStockByCapacity
+        },
+        { transaction }
+      );
+      updatedDrinks += 1;
+    }
+
+    await transaction.commit();
+    return res.json({
+      success: true,
+      message: `Capacity "${sourceCapacity}" deleted and transferred to "${targetCapacity}"`,
+      updatedDrinks
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error deleting capacity with transfer:', error);
+    return res.status(500).json({ error: 'Failed to delete capacity with transfer' });
+  }
+});
+
+// Delete category and transfer drinks to another category
+router.post('/inventory/categories/:id/delete-with-transfer', verifyAdmin, async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const sourceCategoryId = parseInt(req.params.id, 10);
+    const targetCategoryId = parseInt(req.body?.targetCategoryId, 10);
+
+    if (!sourceCategoryId || !targetCategoryId || sourceCategoryId === targetCategoryId) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Valid targetCategoryId (different from source) is required' });
+    }
+
+    const source = await db.Category.findByPk(sourceCategoryId, { transaction });
+    const target = await db.Category.findByPk(targetCategoryId, { transaction });
+    if (!source || !target) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Source or target category not found' });
+    }
+
+    const movedDrinks = await db.Drink.update(
+      { categoryId: targetCategoryId },
+      { where: { categoryId: sourceCategoryId }, transaction }
+    );
+
+    await db.SubCategory.update(
+      { categoryId: targetCategoryId },
+      { where: { categoryId: sourceCategoryId }, transaction }
+    );
+
+    await source.destroy({ transaction });
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: `Category "${source.name}" deleted and drinks transferred to "${target.name}"`,
+      movedDrinks
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error deleting category with transfer:', error);
+    res.status(500).json({ error: 'Failed to delete category with transfer' });
+  }
+});
+
+// Delete subcategory and transfer drinks to another subcategory
+router.post('/inventory/subcategories/:id/delete-with-transfer', verifyAdmin, async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const sourceSubCategoryId = parseInt(req.params.id, 10);
+    const targetSubCategoryId = parseInt(req.body?.targetSubCategoryId, 10);
+
+    if (!sourceSubCategoryId || !targetSubCategoryId || sourceSubCategoryId === targetSubCategoryId) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Valid targetSubCategoryId (different from source) is required' });
+    }
+
+    const source = await db.SubCategory.findByPk(sourceSubCategoryId, { transaction });
+    const target = await db.SubCategory.findByPk(targetSubCategoryId, { transaction });
+    if (!source || !target) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Source or target subcategory not found' });
+    }
+
+    if (source.categoryId !== target.categoryId) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Target subcategory must belong to the same category' });
+    }
+
+    const movedDrinks = await db.Drink.update(
+      { subCategoryId: targetSubCategoryId },
+      { where: { subCategoryId: sourceSubCategoryId }, transaction }
+    );
+
+    await source.destroy({ transaction });
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: `Subcategory "${source.name}" deleted and drinks transferred to "${target.name}"`,
+      movedDrinks
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error deleting subcategory with transfer:', error);
+    res.status(500).json({ error: 'Failed to delete subcategory with transfer' });
+  }
+});
+
+// Delete brand and transfer drinks to another brand
+router.post('/inventory/brands/:id/delete-with-transfer', verifyAdmin, async (req, res) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const sourceBrandId = parseInt(req.params.id, 10);
+    const targetBrandId = parseInt(req.body?.targetBrandId, 10);
+
+    if (!sourceBrandId || !targetBrandId || sourceBrandId === targetBrandId) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Valid targetBrandId (different from source) is required' });
+    }
+
+    const source = await db.Brand.findByPk(sourceBrandId, { transaction });
+    const target = await db.Brand.findByPk(targetBrandId, { transaction });
+    if (!source || !target) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Source or target brand not found' });
+    }
+
+    const movedDrinks = await db.Drink.update(
+      { brandId: targetBrandId },
+      { where: { brandId: sourceBrandId }, transaction }
+    );
+
+    await source.destroy({ transaction });
+    await transaction.commit();
+
+    res.json({
+      success: true,
+      message: `Brand "${source.name}" deleted and drinks transferred to "${target.name}"`,
+      movedDrinks
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error('Error deleting brand with transfer:', error);
+    res.status(500).json({ error: 'Failed to delete brand with transfer' });
+  }
+});
+
 /**
  * Get all inventory checks
  * GET /api/admin/inventory-checks

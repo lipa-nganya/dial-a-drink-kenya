@@ -254,7 +254,7 @@ const Orders = () => {
           order.id === orderId ? { ...order, ...updatedOrder } : order
         );
         const sorted = sortOrdersByStatus(updated);
-        // If we're viewing cancellation requests and the order is now cancelled, show cancelled orders
+        // If we were viewing cancellation requests and the order is now cancelled, show cancelled orders
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && updatedOrder?.status === 'cancelled') {
           setCancelledSubTab('cancelled');
           applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
@@ -290,7 +290,7 @@ const Orders = () => {
           order.id === orderId ? { ...order, ...updatedOrder } : order
         );
         const sorted = sortOrdersByStatus(updated);
-        // If we're viewing cancellation requests and it was rejected, send back to pending (original behavior)
+        // If we were viewing cancellation requests and it was rejected, send back to pending (original behavior)
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
           setOrderTab('pending');
           setCancelledSubTab('cancelled');
@@ -2310,7 +2310,7 @@ const Orders = () => {
                         sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}
                         onClick={(e) => e.stopPropagation()}
                       >
-                        {cancelledSubTab === 'cancellation-requests' && hasPendingCancellation && (
+                        {hasPendingCancellation && (
                           <Box sx={{ display: 'flex', gap: 1 }}>
                             <Button
                               variant="contained"

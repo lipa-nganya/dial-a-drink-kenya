@@ -141,6 +141,38 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Create new category
+router.post('/', async (req, res) => {
+  try {
+    const { name, description, isActive } = req.body;
+
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'Category name is required' });
+    }
+
+    const normalizedName = String(name).trim();
+
+    const existingCategory = await db.Category.findOne({
+      where: { name: normalizedName }
+    });
+
+    if (existingCategory) {
+      return res.status(400).json({ error: 'Category with this name already exists' });
+    }
+
+    const category = await db.Category.create({
+      name: normalizedName,
+      description: description || null,
+      isActive: isActive !== undefined ? isActive : true
+    });
+
+    return res.status(201).json(category);
+  } catch (error) {
+    console.error('Error creating category:', error);
+    return res.status(500).json({ error: 'Failed to create category' });
+  }
+});
+
 // Add new categories (admin endpoint)
 router.post('/add-all', async (req, res) => {
   try {
