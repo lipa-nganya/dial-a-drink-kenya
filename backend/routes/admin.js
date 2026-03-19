@@ -6108,7 +6108,7 @@ router.get('/inventory-analytics', verifyAdmin, async (req, res) => {
 router.get('/inventory/categories-summary', verifyAdmin, async (req, res) => {
   try {
     const categories = await db.Category.findAll({
-      attributes: ['id', 'name', 'isActive'],
+      attributes: ['id', 'name'],
       order: [['name', 'ASC']]
     });
 
@@ -6118,7 +6118,6 @@ router.get('/inventory/categories-summary', verifyAdmin, async (req, res) => {
         return {
           id: category.id,
           name: category.name,
-          isActive: category.isActive,
           drinksCount
         };
       })
@@ -6135,10 +6134,19 @@ router.get('/inventory/categories-summary', verifyAdmin, async (req, res) => {
 router.get('/inventory/subcategories-summary', verifyAdmin, async (req, res) => {
   try {
     const subcategories = await db.SubCategory.findAll({
-      attributes: ['id', 'name', 'categoryId', 'isActive'],
-      include: [{ model: db.Category, as: 'category', attributes: ['id', 'name'], required: false }],
+      attributes: ['id', 'name', 'categoryId'],
       order: [['name', 'ASC']]
     });
+
+    const categoryIds = subcategories.map((s) => s.categoryId).filter(Boolean);
+    const categories = categoryIds.length
+      ? await db.Category.findAll({
+          where: { id: categoryIds },
+          attributes: ['id', 'name'],
+          order: [['name', 'ASC']]
+        })
+      : [];
+    const categoryNameById = new Map(categories.map((c) => [c.id, c.name]));
 
     const data = await Promise.all(
       subcategories.map(async (subcategory) => {
@@ -6147,8 +6155,7 @@ router.get('/inventory/subcategories-summary', verifyAdmin, async (req, res) => 
           id: subcategory.id,
           name: subcategory.name,
           categoryId: subcategory.categoryId,
-          categoryName: subcategory.category?.name || null,
-          isActive: subcategory.isActive,
+          categoryName: categoryNameById.get(subcategory.categoryId) || null,
           drinksCount
         };
       })
@@ -6165,7 +6172,7 @@ router.get('/inventory/subcategories-summary', verifyAdmin, async (req, res) => 
 router.get('/inventory/brands-summary', verifyAdmin, async (req, res) => {
   try {
     const brands = await db.Brand.findAll({
-      attributes: ['id', 'name', 'isActive'],
+      attributes: ['id', 'name'],
       order: [['name', 'ASC']]
     });
 
@@ -6175,7 +6182,6 @@ router.get('/inventory/brands-summary', verifyAdmin, async (req, res) => {
         return {
           id: brand.id,
           name: brand.name,
-          isActive: brand.isActive,
           drinksCount
         };
       })
