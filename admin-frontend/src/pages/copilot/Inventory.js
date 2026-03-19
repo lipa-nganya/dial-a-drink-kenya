@@ -18,7 +18,8 @@ import {
   TextField,
   IconButton,
   TablePagination,
-  Snackbar
+  Snackbar,
+  Button
 } from '@mui/material';
 import {
   Warning,
@@ -39,6 +40,7 @@ const Inventory = () => {
   const [error, setError] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [zeroPurchasePriceItems, setZeroPurchasePriceItems] = useState([]);
+  const [zeroSellingPriceItems, setZeroSellingPriceItems] = useState([]);
   const [loadingZeroPrice, setLoadingZeroPrice] = useState(true);
   
   // Pagination states
@@ -49,6 +51,8 @@ const Inventory = () => {
   // const [slowMovingRowsPerPage, setSlowMovingRowsPerPage] = useState(10);
   const [zeroPricePage, setZeroPricePage] = useState(0);
   const [zeroPriceRowsPerPage, setZeroPriceRowsPerPage] = useState(10);
+  const [zeroSellingPage, setZeroSellingPage] = useState(0);
+  const [zeroSellingRowsPerPage, setZeroSellingRowsPerPage] = useState(10);
   
   // Editing states
   const [editingItem, setEditingItem] = useState(null);
@@ -85,17 +89,31 @@ const Inventory = () => {
       setLoadingZeroPrice(true);
       const response = await api.get('/admin/drinks');
       const drinks = response.data || [];
-      
-      // Filter items where purchasePrice is 0, null, or undefined
-      const zeroPriceItems = drinks.filter(drink => {
+
+      // Items where purchasePrice is 0, null, or undefined
+      const zeroPurchaseItems = drinks.filter((drink) => {
         const purchasePrice = drink.purchasePrice;
-        return purchasePrice === null || 
-               purchasePrice === undefined || 
-               purchasePrice === '' ||
-               parseFloat(purchasePrice) === 0;
+        return (
+          purchasePrice === null ||
+          purchasePrice === undefined ||
+          purchasePrice === '' ||
+          parseFloat(purchasePrice) === 0
+        );
       });
-      
-      setZeroPurchasePriceItems(zeroPriceItems);
+
+      // Items where selling price (price or originalPrice) is 0, null, or undefined
+      const zeroSellItems = drinks.filter((drink) => {
+        const selling = drink.price ?? drink.originalPrice;
+        return (
+          selling === null ||
+          selling === undefined ||
+          selling === '' ||
+          parseFloat(selling) === 0
+        );
+      });
+
+      setZeroPurchasePriceItems(zeroPurchaseItems);
+      setZeroSellingPriceItems(zeroSellItems);
     } catch (err) {
       console.error('Error fetching zero purchase price items:', err);
     } finally {
@@ -228,6 +246,80 @@ const Inventory = () => {
     }
   };
 
+  const exportToCsv = (filename, rows, columns) => {
+    if (!rows || rows.length === 0) return;
+    const header = columns.map((c) => c.label).join(',');
+    const lines = rows.map((row) =>
+      columns
+        .map((c) => {
+          const raw = typeof c.value === 'function' ? c.value(row) : row[c.value];
+          const cell = raw != null ? String(raw) : '';
+          const escaped = cell.replace(/"/g, '""');
+          return `"${escaped}"`;
+        })
+        .join(',')
+    );
+    const csv = [header, ...lines].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportOutOfStock = () => {
+    if (!analytics?.outOfStock?.items?.length) return;
+    exportToCsv('out-of-stock-items.csv', analytics.outOfStock.items, [
+      { label: 'ID', value: (item) => item.id },
+      { label: 'Name', value: (item) => item.name },
+      { label: 'Category', value: (item) => item.category?.name || '' },
+      { label: 'Stock', value: (item) => item.stock },
+      { label: 'Purchase Price', value: (item) => item.purchasePrice },
+      { label: 'Selling Price', value: (item) => item.price ?? item.originalPrice }
+    ]);
+  };
+
+  const handleExportZeroPurchase = () => {
+    if (!zeroPurchasePriceItems.length) return;
+    exportToCsv('zero-purchase-price-items.csv', zeroPurchasePriceItems, [
+      { label: 'ID', value: (item) => item.id },
+      { label: 'Name', value: (item) => item.name },
+      { label: 'Category', value: (item) => item.category?.name || '' },
+      { label: 'Stock', value: (item) => item.stock || 0 },
+      { label: 'Purchase Price', value: (item) => item.purchasePrice },
+      { label: 'Selling Price', value: (item) => item.price ?? item.originalPrice }
+    ]);
+  };
+
+  const handleExportZeroSelling = () => {
+    if (!zeroSellingPriceItems.length) return;
+    exportToCsv('zero-selling-price-items.csv', zeroSellingPriceItems, [
+      { label: 'ID', value: (item) => item.id },
+      { label: 'Name', value: (item) => item.name },
+      { label: 'Category', value: (item) => item.category?.name || '' },
+      { label: 'Stock', value: (item) => item.stock || 0 },
+      { label: 'Purchase Price', value: (item) => item.purchasePrice },
+      { label: 'Selling Price', value: (item) => item.price ?? item.originalPrice }
+    ]);
+  };
+
+  const handleExportSlowMoving = () => {
+    if (!analytics?.slowMoving?.items?.length) return;
+    exportToCsv('slow-moving-stock.csv', analytics.slowMoving.items, [
+      { label: 'ID', value: (item) => item.id },
+      { label: 'Name', value: (item) => item.name },
+      { label: 'Category', value: (item) => item.category?.name || '' },
+      { label: 'Stock', value: (item) => item.stock },
+      { label: 'Purchase Price', value: (item) => item.purchasePrice },
+      { label: 'Selling Price', value: (item) => item.price ?? item.originalPrice },
+      { label: 'Last Sold Date', value: (item) => item.lastSoldDate || '' }
+    ]);
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -346,11 +438,16 @@ const Inventory = () => {
       {analytics.outOfStock.items.length > 0 && (
         <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
           <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <Warning sx={{ color: '#FF3366', mr: 1 }} />
-              <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                Out of Stock Items ({analytics.outOfStock.count})
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Warning sx={{ color: '#FF3366' }} />
+                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                  Out of Stock Items ({analytics.outOfStock.count})
+                </Typography>
+              </Box>
+              <Button variant="outlined" size="small" onClick={handleExportOutOfStock}>
+                Export CSV
+              </Button>
             </Box>
             <TableContainer>
               <Table>
@@ -484,11 +581,16 @@ const Inventory = () => {
       {!loadingZeroPrice && zeroPurchasePriceItems.length > 0 && (
         <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
           <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <Warning sx={{ color: '#FFA500', mr: 1 }} />
-              <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                Items with Zero Purchase Price ({zeroPurchasePriceItems.length})
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Warning sx={{ color: '#FFA500' }} />
+                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                  Items with Zero Purchase Price ({zeroPurchasePriceItems.length})
+                </Typography>
+              </Box>
+              <Button variant="outlined" size="small" onClick={handleExportZeroPurchase}>
+                Export CSV
+              </Button>
             </Box>
             <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
               Items that have a purchase price of 0 or no purchase price set. These items need purchase prices to calculate profit accurately.
@@ -624,15 +726,171 @@ const Inventory = () => {
         </Card>
       )}
 
+      {/* Items with Zero Selling Price */}
+      {!loadingZeroPrice && zeroSellingPriceItems.length > 0 && (
+        <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Warning sx={{ color: '#FF3366' }} />
+                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                  Items with Zero Selling Price ({zeroSellingPriceItems.length})
+                </Typography>
+              </Box>
+              <Button variant="outlined" size="small" onClick={handleExportZeroSelling}>
+                Export CSV
+              </Button>
+            </Box>
+            <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
+              Items that have a selling price of 0 or no selling price set. These items need valid prices so customers see correct amounts.
+            </Typography>
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Item Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Category</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">
+                      Stock
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">
+                      Purchase Price
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">
+                      Selling Price
+                    </TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">
+                      Actions
+                    </TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {zeroSellingPriceItems
+                    .slice(
+                      zeroSellingPage * zeroSellingRowsPerPage,
+                      zeroSellingPage * zeroSellingRowsPerPage + zeroSellingRowsPerPage
+                    )
+                    .map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell sx={{ color: colors.textPrimary }}>{item.name}</TableCell>
+                        <TableCell>
+                          {item.category ? (
+                            <Chip
+                              label={item.category.name}
+                              size="small"
+                              sx={{
+                                backgroundColor: isDarkMode
+                                  ? 'rgba(0, 224, 184, 0.2)'
+                                  : 'rgba(0, 224, 184, 0.1)',
+                                color: colors.accentText
+                              }}
+                            />
+                          ) : (
+                            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                              Uncategorized
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                          {item.stock || 0}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                          {item.purchasePrice != null && item.purchasePrice !== ''
+                            ? formatCurrency(item.purchasePrice)
+                            : 'Not Set'}
+                        </TableCell>
+                        <TableCell align="right">
+                          {editingItem === item.id ? (
+                            <TextField
+                              type="number"
+                              size="small"
+                              value={editSellingPrice}
+                              onChange={(e) => setEditSellingPrice(e.target.value)}
+                              sx={{ width: '100px' }}
+                              inputProps={{ min: 0, step: 0.01 }}
+                              placeholder="0.00"
+                            />
+                          ) : (
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'flex-end',
+                                gap: 1
+                              }}
+                            >
+                              <Typography sx={{ color: '#FF3366', fontWeight: 600 }}>
+                                {item.price == null || item.price === ''
+                                  ? 'Not Set'
+                                  : formatCurrency(item.price)}
+                              </Typography>
+                              <IconButton size="small" onClick={() => handleEditClick(item)}>
+                                <Edit fontSize="small" />
+                              </IconButton>
+                            </Box>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          {editingItem === item.id ? (
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <IconButton
+                                size="small"
+                                color="primary"
+                                onClick={() => handleSave(item)}
+                                disabled={saving}
+                              >
+                                <Save fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={handleCancelEdit}
+                                disabled={saving}
+                              >
+                                <Cancel fontSize="small" />
+                              </IconButton>
+                            </Box>
+                          ) : (
+                            <IconButton size="small" onClick={() => handleEditClick(item)}>
+                              <Edit fontSize="small" />
+                            </IconButton>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <TablePagination
+              component="div"
+              count={zeroSellingPriceItems.length}
+              page={zeroSellingPage}
+              onPageChange={(e, newPage) => setZeroSellingPage(newPage)}
+              rowsPerPage={zeroSellingRowsPerPage}
+              onRowsPerPageChange={(e) => {
+                setZeroSellingRowsPerPage(parseInt(e.target.value, 10));
+                setZeroSellingPage(0);
+              }}
+              rowsPerPageOptions={[5, 10, 25, 50]}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Slow-Moving Stock Table */}
       {analytics.slowMoving.items.length > 0 && (
         <Card sx={{ backgroundColor: colors.paper }}>
           <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-              <TrendingDown sx={{ color: '#FFA500', mr: 1 }} />
-              <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                Slow-Moving Stock ({analytics.slowMoving.count})
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TrendingDown sx={{ color: '#FFA500' }} />
+                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                  Slow-Moving Stock ({analytics.slowMoving.count})
+                </Typography>
+              </Box>
+              <Button variant="outlined" size="small" onClick={handleExportSlowMoving}>
+                Export CSV
+              </Button>
             </Box>
             <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
               Items with no sales in the last {analytics.slowMoving.thresholdMonths} months
