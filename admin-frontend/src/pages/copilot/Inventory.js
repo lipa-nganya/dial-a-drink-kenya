@@ -123,6 +123,8 @@ const Inventory = () => {
     fetchAnalytics();
     fetchZeroPurchasePriceItems();
     fetchInventoryEntitySummaries();
+    // Initial load on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -955,7 +957,7 @@ const Inventory = () => {
     });
 
     return rows;
-  }, [priceListItems]);
+  }, [priceListItems, getCapacityLabel]);
 
   const zeroSellingCapacityRows = useMemo(() => {
     const rows = [];
