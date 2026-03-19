@@ -23,7 +23,6 @@ import {
   ShoppingCart,
   TrendingUp,
   AccountBalanceWallet,
-  EmojiEvents,
   Inventory2,
   CheckCircleOutlined,
   Block,
