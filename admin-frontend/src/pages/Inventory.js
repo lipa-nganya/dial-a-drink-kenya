@@ -214,6 +214,32 @@ const InventoryPage = () => {
     }
   };
 
+  const refetchCategoriesAndBrands = async () => {
+    try {
+      const [categoriesResponse, brandsResponse] = await Promise.all([
+        api.get('/categories'),
+        api.get('/brands/all')
+      ]);
+      setCategories(categoriesResponse.data || []);
+      setBrands(brandsResponse.data || []);
+    } catch (error) {
+      console.error('Error refetching categories/brands:', error);
+    }
+  };
+
+  // If the user adds categories/brands in Copilot and then comes back here,
+  // refresh the filter dropdown data without doing a full drinks refetch.
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return;
+      refetchCategoriesAndBrands();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Helper function to check if a drink is on offer
   const isDrinkOnOffer = (drink) => {
     // Check if explicitly marked as on offer

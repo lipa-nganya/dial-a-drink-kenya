@@ -51,6 +51,53 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
     setLocalPricing(capacityPricing);
   }, [capacityPricing]);
 
+  // Copilot stores custom capacities locally; merge them into this dropdown
+  // so Admin Inventory shows the same capacity options.
+  const CUSTOM_CAPACITY_STORAGE_KEY = 'copilot_inventory_custom_capacities';
+  const readCustomCapacitiesFromStorage = () => {
+    try {
+      const raw = window.localStorage.getItem(CUSTOM_CAPACITY_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.map((c) => String(c || '').trim()).filter(Boolean);
+    } catch {
+      return [];
+    }
+  };
+
+  const [customCapacities, setCustomCapacities] = useState(() =>
+    readCustomCapacitiesFromStorage()
+  );
+
+  useEffect(() => {
+    const onStorage = (e) => {
+      if (e.key !== CUSTOM_CAPACITY_STORAGE_KEY) return;
+      setCustomCapacities(readCustomCapacitiesFromStorage());
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const capacityOptions = (() => {
+    const fromDrink = Array.isArray(capacities) ? capacities : [];
+    const fromPricing = Array.isArray(localPricing) ? localPricing.map((p) => p?.capacity) : [];
+
+    // Merge with stable base options, preserving original casing.
+    const merged = [...CAPACITY_OPTIONS, ...fromDrink, ...fromPricing, ...customCapacities].filter(Boolean);
+
+    // Deduplicate case-insensitively but keep first encountered label.
+    const seen = new Set();
+    const out = [];
+    for (const label of merged) {
+      const key = String(label).trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(String(label).trim());
+    }
+    return out;
+  })();
+
   // Sync capacityPricing with capacities
   const syncCapacitiesAndPricing = (newCapacityPricing) => {
     setLocalPricing(newCapacityPricing);
@@ -269,7 +316,7 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
                           }
                         }}
                       >
-                        {CAPACITY_OPTIONS.map((option) => (
+                        {capacityOptions.map((option) => (
                           <MenuItem key={option} value={option}>
                             {option}
                           </MenuItem>
