@@ -959,7 +959,7 @@ const Inventory = () => {
     });
 
     return rows;
-  }, [priceListItems, getCapacityLabel]);
+  }, [priceListItems, isDefaultCapacityLabel]);
 
   const zeroSellingCapacityRows = useMemo(() => {
     const rows = [];
@@ -1027,7 +1027,7 @@ const Inventory = () => {
     });
 
     return rows;
-  }, [zeroSellingPriceItems]);
+  }, [zeroSellingPriceItems, isDefaultCapacityLabel]);
 
   const availableCapacities = useMemo(() => {
     const detected = [];
@@ -1057,7 +1057,7 @@ const Inventory = () => {
     });
 
     return unique.sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-  }, [allDrinks, customCapacities]);
+  }, [allDrinks, customCapacities, isDefaultCapacityLabel]);
 
   const filteredAvailableCapacities = useMemo(() => {
     const q = String(capacitySettingsSearch || '').trim().toLowerCase();
@@ -1132,7 +1132,7 @@ const Inventory = () => {
     });
 
     return rows;
-  }, [allDrinks]);
+  }, [allDrinks, isDefaultCapacityLabel]);
 
   const filteredStockValuationRows = useMemo(
     () =>
@@ -1288,22 +1288,19 @@ const Inventory = () => {
     return 0;
   }
 
-  const getCapacityLabel = useCallback(
-    (item) => {
-      if (Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0) {
-        const capacities = item.capacityPricing
-          .map((entry) => entry?.capacity)
-          .filter((cap) => cap && !isDefaultCapacityLabel(cap));
-        if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
-      }
-      if (Array.isArray(item?.capacity) && item.capacity.length > 0) {
-        const capacities = item.capacity.filter((cap) => cap && !isDefaultCapacityLabel(cap));
-        if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
-      }
-      return 'N/A';
-    },
-    [isDefaultCapacityLabel]
-  );
+  function getCapacityLabel(item) {
+    if (Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0) {
+      const capacities = item.capacityPricing
+        .map((entry) => entry?.capacity)
+        .filter((cap) => cap && !isDefaultCapacityLabel(cap));
+      if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
+    }
+    if (Array.isArray(item?.capacity) && item.capacity.length > 0) {
+      const capacities = item.capacity.filter((cap) => cap && !isDefaultCapacityLabel(cap));
+      if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
+    }
+    return 'N/A';
+  }
 
   const getCapacityOptions = (item) => {
     const values = [...availableCapacities];
