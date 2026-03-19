@@ -80,11 +80,11 @@ export const AdminProvider = ({ children }) => {
     }
 
     if (Notification.permission === 'granted') {
-      const icon = '/favicon.ico';
+      const icon = '/favicon-32x32.png';
       const notification = new Notification(title, {
         body: body,
         icon: icon,
-        badge: '/favicon.ico',
+        badge: '/favicon-32x32.png',
         tag: `driver-shift-${Date.now()}`, // Unique tag to prevent duplicate notifications
         requireInteraction: false,
         silent: false

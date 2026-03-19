@@ -49,6 +49,7 @@ const Inventory = () => {
   const [priceListItems, setPriceListItems] = useState([]);
   const [uncategorizedItems, setUncategorizedItems] = useState([]);
   const [unbrandedItems, setUnbrandedItems] = useState([]);
+  const [missingImageItems, setMissingImageItems] = useState([]);
   const [loadingZeroPrice, setLoadingZeroPrice] = useState(true);
   const [allDrinks, setAllDrinks] = useState([]);
   const [copilotTab, setCopilotTab] = useState(0);
@@ -68,6 +69,8 @@ const Inventory = () => {
   const [uncategorizedRowsPerPage, setUncategorizedRowsPerPage] = useState(10);
   const [unbrandedPage, setUnbrandedPage] = useState(0);
   const [unbrandedRowsPerPage, setUnbrandedRowsPerPage] = useState(10);
+  const [missingImagePage, setMissingImagePage] = useState(0);
+  const [missingImageRowsPerPage, setMissingImageRowsPerPage] = useState(10);
   const [categoriesSummary, setCategoriesSummary] = useState([]);
   const [subcategoriesSummary, setSubcategoriesSummary] = useState([]);
   const [brandsSummary, setBrandsSummary] = useState([]);
@@ -87,6 +90,7 @@ const Inventory = () => {
   const [priceListSubcategoryFilter, setPriceListSubcategoryFilter] = useState('');
   const [uncategorizedSearch, setUncategorizedSearch] = useState('');
   const [unbrandedSearch, setUnbrandedSearch] = useState('');
+  const [missingImageSearch, setMissingImageSearch] = useState('');
   const [categoriesSearch, setCategoriesSearch] = useState('');
   const [subcategoriesSearch, setSubcategoriesSearch] = useState('');
   const [brandsSearch, setBrandsSearch] = useState('');
@@ -267,11 +271,21 @@ const Inventory = () => {
           return (a.name || '').localeCompare(b.name || '');
         });
 
+      const missingImages = drinks
+        .filter((drink) => {
+          const img = drink.image;
+          if (img === null || img === undefined) return true;
+          if (typeof img === 'string' && img.trim() === '') return true;
+          return false;
+        })
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
       setZeroPurchasePriceItems(zeroPurchaseItems);
       setZeroSellingPriceItems(zeroSellItems);
       setPriceListItems(pricedItems);
       setUncategorizedItems(uncategorized);
       setUnbrandedItems(unbranded);
+      setMissingImageItems(missingImages);
     } catch (err) {
       console.error('Error fetching zero purchase price items:', err);
     } finally {
@@ -1272,6 +1286,16 @@ const Inventory = () => {
     [unbrandedItems, unbrandedSearch]
   );
 
+  const filteredMissingImageItems = useMemo(
+    () =>
+      filterByQuery(missingImageItems, missingImageSearch, (item) => {
+        const brandName = item.brand?.name || '';
+        const categoryName = item.category?.name || '';
+        return `${item.name} ${brandName} ${categoryName}`;
+      }),
+    [missingImageItems, missingImageSearch]
+  );
+
   const filteredCategoriesSummary = useMemo(
     () => filterByQuery(categoriesSummary, categoriesSearch, (item) => item.name),
     [categoriesSummary, categoriesSearch]
@@ -1437,20 +1461,30 @@ const Inventory = () => {
                 }
               }}
             >
-              <CardContent sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <AttachMoney sx={{ color: colors.accentText, fontSize: 28 }} />
-                  <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
-                  Stock Valuation
-                </Typography>
-              </Box>
-                <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, mb: 0.5 }}>
-                  {formatCurrency(stockValuationTableTotal)}
-              </Typography>
-                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                  Total value of {stockValuationRows.length} item-capacity rows
-              </Typography>
-            </CardContent>
+                  <CardContent
+                    sx={{
+                      p: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1.5
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.accentText }}>
+                      <AttachMoney sx={{ color: colors.accentText, fontSize: 30 }} />
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                      <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
+                        Stock Valuation
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, lineHeight: 1.1 }}>
+                        {formatCurrency(stockValuationTableTotal)}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                        Total value of {stockValuationRows.length} item-capacity rows
+                      </Typography>
+                    </Box>
+                  </CardContent>
           </Card>
         </Grid>
 
@@ -1471,20 +1505,30 @@ const Inventory = () => {
                 }
               }}
             >
-              <CardContent sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Warning sx={{ color: '#FF3366', fontSize: 28 }} />
-                  <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
-                  Out of Stock
-                </Typography>
-              </Box>
-                <Typography variant="h5" sx={{ fontWeight: 800, color: '#FF3366', mb: 0.5 }}>
-                {analytics.outOfStock.count}
-              </Typography>
-                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                Items currently out of stock
-              </Typography>
-            </CardContent>
+                  <CardContent
+                    sx={{
+                      p: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1.5
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FF3366' }}>
+                      <Warning sx={{ color: '#FF3366', fontSize: 30 }} />
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                      <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
+                        Out of Stock
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 800, color: '#FF3366', lineHeight: 1.1 }}>
+                        {analytics.outOfStock.count}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                        Items currently out of stock
+                      </Typography>
+                    </Box>
+                  </CardContent>
           </Card>
         </Grid>
 
@@ -1505,20 +1549,30 @@ const Inventory = () => {
                 }
               }}
             >
-              <CardContent sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <TrendingDown sx={{ color: '#FFA500', fontSize: 28 }} />
-                  <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
-                    Slow-Moving
-                </Typography>
-              </Box>
-                <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFA500', mb: 0.5 }}>
-                {analytics.slowMoving.count}
-              </Typography>
-                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                No sales in ≥ {analytics.slowMoving.thresholdMonths} months
-              </Typography>
-            </CardContent>
+                  <CardContent
+                    sx={{
+                      p: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1.5
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFA500' }}>
+                      <TrendingDown sx={{ color: '#FFA500', fontSize: 30 }} />
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                      <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
+                        Slow-Moving
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFA500', lineHeight: 1.1 }}>
+                        {analytics.slowMoving.count}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                        No sales in ≥ {analytics.slowMoving.thresholdMonths} months
+                      </Typography>
+                    </Box>
+                  </CardContent>
           </Card>
         </Grid>
 
@@ -1539,20 +1593,30 @@ const Inventory = () => {
                 }
               }}
             >
-              <CardContent sx={{ p: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Warning sx={{ color: '#FFA500', fontSize: 28 }} />
-                  <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
-                    Zero Purchase
-                </Typography>
-              </Box>
-                <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFA500', mb: 0.5 }}>
-                {loadingZeroPrice ? '...' : zeroPurchasePriceItems.length}
-              </Typography>
-                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                Items missing purchase price
-              </Typography>
-            </CardContent>
+                  <CardContent
+                    sx={{
+                      p: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 1.5
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFA500' }}>
+                      <Warning sx={{ color: '#FFA500', fontSize: 30 }} />
+                    </Box>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                      <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
+                        Zero Purchase
+                      </Typography>
+                      <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFA500', lineHeight: 1.1 }}>
+                        {loadingZeroPrice ? '...' : zeroPurchasePriceItems.length}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                        Items missing purchase price
+                      </Typography>
+                    </Box>
+                  </CardContent>
           </Card>
         </Grid>
       </Grid>
@@ -2422,6 +2486,76 @@ const Inventory = () => {
               onRowsPerPageChange={(e) => {
                 setUnbrandedRowsPerPage(parseInt(e.target.value, 10));
                 setUnbrandedPage(0);
+              }}
+              rowsPerPageOptions={[5, 10, 25, 50]}
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Items Missing an Image */}
+      {copilotTab === 1 && !loadingZeroPrice && missingImageItems.length > 0 && (
+        <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Warning sx={{ color: '#FF3366', fontSize: 28 }} />
+                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                  Items Missing an Image ({missingImageItems.length})
+                </Typography>
+              </Box>
+            </Box>
+            <TextField
+              size="small"
+              fullWidth
+              placeholder="Search items missing image..."
+              value={missingImageSearch}
+              onChange={(e) => {
+                setMissingImageSearch(e.target.value);
+                setMissingImagePage(0);
+              }}
+              sx={{ mb: 2 }}
+            />
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Item Name</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Brand</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Category</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Stock</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Selling Price</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {filteredMissingImageItems
+                    .slice(
+                      missingImagePage * missingImageRowsPerPage,
+                      missingImagePage * missingImageRowsPerPage + missingImageRowsPerPage
+                    )
+                    .map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell sx={{ color: colors.textPrimary }}>{item.name}</TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>{item.brand?.name || '—'}</TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>{item.category?.name || '—'}</TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary }}>{item.stock || 0}</TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                          {formatCurrency(item.price ?? item.originalPrice ?? 0)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+            <TablePagination
+              component="div"
+              count={filteredMissingImageItems.length}
+              page={missingImagePage}
+              onPageChange={(e, newPage) => setMissingImagePage(newPage)}
+              rowsPerPage={missingImageRowsPerPage}
+              onRowsPerPageChange={(e) => {
+                setMissingImageRowsPerPage(parseInt(e.target.value, 10));
+                setMissingImagePage(0);
               }}
               rowsPerPageOptions={[5, 10, 25, 50]}
             />

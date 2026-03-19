@@ -22,7 +22,9 @@ import {
   Paper,
   Pagination,
   Tabs,
-  Tab
+  Tab,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material';
 import {
   LocalBar,
@@ -39,7 +41,9 @@ import {
   LocalOffer,
   QrCodeScanner,
   Star,
-  Calculate
+  Calculate,
+  ViewList,
+  ViewModule
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -73,6 +77,7 @@ const InventoryPage = () => {
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [offerFilter, setOfferFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [inventoryView, setInventoryView] = useState('grid'); // 'grid' | 'list'
   
   const itemsPerPage = 16; // 4 rows × 4 columns
 
@@ -106,6 +111,23 @@ const InventoryPage = () => {
       const stock = Number.isNaN(parsed) || parsed == null ? 0 : parsed;
       return { capacity: cap, stock };
     });
+  };
+
+  // Item-level stock must be derived from per-capacity stock:
+  // if one capacity has stock (e.g. 750ml), the whole item should be considered "in stock".
+  const getTotalStock = (drink) => {
+    if (!drink) return 0;
+    const rows = getCapacityStockRows(drink);
+    if (rows.length > 0) {
+      return rows.reduce((sum, r) => sum + (Number(r.stock) || 0), 0);
+    }
+
+    // Fallback: if capacity stock isn't present, use the legacy `drink.stock`.
+    if (drink.stock !== undefined && drink.stock !== null) {
+      const parsed = Number(drink.stock);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
   };
 
   // Helper function to get full image URL
@@ -275,7 +297,7 @@ const InventoryPage = () => {
     // - "all": no stock-based filtering
     if (availabilityFilter !== 'all') {
       filtered = filtered.filter(drink => {
-        const stock = drink.stock !== undefined && drink.stock !== null ? Number(drink.stock) : 0;
+        const stock = getTotalStock(drink);
         if (availabilityFilter === 'available') {
           return stock > 0;
         }
@@ -329,12 +351,12 @@ const InventoryPage = () => {
     },
     {
       icon: <TrendingUp sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
-      value: filteredDrinks.filter(drink => drink.isAvailable).length,
+      value: filteredDrinks.filter(drink => getTotalStock(drink) > 0).length,
       label: 'Available'
     },
     {
       icon: <TrendingDown sx={{ fontSize: 40, color: '#FF3366', mb: 1 }} />,
-      value: filteredDrinks.filter(drink => !drink.isAvailable).length,
+      value: filteredDrinks.filter(drink => getTotalStock(drink) === 0).length,
       label: 'Out of Stock'
     },
     {
@@ -565,40 +587,134 @@ const InventoryPage = () => {
         >
           {summaryCards.map((card, index) => (
             <Grid key={index} item xs={12} sm={6} md={4} lg={2} sx={{ display: 'flex' }}>
-              <Card sx={{ backgroundColor: colors.paper, flexGrow: 1 }}>
-                <CardContent sx={{ textAlign: 'center' }}>
-                  {card.icon}
-                  <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
-                    {card.value}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {card.label}
-                  </Typography>
-                  {card.sublabel && (
-                    <Typography variant="caption" color="text.secondary">
-                      {card.sublabel}
-                    </Typography>
-                  )}
-                </CardContent>
-              </Card>
+              {(() => {
+                const isOutOfStock = card.label === 'Out of Stock';
+                const isGreenStat = !isOutOfStock && ['Total Drinks', 'Filtered Drinks', 'Available'].includes(card.label);
+                const valueColor = isOutOfStock ? '#FF3366' : colors.accentText;
+                const bgColor = isOutOfStock
+                  ? isDarkMode
+                    ? 'rgba(255, 51, 102, 0.16)'
+                    : 'rgba(255, 51, 102, 0.10)'
+                  : isGreenStat
+                    ? isDarkMode
+                      ? 'rgba(0, 224, 184, 0.14)'
+                      : 'rgba(0, 224, 184, 0.10)'
+                    : isDarkMode
+                      ? 'rgba(158, 158, 158, 0.18)'
+                      : 'rgba(158, 158, 158, 0.16)';
+                const hoverBgColor = isOutOfStock
+                  ? isDarkMode
+                    ? 'rgba(255, 51, 102, 0.26)'
+                    : 'rgba(255, 51, 102, 0.16)'
+                  : isGreenStat
+                    ? isDarkMode
+                      ? 'rgba(0, 224, 184, 0.20)'
+                      : 'rgba(0, 224, 184, 0.14)'
+                    : isDarkMode
+                      ? 'rgba(158, 158, 158, 0.24)'
+                      : 'rgba(158, 158, 158, 0.22)';
+
+                return (
+                  <Card
+                    sx={{
+                      backgroundColor: bgColor,
+                      flexGrow: 1,
+                      height: '100%',
+                      borderRadius: 3,
+                      border: `2px solid transparent`,
+                      boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                        borderColor: valueColor,
+                        backgroundColor: hoverBgColor
+                      }
+                    }}
+                  >
+                    <CardContent
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1.5,
+                        p: 2
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          '& .MuiSvgIcon-root': { marginBottom: 0 }
+                        }}
+                      >
+                        {card.icon}
+                      </Box>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-end',
+                          minWidth: 0
+                        }}
+                      >
+                        <Typography variant="h5" sx={{ color: valueColor, fontWeight: 800, lineHeight: 1.1 }}>
+                          {card.value}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.25 }}>
+                          {card.label}
+                        </Typography>
+                        {card.sublabel && (
+                          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.15 }}>
+                            {card.sublabel}
+                          </Typography>
+                        )}
+                      </Box>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
             </Grid>
           ))}
         </Grid>
       </Box>
 
+          {/* View toggle (grid vs list) */}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+            <ToggleButtonGroup
+              exclusive
+              value={inventoryView}
+              onChange={(_, v) => {
+                if (!v) return;
+                setInventoryView(v);
+              }}
+              size="small"
+            >
+              <ToggleButton value="grid" aria-label="Grid view">
+                <ViewModule sx={{ fontSize: 18 }} />
+              </ToggleButton>
+              <ToggleButton value="list" aria-label="List view">
+                <ViewList sx={{ fontSize: 18 }} />
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
+
       {/* Search and Filter Section */}
-      <Paper sx={{ p: 3, mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+      <Paper sx={{ p: 2, mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
           <FilterList sx={{ color: colors.accentText, mr: 1 }} />
-          <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 600 }}>
+          <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, fontSize: '0.95rem' }}>
             Search & Filter
           </Typography>
         </Box>
         
-        <Grid container spacing={3} alignItems="center">
+        <Grid container spacing={2} alignItems="center">
           {/* Search Input */}
           <Grid size={{ xs: 12, md: 4 }}>
             <TextField
+              size="small"
               fullWidth
               placeholder="Search by name or description..."
               value={searchTerm}
@@ -623,6 +739,9 @@ const InventoryPage = () => {
                     borderColor: colors.accentText,
                   },
                 },
+                '& .MuiInputBase-input': {
+                  fontSize: '0.86rem',
+                },
                 '& .MuiInputBase-input::placeholder': {
                   color: colors.textSecondary,
                   opacity: 1,
@@ -633,14 +752,20 @@ const InventoryPage = () => {
 
           {/* Category Filter */}
           <Grid size={{ xs: 12, md: 2.5 }}>
-            <FormControl fullWidth sx={{ minWidth: 120 }}>
-              <InputLabel sx={{ color: colors.textPrimary }}>Category</InputLabel>
+            <FormControl fullWidth size="small" sx={{ minWidth: 120 }}>
+              <InputLabel sx={{ color: colors.textPrimary, fontSize: '0.85rem' }}>Category</InputLabel>
               <Select
+                size="small"
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
                 label="Category"
                 sx={{
                   color: colors.textPrimary,
+                  '& .MuiSelect-select': {
+                    fontSize: '0.86rem',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  },
                   '& .MuiOutlinedInput-notchedOutline': {
                     borderColor: colors.border,
                   },
@@ -668,9 +793,10 @@ const InventoryPage = () => {
 
           {/* Brand Filter */}
           <Grid size={{ xs: 12, md: 2.5 }}>
-            <FormControl fullWidth sx={{ minWidth: 120 }}>
-              <InputLabel sx={{ color: colors.textPrimary }}>Brand</InputLabel>
+            <FormControl fullWidth size="small" sx={{ minWidth: 120 }}>
+              <InputLabel sx={{ color: colors.textPrimary, fontSize: '0.85rem' }}>Brand</InputLabel>
               <Select
+                size="small"
                 value={selectedBrand}
                 onChange={(e) => {
                   setSelectedBrand(e.target.value);
@@ -682,6 +808,11 @@ const InventoryPage = () => {
                 label="Brand"
                 sx={{
                   color: colors.textPrimary,
+                  '& .MuiSelect-select': {
+                    fontSize: '0.86rem',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  },
                   '& .MuiOutlinedInput-notchedOutline': {
                     borderColor: colors.border,
                   },
@@ -714,7 +845,7 @@ const InventoryPage = () => {
                   display: 'flex',
                   alignItems: 'center',
                   height: '100%',
-                  p: 1,
+                  p: 0.5,
                   border: `1px solid ${colors.border}`,
                   borderRadius: 1,
                   backgroundColor: colors.paper
@@ -737,8 +868,8 @@ const InventoryPage = () => {
                   }
                   label={
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Star sx={{ fontSize: 18, color: '#FFA500' }} />
-                      <Typography variant="body2" sx={{ color: colors.textPrimary }}>
+                      <Star sx={{ fontSize: 16, color: '#FFA500' }} />
+                      <Typography variant="body2" sx={{ color: colors.textPrimary, fontSize: '0.82rem' }}>
                         Brand Focus Only
                       </Typography>
                     </Box>
@@ -750,14 +881,20 @@ const InventoryPage = () => {
 
           {/* Availability Filter */}
           <Grid size={{ xs: 12, sm: 6, md: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel sx={{ color: colors.textPrimary }}>Availability</InputLabel>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: colors.textPrimary, fontSize: '0.85rem' }}>Availability</InputLabel>
               <Select
+                size="small"
                 value={availabilityFilter}
                 onChange={(e) => setAvailabilityFilter(e.target.value)}
                 label="Availability"
                 sx={{
                   color: colors.textPrimary,
+                  '& .MuiSelect-select': {
+                    fontSize: '0.86rem',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  },
                   '& .MuiOutlinedInput-notchedOutline': {
                     borderColor: colors.border,
                   },
@@ -781,14 +918,20 @@ const InventoryPage = () => {
 
           {/* On Offer Filter */}
           <Grid size={{ xs: 12, sm: 6, md: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel sx={{ color: colors.textPrimary }}>On Offer</InputLabel>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: colors.textPrimary, fontSize: '0.85rem' }}>On Offer</InputLabel>
               <Select
+                size="small"
                 value={offerFilter}
                 onChange={(e) => setOfferFilter(e.target.value)}
                 label="On Offer"
                 sx={{
                   color: colors.textPrimary,
+                  '& .MuiSelect-select': {
+                    fontSize: '0.86rem',
+                    paddingTop: '8px',
+                    paddingBottom: '8px',
+                  },
                   '& .MuiOutlinedInput-notchedOutline': {
                     borderColor: colors.border,
                   },
@@ -873,290 +1016,158 @@ const InventoryPage = () => {
         </Card>
       ) : (
         <>
-          <Box sx={{ 
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
-              md: 'repeat(3, 1fr)',
-              lg: 'repeat(4, 1fr)'
-            },
-            gap: 2,
-            justifyContent: 'center'
-          }}>
-            {paginatedDrinks.map((drink) => (
-              <Card 
-                key={drink.id}
-                sx={{ 
-                  width: '100%',
-                  height: '100%',
-                  minHeight: '380px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  backgroundColor: '#ffffff',
-                  transition: 'transform 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: 2
-                  }
-                }}
-              >
-                <CardMedia
-                  component="img"
-                  height="120"
-                  image={getImageUrl(drink.image)}
-                  alt={drink.name}
-                  sx={{ objectFit: 'contain', p: 1, backgroundColor: '#ffffff' }}
-                />
-                <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff' }}>
-                  {/* Status Label Above Name */}
-                  <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-                    {drink.barcode && (
-                      <Chip
-                        icon={<QrCodeScanner />}
-                        label="Barcode"
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: '#4CAF50',
-                          color: '#fff'
-                        }}
-                      />
-                    )}
-                    {drink.stock !== undefined && drink.stock !== null && (
-                      <Chip
-                        icon={<Inventory />}
-                        label={`Stock: ${drink.stock}`}
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: drink.stock > 0 ? '#2196F3' : '#F44336',
-                          color: '#fff'
-                        }}
-                      />
-                    )}
-                    {/* Show "Out of Stock" label if stock is 0 (backend automatically sets isAvailable based on stock) */}
-                    {drink.stock !== undefined && drink.stock !== null && drink.stock === 0 && (
-                      <Chip
-                        icon={<Cancel />}
-                        label="Out of Stock"
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: '#666',
-                          color: '#F5F5F5'
-                        }}
-                      />
-                    )}
-                    {drink.isAvailable && drink.isPopular && (
-                      <Chip
-                        icon={<LocalBar />}
-                        label="Popular"
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: '#FF3366',
-                          color: '#F5F5F5'
-                        }}
-                      />
-                    )}
-                    {drink.isBrandFocus && (
-                      <Chip
-                        icon={<Star />}
-                        label="Brand Focus"
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: '#FFA500',
-                          color: '#0D0D0D'
-                        }}
-                      />
-                    )}
-                    {drink.limitedTimeOffer && (
-                      <Chip
-                        icon={<LocalOffer />}
-                        label="Limited Time"
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: '#00E0B8',
-                          color: '#0D0D0D'
-                        }}
-                      />
-                    )}
-                  </Box>
-
-                  {/* Drink Name */}
-                  <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: colors.textPrimary }}>
-                    {drink.name}
-                  </Typography>
-
-                  {/* Hide description for Soft Drinks */}
-                  {drink.category?.name !== 'Soft Drinks' && drink.description && (
-                    <Typography
-                      variant="body2"
-                      sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: colors.textPrimary }}
-                    >
-                      {truncateDescription(drink.description)}
-                    </Typography>
-                  )}
-
-                  {/* Price Display */}
-                  <Box sx={{ mb: 1 }}>
-                    {drink.isOnOffer && drink.originalPrice ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            textDecoration: 'line-through', 
-                            color: '#666', 
-                            fontSize: '0.65rem' 
-                          }}
-                        >
-                          KES {Math.round(Number(drink.originalPrice))}
-                        </Typography>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            color: '#FF3366', 
-                            fontWeight: 'bold', 
-                            fontSize: '0.7rem' 
-                          }}
-                        >
-                          KES {Math.round(Number(drink.price))}
-                        </Typography>
-                      </Box>
-                    ) : (
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            color: colors.textPrimary, 
-                            fontWeight: 'bold', 
-                            fontSize: '0.7rem' 
-                          }}
-                        >
-                          KES {Math.round(Number(drink.price))}
-                        </Typography>
-                    )}
-                    {drink.purchasePrice && (
-                      <Typography 
-                        variant="caption" 
-                        sx={{ 
-                          color: '#666', 
-                          fontSize: '0.65rem',
-                          display: 'block',
-                          mt: 0.5
-                        }}
-                      >
-                        Cost: KES {Math.round(Number(drink.purchasePrice))}
-                      </Typography>
-                    )}
-                  </Box>
-
-                  {/* Stock Quantity Display (Read-Only) */}
-                  <Box sx={{ mb: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Inventory 
-                        sx={{ 
-                          fontSize: '0.9rem', 
-                          color: (drink.stock !== undefined && drink.stock !== null && drink.stock > 0) ? '#2196F3' : '#F44336' 
-                        }} 
-                      />
-                      <Typography 
-                        variant="body2" 
-                        sx={{ 
-                          color: (drink.stock !== undefined && drink.stock !== null && drink.stock > 0) ? '#2196F3' : '#F44336',
-                          fontWeight: 'bold',
-                          fontSize: '0.75rem'
-                        }}
-                      >
-                        Stock: {drink.stock !== undefined && drink.stock !== null ? drink.stock : 0}
-                      </Typography>
-                    </Box>
-                    {(() => {
-                      const rows = getCapacityStockRows(drink);
-                      if (!rows.length) return null;
-                      return (
-                        <Box sx={{ mt: 0.25, ml: 3, display: 'flex', flexDirection: 'column', gap: 0.1 }}>
-                          {rows.map(({ capacity, stock }, idx) => (
-                            <Typography
-                              key={`${capacity}-${idx}`}
-                              variant="caption"
-                              sx={{ color: '#666', fontSize: '0.7rem' }}
-                            >
-                              Stock {stock}: {capacity}
-                            </Typography>
-                          ))}
-                        </Box>
-                      );
-                    })()}
-                  </Box>
-
-                  {/* ABV Display */}
-                  {drink.abv && (
-                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1, mt: 0 }}>
-                      <Chip
-                        label={`${Number(drink.abv)}% ABV`}
-                        size="small"
-                        sx={{
-                          backgroundColor: '#FF3366',
-                          color: '#F5F5F5',
-                          fontSize: '0.65rem',
-                          height: '20px'
-                        }}
-                      />
-                    </Box>
-                  )}
-
-                  {/* NBV Display (Vapes: %, Pouches / Nicotine pouches: mg) */}
-                  {drink.nbv != null && drink.nbv !== '' && (() => {
-                    const catName = (drink.category?.name || '').toLowerCase();
-                    const subName = (drink.subCategory?.name || '').toLowerCase();
-                    const isVape = catName.includes('vape') || subName.includes('vape');
-                    const isPouch = catName.includes('pouch') || catName.includes('nicotine') || subName.includes('pouch') || subName.includes('nicotine');
-                    if (!isVape && !isPouch) return null;
-                    const label = isVape ? `${Number(drink.nbv)}% NBV` : `${Number(drink.nbv)} mg NBV`;
-                    return (
-                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1, mt: 0 }}>
+          {inventoryView === 'list' ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {paginatedDrinks.map((drink) => (
+                <Paper
+                  key={drink.id}
+                  sx={{
+                    p: 2,
+                    border: `1px solid ${colors.border}`,
+                    borderRadius: 2,
+                    backgroundColor: colors.paper,
+                    display: 'flex',
+                    flexDirection: { xs: 'column', md: 'row' },
+                    gap: 2,
+                    alignItems: { md: 'flex-start' }
+                  }}
+                >
+                  <Box sx={{ flex: 1 }}>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1 }}>
+                      {drink.barcode && (
                         <Chip
-                          label={label}
+                          icon={<QrCodeScanner />}
+                          label="Barcode"
+                          size="small"
+                          sx={{ fontSize: '0.7rem', height: '22px', backgroundColor: '#4CAF50', color: '#fff' }}
+                        />
+                      )}
+                      {drink.stock !== undefined && drink.stock !== null && (
+                        <Chip
+                          icon={<Inventory />}
+                          label={`Stock: ${getTotalStock(drink)}`}
                           size="small"
                           sx={{
-                            backgroundColor: isVape ? '#9C27B0' : '#607D8B',
-                            color: '#F5F5F5',
-                            fontSize: '0.65rem',
-                            height: '20px'
+                            fontSize: '0.7rem',
+                            height: '22px',
+                            backgroundColor: getTotalStock(drink) > 0 ? '#2196F3' : '#F44336',
+                            color: '#fff'
+                          }}
+                        />
+                      )}
+                      {getTotalStock(drink) === 0 && (
+                        <Chip
+                          icon={<Cancel />}
+                          label="Out of Stock"
+                          size="small"
+                          sx={{ fontSize: '0.7rem', height: '22px', backgroundColor: '#666', color: '#F5F5F5' }}
+                        />
+                      )}
+                      {drink.isAvailable && drink.isPopular && (
+                        <Chip
+                          icon={<LocalBar />}
+                          label="Popular"
+                          size="small"
+                          sx={{ fontSize: '0.7rem', height: '22px', backgroundColor: '#FF3366', color: '#F5F5F5' }}
+                        />
+                      )}
+                      {drink.isBrandFocus && (
+                        <Chip
+                          icon={<Star />}
+                          label="Brand Focus"
+                          size="small"
+                          sx={{ fontSize: '0.7rem', height: '22px', backgroundColor: '#FFA500', color: '#0D0D0D' }}
+                        />
+                      )}
+                      {drink.limitedTimeOffer && (
+                        <Chip
+                          icon={<LocalOffer />}
+                          label="Limited Time"
+                          size="small"
+                          sx={{ fontSize: '0.7rem', height: '22px', backgroundColor: '#00E0B8', color: '#0D0D0D' }}
+                        />
+                      )}
+                    </Box>
+
+                    <Typography
+                      variant="subtitle1"
+                      sx={{ fontSize: '0.95rem', fontWeight: 'bold', mb: 0.5, color: colors.textPrimary }}
+                    >
+                      {drink.name}
+                    </Typography>
+
+                    {drink.category && (
+                      <Box sx={{ mb: 1 }}>
+                        <Chip
+                          label={drink.category.name}
+                          size="small"
+                          sx={{
+                            fontSize: '0.7rem',
+                            height: '22px',
+                            backgroundColor: isDarkMode ? '#121212' : colors.paper,
+                            color: colors.accentText,
+                            border: `1px solid ${colors.border}`
                           }}
                         />
                       </Box>
-                    );
-                  })()}
+                    )}
+                  </Box>
 
-                  {/* Category */}
-                  {drink.category && (
-                    <Box sx={{ mb: 1 }}>
-                      <Chip
-                        label={drink.category.name}
-                        size="small"
-                        sx={{
-                          fontSize: '0.65rem',
-                          height: '20px',
-                          backgroundColor: isDarkMode ? '#121212' : colors.paper,
-                          color: colors.accentText,
-                          border: `1px solid ${colors.border}`
-                        }}
-                      />
+                  <Box sx={{ width: { xs: '100%', md: 240 }, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    <Box>
+                      {drink.isOnOffer && drink.originalPrice ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ textDecoration: 'line-through', color: '#666', fontSize: '0.8rem' }}
+                          >
+                            KES {Math.round(Number(drink.originalPrice))}
+                          </Typography>
+                          <Typography variant="body2" sx={{ color: '#FF3366', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                            KES {Math.round(Number(drink.price))}
+                          </Typography>
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 'bold', fontSize: '0.9rem' }}>
+                          KES {Math.round(Number(drink.price))}
+                        </Typography>
+                      )}
+                      {drink.purchasePrice && (
+                        <Typography variant="caption" sx={{ color: '#666', display: 'block', mt: 0.25 }}>
+                          Cost: KES {Math.round(Number(drink.purchasePrice))}
+                        </Typography>
+                      )}
                     </Box>
-                  )}
 
-                  {/* Availability Toggle */}
-                  <Box sx={{ mb: 1, mt: 'auto' }}>
+                    <Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Inventory
+                          sx={{
+                            fontSize: '1rem',
+                            color: getTotalStock(drink) > 0 ? '#2196F3' : '#F44336'
+                          }}
+                        />
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          Stock: {getTotalStock(drink)}
+                        </Typography>
+                      </Box>
+                      {(() => {
+                        const rows = getCapacityStockRows(drink);
+                        if (!rows.length) return null;
+                        return (
+                          <Box sx={{ ml: 2.5, mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                            {rows.map(({ capacity, stock }, idx) => (
+                              <Typography key={`${capacity}-${idx}`} variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
+                                Stock {stock}: {capacity}
+                              </Typography>
+                            ))}
+                          </Box>
+                        );
+                      })()}
+                    </Box>
+                  </Box>
+
+                  <Box sx={{ width: { xs: '100%', md: 240 }, display: 'flex', flexDirection: 'column', gap: 1, alignItems: { md: 'flex-end' } }}>
                     <FormControlLabel
                       control={
                         <Switch
@@ -1164,27 +1175,19 @@ const InventoryPage = () => {
                           onChange={(e) => handleAvailabilityToggle(drink.id, e.target.checked)}
                           size="small"
                           sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': {
-                              color: '#00E0B8',
-                            },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                              backgroundColor: '#00E0B8',
-                            },
+                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#00E0B8' },
+                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#00E0B8' }
                           }}
                         />
                       }
                       label={
-                        <Typography variant="body2" sx={{ fontSize: '0.7rem', color: colors.textPrimary }}>
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem', color: colors.textPrimary }}>
                           {drink.isAvailable ? 'Available' : 'Out of Stock'}
                         </Typography>
                       }
                     />
-                  </Box>
 
-                  {/* Edit Button */}
-                  <Box sx={{ mt: 'auto', mb: 1 }}>
                     <Button
-                      fullWidth
                       variant="contained"
                       startIcon={<Edit />}
                       onClick={() => handleEditDrink(drink)}
@@ -1192,27 +1195,363 @@ const InventoryPage = () => {
                       sx={{
                         backgroundColor: colors.accentText,
                         color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                        fontSize: '0.75rem',
+                        fontSize: '0.8rem',
                         fontWeight: 600,
-                        py: 0.5,
-                        '&:hover': {
-                          backgroundColor: '#00C4A3',
-                          transform: 'translateY(-1px)'
-                        }
+                        '&:hover': { backgroundColor: '#00C4A3' }
                       }}
                     >
                       Edit Product
                     </Button>
-                  </Box>
 
-                  {/* Last Updated */}
-                  <Typography variant="caption" sx={{ fontSize: '0.6rem', color: colors.textSecondary, mt: 0.5, display: 'block', textAlign: 'center' }}>
-                    Updated: {new Date(drink.updatedAt).toLocaleDateString()}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
-          </Box>
+                    <Typography variant="caption" sx={{ fontSize: '0.7rem', color: colors.textSecondary }}>
+                      Updated: {new Date(drink.updatedAt).toLocaleDateString()}
+                    </Typography>
+                  </Box>
+                </Paper>
+              ))}
+            </Box>
+          ) : (
+            <Box sx={{ 
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, 1fr)',
+                md: 'repeat(3, 1fr)',
+                lg: 'repeat(4, 1fr)'
+              },
+              gap: 2,
+              justifyContent: 'center'
+            }}>
+              {paginatedDrinks.map((drink) => (
+                <Card 
+                  key={drink.id}
+                  sx={{ 
+                    width: '100%',
+                    height: '100%',
+                    minHeight: '380px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    backgroundColor: '#ffffff',
+                    transition: 'transform 0.2s',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: 2
+                    }
+                  }}
+                >
+                  <CardMedia
+                    component="img"
+                    height="120"
+                    image={getImageUrl(drink.image)}
+                    alt={drink.name}
+                    sx={{ objectFit: 'contain', p: 1, backgroundColor: '#ffffff' }}
+                  />
+                  <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#ffffff' }}>
+                    {/* Status Label Above Name */}
+                    <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
+                      {drink.barcode && (
+                        <Chip
+                          icon={<QrCodeScanner />}
+                          label="Barcode"
+                          size="small"
+                          sx={{ 
+                            fontSize: '0.65rem', 
+                            height: '20px',
+                            backgroundColor: '#4CAF50',
+                            color: '#fff'
+                          }}
+                        />
+                      )}
+                      {drink.stock !== undefined && drink.stock !== null && (
+                        <Chip
+                          icon={<Inventory />}
+                          label={`Stock: ${getTotalStock(drink)}`}
+                          size="small"
+                          sx={{ 
+                            fontSize: '0.65rem', 
+                            height: '20px',
+                            backgroundColor: getTotalStock(drink) > 0 ? '#2196F3' : '#F44336',
+                            color: '#fff'
+                          }}
+                        />
+                      )}
+                      {/* Show "Out of Stock" label if stock is 0 (backend automatically sets isAvailable based on stock) */}
+                      {getTotalStock(drink) === 0 && (
+                        <Chip
+                          icon={<Cancel />}
+                          label="Out of Stock"
+                          size="small"
+                          sx={{ 
+                            fontSize: '0.65rem', 
+                            height: '20px',
+                            backgroundColor: '#666',
+                            color: '#F5F5F5'
+                          }}
+                        />
+                      )}
+                      {drink.isAvailable && drink.isPopular && (
+                        <Chip
+                          icon={<LocalBar />}
+                          label="Popular"
+                          size="small"
+                          sx={{ 
+                            fontSize: '0.65rem', 
+                            height: '20px',
+                            backgroundColor: '#FF3366',
+                            color: '#F5F5F5'
+                          }}
+                        />
+                      )}
+                      {drink.isBrandFocus && (
+                        <Chip
+                          icon={<Star />}
+                          label="Brand Focus"
+                          size="small"
+                          sx={{ 
+                            fontSize: '0.65rem', 
+                            height: '20px',
+                            backgroundColor: '#FFA500',
+                            color: '#0D0D0D'
+                          }}
+                        />
+                      )}
+                      {drink.limitedTimeOffer && (
+                        <Chip
+                          icon={<LocalOffer />}
+                          label="Limited Time"
+                          size="small"
+                          sx={{ 
+                            fontSize: '0.65rem', 
+                            height: '20px',
+                            backgroundColor: '#00E0B8',
+                            color: '#0D0D0D'
+                          }}
+                        />
+                      )}
+                    </Box>
+
+                    {/* Drink Name */}
+                    <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: colors.textPrimary }}>
+                      {drink.name}
+                    </Typography>
+
+                    {/* Hide description for Soft Drinks */}
+                    {drink.category?.name !== 'Soft Drinks' && drink.description && (
+                      <Typography
+                        variant="body2"
+                        sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: colors.textPrimary }}
+                      >
+                        {truncateDescription(drink.description)}
+                      </Typography>
+                    )}
+
+                    {/* Price Display */}
+                    <Box sx={{ mb: 1 }}>
+                      {drink.isOnOffer && drink.originalPrice ? (
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              textDecoration: 'line-through', 
+                              color: '#666', 
+                              fontSize: '0.65rem' 
+                            }}
+                          >
+                            KES {Math.round(Number(drink.originalPrice))}
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: '#FF3366', 
+                              fontWeight: 'bold', 
+                              fontSize: '0.7rem' 
+                            }}
+                          >
+                            KES {Math.round(Number(drink.price))}
+                          </Typography>
+                        </Box>
+                      ) : (
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              color: colors.textPrimary, 
+                              fontWeight: 'bold', 
+                              fontSize: '0.7rem' 
+                            }}
+                          >
+                            KES {Math.round(Number(drink.price))}
+                          </Typography>
+                      )}
+                      {drink.purchasePrice && (
+                        <Typography 
+                          variant="caption" 
+                          sx={{ 
+                            color: '#666', 
+                            fontSize: '0.65rem',
+                            display: 'block',
+                            mt: 0.5
+                          }}
+                        >
+                          Cost: KES {Math.round(Number(drink.purchasePrice))}
+                        </Typography>
+                      )}
+                    </Box>
+
+                    {/* Stock Quantity Display (Read-Only) */}
+                    <Box sx={{ mb: 1 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Inventory 
+                          sx={{ 
+                            fontSize: '0.9rem', 
+                            color: (getTotalStock(drink) > 0) ? '#2196F3' : '#F44336' 
+                          }} 
+                        />
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            color: (getTotalStock(drink) > 0) ? '#2196F3' : '#F44336',
+                            fontWeight: 'bold',
+                            fontSize: '0.75rem'
+                          }}
+                        >
+                          Stock: {getTotalStock(drink)}
+                        </Typography>
+                      </Box>
+                      {(() => {
+                        const rows = getCapacityStockRows(drink);
+                        if (!rows.length) return null;
+                        return (
+                          <Box sx={{ mt: 0.25, ml: 3, display: 'flex', flexDirection: 'column', gap: 0.1 }}>
+                            {rows.map(({ capacity, stock }, idx) => (
+                              <Typography
+                                key={`${capacity}-${idx}`}
+                                variant="caption"
+                                sx={{ color: '#666', fontSize: '0.7rem' }}
+                              >
+                                Stock {stock}: {capacity}
+                              </Typography>
+                            ))}
+                          </Box>
+                        );
+                      })()}
+                    </Box>
+
+                    {/* ABV Display */}
+                    {drink.abv && (
+                      <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1, mt: 0 }}>
+                        <Chip
+                          label={`${Number(drink.abv)}% ABV`}
+                          size="small"
+                          sx={{
+                            backgroundColor: '#FF3366',
+                            color: '#F5F5F5',
+                            fontSize: '0.65rem',
+                            height: '20px'
+                          }}
+                        />
+                      </Box>
+                    )}
+
+                    {/* NBV Display (Vapes: %, Pouches / Nicotine pouches: mg) */}
+                    {drink.nbv != null && drink.nbv !== '' && (() => {
+                      const catName = (drink.category?.name || '').toLowerCase();
+                      const subName = (drink.subCategory?.name || '').toLowerCase();
+                      const isVape = catName.includes('vape') || subName.includes('vape');
+                      const isPouch = catName.includes('pouch') || catName.includes('nicotine') || subName.includes('pouch') || subName.includes('nicotine');
+                      if (!isVape && !isPouch) return null;
+                      const label = isVape ? `${Number(drink.nbv)}% NBV` : `${Number(drink.nbv)} mg NBV`;
+                      return (
+                        <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1, mt: 0 }}>
+                          <Chip
+                            label={label}
+                            size="small"
+                            sx={{
+                              backgroundColor: isVape ? '#9C27B0' : '#607D8B',
+                              color: '#F5F5F5',
+                              fontSize: '0.65rem',
+                              height: '20px'
+                            }}
+                          />
+                        </Box>
+                      );
+                    })()}
+
+                    {/* Category */}
+                    {drink.category && (
+                      <Box sx={{ mb: 1 }}>
+                        <Chip
+                          label={drink.category.name}
+                          size="small"
+                          sx={{
+                            fontSize: '0.65rem',
+                            height: '20px',
+                            backgroundColor: isDarkMode ? '#121212' : colors.paper,
+                            color: colors.accentText,
+                            border: `1px solid ${colors.border}`
+                          }}
+                        />
+                      </Box>
+                    )}
+
+                    {/* Availability Toggle */}
+                    <Box sx={{ mb: 1, mt: 'auto' }}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={drink.isAvailable}
+                            onChange={(e) => handleAvailabilityToggle(drink.id, e.target.checked)}
+                            size="small"
+                            sx={{
+                              '& .MuiSwitch-switchBase.Mui-checked': {
+                                color: '#00E0B8',
+                              },
+                              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                backgroundColor: '#00E0B8',
+                              },
+                            }}
+                          />
+                        }
+                        label={
+                          <Typography variant="body2" sx={{ fontSize: '0.7rem', color: colors.textPrimary }}>
+                            {drink.isAvailable ? 'Available' : 'Out of Stock'}
+                          </Typography>
+                        }
+                      />
+                    </Box>
+
+                    {/* Edit Button */}
+                    <Box sx={{ mt: 'auto', mb: 1 }}>
+                      <Button
+                        fullWidth
+                        variant="contained"
+                        startIcon={<Edit />}
+                        onClick={() => handleEditDrink(drink)}
+                        size="small"
+                        sx={{
+                          backgroundColor: colors.accentText,
+                          color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                          fontSize: '0.75rem',
+                          fontWeight: 600,
+                          py: 0.5,
+                          '&:hover': {
+                            backgroundColor: '#00C4A3',
+                            transform: 'translateY(-1px)'
+                          }
+                        }}
+                      >
+                        Edit Product
+                      </Button>
+                    </Box>
+
+                    {/* Last Updated */}
+                    <Typography variant="caption" sx={{ fontSize: '0.6rem', color: colors.textSecondary, mt: 0.5, display: 'block', textAlign: 'center' }}>
+                      Updated: {new Date(drink.updatedAt).toLocaleDateString()}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+          )}
           {totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
               <Pagination
