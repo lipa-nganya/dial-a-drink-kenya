@@ -508,6 +508,7 @@ data class CashAtHandResponse(
 data class CashAtHandEntry(
     val type: String, // "cash_received" or "cash_sent"
     val orderId: Int? = null,
+    val deliveryFee: Double? = null,
     val transactionId: Int? = null,
     val customerName: String? = null,
     val amount: Double,
