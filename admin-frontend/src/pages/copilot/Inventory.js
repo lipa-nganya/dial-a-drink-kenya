@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -268,8 +268,10 @@ const Inventory = () => {
     }).format(amount);
   };
 
-  const isDefaultCapacityLabel = (label) =>
-    typeof label === 'string' && label.trim().toLowerCase() === 'default';
+  const isDefaultCapacityLabel = useCallback(
+    (label) => typeof label === 'string' && label.trim().toLowerCase() === 'default',
+    []
+  );
 
   const getNormalizedNonDefaultCapacityPricing = (item, fallbackSellingPrice = null) => {
     if (!Array.isArray(item?.capacityPricing) || item.capacityPricing.length === 0) {
@@ -1286,19 +1288,22 @@ const Inventory = () => {
     return 0;
   }
 
-  function getCapacityLabel(item) {
-    if (Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0) {
-      const capacities = item.capacityPricing
-        .map((entry) => entry?.capacity)
-        .filter((cap) => cap && !isDefaultCapacityLabel(cap));
-      if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
-    }
-    if (Array.isArray(item?.capacity) && item.capacity.length > 0) {
-      const capacities = item.capacity.filter((cap) => cap && !isDefaultCapacityLabel(cap));
-      if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
-    }
-    return 'N/A';
-  }
+  const getCapacityLabel = useCallback(
+    (item) => {
+      if (Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0) {
+        const capacities = item.capacityPricing
+          .map((entry) => entry?.capacity)
+          .filter((cap) => cap && !isDefaultCapacityLabel(cap));
+        if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
+      }
+      if (Array.isArray(item?.capacity) && item.capacity.length > 0) {
+        const capacities = item.capacity.filter((cap) => cap && !isDefaultCapacityLabel(cap));
+        if (capacities.length > 0) return Array.from(new Set(capacities)).join(', ');
+      }
+      return 'N/A';
+    },
+    [isDefaultCapacityLabel]
+  );
 
   const getCapacityOptions = (item) => {
     const values = [...availableCapacities];
