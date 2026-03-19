@@ -54,6 +54,7 @@ const PendingSubmissionApproval = () => {
   const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Default to account flow; account flow is not shown in UI.
   const [approvalMode, setApprovalMode] = useState('account'); // 'account' or 'supplier'
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState('');
@@ -144,10 +145,18 @@ const PendingSubmissionApproval = () => {
     }
   }, [submission]);
 
-  const approvedWithAccount = useMemo(() => {
+  const similarApprovedTransactions = useMemo(() => {
+    const targetAmount = Number(amount || 0);
     if (!approvedSubmissions || approvedSubmissions.length === 0) return [];
-    return approvedSubmissions.filter((s) => s.details && s.details.assetAccountId);
-  }, [approvedSubmissions]);
+
+    return approvedSubmissions
+      .filter((s) => Number(s.amount || 0) === targetAmount)
+      .sort((a, b) => {
+        const aTime = new Date(a.approvedAt || a.createdAt || 0).getTime();
+        const bTime = new Date(b.approvedAt || b.createdAt || 0).getTime();
+        return bTime - aTime;
+      });
+  }, [approvedSubmissions, amount]);
 
   const accountById = useMemo(() => {
     const map = new Map();
@@ -317,20 +326,129 @@ const PendingSubmissionApproval = () => {
         Approve Cash Submission
       </Typography>
 
-      <Paper sx={{ p: 2, mb: 3, backgroundColor: colors.paper }}>
+      <Paper
+        sx={{
+          p: 2,
+          mb: 2,
+          backgroundColor: colors.paper,
+          width: '100%'
+        }}
+      >
         <form onSubmit={handleSubmit}>
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-            <Button
-              type="button"
-              variant={approvalMode === 'account' ? 'contained' : 'outlined'}
-              onClick={() => setApprovalMode('account')}
-              sx={{
-                backgroundColor: approvalMode === 'account' ? colors.accentText : 'transparent',
-                color: approvalMode === 'account' ? '#FFFFFF' : colors.textSecondary,
-                fontWeight: 600
+          {/* Single-row layout (desktop): keep everything aligned in one line. */}
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                // Wider Date/Payment Date column.
+                md: '1.1fr 1.1fr 0.9fr 1.05fr 1.6fr 1fr 1.15fr'
+              },
+              gap: 1
+            }}
+          >
+            <TextField
+              label="Transaction number"
+              value={transactionNumber}
+              InputProps={{ readOnly: true }}
+              size="small"
+              fullWidth
+            />
+
+            <TextField
+              label="Rider Name"
+              value={riderName}
+              InputProps={{ readOnly: true }}
+              size="small"
+              fullWidth
+            />
+
+            <TextField
+              label="Amount"
+              value={formatCurrency(amount)}
+              InputProps={{ readOnly: true }}
+              size="small"
+              fullWidth
+            />
+
+            {approvalMode === 'account' ? (
+              <FormControl fullWidth>
+                <InputLabel id="account-label">Account</InputLabel>
+                <Select
+                  labelId="account-label"
+                  label="Account"
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  size="small"
+                >
+                  {accounts.map((account) => (
+                    <MenuItem key={account.id} value={account.id}>
+                      {account.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            ) : (
+              <FormControl fullWidth>
+                <InputLabel id="supplier-label">Supplier</InputLabel>
+                <Select
+                  labelId="supplier-label"
+                  label="Supplier"
+                  value={supplierId}
+                  onChange={(e) => setSupplierId(e.target.value)}
+                  size="small"
+                >
+                  {suppliers.map((s) => (
+                    <MenuItem key={s.id} value={s.id}>
+                      {s.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
+
+            <TextField
+              label={approvalMode === 'account' ? 'Date' : 'Payment Date'}
+              type="date"
+              value={transactionDate}
+              onChange={(e) => setTransactionDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              size="small"
+              fullWidth
+            />
+
+            <TextField
+              label="Transaction code"
+              value={approvalMode === 'account' ? transactionCode : '—'}
+              onChange={(e) => {
+                if (approvalMode === 'account') setTransactionCode(e.target.value);
               }}
+              InputProps={{ readOnly: approvalMode !== 'account' }}
+              size="small"
+              fullWidth
+            />
+
+            <TextField
+              label="Reference"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              size="small"
+              fullWidth
+            />
+          </Box>
+
+          <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button
+              type="submit"
+              variant="contained"
+              sx={{ backgroundColor: colors.accentText, color: '#fff', fontWeight: 600 }}
+              disabled={submitting}
             >
-              Confirm to Account
+              {submitting
+                ? 'Approving…'
+                : approvalMode === 'account'
+                  ? 'Approve to Account'
+                  : 'Approve Supplier Payment'}
             </Button>
             <Button
               type="button"
@@ -345,116 +463,11 @@ const PendingSubmissionApproval = () => {
               Supplier Payment
             </Button>
           </Box>
-
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-            <TextField
-              label="Transaction number"
-              value={transactionNumber}
-              InputProps={{ readOnly: true }}
-              fullWidth
-            />
-            <TextField
-              label="Rider Name"
-              value={riderName}
-              InputProps={{ readOnly: true }}
-              fullWidth
-            />
-            <TextField
-              label="Amount"
-              value={formatCurrency(amount)}
-              InputProps={{ readOnly: true }}
-              fullWidth
-            />
-            {approvalMode === 'account' && (
-              <>
-                <FormControl fullWidth>
-                  <InputLabel id="account-label">Account</InputLabel>
-                  <Select
-                    labelId="account-label"
-                    label="Account"
-                    value={accountId}
-                    onChange={(e) => setAccountId(e.target.value)}
-                  >
-                    {accounts.map((account) => (
-                      <MenuItem key={account.id} value={account.id}>
-                        {account.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="Date"
-                  type="date"
-                  value={transactionDate}
-                  onChange={(e) => setTransactionDate(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                />
-                <TextField
-                  label="Transaction code"
-                  value={transactionCode}
-                  onChange={(e) => setTransactionCode(e.target.value)}
-                  fullWidth
-                />
-                <TextField
-                  label="Reference"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  fullWidth
-                />
-              </>
-            )}
-
-            {approvalMode === 'supplier' && (
-              <>
-                <FormControl fullWidth>
-                  <InputLabel id="supplier-label">Supplier</InputLabel>
-                  <Select
-                    labelId="supplier-label"
-                    label="Supplier"
-                    value={supplierId}
-                    onChange={(e) => setSupplierId(e.target.value)}
-                  >
-                    {suppliers.map((s) => (
-                      <MenuItem key={s.id} value={s.id}>
-                        {s.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-                <TextField
-                  label="Payment Date"
-                  type="date"
-                  value={transactionDate}
-                  onChange={(e) => setTransactionDate(e.target.value)}
-                  InputLabelProps={{ shrink: true }}
-                  fullWidth
-                />
-                <TextField
-                  label="Reference"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  fullWidth
-                />
-              </>
-            )}
-          </Box>
-
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="submit"
-              variant="contained"
-              sx={{ backgroundColor: colors.accentText, color: '#fff', fontWeight: 600 }}
-              disabled={submitting}
-            >
-              {submitting ? 'Approving…' : 'Approve submission'}
-            </Button>
-          </Box>
         </form>
       </Paper>
 
       <Typography variant="h6" sx={{ mb: 1.5, color: colors.textPrimary, fontWeight: 600 }}>
-        Previous approved transactions
+        Similar approved transactions
       </Typography>
 
       <Paper sx={{ backgroundColor: colors.paper }}>
@@ -472,18 +485,19 @@ const PendingSubmissionApproval = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {approvedWithAccount.length === 0 ? (
+              {similarApprovedTransactions.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={7} align="center" sx={{ py: 3, color: colors.textSecondary }}>
-                    No previous approved transactions found.
+                    No similar approved transactions found.
                   </TableCell>
                 </TableRow>
               ) : (
-                approvedWithAccount.map((s) => {
+                similarApprovedTransactions.map((s) => {
                   const d = (s.details && typeof s.details === 'object') ? s.details : {};
                   const account = d.assetAccountId ? accountById.get(d.assetAccountId) : null;
+                  const supplierName = d.supplierPayment?.supplierName || null;
                   const recipient = d.recipient || s.driver?.name || '—';
-                  const ref = d.accountReference || d.reference || '—';
+                  const ref = d.accountReference || d.supplierPayment?.reference || d.reference || '—';
                   const txCode = d.transactionCode || '—';
                   const approvedBy =
                     s.approver?.username ||
@@ -498,7 +512,7 @@ const PendingSubmissionApproval = () => {
                         {formatCurrency(s.amount)}
                       </TableCell>
                       <TableCell sx={{ color: colors.textPrimary }}>
-                        {account?.name || '—'}
+                        {account?.name || supplierName || '—'}
                       </TableCell>
                       <TableCell sx={{ color: colors.textSecondary }}>{ref}</TableCell>
                       <TableCell sx={{ color: colors.textSecondary }}>{txCode}</TableCell>

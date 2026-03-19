@@ -913,104 +913,206 @@ const Reports = () => {
       {activeTab === 0 && (
         <Grid container spacing={3}>
           <Grid item xs={12} md={3}>
-            <Card sx={{ backgroundColor: colors.paper }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <AttachMoney sx={{ color: colors.accentText, mr: 1 }} />
-                  <Typography variant="h6" sx={{ color: colors.textPrimary }}>
+            <Card
+              sx={{
+                height: '100%',
+                borderRadius: 3,
+                border: `2px solid transparent`,
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.14)' : 'rgba(0, 224, 184, 0.10)',
+                boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                  borderColor: colors.accentText,
+                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.20)' : 'rgba(0, 224, 184, 0.14)'
+                }
+              }}
+            >
+              <CardContent
+                sx={{
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1.5
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.accentText }}>
+                  <AttachMoney sx={{ fontSize: 30 }} />
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                  <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
                     Total Sales
                   </Typography>
-                </Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.accentText, mb: 1 }}>
-                  {formatCurrency(salesData.totalSales)}
-                </Typography>
-                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                  {dateRange} period
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} md={3}>
-            <Card sx={{ backgroundColor: colors.paper }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                  <Assessment sx={{ color: colors.accentText, mr: 1 }} />
-                  <Typography variant="h6" sx={{ color: colors.textPrimary }}>
-                    Total Orders
+                  <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, mb: 0.25, lineHeight: 1.1 }}>
+                    {formatCurrency(salesData.totalSales)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                    {dateRange} period
                   </Typography>
                 </Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.accentText, mb: 1 }}>
-                  {salesData.totalOrders}
-                </Typography>
-                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                  {dateRange} period
-                </Typography>
               </CardContent>
             </Card>
           </Grid>
 
           <Grid item xs={12} md={3}>
-            <Card sx={{ backgroundColor: colors.paper }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Assessment sx={{ color: colors.accentText, mr: 1 }} />
-                    <Typography variant="h6" sx={{ color: colors.textPrimary }}>
+            <Card
+              sx={{
+                height: '100%',
+                borderRadius: 3,
+                border: `2px solid transparent`,
+                backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.18)' : 'rgba(158, 158, 158, 0.16)',
+                boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                  borderColor: '#9E9E9E',
+                  backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.24)' : 'rgba(158, 158, 158, 0.22)'
+                }
+              }}
+            >
+              <CardContent
+                sx={{
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1.5
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.accentText }}>
+                  <Assessment sx={{ fontSize: 30 }} />
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                  <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
+                    Total Orders
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, mb: 0.25, lineHeight: 1.1 }}>
+                    {salesData.totalOrders}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                    {dateRange} period
+                  </Typography>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <Card
+              sx={{
+                height: '100%',
+                borderRadius: 3,
+                border: `2px solid transparent`,
+                backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.18)' : 'rgba(158, 158, 158, 0.16)',
+                boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                  borderColor: '#9E9E9E',
+                  backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.24)' : 'rgba(158, 158, 158, 0.22)'
+                }
+              }}
+            >
+              <CardContent
+                sx={{
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1.5
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.accentText }}>
+                  <Assessment sx={{ fontSize: 30 }} />
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
                       Average Order
                     </Typography>
+                    <Tooltip
+                      title="Average Order Value is calculated by dividing total sales revenue by the total number of orders. It represents the average amount customers spend per order."
+                      arrow
+                    >
+                      <IconButton size="small" sx={{ color: colors.textSecondary }}>
+                        <Info fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
-                  <Tooltip
-                    title="Average Order Value is calculated by dividing total sales revenue by the total number of orders. It represents the average amount customers spend per order."
-                    arrow
-                  >
-                    <IconButton size="small" sx={{ color: colors.textSecondary }}>
-                      <Info fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                  <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, mb: 0.25, lineHeight: 1.1 }}>
+                    {formatCurrency(salesData.averageOrder)}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                    {dateRange} period
+                  </Typography>
                 </Box>
-                <Typography variant="h4" sx={{ fontWeight: 700, color: colors.accentText, mb: 1 }}>
-                  {formatCurrency(salesData.averageOrder)}
-                </Typography>
-                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                  {dateRange} period
-                </Typography>
               </CardContent>
             </Card>
           </Grid>
 
           <Grid item xs={12} md={3}>
-            <Card sx={{ backgroundColor: colors.paper }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Assessment sx={{ color: colors.accentText, mr: 1 }} />
-                    <Typography variant="h6" sx={{ color: colors.textPrimary }}>
+            <Card
+              sx={{
+                height: '100%',
+                borderRadius: 3,
+                border: `2px solid transparent`,
+                backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.18)' : 'rgba(158, 158, 158, 0.16)',
+                boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                transition: 'all 0.2s ease',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                  borderColor: '#9E9E9E',
+                  backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.24)' : 'rgba(158, 158, 158, 0.22)'
+                }
+              }}
+            >
+              <CardContent
+                sx={{
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1.5
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.accentText }}>
+                  <Assessment sx={{ fontSize: 30 }} />
+                </Box>
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
                       Growth Rate
                     </Typography>
+                    <Tooltip
+                      title="Growth Rate compares current period sales with the previous equivalent period. Positive values indicate growth, negative values indicate decline. Calculated as: ((Current Period - Previous Period) / Previous Period) × 100%"
+                      arrow
+                    >
+                      <IconButton size="small" sx={{ color: colors.textSecondary }}>
+                        <Info fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                   </Box>
-                  <Tooltip
-                    title="Growth Rate compares current period sales with the previous equivalent period. Positive values indicate growth, negative values indicate decline. Calculated as: ((Current Period - Previous Period) / Previous Period) × 100%"
-                    arrow
+                  <Typography
+                    variant="h5"
+                    sx={{
+                      fontWeight: 800,
+                      color: salesData.growthRate >= 0 ? colors.accentText : colors.error,
+                      mb: 0.25,
+                      lineHeight: 1.1
+                    }}
                   >
-                    <IconButton size="small" sx={{ color: colors.textSecondary }}>
-                      <Info fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
+                    {salesData.growthRate >= 0 ? '+' : ''}
+                    {salesData.growthRate}%
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                    {dateRange} period
+                  </Typography>
                 </Box>
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 700, 
-                    color: salesData.growthRate >= 0 ? colors.accentText : colors.error, 
-                    mb: 1 
-                  }}
-                >
-                  {salesData.growthRate >= 0 ? '+' : ''}{salesData.growthRate}%
-                </Typography>
-                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                  {dateRange} period
-                </Typography>
               </CardContent>
             </Card>
           </Grid>

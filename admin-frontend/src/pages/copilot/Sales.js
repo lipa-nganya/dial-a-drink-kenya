@@ -239,62 +239,140 @@ const Sales = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={4}>
-          <Card sx={{ backgroundColor: colors.paper, height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <ShoppingCart sx={{ color: colors.accentText, mr: 1, fontSize: 32 }} />
-                <Typography variant="h6" sx={{ color: colors.textPrimary }}>
+          <Card
+            sx={{
+              height: '100%',
+              borderRadius: 3,
+              border: `2px solid transparent`,
+              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.14)' : 'rgba(0, 224, 184, 0.10)',
+              boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                borderColor: colors.accentText,
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.20)' : 'rgba(0, 224, 184, 0.14)'
+              }
+            }}
+          >
+            <CardContent
+              sx={{
+                p: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1.5
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.accentText }}>
+                <ShoppingCart sx={{ fontSize: 30 }} />
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
                   Online Sales
                 </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, mb: 0.25, lineHeight: 1.1 }}>
+                  {formatCurrency(analytics.onlineSales.total)}
+                </Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                  {analytics.onlineSales.orderCount} orders from customer site
+                </Typography>
               </Box>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: colors.accentText, mb: 1 }}>
-                {formatCurrency(analytics.onlineSales.total)}
-              </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                {analytics.onlineSales.orderCount} orders from customer site
-              </Typography>
             </CardContent>
           </Card>
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card sx={{ backgroundColor: colors.paper, height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Person sx={{ color: '#FFA500', mr: 1, fontSize: 32 }} />
-                <Typography variant="h6" sx={{ color: colors.textPrimary }}>
+          <Card
+            sx={{
+              height: '100%',
+              borderRadius: 3,
+              border: `2px solid transparent`,
+              backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.18)' : 'rgba(158, 158, 158, 0.16)',
+              boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                borderColor: '#9E9E9E',
+                backgroundColor: isDarkMode ? 'rgba(158, 158, 158, 0.24)' : 'rgba(158, 158, 158, 0.22)'
+              }
+            }}
+          >
+            <CardContent
+              sx={{
+                p: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1.5
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#FFA500' }}>
+                <Person sx={{ fontSize: 30 }} />
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
                   Admin Sales
                 </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFA500', mb: 0.25, lineHeight: 1.1 }}>
+                  {formatCurrency(analytics.adminSales.total)}
+                </Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                  {analytics.adminSales.totalOrderCount} orders posted by admins
+                </Typography>
               </Box>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: '#FFA500', mb: 1 }}>
-                {formatCurrency(analytics.adminSales.total)}
-              </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                {analytics.adminSales.totalOrderCount} orders posted by admins
-              </Typography>
             </CardContent>
           </Card>
         </Grid>
 
         <Grid item xs={12} md={4}>
-          <Card sx={{ backgroundColor: colors.paper, height: '100%' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <AttachMoney sx={{ color: '#00E0B8', mr: 1, fontSize: 32 }} />
-                <Typography variant="h6" sx={{ color: colors.textPrimary }}>
+          <Card
+            sx={{
+              height: '100%',
+              borderRadius: 3,
+              border: `2px solid transparent`,
+              backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.14)' : 'rgba(0, 224, 184, 0.10)',
+              boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+              transition: 'all 0.2s ease',
+              '&:hover': {
+                transform: 'translateY(-2px)',
+                boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                borderColor: colors.accentText,
+                backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.20)' : 'rgba(0, 224, 184, 0.14)'
+              }
+            }}
+          >
+            <CardContent
+              sx={{
+                p: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 1.5
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: colors.accentText }}>
+                <AttachMoney sx={{ fontSize: 30, color: colors.accentText }} />
+              </Box>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700, lineHeight: 1.1 }}>
                   Admin Cash at Hand
                 </Typography>
+                <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, mb: 0.25, lineHeight: 1.1 }}>
+                  {formatCurrency(
+                    analytics.adminCashAtHand.cashAtHand ||
+                      analytics.adminCashAtHand.calculatedCashAtHand ||
+                      0
+                  )}
+                </Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
+                  Cash received: {formatCurrency(analytics.adminCashAtHand.cashReceived)}
+                </Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.25 }}>
+                  Remitted: {formatCurrency(analytics.adminCashAtHand.cashRemitted)} | Submitted: {formatCurrency(analytics.adminCashAtHand.cashSubmitted)}
+                </Typography>
               </Box>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: '#00E0B8', mb: 1 }}>
-                {formatCurrency(analytics.adminCashAtHand.cashAtHand || analytics.adminCashAtHand.calculatedCashAtHand || 0)}
-              </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                Cash received: {formatCurrency(analytics.adminCashAtHand.cashReceived)}
-              </Typography>
-              <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5 }}>
-                Remitted: {formatCurrency(analytics.adminCashAtHand.cashRemitted)} | 
-                Submitted: {formatCurrency(analytics.adminCashAtHand.cashSubmitted)}
-              </Typography>
             </CardContent>
           </Card>
         </Grid>

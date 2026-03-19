@@ -214,6 +214,75 @@ const ProductPage = () => {
     }
   };
 
+  const ProductPageSkeleton = () => (
+    <Container
+      maxWidth="lg"
+      sx={{
+        py: 4,
+        overflowX: 'hidden',
+        maxWidth: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3
+      }}
+    >
+      {/* Breadcrumbs placeholder */}
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', opacity: 0.6 }}>
+        <Box sx={{ width: 70, height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+        <Box sx={{ width: 35, height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+        <Box sx={{ width: 100, height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+      </Box>
+
+      {/* Title placeholder */}
+      <Box sx={{ mb: 2 }}>
+        <Box sx={{ width: '70%', height: 40, maxWidth: 520, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)', mx: 'auto' }} />
+      </Box>
+
+      <Grid container spacing={3} sx={{ alignItems: 'flex-start', justifyContent: 'center', minWidth: 0 }}>
+        {/* Image placeholder */}
+        <Grid item xs={12} md={5} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Card sx={{ width: '100%', overflow: 'hidden' }}>
+            <Box
+              sx={{
+                width: '100%',
+                height: { xs: 300, md: 350 },
+                minHeight: { xs: 300, md: 350 },
+                maxHeight: { xs: 300, md: 350 },
+                backgroundColor: 'rgba(0,0,0,0.08)'
+              }}
+            />
+          </Card>
+        </Grid>
+
+        {/* Options/description placeholders */}
+        <Grid item xs={12} md={7} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Box sx={{ width: '100%', maxWidth: 520 }}>
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', mb: 2 }}>
+              <Box sx={{ width: 110, height: 34, borderRadius: 999, bgcolor: 'rgba(0,0,0,0.08)' }} />
+              <Box sx={{ width: 130, height: 34, borderRadius: 999, bgcolor: 'rgba(0,0,0,0.08)' }} />
+              <Box sx={{ width: 110, height: 34, borderRadius: 999, bgcolor: 'rgba(0,0,0,0.08)' }} />
+            </Box>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box sx={{ width: '55%', height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+              <Box sx={{ width: '65%', height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+              <Box sx={{ width: '90%', height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+              <Box sx={{ width: '100%', height: 42, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)', mt: 1 }} />
+            </Box>
+          </Box>
+        </Grid>
+      </Grid>
+
+      {/* Description placeholder */}
+      <Box sx={{ mt: 1 }}>
+        <Box sx={{ width: 220, height: 16, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)', mb: 1 }} />
+        <Box sx={{ width: '100%', height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)', mb: 1 }} />
+        <Box sx={{ width: '100%', height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)', mb: 1 }} />
+        <Box sx={{ width: '80%', height: 14, borderRadius: 1, bgcolor: 'rgba(0,0,0,0.08)' }} />
+      </Box>
+    </Container>
+  );
+
   const fetchRelatedProducts = async () => {
     try {
       if (!product) return;
@@ -543,11 +612,8 @@ const ProductPage = () => {
   };
 
   if (loading && !product) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-        <CircularProgress />
-      </Container>
-    );
+    // Keep the overall product layout visible while data loads (prevents blank page + lone spinner).
+    return <ProductPageSkeleton />;
   }
 
   if (error || !product) {
@@ -561,14 +627,9 @@ const ProductPage = () => {
     );
   }
 
-  // Wait for description and testing notes so the first paint is the final layout (no shift).
-  if (descriptionLoading || testingNotesLoading) {
-    return (
-      <Container maxWidth="lg" sx={{ py: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
-        <CircularProgress />
-      </Container>
-    );
-  }
+  // IMPORTANT:
+  // Do not block the whole page while description/testing notes load.
+  // The JSX below already renders "Loading..." placeholders in those sections.
 
   const availableCapacities = getAvailableCapacities();
   const imageUrl = getImageUrl(product.image);

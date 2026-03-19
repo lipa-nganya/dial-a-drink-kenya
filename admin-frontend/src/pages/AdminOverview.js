@@ -255,7 +255,7 @@ const AdminOverview = () => {
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification('New Order Received!', {
           body: 'A new order has been placed',
-          icon: '/favicon.ico'
+          icon: '/favicon-32x32.png'
         });
       }
     }
@@ -302,38 +302,6 @@ const AdminOverview = () => {
           value: stats.todayRevenue,
           formatter: formatCurrency
         },
-        {
-          key: 'totalTips',
-          icon: <EmojiEvents sx={{ fontSize: 36, color: '#FFC107', mb: 1 }} />,
-          label: 'Total Tips (To Drivers)',
-          value: stats.totalTips,
-          formatter: formatCurrency,
-          border: '1px solid rgba(255, 193, 7, 0.3)'
-        },
-        {
-          key: 'todayTips',
-          icon: <EmojiEvents sx={{ fontSize: 36, color: '#FFC107', mb: 1 }} />,
-          label: "Today's Tips (To Drivers)",
-          value: stats.todayTips,
-          formatter: formatCurrency,
-          border: '1px solid rgba(255, 193, 7, 0.3)'
-        },
-        {
-          key: 'totalTipTransactions',
-          icon: <EmojiEvents sx={{ fontSize: 36, color: '#FFC107', mb: 1 }} />,
-          label: 'Total Tip Transactions',
-          value: stats.totalTipTransactions,
-          formatter: formatNumber,
-          border: '1px solid rgba(255, 193, 7, 0.3)'
-        },
-        {
-          key: 'todayTipTransactions',
-          icon: <EmojiEvents sx={{ fontSize: 36, color: '#FFC107', mb: 1 }} />,
-          label: "Today's Tip Transactions",
-          value: stats.todayTipTransactions,
-          formatter: formatNumber,
-          border: '1px solid rgba(255, 193, 7, 0.3)'
-        }
       ]
     },
     {
@@ -550,26 +518,108 @@ const AdminOverview = () => {
           >
             {section.cards.filter((card) => !(isMobileDevice && card.key === 'pendingOrders')).map((card) => {
               const displayValue = card.formatter ? card.formatter(card.value) : formatNumber(card.value);
+              const isInventoryQuickStats = section.title === 'Inventory';
+              const greenKeys = ['totalRevenue', 'totalOrders', 'todayOrders', 'totalItems', 'availableItems'];
+              const isGreenStat = greenKeys.includes(card.key);
+
+              const redKeys = ['todayRevenue', 'pendingOrders', 'cancelledOrders', 'outOfStockItems'];
+              const amberKeys = ['limitedOfferItems'];
+
+              const valueColor = redKeys.includes(card.key)
+                ? '#FF3366'
+                : amberKeys.includes(card.key)
+                  ? '#FFC107'
+                  : colors.accentText;
+
               return (
-                <Grid key={card.key} item xs={12} sm={6} md={4} lg={2} sx={{ display: 'flex' }}>
+                <Grid
+                  key={card.key}
+                  item
+                  xs={12}
+                  sm={6}
+                  md={isInventoryQuickStats ? 3 : 4}
+                  lg={isInventoryQuickStats ? 3 : 2}
+                  sx={{ display: 'flex' }}
+                >
                   <Card
                     sx={{
-                      backgroundColor: colors.paper,
                       height: '100%',
                       flexGrow: 1,
-                      border: card.border || `1px solid ${colors.border}`
+                      borderRadius: 3,
+                      border: `2px solid transparent`,
+                      backgroundColor: isGreenStat
+                        ? isDarkMode
+                          ? 'rgba(0, 224, 184, 0.14)'
+                          : 'rgba(0, 224, 184, 0.10)'
+                        : isDarkMode
+                          ? 'rgba(158, 158, 158, 0.18)'
+                          : 'rgba(158, 158, 158, 0.16)',
+                      boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        transform: 'translateY(-2px)',
+                        boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                        borderColor: isGreenStat ? colors.accentText : '#9E9E9E',
+                        backgroundColor: isGreenStat
+                          ? isDarkMode
+                            ? 'rgba(0, 224, 184, 0.20)'
+                            : 'rgba(0, 224, 184, 0.14)'
+                          : isDarkMode
+                            ? 'rgba(158, 158, 158, 0.24)'
+                            : 'rgba(158, 158, 158, 0.22)'
+                      }
                     }}
                   >
-                    <CardContent sx={{ textAlign: 'center', py: 1.5, px: 1.5 }}>
-                      <Box sx={{ fontSize: '1.5rem', mb: 0.5 }}>
+                    <CardContent
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1,
+                        p: isInventoryQuickStats ? 1.25 : 1.5
+                      }}
+                    >
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          flexShrink: 0,
+                          '& .MuiSvgIcon-root': { marginBottom: 0 }
+                        }}
+                      >
                         {card.icon}
                       </Box>
-                      <Typography variant="h6" sx={{ color: colors.accentText, fontWeight: 700, fontSize: '1.1rem' }}>
-                        {displayValue}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
-                        {card.label}
-                      </Typography>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-end',
+                          minWidth: 0
+                        }}
+                      >
+                        <Typography
+                          variant="h6"
+                          sx={{
+                            color: valueColor,
+                            fontWeight: 700,
+                            fontSize: isInventoryQuickStats ? '1rem' : '1.05rem',
+                            lineHeight: 1.1
+                          }}
+                        >
+                          {displayValue}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            fontSize: isInventoryQuickStats ? '0.7rem' : '0.75rem',
+                            mt: 0.25
+                          }}
+                        >
+                          {card.label}
+                        </Typography>
+                      </Box>
                     </CardContent>
                   </Card>
                 </Grid>

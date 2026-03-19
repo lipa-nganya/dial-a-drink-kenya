@@ -7,6 +7,7 @@ import {
 import PersonAdd from '@mui/icons-material/PersonAdd';
 import ListAlt from '@mui/icons-material/ListAlt';
 import ReceiptLong from '@mui/icons-material/ReceiptLong';
+import ChevronRight from '@mui/icons-material/ChevronRight';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -97,48 +98,46 @@ const PayablesDashboard = () => {
         {cards.map((card) => (
           <Paper
             key={card.id}
+            component="button"
+            type="button"
             onClick={card.onClick}
             sx={{
-              p: 2,
               display: 'flex',
               flexDirection: 'column',
-              justifyContent: 'space-between',
-              minHeight: 120,
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: 160,
+              p: 3,
+              textAlign: 'center',
               cursor: 'pointer',
               backgroundColor: card.bg,
-              borderRadius: 2,
-              border: `1px solid ${card.borderColor}`,
-              boxShadow: 'none',
+              border: `2px solid transparent`,
+              borderRadius: 3,
+              boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
               transition: 'transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease',
               '&:hover': {
                 transform: 'translateY(-2px)',
-                boxShadow: '0 4px 10px rgba(0,0,0,0.15)'
+                boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                borderColor: card.borderColor,
+                backgroundColor: card.id === 'add-supplier'
+                  ? (isDarkMode ? 'rgba(76, 175, 80, 0.35)' : 'rgba(76, 175, 80, 0.22)')
+                  : (isDarkMode ? 'rgba(0, 224, 184, 0.28)' : 'rgba(0, 224, 184, 0.18)')
+              }
+              ,
+              '&:focus-visible': {
+                outline: `2px solid ${card.borderColor}`,
+                outlineOffset: 2
               }
             }}
           >
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-              <Box
-                sx={{
-                  mr: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 56,
-                  height: 56,
-                  borderRadius: 2,
-                  backgroundColor: '#ffffff20',
-                  color: card.iconColor
-                }}
-              >
-                {card.icon}
-              </Box>
-              <Typography variant="h6" sx={{ fontWeight: 700, color: colors.textPrimary }}>
-                {card.label}
-              </Typography>
-            </Box>
-            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+            <Box sx={{ color: card.iconColor, mb: 1.5 }}>{card.icon}</Box>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: colors.textPrimary }}>
+              {card.label}
+            </Typography>
+            <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5 }}>
               {card.description}
             </Typography>
+            <ChevronRight sx={{ mt: 1.5, color: colors.textSecondary, fontSize: 28 }} />
           </Paper>
         ))}
       </Box>

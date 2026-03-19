@@ -542,48 +542,7 @@ const Transactions = () => {
         </Typography>
       </Box>
 
-      {/* Merchant Wallet Section */}
-      {merchantWallet && (
-        <Box sx={{ mb: 3 }}>
-          <Paper sx={{ p: 3, backgroundColor: colors.paper, border: `2px solid ${colors.accentText}` }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <AccountBalanceWallet sx={{ fontSize: 32, color: colors.accentText }} />
-              <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
-                Merchant Wallet
-              </Typography>
-            </Box>
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">Current Balance</Typography>
-                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
-                  KES {Number(merchantWallet.balance || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">Total Revenue</Typography>
-                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
-                  KES {Number(merchantWallet.totalRevenue || 0).toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">Paid Orders Count</Typography>
-                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
-                  {merchantWallet.totalOrders || 0}
-                </Typography>
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <Typography variant="body2" color="text.secondary">All Orders Count</Typography>
-                <Typography variant="h4" sx={{ color: colors.accentText, fontWeight: 700 }}>
-                  {merchantWallet.allOrdersCount || 0}
-                </Typography>
-              </Grid>
-            </Grid>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-              * Both Current Balance and Total Revenue exclude driver tips. Tips are credited directly to driver wallets.
-            </Typography>
-          </Paper>
-        </Box>
-      )}
+      {/* Merchant Wallet Section hidden */}
 
       {/* Main Tabs */}
       <Box sx={{ mb: 3 }}>
@@ -617,45 +576,120 @@ const Transactions = () => {
       {/* Summary Stats */}
       {(currentTab === 'transactions' || currentTab === 'card-payments') && (
       <Box sx={{ mb: 3, display: 'flex', gap: 2 }}>
-        <Paper sx={{ p: 2, flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">Total Transactions</Typography>
-          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
-            {currentTab === 'card-payments' ? filterCardPaymentTransactions().length : filteredTransactions.length}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">Total Orders</Typography>
-          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
-            {merchantWallet?.allOrdersCount || 0}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">Complete Transactions</Typography>
-          <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 700 }}>
-            {displayTransactions.filter(t => t.status === 'completed').length}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">Total Amount (Excludes Tips)</Typography>
-          <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
-            KES {Math.round(displayTransactions
-              .filter(t => {
-                // Exclude tips
+        {(() => {
+          const amountExcludesTips = Math.round(
+            displayTransactions
+              .filter((t) => {
                 if (t.transactionType === 'tip') return false;
-                // Exclude driver delivery fee payments (delivery_pay transactions with driverWalletId)
-                // Only include merchant delivery fee payments (delivery_pay with driverId/driverWalletId null)
                 if (t.transactionType === 'delivery_pay' && t.driverWalletId) return false;
                 return t.status === 'completed';
               })
-              .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0))}
-          </Typography>
-        </Paper>
-        <Paper sx={{ p: 2, flex: 1 }}>
-          <Typography variant="body2" color="text.secondary">Pending/Failed</Typography>
-          <Typography variant="h5" sx={{ color: '#FF3366', fontWeight: 700 }}>
-            {displayTransactions.filter(t => t.status === 'pending' || t.status === 'failed').length}
-          </Typography>
-        </Paper>
+              .reduce((sum, t) => sum + parseFloat(t.amount || 0), 0)
+          );
+
+          const quickStats = [
+            {
+              key: 'totalTransactions',
+              label: 'Total Transactions',
+              value:
+                currentTab === 'card-payments'
+                  ? filterCardPaymentTransactions().length
+                  : filteredTransactions.length,
+              icon: <Receipt sx={{ fontSize: 28 }} />,
+              tone: 'green'
+            },
+            {
+              key: 'totalOrders',
+              label: 'Total Orders',
+              value: merchantWallet?.allOrdersCount || 0,
+              icon: <ShoppingCart sx={{ fontSize: 28 }} />,
+              tone: 'green'
+            },
+            {
+              key: 'completeTransactions',
+              label: 'Complete Transactions',
+              value: displayTransactions.filter((t) => t.status === 'completed').length,
+              icon: <Info sx={{ fontSize: 28 }} />,
+              tone: 'green'
+            },
+            {
+              key: 'amountExcludesTips',
+              label: 'Total Amount (Excludes Tips)',
+              value: `KES ${amountExcludesTips.toLocaleString('en-KE')}`,
+              icon: <AccountBalanceWallet sx={{ fontSize: 28 }} />,
+              tone: 'red'
+            },
+            {
+              key: 'pendingFailed',
+              label: 'Pending/Failed',
+              value: displayTransactions.filter((t) => t.status === 'pending' || t.status === 'failed').length,
+              icon: <Info sx={{ fontSize: 28 }} />,
+              tone: 'red'
+            }
+          ];
+
+          return quickStats.map((s) => {
+            const isRed = s.tone === 'red';
+            const valueColor = isRed ? '#FF3366' : colors.accentText;
+            const bgColor = isRed
+              ? isDarkMode
+                ? 'rgba(255, 51, 102, 0.16)'
+                : 'rgba(255, 51, 102, 0.10)'
+              : isDarkMode
+                ? 'rgba(0, 224, 184, 0.14)'
+                : 'rgba(0, 224, 184, 0.10)';
+            const hoverBgColor = isRed
+              ? isDarkMode
+                ? 'rgba(255, 51, 102, 0.26)'
+                : 'rgba(255, 51, 102, 0.16)'
+              : isDarkMode
+                ? 'rgba(0, 224, 184, 0.20)'
+                : 'rgba(0, 224, 184, 0.14)';
+
+            return (
+              <Paper
+                key={s.key}
+                sx={{
+                  flex: 1,
+                  p: 0,
+                  borderRadius: 3,
+                  backgroundColor: bgColor,
+                  border: '2px solid transparent',
+                  boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
+                  transition: 'all 0.2s ease',
+                  '&:hover': {
+                    transform: 'translateY(-2px)',
+                    boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
+                    borderColor: valueColor,
+                    backgroundColor: hoverBgColor
+                  }
+                }}
+              >
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 1.5,
+                    p: 2
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', color: valueColor }}>
+                    {s.icon}
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', minWidth: 0 }}>
+                    <Typography variant="h6" sx={{ color: valueColor, fontWeight: 800, lineHeight: 1.1 }}>
+                      {s.value}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25, textAlign: 'right' }}>
+                      {s.label}
+                    </Typography>
+                  </Box>
+                </Box>
+              </Paper>
+            );
+          });
+        })()}
       </Box>
       )}
 

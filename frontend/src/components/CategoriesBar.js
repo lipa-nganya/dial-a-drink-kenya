@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Button } from '@mui/material';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
@@ -10,6 +10,8 @@ const CategoriesBar = () => {
   const [searchParams] = useSearchParams();
   const { colors } = useTheme();
   const [categories, setCategories] = useState([]);
+  const isDraggingRef = useRef(false);
+  const touchStartXRef = useRef(0);
 
   const isOnMenu = location.pathname === '/menu';
   const selectedCategoryId = isOnMenu ? (() => {
@@ -37,6 +39,10 @@ const CategoriesBar = () => {
   }, []);
 
   const handleCategoryClick = (categoryId) => {
+    // On mobile, horizontal swipes inside a scroll container can still trigger
+    // a click on the touched button. That navigation makes the scroll feel
+    // "stuck" (snaps back to the selected category). Ignore clicks after a drag.
+    if (isDraggingRef.current) return;
     navigate(`/menu?category=${categoryId}`);
   };
 
@@ -47,16 +53,40 @@ const CategoriesBar = () => {
       sx={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: 'flex-start',
         gap: 0,
         overflowX: 'auto',
+        overflowY: 'hidden',
         flexWrap: 'nowrap',
+        width: '100%',
+        touchAction: 'pan-x',
+        WebkitOverflowScrolling: 'touch',
         px: 1,
         py: 0.75,
         borderTop: '1px solid rgba(0, 0, 0, 0.08)',
         backgroundColor: colors.paper || '#FFFFFF',
         '&::-webkit-scrollbar': { height: 4 },
         '&::-webkit-scrollbar-thumb': { backgroundColor: 'rgba(0,0,0,0.2)', borderRadius: 2 },
+      }}
+      onTouchStart={(e) => {
+        if (!e.touches || e.touches.length === 0) return;
+        isDraggingRef.current = false;
+        touchStartXRef.current = e.touches[0].clientX;
+      }}
+      onTouchMove={(e) => {
+        if (!e.touches || e.touches.length === 0) return;
+        const startX = touchStartXRef.current;
+        const currentX = e.touches[0].clientX;
+        const dx = Math.abs(currentX - startX);
+        if (dx > 6) isDraggingRef.current = true; // ~6px threshold to avoid false positives
+      }}
+      onTouchEnd={() => {
+        // keep the value for the click handler that fires after touchend
+        // (it will reset on the next touchstart)
+      }}
+      onTouchCancel={() => {
+        isDraggingRef.current = false;
+        touchStartXRef.current = 0;
       }}
     >
       {categories.map((category) => {
@@ -71,7 +101,9 @@ const CategoriesBar = () => {
               fontWeight: 600,
               color: isSelected ? '#000000' : (colors.textPrimary || '#000000'),
               backgroundColor: isSelected ? (colors.accent || '#00E0B8') : 'transparent',
-              minWidth: 'auto',
+              minWidth: 'unset',
+              flex: '0 0 auto',
+              flexShrink: 0,
               px: 1.5,
               whiteSpace: 'nowrap',
               '&:hover': {

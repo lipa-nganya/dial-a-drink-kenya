@@ -147,11 +147,10 @@ const DrinkCard = ({ drink }) => {
     // can render immediately without a blank loading state.
     if (drink.category?.slug && drink.slug) {
       navigate(`/${drink.category.slug}/${drink.slug}`, { state: { drink } });
-    } else if (drink.slug) {
-      // Fallback to old format if category slug is missing
-      navigate(`/product/${drink.slug}`, { state: { drink } });
     } else {
-      // Last resort: use ID
+      // Fallback to old format:
+      // `/product/:id` is backed by `/drinks/:id`, so we must use `drink.id`
+      // (not `drink.slug`) to avoid 404s on refresh/cold loads.
       navigate(`/product/${drink.id}`, { state: { drink } });
     }
   };

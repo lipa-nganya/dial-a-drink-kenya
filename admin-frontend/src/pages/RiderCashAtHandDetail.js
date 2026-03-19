@@ -70,8 +70,20 @@ const RiderCashAtHandDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tabIndex, setTabIndex] = useState(0);
-  const initialSubmissionsSubTab =
-    typeof location.state?.submissionsSubTab === 'number' ? location.state.submissionsSubTab : 0;
+  const mapLegacySubmissionsSubTab = (v) => {
+    if (typeof v !== 'number') return 0;
+    // Legacy mapping (pre-removal of "All Submissions"):
+    // 0 = All submissions, 1 = Pending, 2 = Approved, 3 = Rejected
+    // New mapping:
+    // 0 = Pending, 1 = Approved, 2 = Rejected
+    if (v === 1) return 0;
+    if (v === 2) return 1;
+    if (v === 3) return 2;
+    // Any other value (including legacy 0/"All submissions") defaults to Pending
+    return 0;
+  };
+
+  const initialSubmissionsSubTab = mapLegacySubmissionsSubTab(location.state?.submissionsSubTab);
   const [submissionsSubTab, setSubmissionsSubTab] = useState(initialSubmissionsSubTab);
   const [submissions, setSubmissions] = useState([]);
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
@@ -82,6 +94,7 @@ const RiderCashAtHandDetail = () => {
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectSubmissionId, setRejectSubmissionId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [confirmedSearch, setConfirmedSearch] = useState('');
 
   const fetchRider = useCallback(async () => {
     if (!riderId) return;
@@ -97,7 +110,7 @@ const RiderCashAtHandDetail = () => {
   const fetchSubmissions = useCallback(async () => {
     if (!riderId) return;
     try {
-      const statusMap = { 0: undefined, 1: 'pending', 2: 'approved', 3: 'rejected' };
+      const statusMap = { 0: 'pending', 1: 'approved', 2: 'rejected' };
       const statusParam = statusMap[submissionsSubTab];
       const res = await api.get(`/driver-wallet/${riderId}/cash-submissions`, {
         params: statusParam ? { status: statusParam } : { limit: 500 }
@@ -142,9 +155,14 @@ const RiderCashAtHandDetail = () => {
 
   useEffect(() => {
     if (typeof location.state?.submissionsSubTab === 'number') {
-      setSubmissionsSubTab(location.state.submissionsSubTab);
+      setSubmissionsSubTab(mapLegacySubmissionsSubTab(location.state.submissionsSubTab));
     }
   }, [location.state?.submissionsSubTab]);
+
+  // Only keep/allow search on the Confirmed tab.
+  useEffect(() => {
+    if (submissionsSubTab !== 1) setConfirmedSearch('');
+  }, [submissionsSubTab]);
 
   useEffect(() => {
     if (tabIndex === 1) fetchLogs();
@@ -229,6 +247,16 @@ const RiderCashAtHandDetail = () => {
     return s.details && typeof s.details === 'object' ? JSON.stringify(s.details) : (s.details ?? '—');
   };
 
+  const confirmedQuery = String(confirmedSearch || '').trim().toLowerCase();
+  const submissionsForTable =
+    submissionsSubTab === 1 && confirmedQuery
+      ? submissions.filter((s) => {
+          const detailsText = String(renderSubmissionDetails(s) || '');
+          const haystack = `${s.id} ${s.submissionType} ${s.amount} ${detailsText}`;
+          return haystack.toLowerCase().includes(confirmedQuery);
+        })
+      : submissions;
+
   if (loading && !rider) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -288,7 +316,7 @@ const RiderCashAtHandDetail = () => {
               onChange={(_, v) => setSubmissionsSubTab(v)}
               sx={{ borderBottom: `1px solid ${colors.border}`, mb: 2 }}
             >
-              <Tab label="All Submissions" />
+              {/* Removed "All Submissions" tab; tabs now start at Pending */}
               <Tab
                 label={
                   <Badge badgeContent={pendingCount} color="error" max={99}>
@@ -299,6 +327,16 @@ const RiderCashAtHandDetail = () => {
               <Tab label="Confirmed" />
               <Tab label="Rejected" />
             </Tabs>
+            {submissionsSubTab === 1 && (
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search confirmed submissions..."
+                value={confirmedSearch}
+                onChange={(e) => setConfirmedSearch(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+            )}
             <TableContainer>
               <Table size="small">
                 <TableHead>
@@ -307,16 +345,16 @@ const RiderCashAtHandDetail = () => {
                     <TableCell>Type</TableCell>
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>Status</TableCell>
-                    {(submissionsSubTab === 1 || submissions.some((s) => s.status === 'pending')) && (
+                    {(submissionsSubTab === 0 || submissions.some((s) => s.status === 'pending')) && (
                       <TableCell align="right">Actions</TableCell>
                     )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {submissions.length === 0 ? (
+                  {submissionsForTable.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={submissionsSubTab === 1 ? 5 : 4}
+                        colSpan={submissionsSubTab === 0 ? 5 : 4}
                         align="center"
                         sx={{ color: colors.textSecondary, py: 3 }}
                       >
@@ -324,7 +362,7 @@ const RiderCashAtHandDetail = () => {
                       </TableCell>
                     </TableRow>
                   ) : (
-                    submissions.map((s) => (
+                    submissionsForTable.map((s) => (
                       <TableRow key={s.id}>
                         <TableCell sx={{ color: colors.textSecondary }}>{formatDate(s.createdAt)}</TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>{getSubmissionTypeLabel(s.submissionType)}</TableCell>
@@ -332,7 +370,7 @@ const RiderCashAtHandDetail = () => {
                         <TableCell>
                           <Chip size="small" label={s.status} color={getStatusColor(s.status)} />
                         </TableCell>
-                        {(submissionsSubTab === 1 || submissions.some((x) => x.status === 'pending')) && (
+                        {(submissionsSubTab === 0 || submissions.some((x) => x.status === 'pending')) && (
                           <TableCell align="right">
                             {s.status === 'pending' ? (
                               <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
