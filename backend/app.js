@@ -273,6 +273,9 @@ app.use('/api/places', require('./routes/places'));
 app.use('/api/distance', require('./routes/distance'));
 app.use('/api/mpesa', require('./routes/mpesa'));
 app.use('/api/pesapal', require('./routes/pesapal'));
+// Same PesaPal routes without /api prefix — use when reverse-proxying from the storefront host, e.g.
+// https://www.dialadrinkkenya.com/pesapal/ipn → Cloud Run /pesapal/ipn
+app.use('/pesapal', require('./routes/pesapal'));
 app.use('/api/pdq-payment', require('./routes/pdq-payment'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/order-notifications', require('./routes/order-notifications'));
