@@ -191,10 +191,14 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     setError(null);
   }, [drink, open]);
 
+  // Ensure the dialog always reflects the latest categories/brands,
+  // especially after adding them in Copilot Inventory Settings.
   useEffect(() => {
+    if (!open) return;
     fetchCategories();
     fetchBrands();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
   
   // Debug: Log formData.purchasePrice changes
   useEffect(() => {
