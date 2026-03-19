@@ -947,9 +947,21 @@ const Inventory = () => {
               });
             });
           } else {
+            const fallbackCapacityLabel =
+              Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0
+                ? Array.from(
+                    new Set(
+                      item.capacityPricing
+                        .map((entry) => entry?.capacity)
+                        .filter((cap) => cap && !isDefaultCapacityLabel(cap))
+                    )
+                  ).join(', ') || 'N/A'
+                : Array.isArray(item?.capacity) && item.capacity.length > 0
+                ? Array.from(new Set(item.capacity.filter((cap) => cap && !isDefaultCapacityLabel(cap)))).join(', ') || 'N/A'
+                : 'N/A';
             rows.push({
               item,
-              capacity: getCapacityLabel(item),
+              capacity: fallbackCapacityLabel,
               stock: parseInt(item.stock, 10) || 0,
               sellingPrice: basePrice
             });
@@ -959,7 +971,7 @@ const Inventory = () => {
     });
 
     return rows;
-  }, [priceListItems, isDefaultCapacityLabel, getCapacityLabel]);
+  }, [priceListItems, isDefaultCapacityLabel]);
 
   const zeroSellingCapacityRows = useMemo(() => {
     const rows = [];
