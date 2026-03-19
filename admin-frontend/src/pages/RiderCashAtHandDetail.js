@@ -22,7 +22,7 @@ import {
   DialogActions,
   TextField
 } from '@mui/material';
-import { useParams, Link as RouterLink, useNavigate } from 'react-router-dom';
+import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import ArrowBack from '@mui/icons-material/ArrowBack';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
@@ -64,12 +64,15 @@ const getStatusColor = (status) => {
 const RiderCashAtHandDetail = () => {
   const { riderId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { colors } = useTheme();
   const [rider, setRider] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tabIndex, setTabIndex] = useState(0);
-  const [submissionsSubTab, setSubmissionsSubTab] = useState(0);
+  const initialSubmissionsSubTab =
+    typeof location.state?.submissionsSubTab === 'number' ? location.state.submissionsSubTab : 0;
+  const [submissionsSubTab, setSubmissionsSubTab] = useState(initialSubmissionsSubTab);
   const [submissions, setSubmissions] = useState([]);
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
   const [logs, setLogs] = useState([]);
@@ -136,6 +139,12 @@ const RiderCashAtHandDetail = () => {
   useEffect(() => {
     fetchSubmissions();
   }, [fetchSubmissions]);
+
+  useEffect(() => {
+    if (typeof location.state?.submissionsSubTab === 'number') {
+      setSubmissionsSubTab(location.state.submissionsSubTab);
+    }
+  }, [location.state?.submissionsSubTab]);
 
   useEffect(() => {
     if (tabIndex === 1) fetchLogs();
@@ -298,7 +307,6 @@ const RiderCashAtHandDetail = () => {
                     <TableCell>Type</TableCell>
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell>Details</TableCell>
                     {(submissionsSubTab === 1 || submissions.some((s) => s.status === 'pending')) && (
                       <TableCell align="right">Actions</TableCell>
                     )}
@@ -308,7 +316,7 @@ const RiderCashAtHandDetail = () => {
                   {submissions.length === 0 ? (
                     <TableRow>
                       <TableCell
-                        colSpan={submissionsSubTab === 1 ? 6 : 5}
+                        colSpan={submissionsSubTab === 1 ? 5 : 4}
                         align="center"
                         sx={{ color: colors.textSecondary, py: 3 }}
                       >
@@ -323,9 +331,6 @@ const RiderCashAtHandDetail = () => {
                         <TableCell align="right" sx={{ color: colors.textPrimary }}>{formatCurrency(s.amount)}</TableCell>
                         <TableCell>
                           <Chip size="small" label={s.status} color={getStatusColor(s.status)} />
-                        </TableCell>
-                        <TableCell sx={{ color: colors.textSecondary }}>
-                          {renderSubmissionDetails(s)}
                         </TableCell>
                         {(submissionsSubTab === 1 || submissions.some((x) => x.status === 'pending')) && (
                           <TableCell align="right">

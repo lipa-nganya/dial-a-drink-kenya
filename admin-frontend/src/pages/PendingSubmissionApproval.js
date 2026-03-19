@@ -201,7 +201,10 @@ const PendingSubmissionApproval = () => {
           reference: reference || null
         });
 
-        navigate('/cash-at-hand', { replace: true });
+        navigate(`/drivers/${driver?.id}/cash-at-hand`, {
+          replace: true,
+          state: { submissionsSubTab: 1 } // pending submissions tab
+        });
       } catch (err) {
         console.error('Error approving submission as supplier payment', err);
         setError(err.response?.data?.error || err.message || 'Failed to approve supplier payment');
@@ -256,8 +259,11 @@ const PendingSubmissionApproval = () => {
         transactionType: 'debit' // debit = increase asset account balance
       });
 
-      // Go back to cash at hand pending tab
-      navigate('/cash-at-hand', { replace: true });
+      // Go back to rider cash-at-hand pending tab
+      navigate(`/drivers/${driver?.id}/cash-at-hand`, {
+        replace: true,
+        state: { submissionsSubTab: 1 } // pending submissions tab
+      });
     } catch (err) {
       console.error('Error approving submission with account', err);
       setError(err.response?.data?.error || err.message || 'Failed to approve submission');
