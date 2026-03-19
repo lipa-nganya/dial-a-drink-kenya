@@ -147,14 +147,34 @@ const Inventory = () => {
 
   const fetchInventoryEntitySummaries = async () => {
     try {
-      const [catRes, subRes, brandRes] = await Promise.all([
+      const results = await Promise.allSettled([
         api.get('/admin/inventory/categories-summary'),
         api.get('/admin/inventory/subcategories-summary'),
         api.get('/admin/inventory/brands-summary')
       ]);
-      setCategoriesSummary(catRes.data?.categories || []);
-      setSubcategoriesSummary(subRes.data?.subcategories || []);
-      setBrandsSummary(brandRes.data?.brands || []);
+
+      const catRes = results[0];
+      const subRes = results[1];
+      const brandRes = results[2];
+
+      if (catRes.status === 'fulfilled') {
+        setCategoriesSummary(catRes.value.data?.categories || []);
+      }
+      if (subRes.status === 'fulfilled') {
+        setSubcategoriesSummary(subRes.value.data?.subcategories || []);
+      }
+      if (brandRes.status === 'fulfilled') {
+        setBrandsSummary(brandRes.value.data?.brands || []);
+      }
+
+      const anyRejected = results.some((r) => r.status === 'rejected');
+      if (anyRejected) {
+        setSnackbar({
+          open: true,
+          message: 'Some inventory lists failed to load. Try refresh.',
+          severity: 'error'
+        });
+      }
     } catch (err) {
       console.error('Error fetching inventory entity summaries:', err);
       setSnackbar({
@@ -189,14 +209,14 @@ const Inventory = () => {
       const response = await api.get('/admin/drinks');
       const drinks = response.data || [];
       setAllDrinks(drinks);
-
+      
       // Items where purchasePrice is 0, null, or undefined
       const zeroPurchaseItems = drinks.filter((drink) => {
         const purchasePrice = drink.purchasePrice;
         return (
           purchasePrice === null ||
-          purchasePrice === undefined ||
-          purchasePrice === '' ||
+               purchasePrice === undefined || 
+               purchasePrice === '' ||
           parseFloat(purchasePrice) === 0
         );
       });
@@ -1421,18 +1441,18 @@ const Inventory = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <AttachMoney sx={{ color: colors.accentText, fontSize: 28 }} />
                   <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
-                    Stock Valuation
-                  </Typography>
-                </Box>
+                  Stock Valuation
+                </Typography>
+              </Box>
                 <Typography variant="h5" sx={{ fontWeight: 800, color: colors.accentText, mb: 0.5 }}>
                   {formatCurrency(stockValuationTableTotal)}
-                </Typography>
+              </Typography>
                 <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                   Total value of {stockValuationRows.length} item-capacity rows
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
 
           <Grid item xs={12} sm={6} md={3}>
             <Card
@@ -1455,18 +1475,18 @@ const Inventory = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <Warning sx={{ color: '#FF3366', fontSize: 28 }} />
                   <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
-                    Out of Stock
-                  </Typography>
-                </Box>
+                  Out of Stock
+                </Typography>
+              </Box>
                 <Typography variant="h5" sx={{ fontWeight: 800, color: '#FF3366', mb: 0.5 }}>
-                  {analytics.outOfStock.count}
-                </Typography>
+                {analytics.outOfStock.count}
+              </Typography>
                 <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                  Items currently out of stock
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+                Items currently out of stock
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
 
           <Grid item xs={12} sm={6} md={3}>
             <Card
@@ -1490,17 +1510,17 @@ const Inventory = () => {
                   <TrendingDown sx={{ color: '#FFA500', fontSize: 28 }} />
                   <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
                     Slow-Moving
-                  </Typography>
-                </Box>
+                </Typography>
+              </Box>
                 <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFA500', mb: 0.5 }}>
-                  {analytics.slowMoving.count}
-                </Typography>
+                {analytics.slowMoving.count}
+              </Typography>
                 <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                  No sales in ≥ {analytics.slowMoving.thresholdMonths} months
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+                No sales in ≥ {analytics.slowMoving.thresholdMonths} months
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
 
           <Grid item xs={12} sm={6} md={3}>
             <Card
@@ -1524,18 +1544,18 @@ const Inventory = () => {
                   <Warning sx={{ color: '#FFA500', fontSize: 28 }} />
                   <Typography variant="subtitle1" sx={{ color: colors.textPrimary, fontWeight: 700 }}>
                     Zero Purchase
-                  </Typography>
-                </Box>
+                </Typography>
+              </Box>
                 <Typography variant="h5" sx={{ fontWeight: 800, color: '#FFA500', mb: 0.5 }}>
-                  {loadingZeroPrice ? '...' : zeroPurchasePriceItems.length}
-                </Typography>
+                {loadingZeroPrice ? '...' : zeroPurchasePriceItems.length}
+              </Typography>
                 <Typography variant="caption" sx={{ color: colors.textSecondary }}>
-                  Items missing purchase price
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+                Items missing purchase price
+              </Typography>
+            </CardContent>
+          </Card>
         </Grid>
+      </Grid>
       )}
 
       {copilotTab === 0 && (
@@ -1638,10 +1658,10 @@ const Inventory = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Warning sx={{ color: '#FF3366' }} />
-                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                  Out of Stock Items ({analytics.outOfStock.count})
-                </Typography>
-              </Box>
+              <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                Out of Stock Items ({analytics.outOfStock.count})
+              </Typography>
+            </Box>
               <Button variant="contained" size="small" onClick={handleExportOutOfStock} sx={exportButtonSx}>
                 Export CSV
               </Button>
@@ -1806,7 +1826,7 @@ const Inventory = () => {
                             {item.purchasePrice === null || item.purchasePrice === undefined || item.purchasePrice === ''
                               ? 'Not Set'
                               : formatCurrency(0)}
-                          </Typography>
+                            </Typography>
                         )}
                       </TableCell>
                       <TableCell align="right">
@@ -1822,7 +1842,7 @@ const Inventory = () => {
                         ) : (
                           <Typography sx={{ color: colors.textPrimary, textAlign: 'right' }}>
                             {formatCurrency(item.price || item.originalPrice || 0)}
-                          </Typography>
+                            </Typography>
                         )}
                       </TableCell>
                       <TableCell align="right">
@@ -1879,9 +1899,9 @@ const Inventory = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <Warning sx={{ color: '#FF3366' }} />
-                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+              <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
                   Items with Zero Selling Price ({filteredZeroSellingCapacityRows.length})
-                </Typography>
+              </Typography>
               </Box>
               <Button variant="contained" size="small" onClick={handleExportZeroSelling} sx={exportButtonSx}>
                 Export CSV
@@ -1933,25 +1953,25 @@ const Inventory = () => {
                       const item = row.item;
                       return (
                       <TableRow key={row.key}>
-                        <TableCell sx={{ color: colors.textPrimary }}>{item.name}</TableCell>
-                        <TableCell>
-                          {item.category ? (
-                            <Chip
-                              label={item.category.name}
-                              size="small"
-                              sx={{
+                      <TableCell sx={{ color: colors.textPrimary }}>{item.name}</TableCell>
+                      <TableCell>
+                        {item.category ? (
+                          <Chip
+                            label={item.category.name}
+                            size="small"
+                            sx={{
                                 backgroundColor: isDarkMode
                                   ? 'rgba(0, 224, 184, 0.2)'
                                   : 'rgba(0, 224, 184, 0.1)',
-                                color: colors.accentText
-                              }}
-                            />
-                          ) : (
-                            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                              Uncategorized
-                            </Typography>
-                          )}
-                        </TableCell>
+                              color: colors.accentText
+                            }}
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                            Uncategorized
+                          </Typography>
+                        )}
+                      </TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>
                           {item.brand?.name || 'Unbranded'}
                         </TableCell>
@@ -1993,32 +2013,32 @@ const Inventory = () => {
                           ) : (
                             <Typography sx={{ color: colors.textPrimary }}>
                               {row.capacity}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                          </Typography>
+                        )}
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: colors.textPrimary }}>
                           {row.stock}
                         </TableCell>
                         <TableCell align="right" sx={{ color: colors.textPrimary }}>
                           {item.purchasePrice != null && item.purchasePrice !== ''
                             ? formatCurrency(item.purchasePrice)
                             : 'Not Set'}
-                        </TableCell>
-                        <TableCell align="right">
-                          {editingItem === item.id ? (
-                            <TextField
-                              type="number"
-                              size="small"
+                      </TableCell>
+                      <TableCell align="right">
+                        {editingItem === item.id ? (
+                          <TextField
+                            type="number"
+                            size="small"
                               value={editSellingPrice}
                               onChange={(e) => setEditSellingPrice(e.target.value)}
-                              sx={{ width: '100px' }}
-                              inputProps={{ min: 0, step: 0.01 }}
-                              placeholder="0.00"
-                            />
-                          ) : (
+                            sx={{ width: '100px' }}
+                            inputProps={{ min: 0, step: 0.01 }}
+                            placeholder="0.00"
+                          />
+                        ) : (
                             <Typography sx={{ color: '#FF3366', fontWeight: 600 }}>
                               {row.sellingPrice == null || row.sellingPrice === ''
-                                ? 'Not Set'
+                                ? 'Not Set' 
                                 : formatCurrency(row.sellingPrice)}
                             </Typography>
                           )}
@@ -2080,7 +2100,7 @@ const Inventory = () => {
                 <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
                   Price List ({priceListItems.length})
                 </Typography>
-              </Box>
+                          </Box>
               <Button variant="contained" size="small" onClick={handleExportPriceList} sx={exportButtonSx}>
                 Export CSV
               </Button>
@@ -2198,8 +2218,8 @@ const Inventory = () => {
                               <Typography variant="body2" sx={{ color: colors.textSecondary }}>
                                 Uncategorized
                               </Typography>
-                            )}
-                          </TableCell>
+                        )}
+                      </TableCell>
                           <TableCell sx={{ color: colors.textPrimary }}>
                             {item.brand?.name || 'Unbranded'}
                           </TableCell>
@@ -2211,43 +2231,43 @@ const Inventory = () => {
                           </TableCell>
                           <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                             {isEditingPriceRow ? (
-                              <TextField
-                                type="number"
-                                size="small"
+                          <TextField
+                            type="number"
+                            size="small"
                                 value={editPriceListSellingPrice}
                                 onChange={(e) => setEditPriceListSellingPrice(e.target.value)}
                                 sx={{ width: '110px' }}
-                                inputProps={{ min: 0, step: 0.01 }}
-                              />
-                            ) : (
+                            inputProps={{ min: 0, step: 0.01 }}
+                          />
+                        ) : (
                               formatCurrency(entry.sellingPrice)
-                            )}
-                          </TableCell>
-                          <TableCell align="right">
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
                             {isEditingPriceRow ? (
                               <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                                <IconButton
-                                  size="small"
-                                  color="primary"
+                            <IconButton 
+                              size="small" 
+                              color="primary" 
                                   onClick={() => handleSavePriceListRow(entry)}
-                                  disabled={saving}
-                                >
-                                  <Save fontSize="small" />
-                                </IconButton>
-                                <IconButton
-                                  size="small"
-                                  color="error"
+                              disabled={saving}
+                            >
+                              <Save fontSize="small" />
+                            </IconButton>
+                            <IconButton 
+                              size="small" 
+                              color="error" 
                                   onClick={handleCancelPriceListEdit}
-                                  disabled={saving}
-                                >
-                                  <Cancel fontSize="small" />
-                                </IconButton>
-                              </Box>
-                            ) : (
+                              disabled={saving}
+                            >
+                              <Cancel fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        ) : (
                               <IconButton size="small" onClick={() => handleEditPriceListRow(entry)}>
-                                <Edit fontSize="small" />
-                              </IconButton>
-                            )}
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        )}
                           </TableCell>
                         </TableRow>
                       );
@@ -2317,9 +2337,9 @@ const Inventory = () => {
                         <TableCell align="right" sx={{ color: colors.textPrimary }}>{item.stock || 0}</TableCell>
                         <TableCell align="right" sx={{ color: colors.textPrimary }}>
                           {formatCurrency(item.price ?? item.originalPrice ?? 0)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -2861,9 +2881,9 @@ const Inventory = () => {
             <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, justifyContent: 'space-between' }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <TrendingDown sx={{ color: '#FFA500' }} />
-                <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
-                  Slow-Moving Stock ({analytics.slowMoving.count})
-                </Typography>
+              <Typography variant="h5" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                Slow-Moving Stock ({analytics.slowMoving.count})
+              </Typography>
               </Box>
               <Button variant="contained" size="small" onClick={handleExportSlowMoving} sx={exportButtonSx}>
                 Export CSV
