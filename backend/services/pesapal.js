@@ -133,10 +133,14 @@ async function getAccessToken() {
  * NOTE: Since PesaPal only allows IPN configuration in production credentials section,
  * we prioritize ngrok for local testing, but fall back to production URL.
  * Even when using sandbox credentials, IPN must be configured in Production section.
+ *
+ * Shared backend, two Merchant IPN listener URLs (configure in PesaPal + proxy each www host to Cloud Run):
+ *   https://www.ruakadrinksdelivery.co.ke/api/pesapal/ipn
+ *   https://www.dialadrinkkenya.com/pesapal/ipn
+ * registerIPN() sends one URL to PesaPal; set PESAPAL_IPN_CALLBACK_URL if that registration must match a specific listener.
  */
 const getIPNCallbackUrl = () => {
-  // Merchant IPN listener domain should match the primary storefront (PesaPal dashboard).
-  // Path /pesapal/ipn is served on the API after proxying from www — see app.js /pesapal mount.
+  // Default registration URL (canonical storefront). Ruaka uses /api/pesapal/ipn on its own domain — same Express handlers.
   const PRODUCTION_IPN_URL = 'https://www.dialadrinkkenya.com/pesapal/ipn';
   const DEV_IPN_URL = 'https://deliveryos-development-backend-lssctajjoq-uc.a.run.app/api/pesapal/ipn';
   
