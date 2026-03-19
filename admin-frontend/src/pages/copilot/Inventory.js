@@ -959,7 +959,7 @@ const Inventory = () => {
     });
 
     return rows;
-  }, [priceListItems, isDefaultCapacityLabel]);
+  }, [priceListItems, isDefaultCapacityLabel, getCapacityLabel]);
 
   const zeroSellingCapacityRows = useMemo(() => {
     const rows = [];
