@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import {
   Container,
   Typography,
@@ -68,6 +68,13 @@ const ProductPage = () => {
   const [error, setError] = useState(null);
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [pendingScrollToTop, setPendingScrollToTop] = useState(false);
+
+  // "For More About" expandable section: animate vertical expansion while keeping
+  // the collapsed card height ending below the Read More link.
+  const aboutTextRef = useRef(null);
+  const [aboutTextMaxHeight, setAboutTextMaxHeight] = useState(180);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [detailedDescription, setDetailedDescription] = useState(null);
   const [descriptionLoading, setDescriptionLoading] = useState(!!initialProduct);
@@ -90,6 +97,13 @@ const ProductPage = () => {
           String(initialProduct.id) === String(id) &&
           initialHasCanonicalSlugs));
 
+    // We want to scroll back to the top, but doing it immediately can cause
+    // layout shifts while the product image/layout is still re-rendering.
+    // We defer scrolling until the image is loaded (or has errored).
+    setPendingScrollToTop(true);
+    setImageLoaded(false);
+    setImageError(false);
+
     if (canSkipFetch) {
       // `product` state is initialized only once via `useState(initialProduct)`.
       // When navigating to another product while staying on the same component instance,
@@ -97,13 +111,43 @@ const ProductPage = () => {
       if (initialProduct) {
         setProduct(initialProduct);
       }
+      setDescriptionExpanded(false);
       setLoading(false);
       return;
     }
-
-    window.scrollTo({ top: 0, behavior: 'auto' });
     fetchProduct();
   }, [categorySlug, productSlug, id]);
+
+  // Measure full text height for the expandable "For More About" card so the
+  // maxHeight transitions animate smoothly.
+  useLayoutEffect(() => {
+    if (descriptionLoading) return;
+    if (!aboutTextRef.current) return;
+    setAboutTextMaxHeight(aboutTextRef.current.scrollHeight);
+  }, [descriptionLoading, descriptionExpanded, product?.id]);
+
+  // Always collapse the section when switching products.
+  useEffect(() => {
+    setDescriptionExpanded(false);
+  }, [product?.id]);
+
+  // Scroll only after the product image is stable (loaded) or we know it will render as fallback.
+  useEffect(() => {
+    if (!pendingScrollToTop) return;
+    if (!product) return;
+
+    // If there's no image (or imageUrl resolves empty), jump immediately.
+    if (!product.image) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      setPendingScrollToTop(false);
+      return;
+    }
+
+    if (imageLoaded || imageError) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      setPendingScrollToTop(false);
+    }
+  }, [pendingScrollToTop, product?.id, imageLoaded, imageError]);
 
   useEffect(() => {
     if (product) {
@@ -707,6 +751,7 @@ const ProductPage = () => {
                     maxHeight: '100%',
                     p: 2
                   }}
+                  onLoad={() => setImageLoaded(true)}
                   onError={() => setImageError(true)}
                 />
               ) : (
@@ -1047,7 +1092,18 @@ const ProductPage = () => {
                 <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', flexShrink: 0, fontSize: '0.85rem', textAlign: 'left' }}>
                   Tasting notes:
                 </Typography>
-                <Typography variant="body2" sx={{ flex: 1, wordWrap: 'break-word', overflowWrap: 'break-word', fontSize: '0.85rem', textAlign: 'left', minHeight: '1.5em' }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    flex: 1,
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                    fontSize: '0.85rem',
+                    textAlign: 'left',
+                    // Reserve space so loading tasting notes doesn't cause layout jumps.
+                    minHeight: '120px'
+                  }}
+                >
                   {testingNotesLoading ? 'Loading...' : (testingNotes || 'N/A')}
                 </Typography>
               </Box>
@@ -1255,7 +1311,6 @@ const ProductPage = () => {
               sx={{ 
                 width: '100%',
                 height: '100%',
-                minHeight: 200,
                 p: 3,
                 backgroundColor: '#f8f9fa',
                 border: `1px solid #e0e0e0`,
@@ -1276,8 +1331,42 @@ const ProductPage = () => {
                 For More About {product.name}
               </Typography>
               {descriptionLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                  <CircularProgress size={24} />
+                <Box sx={{ py: 2 }}>
+                  <Box
+                    ref={aboutTextRef}
+                    sx={{
+                      overflow: 'hidden',
+                      transition: 'max-height 450ms ease',
+                      maxHeight: aboutTextMaxHeight
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                      <CircularProgress size={24} />
+                    </Box>
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        fontSize: '1rem',
+                        lineHeight: 1.8,
+                        textAlign: 'left',
+                        fontFamily: '"Lato", "Georgia", serif',
+                        color: 'text.secondary'
+                      }}
+                    >
+                      Loading... Loading... Loading...
+                    </Typography>
+                  </Box>
+
+                  {/* Reserve the Read More link space so the card doesn't jump */}
+                  <Box
+                    sx={{
+                      mt: 1,
+                      width: '130px',
+                      height: '34px',
+                      borderRadius: 1,
+                      backgroundColor: 'rgba(0,0,0,0.08)'
+                    }}
+                  />
                 </Box>
               ) : (() => {
                 const { sentences } = getProductDescription();
@@ -1303,51 +1392,64 @@ const ProductPage = () => {
                 
                 return (
                   <Box>
-                    <Typography 
-                      variant="body1" 
-                      sx={{ 
-                        fontSize: '1rem', 
-                        lineHeight: 1.8, 
-                        textAlign: 'left',
-                        mb: hasMore && !descriptionExpanded ? 1 : 0,
-                        fontFamily: '"Lato", "Georgia", serif'
+                    <Box
+                      ref={aboutTextRef}
+                      sx={{
+                        overflow: 'hidden',
+                        transition: 'max-height 450ms ease',
+                        maxHeight: aboutTextMaxHeight
                       }}
                     >
-                      {firstThree.map((sentence, index) => (
-                        <React.Fragment key={index}>
-                          {sentence}
-                          {index < firstThree.length - 1 && ' '}
-                        </React.Fragment>
-                      ))}
-                      {descriptionExpanded && remaining.length > 0 && (
-                        <>
-                          {' '}
-                          {remaining.map((sentence, index) => (
-                            <React.Fragment key={`remaining-${index}`}>
-                              {sentence}
-                              {index < remaining.length - 1 && ' '}
-                            </React.Fragment>
-                          ))}
-                        </>
-                      )}
-                    </Typography>
-                    {hasMore && (
-                      <Button
-                        onClick={() => setDescriptionExpanded(!descriptionExpanded)}
-                        sx={{
-                          mt: 1,
-                          textTransform: 'none',
-                          fontSize: '0.9rem',
-                          color: colors.accentText,
-                          '&:hover': {
-                            backgroundColor: 'transparent',
-                            textDecoration: 'underline'
-                          }
+                      <Typography 
+                        variant="body1" 
+                        sx={{ 
+                          fontSize: '1rem', 
+                          lineHeight: 1.8, 
+                          textAlign: 'left',
+                          mb: 0,
+                          fontFamily: '"Lato", "Georgia", serif'
                         }}
                       >
-                        {descriptionExpanded ? 'Read Less' : 'Read More'}
-                      </Button>
-                    )}
+                        {firstThree.map((sentence, index) => (
+                          <React.Fragment key={index}>
+                            {sentence}
+                            {index < firstThree.length - 1 && ' '}
+                          </React.Fragment>
+                        ))}
+                        {descriptionExpanded && remaining.length > 0 && (
+                          <>
+                            {' '}
+                            {remaining.map((sentence, index) => (
+                              <React.Fragment key={`remaining-${index}`}>
+                                {sentence}
+                                {index < remaining.length - 1 && ' '}
+                              </React.Fragment>
+                            ))}
+                          </>
+                        )}
+                      </Typography>
+                    </Box>
+
+                    {/* Keep the link area reserved; animate only the text height */}
+                    <Button
+                      onClick={() => {
+                        if (!hasMore) return;
+                        setDescriptionExpanded(!descriptionExpanded);
+                      }}
+                      sx={{
+                        mt: 1,
+                        textTransform: 'none',
+                        fontSize: '0.9rem',
+                        color: colors.accentText,
+                        visibility: hasMore ? 'visible' : 'hidden',
+                        '&:hover': {
+                          backgroundColor: 'transparent',
+                          textDecoration: 'underline'
+                        }
+                      }}
+                    >
+                      {descriptionExpanded ? 'Read Less' : 'Read More'}
+                    </Button>
                   </Box>
                 );
               })()}
