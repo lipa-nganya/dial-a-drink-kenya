@@ -469,7 +469,7 @@ const Cart = () => {
   const sendOrderToWhatsApp = (orderId, totalAmount) => {
     try {
       const whatsappMessage = formatOrderMessage(orderId, totalAmount);
-      const whatsappNumber = '254712674333'; // Dial A Drink WhatsApp number
+        const whatsappNumber = '254723688108'; // Dial A Drink WhatsApp number
       const encodedMessage = encodeURIComponent(whatsappMessage);
       const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodedMessage}`;
       

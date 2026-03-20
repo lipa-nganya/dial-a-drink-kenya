@@ -18,6 +18,7 @@ const Home = () => {
   const [drinksLoading, setDrinksLoading] = useState(true);
   const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
   const heroImageUrlRef = useRef(null); // Store the base URL to detect changes
+  const heroImageUpdatedAtRef = useRef(null); // Tracks Settings.updatedAt to refresh even if URL is unchanged
   const [heroLinkType, setHeroLinkType] = useState('none'); // 'none' | 'product' | 'brand'
   const [heroLinkTargetId, setHeroLinkTargetId] = useState(''); // product id or brand id
   const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
@@ -86,22 +87,30 @@ const Home = () => {
       });
       if (response.data && response.data.value) {
         const imageUrl = getImageUrl(response.data.value);
-        
-        // Only add cache-busting if the URL has changed (new image uploaded)
-        // This prevents unnecessary reloads while ensuring new images are fetched
+
+        // Refresh logic:
+        // - If the URL string changed, we must reload.
+        // - If the URL string stayed the same but Settings.updatedAt changed,
+        //   the underlying image file may have been replaced at the same URL,
+        //   so we still need to reload (using cache-busting query param).
         const currentUrl = heroImageUrlRef.current;
+        const currentUpdatedAt = heroImageUpdatedAtRef.current;
+        const nextUpdatedAt = response.data.updatedAt || null;
+
         const urlChanged = currentUrl !== imageUrl;
-        if (urlChanged) {
-          // Add cache-busting to force browser to fetch new image
+        const updatedAtChanged = currentUpdatedAt !== nextUpdatedAt;
+
+        const shouldReload = urlChanged || updatedAtChanged || !currentUrl;
+        if (shouldReload) {
+          const updatedMs = nextUpdatedAt ? new Date(nextUpdatedAt).getTime() : NaN;
+          const cacheToken = Number.isFinite(updatedMs) ? updatedMs : Date.now();
           const separator = imageUrl.includes('?') ? '&' : '?';
-          const cacheBustedUrl = `${imageUrl}${separator}_v=${Date.now()}`;
+          const cacheBustedUrl = `${imageUrl}${separator}_v=${cacheToken}`;
           setHeroImage(cacheBustedUrl);
-        } else if (!currentUrl) {
-          // First load - set the URL without cache-busting (browser can cache it)
-          setHeroImage(imageUrl);
         }
-        // If URL hasn't changed, keep existing heroImage to avoid unnecessary reloads
-        heroImageUrlRef.current = imageUrl; // Update ref with new URL
+
+        heroImageUrlRef.current = imageUrl;
+        heroImageUpdatedAtRef.current = nextUpdatedAt;
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
