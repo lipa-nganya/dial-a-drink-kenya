@@ -1376,7 +1376,19 @@ const Inventory = () => {
     }
 
     // Common capacity presets for quick correction in Copilot table
-    values.push('250ml', '330ml', '500ml', '700ml', '750ml', '1L', '1.25L', '1.5L');
+    values.push(
+      '250ml',
+      '330ml',
+      '500ml',
+      '700ml',
+      '750ml',
+      '1L',
+      '1.25L',
+      '1.5L',
+      '1.5 Litres',
+      '5L',
+      '5 Litres'
+    );
 
     if (editCapacity && editCapacity.trim()) values.push(editCapacity.trim());
     if (Array.isArray(editCapacities) && editCapacities.length > 0) values.push(...editCapacities);
