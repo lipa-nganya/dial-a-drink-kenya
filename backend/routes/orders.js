@@ -854,7 +854,22 @@ router.post('/', async (req, res) => {
             frontendUrl = 'http://localhost:3000';
             console.log(`⚠️  Using localhost fallback. Set FRONTEND_URL for production: ${frontendUrl}`);
           }
-          
+
+          // If the env is pointing at the raw Cloud Run URL (e.g. *.run.app),
+          // use the domain-mapped production customer site for the customer link.
+          if (isProduction() && typeof frontendUrl === 'string') {
+            try {
+              const u = new URL(frontendUrl);
+              if (u.hostname.includes('run.app')) {
+                const mappedBase = process.env.CUSTOMER_MAPPED_FRONTEND_URL || 'https://dialadrinkkenya.com';
+                console.log(`🔗 FRONTEND_URL is a raw run.app hostname (${u.hostname}); using mapped domain: ${mappedBase}`);
+                frontendUrl = mappedBase;
+              }
+            } catch (_) {
+              // Ignore URL parsing issues; keep original frontendUrl
+            }
+          }
+
           const trackingUrl = `${frontendUrl}/order-tracking?token=${completeOrder.trackingToken}`;
           
           const customerSmsMessage = `Order Confirmed! Order #${completeOrder.id}\n` +
