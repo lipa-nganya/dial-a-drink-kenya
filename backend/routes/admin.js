@@ -1495,20 +1495,17 @@ router.put('/drinks/:id', async (req, res) => {
     
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : drink.limitedTimeOffer;
 
-    // Handle stock update
-    const stockValue = req.body.stock !== undefined && req.body.stock !== null
-      ? parseInt(req.body.stock) || 0
-      : drink.stock !== undefined && drink.stock !== null
-      ? drink.stock
-      : 0;
-
-    // Automatically set isAvailable based on stock if stock is being updated
-    const shouldAutoSetAvailable = req.body.stock !== undefined && req.body.stock !== null;
-    const autoAvailable = shouldAutoSetAvailable ? stockValue > 0 : undefined;
+    // Stock policy:
+    // - Do NOT mutate stock from generic admin drink edits.
+    // - Stock increases must come from inventory check approvals or purchases.
+    // - Stock decreases must come from completed-order inventory deduction.
+    // Preserve current stock value here.
+    const stockValue = drink.stock !== undefined && drink.stock !== null ? drink.stock : 0;
+    const autoAvailable = undefined;
     
     // Store current stock for alert checking
     const currentStock = parseInt(drink.stock) || 0;
-    const isStockBeingUpdated = req.body.stock !== undefined && req.body.stock !== null;
+    const isStockBeingUpdated = false;
 
     // Only set nbv if the drinks table has the column (use same attribute list we used to load the drink)
     const drinksHasNbv = drinkAttributes && drinkAttributes.includes('nbv');

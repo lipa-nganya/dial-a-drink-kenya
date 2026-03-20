@@ -103,12 +103,18 @@ const InventoryPage = () => {
     const uniqueCaps = Array.from(new Set(capacities));
     if (uniqueCaps.length === 0) return [];
 
+    const mainStock = parseInt(drink?.stock, 10) || 0;
+
     return uniqueCaps.map(cap => {
       const raw = stockByCapacity && stockByCapacity[cap] != null
         ? stockByCapacity[cap]
         : null;
       const parsed = typeof raw === 'number' ? raw : parseInt(raw, 10);
-      const stock = Number.isNaN(parsed) || parsed == null ? 0 : parsed;
+      // If stockByCapacity is not initialized (or missing this capacity),
+      // fall back to aggregate stock so legacy items still show usable stock.
+      const stock = Number.isNaN(parsed) || parsed == null
+        ? mainStock
+        : parsed;
       return { capacity: cap, stock };
     });
   };
