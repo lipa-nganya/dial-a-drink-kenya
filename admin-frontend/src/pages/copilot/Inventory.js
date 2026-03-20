@@ -1325,21 +1325,38 @@ const Inventory = () => {
         ? item.stockByCapacity
         : null;
 
+    const mainStock = parseInt(item?.stock, 10) || 0;
+
     if (byCap && byCap[capacityLabel] != null) {
       const parsed = parseInt(byCap[capacityLabel], 10);
       return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    // If stockByCapacity is not initialized (or missing this specific capacity),
+    // fall back to the legacy aggregate stock so capacities remain purchasable.
+    // This matches the pre-per-capacity behavior where `drink.stock` was the source of truth.
+    if (!byCap) {
+      return mainStock;
+    }
+
+    if (byCap && byCap[capacityLabel] == null) {
+      // Only fallback when the drink actually offers this capacity.
+      const itemCaps = Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0
+        ? item.capacityPricing.map((p) => p?.capacity).filter(Boolean)
+        : Array.isArray(item?.capacity)
+          ? item.capacity.filter(Boolean)
+          : [];
+      if (itemCaps.includes(capacityLabel)) return mainStock;
     }
 
     // Fallback: if item has exactly one capacity and matches this column, use main stock.
     const itemCaps = Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0
       ? item.capacityPricing.map((p) => p?.capacity).filter(Boolean)
       : Array.isArray(item?.capacity)
-      ? item.capacity.filter(Boolean)
-      : [];
+        ? item.capacity.filter(Boolean)
+        : [];
 
-    if (itemCaps.length === 1 && itemCaps[0] === capacityLabel) {
-      return parseInt(item?.stock, 10) || 0;
-    }
+    if (itemCaps.length === 1 && itemCaps[0] === capacityLabel) return mainStock;
 
     return 0;
   }
