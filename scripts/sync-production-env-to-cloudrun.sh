@@ -53,6 +53,19 @@ if [[ -z "${MPESA_PAYBILL_ACCOUNT:-}" ]]; then
   echo "ℹ️  MPESA_PAYBILL_ACCOUNT not set in env; defaulting to 7251353 (existing production value)."
 fi
 
+# Strip wrapping single/double quotes if a user accidentally put them in their local env file.
+strip_wrapping_quotes() {
+  local v="$1"
+  v="$(echo -n "$v" | sed "s/^'//; s/'$//; s/^\"//; s/\"$//")"
+  echo -n "$v"
+}
+
+MPESA_SHORTCODE="$(strip_wrapping_quotes "${MPESA_SHORTCODE:-}")"
+MPESA_PAYBILL_ACCOUNT="$(strip_wrapping_quotes "${MPESA_PAYBILL_ACCOUNT:-}")"
+MPESA_CONSUMER_KEY="$(strip_wrapping_quotes "${MPESA_CONSUMER_KEY:-}")"
+MPESA_CONSUMER_SECRET="$(strip_wrapping_quotes "${MPESA_CONSUMER_SECRET:-}")"
+MPESA_PASSKEY="$(strip_wrapping_quotes "${MPESA_PASSKEY:-}")"
+
 required_back_env=(
   MPESA_CONSUMER_KEY
   MPESA_CONSUMER_SECRET

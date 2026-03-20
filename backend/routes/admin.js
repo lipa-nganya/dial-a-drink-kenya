@@ -6668,10 +6668,17 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
           const n = typeof value === 'number' ? value : parseInt(value, 10);
           return sum + (Number.isNaN(n) ? 0 : n);
         }, 0);
-        await inventoryCheck.drink.update({ stockByCapacity: byCap, stock: totalStock });
+        await inventoryCheck.drink.update({
+          stockByCapacity: byCap,
+          stock: totalStock,
+          // Customer site uses `isAvailable` for the Out of Stock state.
+          isAvailable: totalStock > 0
+        });
       } else {
         await inventoryCheck.drink.update({
-          stock: inventoryCheck.agentCount
+          stock: inventoryCheck.agentCount,
+          // Customer site uses `isAvailable` for the Out of Stock state.
+          isAvailable: inventoryCheck.agentCount > 0
         });
       }
     }
