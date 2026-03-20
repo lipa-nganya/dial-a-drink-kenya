@@ -99,6 +99,17 @@
                             android:gravity="start"
                             android:paddingEnd="8dp" />
 
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="0.8"
+                        android:text="Delivery Fee"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:gravity="start"
+                        android:paddingEnd="8dp" />
+
                         <TextView
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"

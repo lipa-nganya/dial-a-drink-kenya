@@ -137,7 +137,7 @@ class CashTransactionsFragment : Fragment() {
             
             val deliveryFeeDisplay = when {
                 entry.orderId == null -> "—"
-                entry.deliveryFee != null -> formatter.format(entry.deliveryFee)
+                entry.deliveryFee != null -> "KES ${formatter.format(entry.deliveryFee)}"
                 else -> "—"
             }
             orderNumText.text = deliveryFeeDisplay

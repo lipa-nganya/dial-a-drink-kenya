@@ -393,7 +393,7 @@ class CashAtHandFormFragment : Fragment() {
 
                 orders.forEach { order ->
                     val cb = com.google.android.material.checkbox.MaterialCheckBox(requireContext()).apply {
-                        text = "Order #${order.orderId} • ${order.customerName} • KES ${String.format("%.0f", order.totalToSubmit)}"
+                        text = "Order #${order.orderId} • ${order.customerName} • Delivery Fee: KES ${String.format("%.0f", order.deliveryFee)} • Total: KES ${String.format("%.0f", order.totalToSubmit)}"
                         setTextColor(Color.parseColor("#FFFFFF"))
                         isChecked = false
                         setOnCheckedChangeListener { _, isChecked ->
