@@ -68,6 +68,8 @@ const ProductPage = () => {
   const [error, setError] = useState(null);
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [imageError, setImageError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [pendingScrollToTop, setPendingScrollToTop] = useState(false);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [detailedDescription, setDetailedDescription] = useState(null);
   const [descriptionLoading, setDescriptionLoading] = useState(!!initialProduct);
@@ -90,6 +92,13 @@ const ProductPage = () => {
           String(initialProduct.id) === String(id) &&
           initialHasCanonicalSlugs));
 
+    // We want to scroll back to the top, but doing it immediately can cause
+    // layout shifts while the product image/layout is still re-rendering.
+    // We defer scrolling until the image is loaded (or has errored).
+    setPendingScrollToTop(true);
+    setImageLoaded(false);
+    setImageError(false);
+
     if (canSkipFetch) {
       // `product` state is initialized only once via `useState(initialProduct)`.
       // When navigating to another product while staying on the same component instance,
@@ -100,10 +109,26 @@ const ProductPage = () => {
       setLoading(false);
       return;
     }
-
-    window.scrollTo({ top: 0, behavior: 'auto' });
     fetchProduct();
   }, [categorySlug, productSlug, id]);
+
+  // Scroll only after the product image is stable (loaded) or we know it will render as fallback.
+  useEffect(() => {
+    if (!pendingScrollToTop) return;
+    if (!product) return;
+
+    // If there's no image (or imageUrl resolves empty), jump immediately.
+    if (!product.image) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      setPendingScrollToTop(false);
+      return;
+    }
+
+    if (imageLoaded || imageError) {
+      window.scrollTo({ top: 0, behavior: 'auto' });
+      setPendingScrollToTop(false);
+    }
+  }, [pendingScrollToTop, product?.id, imageLoaded, imageError]);
 
   useEffect(() => {
     if (product) {
@@ -707,6 +732,7 @@ const ProductPage = () => {
                     maxHeight: '100%',
                     p: 2
                   }}
+                  onLoad={() => setImageLoaded(true)}
                   onError={() => setImageError(true)}
                 />
               ) : (
