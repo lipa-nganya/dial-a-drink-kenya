@@ -1073,7 +1073,18 @@ const ProductPage = () => {
                 <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: '120px', flexShrink: 0, fontSize: '0.85rem', textAlign: 'left' }}>
                   Tasting notes:
                 </Typography>
-                <Typography variant="body2" sx={{ flex: 1, wordWrap: 'break-word', overflowWrap: 'break-word', fontSize: '0.85rem', textAlign: 'left', minHeight: '1.5em' }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    flex: 1,
+                    wordWrap: 'break-word',
+                    overflowWrap: 'break-word',
+                    fontSize: '0.85rem',
+                    textAlign: 'left',
+                    // Reserve space so loading tasting notes doesn't cause layout jumps.
+                    minHeight: '120px'
+                  }}
+                >
                   {testingNotesLoading ? 'Loading...' : (testingNotes || 'N/A')}
                 </Typography>
               </Box>
@@ -1281,7 +1292,9 @@ const ProductPage = () => {
               sx={{ 
                 width: '100%',
                 height: '100%',
-                minHeight: 200,
+                // Reserve a generous height so when description loads asynchronously,
+                // the card (and the row) doesn't expand and cause horizontal/scrollbar jumps.
+                minHeight: 420,
                 p: 3,
                 backgroundColor: '#f8f9fa',
                 border: `1px solid #e0e0e0`,
@@ -1302,8 +1315,25 @@ const ProductPage = () => {
                 For More About {product.name}
               </Typography>
               {descriptionLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                  <CircularProgress size={24} />
+                // Placeholder reserves the approximate size of the final description block
+                <Box sx={{ py: 2, minHeight: 260 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                    <CircularProgress size={24} />
+                  </Box>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      fontSize: '1rem',
+                      lineHeight: 1.8,
+                      textAlign: 'left',
+                      fontFamily: '"Lato", "Georgia", serif',
+                      color: 'text.secondary',
+                      minHeight: 180
+                    }}
+                  >
+                    Loading... Loading... Loading...
+                  </Typography>
+                  <Box sx={{ mt: 1, width: '130px', height: '34px', borderRadius: 1, backgroundColor: 'rgba(0,0,0,0.08)' }} />
                 </Box>
               ) : (() => {
                 const { sentences } = getProductDescription();
