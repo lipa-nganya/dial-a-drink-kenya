@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
-const { generateCategorySlugFromName } = require('../utils/slugGenerator');
+const { generateCategorySlugFromName, generateSlug } = require('../utils/slugGenerator');
 
 // Get all drinks
 router.get('/', async (req, res) => {
@@ -74,9 +74,7 @@ router.get('/', async (req, res) => {
               model: db.Category,
               as: 'category',
               required: false,
-              attributes: {
-                include: ['id', 'name', 'description', 'image', 'isActive'],
-              }
+              attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive']
             }, {
               model: db.SubCategory,
               as: 'subCategory',
@@ -110,7 +108,7 @@ router.get('/', async (req, res) => {
                 model: db.Category,
                 as: 'category',
                 required: false,
-                attributes: ['id', 'name', 'description', 'image', 'isActive']
+                attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive']
               }, {
                 model: db.SubCategory,
                 as: 'subCategory',
@@ -139,6 +137,10 @@ router.get('/', async (req, res) => {
       if (queryTimeout) {
         clearTimeout(queryTimeout);
         queryTimeout = null;
+      }
+
+      for (const d of drinks) {
+        ensureCategorySlug(d);
       }
       
       console.log(`✅ Returning ${drinks.length} drinks`);
@@ -373,6 +375,39 @@ function ensureCategorySlug(drink) {
   }
 }
 
+/** Ensure drink.slug for client canonical URLs when DB slug is empty (legacy /product/:id). */
+function ensureDrinkSlug(drink) {
+  try {
+    if (!drink) return;
+    if (drink.slug != null && String(drink.slug).trim()) return;
+
+    const brandName = drink.brand && drink.brand.name ? drink.brand.name : null;
+    let cap = drink.capacity;
+    if (Array.isArray(cap) && cap.length === 0) cap = null;
+    if (
+      (!cap || (Array.isArray(cap) && cap.length === 0)) &&
+      Array.isArray(drink.capacityPricing) &&
+      drink.capacityPricing.length > 0
+    ) {
+      const fromPricing = drink.capacityPricing
+        .map((e) => (e && (e.capacity != null ? e.capacity : e.size)) || null)
+        .filter(Boolean);
+      cap = fromPricing.length ? fromPricing : null;
+    }
+    // Multi-capacity: prefer longest label so "5 Litres" wins over "750ML" when DB slug is empty
+    if (Array.isArray(cap) && cap.length > 1) {
+      cap = [...cap].sort(
+        (a, b) => String(b).length - String(a).length
+      )[0];
+    }
+
+    drink.slug = generateSlug(drink.name, brandName, cap);
+  } catch (e) {
+    console.error('⚠️ Failed to compute drink slug for drink:', drink?.id, e.message);
+    if (drink && drink.id != null) drink.slug = `product-${drink.id}`;
+  }
+}
+
 // Get drink by ID or slug (must be after /:id/detailed-description and /:id/testing-notes routes)
 // This route handles old /product/:id URLs and redirects to category-based URLs
 router.get('/:id', async (req, res) => {
@@ -411,6 +446,11 @@ router.get('/:id', async (req, res) => {
           as: 'subCategory',
           required: false,
           attributes: ['id', 'name', 'categoryId']
+        }, {
+          model: db.Brand,
+          as: 'brand',
+          required: false,
+          attributes: ['id', 'name']
         }]
       });
       
@@ -420,6 +460,7 @@ router.get('/:id', async (req, res) => {
 
       // Populate category.slug in the JSON response if it's missing so the frontend
       ensureCategorySlug(drink);
+      ensureDrinkSlug(drink);
 
       // Record product details view (clicks) - fire and forget, raw SQL so it works even if model/column was not migrated yet
       const drinkIdForClicks = drink.id;
@@ -455,6 +496,11 @@ router.get('/:id', async (req, res) => {
           as: 'subCategory',
           required: false,
           attributes: ['id', 'name', 'categoryId']
+        }, {
+          model: db.Brand,
+          as: 'brand',
+          required: false,
+          attributes: ['id', 'name']
         }]
       });
       
@@ -464,6 +510,7 @@ router.get('/:id', async (req, res) => {
 
       // Populate category.slug for slug-based lookups as well
       ensureCategorySlug(drink);
+      ensureDrinkSlug(drink);
 
       // Record product details view (clicks) - fire and forget, raw SQL so it works even if model/column was not migrated yet
       const drinkIdForClicksSlug = drink.id;

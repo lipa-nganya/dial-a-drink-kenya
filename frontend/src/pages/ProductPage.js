@@ -50,6 +50,7 @@ const ProductPage = () => {
   // Old: /product/:id (e.g., /product/306)
   const params = useParams();
   const { categorySlug, productSlug, id } = params;
+  const isCategoryBasedUrl = Boolean(categorySlug && productSlug);
   const location = useLocation();
   const initialProduct = location.state?.drink || null;
   const navigate = useNavigate();
@@ -57,7 +58,13 @@ const ProductPage = () => {
   const { colors } = useTheme();
   const [product, setProduct] = useState(initialProduct);
   const [relatedProducts, setRelatedProducts] = useState([]);
-  const [loading, setLoading] = useState(!initialProduct);
+  const initialHasCanonicalSlugs = Boolean(
+    initialProduct?.slug && initialProduct?.category?.slug
+  );
+  const isLegacyProductRoute = Boolean(id && !isCategoryBasedUrl);
+  const [loading, setLoading] = useState(
+    !initialProduct || (isLegacyProductRoute && !initialHasCanonicalSlugs)
+  );
   const [error, setError] = useState(null);
   const [selectedCapacity, setSelectedCapacity] = useState('');
   const [imageError, setImageError] = useState(false);
@@ -70,28 +77,23 @@ const ProductPage = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
 
-  // Determine which URL format is being used
-  const isCategoryBasedUrl = categorySlug && productSlug;
-
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
-    // If we already have a matching product from navigation state,
-    // don't refetch and don't scroll – keeps first paint stable (no movement).
-    const hasInitialMatchingProduct = initialProduct && (
-      (isCategoryBasedUrl &&
+    // Skip refetch only when state has everything needed for canonical URL + redirect.
+    // (List API used to omit category.slug — then we must fetch /drinks/:id to redirect off /product/:id.)
+    const canSkipFetch =
+      initialProduct &&
+      ((isCategoryBasedUrl &&
         initialProduct.slug === productSlug &&
         initialProduct.category?.slug === categorySlug) ||
-      (!isCategoryBasedUrl &&
-        (String(initialProduct.slug) === String(id) ||
-         String(initialProduct.id) === String(id)))
-    );
+        (isLegacyProductRoute &&
+          String(initialProduct.id) === String(id) &&
+          initialHasCanonicalSlugs));
 
-    if (hasInitialMatchingProduct) {
-      // No scroll: user just navigated from menu, avoid any movement.
+    if (canSkipFetch) {
       return;
     }
 
-    // Instant scroll only when we need to (e.g. direct link / refresh).
     window.scrollTo({ top: 0, behavior: 'auto' });
     fetchProduct();
   }, [categorySlug, productSlug, id]);

@@ -18,6 +18,11 @@ import { useTheme } from '../contexts/ThemeContext';
 const CAPACITY_OPTIONS = [
   '1 litre',
   '1.5 litre',
+  '1.5 Litres',
+  '5 Litres',
+  '5L',
+  '250ml',
+  '500ml',
   '750ml',
   '700ml',
   '6pack',
