@@ -101,7 +101,20 @@ const Header = () => {
             size="small"
             placeholder="Search..."
             value={isOnMenu ? searchFromUrl : searchInput}
-            onChange={(e) => { setSearchInput(e.target.value); if (location.pathname === '/menu') { const next = new URLSearchParams(searchParams); if (e.target.value.trim()) next.set('search', e.target.value.trim()); else next.delete('search'); setSearchParams(next); } }}
+            onChange={(e) => {
+              const rawValue = e.target.value;
+              setSearchInput(rawValue);
+
+              // Important: do NOT trim on every keystroke.
+              // Trimming removes trailing spaces while you're typing (e.g. "Jim " => "Jim"),
+              // which makes it feel like the space bar isn't working.
+              if (location.pathname === '/menu') {
+                const next = new URLSearchParams(searchParams);
+                if (rawValue.trim()) next.set('search', rawValue);
+                else next.delete('search');
+                setSearchParams(next);
+              }
+            }}
             sx={{
               '& .MuiOutlinedInput-root': { backgroundColor: colors.background || 'rgba(0,0,0,0.06)', borderRadius: 2 },
             }}

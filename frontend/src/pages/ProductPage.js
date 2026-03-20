@@ -91,6 +91,13 @@ const ProductPage = () => {
           initialHasCanonicalSlugs));
 
     if (canSkipFetch) {
+      // `product` state is initialized only once via `useState(initialProduct)`.
+      // When navigating to another product while staying on the same component instance,
+      // we must sync it from the new `location.state` payload.
+      if (initialProduct) {
+        setProduct(initialProduct);
+      }
+      setLoading(false);
       return;
     }
 

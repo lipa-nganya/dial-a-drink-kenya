@@ -537,12 +537,26 @@ router.post('/admin/cash-submissions', async (req, res) => {
                   const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? { ...drink.stockByCapacity } : {};
                   const current = parseInt(byCap[capacity], 10) || 0;
                   byCap[capacity] = current + qtyToAdd;
-                  await drink.update({ stockByCapacity: byCap });
+                  // Keep overall stock in sync with per-capacity totals (legacy views + isAvailable checks)
+                  const totalStock = Object.values(byCap).reduce((sum, value) => {
+                    const n = typeof value === 'number' ? value : parseInt(value, 10);
+                    return sum + (Number.isNaN(n) ? 0 : n);
+                  }, 0);
+                  await drink.update({
+                    stockByCapacity: byCap,
+                    stock: totalStock,
+                    // Customer site uses `isAvailable` for the Out of Stock state.
+                    isAvailable: totalStock > 0
+                  });
                   console.log(`   Updated stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]}`);
                 } else {
                   const currentStock = parseFloat(drink.stock || 0);
                   const newStock = currentStock + qtyToAdd;
-                  await drink.update({ stock: newStock });
+                  await drink.update({
+                    stock: newStock,
+                    // Customer site uses `isAvailable` for the Out of Stock state.
+                    isAvailable: newStock > 0
+                  });
                   console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
                 }
               }
@@ -640,12 +654,17 @@ router.post('/admin/cash-submissions', async (req, res) => {
                 return sum + (Number.isNaN(n) ? 0 : n);
               }, 0);
 
-              await drink.update({ stockByCapacity: byCap, stock: totalStock });
+              await drink.update({
+                stockByCapacity: byCap,
+                stock: totalStock,
+                // Customer site uses `isAvailable` for the Out of Stock state.
+                isAvailable: totalStock > 0
+              });
               console.log(`   Updated per-capacity stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]} (total: ${totalStock})`);
             } else {
               const currentStock = parseFloat(drink.stock || 0);
               const newStock = currentStock + qty;
-              await drink.update({ stock: newStock });
+              await drink.update({ stock: newStock, isAvailable: newStock > 0 });
               console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
             }
           }
