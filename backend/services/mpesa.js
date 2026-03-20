@@ -2,12 +2,21 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 // M-Pesa Production credentials (must be set via environment variables)
-const MPESA_CONSUMER_KEY = process.env.MPESA_CONSUMER_KEY;
-const MPESA_CONSUMER_SECRET = process.env.MPESA_CONSUMER_SECRET;
-const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE;
-const MPESA_PASSKEY = process.env.MPESA_PASSKEY;
+// Some deployments may accidentally store values as "'12345'" (with wrapping quotes).
+// Safaricom expects the raw numeric/string values, so we strip wrapping single/double quotes.
+function sanitizeMpesaEnvValue(val) {
+  if (val === null || val === undefined) return val;
+  return String(val).trim().replace(/^'+/, '').replace(/'+$/, '').replace(/^"+/, '').replace(/"+$/, '').trim();
+}
+
+const MPESA_CONSUMER_KEY = sanitizeMpesaEnvValue(process.env.MPESA_CONSUMER_KEY);
+const MPESA_CONSUMER_SECRET = sanitizeMpesaEnvValue(process.env.MPESA_CONSUMER_SECRET);
+const MPESA_SHORTCODE = sanitizeMpesaEnvValue(process.env.MPESA_SHORTCODE);
+const MPESA_PASSKEY = sanitizeMpesaEnvValue(process.env.MPESA_PASSKEY);
 // For PayBill: PartyB is the PayBill account number (different from BusinessShortCode)
-const MPESA_PAYBILL_ACCOUNT = process.env.MPESA_PAYBILL_ACCOUNT || process.env.MPESA_PARTYB || process.env.MPESA_SHORTCODE;
+const MPESA_PAYBILL_ACCOUNT = sanitizeMpesaEnvValue(
+  process.env.MPESA_PAYBILL_ACCOUNT || process.env.MPESA_PARTYB || process.env.MPESA_SHORTCODE
+);
 
 // Validate required credentials - don't throw during module load, check at runtime
 const validateMpesaCredentials = () => {

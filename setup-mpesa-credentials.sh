@@ -34,6 +34,18 @@ MPESA_CONSUMER_SECRET="$2"
 MPESA_SHORTCODE="$3"
 MPESA_PASSKEY="$4"
 
+# Strip wrapping single/double quotes (in case args include them literally)
+strip_wrapping_quotes() {
+  local v="$1"
+  v="$(echo -n "$v" | sed "s/^'//; s/'$//; s/^\"//; s/\"$//")"
+  echo -n "$v"
+}
+
+MPESA_CONSUMER_KEY="$(strip_wrapping_quotes "$MPESA_CONSUMER_KEY")"
+MPESA_CONSUMER_SECRET="$(strip_wrapping_quotes "$MPESA_CONSUMER_SECRET")"
+MPESA_SHORTCODE="$(strip_wrapping_quotes "$MPESA_SHORTCODE")"
+MPESA_PASSKEY="$(strip_wrapping_quotes "$MPESA_PASSKEY")"
+
 echo "📋 Configuration:"
 echo "   Project: $PROJECT_ID"
 echo "   Region: $REGION"

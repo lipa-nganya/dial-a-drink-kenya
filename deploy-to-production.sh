@@ -109,6 +109,19 @@ EXISTING_MPESA_ENVIRONMENT=$(echo "$EXISTING_ENV" | grep -A1 "name: MPESA_ENVIRO
 EXISTING_BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format "value(status.url)" 2>/dev/null || echo "")
 EXISTING_MPESA_CALLBACK_URL="${EXISTING_BACKEND_URL}/api/mpesa/callback"
 
+# Strip wrapping quotes that may have been stored as part of env values (e.g. "'174379'")
+strip_wrapping_quotes() {
+  local v="$1"
+  v="$(echo -n "$v" | sed "s/^'//; s/'$//; s/^\"//; s/\"$//")"
+  echo -n "$v"
+}
+
+EXISTING_MPESA_CONSUMER_KEY="$(strip_wrapping_quotes "$EXISTING_MPESA_CONSUMER_KEY")"
+EXISTING_MPESA_CONSUMER_SECRET="$(strip_wrapping_quotes "$EXISTING_MPESA_CONSUMER_SECRET")"
+EXISTING_MPESA_SHORTCODE="$(strip_wrapping_quotes "$EXISTING_MPESA_SHORTCODE")"
+EXISTING_MPESA_PASSKEY="$(strip_wrapping_quotes "$EXISTING_MPESA_PASSKEY")"
+EXISTING_MPESA_PAYBILL_ACCOUNT="$(strip_wrapping_quotes "$EXISTING_MPESA_PAYBILL_ACCOUNT")"
+
 # Extract SMTP credentials
 EXISTING_SMTP_HOST=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_HOST" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
 EXISTING_SMTP_PORT=$(echo "$EXISTING_ENV" | grep -A1 "name: SMTP_PORT" | grep "value:" | sed "s/.*value: *//" | tr -d '"' | head -1 || echo "")
