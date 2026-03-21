@@ -49,7 +49,7 @@ const Sitemap = () => {
       links: [
         { name: 'Delivery Locations', path: '/delivery-locations' },
         { name: 'Order Tracking', path: '/order-tracking' },
-        { name: 'Track My Orders', path: '/orders' }
+        { name: 'My Orders', path: '/orders' }
       ]
     },
     {

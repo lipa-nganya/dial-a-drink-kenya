@@ -5,11 +5,13 @@ import {
   Box,
   TextField,
   InputAdornment,
-  Button,
   Chip,
-  CircularProgress
+  CircularProgress,
+  Paper,
+  Stack,
+  Grid,
 } from '@mui/material';
-import { Search, Star } from '@mui/icons-material';
+import { Search, Star, LocalShipping, LocationCity, Place } from '@mui/icons-material';
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useParams, useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
@@ -208,18 +210,6 @@ const LocationDetails = () => {
     setFilteredDrinks(filtered);
   };
 
-  const handleCategoryChange = (event, newValue) => {
-    setSelectedCategory(newValue);
-    setSelectedSubcategory(0); // Reset subcategory when category changes
-    // Update URL query parameter
-    if (newValue > 0) {
-      setSearchParams({ category: newValue.toString() });
-    } else {
-      // Clear category param for "All" (0) or "Popular" (-1)
-      setSearchParams({});
-    }
-  };
-
   const handleSubcategoryChange = (subcategoryId) => {
     setSelectedSubcategory(subcategoryId);
     // Update URL query parameter
@@ -283,19 +273,166 @@ const LocationDetails = () => {
         </Box>
 
         {location && (
-          <Box sx={{ mb: 3, p: 2, backgroundColor: colors.paper, borderRadius: 2 }}>
-            <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
-              <strong>Delivery Fees:</strong>
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                From CBD: {formatCurrency(location.deliveryFromCBD)}
-              </Typography>
-              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                From Ruaka: {formatCurrency(location.deliveryFromRuaka)}
-              </Typography>
+          <Paper
+            elevation={0}
+            sx={{
+              mb: 4,
+              borderRadius: 3,
+              overflow: 'hidden',
+              border: `1px solid ${colors.border || 'rgba(0, 0, 0, 0.08)'}`,
+              boxShadow: '0 4px 24px rgba(0, 0, 0, 0.06)',
+              backgroundColor: colors.paper,
+            }}
+          >
+            <Box
+              sx={{
+                px: { xs: 2, sm: 2.5 },
+                py: 2,
+                background: colors.accent
+                  ? `linear-gradient(135deg, ${colors.accent}18 0%, ${colors.accent}08 100%)`
+                  : 'linear-gradient(135deg, rgba(0, 224, 184, 0.12) 0%, rgba(0, 224, 184, 0.04) 100%)',
+                borderBottom: `1px solid ${colors.border || 'rgba(0, 0, 0, 0.06)'}`,
+              }}
+            >
+              <Stack direction="row" alignItems="center" spacing={1.5}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 44,
+                    height: 44,
+                    borderRadius: 2,
+                    backgroundColor: colors.accent ? `${colors.accent}28` : 'rgba(0, 224, 184, 0.2)',
+                    color: colors.accent || '#00E0B8',
+                  }}
+                >
+                  <LocalShipping sx={{ fontSize: 26 }} />
+                </Box>
+                <Box>
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: 700,
+                      color: colors.textPrimary,
+                      letterSpacing: '0.02em',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    Delivery fees
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
+                    Estimated charges for orders dispatched from each hub
+                  </Typography>
+                </Box>
+              </Stack>
             </Box>
-          </Box>
+
+            <Grid container>
+              <Grid
+                item
+                xs={12}
+                sm={6}
+                sx={{
+                  borderBottom: { xs: `1px solid ${colors.border || 'rgba(0,0,0,0.08)'}`, sm: 'none' },
+                  borderRight: { sm: `1px solid ${colors.border || 'rgba(0,0,0,0.08)'}` },
+                }}
+              >
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  sx={{
+                    p: { xs: 2.5, sm: 3 },
+                    alignItems: 'flex-start',
+                    height: '100%',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      mt: 0.25,
+                      color: colors.accent || '#00E0B8',
+                      opacity: 0.95,
+                    }}
+                  >
+                    <LocationCity sx={{ fontSize: 28 }} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      variant="overline"
+                      sx={{
+                        color: colors.textSecondary,
+                        letterSpacing: '0.08em',
+                        fontWeight: 600,
+                        display: 'block',
+                        mb: 0.5,
+                      }}
+                    >
+                      From Nairobi CBD
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      component="p"
+                      sx={{
+                        fontWeight: 800,
+                        color: colors.textPrimary,
+                        fontVariantNumeric: 'tabular-nums',
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      {formatCurrency(location.deliveryFromCBD)}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Stack
+                  direction="row"
+                  spacing={2}
+                  sx={{
+                    p: { xs: 2.5, sm: 3 },
+                    alignItems: 'flex-start',
+                    height: '100%',
+                  }}
+                >
+                  <Box
+                    sx={{
+                      mt: 0.25,
+                      color: colors.accent || '#00E0B8',
+                      opacity: 0.95,
+                    }}
+                  >
+                    <Place sx={{ fontSize: 28 }} />
+                  </Box>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <Typography
+                      variant="overline"
+                      sx={{
+                        color: colors.textSecondary,
+                        letterSpacing: '0.08em',
+                        fontWeight: 600,
+                        display: 'block',
+                        mb: 0.5,
+                      }}
+                    >
+                      From Ruaka
+                    </Typography>
+                    <Typography
+                      variant="h5"
+                      component="p"
+                      sx={{
+                        fontWeight: 800,
+                        color: colors.textPrimary,
+                        fontVariantNumeric: 'tabular-nums',
+                        letterSpacing: '-0.02em',
+                      }}
+                    >
+                      {formatCurrency(location.deliveryFromRuaka)}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Grid>
+            </Grid>
+          </Paper>
         )}
 
       {/* Search Bar */}
@@ -317,124 +454,28 @@ const LocationDetails = () => {
         />
       </Box>
 
-      {/* Category Buttons - Sticky */}
-      <Box 
-        sx={{ 
-          position: 'sticky',
-          top: { xs: '56px', sm: '64px' }, // Account for AppBar height (56px on mobile, 64px on desktop)
-          zIndex: 99, // Lower than AppBar (which is typically 1100)
-          backgroundColor: colors.background,
-          pt: 1,
-          pb: 1,
-          mb: 2,
-          borderBottom: `1px solid rgba(0, 0, 0, 0.1)`
-        }}
-      >
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: 'repeat(2, 1fr)',
-              sm: 'repeat(3, 1fr)',
-              md: 'repeat(4, 1fr)',
-              lg: 'repeat(5, 1fr)',
-              xl: 'repeat(6, 1fr)'
-            },
-            gap: 1,
-            width: '100%'
-          }}
-        >
-          <Button
-            variant={selectedCategory === 0 ? 'contained' : 'outlined'}
-            onClick={() => handleCategoryChange(null, 0)}
-            sx={{
-              py: 0.75,
-              fontSize: '0.75rem',
-              fontWeight: '500 !important', // Same font weight as menu (h4)
-              textTransform: 'none',
-              borderRadius: 1.5,
-              minHeight: '36px',
-              color: '#000000',
-              '&.MuiButton-contained': {
-                color: '#000000',
-                backgroundColor: 'transparent',
-                boxShadow: 'none',
-                border: '2px solid rgba(0, 0, 0, 0.5)',
-                fontWeight: '500 !important',
-                '&:hover': {
-                  backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                }
-              },
-              '&.MuiButton-outlined': {
-                color: '#000000',
-                borderColor: 'rgba(0, 0, 0, 0.23)',
-                fontWeight: '500 !important'
-              }
-            }}
-          >
-            All
-          </Button>
-          {categories.map((category) => (
-            <Button
-              key={category.id}
-              variant={selectedCategory === category.id ? 'contained' : 'outlined'}
-              onClick={() => handleCategoryChange(null, category.id)}
-              sx={{
-                py: 0.75,
-                fontSize: '0.75rem',
-                fontWeight: '500 !important', // Same font weight as menu (h4)
-                textTransform: 'none',
-                borderRadius: 1.5,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                minHeight: '36px',
-                color: '#000000',
-                '&.MuiButton-contained': {
-                  color: '#000000',
-                  backgroundColor: 'transparent',
-                  boxShadow: 'none',
-                  border: '2px solid rgba(0, 0, 0, 0.5)',
-                  fontWeight: '500 !important',
-                  '&:hover': {
-                    backgroundColor: 'rgba(0, 0, 0, 0.04)'
-                  }
-                },
-                '&.MuiButton-outlined': {
-                  color: '#000000',
-                  borderColor: 'rgba(0, 0, 0, 0.23)',
-                  fontWeight: '500 !important'
-                }
-              }}
-            >
-              {category.name}
-            </Button>
-          ))}
-        </Box>
-
-        {/* Subcategory Chips - Show when a category is selected */}
-        {selectedCategory > 0 && subcategories.length > 0 && (
-          <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+      {/* Subcategory chips when a category is chosen from the header categories bar */}
+      {selectedCategory > 0 && subcategories.length > 0 && (
+        <Box sx={{ mb: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          <Chip
+            label="All"
+            onClick={() => handleSubcategoryChange(0)}
+            color={selectedSubcategory === 0 ? 'primary' : 'default'}
+            variant={selectedSubcategory === 0 ? 'filled' : 'outlined'}
+            sx={{ cursor: 'pointer' }}
+          />
+          {subcategories.map((subcategory) => (
             <Chip
-              label="All"
-              onClick={() => handleSubcategoryChange(0)}
-              color={selectedSubcategory === 0 ? 'primary' : 'default'}
-              variant={selectedSubcategory === 0 ? 'filled' : 'outlined'}
+              key={subcategory.id}
+              label={subcategory.name}
+              onClick={() => handleSubcategoryChange(subcategory.id)}
+              color={selectedSubcategory === subcategory.id ? 'primary' : 'default'}
+              variant={selectedSubcategory === subcategory.id ? 'filled' : 'outlined'}
               sx={{ cursor: 'pointer' }}
             />
-            {subcategories.map((subcategory) => (
-              <Chip
-                key={subcategory.id}
-                label={subcategory.name}
-                onClick={() => handleSubcategoryChange(subcategory.id)}
-                color={selectedSubcategory === subcategory.id ? 'primary' : 'default'}
-                variant={selectedSubcategory === subcategory.id ? 'filled' : 'outlined'}
-                sx={{ cursor: 'pointer' }}
-              />
-            ))}
-          </Box>
-        )}
-      </Box>
+          ))}
+        </Box>
+      )}
 
       {/* All Drinks */}
       <Box>
