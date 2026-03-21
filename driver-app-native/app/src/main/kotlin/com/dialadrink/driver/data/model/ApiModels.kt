@@ -773,8 +773,7 @@ data class CreatePosCustomerRequest(
 data class Territory(
     val id: Int,
     val name: String,
-    @SerializedName("deliveryFromCBD") val deliveryFromCBD: Double? = null,
-    @SerializedName("deliveryFromRuaka") val deliveryFromRuaka: Double? = null
+    @SerializedName("deliveryFromCBD") val deliveryFromCBD: Double? = null
 )
 
 @Parcelize

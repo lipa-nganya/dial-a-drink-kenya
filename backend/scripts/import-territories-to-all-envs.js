@@ -73,20 +73,18 @@ async function importToEnvironment(envName) {
           where: { name: territory.name.trim() },
           defaults: {
             name: territory.name.trim(),
-            deliveryFromCBD: territory.deliveryFromCBD || 0,
-            deliveryFromRuaka: territory.deliveryFromRuaka || 0
+            deliveryFromCBD: territory.deliveryFromCBD || 0
           }
         });
         
         if (created) {
-          console.log(`✅ Created: ${territory.name} (CBD: ${territory.deliveryFromCBD}, Ruaka: ${territory.deliveryFromRuaka})`);
+          console.log(`✅ Created: ${territory.name} (fee: ${territory.deliveryFromCBD})`);
           imported++;
         } else {
           // Update existing territory
           territoryRecord.deliveryFromCBD = territory.deliveryFromCBD || 0;
-          territoryRecord.deliveryFromRuaka = territory.deliveryFromRuaka || 0;
           await territoryRecord.save();
-          console.log(`🔄 Updated: ${territory.name} (CBD: ${territory.deliveryFromCBD}, Ruaka: ${territory.deliveryFromRuaka})`);
+          console.log(`🔄 Updated: ${territory.name} (fee: ${territory.deliveryFromCBD})`);
           updated++;
         }
       } catch (error) {

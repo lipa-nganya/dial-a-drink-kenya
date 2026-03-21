@@ -1354,6 +1354,7 @@ const Orders = () => {
         );
 
         const updatedOrder = territoryResponse.data;
+        const bd = updatedOrder.breakdown;
         const territory =
           territoryId && territories.find((t) => t.id === territoryId);
 
@@ -1362,7 +1363,12 @@ const Orders = () => {
           territoryId: updatedOrder.territoryId,
           territory: territory
             ? { id: territory.id, name: territory.name }
-            : null
+            : null,
+          ...(bd && {
+            deliveryFee: bd.deliveryFee,
+            totalAmount: bd.totalAmount,
+            itemsTotal: bd.itemsTotal
+          })
         }));
 
         setOrders((prev) =>
@@ -1373,7 +1379,12 @@ const Orders = () => {
                   territoryId: updatedOrder.territoryId,
                   territory: territory
                     ? { id: territory.id, name: territory.name }
-                    : null
+                    : null,
+                  ...(bd && {
+                    deliveryFee: bd.deliveryFee,
+                    totalAmount: bd.totalAmount,
+                    itemsTotal: bd.itemsTotal
+                  })
                 }
               : o
           )
@@ -1387,7 +1398,12 @@ const Orders = () => {
                   territoryId: updatedOrder.territoryId,
                   territory: territory
                     ? { id: territory.id, name: territory.name }
-                    : null
+                    : null,
+                  ...(bd && {
+                    deliveryFee: bd.deliveryFee,
+                    totalAmount: bd.totalAmount,
+                    itemsTotal: bd.itemsTotal
+                  })
                 }
               : o
           )
@@ -2924,34 +2940,22 @@ const Orders = () => {
                         const tid = selectedTerritoryId === '' ? (selectedOrderForDetail.territoryId ?? selectedOrderForDetail.territory?.id) : selectedTerritoryId;
                         const hasTerritory = tid != null && tid !== '';
                         const territoryForFee = hasTerritory ? territories.find(t => Number(t.id) === Number(tid)) : null;
-                        const feeCBD = territoryForFee ? Number(territoryForFee.deliveryFromCBD ?? 0) : null;
-                        const feeRuaka = territoryForFee ? Number(territoryForFee.deliveryFromRuaka ?? 0) : null;
+                        const feeTerritory = territoryForFee ? Number(territoryForFee.deliveryFromCBD ?? 0) : null;
                         if (!hasTerritory || (selectedOrderForDetail.status === 'completed' || selectedOrderForDetail.status === 'cancelled' || selectedOrderForDetail.paymentStatus === 'paid')) return null;
                         return (
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                             <Typography variant="subtitle2" sx={{ width: '100%', color: colors.textPrimary }}>
                               Set delivery fee to:
                             </Typography>
-                            {feeCBD != null && (
+                            {feeTerritory != null && (
                               <Button
                                 variant="outlined"
                                 size="small"
-                                onClick={() => handleApplyTerritoryDeliveryFee(feeCBD)}
+                                onClick={() => handleApplyTerritoryDeliveryFee(feeTerritory)}
                                 disabled={applyingTerritoryFee}
                                 sx={{ fontSize: '0.8rem' }}
                               >
-                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – CBD (KES ${Math.round(feeCBD)})`}
-                              </Button>
-                            )}
-                            {feeRuaka != null && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => handleApplyTerritoryDeliveryFee(feeRuaka)}
-                                disabled={applyingTerritoryFee}
-                                sx={{ fontSize: '0.8rem' }}
-                              >
-                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – Ruaka (KES ${Math.round(feeRuaka)})`}
+                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory fee (KES ${Math.round(feeTerritory)})`}
                               </Button>
                             )}
                             <Button

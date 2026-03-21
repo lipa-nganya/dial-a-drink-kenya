@@ -220,8 +220,7 @@ async function scrapeTerritories() {
                 !name.match(/^\d+$/)) { // Skip pure numbers
               territories.push({
                 name: name,
-                deliveryFromCBD: deliveryFromCBD,
-                deliveryFromRuaka: deliveryFromRuaka
+                deliveryFromCBD: deliveryFromCBD
               });
             }
           }
@@ -240,8 +239,7 @@ async function scrapeTerritories() {
           if (name && name.length > 0 && name.length < 100) {
             territories.push({
               name: name,
-              deliveryFromCBD: 0,
-              deliveryFromRuaka: 0
+              deliveryFromCBD: 0
             });
           }
         });
@@ -497,20 +495,18 @@ async function importTerritories(territories) {
         where: { name: territory.name.trim() },
         defaults: {
           name: territory.name.trim(),
-          deliveryFromCBD: territory.deliveryFromCBD || 0,
-          deliveryFromRuaka: territory.deliveryFromRuaka || 0
+          deliveryFromCBD: territory.deliveryFromCBD || 0
         }
       });
       
       if (created) {
-        console.log(`✅ Created: ${territory.name} (CBD: ${territory.deliveryFromCBD}, Ruaka: ${territory.deliveryFromRuaka})`);
+        console.log(`✅ Created: ${territory.name} (fee: ${territory.deliveryFromCBD})`);
         imported++;
       } else {
         // Update existing territory
         territoryRecord.deliveryFromCBD = territory.deliveryFromCBD || 0;
-        territoryRecord.deliveryFromRuaka = territory.deliveryFromRuaka || 0;
         await territoryRecord.save();
-        console.log(`🔄 Updated: ${territory.name} (CBD: ${territory.deliveryFromCBD}, Ruaka: ${territory.deliveryFromRuaka})`);
+        console.log(`🔄 Updated: ${territory.name} (fee: ${territory.deliveryFromCBD})`);
         updated++;
       }
     } catch (error) {

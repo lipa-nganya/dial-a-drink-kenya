@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+const { calculateDeliveryFee } = require('../utils/calculateDeliveryFee');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { creditWalletsOnDeliveryCompletion, repairSavingsForOrder, repairPayNowCashAtHandOnly } = require('../utils/walletCredits');
 const mpesaService = require('../services/mpesa');
@@ -2295,40 +2296,112 @@ router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
     const { orderId } = req.params;
     const { territoryId } = req.body;
 
-    const order = await db.Order.findByPk(orderId);
+    const order = await db.Order.findByPk(orderId, {
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        attributes: ['id', 'drinkId', 'quantity', 'price']
+      }]
+    });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    const newTerritoryId = territoryId === '' || territoryId === null || territoryId === undefined ? null : parseInt(territoryId);
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit territory for completed or cancelled orders' });
+    }
+
+    if (order.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Cannot edit territory for orders that have been paid' });
+    }
+
+    const newTerritoryId = territoryId === '' || territoryId === null || territoryId === undefined ? null : parseInt(territoryId, 10);
 
     if (newTerritoryId !== null && isNaN(newTerritoryId)) {
       return res.status(400).json({ error: 'Invalid territory ID' });
     }
 
+    let territoryRecord = null;
     if (newTerritoryId !== null) {
-      const territory = await db.Territory.findByPk(newTerritoryId);
-      if (!territory) {
+      territoryRecord = await db.Territory.findByPk(newTerritoryId);
+      if (!territoryRecord) {
         return res.status(404).json({ error: 'Territory not found' });
       }
     }
 
-    await order.update({ territoryId: newTerritoryId });
+    const addr = order.deliveryAddress || '';
+    const isWalkInOrder = order.customerName === 'POS'
+      || order.customerPhone === 'POS'
+      || addr === 'In-Store Purchase'
+      || (addr && addr.includes('In-Store Purchase'));
+
+    if (isWalkInOrder) {
+      await order.update({ territoryId: newTerritoryId });
+    } else {
+      const breakdown = await getOrderFinancialBreakdown(orderId);
+      let newDeliveryFee = breakdown.deliveryFee;
+      let newDeliveryDistance = order.deliveryDistance;
+
+      if (newTerritoryId !== null && territoryRecord) {
+        newDeliveryFee = parseFloat(territoryRecord.deliveryFromCBD) || 0;
+        newDeliveryDistance = null;
+      } else {
+        const normalizedItems = (order.items || []).map((i) => ({
+          drinkId: i.drinkId,
+          quantity: i.quantity
+        }));
+        const feeResult = await calculateDeliveryFee(
+          normalizedItems,
+          breakdown.itemsTotal,
+          order.deliveryAddress,
+          order.branchId
+        );
+        newDeliveryFee = feeResult.fee || 0;
+        newDeliveryDistance = feeResult.distance != null ? feeResult.distance : null;
+      }
+
+      const newTotalAmount = breakdown.itemsTotal + newDeliveryFee + breakdown.tipAmount;
+      const oldNotes = order.notes || '';
+      const territoryNote = `[${new Date().toISOString()}] Territory updated: delivery fee set to KES ${newDeliveryFee.toFixed(2)}${newTerritoryId ? ' (from territory)' : ' (settings-based)'}`;
+
+      await order.update({
+        territoryId: newTerritoryId,
+        totalAmount: newTotalAmount,
+        notes: oldNotes ? `${oldNotes}\n${territoryNote}` : territoryNote,
+        deliveryDistance: newDeliveryDistance
+      });
+    }
 
     await order.reload({
       include: [
-        { model: db.Territory, as: 'territory', required: false, attributes: ['id', 'name'] }
+        { model: db.Territory, as: 'territory', required: false, attributes: ['id', 'name', 'deliveryFromCBD'] },
+        {
+          model: db.OrderItem,
+          as: 'items',
+          include: [{ model: db.Drink, as: 'drink', required: false }]
+        }
       ]
     });
 
     const orderData = order.toJSON();
+
+    let breakdownOut = null;
+    if (!isWalkInOrder) {
+      const b = await getOrderFinancialBreakdown(orderId);
+      breakdownOut = {
+        itemsTotal: b.itemsTotal,
+        deliveryFee: b.deliveryFee,
+        tipAmount: b.tipAmount,
+        totalAmount: parseFloat(order.totalAmount)
+      };
+    }
 
     const io = req.app.get('io');
     if (io) {
       io.to('admin').emit('order-updated', { orderId: order.id, order: orderData });
     }
 
-    res.json(orderData);
+    res.json(breakdownOut ? { ...orderData, breakdown: breakdownOut } : orderData);
   } catch (error) {
     console.error('Error updating order territory:', error);
     res.status(500).json({ error: 'Failed to update order territory' });

@@ -13,15 +13,14 @@ async function exportTerritories() {
     
     const territories = await db.Territory.findAll({
       order: [['name', 'ASC']],
-      attributes: ['name', 'deliveryFromCBD', 'deliveryFromRuaka']
+      attributes: ['name', 'deliveryFromCBD']
     });
     
     console.log(`📦 Found ${territories.length} territories in database\n`);
     
     const territoriesData = territories.map(t => ({
       name: t.name,
-      deliveryFromCBD: t.deliveryFromCBD || 0,
-      deliveryFromRuaka: t.deliveryFromRuaka || 0
+      deliveryFromCBD: t.deliveryFromCBD || 0
     }));
     
     const territoriesFile = path.join(__dirname, 'territories-data.json');
@@ -30,7 +29,7 @@ async function exportTerritories() {
     console.log(`💾 Exported ${territoriesData.length} territories to ${territoriesFile}`);
     console.log('\nSample territories:');
     territoriesData.slice(0, 5).forEach(t => {
-      console.log(`   - ${t.name} (CBD: ${t.deliveryFromCBD}, Ruaka: ${t.deliveryFromRuaka})`);
+      console.log(`   - ${t.name} (fee: ${t.deliveryFromCBD})`);
     });
     
     await db.sequelize.close();
