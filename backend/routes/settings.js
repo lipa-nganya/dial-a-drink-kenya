@@ -79,8 +79,13 @@ router.get('/:key', async (req, res) => {
     
     if (!setting) {
       // Return default values for certain settings
+      // Include updatedAt so clients can cache-bust hero image the same as DB-backed rows
       if (key === 'heroImage') {
-        return res.json({ key: 'heroImage', value: '/assets/images/ads/hero-ad.png' });
+        return res.json({
+          key: 'heroImage',
+          value: '/assets/images/ads/hero-ad.png',
+          updatedAt: new Date(0).toISOString()
+        });
       }
       if (key === 'heroImageLinkType') {
         return res.json({ key: 'heroImageLinkType', value: 'none' });

@@ -16,9 +16,11 @@ import { Link } from 'react-router-dom';
 const Home = () => {
   const [drinks, setDrinks] = useState([]);
   const [drinksLoading, setDrinksLoading] = useState(true);
-  const [heroImage, setHeroImage] = useState('/assets/images/ads/hero-ad.png');
-  const heroImageUrlRef = useRef(null); // Store the base URL to detect changes
-  const heroImageUpdatedAtRef = useRef(null); // Tracks Settings.updatedAt to refresh even if URL is unchanged
+  /** null = not loaded yet (avoid flashing cached bundled default hero before API returns) */
+  const [heroImage, setHeroImage] = useState(null);
+  const heroImageUrlRef = useRef(null); // Base image URL from settings (no cache-bust query)
+  const heroImageUpdatedAtRef = useRef(null); // Tracks Settings.updatedAt from API
+  const heroLoadAttemptRef = useRef(0); // For img onError retry with new cache-bust
   const [heroLinkType, setHeroLinkType] = useState('none'); // 'none' | 'product' | 'brand'
   const [heroLinkTargetId, setHeroLinkTargetId] = useState(''); // product id or brand id
   const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
@@ -80,42 +82,51 @@ const Home = () => {
   };
 
   const fetchHeroImage = async () => {
+    heroLoadAttemptRef.current = 0;
     try {
-      // Add cache-busting query parameter to prevent browser caching of API response
+      // Bust HTTP caches on the settings response itself
       const response = await api.get('/settings/heroImage', {
         params: { _t: Date.now() }
       });
       if (response.data && response.data.value) {
         const imageUrl = getImageUrl(response.data.value);
-
-        // Refresh logic:
-        // - If the URL string changed, we must reload.
-        // - If the URL string stayed the same but Settings.updatedAt changed,
-        //   the underlying image file may have been replaced at the same URL,
-        //   so we still need to reload (using cache-busting query param).
-        const currentUrl = heroImageUrlRef.current;
-        const currentUpdatedAt = heroImageUpdatedAtRef.current;
         const nextUpdatedAt = response.data.updatedAt || null;
-
-        const urlChanged = currentUrl !== imageUrl;
-        const updatedAtChanged = currentUpdatedAt !== nextUpdatedAt;
-
-        const shouldReload = urlChanged || updatedAtChanged || !currentUrl;
-        if (shouldReload) {
-          const updatedMs = nextUpdatedAt ? new Date(nextUpdatedAt).getTime() : NaN;
-          const cacheToken = Number.isFinite(updatedMs) ? updatedMs : Date.now();
-          const separator = imageUrl.includes('?') ? '&' : '?';
-          const cacheBustedUrl = `${imageUrl}${separator}_v=${cacheToken}`;
-          setHeroImage(cacheBustedUrl);
-        }
 
         heroImageUrlRef.current = imageUrl;
         heroImageUpdatedAtRef.current = nextUpdatedAt;
+
+        // Always append a fresh cache-buster on every successful fetch so:
+        // - Same URL + replaced file still reloads
+        // - Missing/unchanged updatedAt in API still updates the img src
+        // - Per-fetch Date.now() avoids CDN/browser serving an old byte stream
+        const updatedMs = nextUpdatedAt ? new Date(nextUpdatedAt).getTime() : NaN;
+        const tokenBase = Number.isFinite(updatedMs) ? updatedMs : 0;
+        const separator = imageUrl.includes('?') ? '&' : '?';
+        const cacheBustedUrl = `${imageUrl}${separator}_v=${tokenBase}&_r=${Date.now()}`;
+        setHeroImage(cacheBustedUrl);
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
-      // Keep default image if fetch fails
+      const fallback = '/assets/images/ads/hero-ad.png';
+      const separator = fallback.includes('?') ? '&' : '?';
+      setHeroImage(`${fallback}${separator}_v=fallback&_r=${Date.now()}`);
     }
+  };
+
+  const handleHeroImgError = (e) => {
+    const attempt = (heroLoadAttemptRef.current += 1);
+    const base = heroImageUrlRef.current || '/assets/images/ads/hero-ad.png';
+    // Retry once with a new bust param (transient CDN / TLS issues)
+    if (attempt <= 1) {
+      const sep = base.includes('?') ? '&' : '?';
+      e.target.src = `${base}${sep}_retry=${attempt}&_r=${Date.now()}`;
+      return;
+    }
+    // Last resort: bundled default; then detach handler to avoid infinite onError loops
+    const fb = '/assets/images/ads/hero-ad.png';
+    const sep = fb.includes('?') ? '&' : '?';
+    e.target.onerror = null;
+    e.target.src = `${fb}${sep}_err=1&_r=${Date.now()}`;
   };
 
   const fetchHeroLinkSettings = async () => {
@@ -236,7 +247,24 @@ const Home = () => {
               overflow: 'hidden'
             }}
           >
-            {(heroLinkType === 'product' && heroLinkTargetId) || (heroLinkType === 'brand' && heroLinkTargetId) || heroLinkType === 'brands' ? (
+            {heroImage == null ? (
+              <Box
+                sx={{
+                  width: '100%',
+                  maxWidth: { xs: '100%', md: '1400px' },
+                  minHeight: { xs: 200, md: 240 },
+                  mx: 'auto',
+                  borderRadius: 2,
+                  bgcolor: 'action.hover',
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  '@keyframes pulse': {
+                    '0%, 100%': { opacity: 0.6 },
+                    '50%': { opacity: 0.9 },
+                  },
+                }}
+                aria-hidden
+              />
+            ) : (heroLinkType === 'product' && heroLinkTargetId) || (heroLinkType === 'brand' && heroLinkTargetId) || heroLinkType === 'brands' ? (
               <Link
                 to={
                   heroLinkType === 'product'
@@ -256,6 +284,7 @@ const Home = () => {
               >
                 <Box
                   component="img"
+                  key={heroImage}
                   src={heroImage}
                   alt="Special Offer - Premium Drinks"
                   sx={{
@@ -267,15 +296,13 @@ const Home = () => {
                     objectFit: 'contain',
                     cursor: 'pointer'
                   }}
-                  onError={(e) => {
-                    // Fallback to default if image doesn't exist
-                    e.target.src = '/assets/images/ads/hero-ad.png';
-                  }}
+                  onError={handleHeroImgError}
                 />
               </Link>
             ) : (
               <Box
                 component="img"
+                key={heroImage}
                 src={heroImage}
                 alt="Special Offer - Premium Drinks"
                 sx={{
@@ -286,10 +313,7 @@ const Home = () => {
                   display: 'block',
                   objectFit: 'contain'
                 }}
-                onError={(e) => {
-                  // Fallback to default if image doesn't exist
-                  e.target.src = '/assets/images/ads/hero-ad.png';
-                }}
+                onError={handleHeroImgError}
               />
             )}
           </Box>
