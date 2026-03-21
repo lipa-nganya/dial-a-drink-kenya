@@ -795,10 +795,15 @@ router.post('/', async (req, res) => {
       
       const isSmsEnabledNotifications = smsEnabledSetting?.value !== 'false';
       
+      // Staff SMS (OrderNotification list in Admin Settings): customer site only — not Admin Web / Admin Mobile
+      const isCustomerPlacedOrder = !completeOrder.adminOrder;
+
       if (!isSmsEnabledNotifications) {
-        console.log('📱 SMS notifications are DISABLED - skipping SMS for order #' + completeOrder.id);
+        console.log('📱 SMS notifications are DISABLED - skipping staff SMS for order #' + completeOrder.id);
+      } else if (!isCustomerPlacedOrder) {
+        console.log('📱 Skipping staff SMS for admin-created order #' + completeOrder.id + ' (customer site orders only)');
       } else {
-        console.log('📱 SMS notifications are ENABLED - sending SMS for order #' + completeOrder.id);
+        console.log('📱 SMS notifications are ENABLED - sending staff SMS for order #' + completeOrder.id);
         const activeNotifications = await db.OrderNotification.findAll({
           where: { isActive: true }
         });

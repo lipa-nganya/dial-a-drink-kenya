@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   AppBar, 
   Toolbar, 
@@ -17,6 +17,8 @@ import {
   useTheme as useMUITheme,
   TextField,
   InputAdornment,
+  Autocomplete,
+  CircularProgress,
 } from '@mui/material';
 import { ShoppingCart, Menu as MenuIcon, Home, Restaurant, Person, Login, Lightbulb, ReportProblem, PrivacyTip, Description, Phone, Search } from '@mui/icons-material';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
@@ -24,6 +26,7 @@ import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useCustomer } from '../contexts/CustomerContext';
 import CategoriesBar from './CategoriesBar';
+import { api } from '../services/api';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -33,6 +36,8 @@ const Header = () => {
   const { isLoggedIn } = useCustomer();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
+  const [allDrinks, setAllDrinks] = useState([]);
+  const [drinksLoading, setDrinksLoading] = useState(false);
   const muiTheme = useMUITheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const { colors } = useTheme();
@@ -40,22 +45,56 @@ const Header = () => {
   const isOnMenu = location.pathname === '/menu';
   const searchFromUrl = isOnMenu ? (searchParams.get('search') || '') : '';
 
-  const handleSearchChange = (e) => {
-    const value = e.target.value;
-    setSearchInput(value);
-    if (isOnMenu) {
-      const next = new URLSearchParams(searchParams);
-      if (value.trim()) next.set('search', value.trim()); else next.delete('search');
-      setSearchParams(next);
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      setDrinksLoading(true);
+      try {
+        const res = await api.get('/drinks');
+        const arr = Array.isArray(res.data) ? res.data : [];
+        if (mounted) setAllDrinks(arr);
+      } catch {
+        if (mounted) setAllDrinks([]);
+      } finally {
+        if (mounted) setDrinksLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, []);
+
+  const navigateToDrink = useCallback((drink) => {
+    if (!drink) return;
+    if (drink.category?.slug && drink.slug) {
+      navigate(`/${drink.category.slug}/${drink.slug}`, { state: { drink } });
+    } else {
+      navigate(`/product/${drink.id}`, { state: { drink } });
     }
-  };
+  }, [navigate]);
+
+  const searchInputValue = isOnMenu ? searchFromUrl : searchInput;
+
+  const handleSearchInputChange = useCallback((event, newInputValue, reason) => {
+    if (reason === 'reset') return;
+    const v = newInputValue ?? '';
+    if (!isOnMenu) {
+      setSearchInput(v);
+    }
+    if (isOnMenu) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (v.trim()) next.set('search', v);
+        else next.delete('search');
+        return next;
+      });
+    }
+  }, [isOnMenu, setSearchParams]);
 
   const handleSearchSubmit = (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const q = (isOnMenu ? searchFromUrl : searchInput) || searchInput;
+    const q = searchInputValue;
     if (q.trim()) {
       navigate(`/menu?search=${encodeURIComponent(q.trim())}`);
-      setSearchInput('');
+      if (!isOnMenu) setSearchInput('');
     } else {
       navigate('/menu');
     }
@@ -95,36 +134,6 @@ const Header = () => {
         }}>
           Dial a Drink Kenya
         </Typography>
-        <Box component="form" onSubmit={(e) => { e.preventDefault(); handleSearchSubmit(e); handleDrawerToggle(); }} sx={{ mt: 2 }}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Search..."
-            value={isOnMenu ? searchFromUrl : searchInput}
-            onChange={(e) => {
-              const rawValue = e.target.value;
-              setSearchInput(rawValue);
-
-              // Important: do NOT trim on every keystroke.
-              // Trimming removes trailing spaces while you're typing (e.g. "Jim " => "Jim"),
-              // which makes it feel like the space bar isn't working.
-              if (location.pathname === '/menu') {
-                const next = new URLSearchParams(searchParams);
-                if (rawValue.trim()) next.set('search', rawValue);
-                else next.delete('search');
-                setSearchParams(next);
-              }
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': { backgroundColor: colors.background || 'rgba(0,0,0,0.06)', borderRadius: 2 },
-            }}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start"><Search sx={{ color: colors.textSecondary, fontSize: '1.2rem' }} /></InputAdornment>
-              ),
-            }}
-          />
-        </Box>
       </Box>
 
       {/* Main Navigation */}
@@ -238,7 +247,7 @@ const Header = () => {
             <ShoppingCart sx={{ color: colors.accent || '#20B2AA', fontSize: '1.5rem' }} />
           </ListItemIcon>
           <ListItemText 
-            primary="Track My Orders" 
+            primary="My Orders" 
             primaryTypographyProps={{
               fontSize: '1rem',
               fontWeight: 500,
@@ -454,34 +463,68 @@ const Header = () => {
           
           {!isMobile && (
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              {/* Search in main nav - desktop */}
+              {/* Search in main nav - desktop (wider + live drink name suggestions) */}
               <Box
                 component="form"
                 onSubmit={handleSearchSubmit}
-                sx={{ display: 'flex', alignItems: 'center', mr: 1 }}
+                sx={{ display: 'flex', alignItems: 'center', mr: 1, minWidth: 320, maxWidth: 480, flex: '0 1 420px' }}
               >
-                <TextField
-                  size="small"
-                  placeholder="Search..."
-                  value={isOnMenu ? searchFromUrl : searchInput}
-                  onChange={handleSearchChange}
-                  onBlur={() => !isOnMenu && setSearchInput((p) => p)}
-                  sx={{
-                    width: 180,
-                    '& .MuiOutlinedInput-root': {
-                      backgroundColor: colors.background || 'rgba(0,0,0,0.04)',
-                      borderRadius: 2,
-                      fontSize: '0.85rem',
-                      '& fieldset': { borderColor: 'rgba(0,0,0,0.12)' },
-                    },
+                <Autocomplete
+                  freeSolo
+                  fullWidth
+                  options={allDrinks}
+                  loading={drinksLoading}
+                  filterOptions={(options, { inputValue }) => {
+                    const q = inputValue.trim().toLowerCase();
+                    if (!q) return [];
+                    return options
+                      .filter((o) => o && o.name && o.name.toLowerCase().includes(q))
+                      .slice(0, 20);
                   }}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <Search sx={{ color: colors.textSecondary || '#666', fontSize: '1.2rem' }} />
-                      </InputAdornment>
-                    ),
+                  getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
+                  isOptionEqualToValue={(a, b) => a?.id === b?.id}
+                  inputValue={searchInputValue}
+                  onInputChange={handleSearchInputChange}
+                  onChange={(e, newValue) => {
+                    if (newValue && typeof newValue === 'object') {
+                      navigateToDrink(newValue);
+                    }
                   }}
+                  noOptionsText="No matching drink names"
+                  ListboxProps={{ style: { maxHeight: 280 } }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      name="drink-search-desktop"
+                      size="small"
+                      placeholder="Search drinks..."
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          backgroundColor: colors.background || 'rgba(0,0,0,0.04)',
+                          borderRadius: 2,
+                          fontSize: '0.85rem',
+                          '& fieldset': { borderColor: 'rgba(0,0,0,0.12)' },
+                        },
+                      }}
+                      InputProps={{
+                        ...params.InputProps,
+                        startAdornment: (
+                          <>
+                            <InputAdornment position="start">
+                              <Search sx={{ color: colors.textSecondary || '#666', fontSize: '1.2rem' }} />
+                            </InputAdornment>
+                            {params.InputProps.startAdornment}
+                          </>
+                        ),
+                        endAdornment: (
+                          <>
+                            {drinksLoading ? <CircularProgress color="inherit" size={16} sx={{ mr: 0.5 }} /> : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
                 />
               </Box>
               <Button
@@ -503,7 +546,7 @@ const Header = () => {
                 onClick={() => navigate(isLoggedIn ? '/orders' : '/login')}
                 sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
               >
-                Track My Orders
+                My Orders
               </Button>
               {isLoggedIn ? (
                 <Button
@@ -571,6 +614,80 @@ const Header = () => {
             </Box>
           )}
         </Toolbar>
+
+        {/* Mobile: full-width search above category chips (not inside hamburger menu) */}
+        {isMobile && (
+          <Box
+            sx={{
+              px: 2,
+              py: 1,
+              width: '100%',
+              boxSizing: 'border-box',
+              borderTop: '1px solid rgba(0, 0, 0, 0.06)',
+              backgroundColor: colors.paper,
+            }}
+          >
+            <Box component="form" onSubmit={handleSearchSubmit} sx={{ width: '100%' }}>
+              <Autocomplete
+                freeSolo
+                fullWidth
+                options={allDrinks}
+                loading={drinksLoading}
+                filterOptions={(options, { inputValue }) => {
+                  const q = inputValue.trim().toLowerCase();
+                  if (!q) return [];
+                  return options
+                    .filter((o) => o && o.name && o.name.toLowerCase().includes(q))
+                    .slice(0, 20);
+                }}
+                getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
+                isOptionEqualToValue={(a, b) => a?.id === b?.id}
+                inputValue={searchInputValue}
+                onInputChange={handleSearchInputChange}
+                onChange={(e, newValue) => {
+                  if (newValue && typeof newValue === 'object') {
+                    navigateToDrink(newValue);
+                  }
+                }}
+                noOptionsText="No matching drink names"
+                ListboxProps={{ style: { maxHeight: 280 } }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    name="drink-search-mobile"
+                    size="small"
+                    placeholder="Search drinks..."
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        backgroundColor: colors.background || 'rgba(0,0,0,0.06)',
+                        borderRadius: 2,
+                        fontSize: '0.95rem',
+                      },
+                    }}
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <>
+                          <InputAdornment position="start">
+                            <Search sx={{ color: colors.textSecondary || '#666', fontSize: '1.25rem' }} />
+                          </InputAdornment>
+                          {params.InputProps.startAdornment}
+                        </>
+                      ),
+                      endAdornment: (
+                        <>
+                          {drinksLoading ? <CircularProgress color="inherit" size={18} sx={{ mr: 0.5 }} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            </Box>
+          </Box>
+        )}
+
         <CategoriesBar />
       </AppBar>
       

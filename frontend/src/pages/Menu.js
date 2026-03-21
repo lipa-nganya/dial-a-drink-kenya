@@ -16,6 +16,7 @@ import { useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { getSimilarDrinkSuggestions, drinkNameMatchesSearch } from '../utils/drinkSearch';
 
 const Menu = () => {
   const { colors } = useTheme();
@@ -45,8 +46,7 @@ const Menu = () => {
     if (!Array.isArray(drinks) || sortBy !== 'quantity') return [];
     let base = drinks.filter(d => d != null);
     if (searchTerm) {
-      const q = searchTerm.toLowerCase();
-      base = base.filter(d => (d.name && d.name.toLowerCase().includes(q)) || (d.description && d.description.toLowerCase().includes(q)));
+      base = base.filter(d => drinkNameMatchesSearch(d, searchTerm));
     }
     if (selectedCategory === -1) base = base.filter(d => d.isPopular);
     else if (selectedCategory > 0) {
@@ -181,6 +181,15 @@ const Menu = () => {
     }
   }, [sortBy, quantityCapacityFilter, availableCapacityOptions]);
 
+  // When name search matches nothing, suggest related products
+  const similarSuggestions = React.useMemo(() => {
+    if (loading) return [];
+    const q = (searchTerm || '').trim();
+    if (!q) return [];
+    if (filteredDrinks.length > 0) return [];
+    return getSimilarDrinkSuggestions(drinks, q, selectedCategory, { limit: 12 });
+  }, [loading, searchTerm, filteredDrinks.length, drinks, selectedCategory]);
+
   const fetchData = async () => {
     try {
       const [drinksResponse, categoriesResponse] = await Promise.all([
@@ -243,18 +252,9 @@ const Menu = () => {
     // Filter out any null/undefined drinks
     let filtered = drinks.filter(drink => drink != null);
 
-    // Filter by search term
+    // Filter by search term (drink name only, case-insensitive)
     if (searchTerm) {
-      filtered = filtered.filter(drink => {
-        if (!drink) return false;
-        const nameMatch = drink.name && typeof drink.name === 'string' 
-          ? drink.name.toLowerCase().includes(searchTerm.toLowerCase()) 
-          : false;
-        const descMatch = drink.description && typeof drink.description === 'string'
-          ? drink.description.toLowerCase().includes(searchTerm.toLowerCase())
-          : false;
-        return nameMatch || descMatch;
-      });
+      filtered = filtered.filter((drink) => drink && drinkNameMatchesSearch(drink, searchTerm));
     }
 
     // Filter by category or popular
@@ -481,9 +481,37 @@ const Menu = () => {
         {loading ? (
           <Typography textAlign="center" sx={{ fontSize: '0.9rem' }}>Loading drinks...</Typography>
         ) : filteredDrinks.length === 0 ? (
-          <Typography textAlign="center" color="text.secondary" sx={{ fontSize: '0.9rem' }}>
-            No drinks found matching your criteria.
-          </Typography>
+          <Box>
+            <Typography textAlign="center" color="text.secondary" sx={{ fontSize: '0.9rem', mb: 2 }}>
+              {searchTerm.trim()
+                ? 'No drinks found with that name.'
+                : 'No drinks found matching your criteria.'}
+            </Typography>
+            {similarSuggestions.length > 0 && (
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, textAlign: 'center' }}>
+                  You might also like
+                </Typography>
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                      xs: 'repeat(2, 1fr)',
+                      sm: 'repeat(2, 1fr)',
+                      md: 'repeat(3, 1fr)',
+                      lg: 'repeat(4, 1fr)',
+                    },
+                    gap: { xs: 1, sm: 2 },
+                    width: '100%',
+                  }}
+                >
+                  {similarSuggestions.map((drink) => (
+                    <DrinkCard key={`similar-${drink.id}`} drink={drink} />
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </Box>
         ) : (
           <>
             <Box sx={{ 

@@ -142,7 +142,7 @@ const VerifyEmail = () => {
               }
             }}
           >
-            Go to Track My Orders
+            Go to My Orders
           </Button>
         </Paper>
       </Container>

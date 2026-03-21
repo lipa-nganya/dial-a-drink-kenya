@@ -14,7 +14,9 @@ const CategoriesBar = () => {
   const touchStartXRef = useRef(0);
 
   const isOnMenu = location.pathname === '/menu';
-  const selectedCategoryId = isOnMenu ? (() => {
+  const isDeliveryLocationPage = location.pathname.startsWith('/delivery-location/');
+
+  const selectedCategoryId = (isOnMenu || isDeliveryLocationPage) ? (() => {
     const cat = searchParams.get('category');
     if (cat == null || cat === '') return null;
     const id = parseInt(cat, 10);
@@ -43,7 +45,19 @@ const CategoriesBar = () => {
     // a click on the touched button. That navigation makes the scroll feel
     // "stuck" (snaps back to the selected category). Ignore clicks after a drag.
     if (isDraggingRef.current) return;
+    // Stay on delivery location detail pages; filter via query string (same as menu UX)
+    if (isDeliveryLocationPage) {
+      navigate({ pathname: location.pathname, search: `?category=${categoryId}` });
+      return;
+    }
     navigate(`/menu?category=${categoryId}`);
+  };
+
+  const handleAllCategoriesClick = () => {
+    if (isDraggingRef.current) return;
+    if (isDeliveryLocationPage) {
+      navigate({ pathname: location.pathname, search: '' });
+    }
   };
 
   if (categories.length === 0) return null;
@@ -89,6 +103,29 @@ const CategoriesBar = () => {
         touchStartXRef.current = 0;
       }}
     >
+      {isDeliveryLocationPage && (
+        <Button
+          key="delivery-location-all-categories"
+          onClick={handleAllCategoriesClick}
+          sx={{
+            textTransform: 'uppercase',
+            fontSize: '0.8rem',
+            fontWeight: 600,
+            color: selectedCategoryId == null ? '#000000' : (colors.textPrimary || '#000000'),
+            backgroundColor: selectedCategoryId == null ? (colors.accent || '#00E0B8') : 'transparent',
+            minWidth: 'unset',
+            flex: '0 0 auto',
+            flexShrink: 0,
+            px: 1.5,
+            whiteSpace: 'nowrap',
+            '&:hover': {
+              backgroundColor: selectedCategoryId == null ? (colors.accent || '#00E0B8') : 'rgba(0, 0, 0, 0.04)',
+            },
+          }}
+        >
+          All
+        </Button>
+      )}
       {categories.map((category) => {
         const isSelected = selectedCategoryId != null && category.id === selectedCategoryId;
         return (

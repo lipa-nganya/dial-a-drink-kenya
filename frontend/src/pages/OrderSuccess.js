@@ -734,7 +734,7 @@ const OrderSuccess = () => {
                 }
               }}
             >
-              {isLoggedIn ? 'Track My Orders' : 'Log in'}
+              {isLoggedIn ? 'My Orders' : 'Log in'}
             </Button>
           </Box>
         </Paper>
