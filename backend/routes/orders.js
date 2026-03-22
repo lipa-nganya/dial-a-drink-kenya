@@ -9,195 +9,10 @@ const { findClosestBranch } = require('../utils/branchAssignment');
 const { generateReceiptPDF } = require('../services/pdfReceipt');
 const pushNotifications = require('../services/pushNotifications');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
+const { calculateDeliveryFee } = require('../utils/calculateDeliveryFee');
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
-
-// Ensure dotenv is loaded for Google Maps API key
-if (!process.env.GOOGLE_MAPS_API_KEY && !process.env.REACT_APP_GOOGLE_MAPS_API_KEY) {
-  try {
-    require('dotenv').config();
-  } catch (e) {
-    // dotenv might already be loaded
-  }
-}
-
-const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.REACT_APP_GOOGLE_MAPS_API_KEY || '';
-
-// Reference point: Taveta Shopping Mall - M 48, Taveta Shopping Mall, Taveta Road, Nairobi
-// This is a fallback if no branch is specified - should match branch 4 address
-const ORIGIN_ADDRESS = 'Taveta Shopping Mall - M 48, Taveta Shopping Mall, Taveta Road, Nairobi';
-const ORIGIN_COORDS = { lat: -1.359872, lng: 36.6641152 };
-
-/**
- * Calculate road distance using Google Distance Matrix API
- * Falls back to Haversine formula if API is unavailable
- * @param {string} destinationAddress - Delivery address
- * @param {string} originAddress - Origin address (branch address). If not provided, uses default ORIGIN_ADDRESS
- * @returns {Promise<{distance: number, isRoadDistance: boolean}>} - Distance in kilometers
- */
-const calculateRoadDistance = async (destinationAddress, originAddress = null) => {
-  // If no API key, fall back to Haversine if we have coordinates
-  if (!GOOGLE_MAPS_API_KEY) {
-    console.warn('⚠️ Google Maps API key not configured. Cannot calculate road distance.');
-    return { distance: null, isRoadDistance: false };
-  }
-
-  // Use branch address if provided, otherwise fall back to default
-  const origin = originAddress || ORIGIN_ADDRESS;
-
-  if (!origin || !origin.trim()) {
-    console.error('❌ Origin address is empty! Cannot calculate distance.');
-    return { distance: null, isRoadDistance: false };
-  }
-
-  try {
-    const distanceMatrixUrl = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${encodeURIComponent(origin)}&destinations=${encodeURIComponent(destinationAddress)}&key=${GOOGLE_MAPS_API_KEY}&units=metric`;
-
-    console.log(`🌐 Calling Google Distance Matrix API:`);
-    console.log(`   Origin: ${origin}`);
-    console.log(`   Destination: ${destinationAddress}`);
-
-    const response = await fetch(distanceMatrixUrl);
-    
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.status !== 'OK') {
-      console.error('❌ Google Distance Matrix API error:', data.status, data.error_message);
-      return { distance: null, isRoadDistance: false };
-    }
-
-    if (data.rows && data.rows[0] && data.rows[0].elements && data.rows[0].elements[0]) {
-      const element = data.rows[0].elements[0];
-      
-      if (element.status === 'OK' && element.distance) {
-        const distanceKm = element.distance.value / 1000; // Convert meters to kilometers
-        console.log(`✅ Distance Matrix API returned: ${distanceKm} km (${element.distance.text})`);
-        return { distance: parseFloat(distanceKm.toFixed(2)), isRoadDistance: true };
-      } else {
-        console.warn(`⚠️ Distance Matrix API returned status: ${element.status} for origin "${origin}" to destination "${destinationAddress}"`);
-        return { distance: null, isRoadDistance: false };
-      }
-    }
-
-    console.warn(`⚠️ Distance Matrix API returned invalid response structure`);
-    return { distance: null, isRoadDistance: false };
-  } catch (error) {
-    console.error('❌ Error calling Google Distance Matrix API:', error.message);
-    console.error('   Origin:', origin);
-    console.error('   Destination:', destinationAddress);
-    return { distance: null, isRoadDistance: false };
-  }
-};
-
-// Helper function to calculate delivery fee
-const calculateDeliveryFee = async (items, itemsSubtotal = null, deliveryAddress = null, branchId = null) => {
-  try {
-    // Get delivery settings
-    const [testModeSetting, feeModeSetting, withAlcoholSetting, withoutAlcoholSetting, perKmWithAlcoholSetting, perKmWithoutAlcoholSetting] = await Promise.all([
-      db.Settings.findOne({ where: { key: 'deliveryTestMode' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'deliveryFeeMode' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'deliveryFeeWithAlcohol' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'deliveryFeeWithoutAlcohol' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'deliveryFeePerKmWithAlcohol' } }).catch(() => null),
-      db.Settings.findOne({ where: { key: 'deliveryFeePerKmWithoutAlcohol' } }).catch(() => null)
-    ]);
-
-    const isTestMode = testModeSetting?.value === 'true';
-    
-    if (isTestMode) {
-      return { fee: 0, distance: null };
-    }
-
-    const feeMode = feeModeSetting?.value || 'fixed';
-    const isPerKmMode = feeMode === 'perKm';
-
-    // Check if all items are from Soft Drinks category
-    let allSoftDrinks = false;
-    if (items && items.length > 0) {
-      const drinkIds = items.map(item => item.drinkId);
-      const drinks = await db.Drink.findAll({
-        where: { id: drinkIds },
-        include: [{
-          model: db.Category,
-          as: 'category'
-        }]
-      });
-
-      allSoftDrinks = drinks.every(drink => 
-        drink.category && drink.category.name === 'Soft Drinks'
-      );
-    }
-
-    if (isPerKmMode) {
-      // Per KM mode: calculate fee based on road distance
-      const perKmWithAlcohol = parseFloat(perKmWithAlcoholSetting?.value || '20');
-      const perKmWithoutAlcohol = parseFloat(perKmWithoutAlcoholSetting?.value || '15');
-      
-      const perKmRate = allSoftDrinks ? perKmWithoutAlcohol : perKmWithAlcohol;
-      
-      // Calculate road distance from branch to delivery address
-      let distanceKm = null;
-      if (deliveryAddress) {
-        try {
-          // Get branch address if branchId is provided
-          let originAddress = null;
-          if (branchId) {
-            const branch = await db.Branch.findByPk(branchId);
-            if (branch && branch.address) {
-              originAddress = branch.address;
-              console.log(`📍 Using branch address as origin: ${branch.name} (ID: ${branchId}) - ${originAddress}`);
-            } else {
-              console.warn(`⚠️ Branch ID ${branchId} not found or has no address, using ORIGIN_ADDRESS`);
-            }
-          } else {
-            console.warn(`⚠️ No branchId provided, using ORIGIN_ADDRESS: ${ORIGIN_ADDRESS}`);
-          }
-          
-          // Use Google Distance Matrix API to calculate road distance from branch to delivery address
-          const distanceResult = await calculateRoadDistance(deliveryAddress, originAddress);
-          if (distanceResult.isRoadDistance && distanceResult.distance) {
-            distanceKm = distanceResult.distance;
-            console.log(`✅ Road distance calculated: ${distanceKm} km from ${originAddress || ORIGIN_ADDRESS} to ${deliveryAddress}`);
-          } else {
-            // Fallback: use minimum 1km if road distance calculation fails
-            console.warn(`⚠️ Road distance calculation failed (isRoadDistance: ${distanceResult.isRoadDistance}, distance: ${distanceResult.distance}), using minimum 1km`);
-            console.warn(`   Origin: ${originAddress || ORIGIN_ADDRESS}`);
-            console.warn(`   Destination: ${deliveryAddress}`);
-            distanceKm = 1;
-          }
-        } catch (distanceError) {
-          console.error('Error calculating road distance:', distanceError);
-          distanceKm = 1; // Default to minimum 1km on error
-        }
-      } else {
-        distanceKm = 1; // Default to minimum 1km if no address
-      }
-      
-      // Ensure minimum 1km distance
-      distanceKm = Math.max(distanceKm || 1, 1);
-      
-      const fee = distanceKm * perKmRate;
-      // Round up to nearest whole number (no decimals)
-      return { fee: Math.ceil(fee), distance: distanceKm };
-    } else {
-      // Fixed mode: use fixed amounts (no distance calculation needed)
-      const deliveryFeeWithAlcohol = parseFloat(withAlcoholSetting?.value || '50');
-      const deliveryFeeWithoutAlcohol = parseFloat(withoutAlcoholSetting?.value || '30');
-
-      const fee = allSoftDrinks ? deliveryFeeWithoutAlcohol : deliveryFeeWithAlcohol;
-      return { fee, distance: null }; // Distance is null for fixed mode
-    }
-  } catch (error) {
-    console.error('Error calculating delivery fee:', error);
-    // Default to standard delivery fee on error
-    return { fee: 50, distance: null };
-  }
-};
 
 // Create new order
 router.post('/', async (req, res) => {
@@ -224,8 +39,7 @@ router.post('/', async (req, res) => {
       paymentStatus,
       isStop,
       stopDeductionAmount,
-      sendSmsToCustomer,
-      deliveryFee: providedDeliveryFee
+      sendSmsToCustomer
     } = req.body;
 
     // Admin attribution (Posted by)
@@ -507,19 +321,34 @@ router.post('/', async (req, res) => {
       
       let deliveryFee = 0;
       let deliveryDistance = null;
-      
-      // For admin orders, if deliveryFee is explicitly provided, use it instead of recalculating
-      if (effectiveAdminOrder && providedDeliveryFee != null && providedDeliveryFee !== undefined) {
-        deliveryFee = parseFloat(providedDeliveryFee) || 0;
-        console.log(`✅ Admin order: Using provided delivery fee from mobile app: KES ${deliveryFee}`);
-      } else if (!isWalkInOrder) {
-        // Only calculate delivery fee for non-walk-in orders if not provided
-        const feeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
-        deliveryFee = feeResult.fee || 0;
-        deliveryDistance = feeResult.distance || null;
-        console.log(`📦 Calculated delivery fee: KES ${deliveryFee}`);
-      } else {
+      /** When set, order notes indicate fee came from territory (not settings-based calculation). */
+      let deliveryFeeFromTerritory = false;
+
+      if (isWalkInOrder) {
         console.log(`🛍️  Walk-in order detected (customerName: ${customerName}, deliveryAddress: ${deliveryAddress}). Skipping delivery fee calculation.`);
+      } else {
+        const tidRaw = territoryId !== undefined && territoryId !== null && territoryId !== ''
+          ? parseInt(territoryId, 10)
+          : NaN;
+        if (!Number.isNaN(tidRaw) && tidRaw > 0) {
+          const territory = await db.Territory.findByPk(tidRaw, { transaction });
+          if (territory) {
+            deliveryFee = parseFloat(territory.deliveryFromCBD) || 0;
+            deliveryDistance = null;
+            deliveryFeeFromTerritory = true;
+            console.log(`📍 Territory ${tidRaw} (${territory.name || 'unnamed'}): delivery fee KES ${deliveryFee} (deliveryFromCBD)`);
+          } else {
+            const feeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
+            deliveryFee = feeResult.fee || 0;
+            deliveryDistance = feeResult.distance || null;
+            console.warn(`⚠️ territoryId ${tidRaw} not found; using settings-based delivery fee: KES ${deliveryFee}`);
+          }
+        } else {
+          const feeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
+          deliveryFee = feeResult.fee || 0;
+          deliveryDistance = feeResult.distance || null;
+          console.log(`📦 No territory selected: settings-based delivery fee: KES ${deliveryFee}`);
+        }
       }
       
       const finalTotal = totalAmount + deliveryFee + tip;
@@ -596,8 +425,8 @@ router.post('/', async (req, res) => {
           let noteParts = [];
           if (notes) noteParts.push(notes);
           if (!isWalkInOrder && deliveryFee > 0) {
-            const deliveryFeeNote = effectiveAdminOrder && providedDeliveryFee != null 
-              ? `Delivery Fee: KES ${deliveryFee.toFixed(2)} (set via Admin Mobile App)`
+            const deliveryFeeNote = deliveryFeeFromTerritory
+              ? `Delivery Fee: KES ${deliveryFee.toFixed(2)} (from territory)`
               : `Delivery Fee: KES ${deliveryFee.toFixed(2)}`;
             noteParts.push(deliveryFeeNote);
           }

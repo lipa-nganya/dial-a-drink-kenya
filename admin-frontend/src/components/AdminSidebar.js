@@ -38,7 +38,7 @@ const DRAWER_WIDTH = 220;
 const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { pendingOrdersCount, pendingInventoryChecksCount, pendingRiderCashSubmissionsCount, logout, user } = useAdmin();
+  const { pendingInventoryChecksCount, pendingRiderCashSubmissionsCount, logout, user } = useAdmin();
   const { isDarkMode, colors } = useTheme();
   const { isEasterEggActive } = useEasterEgg();
 
@@ -55,7 +55,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
 
   const menuItems = [
     { path: '/dashboard', label: 'Dashboard', icon: Dashboard },
-    { path: '/orders', label: 'Orders', icon: Receipt, badge: pendingOrdersCount },
+    { path: '/orders', label: 'Orders', icon: Receipt },
     { path: '/transactions', label: 'Transactions', icon: Receipt },
     { path: '/inventory', label: 'Inventory', icon: Inventory, badge: pendingInventoryChecksCount },
     { path: '/payables', label: 'Payables', icon: AccountBalance },

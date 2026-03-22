@@ -2,14 +2,14 @@ require('dotenv').config();
 const db = require('../models');
 
 const territoriesData = [
-  { name: '1Default', deliveryFromCBD: 0, deliveryFromRuaka: 0 },
-  { name: 'Bahati', deliveryFromCBD: 2000, deliveryFromRuaka: 1500 },
-  { name: 'Banana', deliveryFromCBD: 600, deliveryFromRuaka: 250 },
-  { name: 'Buruburu Phase 1', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 2', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 3', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 4', deliveryFromCBD: 400, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 5', deliveryFromCBD: 400, deliveryFromRuaka: 0 }
+  { name: '1Default', deliveryFromCBD: 0 },
+  { name: 'Bahati', deliveryFromCBD: 2000 },
+  { name: 'Banana', deliveryFromCBD: 600 },
+  { name: 'Buruburu Phase 1', deliveryFromCBD: 500 },
+  { name: 'Buruburu Phase 2', deliveryFromCBD: 500 },
+  { name: 'Buruburu Phase 3', deliveryFromCBD: 500 },
+  { name: 'Buruburu Phase 4', deliveryFromCBD: 400 },
+  { name: 'Buruburu Phase 5', deliveryFromCBD: 400 }
 ];
 
 async function seedTerritories() {
@@ -24,8 +24,7 @@ async function seedTerritories() {
       const [territory, created] = await db.Territory.findOrCreate({
         where: { name: territoryData.name },
         defaults: {
-          deliveryFromCBD: territoryData.deliveryFromCBD,
-          deliveryFromRuaka: territoryData.deliveryFromRuaka
+          deliveryFromCBD: territoryData.deliveryFromCBD
         }
       });
 
@@ -34,8 +33,7 @@ async function seedTerritories() {
       } else {
         // Update existing territory
         await territory.update({
-          deliveryFromCBD: territoryData.deliveryFromCBD,
-          deliveryFromRuaka: territoryData.deliveryFromRuaka
+          deliveryFromCBD: territoryData.deliveryFromCBD
         });
         console.log(`🔄 Updated territory: ${territory.name}`);
       }

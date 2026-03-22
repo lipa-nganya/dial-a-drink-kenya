@@ -14,13 +14,7 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,
       defaultValue: 0,
-      comment: 'Delivery cost from CBD location'
-    },
-    deliveryFromRuaka: {
-      type: DataTypes.DECIMAL(10, 2),
-      allowNull: false,
-      defaultValue: 0,
-      comment: 'Delivery cost from Ruaka location'
+      comment: 'Delivery fee for this territory (single value)'
     }
   }, {
     tableName: 'territories',

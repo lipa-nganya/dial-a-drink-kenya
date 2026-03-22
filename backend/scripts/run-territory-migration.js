@@ -20,6 +20,10 @@ async function runMigration() {
 
     if (tableExists) {
       console.log('✅ Territories table already exists');
+      await db.sequelize.query(
+        'ALTER TABLE territories DROP COLUMN IF EXISTS "deliveryFromRuaka";'
+      );
+      console.log('✅ Single delivery fee: removed deliveryFromRuaka if present');
     } else {
       console.log('📝 Creating territories table...');
       
@@ -28,7 +32,6 @@ async function runMigration() {
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL UNIQUE,
           "deliveryFromCBD" DECIMAL(10, 2) NOT NULL DEFAULT 0,
-          "deliveryFromRuaka" DECIMAL(10, 2) NOT NULL DEFAULT 0,
           "createdAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
           "updatedAt" TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
         );

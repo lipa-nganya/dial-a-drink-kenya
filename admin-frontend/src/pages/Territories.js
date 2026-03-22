@@ -39,8 +39,7 @@ const Territories = () => {
   const [editingTerritory, setEditingTerritory] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    deliveryFromCBD: '0',
-    deliveryFromRuaka: '0'
+    deliveryFromCBD: '0'
   });
   const [deletingTerritoryId, setDeletingTerritoryId] = useState(null);
 
@@ -67,15 +66,13 @@ const Territories = () => {
       setEditingTerritory(territory);
       setFormData({
         name: territory.name,
-        deliveryFromCBD: territory.deliveryFromCBD?.toString() || '0',
-        deliveryFromRuaka: territory.deliveryFromRuaka?.toString() || '0'
+        deliveryFromCBD: territory.deliveryFromCBD?.toString() || '0'
       });
     } else {
       setEditingTerritory(null);
       setFormData({
         name: '',
-        deliveryFromCBD: '0',
-        deliveryFromRuaka: '0'
+        deliveryFromCBD: '0'
       });
     }
     setOpenDialog(true);
@@ -86,8 +83,7 @@ const Territories = () => {
     setEditingTerritory(null);
     setFormData({
       name: '',
-      deliveryFromCBD: '0',
-      deliveryFromRuaka: '0'
+      deliveryFromCBD: '0'
     });
     setError('');
   };
@@ -102,8 +98,7 @@ const Territories = () => {
 
       const payload = {
         name: formData.name.trim(),
-        deliveryFromCBD: parseFloat(formData.deliveryFromCBD) || 0,
-        deliveryFromRuaka: parseFloat(formData.deliveryFromRuaka) || 0
+        deliveryFromCBD: parseFloat(formData.deliveryFromCBD) || 0
       };
 
       if (editingTerritory) {
@@ -185,15 +180,14 @@ const Territories = () => {
           <TableHead>
             <TableRow>
               <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Territory</TableCell>
-              <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Delivery From CBD</TableCell>
-              <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Delivery From Ruaka</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Delivery fee (KES)</TableCell>
               <TableCell sx={{ fontWeight: 700, color: colors.accentText }} align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {territories.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} align="center" sx={{ color: colors.textSecondary, py: 4 }}>
+                <TableCell colSpan={3} align="center" sx={{ color: colors.textSecondary, py: 4 }}>
                   No territories found. Add your first territory to get started.
                 </TableCell>
               </TableRow>
@@ -202,7 +196,6 @@ const Territories = () => {
                 <TableRow key={territory.id}>
                   <TableCell sx={{ color: colors.textPrimary, fontWeight: 500 }}>{territory.name}</TableCell>
                   <TableCell sx={{ color: colors.textPrimary }}>{formatCurrency(territory.deliveryFromCBD)}</TableCell>
-                  <TableCell sx={{ color: colors.textPrimary }}>{formatCurrency(territory.deliveryFromRuaka)}</TableCell>
                   <TableCell align="right">
                     <Tooltip title="Edit Territory">
                       <IconButton
@@ -276,36 +269,10 @@ const Territories = () => {
             />
             <TextField
               fullWidth
-              label="Delivery From CBD (KES)"
+              label="Delivery fee (KES)"
               type="number"
               value={formData.deliveryFromCBD}
               onChange={(e) => setFormData({ ...formData, deliveryFromCBD: e.target.value })}
-              margin="normal"
-              inputProps={{ min: 0, step: 1 }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
-                  '& fieldset': { borderColor: colors.border },
-                  '&:hover fieldset': { borderColor: colors.accentText },
-                  '&.Mui-focused fieldset': { borderColor: colors.accentText }
-                },
-                '& .MuiInputBase-input': {
-                  color: colors.textPrimary
-                },
-                '& .MuiInputLabel-root': {
-                  color: colors.textSecondary
-                },
-                '& .MuiInputLabel-root.Mui-focused': {
-                  color: colors.accentText
-                }
-              }}
-            />
-            <TextField
-              fullWidth
-              label="Delivery From Ruaka (KES)"
-              type="number"
-              value={formData.deliveryFromRuaka}
-              onChange={(e) => setFormData({ ...formData, deliveryFromRuaka: e.target.value })}
               margin="normal"
               inputProps={{ min: 0, step: 1 }}
               sx={{

@@ -36,7 +36,7 @@ router.get('/:id', async (req, res) => {
 // Create new territory
 router.post('/', async (req, res) => {
   try {
-    const { name, deliveryFromCBD, deliveryFromRuaka } = req.body;
+    const { name, deliveryFromCBD } = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Territory name is required' });
@@ -44,8 +44,7 @@ router.post('/', async (req, res) => {
     
     const territory = await db.Territory.create({
       name: name.trim(),
-      deliveryFromCBD: deliveryFromCBD ? parseFloat(deliveryFromCBD) : 0,
-      deliveryFromRuaka: deliveryFromRuaka ? parseFloat(deliveryFromRuaka) : 0
+      deliveryFromCBD: deliveryFromCBD ? parseFloat(deliveryFromCBD) : 0
     });
     
     res.status(201).json(territory);
@@ -59,7 +58,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, deliveryFromCBD, deliveryFromRuaka } = req.body;
+    const { name, deliveryFromCBD } = req.body;
     
     const territory = await db.Territory.findByPk(id);
     
@@ -72,9 +71,6 @@ router.put('/:id', async (req, res) => {
     }
     if (deliveryFromCBD !== undefined) {
       territory.deliveryFromCBD = parseFloat(deliveryFromCBD);
-    }
-    if (deliveryFromRuaka !== undefined) {
-      territory.deliveryFromRuaka = parseFloat(deliveryFromRuaka);
     }
     
     await territory.save();

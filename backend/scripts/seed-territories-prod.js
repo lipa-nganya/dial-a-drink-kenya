@@ -3,39 +3,39 @@ const db = require('../models');
 
 // Full territories data from the website
 const territoriesData = [
-  { name: '1Default', deliveryFromCBD: 0, deliveryFromRuaka: 0 },
-  { name: 'Bahati', deliveryFromCBD: 2000, deliveryFromRuaka: 1500 },
-  { name: 'Banana', deliveryFromCBD: 600, deliveryFromRuaka: 250 },
-  { name: 'Buruburu Phase 1', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 2', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 3', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 4', deliveryFromCBD: 400, deliveryFromRuaka: 0 },
-  { name: 'Buruburu Phase 5', deliveryFromCBD: 400, deliveryFromRuaka: 0 },
-  { name: 'CBD', deliveryFromCBD: 0, deliveryFromRuaka: 0 },
-  { name: 'Dandora', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Donholm', deliveryFromCBD: 600, deliveryFromRuaka: 0 },
-  { name: 'Eastleigh', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Embakasi', deliveryFromCBD: 800, deliveryFromRuaka: 0 },
-  { name: 'Githurai', deliveryFromCBD: 800, deliveryFromRuaka: 0 },
-  { name: 'Hurlingham', deliveryFromCBD: 300, deliveryFromRuaka: 0 },
-  { name: 'Juja', deliveryFromCBD: 1500, deliveryFromRuaka: 0 },
-  { name: 'Kahawa', deliveryFromCBD: 1000, deliveryFromRuaka: 0 },
-  { name: 'Kasarani', deliveryFromCBD: 800, deliveryFromRuaka: 0 },
-  { name: 'Kayole', deliveryFromCBD: 600, deliveryFromRuaka: 0 },
-  { name: 'Kileleshwa', deliveryFromCBD: 400, deliveryFromRuaka: 0 },
-  { name: 'Kilimani', deliveryFromCBD: 300, deliveryFromRuaka: 0 },
-  { name: 'Kitisuru', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Lavington', deliveryFromCBD: 400, deliveryFromRuaka: 0 },
-  { name: 'Muthaiga', deliveryFromCBD: 600, deliveryFromRuaka: 0 },
-  { name: 'Ngong Road', deliveryFromCBD: 400, deliveryFromRuaka: 0 },
-  { name: 'Parklands', deliveryFromCBD: 300, deliveryFromRuaka: 0 },
-  { name: 'Rongai', deliveryFromCBD: 1200, deliveryFromRuaka: 0 },
-  { name: 'Ruaka', deliveryFromCBD: 0, deliveryFromRuaka: 0 },
-  { name: 'Runda', deliveryFromCBD: 800, deliveryFromRuaka: 0 },
-  { name: 'South B', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'South C', deliveryFromCBD: 500, deliveryFromRuaka: 0 },
-  { name: 'Umoja', deliveryFromCBD: 600, deliveryFromRuaka: 0 },
-  { name: 'Westlands', deliveryFromCBD: 400, deliveryFromRuaka: 0 }
+  { name: '1Default', deliveryFromCBD: 0 },
+  { name: 'Bahati', deliveryFromCBD: 2000 },
+  { name: 'Banana', deliveryFromCBD: 600 },
+  { name: 'Buruburu Phase 1', deliveryFromCBD: 500 },
+  { name: 'Buruburu Phase 2', deliveryFromCBD: 500 },
+  { name: 'Buruburu Phase 3', deliveryFromCBD: 500 },
+  { name: 'Buruburu Phase 4', deliveryFromCBD: 400 },
+  { name: 'Buruburu Phase 5', deliveryFromCBD: 400 },
+  { name: 'CBD', deliveryFromCBD: 0 },
+  { name: 'Dandora', deliveryFromCBD: 500 },
+  { name: 'Donholm', deliveryFromCBD: 600 },
+  { name: 'Eastleigh', deliveryFromCBD: 500 },
+  { name: 'Embakasi', deliveryFromCBD: 800 },
+  { name: 'Githurai', deliveryFromCBD: 800 },
+  { name: 'Hurlingham', deliveryFromCBD: 300 },
+  { name: 'Juja', deliveryFromCBD: 1500 },
+  { name: 'Kahawa', deliveryFromCBD: 1000 },
+  { name: 'Kasarani', deliveryFromCBD: 800 },
+  { name: 'Kayole', deliveryFromCBD: 600 },
+  { name: 'Kileleshwa', deliveryFromCBD: 400 },
+  { name: 'Kilimani', deliveryFromCBD: 300 },
+  { name: 'Kitisuru', deliveryFromCBD: 500 },
+  { name: 'Lavington', deliveryFromCBD: 400 },
+  { name: 'Muthaiga', deliveryFromCBD: 600 },
+  { name: 'Ngong Road', deliveryFromCBD: 400 },
+  { name: 'Parklands', deliveryFromCBD: 300 },
+  { name: 'Rongai', deliveryFromCBD: 1200 },
+  { name: 'Ruaka', deliveryFromCBD: 0 },
+  { name: 'Runda', deliveryFromCBD: 800 },
+  { name: 'South B', deliveryFromCBD: 500 },
+  { name: 'South C', deliveryFromCBD: 500 },
+  { name: 'Umoja', deliveryFromCBD: 600 },
+  { name: 'Westlands', deliveryFromCBD: 400 }
 ];
 
 async function seedTerritories() {
@@ -53,8 +53,7 @@ async function seedTerritories() {
       const [territory, created] = await db.Territory.findOrCreate({
         where: { name: territoryData.name },
         defaults: {
-          deliveryFromCBD: territoryData.deliveryFromCBD,
-          deliveryFromRuaka: territoryData.deliveryFromRuaka
+          deliveryFromCBD: territoryData.deliveryFromCBD
         }
       });
 
@@ -64,8 +63,7 @@ async function seedTerritories() {
       } else {
         // Update existing territory
         await territory.update({
-          deliveryFromCBD: territoryData.deliveryFromCBD,
-          deliveryFromRuaka: territoryData.deliveryFromRuaka
+          deliveryFromCBD: territoryData.deliveryFromCBD
         });
         console.log(`🔄 Updated territory: ${territory.name}`);
         updatedCount++;

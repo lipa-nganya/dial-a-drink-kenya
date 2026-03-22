@@ -114,13 +114,8 @@ const Orders = () => {
   const [newDeliveryFee, setNewDeliveryFee] = useState('');
   const [updatingDeliveryFee, setUpdatingDeliveryFee] = useState(false);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState('');
-  const [applyingTerritoryFee, setApplyingTerritoryFee] = useState(false);
   const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ customer: false, deliveryFee: false, territory: false });
   const updatedFeeTimeoutRef = useRef(null);
-  const [adminDeliveryFees, setAdminDeliveryFees] = useState({
-    deliveryFeeWithAlcohol: 50,
-    deliveryFeeWithoutAlcohol: 30
-  });
   const [savingOrderDetails, setSavingOrderDetails] = useState(false);
   const originalOrderDetailRef = useRef(null);
   
@@ -222,7 +217,6 @@ const Orders = () => {
     fetchDrivers();
     fetchBranches();
     fetchTerritories();
-    fetchAdminDeliveryFees();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -312,21 +306,6 @@ const Orders = () => {
       setToastOpen(true);
     } finally {
       setProcessingCancellationRequest(false);
-    }
-  };
-
-  const fetchAdminDeliveryFees = async () => {
-    try {
-      const [withRes, withoutRes] = await Promise.all([
-        api.get('/settings/deliveryFeeWithAlcohol').catch(() => ({ data: { value: '50' } })),
-        api.get('/settings/deliveryFeeWithoutAlcohol').catch(() => ({ data: { value: '30' } }))
-      ]);
-      setAdminDeliveryFees({
-        deliveryFeeWithAlcohol: parseFloat(withRes.data?.value || '50'),
-        deliveryFeeWithoutAlcohol: parseFloat(withoutRes.data?.value || '30')
-      });
-    } catch (error) {
-      console.error('Error fetching admin delivery fees:', error);
     }
   };
 
@@ -1354,6 +1333,7 @@ const Orders = () => {
         );
 
         const updatedOrder = territoryResponse.data;
+        const bd = updatedOrder.breakdown;
         const territory =
           territoryId && territories.find((t) => t.id === territoryId);
 
@@ -1362,7 +1342,12 @@ const Orders = () => {
           territoryId: updatedOrder.territoryId,
           territory: territory
             ? { id: territory.id, name: territory.name }
-            : null
+            : null,
+          ...(bd && {
+            deliveryFee: bd.deliveryFee,
+            totalAmount: bd.totalAmount,
+            itemsTotal: bd.itemsTotal
+          })
         }));
 
         setOrders((prev) =>
@@ -1373,7 +1358,12 @@ const Orders = () => {
                   territoryId: updatedOrder.territoryId,
                   territory: territory
                     ? { id: territory.id, name: territory.name }
-                    : null
+                    : null,
+                  ...(bd && {
+                    deliveryFee: bd.deliveryFee,
+                    totalAmount: bd.totalAmount,
+                    itemsTotal: bd.itemsTotal
+                  })
                 }
               : o
           )
@@ -1387,7 +1377,12 @@ const Orders = () => {
                   territoryId: updatedOrder.territoryId,
                   territory: territory
                     ? { id: territory.id, name: territory.name }
-                    : null
+                    : null,
+                  ...(bd && {
+                    deliveryFee: bd.deliveryFee,
+                    totalAmount: bd.totalAmount,
+                    itemsTotal: bd.itemsTotal
+                  })
                 }
               : o
           )
@@ -1448,40 +1443,6 @@ const Orders = () => {
       );
     } finally {
       setSavingOrderDetails(false);
-    }
-  };
-
-  const handleApplyTerritoryDeliveryFee = async (fee) => {
-    if (!selectedOrderForDetail) return;
-    if (selectedOrderForDetail.status === 'completed' || selectedOrderForDetail.status === 'cancelled' || selectedOrderForDetail.paymentStatus === 'paid') {
-      alert('Cannot change delivery fee for completed, cancelled, or paid orders.');
-      return;
-    }
-    setApplyingTerritoryFee(true);
-    try {
-      const response = await api.patch(`/admin/orders/${selectedOrderForDetail.id}/delivery-fee`, { deliveryFee: fee });
-      if (response.data?.success && response.data?.breakdown) {
-        const { breakdown } = response.data;
-        setSelectedOrderForDetail(prev => ({
-          ...prev,
-          deliveryFee: breakdown.deliveryFee,
-          totalAmount: breakdown.totalAmount,
-          itemsTotal: breakdown.itemsTotal
-        }));
-        setOrders(prev => prev.map(o => o.id === selectedOrderForDetail.id ? { ...o, totalAmount: breakdown.totalAmount, deliveryFee: breakdown.deliveryFee } : o));
-        setFilteredOrders(prev => prev.map(o => o.id === selectedOrderForDetail.id ? { ...o, totalAmount: breakdown.totalAmount, deliveryFee: breakdown.deliveryFee } : o));
-        if (updatedFeeTimeoutRef.current) clearTimeout(updatedFeeTimeoutRef.current);
-        setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, deliveryFee: true }));
-        updatedFeeTimeoutRef.current = setTimeout(() => {
-          setRecentlyUpdatedInOrderDetail(prev => ({ ...prev, deliveryFee: false }));
-          updatedFeeTimeoutRef.current = null;
-        }, 4000);
-      }
-    } catch (error) {
-      console.error('Error applying territory delivery fee:', error);
-      alert(error.response?.data?.error || error.message || 'Failed to update delivery fee');
-    } finally {
-      setApplyingTerritoryFee(false);
     }
   };
 
@@ -2885,7 +2846,20 @@ const Orders = () => {
                           <Select
                             value={selectedTerritoryId}
                             label="Territory"
-                            onChange={(e) => setSelectedTerritoryId(e.target.value)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSelectedTerritoryId(val);
+                              if (val === '' || val == null) {
+                                return;
+                              }
+                              const t = territories.find((tr) => String(tr.id) === String(val));
+                              if (t) {
+                                const fee = Number(t.deliveryFromCBD ?? 0);
+                                setSelectedOrderForDetail((prev) =>
+                                  prev ? { ...prev, deliveryFee: fee } : prev
+                                );
+                              }
+                            }}
                             sx={{ fontSize: '0.95rem' }}
                           >
                             <MenuItem value="">
@@ -2919,62 +2893,6 @@ const Orders = () => {
                           sx={{ maxWidth: 200 }}
                         />
                       </Box>
-
-                      {(() => {
-                        const tid = selectedTerritoryId === '' ? (selectedOrderForDetail.territoryId ?? selectedOrderForDetail.territory?.id) : selectedTerritoryId;
-                        const hasTerritory = tid != null && tid !== '';
-                        const territoryForFee = hasTerritory ? territories.find(t => Number(t.id) === Number(tid)) : null;
-                        const feeCBD = territoryForFee ? Number(territoryForFee.deliveryFromCBD ?? 0) : null;
-                        const feeRuaka = territoryForFee ? Number(territoryForFee.deliveryFromRuaka ?? 0) : null;
-                        if (!hasTerritory || (selectedOrderForDetail.status === 'completed' || selectedOrderForDetail.status === 'cancelled' || selectedOrderForDetail.paymentStatus === 'paid')) return null;
-                        return (
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                            <Typography variant="subtitle2" sx={{ width: '100%', color: colors.textPrimary }}>
-                              Set delivery fee to:
-                            </Typography>
-                            {feeCBD != null && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => handleApplyTerritoryDeliveryFee(feeCBD)}
-                                disabled={applyingTerritoryFee}
-                                sx={{ fontSize: '0.8rem' }}
-                              >
-                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – CBD (KES ${Math.round(feeCBD)})`}
-                              </Button>
-                            )}
-                            {feeRuaka != null && (
-                              <Button
-                                variant="outlined"
-                                size="small"
-                                onClick={() => handleApplyTerritoryDeliveryFee(feeRuaka)}
-                                disabled={applyingTerritoryFee}
-                                sx={{ fontSize: '0.8rem' }}
-                              >
-                                {applyingTerritoryFee ? <CircularProgress size={16} /> : `Territory – Ruaka (KES ${Math.round(feeRuaka)})`}
-                              </Button>
-                            )}
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => handleApplyTerritoryDeliveryFee(adminDeliveryFees.deliveryFeeWithAlcohol)}
-                              disabled={applyingTerritoryFee}
-                              sx={{ fontSize: '0.8rem' }}
-                            >
-                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – With alcohol (KES ${Math.round(Number(adminDeliveryFees.deliveryFeeWithAlcohol))})`}
-                            </Button>
-                            <Button
-                              variant="outlined"
-                              size="small"
-                              onClick={() => handleApplyTerritoryDeliveryFee(adminDeliveryFees.deliveryFeeWithoutAlcohol)}
-                              disabled={applyingTerritoryFee}
-                              sx={{ fontSize: '0.8rem' }}
-                            >
-                              {applyingTerritoryFee ? <CircularProgress size={16} /> : `Admin – Without alcohol (KES ${Math.round(Number(adminDeliveryFees.deliveryFeeWithoutAlcohol))})`}
-                            </Button>
-                          </Box>
-                        );
-                      })()}
                     </Box>
                   </CardContent>
                 </Card>

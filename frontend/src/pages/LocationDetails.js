@@ -9,9 +9,8 @@ import {
   CircularProgress,
   Paper,
   Stack,
-  Grid,
 } from '@mui/material';
-import { Search, Star, LocalShipping, LocationCity, Place } from '@mui/icons-material';
+import { Search, Star, LocalShipping, Payments } from '@mui/icons-material';
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useParams, useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
@@ -328,110 +327,50 @@ const LocationDetails = () => {
               </Stack>
             </Box>
 
-            <Grid container>
-              <Grid
-                item
-                xs={12}
-                sm={6}
+            <Stack
+              direction="row"
+              spacing={2}
+              sx={{
+                p: { xs: 2.5, sm: 3 },
+                alignItems: 'flex-start',
+              }}
+            >
+              <Box
                 sx={{
-                  borderBottom: { xs: `1px solid ${colors.border || 'rgba(0,0,0,0.08)'}`, sm: 'none' },
-                  borderRight: { sm: `1px solid ${colors.border || 'rgba(0,0,0,0.08)'}` },
+                  mt: 0.25,
+                  color: colors.accent || '#00E0B8',
+                  opacity: 0.95,
                 }}
               >
-                <Stack
-                  direction="row"
-                  spacing={2}
+                <Payments sx={{ fontSize: 28 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  variant="overline"
                   sx={{
-                    p: { xs: 2.5, sm: 3 },
-                    alignItems: 'flex-start',
-                    height: '100%',
+                    color: colors.textSecondary,
+                    letterSpacing: '0.08em',
+                    fontWeight: 600,
+                    display: 'block',
+                    mb: 0.5,
                   }}
                 >
-                  <Box
-                    sx={{
-                      mt: 0.25,
-                      color: colors.accent || '#00E0B8',
-                      opacity: 0.95,
-                    }}
-                  >
-                    <LocationCity sx={{ fontSize: 28 }} />
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      variant="overline"
-                      sx={{
-                        color: colors.textSecondary,
-                        letterSpacing: '0.08em',
-                        fontWeight: 600,
-                        display: 'block',
-                        mb: 0.5,
-                      }}
-                    >
-                      From Nairobi CBD
-                    </Typography>
-                    <Typography
-                      variant="h5"
-                      component="p"
-                      sx={{
-                        fontWeight: 800,
-                        color: colors.textPrimary,
-                        fontVariantNumeric: 'tabular-nums',
-                        letterSpacing: '-0.02em',
-                      }}
-                    >
-                      {formatCurrency(location.deliveryFromCBD)}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Stack
-                  direction="row"
-                  spacing={2}
+                  Delivery fee
+                </Typography>
+                <Typography
+                  variant="h5"
+                  component="p"
                   sx={{
-                    p: { xs: 2.5, sm: 3 },
-                    alignItems: 'flex-start',
-                    height: '100%',
+                    fontWeight: 800,
+                    color: colors.textPrimary,
+                    fontVariantNumeric: 'tabular-nums',
+                    letterSpacing: '-0.02em',
                   }}
                 >
-                  <Box
-                    sx={{
-                      mt: 0.25,
-                      color: colors.accent || '#00E0B8',
-                      opacity: 0.95,
-                    }}
-                  >
-                    <Place sx={{ fontSize: 28 }} />
-                  </Box>
-                  <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography
-                      variant="overline"
-                      sx={{
-                        color: colors.textSecondary,
-                        letterSpacing: '0.08em',
-                        fontWeight: 600,
-                        display: 'block',
-                        mb: 0.5,
-                      }}
-                    >
-                      From Ruaka
-                    </Typography>
-                    <Typography
-                      variant="h5"
-                      component="p"
-                      sx={{
-                        fontWeight: 800,
-                        color: colors.textPrimary,
-                        fontVariantNumeric: 'tabular-nums',
-                        letterSpacing: '-0.02em',
-                      }}
-                    >
-                      {formatCurrency(location.deliveryFromRuaka)}
-                    </Typography>
-                  </Box>
-                </Stack>
-              </Grid>
-            </Grid>
+                  {formatCurrency(location.deliveryFromCBD)}
+                </Typography>
+              </Box>
+            </Stack>
           </Paper>
         )}
 
