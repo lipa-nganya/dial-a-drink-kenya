@@ -336,6 +336,7 @@ async function loadFullApplication() {
 
 // Function to initialize database (non-blocking)
 async function initializeDatabase(db, seedData) {
+  const { withDbRetry } = require('./utils/dbRetry');
   try {
     // Test database connection with timeout
     const dbTimeout = setTimeout(() => {
@@ -343,7 +344,7 @@ async function initializeDatabase(db, seedData) {
     }, 10000);
     
     try {
-      await db.sequelize.authenticate();
+      await withDbRetry(() => db.sequelize.authenticate(), { retries: 5, baseDelayMs: 100 });
       console.log('✅ Database connection established successfully.');
       clearTimeout(dbTimeout);
     } catch (dbError) {

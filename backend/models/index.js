@@ -50,16 +50,20 @@ try {
       const baseDialectOptions = dbConfig.dialectOptions || {};
       sequelize = new Sequelize(sanitizedUrl, {
         ...dbConfig,
+        // min: 1 reduces total DB connections across many Cloud Run instances (helps avoid max_connections).
         pool: {
           max: 10,
-          min: 2,
-          acquire: 10000,
+          min: 1,
+          acquire: 15000,
           idle: 10000,
           evict: 1000
         },
         dialectOptions: {
           ...baseDialectOptions,
           connectTimeout: 10000,
+          // Reduce idle TCP drops between app and Cloud SQL (no extra GCP cost).
+          keepAlive: true,
+          keepAliveInitialDelayMillis: 10000,
           statement_timeout: 5000,
           query_timeout: 5000,
           // Proxy (localhost/127.0.0.1): no SSL. Otherwise use config SSL.
@@ -406,6 +410,17 @@ if (ValkyriePartnerOrder && Order) {
 
 db.sequelize = sequelize;
 db.Sequelize = Sequelize;
+
+// Retry transient connection errors on ORM queries (install once for real DATABASE_URL only).
+try {
+  const dbUrl = process.env.DATABASE_URL || '';
+  if (dbUrl && !dbUrl.includes('placeholder') && !dbUrl.includes('[YOUR_DB_URL]')) {
+    const { installSequelizeQueryRetry } = require('../utils/dbRetry');
+    installSequelizeQueryRetry(sequelize);
+  }
+} catch (e) {
+  console.warn('⚠️ Could not install DB query retry:', e.message);
+}
 
 // DriverWallet associations
 if (DriverWallet && Driver) {
