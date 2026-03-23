@@ -2,6 +2,57 @@ const db = require('../models');
 const { Op } = db.Sequelize;
 const smsService = require('../services/sms');
 
+const toInt = (value, fallback = 0) => {
+  const n = parseInt(value, 10);
+  return Number.isNaN(n) ? fallback : n;
+};
+
+const toFloat = (value, fallback = 0) => {
+  const n = parseFloat(value);
+  return Number.isNaN(n) ? fallback : n;
+};
+
+const normalizeCapacity = (value) =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+
+const capacityPriceCandidates = (entry) => {
+  if (!entry || typeof entry !== 'object') return [];
+  const values = [];
+  const cp = toFloat(entry.currentPrice, NaN);
+  const op = toFloat(entry.originalPrice, NaN);
+  const p = toFloat(entry.price, NaN);
+  if (!Number.isNaN(cp) && cp > 0) values.push(cp);
+  if (!Number.isNaN(op) && op > 0) values.push(op);
+  if (!Number.isNaN(p) && p > 0) values.push(p);
+  return values;
+};
+
+/**
+ * Best-effort capacity resolution for historical order items that don't persist selectedCapacity:
+ * match by exact unit price against drink.capacityPricing candidates.
+ */
+const resolveCapacityFromOrderItemPrice = (drink, item) => {
+  const unitPrice = toFloat(item.price, NaN);
+  if (Number.isNaN(unitPrice) || unitPrice <= 0) return null;
+  const pricing = Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [];
+  const matches = pricing.filter((entry) => {
+    const capacity = (entry?.capacity || entry?.size || '').toString().trim();
+    if (!capacity) return false;
+    return capacityPriceCandidates(entry).some((candidate) => Math.abs(candidate - unitPrice) < 0.0001);
+  });
+  if (matches.length === 1) {
+    return (matches[0].capacity || matches[0].size || '').toString().trim() || null;
+  }
+  return null;
+};
+
+const sumStockByCapacity = (stockByCapacity) =>
+  Object.values(stockByCapacity || {}).reduce((sum, value) => sum + Math.max(0, toInt(value, 0)), 0);
+
 /**
  * Decreases inventory stock for all items in a completed order
  * @param {number} orderId - The order ID
@@ -69,22 +120,62 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           continue;
         }
 
-        const currentStock = parseInt(drink.stock) || 0;
-        const quantity = parseInt(item.quantity) || 0;
+        const currentStock = toInt(drink.stock, 0);
+        const quantity = toInt(item.quantity, 0);
 
         if (quantity <= 0) {
           console.warn(`⚠️  Invalid quantity (${quantity}) for Drink #${item.drinkId} in Order #${orderId}`);
           continue;
         }
 
-        // Calculate new stock (ensure it doesn't go below 0)
-        const newStock = Math.max(0, currentStock - quantity);
+        const hasStockByCapacity = drink.stockByCapacity && typeof drink.stockByCapacity === 'object';
+        let oldStock = currentStock;
+        let newStock = currentStock;
 
-        // Update drink stock and automatically set isAvailable based on stock
-        await drink.update({
-          stock: newStock,
-          isAvailable: newStock > 0
-        }, { transaction });
+        if (hasStockByCapacity) {
+          const byCap = { ...drink.stockByCapacity };
+          let remainingToDeduct = quantity;
+          const matchedCapacity = resolveCapacityFromOrderItemPrice(drink, item);
+          if (matchedCapacity) {
+            const key = Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizeCapacity(matchedCapacity));
+            if (key) {
+              const current = Math.max(0, toInt(byCap[key], 0));
+              const deduct = Math.min(current, remainingToDeduct);
+              byCap[key] = current - deduct;
+              remainingToDeduct -= deduct;
+            }
+          }
+
+          // Fallback for ambiguous/missing capacity: deduct from capacities with stock, largest first.
+          if (remainingToDeduct > 0) {
+            const keysByStockDesc = Object.keys(byCap).sort(
+              (a, b) => Math.max(0, toInt(byCap[b], 0)) - Math.max(0, toInt(byCap[a], 0))
+            );
+            for (const key of keysByStockDesc) {
+              if (remainingToDeduct <= 0) break;
+              const current = Math.max(0, toInt(byCap[key], 0));
+              if (current <= 0) continue;
+              const deduct = Math.min(current, remainingToDeduct);
+              byCap[key] = current - deduct;
+              remainingToDeduct -= deduct;
+            }
+          }
+
+          oldStock = currentStock;
+          newStock = sumStockByCapacity(byCap);
+          await drink.update({
+            stockByCapacity: byCap,
+            stock: newStock,
+            isAvailable: newStock > 0
+          }, { transaction });
+        } else {
+          // Calculate new stock (ensure it doesn't go below 0)
+          newStock = Math.max(0, currentStock - quantity);
+          await drink.update({
+            stock: newStock,
+            isAvailable: newStock > 0
+          }, { transaction });
+        }
 
         if (newStock === 0) {
           console.log(`📦 Drink #${item.drinkId} (${drink.name}) is now out of stock`);
@@ -147,11 +238,11 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           drinkId: item.drinkId,
           drinkName: drink.name,
           quantity: quantity,
-          oldStock: currentStock,
+          oldStock,
           newStock: newStock
         });
 
-        console.log(`📉 Decreased inventory for Drink #${item.drinkId} (${drink.name}): ${currentStock} → ${newStock} (sold ${quantity})`);
+        console.log(`📉 Decreased inventory for Drink #${item.drinkId} (${drink.name}): ${oldStock} → ${newStock} (sold ${quantity})`);
       } catch (itemError) {
         console.error(`❌ Error decreasing inventory for Drink #${item.drinkId} in Order #${orderId}:`, itemError);
         errors.push({
@@ -213,22 +304,51 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
           continue;
         }
 
-        const currentStock = parseInt(drink.stock) || 0;
-        const quantity = parseInt(item.quantity) || 0;
+        const currentStock = toInt(drink.stock, 0);
+        const quantity = toInt(item.quantity, 0);
 
         if (quantity <= 0) {
           console.warn(`⚠️  Invalid quantity (${quantity}) for Drink #${item.drinkId} in Order #${orderId}`);
           continue;
         }
 
-        // Calculate new stock (increase by quantity)
-        const newStock = currentStock + quantity;
+        const hasStockByCapacity = drink.stockByCapacity && typeof drink.stockByCapacity === 'object';
+        let oldStock = currentStock;
+        let newStock = currentStock;
 
-        // Update drink stock and automatically set isAvailable based on stock
-        await drink.update({
-          stock: newStock,
-          isAvailable: newStock > 0
-        }, { transaction });
+        if (hasStockByCapacity) {
+          const byCap = { ...drink.stockByCapacity };
+          const matchedCapacity = resolveCapacityFromOrderItemPrice(drink, item);
+          if (matchedCapacity) {
+            const key = Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizeCapacity(matchedCapacity));
+            if (key) {
+              byCap[key] = Math.max(0, toInt(byCap[key], 0)) + quantity;
+            } else {
+              byCap[matchedCapacity] = quantity;
+            }
+          } else {
+            // If unknown capacity, restore to first configured capacity key.
+            const keys = Object.keys(byCap);
+            if (keys.length > 0) {
+              const key = keys[0];
+              byCap[key] = Math.max(0, toInt(byCap[key], 0)) + quantity;
+            }
+          }
+
+          oldStock = currentStock;
+          newStock = sumStockByCapacity(byCap);
+          await drink.update({
+            stockByCapacity: byCap,
+            stock: newStock,
+            isAvailable: newStock > 0
+          }, { transaction });
+        } else {
+          newStock = currentStock + quantity;
+          await drink.update({
+            stock: newStock,
+            isAvailable: newStock > 0
+          }, { transaction });
+        }
 
         if (currentStock === 0 && newStock > 0) {
           console.log(`✅ Drink #${item.drinkId} (${drink.name}) is back in stock (${newStock} units)`);
@@ -238,11 +358,11 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
           drinkId: item.drinkId,
           drinkName: drink.name,
           quantity: quantity,
-          oldStock: currentStock,
+          oldStock,
           newStock: newStock
         });
 
-        console.log(`📈 Increased inventory for Drink #${item.drinkId} (${drink.name}): ${currentStock} → ${newStock} (restored ${quantity})`);
+        console.log(`📈 Increased inventory for Drink #${item.drinkId} (${drink.name}): ${oldStock} → ${newStock} (restored ${quantity})`);
       } catch (itemError) {
         console.error(`❌ Error increasing inventory for Drink #${item.drinkId} in Order #${orderId}:`, itemError);
         errors.push({

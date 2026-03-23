@@ -215,11 +215,51 @@ router.post('/', async (req, res) => {
       }
       
       // Build attributes list - exclude purchasePrice if it doesn't exist
-      const drinkAttributes = ['id', 'name', 'price', 'image', 'isAvailable', 'categoryId', 'subCategoryId', 'brandId', 'originalPrice', 'capacity', 'capacityPricing', 'stock', 'isOnOffer', 'limitedTimeOffer'];
+      const drinkAttributes = ['id', 'name', 'price', 'image', 'isAvailable', 'categoryId', 'subCategoryId', 'brandId', 'originalPrice', 'capacity', 'capacityPricing', 'stock', 'stockByCapacity', 'isOnOffer', 'limitedTimeOffer'];
       if (hasPurchasePrice) {
         drinkAttributes.push('purchasePrice');
       }
       
+      const normalizeCapacity = (value) =>
+        (value || '')
+          .toString()
+          .trim()
+          .toLowerCase()
+          .replace(/\s+/g, '');
+
+      const parseStockValue = (value) => {
+        const parsed = parseInt(value, 10);
+        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+      };
+
+      const resolveAvailableStock = (drink, selectedCapacity) => {
+        const byCapacity =
+          drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
+            ? drink.stockByCapacity
+            : null;
+
+        if (!byCapacity) {
+          return parseStockValue(drink.stock);
+        }
+
+        const entries = Object.entries(byCapacity);
+        if (entries.length === 0) {
+          return parseStockValue(drink.stock);
+        }
+
+        if (selectedCapacity) {
+          const target = normalizeCapacity(selectedCapacity);
+          const direct = entries.find(([key]) => normalizeCapacity(key) === target);
+          if (direct) {
+            return parseStockValue(direct[1]);
+          }
+          // If capacity-level stock exists but requested capacity is missing, treat as zero.
+          return 0;
+        }
+
+        return entries.reduce((sum, [, qty]) => sum + parseStockValue(qty), 0);
+      };
+
       let totalAmount = 0;
       const orderItems = [];
 
@@ -231,6 +271,19 @@ router.post('/', async (req, res) => {
         if (!drink) {
           await transaction.rollback();
           return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
+        }
+        if (drink.isAvailable === false) {
+          await transaction.rollback();
+          return res.status(400).json({ error: `${drink.name} is not available` });
+        }
+
+        const availableStock = resolveAvailableStock(drink, item.selectedCapacity);
+        if (availableStock < item.quantity) {
+          await transaction.rollback();
+          const suffix = item.selectedCapacity ? ` (${item.selectedCapacity})` : '';
+          return res.status(400).json({
+            error: `Insufficient stock for ${drink.name}${suffix}. Available: ${availableStock}, requested: ${item.quantity}`
+          });
         }
 
         const priceToUse =

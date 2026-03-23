@@ -320,6 +320,54 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
+    const normalizeCapacity = (value) =>
+      (value || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '');
+    const toStockNumber = (value) => {
+      const parsed = parseInt(value, 10);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    };
+
+    const stockByCapacity =
+      currentProduct.stockByCapacity && typeof currentProduct.stockByCapacity === 'object'
+        ? currentProduct.stockByCapacity
+        : null;
+
+    let availableStock = toStockNumber(currentProduct.stock);
+    if (stockByCapacity && Object.keys(stockByCapacity).length > 0) {
+      if (selectedCapacity) {
+        const target = normalizeCapacity(selectedCapacity);
+        const entry = Object.entries(stockByCapacity).find(
+          ([cap]) => normalizeCapacity(cap) === target
+        );
+        availableStock = entry ? toStockNumber(entry[1]) : 0;
+      } else {
+        availableStock = Object.values(stockByCapacity).reduce(
+          (sum, qty) => sum + toStockNumber(qty),
+          0
+        );
+      }
+    }
+
+    const existingQtyInCart = cartItems
+      .filter(
+        (item) =>
+          item.drinkId === currentProduct.id &&
+          (item.capacity || '') === (selectedCapacity || '')
+      )
+      .reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0);
+
+    if (existingQtyInCart + currentQuantity > availableStock) {
+      const suffix = selectedCapacity ? ` (${selectedCapacity})` : '';
+      setError(
+        `Insufficient stock for ${currentProduct.name}${suffix}. Available: ${availableStock}, requested: ${existingQtyInCart + currentQuantity}`
+      );
+      return;
+    }
+
     // Determine reference/original price based on selected capacity (if any)
     let originalPrice = Math.round(parseFloat(currentProduct.price) || 0);
     if (
@@ -328,13 +376,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       Array.isArray(currentProduct.capacityPricing) &&
       currentProduct.capacityPricing.length > 0
     ) {
-      const normalizeCapacity = (value) =>
-        (value || '')
-          .toString()
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, '');
-
       const target = normalizeCapacity(selectedCapacity);
 
       const match = currentProduct.capacityPricing.find((p) => {
@@ -617,7 +658,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: effectivePaymentMethod === 'cash'
           ? 'pay_now'
@@ -808,7 +850,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: 'pay_on_delivery', // Set as pay_on_delivery so prompt-payment endpoint accepts it
         paymentMethod: 'mobile_money',
@@ -1075,7 +1118,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: 'pay_now',
         paymentMethod: 'card',
@@ -1337,7 +1381,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: 'pay_now',
         paymentMethod: 'card',
