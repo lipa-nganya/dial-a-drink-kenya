@@ -32,11 +32,22 @@ const formatCurrency = (value) => {
   return `KES ${Math.round(n).toLocaleString()}`;
 };
 
+const parseJsonIfString = (value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
 // Capacity options from product: capacity array or capacityPricing effective capacity
 const getCapacityOptions = (product) => {
   if (!product) return [];
-  const cap = product.capacity;
-  const pricing = product.capacityPricing;
+  const cap = parseJsonIfString(product.capacity);
+  const pricing = parseJsonIfString(product.capacityPricing);
   if (Array.isArray(pricing) && pricing.length > 0) {
     return pricing
       .map((p) => p.capacity || p.size || p.effectiveCapacity)
@@ -47,6 +58,9 @@ const getCapacityOptions = (product) => {
   if (typeof cap === 'string' && cap.trim()) return [cap.trim()];
   return [];
 };
+
+/** True when this product has at least one capacity variant — purchase must specify which. */
+const productRequiresCapacity = (product) => getCapacityOptions(product).length > 0;
 
 const AddPurchase = () => {
   const navigate = useNavigate();
@@ -122,8 +136,13 @@ const AddPurchase = () => {
 
   const handleNewItemProductChange = (value) => {
     setNewItem((prev) => {
-      const next = { ...prev, productId: value, capacity: '' };
       const product = productsById.get(value);
+      const options = getCapacityOptions(product);
+      // Single capacity: pre-select so stock updates the correct bucket without an extra click.
+      // Multiple capacities: user must choose explicitly.
+      const capacity =
+        options.length === 1 ? options[0] : '';
+      const next = { ...prev, productId: value, capacity };
       if (product) {
         const defaultPrice =
           product.purchasePrice != null
@@ -165,6 +184,12 @@ const AddPurchase = () => {
       return;
     }
 
+    const product = productsById.get(productId);
+    if (productRequiresCapacity(product) && !String(newItem.capacity || '').trim()) {
+      setError('Please select a capacity for this product.');
+      return;
+    }
+
     setError(null);
     setItems((prev) => [
       ...prev,
@@ -172,7 +197,7 @@ const AddPurchase = () => {
         productId,
         quantity: quantityNum,
         unitPrice: unitPriceNum,
-        ...(newItem.capacity ? { capacity: newItem.capacity } : {})
+        ...(String(newItem.capacity || '').trim() ? { capacity: String(newItem.capacity).trim() } : {})
       }
     ]);
     setNewItem({
@@ -195,6 +220,17 @@ const AddPurchase = () => {
     if (items.length === 0) {
       setError('Please add at least one purchase item.');
       return;
+    }
+
+    for (let i = 0; i < items.length; i++) {
+      const line = items[i];
+      const p = productsById.get(line.productId);
+      if (productRequiresCapacity(p) && !String(line.capacity || '').trim()) {
+        setError(
+          `Line ${i + 1}: "${p?.name || 'Product'}" requires a capacity. Remove the line and add it again with a capacity selected.`
+        );
+        return;
+      }
     }
 
     const supplier = suppliers.find((s) => s.id === supplierId || s.id === Number(supplierId));
@@ -221,7 +257,11 @@ const AddPurchase = () => {
           quantity: Number(item.quantity),
           productId: Number(item.productId)
         };
-        if (item.capacity) out.capacity = item.capacity;
+        if (productRequiresCapacity(product)) {
+          out.capacity = String(item.capacity || '').trim();
+        } else if (item.capacity) {
+          out.capacity = item.capacity;
+        }
         return out;
       });
 
@@ -426,22 +466,36 @@ const AddPurchase = () => {
             />
           </Grid>
           {getCapacityOptions(productsById.get(newItem.productId)).length > 0 && (
-            <Grid item xs={12} md={3}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Capacity (stock)</InputLabel>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth size="small" required>
+                <InputLabel id="purchase-capacity-label">Capacity *</InputLabel>
                 <Select
-                  label="Capacity (stock)"
+                  labelId="purchase-capacity-label"
+                  label="Capacity *"
                   value={newItem.capacity || ''}
                   onChange={(e) => setNewItem((prev) => ({ ...prev, capacity: e.target.value }))}
+                  displayEmpty
+                  renderValue={(value) => (value ? value : 'Select capacity')}
                   sx={{
                     backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                    minWidth: 220,
+                    width: '100%',
                     '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border },
                     '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.accentText },
                     '& .MuiInputBase-input': { color: colors.textPrimary },
                     '& .MuiInputLabel-root': { color: colors.textSecondary }
                   }}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: { minWidth: 220 }
+                    }
+                  }}
                 >
-                  <MenuItem value="">—</MenuItem>
+                  {getCapacityOptions(productsById.get(newItem.productId)).length > 1 && (
+                    <MenuItem value="" disabled>
+                      Select capacity
+                    </MenuItem>
+                  )}
                   {getCapacityOptions(productsById.get(newItem.productId)).map((cap) => (
                     <MenuItem key={cap} value={cap}>
                       {cap}

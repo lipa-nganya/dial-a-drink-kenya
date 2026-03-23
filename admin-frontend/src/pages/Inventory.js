@@ -268,12 +268,11 @@ const InventoryPage = () => {
     }
   };
 
-  // If the user adds categories/brands in Copilot and then comes back here,
-  // refresh the filter dropdown data without doing a full drinks refetch.
+  // When returning from another tab (e.g. Add Purchase) or Copilot, refresh drinks so stock levels stay current.
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
-      refetchCategoriesAndBrands();
+      fetchData();
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);

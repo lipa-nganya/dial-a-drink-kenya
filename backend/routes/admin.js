@@ -1141,13 +1141,30 @@ router.get('/drinks', async (req, res) => {
       if (!validDrinkAttributes.includes('capacityPricing') && drinkColumnNames.has('capacitypricing')) {
         validDrinkAttributes.push('capacityPricing');
       }
+      // Per-capacity stock + purchase cost — required for admin inventory / purchases UI
+      if (!validDrinkAttributes.includes('stockByCapacity')) {
+        const hasStockByCapCol = [...drinkColumnNames].some(
+          (n) => n === 'stockbycapacity' || n === 'stock_by_capacity'
+        );
+        if (hasStockByCapCol) {
+          validDrinkAttributes.push('stockByCapacity');
+        }
+      }
+      if (!validDrinkAttributes.includes('purchasePrice')) {
+        const hasPurchasePriceCol = [...drinkColumnNames].some(
+          (n) => n === 'purchaseprice' || n === 'purchase_price'
+        );
+        if (hasPurchasePriceCol) {
+          validDrinkAttributes.push('purchasePrice');
+        }
+      }
     } catch (schemaError) {
       // Fallback: use a safe default set of attributes if schema query fails (exclude purchasePrice)
       console.warn('⚠️ Could not query information_schema for drinks, using default attributes:', schemaError.message);
       validDrinkAttributes = [
         'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
         'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-        'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'
+        'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'stockByCapacity', 'purchasePrice', 'createdAt', 'updatedAt'
       ];
     }
     

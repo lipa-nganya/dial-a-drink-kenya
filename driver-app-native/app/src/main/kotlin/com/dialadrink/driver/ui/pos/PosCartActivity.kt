@@ -1675,8 +1675,8 @@ class PosCartActivity : AppCompatActivity() {
                         } else {
                             Toast.makeText(this@PosCartActivity, "Order submitted successfully", Toast.LENGTH_SHORT).show()
                         }
-                        
-                        finish()
+
+                        returnEmptyCartResultAndFinish()
                     } else {
                         android.util.Log.e("PosCartActivity", "Order response body is null or invalid format")
                         android.util.Log.e("PosCartActivity", "Order object: $order")
@@ -1690,8 +1690,8 @@ class PosCartActivity : AppCompatActivity() {
                         
                         // Clear cart and form fields on successful order
                         clearCartAndFormFields()
-                        
-                        finish()
+
+                        returnEmptyCartResultAndFinish()
                     }
                 } else {
                     val errorBody = response.body()
@@ -1751,6 +1751,13 @@ class PosCartActivity : AppCompatActivity() {
         
         // Clear from SharedPrefs
         SharedPrefs.clearPosCart(this)
+    }
+
+    private fun returnEmptyCartResultAndFinish() {
+        val resultIntent = Intent()
+        resultIntent.putParcelableArrayListExtra(CART_EXTRA, ArrayList<PosCartItem>())
+        setResult(RESULT_OK, resultIntent)
+        finish()
     }
     
     private fun promptCustomerForPayment(orderId: Int, customerPhone: String) {

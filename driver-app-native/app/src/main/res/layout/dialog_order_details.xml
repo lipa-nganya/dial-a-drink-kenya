@@ -30,10 +30,13 @@
             android:textColor="@color/text_secondary_dark"
             android:textSize="12sp" />
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/customerPhoneLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
             app:boxBackgroundColor="@color/paper_dark"
+            app:endIconMode="clear_text"
+            app:endIconTint="@color/text_primary_dark"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -54,10 +57,13 @@
             android:textColor="@color/text_secondary_dark"
             android:textSize="12sp" />
         <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/customerNameLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
             app:boxBackgroundColor="@color/paper_dark"
+            app:endIconMode="clear_text"
+            app:endIconTint="@color/text_primary_dark"
             style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
 
             <com.google.android.material.textfield.TextInputEditText
@@ -132,6 +138,8 @@
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             android:hint="Select a rider"
+            app:endIconMode="clear_text"
+            app:endIconTint="@color/text_primary_dark"
             app:hintTextColor="#FFFFFF"
             app:boxStrokeColor="@color/accent"
             app:boxStrokeWidth="2dp"
