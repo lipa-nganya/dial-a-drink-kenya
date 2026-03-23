@@ -84,37 +84,72 @@ const InventoryPage = () => {
   // Helper to build per-capacity stock rows, e.g. "Stock 6: 1.5 litre"
   const getCapacityStockRows = (drink) => {
     if (!drink) return [];
+    const parseJsonIfString = (value) => {
+      if (typeof value !== 'string') return value;
+      const trimmed = value.trim();
+      if (!trimmed) return value;
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return value;
+      }
+    };
+    const normalizeCapacityKey = (value) =>
+      (value || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '');
+    const toInt = (value) => {
+      const parsed = parseInt(value, 10);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
 
+    const parsedStockByCapacity = parseJsonIfString(drink.stockByCapacity);
     const stockByCapacity =
-      drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
-        ? drink.stockByCapacity
+      parsedStockByCapacity && typeof parsedStockByCapacity === 'object' && !Array.isArray(parsedStockByCapacity)
+        ? parsedStockByCapacity
         : null;
+    const parsedCapacityPricing = parseJsonIfString(drink.capacityPricing);
+    const parsedCapacity = parseJsonIfString(drink.capacity);
 
     // Prefer capacities from capacityPricing (they are normalized labels)
     let capacities = [];
-    if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
-      capacities = drink.capacityPricing
-        .map(p => p && p.capacity)
+    if (Array.isArray(parsedCapacityPricing) && parsedCapacityPricing.length > 0) {
+      capacities = parsedCapacityPricing
+        .map(p => p && (p.capacity || p.size))
         .filter(Boolean);
-    } else if (Array.isArray(drink.capacity) && drink.capacity.length > 0) {
-      capacities = drink.capacity.filter(Boolean);
+    } else if (Array.isArray(parsedCapacity) && parsedCapacity.length > 0) {
+      capacities = parsedCapacity.filter(Boolean);
+    } else if (typeof parsedCapacity === 'string' && parsedCapacity.trim()) {
+      // Some items store a single capacity as a string instead of an array.
+      capacities = [parsedCapacity.trim()];
+    }
+
+    // If capacities are not present but stockByCapacity exists, use its keys.
+    if (capacities.length === 0 && stockByCapacity) {
+      capacities = Object.keys(stockByCapacity).filter(Boolean);
     }
 
     const uniqueCaps = Array.from(new Set(capacities));
     if (uniqueCaps.length === 0) return [];
 
-    const mainStock = parseInt(drink?.stock, 10) || 0;
+    const mainStock = toInt(drink?.stock);
+    const stockByCapacityEntries = stockByCapacity
+      ? Object.entries(stockByCapacity)
+      : [];
 
     return uniqueCaps.map(cap => {
-      const raw = stockByCapacity && stockByCapacity[cap] != null
-        ? stockByCapacity[cap]
-        : null;
-      const parsed = typeof raw === 'number' ? raw : parseInt(raw, 10);
+      let raw = null;
+      if (stockByCapacityEntries.length > 0) {
+        const normalizedCap = normalizeCapacityKey(cap);
+        const direct = stockByCapacityEntries.find(([key]) => normalizeCapacityKey(key) === normalizedCap);
+        raw = direct ? direct[1] : null;
+      }
+      const parsed = toInt(raw);
       // If stockByCapacity is not initialized (or missing this capacity),
       // fall back to aggregate stock so legacy items still show usable stock.
-      const stock = Number.isNaN(parsed) || parsed == null
-        ? mainStock
-        : parsed;
+      const stock = raw == null ? mainStock : parsed;
       return { capacity: cap, stock };
     });
   };

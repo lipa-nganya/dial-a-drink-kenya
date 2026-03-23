@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -39,6 +39,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const { isDarkMode, colors } = useTheme();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const dialogContentRef = useRef(null);
+  const errorAlertRef = useRef(null);
   const [customers, setCustomers] = useState([]);
   const [branches, setBranches] = useState([]);
   const [drivers, setDrivers] = useState([]);
@@ -126,6 +128,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Keep the latest error visible without forcing the admin to scroll.
+  useEffect(() => {
+    if (!open) return;
+    if (!error) return;
+    if (dialogContentRef.current) {
+      dialogContentRef.current.scrollTop = 0;
+    }
+    if (errorAlertRef.current) {
+      errorAlertRef.current.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+    }
+  }, [error, open]);
 
   // Fetch customers with search query
   useEffect(() => {
@@ -320,6 +334,54 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
+    const normalizeCapacity = (value) =>
+      (value || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '');
+    const toStockNumber = (value) => {
+      const parsed = parseInt(value, 10);
+      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+    };
+
+    const stockByCapacity =
+      currentProduct.stockByCapacity && typeof currentProduct.stockByCapacity === 'object'
+        ? currentProduct.stockByCapacity
+        : null;
+
+    let availableStock = toStockNumber(currentProduct.stock);
+    if (stockByCapacity && Object.keys(stockByCapacity).length > 0) {
+      if (selectedCapacity) {
+        const target = normalizeCapacity(selectedCapacity);
+        const entry = Object.entries(stockByCapacity).find(
+          ([cap]) => normalizeCapacity(cap) === target
+        );
+        availableStock = entry ? toStockNumber(entry[1]) : 0;
+      } else {
+        availableStock = Object.values(stockByCapacity).reduce(
+          (sum, qty) => sum + toStockNumber(qty),
+          0
+        );
+      }
+    }
+
+    const existingQtyInCart = cartItems
+      .filter(
+        (item) =>
+          item.drinkId === currentProduct.id &&
+          (item.capacity || '') === (selectedCapacity || '')
+      )
+      .reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0);
+
+    if (existingQtyInCart + currentQuantity > availableStock) {
+      const suffix = selectedCapacity ? ` (${selectedCapacity})` : '';
+      setError(
+        `Insufficient stock for ${currentProduct.name}${suffix}. Please reduce quantity and try again.`
+      );
+      return;
+    }
+
     // Determine reference/original price based on selected capacity (if any)
     let originalPrice = Math.round(parseFloat(currentProduct.price) || 0);
     if (
@@ -328,13 +390,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       Array.isArray(currentProduct.capacityPricing) &&
       currentProduct.capacityPricing.length > 0
     ) {
-      const normalizeCapacity = (value) =>
-        (value || '')
-          .toString()
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, '');
-
       const target = normalizeCapacity(selectedCapacity);
 
       const match = currentProduct.capacityPricing.find((p) => {
@@ -617,7 +672,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: effectivePaymentMethod === 'cash'
           ? 'pay_now'
@@ -808,7 +864,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: 'pay_on_delivery', // Set as pay_on_delivery so prompt-payment endpoint accepts it
         paymentMethod: 'mobile_money',
@@ -1075,7 +1132,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: 'pay_now',
         paymentMethod: 'card',
@@ -1337,7 +1395,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         items: cartItems.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.capacity || null
         })),
         paymentType: 'pay_now',
         paymentMethod: 'card',
@@ -1418,7 +1477,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       }}>
         POS
       </DialogTitle>
-      <DialogContent sx={{ 
+      <DialogContent
+        ref={dialogContentRef}
+        sx={{ 
         overflowY: 'auto',
         overflowX: 'hidden',
         maxHeight: mobileSize ? 'calc(90vh - 180px)' : 'calc(90vh - 120px)',
@@ -1432,6 +1493,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         {error && (
           <Alert 
             severity="error" 
+            ref={errorAlertRef}
             sx={{ 
               mb: mobileSize ? 1.8 : 2,
               fontSize: mobileSize ? '0.9rem' : '1rem',
@@ -1558,9 +1620,15 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   }
                 }}
               >
+                <MenuItem value="">
+                  <em>No territory</em>
+                </MenuItem>
                 {territories.map((territory) => (
                   <MenuItem key={territory.id} value={territory.id}>
-                    {territory.name}
+                    {territory.name}{' '}
+                    <span style={{ color: colors.textSecondary, fontSize: '0.85em' }}>
+                      (KES {Math.round(Number(territory.deliveryFromCBD ?? 0))})
+                    </span>
                   </MenuItem>
                 ))}
               </Select>
