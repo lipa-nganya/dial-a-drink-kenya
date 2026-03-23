@@ -42,6 +42,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
 import { stripHtml } from '../utils/stripHtml';
+import { ensureCanonicalLink, buildProductCanonicalUrl } from '../utils/seoCanonical';
 import DrinkCard from '../components/DrinkCard';
 
 const ProductPage = () => {
@@ -163,21 +164,8 @@ const ProductPage = () => {
         return;
       }
       
-      // Set canonical URL for SEO (always dialadrinkkenya.com as canonical domain)
-      const canonicalUrl = (product.slug && product.category?.slug)
-        ? `https://dialadrinkkenya.com/${product.category.slug}/${product.slug}`
-        : product.slug
-        ? `https://dialadrinkkenya.com/product/${product.slug}`
-        : `https://dialadrinkkenya.com/product/${product.id}`;
-      
-      // Remove existing canonical link if any
-      let canonicalLink = document.querySelector('link[rel="canonical"]');
-      if (!canonicalLink) {
-        canonicalLink = document.createElement('link');
-        canonicalLink.setAttribute('rel', 'canonical');
-        document.head.appendChild(canonicalLink);
-      }
-      canonicalLink.setAttribute('href', canonicalUrl);
+      // Prefer slug-based canonical when product data is canonical (overrides pathname-based from CanonicalHead)
+      ensureCanonicalLink(buildProductCanonicalUrl(product));
       
       // Auto-select capacity: one option → select it; multiple → select the more expensive option
       const availableCapacities = Array.isArray(product.capacityPricing) && product.capacityPricing.length > 0
