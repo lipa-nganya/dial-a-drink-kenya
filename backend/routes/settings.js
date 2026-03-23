@@ -4,6 +4,7 @@ const db = require('../models');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const { Storage } = require('@google-cloud/storage');
 
 const heroImageUploadDir = path.join(__dirname, '../public/uploads/hero');
 
@@ -35,6 +36,39 @@ const heroImageUpload = multer({
   }
 });
 
+const isCloudRuntime = Boolean(process.env.K_SERVICE || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCP_PROJECT);
+const cloudStorageBucket =
+  process.env.HERO_IMAGE_BUCKET ||
+  process.env.CLOUD_STORAGE_BUCKET ||
+  process.env.FIREBASE_STORAGE_BUCKET ||
+  'dialadrink-production-images';
+let storageClient = null;
+
+const getStorageClient = () => {
+  if (!storageClient) {
+    storageClient = new Storage();
+  }
+  return storageClient;
+};
+
+const uploadHeroToCloudStorage = async (localFilePath, originalName) => {
+  const extension = path.extname(originalName || localFilePath || '') || '.png';
+  const filename = `hero-${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
+  const objectPath = `hero/${filename}`;
+
+  const storage = getStorageClient();
+  const bucket = storage.bucket(cloudStorageBucket);
+  await bucket.upload(localFilePath, {
+    destination: objectPath,
+    resumable: false,
+    metadata: {
+      cacheControl: 'public, max-age=3600'
+    }
+  });
+
+  return `https://storage.googleapis.com/${cloudStorageBucket}/${objectPath}`;
+};
+
 router.post('/heroImage/upload', (req, res) => {
   heroImageUpload.single('image')(req, res, (err) => {
     if (err instanceof multer.MulterError) {
@@ -50,17 +84,41 @@ router.post('/heroImage/upload', (req, res) => {
     }
 
     const relativePath = `/uploads/hero/${req.file.filename}`;
-    // Always use HTTPS in production, or if X-Forwarded-Proto indicates HTTPS
-    const forwardedProto = req.get('X-Forwarded-Proto');
-    const useHttps = forwardedProto === 'https' || process.env.NODE_ENV === 'production';
-    const finalProtocol = useHttps ? 'https' : req.protocol;
-    const absoluteUrl = `${finalProtocol}://${req.get('host')}${relativePath}`;
+    const finish = async () => {
+      try {
+        // In Cloud Run/GCP, persist hero image in GCS so deploys/revisions do not wipe it.
+        if (isCloudRuntime) {
+          const cloudUrl = await uploadHeroToCloudStorage(req.file.path, req.file.originalname);
+          try {
+            fs.unlinkSync(req.file.path);
+          } catch (unlinkErr) {
+            // Non-fatal cleanup failure
+            console.warn('Could not remove temp hero upload file:', unlinkErr.message);
+          }
+          return res.json({
+            url: cloudUrl,
+            path: cloudUrl,
+            filename: req.file.filename
+          });
+        }
 
-    return res.json({
-      url: absoluteUrl,
-      path: relativePath,
-      filename: req.file.filename
-    });
+        // Local/dev fallback: serve from local uploads folder.
+        const forwardedProto = req.get('X-Forwarded-Proto');
+        const useHttps = forwardedProto === 'https' || process.env.NODE_ENV === 'production';
+        const finalProtocol = useHttps ? 'https' : req.protocol;
+        const absoluteUrl = `${finalProtocol}://${req.get('host')}${relativePath}`;
+        return res.json({
+          url: absoluteUrl,
+          path: relativePath,
+          filename: req.file.filename
+        });
+      } catch (uploadError) {
+        console.error('Hero image upload failed:', uploadError);
+        return res.status(500).json({ error: 'Failed to persist hero image upload' });
+      }
+    };
+
+    finish();
   });
 });
 
