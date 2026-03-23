@@ -45,6 +45,7 @@ import Payables from './pages/admin/Payables';
 import AdminLogin from './pages/admin/AdminLogin';
 import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
+import CanonicalHead from './components/CanonicalHead';
 import './App.css';
 
 const getMUITheme = () => {
@@ -189,6 +190,7 @@ function AppContent() {
   
   return (
     <MUIThemeProvider theme={muiTheme}>
+      <CanonicalHead />
       <CssBaseline />
       <div
         className="App"
