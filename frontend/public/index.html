@@ -5,6 +5,10 @@
     <link rel="icon" type="image/png" sizes="32x32" href="%PUBLIC_URL%/favicon-32x32.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0D0D0D" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Dial a Drink Kenya" />
+    <link rel="apple-touch-startup-image" href="%PUBLIC_URL%/splash.png" />
     <!-- Single canonical domain (apex); JS updates per-route after load -->
     <link rel="canonical" href="https://dialadrinkkenya.com/" />
     <meta
@@ -34,7 +38,53 @@
     <!-- Build: 2025-01-15T12:00:00Z - Backend URL fix -->
     <!-- Google Maps API will be loaded dynamically by AddressAutocomplete component -->
     <!-- Routing fix script -->
+    <style>
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        background: #0d0d0d;
+      }
+
+      #root {
+        min-height: 100%;
+      }
+
+      #startup-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 2147483647;
+        background-image: url("%PUBLIC_URL%/splash.png");
+        background-size: cover;
+        background-position: center center;
+        background-repeat: no-repeat;
+        background-color: #0d0d0d;
+        opacity: 1;
+        transition: opacity 200ms ease;
+      }
+
+      #startup-splash.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
     <script>
+      (function() {
+        function hideSplash() {
+          var splash = document.getElementById('startup-splash');
+          if (!splash || splash.classList.contains('hidden')) return;
+          splash.classList.add('hidden');
+          setTimeout(function () {
+            if (splash && splash.parentNode) splash.parentNode.removeChild(splash);
+          }, 220);
+        }
+
+        window.addEventListener('load', hideSplash);
+        // Safety fallback in case load event is delayed.
+        setTimeout(hideSplash, 2500);
+      })();
+
       // Handle client-side routing for all paths
       if (window.location.pathname !== '/' && !window.location.pathname.startsWith('/static/')) {
         // This is a client-side route, let React Router handle it
@@ -44,6 +94,7 @@
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="startup-splash" aria-hidden="true"></div>
     <div id="root"></div>
     <!--
       This HTML file is a template.

@@ -9,6 +9,7 @@ import android.text.TextWatcher
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
@@ -24,6 +25,7 @@ class PhoneNumberActivity : AppCompatActivity() {
     private var phoneCheckRunnable: Runnable? = null
     
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         binding = ActivityPhoneNumberBinding.inflate(layoutInflater)
         setContentView(binding.root)
