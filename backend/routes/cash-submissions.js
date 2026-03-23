@@ -7,6 +7,28 @@ const pushNotifications = require('../services/pushNotifications');
 const { verifyAdmin } = require('./admin');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 
+/** Match capacity labels across spacing/casing so purchase lines update the same bucket as pricing. */
+function normalizeCapacityKey(value) {
+  return (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+}
+
+function addQtyToStockByCapacity(byCapInput, capacityLabel, qtyToAdd) {
+  const byCap =
+    byCapInput && typeof byCapInput === 'object' && !Array.isArray(byCapInput)
+      ? { ...byCapInput }
+      : {};
+  const targetNorm = normalizeCapacityKey(capacityLabel);
+  const existingKey = Object.keys(byCap).find((k) => normalizeCapacityKey(k) === targetNorm);
+  const key = existingKey || String(capacityLabel).trim();
+  const current = parseInt(byCap[key], 10) || 0;
+  byCap[key] = current + qtyToAdd;
+  return byCap;
+}
+
 // Admin routes - must be defined BEFORE driver routes to avoid route conflicts
 // Admin routes - require admin authentication
 router.use('/admin', verifyAdmin);
@@ -43,31 +65,14 @@ async function applyPurchaseInventoryAndAccountSideEffects({
 
         let totalFromItems = 0;
 
+        // Sum line totals for the asset-account posting only.
+        // Stock/inventory updates are handled once below (second block) so we never double-count
+        // or leave aggregate `stock` out of sync with `stockByCapacity`.
         for (const item of itemsArray) {
           const qty = Number(item.quantity || 1);
           const unitPrice = Number(item.price || 0);
           if (qty > 0 && unitPrice > 0) {
             totalFromItems += qty * unitPrice;
-          }
-
-          if (item.productId) {
-            const drink = await db.Drink.findByPk(item.productId);
-            if (drink) {
-              const qtyToAdd = qty;
-              const capacity = item.capacity != null && String(item.capacity).trim() !== '' ? String(item.capacity).trim() : null;
-              if (capacity) {
-                const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? { ...drink.stockByCapacity } : {};
-                const current = parseInt(byCap[capacity], 10) || 0;
-                byCap[capacity] = current + qtyToAdd;
-                await drink.update({ stockByCapacity: byCap });
-                console.log(`   Updated stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]}`);
-              } else {
-                const currentStock = parseFloat(drink.stock || 0);
-                const newStock = currentStock + qtyToAdd;
-                await drink.update({ stock: newStock });
-                console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
-              }
-            }
           }
         }
 
@@ -150,11 +155,17 @@ async function applyPurchaseInventoryAndAccountSideEffects({
             : null;
 
           if (capacity) {
-            const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
+            const before = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
               ? { ...drink.stockByCapacity }
               : {};
-            const current = parseInt(byCap[capacity], 10) || 0;
-            byCap[capacity] = current + qty;
+            const beforeKey = Object.keys(before).find(
+              (k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)
+            );
+            const prevVal = beforeKey != null ? parseInt(before[beforeKey], 10) || 0 : 0;
+            const byCap = addQtyToStockByCapacity(before, capacity, qty);
+            const mergedKey =
+              Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)) ||
+              String(capacity).trim();
 
             // Keep overall stock in sync with per-capacity totals
             const totalStock = Object.values(byCap).reduce((sum, value) => {
@@ -162,12 +173,18 @@ async function applyPurchaseInventoryAndAccountSideEffects({
               return sum + (Number.isNaN(n) ? 0 : n);
             }, 0);
 
-            await drink.update({ stockByCapacity: byCap, stock: totalStock });
-            console.log(`   Updated per-capacity stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]} (total: ${totalStock})`);
+            await drink.update({
+              stockByCapacity: byCap,
+              stock: totalStock,
+              isAvailable: totalStock > 0
+            });
+            console.log(
+              `   Updated per-capacity stock for Drink #${drink.id} capacity "${mergedKey}": ${prevVal} → ${byCap[mergedKey]} (total: ${totalStock})`
+            );
           } else {
             const currentStock = parseFloat(drink.stock || 0);
             const newStock = currentStock + qty;
-            await drink.update({ stock: newStock });
+            await drink.update({ stock: newStock, isAvailable: newStock > 0 });
             console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
           }
         }
@@ -521,45 +538,12 @@ router.post('/admin/cash-submissions', async (req, res) => {
 
           let totalFromItems = 0;
 
+          // Line totals only — inventory updates run once in the shared block below (avoids double-counting).
           for (const item of itemsArray) {
             const qty = Number(item.quantity || 1);
             const unitPrice = Number(item.price || 0);
             if (qty > 0 && unitPrice > 0) {
               totalFromItems += qty * unitPrice;
-            }
-
-            if (item.productId) {
-              const drink = await db.Drink.findByPk(item.productId);
-              if (drink) {
-                const qtyToAdd = qty;
-                const capacity = item.capacity != null && String(item.capacity).trim() !== '' ? String(item.capacity).trim() : null;
-                if (capacity) {
-                  const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? { ...drink.stockByCapacity } : {};
-                  const current = parseInt(byCap[capacity], 10) || 0;
-                  byCap[capacity] = current + qtyToAdd;
-                  // Keep overall stock in sync with per-capacity totals (legacy views + isAvailable checks)
-                  const totalStock = Object.values(byCap).reduce((sum, value) => {
-                    const n = typeof value === 'number' ? value : parseInt(value, 10);
-                    return sum + (Number.isNaN(n) ? 0 : n);
-                  }, 0);
-                  await drink.update({
-                    stockByCapacity: byCap,
-                    stock: totalStock,
-                    // Customer site uses `isAvailable` for the Out of Stock state.
-                    isAvailable: totalStock > 0
-                  });
-                  console.log(`   Updated stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]}`);
-                } else {
-                  const currentStock = parseFloat(drink.stock || 0);
-                  const newStock = currentStock + qtyToAdd;
-                  await drink.update({
-                    stock: newStock,
-                    // Customer site uses `isAvailable` for the Out of Stock state.
-                    isAvailable: newStock > 0
-                  });
-                  console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
-                }
-              }
             }
           }
 
@@ -642,11 +626,17 @@ router.post('/admin/cash-submissions', async (req, res) => {
               : null;
 
             if (capacity) {
-              const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
+              const before = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
                 ? { ...drink.stockByCapacity }
                 : {};
-              const current = parseInt(byCap[capacity], 10) || 0;
-              byCap[capacity] = current + qty;
+              const beforeKey = Object.keys(before).find(
+                (k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)
+              );
+              const prevVal = beforeKey != null ? parseInt(before[beforeKey], 10) || 0 : 0;
+              const byCap = addQtyToStockByCapacity(before, capacity, qty);
+              const mergedKey =
+                Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)) ||
+                String(capacity).trim();
 
               // Keep overall stock in sync with per-capacity totals
               const totalStock = Object.values(byCap).reduce((sum, value) => {
@@ -660,7 +650,9 @@ router.post('/admin/cash-submissions', async (req, res) => {
                 // Customer site uses `isAvailable` for the Out of Stock state.
                 isAvailable: totalStock > 0
               });
-              console.log(`   Updated per-capacity stock for Drink #${drink.id} capacity "${capacity}": ${current} → ${byCap[capacity]} (total: ${totalStock})`);
+              console.log(
+                `   Updated per-capacity stock for Drink #${drink.id} capacity "${mergedKey}": ${prevVal} → ${byCap[mergedKey]} (total: ${totalStock})`
+              );
             } else {
               const currentStock = parseFloat(drink.stock || 0);
               const newStock = currentStock + qty;
