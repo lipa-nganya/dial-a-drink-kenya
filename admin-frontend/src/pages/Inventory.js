@@ -98,6 +98,14 @@ const InventoryPage = () => {
         .filter(Boolean);
     } else if (Array.isArray(drink.capacity) && drink.capacity.length > 0) {
       capacities = drink.capacity.filter(Boolean);
+    } else if (typeof drink.capacity === 'string' && drink.capacity.trim()) {
+      // Some items store a single capacity as a string instead of an array.
+      capacities = [drink.capacity.trim()];
+    }
+
+    // If capacities are not present but stockByCapacity exists, use its keys.
+    if (capacities.length === 0 && stockByCapacity) {
+      capacities = Object.keys(stockByCapacity).filter(Boolean);
     }
 
     const uniqueCaps = Array.from(new Set(capacities));
