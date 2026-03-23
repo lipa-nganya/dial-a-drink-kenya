@@ -84,6 +84,16 @@ const InventoryPage = () => {
   // Helper to build per-capacity stock rows, e.g. "Stock 6: 1.5 litre"
   const getCapacityStockRows = (drink) => {
     if (!drink) return [];
+    const normalizeCapacityKey = (value) =>
+      (value || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '');
+    const toInt = (value) => {
+      const parsed = parseInt(value, 10);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    };
 
     const stockByCapacity =
       drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
@@ -94,7 +104,7 @@ const InventoryPage = () => {
     let capacities = [];
     if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
       capacities = drink.capacityPricing
-        .map(p => p && p.capacity)
+        .map(p => p && (p.capacity || p.size))
         .filter(Boolean);
     } else if (Array.isArray(drink.capacity) && drink.capacity.length > 0) {
       capacities = drink.capacity.filter(Boolean);
@@ -111,18 +121,22 @@ const InventoryPage = () => {
     const uniqueCaps = Array.from(new Set(capacities));
     if (uniqueCaps.length === 0) return [];
 
-    const mainStock = parseInt(drink?.stock, 10) || 0;
+    const mainStock = toInt(drink?.stock);
+    const stockByCapacityEntries = stockByCapacity
+      ? Object.entries(stockByCapacity)
+      : [];
 
     return uniqueCaps.map(cap => {
-      const raw = stockByCapacity && stockByCapacity[cap] != null
-        ? stockByCapacity[cap]
-        : null;
-      const parsed = typeof raw === 'number' ? raw : parseInt(raw, 10);
+      let raw = null;
+      if (stockByCapacityEntries.length > 0) {
+        const normalizedCap = normalizeCapacityKey(cap);
+        const direct = stockByCapacityEntries.find(([key]) => normalizeCapacityKey(key) === normalizedCap);
+        raw = direct ? direct[1] : null;
+      }
+      const parsed = toInt(raw);
       // If stockByCapacity is not initialized (or missing this capacity),
       // fall back to aggregate stock so legacy items still show usable stock.
-      const stock = Number.isNaN(parsed) || parsed == null
-        ? mainStock
-        : parsed;
+      const stock = raw == null ? mainStock : parsed;
       return { capacity: cap, stock };
     });
   };
