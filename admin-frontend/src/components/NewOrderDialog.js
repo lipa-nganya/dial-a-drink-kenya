@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -39,6 +39,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const { isDarkMode, colors } = useTheme();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const dialogContentRef = useRef(null);
+  const errorAlertRef = useRef(null);
   const [customers, setCustomers] = useState([]);
   const [branches, setBranches] = useState([]);
   const [drivers, setDrivers] = useState([]);
@@ -126,6 +128,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  // Keep the latest error visible without forcing the admin to scroll.
+  useEffect(() => {
+    if (!open) return;
+    if (!error) return;
+    if (dialogContentRef.current) {
+      dialogContentRef.current.scrollTop = 0;
+    }
+    if (errorAlertRef.current) {
+      errorAlertRef.current.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+    }
+  }, [error, open]);
 
   // Fetch customers with search query
   useEffect(() => {
@@ -363,7 +377,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     if (existingQtyInCart + currentQuantity > availableStock) {
       const suffix = selectedCapacity ? ` (${selectedCapacity})` : '';
       setError(
-        `Insufficient stock for ${currentProduct.name}${suffix}. Available: ${availableStock}, requested: ${existingQtyInCart + currentQuantity}`
+        `Insufficient stock for ${currentProduct.name}${suffix}. Please reduce quantity and try again.`
       );
       return;
     }
@@ -1463,7 +1477,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       }}>
         POS
       </DialogTitle>
-      <DialogContent sx={{ 
+      <DialogContent
+        ref={dialogContentRef}
+        sx={{ 
         overflowY: 'auto',
         overflowX: 'hidden',
         maxHeight: mobileSize ? 'calc(90vh - 180px)' : 'calc(90vh - 120px)',
@@ -1477,6 +1493,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         {error && (
           <Alert 
             severity="error" 
+            ref={errorAlertRef}
             sx={{ 
               mb: mobileSize ? 1.8 : 2,
               fontSize: mobileSize ? '0.9rem' : '1rem',
@@ -1603,9 +1620,15 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   }
                 }}
               >
+                <MenuItem value="">
+                  <em>No territory</em>
+                </MenuItem>
                 {territories.map((territory) => (
                   <MenuItem key={territory.id} value={territory.id}>
-                    {territory.name}
+                    {territory.name}{' '}
+                    <span style={{ color: colors.textSecondary, fontSize: '0.85em' }}>
+                      (KES {Math.round(Number(territory.deliveryFromCBD ?? 0))})
+                    </span>
                   </MenuItem>
                 ))}
               </Select>

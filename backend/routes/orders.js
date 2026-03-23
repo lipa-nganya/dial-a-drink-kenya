@@ -282,7 +282,7 @@ router.post('/', async (req, res) => {
           await transaction.rollback();
           const suffix = item.selectedCapacity ? ` (${item.selectedCapacity})` : '';
           return res.status(400).json({
-            error: `Insufficient stock for ${drink.name}${suffix}. Available: ${availableStock}, requested: ${item.quantity}`
+            error: `Insufficient stock for ${drink.name}${suffix}. Please reduce quantity and try again.`
           });
         }
 
