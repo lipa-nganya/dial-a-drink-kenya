@@ -12,10 +12,9 @@ import com.dialadrink.driver.R
 import com.dialadrink.driver.data.model.Order
 import com.dialadrink.driver.data.repository.OrderRepository
 import com.dialadrink.driver.databinding.ActivityCompletedOrdersBinding
-import com.dialadrink.driver.databinding.ItemActiveOrderBinding
+import com.dialadrink.driver.databinding.ItemCompletedOrderRowBinding
 import com.dialadrink.driver.ui.auth.PinVerificationDialog
 import com.dialadrink.driver.utils.SharedPrefs
-import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -235,6 +234,7 @@ class CompletedOrdersActivity : AppCompatActivity() {
     private fun showEmptyState(message: String) {
         binding.loadingProgress.visibility = View.GONE
         binding.swipeRefresh.isRefreshing = false
+        binding.tableHeader.visibility = View.GONE
         removeOrderCards()
         binding.emptyStateText.text = message
         binding.emptyStateText.visibility = View.VISIBLE
@@ -244,15 +244,16 @@ class CompletedOrdersActivity : AppCompatActivity() {
         binding.loadingProgress.visibility = View.GONE
         binding.swipeRefresh.isRefreshing = false
         binding.emptyStateText.visibility = View.GONE
+        binding.tableHeader.visibility = View.VISIBLE
         removeOrderCards()
 
         orders.forEach { order ->
-            val orderCard = createOrderCard(order)
+            val orderCard = createOrderRow(order)
             val layoutParams = android.widget.LinearLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply {
-                val marginInDp = 16
+                val marginInDp = 0
                 val scale = resources.displayMetrics.density
                 bottomMargin = (marginInDp * scale + 0.5f).toInt()
             }
@@ -264,88 +265,35 @@ class CompletedOrdersActivity : AppCompatActivity() {
     private fun removeOrderCards() {
         for (i in binding.ordersContainer.childCount - 1 downTo 0) {
             val child = binding.ordersContainer.getChildAt(i)
-            if (child is MaterialCardView) {
+            if (child.id != R.id.tableHeader && child.id != R.id.emptyStateText) {
                 binding.ordersContainer.removeViewAt(i)
             }
         }
     }
 
-    private fun createOrderCard(order: Order): View {
-        val cardBinding = ItemActiveOrderBinding.inflate(LayoutInflater.from(this))
-        val card = cardBinding.root as MaterialCardView
+    private fun createOrderRow(order: Order): View {
+        val rowBinding = ItemCompletedOrderRowBinding.inflate(LayoutInflater.from(this))
+        val row = rowBinding.root
 
-        cardBinding.orderNumberText.text = "Order #${order.id}"
+        rowBinding.locationText.text = order.deliveryAddress ?: "Address not provided"
+        rowBinding.orderValueText.text = "KES ${String.format("%.2f", order.totalAmount)}"
+        rowBinding.paymentMethodText.text = getPaymentMethodLabel(order.paymentMethod)
+        rowBinding.deliveryFeeText.text = "KES ${String.format("%.2f", order.deliveryFee ?: 0.0)}"
 
-        // Status badge - display as pill (matching other screens)
-        val statusColor = getStatusColor(order.status)
-        val drawable = android.graphics.drawable.GradientDrawable().apply {
-            setColor(statusColor)
-            cornerRadius = 12f * resources.displayMetrics.density
-        }
-        cardBinding.statusBadge.background = drawable
-        cardBinding.statusText.text = order.status.replace("_", " ").uppercase()
-
-        cardBinding.customerNameText.text = order.customerName ?: "Customer"
-        cardBinding.addressText.text = order.deliveryAddress ?: "Address not provided"
-        cardBinding.amountText.text = "KES ${String.format("%.2f", order.totalAmount)}"
-
-        // Display payment method and transaction details
-        val paymentInfo = buildPaymentInfo(order)
-        if (paymentInfo.isNotEmpty()) {
-            // Show payment info instead of order creation date
-            cardBinding.dateText.text = paymentInfo
-        } else if (order.createdAt != null) {
-            try {
-                // Parse UTC date
-                val utcTimeZone = TimeZone.getTimeZone("UTC")
-                val parser1 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
-                parser1.timeZone = utcTimeZone
-                val date = parser1.parse(order.createdAt)
-                if (date != null) {
-                    // Format in Nairobi timezone
-                    val nairobiTimeZone = TimeZone.getTimeZone("Africa/Nairobi")
-                    val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                    formatter.timeZone = nairobiTimeZone
-                    cardBinding.dateText.text = formatter.format(date)
-                }
-            } catch (e: Exception) {
-                try {
-                    // Try alternative format
-                    val utcTimeZone = TimeZone.getTimeZone("UTC")
-                    val parser2 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())
-                    parser2.timeZone = utcTimeZone
-                    val date = parser2.parse(order.createdAt)
-                    if (date != null) {
-                        // Format in Nairobi timezone
-                        val nairobiTimeZone = TimeZone.getTimeZone("Africa/Nairobi")
-                        val formatter = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
-                        formatter.timeZone = nairobiTimeZone
-                        cardBinding.dateText.text = formatter.format(date)
-                    } else {
-                        cardBinding.dateText.text = order.createdAt
-                    }
-                } catch (e2: Exception) {
-                    cardBinding.dateText.text = order.createdAt
-                }
-            }
-        }
-
-        // Hide action buttons (info icon and navigate button)
-        cardBinding.actionButtons.visibility = View.GONE
-        cardBinding.navigateButton.visibility = View.GONE
-        
-        card.setOnClickListener {
+        row.setOnClickListener {
             openOrderDetails(order.id)
         }
-
-        return card
+        return row
     }
 
-    private fun getStatusColor(status: String): Int {
-        return when (status) {
-            "completed" -> getColor(R.color.status_completed)
-            "delivered" -> getColor(R.color.status_delivered)
-            else -> getColor(R.color.status_default)
+    private fun getPaymentMethodLabel(paymentMethod: String?): String {
+        return when (paymentMethod?.lowercase()) {
+            "mobile_money" -> "M-Pesa"
+            "cash" -> "Cash"
+            "card" -> "Card"
+            "cash_at_hand" -> "Cash At Hand"
+            null, "" -> "-"
+            else -> paymentMethod.replace("_", " ").replaceFirstChar { it.uppercase() }
         }
     }
     

@@ -250,6 +250,7 @@ class OrderDetailActivity : AppCompatActivity() {
         binding.customerNameText.text = order.customerName
         binding.customerPhoneText.text = order.customerPhone
         binding.addressText.text = order.deliveryAddress
+        val territoryName = order.territory?.name?.takeIf { it.isNotBlank() } ?: "N/A"
         
         val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
         binding.totalAmountText.text = formatter.format(order.totalAmount)
@@ -278,6 +279,9 @@ class OrderDetailActivity : AppCompatActivity() {
             "${item.quantity}x ${item.drink?.name ?: "Item"} - ${formatter.format(item.price)}"
         }
         binding.itemsText.text = itemsText
+        val deliveryFee = order.deliveryFee ?: 0.0
+        binding.territoryDeliveryText.text = "Territory: $territoryName • Delivery Fee: ${formatter.format(deliveryFee)}"
+        binding.deliveryFeeText.text = "Delivery Fee: ${formatter.format(deliveryFee)}"
         
         // Show/hide customer phone based on status and cancellation request
         // Hide when: completed, cancelled, or cancellation requested (even if status not yet cancelled)
@@ -314,8 +318,10 @@ class OrderDetailActivity : AppCompatActivity() {
         
         // Hide customer location (address) when completed, delivered, cancellation requested, or cancelled
         if (order.cancellationRequested == true || status == "cancelled" || status == "completed" || status == "delivered") {
+            binding.territoryDeliveryText.visibility = View.GONE
             binding.addressText.visibility = View.GONE
         } else {
+            binding.territoryDeliveryText.visibility = View.VISIBLE
             binding.addressText.visibility = View.VISIBLE
         }
         
