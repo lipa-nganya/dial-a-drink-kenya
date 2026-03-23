@@ -84,6 +84,16 @@ const InventoryPage = () => {
   // Helper to build per-capacity stock rows, e.g. "Stock 6: 1.5 litre"
   const getCapacityStockRows = (drink) => {
     if (!drink) return [];
+    const parseJsonIfString = (value) => {
+      if (typeof value !== 'string') return value;
+      const trimmed = value.trim();
+      if (!trimmed) return value;
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return value;
+      }
+    };
     const normalizeCapacityKey = (value) =>
       (value || '')
         .toString()
@@ -95,22 +105,25 @@ const InventoryPage = () => {
       return Number.isNaN(parsed) ? 0 : parsed;
     };
 
+    const parsedStockByCapacity = parseJsonIfString(drink.stockByCapacity);
     const stockByCapacity =
-      drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
-        ? drink.stockByCapacity
+      parsedStockByCapacity && typeof parsedStockByCapacity === 'object' && !Array.isArray(parsedStockByCapacity)
+        ? parsedStockByCapacity
         : null;
+    const parsedCapacityPricing = parseJsonIfString(drink.capacityPricing);
+    const parsedCapacity = parseJsonIfString(drink.capacity);
 
     // Prefer capacities from capacityPricing (they are normalized labels)
     let capacities = [];
-    if (Array.isArray(drink.capacityPricing) && drink.capacityPricing.length > 0) {
-      capacities = drink.capacityPricing
+    if (Array.isArray(parsedCapacityPricing) && parsedCapacityPricing.length > 0) {
+      capacities = parsedCapacityPricing
         .map(p => p && (p.capacity || p.size))
         .filter(Boolean);
-    } else if (Array.isArray(drink.capacity) && drink.capacity.length > 0) {
-      capacities = drink.capacity.filter(Boolean);
-    } else if (typeof drink.capacity === 'string' && drink.capacity.trim()) {
+    } else if (Array.isArray(parsedCapacity) && parsedCapacity.length > 0) {
+      capacities = parsedCapacity.filter(Boolean);
+    } else if (typeof parsedCapacity === 'string' && parsedCapacity.trim()) {
       // Some items store a single capacity as a string instead of an array.
-      capacities = [drink.capacity.trim()];
+      capacities = [parsedCapacity.trim()];
     }
 
     // If capacities are not present but stockByCapacity exists, use its keys.
