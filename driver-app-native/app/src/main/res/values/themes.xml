@@ -10,9 +10,15 @@
         <item name="colorPrimary">@color/accent</item>
         <item name="colorPrimaryDark">@color/accent</item>
         <item name="colorAccent">@color/accent</item>
+        <item name="colorSurface">@color/paper_dark</item>
+        <item name="colorOnSurface">@color/text_primary_dark</item>
+        <item name="colorOnBackground">@color/text_primary_dark</item>
+        <item name="android:textColor">@color/text_primary_dark</item>
         <item name="android:statusBarColor">@color/background_dark</item>
         <item name="android:windowBackground">@color/background_dark</item>
         <item name="android:textColorPrimary">@color/text_primary_dark</item>
+        <item name="android:textColorHint">@color/text_secondary_dark</item>
+        <item name="textInputStyle">@style/Widget.DialADrinkDriver.TextInputLayout</item>
         <item name="editTextStyle">@style/Widget.DialADrinkDriver.TextInputEditText</item>
         <item name="popupMenuStyle">@style/Widget.DialADrinkDriver.PopupMenu</item>
         <item name="android:popupMenuStyle">@style/Widget.DialADrinkDriver.PopupMenu</item>
@@ -54,6 +60,13 @@
     <style name="Widget.DialADrinkDriver.TextInputEditText" parent="Widget.MaterialComponents.TextInputEditText.OutlinedBox">
         <item name="android:textColor">@color/text_primary_dark</item>
         <item name="android:textColorHint">@color/text_secondary_dark</item>
+    </style>
+
+    <!-- Global outlined TextInputLayout colors for dark backgrounds -->
+    <style name="Widget.DialADrinkDriver.TextInputLayout" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+        <item name="hintTextColor">@color/text_secondary_dark</item>
+        <item name="boxBackgroundColor">@color/paper_dark</item>
+        <item name="boxStrokeColor">@color/accent</item>
     </style>
     
     <!-- Global style for EditText to ensure white text -->
