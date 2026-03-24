@@ -567,6 +567,7 @@ data class Admin(
 data class OrderForOrderPayment(
     val orderId: Int,
     val customerName: String,
+    val deliveryAddress: String? = null,
     val itemsTotal: Double,
     val deliveryFee: Double,
     val savings: Double,

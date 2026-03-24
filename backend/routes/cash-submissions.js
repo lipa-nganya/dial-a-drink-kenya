@@ -1018,7 +1018,7 @@ router.get('/:driverId/orders-for-order-payment', async (req, res) => {
         paymentType: 'pay_on_delivery',
         paymentMethod: 'cash'
       },
-      attributes: ['id', 'customerName', 'totalAmount', 'createdAt'],
+      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'deliveryAddress'],
       order: [['createdAt', 'DESC']],
       limit: 100
     });
@@ -1070,6 +1070,7 @@ router.get('/:driverId/orders-for-order-payment', async (req, res) => {
         eligible.push({
           orderId: order.id,
           customerName: order.customerName || 'Customer',
+          deliveryAddress: order.deliveryAddress || null,
           itemsTotal,
           deliveryFee,
           savings,

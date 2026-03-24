@@ -41,6 +41,16 @@ class CashAtHandFormFragment : Fragment() {
     private var eligibleOrderPayments: List<OrderForOrderPayment> = emptyList()
     private val selectedOrderIds = linkedSetOf<Int>()
     private val orderPaymentMethods = listOf("CASH", "MPESA PROMPT", "CUSTOMER PAID TO OFFICE")
+
+    private fun firstTwoWords(address: String?): String {
+        if (address.isNullOrBlank()) return "Unknown Location"
+        return address
+            .trim()
+            .split(Regex("\\s+"))
+            .take(2)
+            .joinToString(" ")
+            .ifBlank { "Unknown Location" }
+    }
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -393,7 +403,7 @@ class CashAtHandFormFragment : Fragment() {
 
                 orders.forEach { order ->
                     val cb = com.google.android.material.checkbox.MaterialCheckBox(requireContext()).apply {
-                        text = "Order #${order.orderId} • ${order.customerName} • Delivery Fee: KES ${String.format("%.0f", order.deliveryFee)} • Total: KES ${String.format("%.0f", order.totalToSubmit)}"
+                        text = "${firstTwoWords(order.deliveryAddress)} • ${order.customerName} • Delivery Fee: KES ${String.format("%.0f", order.deliveryFee)} • Total: KES ${String.format("%.0f", order.totalToSubmit)}"
                         setTextColor(Color.parseColor("#FFFFFF"))
                         isChecked = false
                         setOnCheckedChangeListener { _, isChecked ->

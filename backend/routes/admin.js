@@ -5782,6 +5782,11 @@ router.post('/customers', async (req, res) => {
       return res.status(400).json({ error: 'Phone number is required' });
     }
 
+    // Normalize Kenyan phone formats so 07xxxxxxxx becomes 2547xxxxxxxx.
+    const normalizedPhone = normalizePhoneNumber(phone);
+    const phoneToStore = normalizedPhone || phone.replace(/\D/g, '');
+    const phoneVariants = generatePhoneVariants(phoneToStore);
+
     // Treat blank/whitespace/"null"/"undefined" email values as null to avoid validation errors
     const normalizedEmail =
       email && email.toLowerCase() !== 'null' && email.toLowerCase() !== 'undefined'
@@ -5792,8 +5797,8 @@ router.post('/customers', async (req, res) => {
     const existingCustomer = await db.Customer.findOne({
       where: {
         [Op.or]: [
-          { phone: phone },
-          { username: phone }
+          { phone: { [Op.in]: phoneVariants } },
+          { username: { [Op.in]: phoneVariants } }
         ]
       }
     });
@@ -5814,8 +5819,8 @@ router.post('/customers', async (req, res) => {
 
     // Create new customer
     const newCustomer = await db.Customer.create({
-      phone: phone,
-      username: phone,
+      phone: phoneToStore,
+      username: phoneToStore,
       customerName: customerName || 'Online Customer',
       email: normalizedEmail
     });
