@@ -23,7 +23,11 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem
 } from '@mui/material';
 import {
   ArrowBack,
@@ -35,12 +39,15 @@ import {
   Add
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
 
 const RiderDetails = () => {
   const { riderId } = useParams();
   const navigate = useNavigate();
   const { isDarkMode, colors } = useTheme();
+  const { user } = useAdmin();
+  const isSuperAdmin = user?.role === 'super_admin';
   
   const [rider, setRider] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -65,6 +72,12 @@ const RiderDetails = () => {
   const [penaltyAmount, setPenaltyAmount] = useState('');
   const [penaltyReason, setPenaltyReason] = useState('');
   const [addingPenalty, setAddingPenalty] = useState(false);
+  const [addTransactionDialogOpen, setAddTransactionDialogOpen] = useState(false);
+  const [transactionAmount, setTransactionAmount] = useState('');
+  const [transactionType, setTransactionType] = useState('debit');
+  const [transactionApplyTo, setTransactionApplyTo] = useState('cash_at_hand');
+  const [transactionReason, setTransactionReason] = useState('');
+  const [addingTransaction, setAddingTransaction] = useState(false);
 
   // Fetch rider details
   useEffect(() => {
@@ -341,6 +354,58 @@ const RiderDetails = () => {
     }
   };
 
+  const handleAddTransaction = async () => {
+    if (!transactionAmount || !transactionReason || parseFloat(transactionAmount) <= 0) {
+      return;
+    }
+
+    try {
+      setAddingTransaction(true);
+      const response = await api.post(`/driver-wallet/${riderId}/cash-at-hand/manual-transaction`, {
+        amount: parseFloat(transactionAmount),
+        transactionType,
+        applyTo: transactionApplyTo,
+        reason: transactionReason.trim()
+      });
+
+      if (response?.data?.success) {
+        // Refresh balances immediately in profile card and transactions tab
+        const cashResponse = await api.get(`/driver-wallet/${riderId}/cash-at-hand`);
+        let cashData = null;
+        if (cashResponse?.data?.success && cashResponse.data.data) {
+          cashData = cashResponse.data.data;
+        } else if (cashResponse?.data?.data) {
+          cashData = cashResponse.data.data;
+        } else if (cashResponse?.data) {
+          cashData = cashResponse.data;
+        }
+        setCashAtHandData(cashData);
+        if (cashData?.totalCashAtHand !== undefined) {
+          setCashAtHandAmount(parseFloat(cashData.totalCashAtHand || 0));
+        }
+        const walletResponse = await api.get(`/driver-wallet/${riderId}`);
+        const walletData = walletResponse?.data?.data || walletResponse?.data;
+        if (walletData?.wallet?.savings !== undefined) {
+          setSavingsBalance(parseFloat(walletData.wallet.savings || 0));
+        }
+
+        setAddTransactionDialogOpen(false);
+        setTransactionAmount('');
+        setTransactionType('debit');
+        setTransactionApplyTo('cash_at_hand');
+        setTransactionReason('');
+        alert('Transaction added successfully');
+      } else {
+        alert('Failed to add transaction: ' + (response?.data?.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('Error adding manual transaction:', err);
+      alert('Error adding transaction: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setAddingTransaction(false);
+    }
+  };
+
   const paymentStatusColor = (paymentStatus) => {
     if (paymentStatus === 'paid') return 'success';
     if (paymentStatus === 'unpaid') return 'error';
@@ -540,6 +605,24 @@ const RiderDetails = () => {
                 >
                   Add Penalty
                 </Button>
+                {isSuperAdmin && (
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => setAddTransactionDialogOpen(true)}
+                    sx={{
+                      backgroundColor: '#1976d2',
+                      color: '#FFFFFF',
+                      '&:hover': {
+                        backgroundColor: '#1565c0',
+                        opacity: 0.9,
+                        color: '#FFFFFF'
+                      }
+                    }}
+                  >
+                    Add Transaction
+                  </Button>
+                )}
               </Box>
               {rider?.driverPayAmount && (
                 <Box>
@@ -1072,6 +1155,108 @@ const RiderDetails = () => {
             }}
           >
             {addingPenalty ? 'Adding...' : 'Add Penalty'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Add Cash at Hand Transaction Dialog */}
+      <Dialog
+        open={addTransactionDialogOpen}
+        onClose={() => {
+          setAddTransactionDialogOpen(false);
+          setTransactionAmount('');
+          setTransactionType('debit');
+          setTransactionApplyTo('cash_at_hand');
+          setTransactionReason('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: '#1976d2', fontWeight: 600 }}>
+          Add Cash at Hand Transaction
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
+            <TextField
+              label="Driver"
+              value={rider?.name || ''}
+              disabled
+              fullWidth
+            />
+            <TextField
+              label="Amount (KES)"
+              type="number"
+              value={transactionAmount}
+              onChange={(e) => setTransactionAmount(e.target.value)}
+              fullWidth
+              required
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+            <FormControl fullWidth>
+              <InputLabel>Transaction Type</InputLabel>
+              <Select
+                value={transactionType}
+                label="Transaction Type"
+                onChange={(e) => setTransactionType(e.target.value)}
+              >
+                <MenuItem value="debit">Debit</MenuItem>
+                <MenuItem value="credit">Credit</MenuItem>
+              </Select>
+            </FormControl>
+            <FormControl fullWidth>
+              <InputLabel>Apply To</InputLabel>
+              <Select
+                value={transactionApplyTo}
+                label="Apply To"
+                onChange={(e) => setTransactionApplyTo(e.target.value)}
+              >
+                <MenuItem value="cash_at_hand">Cash at Hand</MenuItem>
+                <MenuItem value="savings">Savings</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Reason"
+              value={transactionReason}
+              onChange={(e) => setTransactionReason(e.target.value)}
+              fullWidth
+              required
+              multiline
+              rows={3}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setAddTransactionDialogOpen(false);
+              setTransactionAmount('');
+              setTransactionType('debit');
+              setTransactionApplyTo('cash_at_hand');
+              setTransactionReason('');
+            }}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleAddTransaction}
+            variant="contained"
+            disabled={addingTransaction || !transactionAmount || !transactionReason || parseFloat(transactionAmount) <= 0}
+            sx={{
+              backgroundColor: '#1976d2',
+              color: '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#1565c0',
+                opacity: 0.9,
+                color: '#FFFFFF'
+              },
+              '&:disabled': {
+                backgroundColor: colors.textSecondary,
+                color: '#FFFFFF'
+              }
+            }}
+          >
+            {addingTransaction ? 'Adding...' : 'Add Transaction'}
           </Button>
         </DialogActions>
       </Dialog>

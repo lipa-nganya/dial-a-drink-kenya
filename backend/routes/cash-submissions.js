@@ -1890,4 +1890,128 @@ router.post('/:driverId/cash-submissions/:id/reject', verifyAdmin, async (req, r
   return handleRejectSubmission(req, res);
 });
 
+/**
+ * Manual rider cash-at-hand transaction (super admin only)
+ * POST /api/driver-wallet/:driverId/cash-at-hand/manual-transaction
+ * body: { amount, transactionType: 'debit'|'credit', reason, applyTo: 'cash_at_hand'|'savings' }
+ */
+router.post('/:driverId/cash-at-hand/manual-transaction', verifyAdmin, requireSuperAdmin, async (req, res) => {
+  try {
+    const driverId = parseInt(req.params.driverId, 10);
+    const amount = parseFloat(req.body?.amount);
+    const transactionType = String(req.body?.transactionType || '').toLowerCase();
+    const reason = String(req.body?.reason || '').trim();
+    const applyTo = String(req.body?.applyTo || 'cash_at_hand').toLowerCase();
+    const actorName = req.admin?.username || req.admin?.name || 'admin';
+
+    if (!Number.isFinite(driverId) || driverId < 1) {
+      return sendError(res, 'Invalid driver id', 400);
+    }
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return sendError(res, 'Amount must be greater than 0', 400);
+    }
+    if (!['debit', 'credit'].includes(transactionType)) {
+      return sendError(res, 'transactionType must be either debit or credit', 400);
+    }
+    if (!['cash_at_hand', 'savings'].includes(applyTo)) {
+      return sendError(res, 'applyTo must be either cash_at_hand or savings', 400);
+    }
+    if (!reason) {
+      return sendError(res, 'Reason is required', 400);
+    }
+
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return sendError(res, 'Driver not found', 404);
+    }
+
+    const signedAmount = transactionType === 'credit' ? amount : -amount;
+    let wallet = await db.DriverWallet.findOne({ where: { driverId } });
+    if (!wallet) {
+      wallet = await db.DriverWallet.create({
+        driverId,
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      });
+    }
+
+    if (applyTo === 'cash_at_hand') {
+      const priorCashAtHand = parseFloat(driver.cashAtHand || 0);
+      const newCashAtHand = priorCashAtHand + signedAmount;
+      await driver.update({ cashAtHand: newCashAtHand, lastActivity: new Date() });
+
+      const tx = await db.Transaction.create({
+        orderId: null,
+        driverId,
+        driverWalletId: wallet.id,
+        transactionType: 'cash_settlement',
+        paymentMethod: 'cash',
+        paymentProvider: 'admin_manual_adjustment',
+        amount: signedAmount,
+        status: 'completed',
+        paymentStatus: 'paid',
+        notes: `Manual ${transactionType} by ${actorName} (${applyTo}): ${reason}`
+      });
+
+      return sendSuccess(
+        res,
+        {
+          transactionId: tx.id,
+          driverId,
+          amount,
+          transactionType,
+          applyTo,
+          reason,
+          previousCashAtHand: priorCashAtHand,
+          cashAtHand: newCashAtHand
+        },
+        'Manual cash at hand transaction recorded'
+      );
+    }
+
+    const priorSavings = parseFloat(wallet.savings || 0);
+    const newSavings = priorSavings + signedAmount;
+    await wallet.update({ savings: newSavings });
+    await driver.update({ lastActivity: new Date() });
+
+    // Mirror savings transaction behavior so entries appear in savings logs:
+    // - credit -> savings_credit (positive)
+    // - debit  -> savings_withdrawal (positive amount, completed/manual)
+    const savingsTx = await db.Transaction.create({
+      orderId: null,
+      driverId,
+      driverWalletId: wallet.id,
+      transactionType: transactionType === 'credit' ? 'savings_credit' : 'savings_withdrawal',
+      paymentMethod: 'system',
+      paymentProvider: 'admin_manual_adjustment',
+      amount: amount,
+      status: 'completed',
+      paymentStatus: 'paid',
+      notes: `Manual ${transactionType} by ${actorName} (${applyTo}): ${reason}`
+    });
+
+    return sendSuccess(
+      res,
+      {
+        transactionId: savingsTx.id,
+        driverId,
+        amount,
+        transactionType,
+        applyTo,
+        reason,
+        previousSavings: priorSavings,
+        savings: newSavings
+      },
+      'Manual savings transaction recorded'
+    );
+  } catch (error) {
+    console.error('Error creating manual rider cash-at-hand transaction:', error);
+    return sendError(res, error.message || 'Failed to create manual transaction', 500);
+  }
+});
+
 module.exports = router;
