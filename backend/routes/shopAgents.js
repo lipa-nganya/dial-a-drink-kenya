@@ -533,9 +533,10 @@ router.get('/inventory-items', async (req, res) => {
       const drinks = await db.Drink.findAll({
         attributes: ['id', 'name', 'barcode', 'stock', 'stockByCapacity', 'capacity', 'capacityPricing', 'isAvailable'],
         include: [{
-          model: db.Category,
+          model: db.Category.unscoped(),
           as: 'category',
-          attributes: ['id', 'name']
+          attributes: ['id', 'name'],
+          required: false
         }],
         order: [['name', 'ASC']]
       });
