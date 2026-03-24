@@ -219,7 +219,7 @@ function AppContent() {
           {/* Old product route - kept for backward compatibility and redirects */}
           <Route path="/product/:id" element={<ProductPage />} />
           <Route path="/brands" element={<Brands />} />
-          <Route path="/brands/:id" element={<BrandDetail />} />
+          <Route path="/brands/:identifier" element={<BrandDetail />} />
           <Route path="/offers" element={<Offers />} />
           <Route path="/test-offers" element={<TestOffers />} />
           <Route path="/cart" element={<Cart />} />

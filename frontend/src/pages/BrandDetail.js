@@ -11,10 +11,11 @@ import { ArrowBack } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { buildBrandPath } from '../utils/brandSlug';
 import DrinkCard from '../components/DrinkCard';
 
 const BrandDetail = () => {
-  const { id } = useParams();
+  const { identifier } = useParams();
   const navigate = useNavigate();
   const { colors } = useTheme();
   const [brand, setBrand] = useState(null);
@@ -23,31 +24,31 @@ const BrandDetail = () => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchBrand();
-    fetchBrandDrinks();
+    fetchBrandAndDrinks();
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [id]);
+  }, [identifier]);
 
-  const fetchBrand = async () => {
+  const fetchBrandAndDrinks = async () => {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get(`/brands/${id}`);
-      setBrand(response.data);
+      const response = await api.get(`/brands/${identifier}`);
+      const brandData = response.data;
+      setBrand(brandData);
+
+      const canonicalPath = buildBrandPath(brandData);
+      if (window.location.pathname !== canonicalPath) {
+        navigate(canonicalPath, { replace: true });
+      }
+
+      const drinksResponse = await api.get(`/drinks?brandId=${brandData.id}`);
+      setDrinks(drinksResponse.data);
     } catch (err) {
       console.error('Error fetching brand:', err);
       setError('Failed to load brand details. Please try again later.');
+      setDrinks([]);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchBrandDrinks = async () => {
-    try {
-      const response = await api.get(`/drinks?brandId=${id}`);
-      setDrinks(response.data);
-    } catch (err) {
-      console.error('Error fetching brand drinks:', err);
     }
   };
 

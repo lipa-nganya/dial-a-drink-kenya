@@ -43,6 +43,7 @@ import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
 import { stripHtml } from '../utils/stripHtml';
 import { ensureCanonicalLink, buildProductCanonicalUrl } from '../utils/seoCanonical';
+import { buildBrandPath } from '../utils/brandSlug';
 import DrinkCard from '../components/DrinkCard';
 
 const ProductPage = () => {
@@ -751,11 +752,12 @@ const ProductPage = () => {
             const brandId = product.brandId || (product.brand && typeof product.brand === 'object' && product.brand.id) || null;
             const brandName = product.brand && typeof product.brand === 'object' ? product.brand.name : (typeof product.brand === 'string' ? product.brand : null);
             if (!brandId || !brandName) return null;
+            const brandPath = buildBrandPath({ id: brandId, name: brandName });
             return (
               <Box sx={{ mt: 2, textAlign: 'center' }}>
                 <Link
                   component={RouterLink}
-                  to={`/brands/${brandId}`}
+                  to={brandPath}
                   sx={{
                     fontSize: '0.95rem',
                     fontWeight: 500,

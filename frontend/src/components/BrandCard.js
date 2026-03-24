@@ -10,6 +10,7 @@ import { LocalBar } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { getBackendUrl } from '../utils/backendUrl';
+import { buildBrandPath } from '../utils/brandSlug';
 
 const BrandCard = ({ brand }) => {
   const navigate = useNavigate();
@@ -34,7 +35,7 @@ const BrandCard = ({ brand }) => {
   };
 
   const handleCardClick = () => {
-    navigate(`/brands/${brand.id}`);
+    navigate(buildBrandPath(brand));
   };
 
   return (
