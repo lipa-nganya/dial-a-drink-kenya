@@ -202,6 +202,7 @@ const RiderCashAtHandDetail = () => {
     }
   };
 
+
   const renderSubmissionDetails = (s) => {
     const orders = s.orders || [];
     if (orders.length > 0) {
@@ -548,6 +549,7 @@ const RiderCashAtHandDetail = () => {
           </Box>
         )}
       </Paper>
+
     </Box>
   );
 };
