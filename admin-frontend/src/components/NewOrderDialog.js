@@ -1275,18 +1275,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
-    if (!newCustomerName || !newCustomerName.trim()) {
-      setError('Customer name is required');
-      return;
-    }
-
     setCreatingCustomer(true);
     setError('');
 
     try {
       const response = await api.post('/admin/customers', {
         phone: newCustomerPhone.trim(),
-        customerName: newCustomerName.trim()
+        customerName: newCustomerName.trim() || undefined
       });
 
       if (response.data?.success && response.data?.customer) {
@@ -2923,7 +2918,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           />
           <TextField
             fullWidth
-            label="Customer Name *"
+            label="Customer Name (Optional)"
             value={newCustomerName}
             onChange={(e) => setNewCustomerName(e.target.value)}
             margin="normal"
@@ -2951,7 +2946,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           <Button
             onClick={handleCreateCustomer}
             variant="contained"
-            disabled={creatingCustomer || !newCustomerPhone || !newCustomerName}
+            disabled={creatingCustomer || !newCustomerPhone}
             sx={{
               backgroundColor: colors.accentText,
               color: '#FFFFFF',

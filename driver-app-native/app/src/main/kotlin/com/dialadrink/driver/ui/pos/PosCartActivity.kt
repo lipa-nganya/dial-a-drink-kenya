@@ -16,6 +16,7 @@ import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -78,6 +79,7 @@ class PosCartActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityPosCartBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applyInputTextColors()
 
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -117,6 +119,23 @@ class PosCartActivity : AppCompatActivity() {
         // Update UI after everything is set up
         adapter.notifyDataSetChanged()
         updateTotals()
+    }
+
+    private fun applyInputTextColors() {
+        val textColor = ContextCompat.getColor(this, R.color.text_primary_dark)
+        val hintColor = ContextCompat.getColor(this, R.color.text_secondary_dark)
+
+        binding.customerPhoneEditText.setTextColor(textColor)
+        binding.customerPhoneEditText.setHintTextColor(hintColor)
+
+        binding.orderTypeSpinner.setTextColor(textColor)
+        binding.orderTypeSpinner.setHintTextColor(hintColor)
+
+        binding.deliveryAddressEditText.setTextColor(textColor)
+        binding.deliveryAddressEditText.setHintTextColor(hintColor)
+
+        binding.deliveryFeeEditText.setTextColor(textColor)
+        binding.deliveryFeeEditText.setHintTextColor(hintColor)
     }
     
     private fun setupStopCheckbox() {
@@ -762,6 +781,14 @@ class PosCartActivity : AppCompatActivity() {
         val nameEditText = dialogView.findViewById<TextInputEditText>(R.id.nameEditText)
         val phoneEditText = dialogView.findViewById<TextInputEditText>(R.id.phoneEditText)
         val emailEditText = dialogView.findViewById<TextInputEditText>(R.id.emailEditText)
+        val textColor = ContextCompat.getColor(this, R.color.text_primary_dark)
+        val hintColor = ContextCompat.getColor(this, R.color.text_secondary_dark)
+        nameEditText.setTextColor(textColor)
+        nameEditText.setHintTextColor(hintColor)
+        phoneEditText.setTextColor(textColor)
+        phoneEditText.setHintTextColor(hintColor)
+        emailEditText.setTextColor(textColor)
+        emailEditText.setHintTextColor(hintColor)
         
         val phone = binding.customerPhoneEditText.text.toString().trim()
         phoneEditText.setText(phone)

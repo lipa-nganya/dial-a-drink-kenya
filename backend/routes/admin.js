@@ -5770,11 +5770,23 @@ router.get('/customers/:id/latest-address', async (req, res) => {
 // Create customer
 router.post('/customers', async (req, res) => {
   try {
-    const { phone, customerName, email } = req.body;
+    const rawPhone = req.body?.phone;
+    const rawCustomerName = req.body?.customerName;
+    const rawEmail = req.body?.email;
+
+    const phone = typeof rawPhone === 'string' ? rawPhone.trim() : String(rawPhone || '').trim();
+    const customerName = typeof rawCustomerName === 'string' ? rawCustomerName.trim() : '';
+    const email = typeof rawEmail === 'string' ? rawEmail.trim() : '';
 
     if (!phone) {
       return res.status(400).json({ error: 'Phone number is required' });
     }
+
+    // Treat blank/whitespace/"null"/"undefined" email values as null to avoid validation errors
+    const normalizedEmail =
+      email && email.toLowerCase() !== 'null' && email.toLowerCase() !== 'undefined'
+        ? email
+        : null;
 
     // Check if customer already exists
     const existingCustomer = await db.Customer.findOne({
@@ -5805,7 +5817,7 @@ router.post('/customers', async (req, res) => {
       phone: phone,
       username: phone,
       customerName: customerName || 'Online Customer',
-      email: email || null
+      email: normalizedEmail
     });
 
     res.json({
@@ -5821,6 +5833,11 @@ router.post('/customers', async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating customer:', error);
+    if (error?.name === 'SequelizeValidationError' || error?.name === 'SequelizeUniqueConstraintError') {
+      return res.status(400).json({
+        error: error.errors?.[0]?.message || 'Invalid customer details'
+      });
+    }
     res.status(500).json({ error: error.message });
   }
 });

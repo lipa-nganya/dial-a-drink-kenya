@@ -13,6 +13,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -51,6 +52,7 @@ class PosProductListActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityPosProductListBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        applySearchFieldColors()
 
         // Initialize API client immediately and synchronously if possible
         if (!ApiClient.isInitialized()) {
@@ -83,6 +85,13 @@ class PosProductListActivity : AppCompatActivity() {
         
         // Start loading products immediately - don't wait for anything
         loadProducts(initialLoad = true)
+    }
+
+    private fun applySearchFieldColors() {
+        val textColor = ContextCompat.getColor(this, R.color.text_primary_dark)
+        val hintColor = ContextCompat.getColor(this, R.color.text_secondary_dark)
+        binding.searchEditText.setTextColor(textColor)
+        binding.searchEditText.setHintTextColor(hintColor)
     }
 
     override fun onPause() {

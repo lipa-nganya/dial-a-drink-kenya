@@ -164,6 +164,63 @@ const getMUITheme = (isDarkMode) => {
           },
         },
       },
+      MuiInputBase: {
+        styleOverrides: {
+          root: {
+            color: colors.textPrimary,
+            backgroundColor: isDarkMode ? '#1A1A1A' : '#FFFFFF',
+          },
+          input: {
+            color: `${colors.textPrimary} !important`,
+            WebkitTextFillColor: `${colors.textPrimary} !important`,
+            '::placeholder': {
+              color: colors.textSecondary,
+              opacity: 1,
+            },
+          },
+        },
+      },
+      MuiOutlinedInput: {
+        styleOverrides: {
+          root: {
+            color: colors.textPrimary,
+            backgroundColor: isDarkMode ? '#1A1A1A' : '#FFFFFF',
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: colors.border,
+            },
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: colors.accentText,
+            },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: colors.accentText,
+            },
+          },
+          input: {
+            color: `${colors.textPrimary} !important`,
+            WebkitTextFillColor: `${colors.textPrimary} !important`,
+          },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            color: colors.textSecondary,
+            '&.Mui-focused': {
+              color: colors.accentText,
+            },
+          },
+        },
+      },
+      MuiFormLabel: {
+        styleOverrides: {
+          root: {
+            color: colors.textSecondary,
+            '&.Mui-focused': {
+              color: colors.accentText,
+            },
+          },
+        },
+      },
       MuiTableCell: {
         styleOverrides: {
           head: {

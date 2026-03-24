@@ -157,18 +157,13 @@ const POS = () => {
       return;
     }
 
-    if (!newCustomerName || !newCustomerName.trim()) {
-      setError('Customer name is required');
-      return;
-    }
-
     setCreatingCustomer(true);
     setError(null);
 
     try {
       const response = await api.post('/admin/customers', {
         phone: newCustomerPhone.trim(),
-        customerName: newCustomerName.trim()
+        customerName: newCustomerName.trim() || undefined
       });
 
       if (response.data?.success && response.data?.customer) {
@@ -641,7 +636,7 @@ const POS = () => {
           />
           <TextField
             fullWidth
-            label="Customer Name *"
+            label="Customer Name (Optional)"
             value={newCustomerName}
             onChange={(e) => setNewCustomerName(e.target.value)}
             margin="normal"
@@ -686,7 +681,7 @@ const POS = () => {
           <Button
             onClick={handleCreateCustomer}
             variant="contained"
-            disabled={creatingCustomer || !newCustomerPhone || !newCustomerName}
+            disabled={creatingCustomer || !newCustomerPhone}
             sx={{
               backgroundColor: colors.accentText,
               color: '#FFFFFF',
