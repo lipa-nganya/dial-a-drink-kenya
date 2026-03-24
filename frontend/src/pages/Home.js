@@ -12,6 +12,7 @@ import CountdownTimer from '../components/CountdownTimer';
 import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
 import { Link } from 'react-router-dom';
+import { buildBrandPath } from '../utils/brandSlug';
 
 const Home = () => {
   const [drinks, setDrinks] = useState([]);
@@ -23,6 +24,7 @@ const Home = () => {
   const heroLoadAttemptRef = useRef(0); // For img onError retry with new cache-bust
   const [heroLinkType, setHeroLinkType] = useState('none'); // 'none' | 'product' | 'brand'
   const [heroLinkTargetId, setHeroLinkTargetId] = useState(''); // product id or brand id
+  const [heroBrandPath, setHeroBrandPath] = useState('');
   const [brandFocusDrinks, setBrandFocusDrinks] = useState([]);
   const [brandFocusLoading, setBrandFocusLoading] = useState(true);
   const [limitedTimeOffers, setLimitedTimeOffers] = useState([]);
@@ -136,7 +138,20 @@ const Home = () => {
         api.get('/settings/heroImageLinkTargetId').catch(() => ({ data: { value: '' } }))
       ]);
       setHeroLinkType(typeRes.data?.value || 'none');
-      setHeroLinkTargetId(targetRes.data?.value != null ? String(targetRes.data.value) : '');
+      const targetId = targetRes.data?.value != null ? String(targetRes.data.value) : '';
+      setHeroLinkTargetId(targetId);
+
+      if ((typeRes.data?.value || 'none') === 'brand' && targetId) {
+        try {
+          const brandRes = await api.get(`/brands/${targetId}`);
+          setHeroBrandPath(buildBrandPath(brandRes.data));
+        } catch (brandError) {
+          console.error('Error resolving hero brand slug:', brandError);
+          setHeroBrandPath(`/brands/${targetId}`);
+        }
+      } else {
+        setHeroBrandPath('');
+      }
     } catch (error) {
       console.error('Error fetching hero link settings:', error);
     }
@@ -270,7 +285,7 @@ const Home = () => {
                   heroLinkType === 'product'
                     ? `/product/${heroLinkTargetId}`
                     : heroLinkType === 'brand'
-                    ? `/brands/${heroLinkTargetId}`
+                    ? (heroBrandPath || `/brands/${heroLinkTargetId}`)
                     : '/brands'
                 }
                 style={{ display: 'block', width: '100%', textAlign: 'center' }}

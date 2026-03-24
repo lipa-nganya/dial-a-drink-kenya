@@ -4,6 +4,15 @@ const db = require('../models');
 const { Sequelize } = require('sequelize');
 const brandScraper = require('../services/brandScraper');
 
+const toBrandSlug = (value = '') =>
+  String(value)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
 // Get all brands
 router.get('/', async (req, res) => {
   try {
@@ -61,10 +70,22 @@ router.get('/all', async (req, res) => {
   }
 });
 
-// Get single brand by ID
-router.get('/:id', async (req, res) => {
+// Get single brand by ID or slug
+router.get('/:identifier', async (req, res) => {
   try {
-    const brand = await db.Brand.findByPk(req.params.id);
+    const { identifier } = req.params;
+    const normalized = String(identifier || '').trim();
+    let brand = null;
+
+    if (/^\d+$/.test(normalized)) {
+      brand = await db.Brand.findByPk(Number(normalized));
+    } else {
+      const brands = await db.Brand.findAll({
+        where: { isActive: true },
+        attributes: ['id', 'name', 'description', 'image', 'country', 'isActive', 'createdAt', 'updatedAt']
+      });
+      brand = brands.find((entry) => toBrandSlug(entry.name) === normalized.toLowerCase()) || null;
+    }
     
     if (!brand) {
       return res.status(404).json({ error: 'Brand not found' });
