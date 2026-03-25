@@ -675,9 +675,64 @@ const ProductPage = () => {
 
   const availableCapacities = getAvailableCapacities();
   const imageUrl = getImageUrl(product.image);
+  const { fullText: productDescription } = getProductDescription();
+  const resolvedPrice = selectedCapacity
+    ? getPriceForCapacity(selectedCapacity)
+    : parseFloat(product.price) || 0;
+  const inStock = Boolean(product.isAvailable) && (parseInt(product.stock, 10) || 0) > 0;
+  const brandName = typeof product.brand === 'object' && product.brand !== null
+    ? product.brand.name
+    : product.brand;
+  const normalizedBarcode = product.barcode != null ? String(product.barcode).trim() : '';
+  const isGtinCandidate = /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(normalizedBarcode);
+  const productStructuredData = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    image: imageUrl ? [imageUrl] : undefined,
+    description: productDescription || `${product.name} from Dial a Drink Kenya.`,
+    brand: brandName ? { '@type': 'Brand', name: brandName } : undefined,
+    sku: product.id != null ? String(product.id) : undefined,
+    ...(isGtinCandidate ? { gtin: normalizedBarcode } : {}),
+    offers: {
+      '@type': 'Offer',
+      url: buildProductCanonicalUrl(product),
+      priceCurrency: 'KES',
+      price: Number(resolvedPrice).toFixed(2),
+      availability: inStock
+        ? 'https://schema.org/InStock'
+        : 'https://schema.org/OutOfStock',
+      itemCondition: 'https://schema.org/NewCondition',
+      shippingDetails: {
+        '@type': 'OfferShippingDetails',
+        shippingDestination: {
+          '@type': 'DefinedRegion',
+          addressCountry: 'KE'
+        },
+        shippingRate: {
+          '@type': 'MonetaryAmount',
+          value: '0.00',
+          currency: 'KES'
+        }
+      },
+      hasMerchantReturnPolicy: {
+        '@type': 'MerchantReturnPolicy',
+        applicableCountry: 'KE',
+        returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+        merchantReturnDays: 2,
+        returnMethod: 'https://schema.org/ReturnByMail',
+        returnFees: 'https://schema.org/FreeReturn'
+      }
+    }
+  };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4, overflowX: 'hidden', maxWidth: '100%' }}>
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productStructuredData) }}
+      />
+      <Container maxWidth="lg" sx={{ py: 4, overflowX: 'hidden', maxWidth: '100%' }}>
       {/* Breadcrumbs: Home › Menu › Category › Product name */}
         <Breadcrumbs
           separator=" › "
@@ -1686,7 +1741,8 @@ const ProductPage = () => {
         message={snackbarMessage}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       />
-    </Container>
+      </Container>
+    </>
   );
 };
 
