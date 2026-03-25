@@ -14,6 +14,7 @@ import FloatingHelpButton from './components/FloatingHelpButton';
 import FloatingCallButton from './components/FloatingCallButton';
 import Home from './pages/Home';
 import Menu from './pages/Menu';
+import LegacyProducts from './pages/LegacyProducts';
 import TestOffers from './pages/TestOffers';
 import Offers from './pages/Offers';
 import Cart from './pages/Cart';
@@ -216,6 +217,8 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
+          {/* Legacy brand listing URL compatibility */}
+          <Route path="/products" element={<LegacyProducts />} />
           {/* Old product route - kept for backward compatibility and redirects */}
           <Route path="/product/:id" element={<ProductPage />} />
           <Route path="/brands" element={<Brands />} />
