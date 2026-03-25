@@ -276,7 +276,8 @@
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
                 android:minHeight="56dp"
-                android:padding="16dp" />
+                android:padding="16dp"
+                android:popupBackground="@color/paper_dark" />
 
             <!-- Delivery Fee -->
             <com.google.android.material.textfield.TextInputLayout

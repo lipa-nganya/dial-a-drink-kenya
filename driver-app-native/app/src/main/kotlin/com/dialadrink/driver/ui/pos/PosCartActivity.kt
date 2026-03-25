@@ -1033,8 +1033,8 @@ class PosCartActivity : AppCompatActivity() {
         paymentMethods.add("Select Payment Method") // Placeholder at position 0
         paymentMethods.addAll(deliveryPaymentMethods)
         
-        paymentMethodAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, paymentMethods)
-        paymentMethodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        paymentMethodAdapter = ArrayAdapter(this, R.layout.spinner_item_pos_dark, paymentMethods)
+        paymentMethodAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_pos_dark)
         binding.paymentMethodSpinner.adapter = paymentMethodAdapter
         
         // Set default selection to "Select Payment Method" (position 0)
@@ -1234,8 +1234,8 @@ class PosCartActivity : AppCompatActivity() {
         }
         
         // Create a new adapter to ensure spinner refreshes properly
-        paymentMethodAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, paymentMethods)
-        paymentMethodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        paymentMethodAdapter = ArrayAdapter(this, R.layout.spinner_item_pos_dark, paymentMethods)
+        paymentMethodAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_pos_dark)
         binding.paymentMethodSpinner.adapter = paymentMethodAdapter
         
         // Reset to "Select Payment Method" placeholder
@@ -1300,8 +1300,8 @@ class PosCartActivity : AppCompatActivity() {
         paymentMethods.addAll(deliveryPaymentMethods)
         
         // Create a new adapter to ensure spinner refreshes properly
-        paymentMethodAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, paymentMethods)
-        paymentMethodAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        paymentMethodAdapter = ArrayAdapter(this, R.layout.spinner_item_pos_dark, paymentMethods)
+        paymentMethodAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_pos_dark)
         binding.paymentMethodSpinner.adapter = paymentMethodAdapter
         
         // Reset to "Select Payment Method" placeholder
