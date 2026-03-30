@@ -34,6 +34,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
 import { buildCashAtHandStatementRows } from '../utils/cashAtHandStatementRows';
+import { buildSavingsStatementRows } from '../utils/savingsStatementRows';
 import {
   formatCashAtHandDateTime,
   formatCashAtHandDateOnly,
@@ -43,6 +44,7 @@ import {
   mergeLogsWithInlineDrafts,
   getDefaultDebitCreditStrings
 } from '../utils/cashAtHandInlineEdit';
+import { mergeSavingsRowsWithDrafts, getDefaultSavingsDebitCreditStrings } from '../utils/savingsInlineEdit';
 
 const formatCurrency = (amount) => `KES ${Math.round(Number(amount || 0)).toLocaleString()}`;
 
@@ -191,6 +193,16 @@ const RiderCashAtHandDetail = () => {
   const [openingBalanceInput, setOpeningBalanceInput] = useState('');
   const [openingBalanceSaving, setOpeningBalanceSaving] = useState(false);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [savingsLoading, setSavingsLoading] = useState(false);
+  const [savingsRows, setSavingsRows] = useState([]);
+  const [savingsBalance, setSavingsBalance] = useState(null);
+  const [savingsSearch, setSavingsSearch] = useState('');
+  const [savingsOpeningInput, setSavingsOpeningInput] = useState('');
+  const [savingsOpeningSaving, setSavingsOpeningSaving] = useState(false);
+  const [savingsInlineDrafts, setSavingsInlineDrafts] = useState({});
+  const [savingsInlineSavingKey, setSavingsInlineSavingKey] = useState(null);
+  const savingsInlineDraftsRef = useRef({});
+  const savingsSaveTimersRef = useRef({});
   const [logsSearch, setLogsSearch] = useState('');
   const [actionLoadingId, setActionLoadingId] = useState(null);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
@@ -206,6 +218,10 @@ const RiderCashAtHandDetail = () => {
   useEffect(() => {
     cashLogInlineDraftsRef.current = cashLogInlineDrafts;
   }, [cashLogInlineDrafts]);
+
+  useEffect(() => {
+    savingsInlineDraftsRef.current = savingsInlineDrafts;
+  }, [savingsInlineDrafts]);
 
   const fetchRider = useCallback(async () => {
     if (!riderId) return;
@@ -262,6 +278,37 @@ const RiderCashAtHandDetail = () => {
     }
   }, [riderId]);
 
+  const fetchSavings = useCallback(async () => {
+    if (!riderId) return;
+    setSavingsLoading(true);
+    try {
+      const res = await api.get(`/driver-wallet/${riderId}`);
+      const data = res.data?.data ?? res.data;
+      const wallet = data?.wallet || null;
+      const raw = Array.isArray(data?.recentSavingsCredits) ? data.recentSavingsCredits : [];
+      setSavingsRows(raw);
+      if (wallet?.savings !== undefined && wallet?.savings !== null && wallet?.savings !== '') {
+        const s = parseFloat(wallet.savings);
+        setSavingsBalance(Number.isFinite(s) ? s : null);
+      } else {
+        setSavingsBalance(null);
+      }
+      const ob = wallet?.savingsOpeningBalance;
+      const obParsed = ob != null && ob !== '' ? parseFloat(ob) : NaN;
+      if (Number.isFinite(obParsed) && obParsed >= 0) {
+        setSavingsOpeningInput(String(Math.round(obParsed)));
+      } else {
+        setSavingsOpeningInput('');
+      }
+    } catch {
+      setSavingsRows([]);
+      setSavingsBalance(null);
+      setSavingsOpeningInput('');
+    } finally {
+      setSavingsLoading(false);
+    }
+  }, [riderId]);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -288,7 +335,8 @@ const RiderCashAtHandDetail = () => {
 
   useEffect(() => {
     if (tabIndex === 1) fetchLogs();
-  }, [tabIndex, fetchLogs]);
+    if (tabIndex === 2) fetchSavings();
+  }, [tabIndex, fetchLogs, fetchSavings]);
 
   const riderName = rider?.name ?? 'Rider';
   const pendingCount = counts.pending ?? 0;
@@ -390,6 +438,152 @@ const RiderCashAtHandDetail = () => {
       desc: getDescriptionPlain(row.entry)
     }));
   }, [filteredCashLogs, totalCashAtHand, cashAtHandOpeningBalance]);
+
+  const normalizedSavingsSearch = String(savingsSearch || '').trim().toLowerCase();
+  const filteredSavingsRows = useMemo(() => {
+    const merged = mergeSavingsRowsWithDrafts(savingsRows, savingsInlineDrafts);
+    if (!Array.isArray(merged) || merged.length === 0) return [];
+    const sorted = [...merged].sort((a, b) => cashAtHandDateSortMs(b.date) - cashAtHandDateSortMs(a.date));
+    if (!normalizedSavingsSearch) return sorted;
+    return sorted.filter((row) => {
+      const amount = parseFloat(row.amount || 0) || 0;
+      const haystack = [
+        row.date,
+        row.orderId,
+        row.orderNumber,
+        row.transactionType,
+        row.paymentProvider,
+        row.notes,
+        amount
+      ]
+        .filter((v) => v !== null && v !== undefined && v !== '')
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(normalizedSavingsSearch);
+    });
+  }, [savingsRows, savingsInlineDrafts, normalizedSavingsSearch]);
+
+  const savingsStatementRows = useMemo(() => {
+    const current = parseFloat(savingsBalance || 0) || 0;
+    const entries = filteredSavingsRows.map((r) => ({
+      ...r,
+      amount: parseFloat(r.amount || 0) || 0 // signed
+    }));
+    const opening = savingsOpeningInput.trim() === '' ? null : parseFloat(savingsOpeningInput);
+    return buildSavingsStatementRows(entries, current, '', { openingBalance: opening });
+  }, [filteredSavingsRows, savingsBalance, savingsOpeningInput]);
+
+  const saveSavingsRow = useCallback(
+    async (entryKey) => {
+      const row = savingsRows.find((r) => r.entryKey === entryKey);
+      if (!row?.entryKey) return;
+      const draft = savingsInlineDraftsRef.current[entryKey] || {};
+      const defaults = getDefaultSavingsDebitCreditStrings(row);
+      const debitStr = draft.debit !== undefined ? draft.debit : defaults.debit;
+      const creditStr = draft.credit !== undefined ? draft.credit : defaults.credit;
+      const parseField = (s) => {
+        const t = String(s ?? '').trim();
+        if (t === '') return null;
+        const n = parseFloat(t);
+        if (!Number.isFinite(n) || n < 0) throw new Error('Amounts must be non-negative numbers or blank');
+        return n;
+      };
+      try {
+        setSavingsInlineSavingKey(entryKey);
+        await api.put(`/admin/drivers/${riderId}/savings-log-display`, {
+          entryKey,
+          debitAmount: parseField(debitStr),
+          creditAmount: parseField(creditStr)
+        });
+        setSavingsInlineDrafts((prev) => {
+          const next = { ...prev };
+          delete next[entryKey];
+          return next;
+        });
+        await fetchSavings();
+      } catch (e) {
+        alert(e.response?.data?.error || e.message || 'Failed to save');
+      } finally {
+        setSavingsInlineSavingKey(null);
+      }
+    },
+    [savingsRows, riderId, fetchSavings]
+  );
+
+  const scheduleSavingsSave = useCallback(
+    (entryKey) => {
+      if (savingsSaveTimersRef.current[entryKey]) {
+        clearTimeout(savingsSaveTimersRef.current[entryKey]);
+      }
+      savingsSaveTimersRef.current[entryKey] = setTimeout(() => {
+        saveSavingsRow(entryKey);
+      }, 850);
+    },
+    [saveSavingsRow]
+  );
+
+  const flushSavingsSave = useCallback(
+    (entryKey) => {
+      if (savingsSaveTimersRef.current[entryKey]) {
+        clearTimeout(savingsSaveTimersRef.current[entryKey]);
+        delete savingsSaveTimersRef.current[entryKey];
+      }
+      saveSavingsRow(entryKey);
+    },
+    [saveSavingsRow]
+  );
+
+  const clearSavingsRowOverrides = useCallback(
+    async (entryKey) => {
+      if (!entryKey) return;
+      try {
+        setSavingsInlineSavingKey(entryKey);
+        await api.put(`/admin/drivers/${riderId}/savings-log-display`, {
+          entryKey,
+          debitAmount: null,
+          creditAmount: null,
+          balanceAfter: null
+        });
+        setSavingsInlineDrafts((prev) => {
+          const next = { ...prev };
+          delete next[entryKey];
+          return next;
+        });
+        await fetchSavings();
+      } catch (e) {
+        alert(e.response?.data?.error || e.message || 'Failed to clear');
+      } finally {
+        setSavingsInlineSavingKey(null);
+      }
+    },
+    [riderId, fetchSavings]
+  );
+
+  const saveSavingsOpeningBalance = async () => {
+    const t = String(savingsOpeningInput ?? '').trim();
+    try {
+      setSavingsOpeningSaving(true);
+      if (t === '') {
+        await api.put(`/admin/drivers/${riderId}/savings-opening-balance`, {
+          savingsOpeningBalance: null
+        });
+      } else {
+        const n = parseFloat(t);
+        if (!Number.isFinite(n) || n < 0) {
+          alert('Opening balance must be a non-negative number or blank to clear.');
+          return;
+        }
+        await api.put(`/admin/drivers/${riderId}/savings-opening-balance`, {
+          savingsOpeningBalance: n
+        });
+      }
+      await fetchSavings();
+    } catch (e) {
+      alert(e.response?.data?.error || e.message || 'Failed to save opening balance');
+    } finally {
+      setSavingsOpeningSaving(false);
+    }
+  };
 
   const parseCashLogField = (s) => {
     const t = String(s ?? '').trim();
@@ -850,6 +1044,7 @@ const RiderCashAtHandDetail = () => {
             }
           />
           <Tab label="Logs" />
+          <Tab label="Savings" />
         </Tabs>
         {tabIndex === 0 && (
           <Box sx={{ p: 2 }}>
@@ -1277,6 +1472,201 @@ const RiderCashAtHandDetail = () => {
               <Typography variant="caption" sx={{ display: 'block', mt: 1, color: colors.textSecondary }}>
                 Edit Credit and Debit inline; the balance column updates as you type. Values save automatically after a short
                 pause or when you leave a field. Use Reset to clear all overrides for a row.
+              </Typography>
+            )}
+          </Box>
+        )}
+        {tabIndex === 2 && (
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+                Savings Credits
+              </Typography>
+              {savingsBalance != null && (
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                  Current savings: {formatCurrency(savingsBalance)}
+                </Typography>
+              )}
+            </Box>
+            {isSuperSuperAdmin && (
+              <Box
+                sx={{
+                  mb: 2,
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 1,
+                  flexWrap: 'wrap',
+                  maxWidth: 720
+                }}
+              >
+                <TextField
+                  size="small"
+                  label="Statement opening balance (KES)"
+                  helperText="Savings before the oldest transaction. Leave blank for auto."
+                  value={savingsOpeningInput}
+                  onChange={(e) => setSavingsOpeningInput(e.target.value)}
+                  sx={{ minWidth: 260, flex: '1 1 220px' }}
+                />
+                <Button
+                  size="small"
+                  variant="contained"
+                  onClick={saveSavingsOpeningBalance}
+                  disabled={savingsOpeningSaving}
+                  sx={{ mt: 0.5 }}
+                >
+                  {savingsOpeningSaving ? 'Saving…' : 'Save opening'}
+                </Button>
+              </Box>
+            )}
+            <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+              <TextField
+                size="small"
+                fullWidth
+                placeholder="Search savings (order #, description, amount, date...)"
+                value={savingsSearch}
+                onChange={(e) => setSavingsSearch(e.target.value)}
+                sx={{ maxWidth: 520 }}
+                InputProps={{
+                  startAdornment: <Search sx={{ color: colors.textSecondary, mr: 1 }} />
+                }}
+              />
+              {normalizedSavingsSearch && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<Clear />}
+                  onClick={() => setSavingsSearch('')}
+                  sx={{ borderColor: colors.border, color: colors.textPrimary }}
+                >
+                  Clear
+                </Button>
+              )}
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Showing {filteredSavingsRows.length} / {Array.isArray(savingsRows) ? savingsRows.length : 0}
+              </Typography>
+            </Box>
+            {savingsLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                <CircularProgress sx={{ color: colors.accent }} />
+              </Box>
+            ) : filteredSavingsRows.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center', backgroundColor: colors.paper }}>
+                <Typography variant="body1" sx={{ color: colors.textSecondary }}>
+                  {savingsRows.length === 0 ? 'No savings transactions found' : 'No savings transactions match your search.'}
+                </Typography>
+              </Paper>
+            ) : (
+              <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Date</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Order #</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>Description</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Debit</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Credit</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Balance</TableCell>
+                      {isSuperSuperAdmin && (
+                        <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="center" width={48}>
+                          Reset
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {savingsStatementRows.map(({ row, debitDisplay, creditDisplay, balance }, idx) => {
+                      const orderNum = row.orderId ?? row.orderNumber ?? null;
+                      const ek = row.entryKey;
+                      const saving = ek && savingsInlineSavingKey === ek;
+                      const defaults = ek ? getDefaultSavingsDebitCreditStrings(row) : { debit: '', credit: '' };
+                      const draft = ek ? savingsInlineDrafts[ek] || {} : {};
+                      const debitInput = draft.debit !== undefined ? draft.debit : defaults.debit;
+                      const creditInput = draft.credit !== undefined ? draft.credit : defaults.credit;
+                      const inlineCellSx = {
+                        '& .MuiInputBase-input': { textAlign: 'right', py: 0.5, fontSize: '0.875rem' },
+                        maxWidth: 120
+                      };
+                      return (
+                        <TableRow key={ek ?? row.id ?? `${row.orderId ?? 'row'}-${idx}`} hover>
+                          <TableCell sx={{ color: colors.textSecondary, whiteSpace: 'nowrap' }}>
+                            {formatDate(row.date)}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {orderNum != null ? `#${orderNum}` : '—'}
+                          </TableCell>
+                          <TableCell sx={{ color: colors.textPrimary }}>
+                            {row.notes || '—'}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                            {isSuperSuperAdmin && ek ? (
+                              <TextField
+                                size="small"
+                                variant="standard"
+                                disabled={saving}
+                                placeholder="—"
+                                value={debitInput}
+                                onChange={(e) => {
+                                  setSavingsInlineDrafts((prev) => ({
+                                    ...prev,
+                                    [ek]: { ...prev[ek], debit: e.target.value }
+                                  }));
+                                  scheduleSavingsSave(ek);
+                                }}
+                                onBlur={() => flushSavingsSave(ek)}
+                                sx={inlineCellSx}
+                              />
+                            ) : debitDisplay === '—' ? '—' : formatCurrency(debitDisplay)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                            {isSuperSuperAdmin && ek ? (
+                              <TextField
+                                size="small"
+                                variant="standard"
+                                disabled={saving}
+                                placeholder="—"
+                                value={creditInput}
+                                onChange={(e) => {
+                                  setSavingsInlineDrafts((prev) => ({
+                                    ...prev,
+                                    [ek]: { ...prev[ek], credit: e.target.value }
+                                  }));
+                                  scheduleSavingsSave(ek);
+                                }}
+                                onBlur={() => flushSavingsSave(ek)}
+                                sx={inlineCellSx}
+                              />
+                            ) : creditDisplay === '—' ? '—' : formatCurrency(creditDisplay)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                            {formatCurrency(balance)}
+                          </TableCell>
+                          {isSuperSuperAdmin && (
+                            <TableCell align="center" sx={{ verticalAlign: 'middle' }}>
+                              {ek ? (
+                                <IconButton
+                                  size="small"
+                                  aria-label="Clear savings overrides for this row"
+                                  disabled={saving}
+                                  onClick={() => clearSavingsRowOverrides(ek)}
+                                  sx={{ color: colors.textSecondary }}
+                                >
+                                  <Clear fontSize="small" />
+                                </IconButton>
+                              ) : (
+                                '—'
+                              )}
+                            </TableCell>
+                          )}
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+            {isSuperSuperAdmin && (
+              <Typography variant="caption" sx={{ display: 'block', mt: 1, color: colors.textSecondary }}>
+                Savings rows can be edited inline; values save automatically after a short pause or when you leave a field. Reset clears overrides.
               </Typography>
             )}
           </Box>

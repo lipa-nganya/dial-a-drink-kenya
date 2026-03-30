@@ -803,6 +803,9 @@ router.get('/:driverId', async (req, res) => {
 
     // Get savings amount from wallet
     const savings = parseFloat(wallet.savings || 0);
+    const openingRaw = wallet.savingsOpeningBalance;
+    const savingsOpeningBalance =
+      openingRaw != null && openingRaw !== '' ? parseFloat(openingRaw) : null;
     
     // Calculate today's savings withdrawal total (for daily limit check)
     const today = new Date();
@@ -833,13 +836,43 @@ router.get('/:driverId', async (req, res) => {
     const remainingDailyLimit = Math.max(0, dailyLimit - todayWithdrawn);
     const canWithdraw = savings > 0 && remainingDailyLimit > 0;
 
+    // Savings display overrides (super-super-admin). Debit/Credit adjustments can also update stored wallet savings via admin PUT.
+    const savingsOverridesByKey = new Map();
+    try {
+      const numericDriverId = parseInt(driverId, 10);
+      if (Number.isFinite(numericDriverId)) {
+        const overrides = await db.DriverSavingsLogOverride.findAll({ where: { driverId: numericDriverId } });
+        overrides.forEach((o) => savingsOverridesByKey.set(o.entryKey, o));
+      }
+    } catch (e) {
+      console.warn('Savings: could not load log overrides:', e.message);
+    }
+
+    const applySavingsOverrides = (row) => {
+      if (!row || !row.entryKey) return row;
+      const o = savingsOverridesByKey.get(row.entryKey);
+      if (!o) return row;
+      const out = { ...row };
+      if (o.debitAmount != null) out.debitAmount = parseFloat(o.debitAmount);
+      if (o.creditAmount != null) out.creditAmount = parseFloat(o.creditAmount);
+      if (o.balanceAfter != null) out.balanceAfterDisplay = parseFloat(o.balanceAfter);
+      if (o.debitAmount != null || o.creditAmount != null) {
+        const d = parseFloat(out.debitAmount != null ? out.debitAmount : 0) || 0;
+        const c = parseFloat(out.creditAmount != null ? out.creditAmount : 0) || 0;
+        out.amount = c - d;
+      }
+      return out;
+    };
+
     sendSuccess(res, {
       wallet: {
         id: wallet.id,
         driverId: wallet.driverId,
         balance: totalBalance,
         availableBalance: availableBalance,
-        savings: savings
+        savings: savings,
+        savingsOpeningBalance:
+          savingsOpeningBalance != null && Number.isFinite(savingsOpeningBalance) ? savingsOpeningBalance : null
       },
       savingsWithdrawal: {
         dailyLimit: dailyLimit,
@@ -858,7 +891,7 @@ router.get('/:driverId', async (req, res) => {
           } else {
             description = tx.notes || `Savings credit from Order #${tx.orderId || 'N/A'}`;
           }
-          return {
+          const base = {
             id: tx.id,
             amount: Math.abs(parseFloat(tx.amount)),
             transactionType: 'savings_credit',
@@ -868,13 +901,17 @@ router.get('/:driverId', async (req, res) => {
             customerName: tx.order?.customerName,
             status: tx.order?.status,
             date: tx.createdAt,
-            notes: description // Use formatted description
+            notes: description, // Use formatted description
+            entryKey: `savings_tx:${tx.id}`,
+            debitAmount: null,
+            creditAmount: Math.abs(parseFloat(tx.amount))
           };
+          return applySavingsOverrides(base);
         }),
         // Stop deductions (negative amounts - debits from savings)
         ...stopDeductionTransactions.map(tx => {
           const amount = Math.abs(parseFloat(tx.amount || 0));
-          return {
+          const base = {
             id: tx.id,
             amount: -amount, // Negative amount to show as debit
             transactionType: 'delivery_fee_debit',
@@ -885,8 +922,12 @@ router.get('/:driverId', async (req, res) => {
             customerName: tx.order?.customerName,
             status: tx.order?.status,
             date: tx.createdAt,
-            notes: tx.notes || `Stop deduction for Order #${tx.orderId || 'N/A'} - KES ${amount.toFixed(2)}`
+            notes: tx.notes || `Stop deduction for Order #${tx.orderId || 'N/A'} - KES ${amount.toFixed(2)}`,
+            entryKey: `savings_tx:${tx.id}`,
+            debitAmount: amount,
+            creditAmount: null
           };
+          return applySavingsOverrides(base);
         })
       ].sort((a, b) => new Date(b.date) - new Date(a.date)), // Sort by date, newest first
       cashSettlements: cashSettlementTransactions.map(tx => ({
@@ -918,7 +959,8 @@ router.get('/:driverId', async (req, res) => {
         receiptNumber: tx.receiptNumber,
         date: pickCashAtHandLogDate(tx.transactionDate, tx.createdAt),
         notes: tx.notes || `Savings withdrawal${tx.phoneNumber ? ` to ${tx.phoneNumber}` : ''}`,
-        paymentProvider: tx.paymentProvider // Include paymentProvider to identify loan/penalty transactions
+        paymentProvider: tx.paymentProvider, // Include paymentProvider to identify loan/penalty transactions
+        entryKey: `savings_withdrawal_tx:${tx.id}`
       }))
     });
   } catch (error) {
