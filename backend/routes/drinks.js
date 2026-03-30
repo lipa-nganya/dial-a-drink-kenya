@@ -14,6 +14,9 @@ router.get('/', async (req, res) => {
   try {
     const { category, search, popular, available_only, brandId } = req.query;
     let whereClause = {};
+
+    // Customer site should only show published drinks
+    whereClause.isPublished = true;
     
     // Only filter by availability if explicitly requested
     if (available_only === 'true') {
@@ -49,14 +52,14 @@ router.get('/', async (req, res) => {
     
     try {
       // Resolve drink attributes so we include nbv only when the column exists
-      let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+      let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
       try {
         const [cols] = await db.sequelize.query(
           "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
         );
         const colSet = new Set((cols || []).map(c => c.column_name.toLowerCase()));
         if (colSet.has('nbv')) {
-          drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+          drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
         }
         if (colSet.has('clicks')) {
           drinkAttributes = drinkAttributes.concat(['clicks']);

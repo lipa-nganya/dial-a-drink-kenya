@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -60,12 +61,7 @@ class AdminDashboardActivity : AppCompatActivity() {
             startActivity(intent)
         }
         
-        // Row 2: Pending, In Progress
-        binding.pendingCard.setOnClickListener {
-            val intent = Intent(this, com.dialadrink.driver.ui.orders.PendingOrdersActivity::class.java)
-            startActivity(intent)
-        }
-        
+        // Row 2: In Progress
         binding.inProgressCard.setOnClickListener {
             val intent = Intent(this, com.dialadrink.driver.ui.orders.InProgressOrdersActivity::class.java)
             startActivity(intent)
@@ -87,6 +83,7 @@ class AdminDashboardActivity : AppCompatActivity() {
             val intent = Intent(this, LoansActivity::class.java)
             startActivity(intent)
         }
+        binding.loansCard.visibility = if (SharedPrefs.isSuperAdmin(this)) View.VISIBLE else View.GONE
         
         // Row 5: Switch to Driver App (full width)
         binding.switchToDriverCard.setOnClickListener {
@@ -199,16 +196,31 @@ class AdminDashboardActivity : AppCompatActivity() {
     private fun loadOrderCounts() {
         lifecycleScope.launch {
             try {
-                // Load pending orders count
-                val pendingOrders = OrderRepository.getAdminPendingOrders(this@AdminDashboardActivity, forceRefresh = false)
-                binding.pendingCountText.text = pendingOrders.size.toString()
-                
+                if (!ApiClient.isInitialized()) {
+                    ApiClient.init(this@AdminDashboardActivity)
+                }
+
+                // Load assign-rider count: delivery orders with no rider assigned.
+                val unassignedResponse = ApiClient.getApiService().getUnassignedOrders()
+                if (unassignedResponse.isSuccessful && unassignedResponse.body() != null) {
+                    val unassignedOrders = unassignedResponse.body()!!.orders
+                    val assignRiderCount = unassignedOrders.count { order ->
+                        val isDeliveryOrder = !order.deliveryAddress.equals("In-Store Purchase", ignoreCase = true)
+                        val hasNoRider = order.driverId == null
+                        isDeliveryOrder && hasNoRider
+                    }
+                    binding.assignRiderCountText.text = assignRiderCount.toString()
+                } else {
+                    binding.assignRiderCountText.text = "0"
+                }
+
                 // Load in-progress orders count
                 val inProgressOrders = OrderRepository.getAdminInProgressOrders(this@AdminDashboardActivity, forceRefresh = false)
                 binding.inProgressCountText.text = inProgressOrders.size.toString()
             } catch (e: Exception) {
                 android.util.Log.e("AdminDashboardActivity", "Error loading order counts: ${e.message}", e)
                 // Keep default values (0) on error
+                binding.assignRiderCountText.text = "0"
             }
         }
     }
@@ -218,6 +230,7 @@ class AdminDashboardActivity : AppCompatActivity() {
         SharedPrefs.saveAdminId(this, -1)
         SharedPrefs.saveAdminUsername(this, "")
         SharedPrefs.saveAdminPhone(this, "")
+        SharedPrefs.saveAdminRole(this, null)
         SharedPrefs.clearAdminToken(this)
         
         val intent = Intent(this, PhoneNumberActivity::class.java)
@@ -307,6 +320,7 @@ class AdminDashboardActivity : AppCompatActivity() {
                 SharedPrefs.saveAdminId(this, -1)
                 SharedPrefs.saveAdminUsername(this, "")
                 SharedPrefs.saveAdminPhone(this, "")
+                SharedPrefs.saveAdminRole(this, null)
                 SharedPrefs.clearAdminToken(this)
                 
                 // Navigate directly to the selected user type's login flow

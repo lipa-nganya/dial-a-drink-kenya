@@ -172,7 +172,7 @@ router.post('/:orderId/respond', async (req, res) => {
           attributes: ['id', 'name']
         }
       ],
-      attributes: ['id', 'status', 'driverId', 'driverAccepted', 'customerName', 'deliveryAddress', 'totalAmount']
+      attributes: ['id', 'status', 'driverId', 'driverAccepted', 'customerName', 'deliveryAddress', 'totalAmount', 'convenienceFee', 'territoryDeliveryFee']
     });
 
     // Emit Socket.IO events (async, don't wait)
@@ -552,12 +552,11 @@ router.get('/:driverId/pending', async (req, res) => {
           pendingSubmissionsAmount: creditCheck.pendingSubmissionsAmount
         };
         
-        // Add delivery fee for earnings calculation
+        // Add delivery fee for earnings calculation (territory delivery fee, not convenience fee)
         try {
-          const breakdown = await getOrderFinancialBreakdown(orderData.id);
-          orderData.deliveryFee = breakdown.deliveryFee || 0;
+          orderData.deliveryFee = parseFloat(orderData.territoryDeliveryFee ?? 0) || 0;
         } catch (breakdownError) {
-          console.warn(`Could not fetch delivery fee breakdown for order ${orderData.id}:`, breakdownError.message);
+          console.warn(`Could not fetch territory delivery fee for order ${orderData.id}:`, breakdownError.message);
           orderData.deliveryFee = 0;
         }
         
@@ -1175,7 +1174,7 @@ router.post('/:orderId/initiate-payment', async (req, res) => {
     }
 
     // Format phone number
-    const cleanedPhone = customerPhone.replace(/\D/g, '');
+    const cleanedPhone = String(customerPhone ?? '').replace(/\D/g, '');
     let formattedPhone = cleanedPhone;
     
     if (cleanedPhone.startsWith('0')) {
@@ -1558,22 +1557,21 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
     if (finalStatus === 'completed' && order.driverId) {
       try {
         await creditWalletsOnDeliveryCompletion(order.id, req);
-        
-        // Decrease inventory stock for completed orders
-        try {
-          const { decreaseInventoryForOrder } = require('../utils/inventory');
-          await decreaseInventoryForOrder(order.id);
-          console.log(`📦 Inventory decreased for Order #${order.id} (driver cash confirmation)`);
-        } catch (inventoryError) {
-          console.error(`❌ Error decreasing inventory for Order #${order.id}:`, inventoryError);
-          // Don't fail the order completion if inventory update fails
-        }
         console.log(`✅ Wallets credited for Order #${order.id} on cash payment confirmation (order completed)`);
       } catch (walletError) {
         console.error(`❌ Error crediting wallets for Order #${order.id}:`, walletError);
         // Don't fail the cash confirmation if wallet crediting fails - payment is already confirmed
       }
-      
+
+      // Decrease inventory even if wallet crediting failed (same as driver status → completed path)
+      try {
+        const { decreaseInventoryForOrder } = require('../utils/inventory');
+        await decreaseInventoryForOrder(order.id);
+        console.log(`📦 Inventory decreased for Order #${order.id} (driver cash confirmation)`);
+      } catch (inventoryError) {
+        console.error(`❌ Error decreasing inventory for Order #${order.id}:`, inventoryError);
+      }
+
       // Update driver status if they have no more active orders
       const { updateDriverStatusIfNoActiveOrders } = require('../utils/driverAssignment');
       await updateDriverStatusIfNoActiveOrders(order.driverId);

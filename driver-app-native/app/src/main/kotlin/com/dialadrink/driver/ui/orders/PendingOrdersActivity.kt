@@ -369,10 +369,10 @@ class PendingOrdersActivity : AppCompatActivity() {
     private fun calculateProfitLoss(order: Order): Double? {
         try {
             val totalAmount = order.totalAmount ?: 0.0
-            val deliveryFee = order.deliveryFee ?: 0.0
+            val territoryDeliveryFee = order.territoryDeliveryFee ?: order.deliveryFee
             val orderItems = order.items ?: emptyList()
             
-            Log.d(TAG, "💰 Calculating profit/loss for Order #${order.id}: totalAmount=$totalAmount, deliveryFee=$deliveryFee, itemsCount=${orderItems.size}")
+            Log.d(TAG, "💰 Calculating profit/loss for Order #${order.id}: totalAmount=$totalAmount, territoryDeliveryFee=$territoryDeliveryFee, itemsCount=${orderItems.size}")
             
             if (orderItems.isEmpty()) {
                 Log.d(TAG, "⚠️ Order #${order.id} has no items, cannot calculate profit/loss")
@@ -408,8 +408,8 @@ class PendingOrdersActivity : AppCompatActivity() {
             
             // Only return profit/loss if at least one item has a purchase price
             return if (hasPurchasePrice) {
-                val profit = totalAmount - totalPurchaseCost - deliveryFee
-                Log.d(TAG, "✅ Order #${order.id} profit/loss: $profit (totalAmount=$totalAmount - purchaseCost=$totalPurchaseCost - deliveryFee=$deliveryFee)")
+                val profit = totalAmount - totalPurchaseCost - territoryDeliveryFee
+                Log.d(TAG, "✅ Order #${order.id} profit/loss: $profit (totalAmount=$totalAmount - purchaseCost=$totalPurchaseCost - territoryDeliveryFee=$territoryDeliveryFee)")
                 profit
             } else {
                 Log.d(TAG, "⚠️ Order #${order.id} has no items with purchase price, cannot calculate profit/loss")

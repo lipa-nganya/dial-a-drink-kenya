@@ -1015,7 +1015,7 @@ router.get('/transactions', async (req, res) => {
     } catch (schemaError) {
       // Fallback: use a safe default set of attributes if schema query fails
       console.warn('⚠️ Could not query information_schema for orders, using default attributes:', schemaError.message);
-      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'notes', 'createdAt', 'updatedAt'];
+      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'convenienceFee', 'territoryDeliveryFee', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'staffPurchaseDriverId', 'notes', 'createdAt', 'updatedAt'];
     }
     
     // Build includes array conditionally
@@ -1024,7 +1024,7 @@ router.get('/transactions', async (req, res) => {
         model: db.OrderItem,
         as: 'items',
         required: false,
-        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
+        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
         include: [{
           model: db.Drink,
             as: 'drink',
@@ -1666,6 +1666,30 @@ router.patch('/drinks/:id/popular', async (req, res) => {
   }
 });
 
+// Update drink published flag (admin)
+router.patch('/drinks/:id/published', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isPublished } = req.body;
+
+    if (typeof isPublished !== 'boolean') {
+      return res.status(400).json({ error: 'isPublished must be a boolean value' });
+    }
+
+    const drink = await db.Drink.findByPk(id, { attributes: ['id', 'isPublished'] });
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+
+    await drink.update({ isPublished });
+
+    res.json({ id: drink.id, isPublished: drink.isPublished });
+  } catch (error) {
+    console.error('Error updating drink published flag:', error);
+    res.status(500).json({ error: 'Failed to update drink published status' });
+  }
+});
+
 // Bulk populate purchase prices for all inventory items
 // Purchase price = 70% of selling price (price field)
 router.post('/drinks/populate-purchase-prices', async (req, res) => {
@@ -1782,12 +1806,24 @@ router.get('/orders/in-progress', verifyAdmin, async (req, res) => {
     const { summary } = req.query;
     
     // Get all orders that are ongoing:
-    // - status is NOT 'pending', 'cancelled', or 'completed'
-    // - This includes: 'confirmed', 'out_for_delivery', 'delivered', 'pos_order'
+    // 1) status is NOT 'pending', 'cancelled', or 'completed'
+    //    - includes: 'confirmed', 'out_for_delivery', 'delivered', 'pos_order', etc.
+    // 2) OR status is 'pending' BUT a driver is already assigned
+    //    - these should be treated as in-progress for admin operational flow
     const whereClause = {
-      status: {
-        [Op.notIn]: ['pending', 'cancelled', 'completed']
-      }
+      [Op.or]: [
+        {
+          status: {
+            [Op.notIn]: ['pending', 'cancelled', 'completed']
+          }
+        },
+        {
+          [Op.and]: [
+            { status: 'pending' },
+            { driverId: { [Op.ne]: null } }
+          ]
+        }
+      ]
     };
     
     // Build includes - for summary mode, exclude all nested objects to shrink payload
@@ -1800,13 +1836,13 @@ router.get('/orders/in-progress', verifyAdmin, async (req, res) => {
           model: db.OrderItem,
           as: 'items',
           required: false,
-          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price'],
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity'],
           include: [
             {
               model: db.Drink,
               as: 'drink',
               required: false,
-              attributes: ['id', 'name', 'price', 'capacity', 'purchasePrice']
+              attributes: ['id', 'name', 'price', 'capacity', 'capacityPricing', 'purchasePrice']
             }
           ]
         },
@@ -1905,7 +1941,7 @@ router.get('/orders/pending', verifyAdmin, async (req, res) => {
           model: db.OrderItem,
           as: 'items',
           required: false,
-          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price'],
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity'],
           include: [
             {
               model: db.Drink,
@@ -2087,23 +2123,27 @@ router.get('/orders/unassigned', verifyAdmin, async (req, res) => {
   try {
     const { Op } = require('sequelize');
     
-    // Get all orders that are not completed but have no rider assigned:
+    // Get all delivery orders that are not completed/cancelled and have no rider assigned:
     // - status is NOT 'completed' and NOT 'cancelled'
-    // - AND either:
-    //   - driverId is null (no driver assigned), OR
-    //   - driverId is not null but driverAccepted is null or false (driver assigned but not accepted)
+    // - driverId is null (no driver assigned)
+    //
+    // IMPORTANT: Walk-in (POS / in-store) orders should NOT appear here.
+    // If unpaid they belong in "In Progress" (in_progress); if paid they should be completed.
     const orders = await db.Order.findAll({
       where: {
-        status: {
-          [Op.notIn]: ['completed', 'cancelled']
-        },
-        [Op.or]: [
+        [Op.and]: [
+          {
+            status: {
+              [Op.notIn]: ['completed', 'cancelled']
+            }
+          },
           { driverId: null },
-          { 
-            driverId: { [Op.ne]: null },
-            [Op.or]: [
-              { driverAccepted: null },
-              { driverAccepted: false }
+          // Exclude walk-in / in-store orders
+          {
+            [Op.and]: [
+              { deliveryAddress: { [Op.ne]: 'In-Store Purchase' } },
+              { customerPhone: { [Op.ne]: 'POS' } },
+              { customerName: { [Op.ne]: 'POS' } }
             ]
           }
         ]
@@ -2113,7 +2153,7 @@ router.get('/orders/unassigned', verifyAdmin, async (req, res) => {
           model: db.OrderItem,
           as: 'items',
           required: false,
-          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price'],
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity'],
           include: [
             {
               model: db.Drink,
@@ -2201,7 +2241,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
     } catch (schemaError) {
       // Fallback: use a safe default set of attributes if schema query fails
       console.warn('⚠️ Could not query information_schema for orders, using default attributes:', schemaError.message);
-      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'notes', 'createdAt', 'updatedAt'];
+      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'convenienceFee', 'territoryDeliveryFee', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'staffPurchaseDriverId', 'notes', 'createdAt', 'updatedAt'];
     }
 
     // Get actual columns that exist for Drink (used in order items) so we don't select e.g. nbv if migration not run
@@ -2229,7 +2269,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
         model: db.OrderItem,
         as: 'items',
         required: false,
-        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
+        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
         include: [
           {
             model: db.Drink,
@@ -2328,10 +2368,6 @@ router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Cannot edit territory for completed or cancelled orders' });
     }
 
-    if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Cannot edit territory for orders that have been paid' });
-    }
-
     const newTerritoryId = territoryId === '' || territoryId === null || territoryId === undefined ? null : parseInt(territoryId, 10);
 
     if (newTerritoryId !== null && isNaN(newTerritoryId)) {
@@ -2356,36 +2392,25 @@ router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
       await order.update({ territoryId: newTerritoryId });
     } else {
       const breakdown = await getOrderFinancialBreakdown(orderId);
-      let newDeliveryFee = breakdown.deliveryFee;
-      let newDeliveryDistance = order.deliveryDistance;
+      // IMPORTANT:
+      // - Convenience fee is customer-facing and already baked into totalAmount.
+      // - Territory delivery fee is internal accounting only and must NOT change what the customer pays.
+      // Therefore: do NOT change totalAmount here.
+      const convenienceFee = parseFloat(order.convenienceFee ?? breakdown.deliveryFee ?? 0) || 0;
+      const newTerritoryDeliveryFee =
+        newTerritoryId !== null && territoryRecord
+          ? (parseFloat(territoryRecord.deliveryFromCBD) || 0)
+          : convenienceFee;
 
-      if (newTerritoryId !== null && territoryRecord) {
-        newDeliveryFee = parseFloat(territoryRecord.deliveryFromCBD) || 0;
-        newDeliveryDistance = null;
-      } else {
-        const normalizedItems = (order.items || []).map((i) => ({
-          drinkId: i.drinkId,
-          quantity: i.quantity
-        }));
-        const feeResult = await calculateDeliveryFee(
-          normalizedItems,
-          breakdown.itemsTotal,
-          order.deliveryAddress,
-          order.branchId
-        );
-        newDeliveryFee = feeResult.fee || 0;
-        newDeliveryDistance = feeResult.distance != null ? feeResult.distance : null;
-      }
-
-      const newTotalAmount = breakdown.itemsTotal + newDeliveryFee + breakdown.tipAmount;
       const oldNotes = order.notes || '';
-      const territoryNote = `[${new Date().toISOString()}] Territory updated: delivery fee set to KES ${newDeliveryFee.toFixed(2)}${newTerritoryId ? ' (from territory)' : ' (settings-based)'}`;
+      const territoryNote = `[${new Date().toISOString()}] Territory updated: territory delivery fee set to KES ${newTerritoryDeliveryFee.toFixed(2)}${newTerritoryId ? ' (from territory)' : ' (defaults to convenience fee)'}`;
 
       await order.update({
         territoryId: newTerritoryId,
-        totalAmount: newTotalAmount,
+        territoryDeliveryFee: newTerritoryDeliveryFee,
         notes: oldNotes ? `${oldNotes}\n${territoryNote}` : territoryNote,
-        deliveryDistance: newDeliveryDistance
+        // If a territory is explicitly selected, this fee is no longer distance-based.
+        deliveryDistance: (newTerritoryId !== null && territoryRecord) ? null : order.deliveryDistance
       });
     }
 
@@ -2629,7 +2654,7 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Valid delivery fee is required' });
     }
 
-    const newDeliveryFee = parseFloat(deliveryFee);
+    const newTerritoryDeliveryFee = parseFloat(deliveryFee);
 
     // Find the order first to check status
     const order = await db.Order.findByPk(orderId);
@@ -2647,17 +2672,12 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Cannot edit delivery fee for orders that have been paid' });
     }
 
-    // Get current financial breakdown
-    const breakdown = await getOrderFinancialBreakdown(orderId);
-    
-    // Calculate new total: itemsTotal + newDeliveryFee + tipAmount
-    const newTotalAmount = breakdown.itemsTotal + newDeliveryFee + breakdown.tipAmount;
-
-    // Update order totalAmount
+    // Update territory delivery fee only.
+    // Customer-facing totalAmount is itemsTotal + convenienceFee + tip, so it must NOT change here.
     const oldNotes = order.notes || '';
-    const deliveryFeeUpdateNote = `[${new Date().toISOString()}] Delivery fee updated: KES ${breakdown.deliveryFee.toFixed(2)} → KES ${newDeliveryFee.toFixed(2)}`;
+    const deliveryFeeUpdateNote = `[${new Date().toISOString()}] Territory delivery fee updated: KES ${(parseFloat(order.territoryDeliveryFee ?? 0) || 0).toFixed(2)} → KES ${newTerritoryDeliveryFee.toFixed(2)}`;
     await order.update({ 
-      totalAmount: newTotalAmount,
+      territoryDeliveryFee: newTerritoryDeliveryFee,
       notes: oldNotes ? `${oldNotes}\n${deliveryFeeUpdateNote}` : deliveryFeeUpdateNote
     });
 
@@ -2673,7 +2693,7 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
       }]
     });
 
-    // Recalculate breakdown with new delivery fee
+    // Breakdown for UI: deliveryFee represents convenience fee (customer-facing).
     const updatedBreakdown = await getOrderFinancialBreakdown(orderId);
 
     res.json({
@@ -2682,14 +2702,83 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
       order: updatedOrder,
       breakdown: {
         itemsTotal: updatedBreakdown.itemsTotal,
-        deliveryFee: newDeliveryFee,
+        deliveryFee: updatedBreakdown.deliveryFee,
         tipAmount: updatedBreakdown.tipAmount,
-        totalAmount: newTotalAmount
+        totalAmount: updatedBreakdown.totalAmount
       }
     });
   } catch (error) {
     console.error('Error updating delivery fee:', error);
     res.status(500).json({ error: 'Failed to update delivery fee' });
+  }
+});
+
+/**
+ * Update customer-facing convenience fee.
+ * PATCH /api/admin/orders/:orderId/convenience-fee
+ * body: { convenienceFee }
+ *
+ * - Updates order.convenienceFee and order.totalAmount (itemsTotal + convenienceFee + tip).
+ * - Does NOT modify territoryDeliveryFee (internal territory accounting) or territory selection.
+ */
+router.patch('/orders/:orderId/convenience-fee', verifyAdmin, async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { convenienceFee } = req.body || {};
+
+    const newConvenienceFee = parseFloat(convenienceFee);
+    if (!Number.isFinite(newConvenienceFee) || newConvenienceFee < 0) {
+      return res.status(400).json({ error: 'Valid convenience fee is required' });
+    }
+
+    const order = await db.Order.findByPk(orderId);
+    if (!order) return res.status(404).json({ error: 'Order not found' });
+
+    if (order.status === 'completed' || order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit convenience fee for completed or cancelled orders' });
+    }
+    if (order.paymentStatus === 'paid') {
+      return res.status(400).json({ error: 'Cannot edit convenience fee for orders that have been paid' });
+    }
+
+    const breakdownBefore = await getOrderFinancialBreakdown(orderId);
+    const itemsTotal = parseFloat(breakdownBefore.itemsTotal || 0) || 0;
+    const tipAmount = parseFloat(breakdownBefore.tipAmount || 0) || 0;
+    const prevConvenienceFee = parseFloat(order.convenienceFee ?? breakdownBefore.deliveryFee ?? 0) || 0;
+
+    const newTotalAmount = Number((itemsTotal + newConvenienceFee + tipAmount).toFixed(2));
+
+    const oldNotes = order.notes || '';
+    const note = `[${new Date().toISOString()}] Convenience fee updated: KES ${prevConvenienceFee.toFixed(2)} → KES ${newConvenienceFee.toFixed(2)}`;
+    await order.update({
+      convenienceFee: newConvenienceFee,
+      totalAmount: newTotalAmount,
+      notes: oldNotes ? `${oldNotes}\n${note}` : note
+    });
+
+    const updatedOrder = await db.Order.findByPk(orderId, {
+      include: [{
+        model: db.OrderItem,
+        as: 'items',
+        include: [{ model: db.Drink, as: 'drink' }]
+      }]
+    });
+    const updatedBreakdown = await getOrderFinancialBreakdown(orderId);
+
+    return res.json({
+      success: true,
+      message: 'Convenience fee updated successfully',
+      order: updatedOrder,
+      breakdown: {
+        itemsTotal: updatedBreakdown.itemsTotal,
+        deliveryFee: updatedBreakdown.deliveryFee,
+        tipAmount: updatedBreakdown.tipAmount,
+        totalAmount: updatedBreakdown.totalAmount
+      }
+    });
+  } catch (error) {
+    console.error('Error updating convenience fee:', error);
+    return res.status(500).json({ error: 'Failed to update convenience fee' });
   }
 });
 
@@ -3490,7 +3579,7 @@ router.post('/orders/:id/prompt-payment', verifyAdmin, async (req, res) => {
     }
     
     // Format phone number
-    const cleanedPhone = customerPhone.replace(/\D/g, '');
+    const cleanedPhone = String(customerPhone ?? '').replace(/\D/g, '');
     let formattedPhone = cleanedPhone;
     
     if (cleanedPhone.startsWith('0')) {
@@ -8464,7 +8553,7 @@ router.post('/penalties/pay-off', verifyAdmin, async (req, res) => {
       }
 
       // Format phone number
-      const cleanedPhone = phoneNumber.replace(/\D/g, '');
+      const cleanedPhone = String(phoneNumber ?? '').replace(/\D/g, '');
       let formattedPhone = cleanedPhone;
       
       if (cleanedPhone.startsWith('0')) {

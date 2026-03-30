@@ -41,6 +41,11 @@
         <item name="android:alertDialogTheme">@style/Theme.DialADrinkDriver.AlertDialog</item>
         <item name="alertDialogTheme">@style/Theme.DialADrinkDriver.AlertDialog</item>
     </style>
+
+    <!-- Black background variant for POS dialogs -->
+    <style name="Theme.DialADrinkDriver.AlertDialog.Black" parent="Theme.DialADrinkDriver.AlertDialog">
+        <item name="android:windowBackground">@color/background_dark</item>
+    </style>
     <style name="Widget.DialADrinkDriver.AlertDialog.Button" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
         <item name="android:textColor">@color/accent</item>
         <item name="background">@drawable/button_border_green</item>

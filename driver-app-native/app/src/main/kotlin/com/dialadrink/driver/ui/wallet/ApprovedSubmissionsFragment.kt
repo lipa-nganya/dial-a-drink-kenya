@@ -105,6 +105,7 @@ class ApprovedSubmissionsFragment : Fragment() {
             val customerNameText = card.findViewById<TextView>(R.id.customerNameText)
             val amountText = card.findViewById<TextView>(R.id.amountText)
             val dateText = card.findViewById<TextView>(R.id.dateText)
+            val dateApprovedText = card.findViewById<TextView>(R.id.dateApprovedText)
             val receiptNumberText = card.findViewById<TextView>(R.id.receiptNumberText)
             
             descriptionText.text = getSubmissionDescription(submission)
@@ -112,15 +113,34 @@ class ApprovedSubmissionsFragment : Fragment() {
             amountText.text = "-${formatter.format(submission.amount)}"
             amountText.setTextColor(requireContext().getColor(android.R.color.holo_red_light))
             
+            // Date posted
             try {
-                val date = try {
-                    apiDateFormat.parse(submission.approvedAt ?: submission.createdAt)
+                val posted = try {
+                    apiDateFormat.parse(submission.createdAt)
                 } catch (e: Exception) {
-                    apiDateFormat2.parse(submission.approvedAt ?: submission.createdAt)
+                    apiDateFormat2.parse(submission.createdAt)
                 }
-                dateText.text = date?.let { dateFormat.format(it) } ?: submission.createdAt
+                dateText.text = "Posted: " + (posted?.let { dateFormat.format(it) } ?: submission.createdAt)
             } catch (e: Exception) {
-                dateText.text = submission.createdAt
+                dateText.text = "Posted: " + submission.createdAt
+            }
+
+            // Date approved
+            val approvedRaw = submission.approvedAt
+            if (!approvedRaw.isNullOrBlank()) {
+                try {
+                    val approved = try {
+                        apiDateFormat.parse(approvedRaw)
+                    } catch (e: Exception) {
+                        apiDateFormat2.parse(approvedRaw)
+                    }
+                    dateApprovedText.text = "Approved: " + (approved?.let { dateFormat.format(it) } ?: approvedRaw)
+                } catch (e: Exception) {
+                    dateApprovedText.text = "Approved: " + approvedRaw
+                }
+                dateApprovedText.visibility = View.VISIBLE
+            } else {
+                dateApprovedText.visibility = View.GONE
             }
             
             receiptNumberText.text = "Status: Approved"

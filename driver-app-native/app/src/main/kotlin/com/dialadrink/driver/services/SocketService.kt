@@ -61,9 +61,14 @@ object SocketService {
         try {
             val options = IO.Options().apply {
                 transports = arrayOf("websocket", "polling")
+                // Default is ~20s; set explicitly so it's predictable across devices/builds.
+                timeout = 20_000
                 reconnection = true
-                reconnectionAttempts = 5
+                // Keep trying; drivers may be on unstable networks.
+                reconnectionAttempts = Int.MAX_VALUE
                 reconnectionDelay = 1000
+                reconnectionDelayMax = 10_000
+                forceNew = true
             }
             
             socket = IO.socket(socketUrl, options)

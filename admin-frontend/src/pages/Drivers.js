@@ -54,6 +54,7 @@ import {
 import NotificationEditor from '../components/NotificationEditor';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAdmin } from '../contexts/AdminContext';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
 
@@ -481,6 +482,8 @@ const ShiftReportTab = () => {
 
 const Drivers = () => {
   const { isDarkMode, colors } = useTheme();
+  const { user } = useAdmin();
+  const isSuperAdmin = user?.role === 'super_admin';
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -786,6 +789,7 @@ const Drivers = () => {
   };
 
   const handleOpenPenaltyDialog = (driver) => {
+    if (!isSuperAdmin) return;
     setSelectedDriverForPenalty(driver);
     setPenaltyFormData({
       driverId: driver.id,
@@ -1220,18 +1224,20 @@ const Drivers = () => {
                         )}
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Add Penalty">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleOpenPenaltyDialog(driver);
-                        }}
-                        sx={{ color: '#FF9800' }}
-                      >
-                        <RemoveCircle />
-                      </IconButton>
-                    </Tooltip>
+                    {isSuperAdmin && (
+                      <Tooltip title="Add Penalty">
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenPenaltyDialog(driver);
+                          }}
+                          sx={{ color: '#FF9800' }}
+                        >
+                          <RemoveCircle />
+                        </IconButton>
+                      </Tooltip>
+                    )}
                     <Tooltip title="Withdraw Savings">
                       <IconButton
                         size="small"

@@ -33,14 +33,15 @@ class TransactionsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         
-        // Setup main tabs: Transactions and Logs
+        // Main tabs: Logs, Submissions (with Pending / Approved / Rejected), Transactions (ledger)
         val mainPagerAdapter = MainTabsPagerAdapter(this)
         binding.mainViewPager.adapter = mainPagerAdapter
-        
+
         TabLayoutMediator(binding.mainTabsLayout, binding.mainViewPager) { tab, position ->
             when (position) {
                 0 -> tab.text = "Logs"
-                1 -> tab.text = "Transactions"
+                1 -> tab.text = "Submissions"
+                2 -> tab.text = "Transactions"
             }
         }.attach()
 
@@ -112,8 +113,7 @@ class TransactionsFragment : Fragment() {
                             .setTitle("Cash At Hand Summary")
                             .setMessage(message)
                             .setPositiveButton("Submit Pending Cash At Hand") { _, _ ->
-                                // Navigate to Cash At Hand form tab
-                                (activity as? CashAtHandActivity)?.switchToMainTab(0)
+                                (activity as? CashAtHandActivity)?.switchToMainTab(1) // Create Submission
                             }
                             .setNegativeButton("Close", null)
                             .show()
@@ -130,7 +130,7 @@ class TransactionsFragment : Fragment() {
     }
 
     /**
-     * Switch to Transactions main sub-tab (0=Transactions, 1=Logs)
+     * Switch Cash at Hand inner main tab: 0=Logs, 1=Submissions, 2=Transactions (ledger).
      */
     fun switchToMainSubTab(position: Int) {
         if (_binding == null) return
@@ -147,6 +147,7 @@ class TransactionsFragment : Fragment() {
                 when (fragment) {
                     is CashTransactionsTabsFragment -> fragment.refresh()
                     is CashTransactionsFragment -> fragment.refresh()
+                    is CashAtHandTransactionsFragment -> fragment.refresh()
                 }
             }
         } catch (e: Exception) {
@@ -155,35 +156,29 @@ class TransactionsFragment : Fragment() {
     }
     
     /**
-     * Switch to a specific sub-tab within Transactions tab
-     * @param position 0=Pending, 1=Approved, 2=Rejected, 3=All
+     * Switch to Submissions tab and a status sub-tab.
+     * @param position 0=Pending, 1=Approved, 2=Rejected
      */
     fun switchToTransactionsSubTab(position: Int) {
-        // First switch to Transactions main tab
-        binding.mainViewPager.setCurrentItem(1, true)
-        
-        // Then switch to the sub-tab
+        binding.mainViewPager.setCurrentItem(1, true) // Submissions
+
         try {
-            val transactionsTabsFragment = childFragmentManager.fragments.find { it is CashTransactionsTabsFragment } as? CashTransactionsTabsFragment
+            val transactionsTabsFragment =
+                childFragmentManager.fragments.find { it is CashTransactionsTabsFragment } as? CashTransactionsTabsFragment
             transactionsTabsFragment?.switchToSubTab(position)
-        } catch (e: Exception) {
-            // Fragment not found, ignore
+        } catch (_: Exception) {
+            // Fragment not ready
         }
     }
-    
+
     fun switchToTab(position: Int) {
-        // Switch to Transactions tab (main tab 0)
         binding.mainViewPager.setCurrentItem(1, true)
-        
-        // Then switch to the sub-tab within Transactions
         try {
-            val transactionsTabsFragment = childFragmentManager.fragments.find { it is CashTransactionsTabsFragment } as? CashTransactionsTabsFragment
+            val transactionsTabsFragment =
+                childFragmentManager.fragments.find { it is CashTransactionsTabsFragment } as? CashTransactionsTabsFragment
             transactionsTabsFragment?.switchToSubTab(position)
-        } catch (e: Exception) {
-            // Fragment not found, ignore
+        } catch (_: Exception) {
         }
-        
-        // Refresh the tab after switching
         refresh()
     }
     
@@ -194,23 +189,22 @@ class TransactionsFragment : Fragment() {
 }
 
 /**
- * Main tabs adapter: Transactions and Logs
+ * Main tabs: Logs, Submissions (nested Pending/Approved/Rejected), Transactions ledger.
  */
 class MainTabsPagerAdapter(fragment: Fragment) : androidx.viewpager2.adapter.FragmentStateAdapter(fragment) {
-    override fun getItemCount(): Int = 2
-    
+    override fun getItemCount(): Int = 3
+
     override fun createFragment(position: Int): Fragment {
         return when (position) {
-            0 -> CashTransactionsFragment() // Logs tab (shows all cash submissions)
-            1 -> CashTransactionsTabsFragment() // Transactions tab (with sub-tabs)
+            0 -> CashTransactionsFragment() // Logs
+            1 -> CashTransactionsTabsFragment() // Submissions
+            2 -> CashAtHandTransactionsFragment() // Transactions (cash at hand ledger)
             else -> throw IllegalArgumentException("Invalid position: $position")
         }
     }
 }
 
-/**
- * Fragment for Transactions tab with sub-tabs: Pending, Approved, Rejected, All
- */
+/** Submissions tab: Pending, Approved, Rejected. */
 class CashTransactionsTabsFragment : Fragment() {
     private var _binding: com.dialadrink.driver.databinding.FragmentCashTransactionsTabsBinding? = null
     private val binding get() = _binding!!
@@ -232,10 +226,9 @@ class CashTransactionsTabsFragment : Fragment() {
         
         TabLayoutMediator(binding.transactionsTabLayout, binding.transactionsViewPager) { tab, position ->
             when (position) {
-                0 -> tab.text = "All"
-                1 -> tab.text = "Pending"
-                2 -> tab.text = "Approved"
-                3 -> tab.text = "Rejected"
+                0 -> tab.text = "Pending"
+                1 -> tab.text = "Approved"
+                2 -> tab.text = "Rejected"
             }
         }.attach()
     }
@@ -269,18 +262,15 @@ class CashTransactionsTabsFragment : Fragment() {
     }
 }
 
-/**
- * Sub-tabs adapter for Transactions tab: Pending, Approved, Rejected, All
- */
+/** Sub-tabs under Submissions: Pending, Approved, Rejected. */
 class TransactionsSubTabsPagerAdapter(fragment: Fragment) : androidx.viewpager2.adapter.FragmentStateAdapter(fragment) {
-    override fun getItemCount(): Int = 4
-    
+    override fun getItemCount(): Int = 3
+
     override fun createFragment(position: Int): Fragment {
         return when (position) {
-            0 -> CashAtHandTransactionsFragment() // All transactions affecting cash at hand
-            1 -> PendingSubmissionsFragment()
-            2 -> ApprovedSubmissionsFragment()
-            3 -> RejectedSubmissionsFragment()
+            0 -> PendingSubmissionsFragment()
+            1 -> ApprovedSubmissionsFragment()
+            2 -> RejectedSubmissionsFragment()
             else -> throw IllegalArgumentException("Invalid position: $position")
         }
     }

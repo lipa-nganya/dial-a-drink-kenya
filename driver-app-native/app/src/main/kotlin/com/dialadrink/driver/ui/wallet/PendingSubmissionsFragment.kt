@@ -115,6 +115,7 @@ class PendingSubmissionsFragment : Fragment() {
             val customerNameText = card.findViewById<TextView>(R.id.customerNameText)
             val amountText = card.findViewById<TextView>(R.id.amountText)
             val dateText = card.findViewById<TextView>(R.id.dateText)
+            val dateApprovedText = card.findViewById<TextView>(R.id.dateApprovedText)
             val receiptNumberText = card.findViewById<TextView>(R.id.receiptNumberText)
             
             descriptionText.text = getSubmissionDescription(submission)
@@ -128,10 +129,13 @@ class PendingSubmissionsFragment : Fragment() {
                 } catch (e: Exception) {
                     apiDateFormat2.parse(submission.createdAt)
                 }
-                dateText.text = date?.let { dateFormat.format(it) } ?: submission.createdAt
+                dateText.text = "Posted: " + (date?.let { dateFormat.format(it) } ?: submission.createdAt)
             } catch (e: Exception) {
-                dateText.text = submission.createdAt
+                dateText.text = "Posted: " + submission.createdAt
             }
+
+            // No approved date for pending submissions
+            dateApprovedText.visibility = View.GONE
             
             receiptNumberText.text = "Status: Pending Approval"
             receiptNumberText.visibility = View.VISIBLE

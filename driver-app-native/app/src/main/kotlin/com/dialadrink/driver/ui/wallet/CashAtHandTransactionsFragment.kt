@@ -99,7 +99,7 @@ class CashAtHandTransactionsFragment : Fragment() {
         
         val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
         
-        // Sort entries by date descending (newest first)
+        // Sort entries newest first
         val sortedEntries = data.entries.sortedByDescending { entry ->
             try {
                 val date = try {

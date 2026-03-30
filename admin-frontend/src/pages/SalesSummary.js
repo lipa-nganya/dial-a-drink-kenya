@@ -36,7 +36,14 @@ function orderFinancials(order) {
   const totalAmount = parseFloat(order.totalAmount) || 0;
   const tipAmount = parseFloat(order.tipAmount) || 0;
   const itemsTotal = items.reduce((sum, it) => sum + (parseFloat(it.price || 0) * (parseInt(it.quantity, 10) || 0)), 0);
-  const deliveryFee = Math.max(0, totalAmount - tipAmount - itemsTotal);
+  const convenienceFee =
+    order.convenienceFee != null && order.convenienceFee !== ''
+      ? parseFloat(order.convenienceFee)
+      : Math.max(0, totalAmount - tipAmount - itemsTotal);
+  const territoryDeliveryFee =
+    order.territoryDeliveryFee != null && order.territoryDeliveryFee !== ''
+      ? parseFloat(order.territoryDeliveryFee)
+      : convenienceFee;
   let purchaseCost = 0;
   items.forEach((it) => {
     const pp = it.drink?.purchasePrice != null && it.drink.purchasePrice !== ''
@@ -46,8 +53,8 @@ function orderFinancials(order) {
       purchaseCost += pp * (parseInt(it.quantity, 10) || 0);
     }
   });
-  const profit = totalAmount - purchaseCost - deliveryFee;
-  return { totalAmount, deliveryFee, purchaseCost, profit, items };
+  const profit = totalAmount - purchaseCost - territoryDeliveryFee;
+  return { totalAmount, deliveryFee: territoryDeliveryFee, purchaseCost, profit, items };
 }
 
 const SalesSummary = () => {
@@ -97,7 +104,7 @@ const SalesSummary = () => {
           salesCount: 0,
           salesValue: 0,
           purchaseValue: 0,
-          deliveryFee: 0,
+          deliveryFee: 0, // territory delivery fee (internal)
           profit: 0,
           orders: []
         });
@@ -193,7 +200,7 @@ const SalesSummary = () => {
                   <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Total Sales #</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Sales Value</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Purchase Value</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Delivery Fee</TableCell>
+                  <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Territory Delivery Fee</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Profit</TableCell>
                   <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Action</TableCell>
                 </TableRow>

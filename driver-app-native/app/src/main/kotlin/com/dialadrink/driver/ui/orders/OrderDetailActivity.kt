@@ -22,6 +22,7 @@ import com.dialadrink.driver.data.model.UpdateOrderStatusRequest
 import com.dialadrink.driver.databinding.ActivityOrderDetailBinding
 import android.view.LayoutInflater
 import com.dialadrink.driver.services.SocketService
+import com.dialadrink.driver.utils.MpesaPhoneUtils
 import com.dialadrink.driver.utils.SharedPrefs
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -47,6 +48,8 @@ class OrderDetailActivity : AppCompatActivity() {
     private val POLLING_INTERVAL_MS = 5000L // Poll every 5 seconds
     /** True when this order already has an order-payment cash submission (pending or completed). */
     private var orderPaymentAlreadySubmitted: Boolean = false
+    /** Prevent double-navigation when status updates arrive via socket + poll + UI. */
+    private var hasRedirectedAfterCompletion: Boolean = false
     
     private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
         maximumFractionDigits = 0
@@ -253,10 +256,22 @@ class OrderDetailActivity : AppCompatActivity() {
         val territoryName = order.territory?.name?.takeIf { it.isNotBlank() } ?: "N/A"
         
         val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
-        binding.totalAmountText.text = formatter.format(order.totalAmount)
+        val tipAmt = order.tipAmount ?: 0.0
+        val orderValue = (order.totalAmount ?: 0.0) - tipAmt
+        binding.orderValueText.text = "Order Value: ${formatter.format(orderValue)}"
+        binding.totalAmountText.text = "Total: ${formatter.format(order.totalAmount)}"
         
         // Status badge - display as pill
         val status = order.status.lowercase()
+
+        // If the driver just finished this order, return them to ongoing orders list.
+        // This is triggered whether completion happens via button, poll, or socket.
+        if (!hasRedirectedAfterCompletion && (status == "completed" || status == "delivered")) {
+            hasRedirectedAfterCompletion = true
+            navigateBackToOngoingOrders()
+            return
+        }
+
         val statusColor = getStatusColor(order.status)
         val statusDrawable = android.graphics.drawable.GradientDrawable().apply {
             setColor(statusColor)
@@ -279,9 +294,14 @@ class OrderDetailActivity : AppCompatActivity() {
             "${item.quantity}x ${item.drink?.name ?: "Item"} - ${formatter.format(item.price)}"
         }
         binding.itemsText.text = itemsText
-        val deliveryFee = order.deliveryFee ?: 0.0
-        binding.territoryDeliveryText.text = "Territory: $territoryName • Delivery Fee: ${formatter.format(deliveryFee)}"
-        binding.deliveryFeeText.text = "Delivery Fee: ${formatter.format(deliveryFee)}"
+        val territoryDeliveryFee = (order.territoryDeliveryFee ?: order.deliveryFee) ?: 0.0
+        binding.territoryDeliveryText.text = "Territory: $territoryName"
+        if (territoryDeliveryFee > 0.009) {
+            binding.deliveryFeeText.visibility = View.VISIBLE
+            binding.deliveryFeeText.text = "Territory Delivery Fee: ${formatter.format(territoryDeliveryFee)}"
+        } else {
+            binding.deliveryFeeText.visibility = View.GONE
+        }
         
         // Show/hide customer phone based on status and cancellation request
         // Hide when: completed, cancelled, or cancellation requested (even if status not yet cancelled)
@@ -335,6 +355,19 @@ class OrderDetailActivity : AppCompatActivity() {
         
         // Show/hide buttons based on status
         updateButtonVisibility(order)
+    }
+
+    private fun navigateBackToOngoingOrders() {
+        try {
+            val intent = Intent(this, ActiveOrdersActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to navigate back to ongoing orders", e)
+        } finally {
+            finish()
+        }
     }
     
     private fun updateButtonVisibility(order: Order) {
@@ -703,12 +736,17 @@ class OrderDetailActivity : AppCompatActivity() {
     }
 
     private fun submitOrderPaymentStkPush(driverId: Int, amount: Double, phoneNumber: String) {
+        if (!MpesaPhoneUtils.isValidSafaricomMpesa(phoneNumber)) {
+            Toast.makeText(this, "Enter a valid Safaricom number (e.g. 0712345678)", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val normalizedPhone = MpesaPhoneUtils.normalizeKenyaMpesaPhone(phoneNumber)
         binding.loadingProgress.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
                 val response = ApiClient.getApiService().orderPaymentStkPush(
                     driverId,
-                    OrderPaymentStkPushRequest(orderId = orderId, phoneNumber = phoneNumber)
+                    OrderPaymentStkPushRequest(orderId = orderId, phoneNumber = normalizedPhone)
                 )
                 runOnUiThread { binding.loadingProgress.visibility = View.GONE }
                 if (!response.isSuccessful || response.body()?.success != true) {
@@ -1006,13 +1044,18 @@ class OrderDetailActivity : AppCompatActivity() {
     }
     
     private fun submitMpesaPayment(orderId: Int, driverId: Int, customerPhone: String) {
+        if (!MpesaPhoneUtils.isValidSafaricomMpesa(customerPhone)) {
+            Toast.makeText(this, "Enter a valid Safaricom number (e.g. 0712345678)", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val normalizedPhone = MpesaPhoneUtils.normalizeKenyaMpesaPhone(customerPhone)
         binding.loadingProgress.visibility = View.VISIBLE
         
         lifecycleScope.launch {
             try {
                 val response = ApiClient.getApiService().initiatePayment(
                     orderId,
-                    InitiatePaymentRequest(driverId, customerPhone)
+                    InitiatePaymentRequest(driverId, normalizedPhone)
                 )
                 
                 withContext(Dispatchers.Main) {

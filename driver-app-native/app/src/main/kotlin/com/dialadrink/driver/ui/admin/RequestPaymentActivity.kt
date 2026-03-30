@@ -21,6 +21,7 @@ import com.dialadrink.driver.data.model.*
 import com.dialadrink.driver.databinding.ActivityRequestPaymentBinding
 import com.dialadrink.driver.databinding.FragmentRequestPaymentTabBinding
 import com.dialadrink.driver.databinding.ItemPendingOrderBinding
+import com.dialadrink.driver.utils.MpesaPhoneUtils
 import com.dialadrink.driver.utils.SharedPrefs
 import com.google.android.material.card.MaterialCardView
 import com.google.android.material.tabs.TabLayoutMediator
@@ -370,17 +371,16 @@ class RequestPaymentActivity : AppCompatActivity() {
                                 ApiClient.init(requireContext())
                             }
                             
-                            // Get all orders and filter for unpaid ones
+                            // Get all orders and filter strictly for unpaid ones
                             val response = ApiClient.getApiService().getAdminOrders()
                             
                             if (response.isSuccessful && response.body() != null) {
                                 val ordersResponse = response.body()!!
-                                // Filter for orders that have not been paid for
-                                // Include all statuses (pending, completed, etc.) - this ensures walk-in completed orders with Mpesa prompt appear
-                                ordersResponse.filter { 
-                                    it.paymentStatus == "unpaid" || 
-                                    it.paymentStatus == null ||
-                                    (it.paymentType == "pay_on_delivery" && it.paymentStatus != "paid")
+                                // Include BOTH walk-in and delivery orders, as long as payment is not paid.
+                                // We only exclude explicitly paid orders.
+                                ordersResponse.filter {
+                                    val paymentStatus = it.paymentStatus?.trim()?.lowercase()
+                                    paymentStatus != "paid"
                                 }
                             } else {
                                 emptyList()
@@ -501,8 +501,12 @@ class RequestPaymentActivity : AppCompatActivity() {
                     Toast.makeText(requireContext(), "Please enter customer phone number", Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
+                if (!MpesaPhoneUtils.isValidSafaricomMpesa(phoneNumber)) {
+                    Toast.makeText(requireContext(), "Enter a valid Safaricom number (e.g. 0712345678)", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 dialog.dismiss()
-                requestPaymentFromOrder(order, phoneNumber)
+                requestPaymentFromOrder(order, MpesaPhoneUtils.normalizeKenyaMpesaPhone(phoneNumber))
             }
             
             dialog.show()

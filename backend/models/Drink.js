@@ -49,6 +49,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.BOOLEAN,
       defaultValue: true
     },
+    isPublished: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'When false, drink is hidden from the customer site (admin can still see it).'
+    },
     isPopular: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

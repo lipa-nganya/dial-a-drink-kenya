@@ -269,8 +269,15 @@ const POS = () => {
       return;
     }
 
-    // Check if item already exists in cart
-    const existingIndex = items.findIndex(item => item.drinkId === selectedProduct.id);
+    const selectedCapacityValue = selectedCapacity && String(selectedCapacity).trim() !== ''
+      ? String(selectedCapacity).trim()
+      : null;
+
+    // Check if same product + same capacity already exists in cart
+    const existingIndex = items.findIndex(item =>
+      item.drinkId === selectedProduct.id &&
+      ((item.selectedCapacity || null) === selectedCapacityValue)
+    );
     
     if (existingIndex >= 0) {
       // Update existing item
@@ -284,6 +291,7 @@ const POS = () => {
       setItems([...items, {
         drinkId: selectedProduct.id,
         name: selectedProduct.name,
+        selectedCapacity: selectedCapacityValue,
         quantity: qty,
         price: price,
         subTotal: qty * price
@@ -349,7 +357,8 @@ const POS = () => {
         items: items.map(item => ({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          selectedPrice: item.price
+          selectedPrice: item.price,
+          selectedCapacity: item.selectedCapacity || null
         })),
         notes: `Office POS Sale${accountId ? ` - Account ID: ${accountId}` : ''}`,
         amountPaid: getTotal(),
@@ -742,6 +751,29 @@ const POS = () => {
                         option.stockByCapacity && typeof option.stockByCapacity === 'object'
                           ? option.stockByCapacity
                           : null;
+                      const normalizeCapacity = (value) =>
+                        (value || '')
+                          .toString()
+                          .trim()
+                          .toLowerCase()
+                          .replace(/\s+/g, '');
+                      const capacityUnitMultiplier = (capacityLabel) => {
+                        const raw = String(capacityLabel || '').trim().toLowerCase();
+                        if (!raw) return 1;
+                        const compact = raw.replace(/\s+/g, '');
+                        const match = compact.match(/^(\d+)(pack|pk).*/);
+                        const n = match ? parseInt(match[1], 10) : NaN;
+                        return Number.isFinite(n) && n > 0 ? n : 1;
+                      };
+                      const isCanPackSharedStockProduct = () => {
+                        const values = Array.isArray(option.capacityPricing)
+                          ? option.capacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
+                          : [];
+                        const normalized = values.map((v) => normalizeCapacity(v));
+                        const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
+                        const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+                        return hasPack && hasCan;
+                      };
 
                       if (Array.isArray(option.capacityPricing) && option.capacityPricing.length > 0) {
                         option.capacityPricing.forEach((pricing) => {
@@ -768,10 +800,19 @@ const POS = () => {
 
                           if (price <= 0) return;
 
-                          const capStock =
+                          let capStock =
                             stockByCapacity && stockByCapacity[capacity] != null
                               ? stockByCapacity[capacity]
                               : option.stock ?? 0;
+                          if (
+                            stockByCapacity &&
+                            stockByCapacity[capacity] == null &&
+                            isCanPackSharedStockProduct()
+                          ) {
+                            const multiplier = capacityUnitMultiplier(capacity);
+                            const totalStock = Number(option.stock ?? 0) || 0;
+                            capStock = multiplier > 1 ? Math.floor(totalStock / multiplier) : totalStock;
+                          }
 
                           rows.push({
                             capacity,
@@ -796,7 +837,7 @@ const POS = () => {
                                     color="text.secondary"
                                     sx={{ display: 'block' }}
                                   >
-                                    {row.capacity} | {Math.round(row.price)} (Stock: {row.stock})
+                                    {row.capacity} - KES {Math.round(row.price)} (Stock: {row.stock})
                                   </Typography>
                                 ))}
                               </Box>
@@ -1057,7 +1098,9 @@ const POS = () => {
                 <>
                   {items.map((item, index) => (
                     <TableRow key={index} hover>
-                      <TableCell>{item.name}</TableCell>
+                      <TableCell>
+                        {item.name}{item.selectedCapacity ? ` (${item.selectedCapacity})` : ''}
+                      </TableCell>
                       <TableCell>KES {Math.round(item.price)}</TableCell>
                       <TableCell>
                         <TextField

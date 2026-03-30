@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
@@ -21,6 +21,7 @@ export const AdminProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState(null);
+  const idleTimeoutRef = useRef(null);
 
   // Load user info from localStorage or fetch from API
   useEffect(() => {
@@ -317,6 +318,49 @@ export const AdminProvider = ({ children }) => {
       setSocket(null);
     }
   };
+
+  // Auto-logout on inactivity (20 minutes)
+  useEffect(() => {
+    // Only enforce when logged in and not on auth screens
+    const isAuthScreen =
+      window.location.pathname.includes('/login') ||
+      window.location.pathname.includes('/setup-password');
+
+    if (!isAuthenticated || isAuthScreen) {
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+        idleTimeoutRef.current = null;
+      }
+      return;
+    }
+
+    const IDLE_MS = 20 * 60 * 1000;
+    const reset = () => {
+      if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);
+      idleTimeoutRef.current = setTimeout(() => {
+        // If token already cleared elsewhere, do nothing.
+        if (!localStorage.getItem('adminToken')) return;
+        logout();
+        // Redirect to login
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+      }, IDLE_MS);
+    };
+
+    const events = ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((e) => window.addEventListener(e, reset, { passive: true }));
+    reset();
+
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, reset));
+      if (idleTimeoutRef.current) {
+        clearTimeout(idleTimeoutRef.current);
+        idleTimeoutRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated]);
 
   const setUserInfo = (userData) => {
     setUser(userData);

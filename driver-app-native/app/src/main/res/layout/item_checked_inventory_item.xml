@@ -79,17 +79,32 @@
                     app:cornerRadius="24dp"
                     android:textColor="@color/accent" />
 
-                <TextView
-                    android:id="@+id/countText"
-                    android:layout_width="wrap_content"
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/countInputLayout"
+                    android:layout_width="72dp"
                     android:layout_height="wrap_content"
-                    android:text="0"
-                    android:textColor="@color/text_primary_dark"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:minWidth="48dp"
-                    android:gravity="center"
-                    android:paddingHorizontal="8dp" />
+                    android:layout_marginHorizontal="8dp"
+                    app:boxBackgroundMode="filled"
+                    app:boxBackgroundColor="@color/paper_dark"
+                    app:boxStrokeColor="@color/accent"
+                    app:boxStrokeWidth="1dp"
+                    app:boxStrokeWidthFocused="2dp"
+                    app:hintEnabled="false"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/countEditText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="number"
+                        android:text="0"
+                        android:textColor="@color/text_primary_dark"
+                        android:textSize="16sp"
+                        android:gravity="center"
+                        android:minHeight="48dp"
+                        android:paddingVertical="0dp"
+                        android:paddingHorizontal="0dp" />
+                </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/increaseButton"

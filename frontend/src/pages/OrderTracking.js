@@ -35,6 +35,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatMpesaPhoneNumber, validateSafaricomPhone } from '../utils/mpesaPhone';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
 import { useCustomer } from '../contexts/CustomerContext';
@@ -321,31 +322,6 @@ const OrderTracking = ({ order: orderProp }) => {
     });
 
     return steps;
-  };
-
-  // Payment helper functions
-  const formatMpesaPhoneNumber = (phone) => {
-    if (!phone) return '';
-    
-    // Remove all non-digit characters
-    let cleaned = phone.replace(/\D/g, '');
-    
-    // If starts with 0, replace with 254
-    if (cleaned.startsWith('0')) {
-      cleaned = '254' + cleaned.substring(1);
-    } else if (!cleaned.startsWith('254')) {
-      // If doesn't start with 254 and is 9 digits, add 254
-      if (cleaned.length === 9 && cleaned.startsWith('7')) {
-        cleaned = '254' + cleaned;
-      }
-    }
-    
-    return cleaned;
-  };
-
-  const validateSafaricomPhone = (phone) => {
-    const cleaned = phone.replace(/\D/g, '');
-    return cleaned.length >= 9 && (cleaned.startsWith('07') || cleaned.startsWith('2547') || (cleaned.startsWith('7') && cleaned.length === 9));
   };
 
   const handleOpenPaymentDialog = () => {
@@ -761,11 +737,11 @@ const OrderTracking = ({ order: orderProp }) => {
                 </Typography>
               </Box>
             )}
-            {/* Delivery Fee */}
+            {/* Convenience Fee */}
             {orderDetails.deliveryFee !== undefined && (
               <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                 <Typography variant="body1">
-                  Delivery Fee:
+                  Convenience Fee:
                 </Typography>
                 <Typography variant="body1">
                   KES {Math.round(Number(orderDetails.deliveryFee || 0))}

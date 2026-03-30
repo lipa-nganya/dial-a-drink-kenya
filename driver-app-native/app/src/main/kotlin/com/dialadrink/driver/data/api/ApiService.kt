@@ -254,6 +254,10 @@ interface ApiService {
     
     @GET("territories")
     suspend fun getTerritories(): Response<List<Territory>>
+
+    /** Public settings (convenience fee mode / amounts) for POS estimate */
+    @GET("settings/{key}")
+    suspend fun getSetting(@Path("key") key: String): Response<SettingResponse>
     
     @POST("pos/order/cash")
     suspend fun createPosOrder(@Body request: CreatePosOrderRequest): Response<ApiResponse<Order>>

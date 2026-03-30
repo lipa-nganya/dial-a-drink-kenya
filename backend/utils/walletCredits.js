@@ -10,6 +10,292 @@ const { calculateDeliveryAccounting } = require('./deliveryAccounting');
 const processingOrders = new Set();
 
 /**
+ * Apply 50% of territory delivery fee to driver savings and adjust cash-at-hand (PAY_NOW vs PAY_ON_DELIVERY).
+ * Creates savings_credit when amount is positive, stop deductions, and PAY_NOW cash_settlement rows as needed.
+ * Skips creating a duplicate savings_credit if one already exists for this order (idempotent create).
+ */
+async function applyTerritorySavingsAndCashAtHand({
+  order,
+  orderId,
+  accounting,
+  paymentTransaction,
+  paymentTypeForAccounting,
+  dbTransaction
+}) {
+  if (!order.driverId) return null;
+
+  const savingsChangeRaw = Number(accounting.savingsChange);
+  const cashAtHandChangeRaw = Number(accounting.cashAtHandChange);
+  if (!Number.isFinite(savingsChangeRaw) || !Number.isFinite(cashAtHandChangeRaw)) {
+    console.error(`❌ Order #${orderId}: invalid delivery accounting (non-finite savings/cash-at-hand change)`);
+    return null;
+  }
+
+  let driverWallet = await db.DriverWallet.findOne({
+    where: { driverId: order.driverId },
+    transaction: dbTransaction
+  });
+
+  if (!driverWallet) {
+    driverWallet = await db.DriverWallet.create(
+      {
+        driverId: order.driverId,
+        balance: 0,
+        totalTipsReceived: 0,
+        totalTipsCount: 0,
+        totalDeliveryPay: 0,
+        totalDeliveryPayCount: 0,
+        savings: 0
+      },
+      { transaction: dbTransaction }
+    );
+  }
+
+  await driverWallet.reload({ transaction: dbTransaction });
+  const currentSavings = parseFloat(driverWallet.savings || 0);
+
+  // If savings_credit already exists for this order, do not add 50% again (idempotent retry / re-entry).
+  const existingSavingsCredit = await db.Transaction.findOne({
+    where: {
+      orderId: orderId,
+      transactionType: 'savings_credit',
+      driverId: order.driverId,
+      status: { [Op.ne]: 'cancelled' }
+    },
+    transaction: dbTransaction,
+    lock: dbTransaction.LOCK.UPDATE
+  });
+
+  const savingsIncrement = existingSavingsCredit ? 0 : savingsChangeRaw;
+  let newSavings = currentSavings + savingsIncrement;
+
+  if (!existingSavingsCredit && savingsChangeRaw > 0.009) {
+    await db.Transaction.create(
+      {
+        orderId: orderId,
+        transactionType: 'savings_credit',
+        paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
+        paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
+        amount: savingsChangeRaw,
+        status: 'completed',
+        paymentStatus: 'paid',
+        receiptNumber: paymentTransaction?.receiptNumber || null,
+        checkoutRequestID: paymentTransaction?.checkoutRequestID || null,
+        merchantRequestID: paymentTransaction?.merchantRequestID || null,
+        phoneNumber: paymentTransaction?.phoneNumber || null,
+        transactionDate: paymentTransaction?.transactionDate || new Date(),
+        driverId: order.driverId,
+        driverWalletId: driverWallet.id,
+        notes: `50% delivery fee order ${orderId}`
+      },
+      { transaction: dbTransaction }
+    );
+
+    console.log(`✅ Savings credit transaction created for Order #${orderId}: KES ${savingsChangeRaw.toFixed(2)}`);
+  } else if (existingSavingsCredit) {
+    console.log(
+      `ℹ️  Savings credit already exists for Order #${orderId} (#${existingSavingsCredit.id}) — wallet balance not double-counted`
+    );
+  }
+
+  console.log(`🔍 Checking stop deduction for Order #${orderId}: isStop=${order.isStop}, stopDeductionAmount=${order.stopDeductionAmount}`);
+  if (order.isStop && order.stopDeductionAmount && parseFloat(order.stopDeductionAmount) > 0) {
+    const existingStopDeduction = await db.Transaction.findOne({
+      where: {
+        orderId: orderId,
+        transactionType: 'delivery_fee_debit',
+        paymentProvider: 'stop_deduction',
+        driverId: order.driverId,
+        status: { [Op.ne]: 'cancelled' }
+      },
+      transaction: dbTransaction
+    });
+
+    if (existingStopDeduction) {
+      console.log(`ℹ️  Stop deduction already exists for Order #${orderId} (transaction #${existingStopDeduction.id}) — not deducting savings again`);
+    } else {
+      const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
+      const savingsBeforeStop = newSavings;
+      newSavings = newSavings - stopDeductionAmount;
+
+      console.log(`🛑 Stop deduction applied for Order #${orderId}:`);
+      console.log(`   Deduction amount: KES ${stopDeductionAmount.toFixed(2)}`);
+      console.log(`   Driver savings before stop: KES ${savingsBeforeStop.toFixed(2)}`);
+      console.log(`   Driver savings after stop: KES ${newSavings.toFixed(2)}`);
+
+      await db.Transaction.create(
+        {
+          orderId: orderId,
+          transactionType: 'delivery_fee_debit',
+          paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'cash',
+          paymentProvider: 'stop_deduction',
+          amount: -stopDeductionAmount,
+          status: 'completed',
+          paymentStatus: 'paid',
+          driverId: order.driverId,
+          driverWalletId: driverWallet.id,
+          notes: `Stop deduction for Order #${orderId} - KES ${stopDeductionAmount.toFixed(2)} deducted from driver savings`
+        },
+        { transaction: dbTransaction }
+      );
+
+      console.log(`✅ Stop deduction transaction created for Order #${orderId}`);
+    }
+  }
+
+  const savingsPersist = Number(newSavings.toFixed(2));
+  await driverWallet.update(
+    {
+      savings: savingsPersist
+    },
+    { transaction: dbTransaction }
+  );
+
+  console.log(`💰 Updated driver savings for Order #${orderId}:`);
+  console.log(
+    `   Savings: KES ${currentSavings.toFixed(2)} → KES ${savingsPersist.toFixed(2)} (change: ${savingsIncrement >= 0 ? '+' : ''}${savingsIncrement.toFixed(2)}${order.isStop && order.stopDeductionAmount ? `, stop deduction: -${parseFloat(order.stopDeductionAmount).toFixed(2)}` : ''})`
+  );
+
+  const cashAtHandIncrement = existingSavingsCredit ? 0 : cashAtHandChangeRaw;
+
+  const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction }).catch(() => null);
+  if (driver) {
+    const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
+    const newCashAtHand = Number((currentCashAtHand + cashAtHandIncrement).toFixed(2));
+
+    await driver.update(
+      {
+        cashAtHand: newCashAtHand
+      },
+      { transaction: dbTransaction }
+    );
+
+    if (paymentTypeForAccounting === 'PAY_NOW' && Math.abs(cashAtHandIncrement) > 0.009) {
+      const cashAtHandDelta = cashAtHandIncrement;
+      const settlementAmount = Math.abs(cashAtHandDelta);
+      const isReduction = cashAtHandDelta < -0.009;
+      const existingCashAtHandSettlement = await db.Transaction.findOne({
+        where: {
+          orderId: orderId,
+          driverId: order.driverId,
+          transactionType: 'cash_settlement',
+          [Op.or]: [
+            { notes: { [Op.like]: '%Cash at hand − 50% delivery fee%' } },
+            { notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand%' } }
+          ]
+        },
+        transaction: dbTransaction
+      });
+      if (!existingCashAtHandSettlement) {
+        await db.Transaction.create(
+          {
+            orderId: orderId,
+            driverId: order.driverId,
+            driverWalletId: driverWallet.id,
+            transactionType: 'cash_settlement',
+            paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
+            paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
+            amount: settlementAmount,
+            status: 'completed',
+            paymentStatus: 'paid',
+            receiptNumber: paymentTransaction?.receiptNumber || null,
+            transactionDate: paymentTransaction?.transactionDate || new Date(),
+            notes: `Cash at hand − 50% delivery fee for Order #${orderId} (driver did not receive cash)`
+          },
+          { transaction: dbTransaction }
+        );
+        console.log(
+          `   Cash at hand ${isReduction ? 'reduction' : 'credit'} logged for Order #${orderId}: ${isReduction ? '-' : '+'}KES ${settlementAmount.toFixed(2)}`
+        );
+      }
+    } else if (paymentTypeForAccounting === 'PAY_ON_DELIVERY' && Math.abs(cashAtHandIncrement) > 0.009) {
+      // COD: net cash retained after 50% territory fee → savings. Driver app lists cash-at-hand from
+      // cash_settlement rows; without this, only reconstructed order rows appeared (easy to miss).
+      const existingCodLedger = await db.Transaction.findOne({
+        where: {
+          orderId,
+          driverId: order.driverId,
+          transactionType: 'cash_settlement',
+          paymentProvider: 'order_completion'
+        },
+        transaction: dbTransaction,
+        lock: dbTransaction.LOCK.UPDATE
+      });
+      if (!existingCodLedger) {
+        await db.Transaction.create(
+          {
+            orderId,
+            driverId: order.driverId,
+            driverWalletId: driverWallet.id,
+            transactionType: 'cash_settlement',
+            paymentMethod: order.paymentMethod || 'cash',
+            paymentProvider: 'order_completion',
+            amount: cashAtHandIncrement,
+            status: 'completed',
+            paymentStatus: 'paid',
+            transactionDate: new Date(),
+            notes: `Cash at hand — Order #${orderId} completed (net after 50% territory fee to savings)`
+          },
+          { transaction: dbTransaction }
+        );
+        console.log(
+          `   Cash at hand ledger (COD) for Order #${orderId}: +KES ${cashAtHandIncrement.toFixed(2)}`
+        );
+      }
+    }
+
+    console.log(`💵 Updated driver cash at hand for Order #${orderId}:`);
+    console.log(
+      `   Cash at Hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (change: ${cashAtHandIncrement >= 0 ? '+' : ''}${cashAtHandIncrement.toFixed(2)})`
+    );
+
+    const creditLimit = parseFloat(driver.creditLimit || 0);
+    if (creditLimit > 0 && newCashAtHand > creditLimit) {
+      if (driver.pushToken) {
+        try {
+          const pushNotifications = require('../services/pushNotifications');
+          const message = {
+            sound: 'default',
+            title: '⚠️ Cash At Hand Limit Exceeded',
+            body: `Your cash at hand (KES ${newCashAtHand.toFixed(2)}) exceeds your limit (KES ${creditLimit.toFixed(2)}). Please submit cash at hand to continue with deliveries.`,
+            data: {
+              type: 'cash_at_hand_limit_exceeded',
+              driverId: String(driver.id),
+              cashAtHand: String(newCashAtHand),
+              creditLimit: String(creditLimit),
+              channelId: 'cash-at-hand'
+            },
+            priority: 'high',
+            badge: 1,
+            channelId: 'cash-at-hand'
+          };
+          await pushNotifications.sendFCMNotification(driver.pushToken, message);
+          console.log(`📤 Push notification sent to driver ${driver.name} (ID: ${driver.id}) about cash at hand limit exceeded`);
+        } catch (pushError) {
+          console.error(`❌ Error sending push notification to driver ${driver.id}:`, pushError);
+        }
+      }
+    }
+  }
+
+  await driverWallet.reload({ transaction: dbTransaction });
+
+  const finalSavings = parseFloat(driverWallet.savings || 0);
+  const drvReloaded = await db.Driver.findByPk(order.driverId, {
+    attributes: ['cashAtHand'],
+    transaction: dbTransaction
+  });
+  const finalCashAtHand = drvReloaded ? parseFloat(drvReloaded.cashAtHand || 0) : null;
+
+  return {
+    savings: finalSavings,
+    cashAtHand: finalCashAtHand,
+    savingsIncrement,
+    cashAtHandIncrement
+  };
+}
+
+/**
  * Credit all wallets when an order is completed (delivery completed)
  * This function handles:
  * 1. Order payment (itemsTotal) -> Merchant wallet
@@ -97,7 +383,8 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
       lock: dbTransaction.LOCK.UPDATE
     });
 
-    // For PAY_NOW orders with a driver, savings (50% delivery fee) must also be credited.
+    // For ANY completed/paid order with a driver and a territory delivery fee,
+    // savings (50% territory fee) must be credited.
     // If delivery_pay exists but savings_credit does not, do not skip - run full flow to create it.
     let existingSavingsCreditForOrder = null;
     if (order.driverId) {
@@ -126,24 +413,22 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
                                  existingTipTxn.paymentStatus === 'paid';
     
     // Only skip if BOTH driver and tip transactions are fully credited (if applicable)
-    // AND for orders with a driver, savings_credit must exist if we would have created one (PAY_NOW or M-Pesa).
+    // AND for orders with a driver + territory fee, savings_credit exists.
     // If savings_credit is missing, fall through so we create it (breakdown/accounting run later).
     const orderTipAmount = parseFloat(order.tipAmount || '0') || 0;
     const hasTip = orderTipAmount > 0.009;
-    const paymentType = order.paymentType || 'pay_on_delivery';
-    const isPayNow = paymentType === 'pay_now';
-    // Load payment transaction to detect M-Pesa: pay_on_delivery + M-Pesa also gets 50/50 savings and cash-at-hand reduction
-    const paymentTxnForSkip = await db.Transaction.findOne({
-      where: { orderId: orderId, transactionType: 'payment', status: 'completed', paymentStatus: 'paid' },
-      order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']],
-      transaction: dbTransaction
-    });
-    const skipProviderLower = String(paymentTxnForSkip?.paymentProvider || '').toLowerCase();
-    const skipMethod = paymentTxnForSkip?.paymentMethod || order.paymentMethod || null;
-    const isMpesaForSkip = paymentTxnForSkip &&
-      (skipMethod === 'mobile_money' || skipMethod === 'card') &&
-      (skipProviderLower === '' || skipProviderLower === 'mpesa' || skipProviderLower === 'pesapal');
-    const needsSavingsCheck = order.driverId && (isPayNow || isMpesaForSkip);
+    // Align with accounting below: territoryDeliveryFee ?? convenienceFee ?? breakdown delivery fee
+    let territoryFeeForSkip = parseFloat(order.territoryDeliveryFee ?? order.convenienceFee ?? 0) || 0;
+    if (territoryFeeForSkip < 0.009 && order.driverId) {
+      try {
+        const breakdownEarly = await getOrderFinancialBreakdown(orderId);
+        const fromBreakdown = parseFloat(breakdownEarly.deliveryFee) || 0;
+        territoryFeeForSkip = parseFloat(order.territoryDeliveryFee ?? fromBreakdown) || 0;
+      } catch (e) {
+        console.warn(`Order #${orderId}: could not load breakdown for territory fee skip check:`, e.message);
+      }
+    }
+    const needsSavingsCheck = order.driverId && territoryFeeForSkip > 0.009;
     const savingsAlreadyDone = !needsSavingsCheck || (existingSavingsCreditForOrder && existingSavingsCreditForOrder.status !== 'cancelled');
     
     if (driverTxnFullyCredited && (!hasTip || tipTxnFullyCredited) && savingsAlreadyDone) {
@@ -325,7 +610,11 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     // Get financial breakdown
     const breakdown = await getOrderFinancialBreakdown(orderId);
     const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-    const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+    const convenienceFee = parseFloat(breakdown.deliveryFee) || 0;
+    const territoryDeliveryFee = parseFloat(order.territoryDeliveryFee ?? convenienceFee) || 0;
+    // Delivery fee for driver pay + result payload = territory fee (internal accounting), not raw convenience fee alone
+    const deliveryFee = territoryDeliveryFee;
+    const orderValue = itemsTotal + convenienceFee;
     
     // CRITICAL: Reload order to ensure we have the latest tipAmount value
     await order.reload({ transaction: dbTransaction });
@@ -365,16 +654,18 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
       // If we do have a provider, it must be a known system provider (or blank/legacy).
       (!paymentTransactionForAccounting || providerLower === '' || providerLower === 'mpesa' || providerLower === 'pesapal');
 
+    const orderPaymentTypeNorm = (order.paymentType || 'pay_on_delivery').toString().toLowerCase();
     // Use PAY_NOW accounting (50% savings, 50% reduce cash at hand) when order is pay_now
     // OR when customer paid via system (pay_on_delivery + M-Pesa/Pesapal/card).
-    const paymentTypeForAccounting = (paymentType === 'pay_now' || isNonCashSystemPayment) ? 'PAY_NOW' : 'PAY_ON_DELIVERY';
+    const paymentTypeForAccounting = (orderPaymentTypeNorm === 'pay_now' || isNonCashSystemPayment) ? 'PAY_NOW' : 'PAY_ON_DELIVERY';
     
-    // Calculate delivery accounting values (alcoholCost = itemsTotal)
-    const accounting = calculateDeliveryAccounting(itemsTotal, deliveryFee, paymentTypeForAccounting);
+    // Delivery accounting uses order value (items + convenience) and territory delivery fee.
+    const accounting = calculateDeliveryAccounting(orderValue, territoryDeliveryFee, paymentTypeForAccounting);
     console.log(`📊 Delivery Accounting for Order #${orderId}:`);
     console.log(`   Payment Type: ${paymentTypeForAccounting}`);
     console.log(`   Alcohol Cost: KES ${itemsTotal.toFixed(2)}`);
-    console.log(`   Delivery Fee: KES ${deliveryFee.toFixed(2)}`);
+    console.log(`   Convenience Fee: KES ${convenienceFee.toFixed(2)}`);
+    console.log(`   Territory Delivery Fee: KES ${territoryDeliveryFee.toFixed(2)}`);
     console.log(`   Withheld Amount: KES ${accounting.withheldAmount.toFixed(2)}`);
     console.log(`   Immediate Driver Earnings: KES ${accounting.immediateDriverEarnings.toFixed(2)}`);
     console.log(`   Cash at Hand Change: KES ${accounting.cashAtHandChange.toFixed(2)}`);
@@ -443,7 +734,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     const merchantDeliveryAmount = 0;
 
     // Get payment transaction to get receipt number and payment details
-    const paymentTransaction = await db.Transaction.findOne({
+    let paymentTransaction = await db.Transaction.findOne({
       where: {
         orderId: orderId,
         transactionType: 'payment',
@@ -454,9 +745,29 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
       transaction: dbTransaction
     });
 
+    // Cash on delivery: customer pays the driver in cash — there is often no `payment` row in the DB.
+    // Without a row, the whole completion flow used to throw and driver cash-at-hand / savings never updated.
     if (!paymentTransaction) {
-      await dbTransaction.rollback();
-      throw new Error(`Payment transaction not found for Order #${orderId}`);
+      const pt = (order.paymentType || 'pay_on_delivery').toString().toLowerCase();
+      const pm = (order.paymentMethod || '').toString().toLowerCase();
+      if (order.paymentStatus === 'paid' && pt === 'pay_on_delivery' && pm === 'cash') {
+        const fallbackDate = order.updatedAt || order.createdAt || new Date();
+        paymentTransaction = {
+          receiptNumber: null,
+          transactionDate: fallbackDate,
+          createdAt: fallbackDate,
+          paymentMethod: 'cash',
+          paymentProvider: 'cash',
+          checkoutRequestID: null,
+          merchantRequestID: null,
+          phoneNumber: null
+        };
+        console.log(`ℹ️  Order #${orderId}: no payment transaction row — using synthetic COD cash record for completion`);
+      } else {
+        await dbTransaction.rollback();
+        processingOrders.delete(orderId);
+        throw new Error(`Payment transaction not found for Order #${orderId}`);
+      }
     }
 
     const receiptNumber = paymentTransaction.receiptNumber;
@@ -543,6 +854,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
     console.log(`   effectiveTipAmount: KES ${effectiveTipAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
     console.log(`   Will credit driver: ${order.driverId && (effectiveDriverPayAmount > 0.009 || effectiveTipAmount > 0.009)}`);
     
+    let driverWalletForCompletionLog = null;
     if (order.driverId && (effectiveDriverPayAmount > 0.009 || effectiveTipAmount > 0.009)) {
       try {
         let driverWallet = await db.DriverWallet.findOne({ 
@@ -561,13 +873,6 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             savings: 0
           }, { transaction: dbTransaction });
         }
-
-        const oldBalance = parseFloat(driverWallet.balance) || 0;
-        const oldTotalDeliveryPay = parseFloat(driverWallet.totalDeliveryPay || 0);
-        const oldDeliveryPayCount = driverWallet.totalDeliveryPayCount || 0;
-        const oldTotalTipsReceived = parseFloat(driverWallet.totalTipsReceived || 0);
-        const oldTipsCount = driverWallet.totalTipsCount || 0;
-        const oldSavings = parseFloat(driverWallet.savings || 0);
 
         // Credit delivery fee (driver share)
         // CRITICAL: Only create/update driver delivery transaction if effectiveDriverPayAmount > 0
@@ -616,9 +921,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             status: 'completed',
             paymentStatus: 'paid',
             receiptNumber: receiptNumber,
-            checkoutRequestID: paymentTransaction.checkoutRequestID,
-            merchantRequestID: paymentTransaction.merchantRequestID,
-            phoneNumber: paymentTransaction.phoneNumber,
+            checkoutRequestID: paymentTransaction?.checkoutRequestID ?? null,
+            merchantRequestID: paymentTransaction?.merchantRequestID ?? null,
+            phoneNumber: paymentTransaction?.phoneNumber ?? null,
             transactionDate: transactionDate,
             driverId: order.driverId,
             driverWalletId: driverWallet.id,
@@ -657,7 +962,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             }
           }
 
-          // No wallet: do not credit driver wallet balance. Only savings and cash at hand are updated below.
+          // No wallet balance credit; 50% territory → savings / cash-at-hand runs in applyTerritorySavingsAndCashAtHand.
           console.log(`✅ Driver delivery_pay transaction for Order #${orderId} (50% to savings, no wallet): KES ${effectiveDriverPayAmount.toFixed(2)}`);
         } else {
           const skipReason = isCashPayment 
@@ -707,9 +1012,9 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
             status: 'completed',
             paymentStatus: 'paid',
             receiptNumber: receiptNumber,
-            checkoutRequestID: paymentTransaction.checkoutRequestID,
-            merchantRequestID: paymentTransaction.merchantRequestID,
-            phoneNumber: paymentTransaction.phoneNumber,
+            checkoutRequestID: paymentTransaction?.checkoutRequestID ?? null,
+            merchantRequestID: paymentTransaction?.merchantRequestID ?? null,
+            phoneNumber: paymentTransaction?.phoneNumber ?? null,
             transactionDate: transactionDate,
             driverId: order.driverId,
             driverWalletId: driverWallet.id,
@@ -759,238 +1064,7 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
           console.log(`⚠️  SKIPPING tip crediting for Order #${orderId} - effectiveTipAmount (${effectiveTipAmount.toFixed(2)}) is too small`);
         }
 
-        // Update savings and cash at hand based on delivery accounting
-        await driverWallet.reload({ transaction: dbTransaction });
-        // Re-read oldSavings after reload to ensure we have the latest value
-        const currentSavings = parseFloat(driverWallet.savings || 0);
-        let newSavings = currentSavings + accounting.savingsChange;
-        
-        // Create transaction record for savings credit (50% of delivery fee)
-        if (accounting.savingsChange > 0.009) {
-          // Check if savings_credit transaction already exists to prevent duplicates
-          const existingSavingsCredit = await db.Transaction.findOne({
-            where: {
-              orderId: orderId,
-              transactionType: 'savings_credit',
-              driverId: order.driverId,
-              status: { [Op.ne]: 'cancelled' }
-            },
-            transaction: dbTransaction,
-            lock: dbTransaction.LOCK.UPDATE
-          });
-          
-          if (!existingSavingsCredit) {
-            await db.Transaction.create({
-              orderId: orderId,
-              transactionType: 'savings_credit',
-              paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
-              paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
-              amount: accounting.savingsChange,
-              status: 'completed',
-              paymentStatus: 'paid',
-              receiptNumber: paymentTransaction?.receiptNumber || null,
-              checkoutRequestID: paymentTransaction?.checkoutRequestID || null,
-              merchantRequestID: paymentTransaction?.merchantRequestID || null,
-              phoneNumber: paymentTransaction?.phoneNumber || null,
-              transactionDate: paymentTransaction?.transactionDate || new Date(),
-              driverId: order.driverId,
-              driverWalletId: driverWallet.id,
-              notes: `50% delivery fee order ${orderId}`
-            }, { transaction: dbTransaction });
-            
-            console.log(`✅ Savings credit transaction created for Order #${orderId}: KES ${accounting.savingsChange.toFixed(2)}`);
-          } else {
-            console.log(`ℹ️  Savings credit transaction already exists for Order #${orderId}, skipping creation`);
-          }
-        }
-        
-        // Deduct stop amount from driver savings if order is a stop
-        // Use the stopDeductionAmount specified by admin when creating/editing the order
-        console.log(`🔍 Checking stop deduction for Order #${orderId}: isStop=${order.isStop}, stopDeductionAmount=${order.stopDeductionAmount}`);
-        if (order.isStop && order.stopDeductionAmount && parseFloat(order.stopDeductionAmount) > 0) {
-          // Check if stop deduction transaction already exists to prevent duplicates
-          const existingStopDeduction = await db.Transaction.findOne({
-            where: {
-              orderId: orderId,
-              transactionType: 'delivery_fee_debit',
-              paymentProvider: 'stop_deduction',
-              driverId: order.driverId,
-              status: { [Op.ne]: 'cancelled' }
-            },
-            transaction: dbTransaction
-          });
-          
-          if (existingStopDeduction) {
-            console.log(`ℹ️  Stop deduction already exists for Order #${orderId} (transaction #${existingStopDeduction.id}), skipping creation`);
-            // Still apply the deduction to savings calculation if it wasn't already applied
-            const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
-            const savingsBeforeStop = newSavings;
-            newSavings = newSavings - stopDeductionAmount; // Allow negative savings
-            console.log(`   Adjusting savings calculation: KES ${savingsBeforeStop.toFixed(2)} → KES ${newSavings.toFixed(2)}`);
-          } else {
-            const stopDeductionAmount = parseFloat(order.stopDeductionAmount);
-            const savingsBeforeStop = newSavings;
-            newSavings = newSavings - stopDeductionAmount; // Allow negative savings
-            
-            console.log(`🛑 Stop deduction applied for Order #${orderId}:`);
-            console.log(`   Deduction amount: KES ${stopDeductionAmount.toFixed(2)}`);
-            console.log(`   Driver savings before stop: KES ${savingsBeforeStop.toFixed(2)}`);
-            console.log(`   Driver savings after stop: KES ${newSavings.toFixed(2)}`);
-            
-            // Create transaction record for stop deduction
-            await db.Transaction.create({
-              orderId: orderId,
-              transactionType: 'delivery_fee_debit', // Using existing transaction type
-              paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'cash',
-              paymentProvider: 'stop_deduction',
-              amount: -stopDeductionAmount, // Negative amount for deduction
-              status: 'completed',
-              paymentStatus: 'paid',
-              driverId: order.driverId,
-              driverWalletId: driverWallet.id,
-              notes: `Stop deduction for Order #${orderId} - KES ${stopDeductionAmount.toFixed(2)} deducted from driver savings`
-            }, { transaction: dbTransaction });
-            
-            console.log(`✅ Stop deduction transaction created for Order #${orderId}`);
-          }
-        }
-        
-        // Update driver wallet savings
-        await driverWallet.update({
-          savings: newSavings
-        }, { transaction: dbTransaction });
-        
-        console.log(`💰 Updated driver savings for Order #${orderId}:`);
-        console.log(`   Savings: KES ${currentSavings.toFixed(2)} → KES ${newSavings.toFixed(2)} (change: ${accounting.savingsChange >= 0 ? '+' : ''}${accounting.savingsChange.toFixed(2)}${order.isStop && order.stopDeductionAmount ? `, stop deduction: -${parseFloat(order.stopDeductionAmount).toFixed(2)}` : ''})`);
-        
-        // Update driver's cash at hand
-        const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction }).catch(() => null);
-        if (driver) {
-          const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-          // Allow negative cash at hand - drivers can go into negative balance (credit)
-          const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange;
-          
-          await driver.update({
-            cashAtHand: newCashAtHand
-          }, { transaction: dbTransaction });
-          
-          // Log cash-at-hand change for Pay Now / M-Pesa (50% delivery fee affects driver cash at hand)
-          // CRITICAL: We record this as a cash_settlement entry so it appears in cash-at-hand history.
-          if (paymentTypeForAccounting === 'PAY_NOW' && Math.abs(accounting.cashAtHandChange) > 0.009) {
-            const cashAtHandDelta = accounting.cashAtHandChange;
-            const settlementAmount = Math.abs(cashAtHandDelta); // always positive for the audit row
-            const isReduction = cashAtHandDelta < -0.009;
-            const existingCashAtHandSettlement = await db.Transaction.findOne({
-              where: {
-                orderId: orderId,
-                driverId: order.driverId,
-                transactionType: 'cash_settlement',
-                [Op.or]: [
-                  { notes: { [Op.like]: '%Cash at hand − 50% delivery fee%' } },
-                  { notes: { [Op.like]: '%Pay Now: 50% delivery fee - cash at hand%' } }
-                ]
-              },
-              transaction: dbTransaction
-            });
-            if (!existingCashAtHandSettlement) {
-              await db.Transaction.create({
-                orderId: orderId,
-                driverId: order.driverId,
-                driverWalletId: driverWallet.id,
-                transactionType: 'cash_settlement',
-                paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
-                paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
-                amount: settlementAmount, // Positive amount; reduces cash at hand by rule
-                status: 'completed',
-                paymentStatus: 'paid',
-                receiptNumber: paymentTransaction?.receiptNumber || null,
-                transactionDate: paymentTransaction?.transactionDate || new Date(),
-                notes: `Cash at hand − 50% delivery fee for Order #${orderId} (driver did not receive cash)`
-              }, { transaction: dbTransaction });
-              console.log(`   Cash at hand ${isReduction ? 'reduction' : 'credit'} logged for Order #${orderId}: ${isReduction ? '-' : '+'}KES ${settlementAmount.toFixed(2)}`);
-            }
-          }
-          
-          console.log(`💵 Updated driver cash at hand for Order #${orderId}:`);
-          console.log(`   Cash at Hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (change: ${accounting.cashAtHandChange >= 0 ? '+' : ''}${accounting.cashAtHandChange.toFixed(2)})`);
-          
-          // Check if cash at hand exceeds limit and send push notification
-          const creditLimit = parseFloat(driver.creditLimit || 0);
-          if (creditLimit > 0 && newCashAtHand > creditLimit) {
-            // Only send notification if driver has push token
-            if (driver.pushToken) {
-              try {
-                const pushNotifications = require('../services/pushNotifications');
-                const message = {
-                  sound: 'default',
-                  title: '⚠️ Cash At Hand Limit Exceeded',
-                  body: `Your cash at hand (KES ${newCashAtHand.toFixed(2)}) exceeds your limit (KES ${creditLimit.toFixed(2)}). Please submit cash at hand to continue with deliveries.`,
-                  data: {
-                    type: 'cash_at_hand_limit_exceeded',
-                    driverId: String(driver.id),
-                    cashAtHand: String(newCashAtHand),
-                    creditLimit: String(creditLimit),
-                    channelId: 'cash-at-hand'
-                  },
-                  priority: 'high',
-                  badge: 1,
-                  channelId: 'cash-at-hand'
-                };
-                await pushNotifications.sendFCMNotification(driver.pushToken, message);
-                console.log(`📤 Push notification sent to driver ${driver.name} (ID: ${driver.id}) about cash at hand limit exceeded`);
-              } catch (pushError) {
-                console.error(`❌ Error sending push notification to driver ${driver.id}:`, pushError);
-                // Don't fail the transaction if push notification fails
-              }
-            }
-          }
-        }
-        
-        await driverWallet.reload({ transaction: dbTransaction });
-
-        console.log(`✅ Credited driver wallet for Order #${orderId}:`);
-        console.log(`   Delivery fee: KES ${effectiveDriverPayAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
-        console.log(`   Tip: KES ${effectiveTipAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
-        console.log(`   Total: KES ${(effectiveDriverPayAmount + effectiveTipAmount).toFixed(2)}`);
-        console.log(`   Final wallet balance: ${parseFloat(driverWallet.balance).toFixed(2)}`);
-        console.log(`   Total delivery pay: ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
-        console.log(`   Total tips received: ${parseFloat(driverWallet.totalTipsReceived).toFixed(2)}`);
-        console.log(`   Savings: ${parseFloat(driverWallet.savings || 0).toFixed(2)}`);
-
-        // Send notifications
-        const io = req?.app?.get('io');
-        
-        if (io) {
-          io.to(`driver-${order.driverId}`).emit('delivery-completed', {
-            orderId: orderId,
-            deliveryPayAmount: effectiveDriverPayAmount,
-            tipAmount: effectiveTipAmount,
-            totalCredited: effectiveDriverPayAmount + effectiveTipAmount,
-            walletBalance: parseFloat(driverWallet.balance)
-          });
-        }
-
-        // NOTE: Push notifications for delivery fee credits are disabled per user request
-        // Only send push notification for tips (not delivery fees)
-        if (driver?.pushToken && effectiveTipAmount > 0.009 && effectiveDriverPayAmount <= 0.009) {
-          const notificationTitle = 'Tip Credited';
-          const notificationBody = `KES ${effectiveTipAmount.toFixed(2)} tip credited for Order #${orderId}`;
-
-          pushNotifications.sendPushNotification(driver.pushToken, {
-            title: notificationTitle,
-            body: notificationBody,
-            data: {
-              type: 'tip_credited',
-              orderId: orderId,
-              tipAmount: effectiveTipAmount
-            }
-          }).catch((pushError) => {
-            console.error('❌ Error sending tip push notification:', pushError);
-          });
-        }
-
-        result.driverCredited = true;
-        result.driverCreditAmount = effectiveDriverPayAmount + effectiveTipAmount;
+        driverWalletForCompletionLog = driverWallet;
       } catch (driverError) {
         console.error(`❌ Error crediting driver wallet for Order #${orderId}:`, driverError);
         console.error(`   Error stack:`, driverError.stack);
@@ -1012,107 +1086,92 @@ const creditWalletsOnDeliveryCompletion = async (orderId, req = null) => {
       console.log(`   effectiveTipAmount: ${effectiveTipAmount.toFixed(2)}`);
       console.log(`   tipAmount: ${tipAmount.toFixed(2)}`);
       console.log(`   orderTipAmount: ${orderTipAmount.toFixed(2)}`);
-      
-      // Even if we skip wallet crediting, we still need to update savings and cash at hand
-      if (order.driverId) {
-        try {
-          let driverWallet = await db.DriverWallet.findOne({ 
-            where: { driverId: order.driverId },
+    }
+
+    // 50% territory fee → driver savings + cash-at-hand (all non-POS delivery completions with a driver)
+    if (!isPOSOrder && order.driverId) {
+      try {
+        const territoryAccounting = await applyTerritorySavingsAndCashAtHand({
+          order,
+          orderId,
+          accounting,
+          paymentTransaction,
+          paymentTypeForAccounting,
+          dbTransaction
+        });
+        if (territoryAccounting) {
+          result.territoryAccounting = territoryAccounting;
+          await order.update(
+            { driverPayCreditedAt: new Date() },
+            { transaction: dbTransaction }
+          );
+          const io = req?.app?.get('io');
+          if (io) {
+            io.to(`driver-${order.driverId}`).emit('driver-balances-updated', {
+              orderId,
+              savings: territoryAccounting.savings,
+              cashAtHand: territoryAccounting.cashAtHand
+            });
+          }
+        }
+      } catch (accountingError) {
+        console.error(`❌ Error applying territory savings/cash-at-hand for Order #${orderId}:`, accountingError);
+      }
+    }
+
+    if (driverWalletForCompletionLog && order.driverId) {
+      try {
+        const driverWallet = driverWalletForCompletionLog;
+        await driverWallet.reload({ transaction: dbTransaction });
+
+        console.log(`✅ Credited driver wallet for Order #${orderId}:`);
+        console.log(`   Delivery fee: KES ${effectiveDriverPayAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
+        console.log(`   Tip: KES ${effectiveTipAmount.toFixed(2)} ${isCashPayment ? '(skipped - cash payment)' : ''}`);
+        console.log(`   Total: KES ${(effectiveDriverPayAmount + effectiveTipAmount).toFixed(2)}`);
+        console.log(`   Final wallet balance: ${parseFloat(driverWallet.balance).toFixed(2)}`);
+        console.log(`   Total delivery pay: ${parseFloat(driverWallet.totalDeliveryPay).toFixed(2)}`);
+        console.log(`   Total tips received: ${parseFloat(driverWallet.totalTipsReceived).toFixed(2)}`);
+        console.log(`   Savings: ${parseFloat(driverWallet.savings || 0).toFixed(2)}`);
+
+        const io = req?.app?.get('io');
+        if (io) {
+          const drvEmit = await db.Driver.findByPk(order.driverId, {
+            attributes: ['cashAtHand'],
             transaction: dbTransaction
           });
-          
-          if (!driverWallet) {
-            driverWallet = await db.DriverWallet.create({
-              driverId: order.driverId,
-              balance: 0,
-              totalTipsReceived: 0,
-              totalTipsCount: 0,
-              totalDeliveryPay: 0,
-              totalDeliveryPayCount: 0,
-              savings: 0
-            }, { transaction: dbTransaction });
-          }
-          
-          const oldSavings = parseFloat(driverWallet.savings || 0);
-          const newSavings = oldSavings + accounting.savingsChange;
-          
-          // Create transaction record for savings credit (50% of delivery fee)
-          if (accounting.savingsChange > 0.009) {
-            // Check if savings_credit transaction already exists to prevent duplicates
-            const existingSavingsCredit = await db.Transaction.findOne({
-              where: {
-                orderId: orderId,
-                transactionType: 'savings_credit',
-                driverId: order.driverId,
-                status: { [Op.ne]: 'cancelled' }
-              },
-              transaction: dbTransaction,
-              lock: dbTransaction.LOCK.UPDATE
-            });
-            
-            if (!existingSavingsCredit) {
-              // Get payment transaction for reference
-              const paymentTransaction = await db.Transaction.findOne({
-                where: {
-                  orderId: orderId,
-                  transactionType: 'payment',
-                  status: 'completed',
-                  paymentStatus: 'paid'
-                },
-                order: [['transactionDate', 'DESC'], ['createdAt', 'DESC']],
-                transaction: dbTransaction
-              });
-              
-              await db.Transaction.create({
-                orderId: orderId,
-                transactionType: 'savings_credit',
-                paymentMethod: paymentTransaction?.paymentMethod || order.paymentMethod || 'mobile_money',
-                paymentProvider: paymentTransaction?.paymentProvider || 'mpesa',
-                amount: accounting.savingsChange,
-                status: 'completed',
-                paymentStatus: 'paid',
-                receiptNumber: paymentTransaction?.receiptNumber || null,
-                checkoutRequestID: paymentTransaction?.checkoutRequestID || null,
-                merchantRequestID: paymentTransaction?.merchantRequestID || null,
-                phoneNumber: paymentTransaction?.phoneNumber || null,
-                transactionDate: paymentTransaction?.transactionDate || new Date(),
-                driverId: order.driverId,
-                driverWalletId: driverWallet.id,
-                notes: `50% delivery fee order ${orderId}`
-              }, { transaction: dbTransaction });
-              
-              console.log(`✅ Savings credit transaction created for Order #${orderId} (no wallet crediting): KES ${accounting.savingsChange.toFixed(2)}`);
-            } else {
-              console.log(`ℹ️  Savings credit transaction already exists for Order #${orderId}, skipping creation`);
-            }
-          }
-          
-          // Update driver wallet savings
-          await driverWallet.update({
-            savings: newSavings
-          }, { transaction: dbTransaction });
-          
-          console.log(`💰 Updated driver savings for Order #${orderId} (no wallet crediting):`);
-          console.log(`   Savings: KES ${oldSavings.toFixed(2)} → KES ${newSavings.toFixed(2)} (change: +${accounting.savingsChange.toFixed(2)})`);
-          
-          // Update driver's cash at hand
-          const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction }).catch(() => null);
-          if (driver) {
-            const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
-            // Allow negative cash at hand - drivers can go into negative balance (credit)
-          const newCashAtHand = currentCashAtHand + accounting.cashAtHandChange;
-            
-            await driver.update({
-              cashAtHand: newCashAtHand
-            }, { transaction: dbTransaction });
-            
-            console.log(`💵 Updated driver cash at hand for Order #${orderId} (no wallet crediting):`);
-            console.log(`   Cash at Hand: KES ${currentCashAtHand.toFixed(2)} → KES ${newCashAtHand.toFixed(2)} (change: ${accounting.cashAtHandChange >= 0 ? '+' : ''}${accounting.cashAtHandChange.toFixed(2)})`);
-          }
-        } catch (accountingError) {
-          console.error(`❌ Error updating savings/cashAtHand for Order #${orderId}:`, accountingError);
-          // Don't throw - allow function to complete even if accounting update fails
+          io.to(`driver-${order.driverId}`).emit('delivery-completed', {
+            orderId: orderId,
+            deliveryPayAmount: effectiveDriverPayAmount,
+            tipAmount: effectiveTipAmount,
+            totalCredited: effectiveDriverPayAmount + effectiveTipAmount,
+            walletBalance: parseFloat(driverWallet.balance),
+            savings: parseFloat(driverWallet.savings || 0),
+            cashAtHand: drvEmit ? parseFloat(drvEmit.cashAtHand || 0) : null
+          });
         }
+
+        const driver = await db.Driver.findByPk(order.driverId, { transaction: dbTransaction }).catch(() => null);
+        if (driver?.pushToken && effectiveTipAmount > 0.009 && effectiveDriverPayAmount <= 0.009) {
+          const notificationTitle = 'Tip Credited';
+          const notificationBody = `KES ${effectiveTipAmount.toFixed(2)} tip credited for Order #${orderId}`;
+
+          pushNotifications.sendPushNotification(driver.pushToken, {
+            title: notificationTitle,
+            body: notificationBody,
+            data: {
+              type: 'tip_credited',
+              orderId: orderId,
+              tipAmount: effectiveTipAmount
+            }
+          }).catch((pushError) => {
+            console.error('❌ Error sending tip push notification:', pushError);
+          });
+        }
+
+        result.driverCredited = true;
+        result.driverCreditAmount = effectiveDriverPayAmount + effectiveTipAmount;
+      } catch (completionLogError) {
+        console.error(`❌ Error in delivery completion logging for Order #${orderId}:`, completionLogError);
       }
     }
 

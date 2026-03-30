@@ -177,13 +177,28 @@ const Analysis = () => {
   // Calculate profit/loss for an order
   const calculateProfitLoss = (order) => {
     let totalSellingPrice = parseFloat(order.totalAmount) || 0;
+    const tipAmount = parseFloat(order.tipAmount) || 0;
     let totalPurchasePrice = 0;
-    const deliveryFee = parseFloat(order.deliveryFee) || 0;
     let itemsWithPurchasePrice = 0;
     let itemsWithoutPurchasePrice = 0;
 
     // Use items or orderItems (backend maps both for compatibility)
     const orderItems = order.items || order.orderItems || [];
+    let itemsSubtotal = 0;
+    if (Array.isArray(orderItems) && orderItems.length > 0) {
+      orderItems.forEach((item) => {
+        const line = (parseFloat(item.price) || 0) * (parseInt(item.quantity, 10) || 0);
+        itemsSubtotal += line;
+      });
+    }
+    const convenienceFee =
+      order.convenienceFee != null && order.convenienceFee !== ''
+        ? parseFloat(order.convenienceFee)
+        : Math.max(0, totalSellingPrice - tipAmount - itemsSubtotal);
+    const deliveryFee =
+      order.territoryDeliveryFee != null && order.territoryDeliveryFee !== ''
+        ? parseFloat(order.territoryDeliveryFee)
+        : convenienceFee;
     
     // Calculate total purchase price from order items
     if (Array.isArray(orderItems) && orderItems.length > 0) {
@@ -247,7 +262,7 @@ const Analysis = () => {
       itemsWithoutPurchasePrice = 1; // Mark as missing data
     }
 
-    // Profit/Loss = Total Selling Price - Total Purchase Price - Delivery Fee
+    // Profit/Loss = Total Selling Price - Total Purchase Price - Territory Delivery Fee
     const profitLoss = totalSellingPrice - totalPurchasePrice - deliveryFee;
     
     // Debug logging for orders with 1659 Sauvignon Blanc
@@ -339,7 +354,7 @@ const Analysis = () => {
       'Customer Name',
       'Selling Price',
       'Purchase Price',
-      'Delivery Fee',
+      'Territory Delivery Fee',
       'Profit/Loss',
       'Status',
       'POS Order'
@@ -558,7 +573,7 @@ const Analysis = () => {
             </Paper>
             <Paper sx={{ p: 2, backgroundColor: colors.paper }}>
               <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
-                Total Delivery Fee
+                Total Territory Delivery Fee
               </Typography>
               <Typography variant="h6" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                 {formatCurrency(totals.totalDeliveryFee)}
@@ -599,7 +614,7 @@ const Analysis = () => {
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Customer</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Selling Price</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Purchase Price</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Delivery Fee</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Territory Delivery Fee</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Profit/Loss</TableCell>
                     <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Status</TableCell>
                   </TableRow>

@@ -5,7 +5,8 @@
  *
  * Current rules:
  * - For PAY_ON_DELIVERY (cash orders where driver receives cash from customer):
- *   - Driver's cash at hand increases by (order items total + 50% of delivery fee).
+ *   - Driver's cash at hand increases by (order value) then decreases by 50% of territory delivery fee.
+ *     Net cash at hand change = order value - 50% territory delivery fee.
  *   - The remaining 50% of the delivery fee (50%) is credited to savings
  *     when the order is completed (via creditWalletsOnDeliveryCompletion),
  *     not when the driver submits cash.
@@ -18,26 +19,26 @@
 /**
  * Calculate delivery accounting values based on payment method
  *
- * @param {number} alcoholCost - Total cost of items (order total excluding delivery fee)
- * @param {number} deliveryFee - Total delivery fee
+ * @param {number} orderValue - Customer-facing order value excluding tip (items total + convenience fee)
+ * @param {number} territoryDeliveryFee - Internal territory delivery fee used for savings/cash-at-hand
  * @param {string} paymentMethod - "PAY_NOW" | "PAY_ON_DELIVERY"
  * @returns {Object} Delivery accounting result
  * @returns {number} returns.cashAtHandChange - Change to driver's cash at hand
  * @returns {number} returns.savingsChange - Change to driver's savings
  * @returns {number} returns.withheldAmount - 50% of delivery fee (savings portion)
  */
-function calculateDeliveryAccounting(alcoholCost, deliveryFee, paymentMethod) {
-  if (typeof alcoholCost !== 'number' || isNaN(alcoholCost) || alcoholCost < 0) {
-    throw new Error('alcoholCost must be a non-negative number');
+function calculateDeliveryAccounting(orderValue, territoryDeliveryFee, paymentMethod) {
+  if (typeof orderValue !== 'number' || isNaN(orderValue) || orderValue < 0) {
+    throw new Error('orderValue must be a non-negative number');
   }
-  if (typeof deliveryFee !== 'number' || isNaN(deliveryFee) || deliveryFee < 0) {
-    throw new Error('deliveryFee must be a non-negative number');
+  if (typeof territoryDeliveryFee !== 'number' || isNaN(territoryDeliveryFee) || territoryDeliveryFee < 0) {
+    throw new Error('territoryDeliveryFee must be a non-negative number');
   }
   if (paymentMethod !== 'PAY_NOW' && paymentMethod !== 'PAY_ON_DELIVERY') {
     throw new Error('paymentMethod must be "PAY_NOW" or "PAY_ON_DELIVERY"');
   }
 
-  const withheldAmount = deliveryFee * 0.5; // 50% of delivery fee
+  const withheldAmount = territoryDeliveryFee * 0.5; // 50% of territory delivery fee
 
   let cashAtHandChange;
   let savingsChange;
@@ -49,10 +50,9 @@ function calculateDeliveryAccounting(alcoholCost, deliveryFee, paymentMethod) {
     savingsChange = withheldAmount;     // Credit 50% to driver savings
   } else {
     // PAY_ON_DELIVERY (cash):
-    // - Driver receives cash from customer (itemsTotal + deliveryFee).
-    // - System tracks driver's cash at hand as itemsTotal + 50% of delivery fee.
-    // - The remaining 50% is credited to savings immediately when the order is completed.
-    cashAtHandChange = alcoholCost + withheldAmount;
+    // - Driver receives cash from customer (order value).
+    // - System increases cash at hand by order value, then withholds 50% of territory fee into savings.
+    cashAtHandChange = orderValue - withheldAmount;
     savingsChange = withheldAmount;
   }
 

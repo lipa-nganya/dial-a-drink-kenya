@@ -43,6 +43,33 @@ class PosProductListActivity : AppCompatActivity() {
     private var hasMoreProducts = true
     private var isLoading = false
 
+    private fun capacityUnitMultiplier(capacityLabel: String?): Int {
+        val raw = (capacityLabel ?: "").trim().lowercase()
+        if (raw.isBlank()) return 1
+        val compact = raw.replace("\\s+".toRegex(), "")
+        val match = Regex("^(\\d+)(pack|pk).*").find(compact)
+        val n = match?.groupValues?.getOrNull(1)?.toIntOrNull()
+        return if (n != null && n > 0) n else 1
+    }
+
+    private fun isCanPackSharedStockProduct(product: PosProduct): Boolean {
+        val values = product.capacityPricing
+            ?.mapNotNull { it.effectiveCapacity }
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+        val normalized = values.map { it.trim().lowercase().replace("\\s+".toRegex(), "") }
+        val hasPack = normalized.any { Regex("^(\\d+)(pack|pk).*").matches(it) || it.contains("pack") || it.contains("pk") }
+        val hasCan = normalized.any { it.contains("can") || it == "single" }
+        return hasPack && hasCan
+    }
+
+    private fun capacityStockForDisplay(product: PosProduct, capacity: String?): Int {
+        val totalStock = (product.stock ?: 0).coerceAtLeast(0)
+        if (!isCanPackSharedStockProduct(product)) return totalStock
+        val multiplier = capacityUnitMultiplier(capacity)
+        return if (multiplier > 1) totalStock / multiplier else totalStock
+    }
+
     companion object {
         const val CART_EXTRA = "cart"
         const val RESULT_CART_UPDATED = 100
@@ -234,14 +261,15 @@ class PosProductListActivity : AppCompatActivity() {
     ) {
         val capacityOptions = capacities.map { pricing ->
             val capacity = pricing.effectiveCapacity ?: ""
-            val price = pricing.effectivePrice ?: 0.0
-            "$capacity | KES ${price.toInt()}"
+            val price = (pricing.effectivePrice ?: 0.0).toInt()
+            val stock = capacityStockForDisplay(product, capacity)
+            "$capacity - KES $price (Stock: $stock)"
         }.toTypedArray()
 
         val selectedIndex = intArrayOf(0) // Default to first option
 
         AlertDialog.Builder(this)
-            .setTitle("Select Capacity & Price")
+            .setTitle("Select Capacity")
             .setSingleChoiceItems(capacityOptions, 0) { _, which ->
                 selectedIndex[0] = which
             }
@@ -249,7 +277,9 @@ class PosProductListActivity : AppCompatActivity() {
                 val selectedPricing = capacities[selectedIndex[0]]
                 val selectedCapacity = selectedPricing.effectiveCapacity ?: ""
                 val selectedPrice = selectedPricing.effectivePrice ?: product.price
-                addProductToCart(product, availableStock, selectedCapacity, selectedPrice)
+                val multiplier = capacityUnitMultiplier(selectedCapacity)
+                val capacityStock = if (multiplier > 1) (availableStock / multiplier) else availableStock
+                addProductToCart(product, capacityStock, selectedCapacity, selectedPrice)
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -261,7 +291,8 @@ class PosProductListActivity : AppCompatActivity() {
         selectedCapacity: String?,
         selectedPrice: Double?
     ) {
-        val existingItem = cart.find { it.drinkId == product.id }
+        val capacityKey = (selectedCapacity ?: "").trim()
+        val existingItem = cart.find { it.drinkId == product.id && (it.capacity ?: "").trim() == capacityKey }
         
         if (existingItem != null) {
             // Check if adding more would exceed stock
@@ -273,8 +304,8 @@ class PosProductListActivity : AppCompatActivity() {
         } else {
             // Determine capacity and price
             val cartCapacity = selectedCapacity ?: run {
-                if (product.capacityDisplayList.isNotEmpty()) {
-                    product.capacityDisplayList.firstOrNull()?.split(" | ")?.firstOrNull() ?: product.capacityDisplay
+                if (product.capacityPricing?.isNotEmpty() == true) {
+                    product.capacityPricing.firstOrNull()?.effectiveCapacity ?: product.capacityDisplay
                 } else {
                     product.capacityDisplay
                 }
@@ -296,7 +327,8 @@ class PosProductListActivity : AppCompatActivity() {
         // Update product stock in the list
         val productIndex = products.indexOfFirst { it.id == product.id }
         if (productIndex >= 0) {
-            products[productIndex] = product.copy(stock = (product.stock ?: 0) - 1)
+            val units = capacityUnitMultiplier(selectedCapacity)
+            products[productIndex] = product.copy(stock = (product.stock ?: 0) - units)
             filterProducts(binding.searchEditText.text.toString())
         }
 
@@ -418,11 +450,18 @@ class PosProductListActivity : AppCompatActivity() {
             val product = items[position]
             holder.productNameText.text = product.name
             
-            // Display capacities with pricing (only shows capacities that have prices)
-            // Each capacity on a separate line with format: "capacity | KES price"
-            val capacityDisplayList = product.capacityDisplayList
-            if (capacityDisplayList.isNotEmpty()) {
-                holder.capacityText.text = capacityDisplayList.joinToString("\n")
+            // Display capacities with price + stock
+            val capacityRows = product.capacityPricing
+                ?.filter { it.effectiveCapacity?.isNotBlank() == true && (it.effectivePrice ?: 0.0) > 0 }
+                ?.distinctBy { it.effectiveCapacity }
+                ?.map { pricing ->
+                    val capacity = pricing.effectiveCapacity ?: ""
+                    val price = (pricing.effectivePrice ?: 0.0).toInt()
+                    "$capacity - KES $price (Stock: ${capacityStockForDisplay(product, capacity)})"
+                }
+                ?: emptyList()
+            if (capacityRows.isNotEmpty()) {
+                holder.capacityText.text = capacityRows.joinToString("\n")
                 holder.capacityText.visibility = android.view.View.VISIBLE
             } else {
                 // Fallback to simple capacity list if no pricing available

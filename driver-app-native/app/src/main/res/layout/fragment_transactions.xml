@@ -80,7 +80,7 @@
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 
-    <!-- Main Tabs: Transactions and Logs -->
+    <!-- Main tabs: Logs, Submissions (Pending / Approved / Rejected), Transactions -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/mainTabsLayout"
         android:layout_width="match_parent"
@@ -93,10 +93,13 @@
         app:tabBackground="@color/paper_dark">
 
         <com.google.android.material.tabs.TabItem
-            android:text="Transactions" />
+            android:text="Logs" />
 
         <com.google.android.material.tabs.TabItem
-            android:text="Logs" />
+            android:text="Submissions" />
+
+        <com.google.android.material.tabs.TabItem
+            android:text="Transactions" />
 
     </com.google.android.material.tabs.TabLayout>
 

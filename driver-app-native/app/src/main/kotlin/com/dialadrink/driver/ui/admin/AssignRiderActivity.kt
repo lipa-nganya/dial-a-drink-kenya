@@ -22,6 +22,8 @@ class AssignRiderActivity : AppCompatActivity() {
     private val drivers = mutableListOf<Driver>()
     private val driverOrderCounts = mutableMapOf<Int, Int>()
     private var ordersAdapter: OrdersAdapter? = null
+    private var initialOrderOpened = false
+    private var directOrderOpenMode = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -32,15 +34,29 @@ class AssignRiderActivity : AppCompatActivity() {
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = "Assign Rider"
 
-        setupRecyclerView()
-        updateUnassignedCount(0) // Initialize count to 0
-        loadUnassignedOrders()
-        loadDrivers()
-        
-        binding.swipeRefresh.setOnRefreshListener {
+        directOrderOpenMode = (intent?.getBooleanExtra("open_order_direct", false) ?: false) &&
+            ((intent?.getIntExtra("open_order_id", -1) ?: -1) > 0)
+
+        if (directOrderOpenMode) {
+            // Direct-open flow from In Progress: skip rendering unassigned list first.
+            supportActionBar?.title = "Order Details"
+            binding.unassignedCountText.visibility = View.GONE
+            binding.ordersRecyclerView.visibility = View.GONE
+            binding.emptyStateText.visibility = View.GONE
+            binding.swipeRefresh.isEnabled = false
+        } else {
+            setupRecyclerView()
+            updateUnassignedCount(0) // Initialize count to 0
             loadUnassignedOrders()
             loadDrivers()
+            
+            binding.swipeRefresh.setOnRefreshListener {
+                loadUnassignedOrders()
+                loadDrivers()
+            }
         }
+
+        maybeOpenOrderDetailsFromIntent()
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -64,6 +80,49 @@ class AssignRiderActivity : AppCompatActivity() {
         binding.ordersRecyclerView.apply {
             layoutManager = LinearLayoutManager(this@AssignRiderActivity)
             adapter = ordersAdapter
+        }
+    }
+
+    private fun maybeOpenOrderDetailsFromIntent() {
+        if (initialOrderOpened) return
+        val orderId = intent?.getIntExtra("open_order_id", -1) ?: -1
+        if (orderId <= 0) return
+        initialOrderOpened = true
+        binding.loadingProgress.visibility = View.VISIBLE
+
+        lifecycleScope.launch {
+            try {
+                if (!ApiClient.isInitialized()) {
+                    ApiClient.init(this@AssignRiderActivity)
+                }
+
+                // Ensure rider picker is populated for editable dialog.
+                val driversResponse = ApiClient.getApiService().getDrivers()
+                if (driversResponse.isSuccessful && driversResponse.body()?.success == true) {
+                    drivers.clear()
+                    drivers.addAll(driversResponse.body()?.data ?: emptyList())
+                }
+
+                val ordersResponse = ApiClient.getApiService().getAdminOrders()
+                if (ordersResponse.isSuccessful && ordersResponse.body() != null) {
+                    val targetOrder = ordersResponse.body()!!.firstOrNull { it.id == orderId }
+                    if (targetOrder != null) {
+                        showOrderDetailsDialog(targetOrder)
+                    } else {
+                        Toast.makeText(this@AssignRiderActivity, "Order #$orderId not found", Toast.LENGTH_SHORT).show()
+                        if (directOrderOpenMode) finish()
+                    }
+                } else {
+                    Toast.makeText(this@AssignRiderActivity, "Failed to open order details", Toast.LENGTH_SHORT).show()
+                    if (directOrderOpenMode) finish()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("AssignRiderActivity", "Error opening order details from intent: ${e.message}", e)
+                Toast.makeText(this@AssignRiderActivity, "Failed to open order details", Toast.LENGTH_SHORT).show()
+                if (directOrderOpenMode) finish()
+            } finally {
+                binding.loadingProgress.visibility = View.GONE
+            }
         }
     }
 
@@ -401,6 +460,9 @@ class AssignRiderActivity : AppCompatActivity() {
             .setTitle("Order Details")
             .setNegativeButton("Close", null)
             .create()
+        if (directOrderOpenMode) {
+            dialog.setOnDismissListener { finish() }
+        }
         
         cancelButton.setOnClickListener {
             showCancelOrderConfirmation(order, dialog)
@@ -731,8 +793,28 @@ class AssignRiderActivity : AppCompatActivity() {
                 val itemPriceEditText = itemView.findViewById<com.google.android.material.textfield.TextInputEditText>(R.id.itemPriceEditText)
                 val itemPriceLayout = itemView.findViewById<com.google.android.material.textfield.TextInputLayout>(R.id.itemPriceLayout)
                 
-                itemNameText.text = item.drink?.name ?: "Item ${item.drinkId}"
-                itemQuantityText.text = "Qty: ${item.quantity}"
+                fun inferCapacityFromPrice(): String? {
+                    val rows = item.drink?.capacityPricing ?: return null
+                    val targetPrice = item.price
+                    val matched = rows.firstOrNull { row ->
+                        val rowPrice = row.currentPrice ?: row.price ?: row.originalPrice
+                        rowPrice != null && kotlin.math.abs(rowPrice - targetPrice) < 0.01
+                    }
+                    val label = matched?.effectiveCapacity
+                    return if (!label.isNullOrBlank()) label.trim() else null
+                }
+                val selectedCapacity = (item.selectedCapacity?.trim().orEmpty()).ifEmpty { inferCapacityFromPrice().orEmpty() }
+                val baseName = item.drink?.name ?: "Item ${item.drinkId}"
+                itemNameText.text = if (selectedCapacity.isNotEmpty()) {
+                    "$baseName ($selectedCapacity)"
+                } else {
+                    baseName
+                }
+                itemQuantityText.text = if (selectedCapacity.isNotEmpty()) {
+                    "Capacity: $selectedCapacity (Qty: ${item.quantity})"
+                } else {
+                    "Qty: ${item.quantity}"
+                }
                 itemPriceEditText.setText((item.price ?: 0.0).toInt().toString())
                 
                 // Set green border color for the price field

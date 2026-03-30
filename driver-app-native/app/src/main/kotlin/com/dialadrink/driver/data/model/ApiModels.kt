@@ -313,6 +313,8 @@ data class Order(
     val status: String,
     val paymentStatus: String,
     val totalAmount: Double,
+    val convenienceFee: Double? = null,
+    val territoryDeliveryFee: Double? = null,
     val tipAmount: Double = 0.0,
     val deliveryFee: Double = 0.0,
     val items: List<OrderItem> = emptyList(),
@@ -345,6 +347,7 @@ data class OrderItem(
     val drinkId: Int,
     val quantity: Int,
     val price: Double,
+    val selectedCapacity: String? = null,
     val drink: Drink? = null
 )
 
@@ -353,6 +356,7 @@ data class Drink(
     val name: String,
     val price: Double,
     val image: String? = null,
+    val capacityPricing: List<CapacityPricing>? = null,
     val purchasePrice: Double? = null
 )
 
@@ -509,6 +513,11 @@ data class CashAtHandEntry(
     val type: String, // "cash_received" or "cash_sent"
     val orderId: Int? = null,
     val deliveryFee: Double? = null,
+    val orderValue: Double? = null,
+    /** For cash_received: 50% territory fee withheld — shown in DBT column */
+    val debitAmount: Double? = null,
+    /** For cash_received: full order value collected — shown in CRT column */
+    val creditAmount: Double? = null,
     val transactionId: Int? = null,
     val customerName: String? = null,
     val amount: Double,
@@ -897,6 +906,12 @@ data class DriverWithOrderCount(
     val orderCount: Int = 0
 )
 
+/** Public GET /api/settings/:key response shape */
+data class SettingResponse(
+    val key: String? = null,
+    val value: String? = null
+)
+
 data class UpdateDeliveryFeeRequest(
     val deliveryFee: Double
 )
@@ -908,7 +923,8 @@ data class UpdateItemPriceRequest(
 data class PosOrderItem(
     val drinkId: Int,
     val quantity: Int,
-    val selectedPrice: Double? = null
+    val selectedPrice: Double? = null,
+    val selectedCapacity: String? = null
 )
 
 // Places API Models (for cost-saving address autocomplete)

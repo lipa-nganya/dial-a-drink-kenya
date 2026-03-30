@@ -20,7 +20,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField
+  TextField,
+  Divider,
+  Stack
 } from '@mui/material';
 import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import ArrowBack from '@mui/icons-material/ArrowBack';
@@ -47,9 +49,90 @@ const getSubmissionTypeLabel = (type) => {
     general_expense: 'General Expense',
     payment_to_office: 'Payment to Office',
     walk_in_sale: 'Walk-in Sale',
-    order_payment: 'Submission'
+    order_payment: 'Order payment'
   };
-  return labels[type] || type;
+  return labels[type] || type || '—';
+};
+
+/** One-line summary for table column search (no JSX). */
+const getDetailsPlainSummary = (s) => {
+  const orders = s.orders || [];
+  if (orders.length > 0) {
+    const nums = orders.map((o) => `#${o.orderNumber ?? o.id}`).join(', ');
+    return `${orders.length} order(s): ${nums}`;
+  }
+  const d = s.details;
+  if (!d || typeof d !== 'object') return '';
+  switch (s.submissionType) {
+    case 'cash': {
+      if (Array.isArray(d.items) && d.items.length > 0) {
+        return d.items
+          .map((it) => {
+            const name = it.item || it.name || 'Item';
+            const qty = it.quantity != null ? it.quantity : 1;
+            const pr = it.price != null ? formatCurrency(it.price) : '';
+            return pr ? `${name} ×${qty} (${pr})` : `${name} ×${qty}`;
+          })
+          .join('; ');
+      }
+      return d.recipientName ? `Recipient: ${d.recipientName}` : '';
+    }
+    case 'general_expense': {
+      const nature = d.nature ? `Nature: ${d.nature}` : '';
+      if (Array.isArray(d.items) && d.items.length > 0) {
+        const lines = d.items
+          .map((it) => {
+            const name = it.item || it.description || 'Item';
+            const amt = it.amount != null || it.price != null ? formatCurrency(it.amount ?? it.price) : '';
+            return amt ? `${name} (${amt})` : name;
+          })
+          .join('; ');
+        return [nature, lines].filter(Boolean).join(' · ');
+      }
+      return nature;
+    }
+    case 'payment_to_office': {
+      const acct = d.accountType ? `Account: ${d.accountType}` : '';
+      const ref = d.reference ? `Ref: ${d.reference}` : '';
+      if (Array.isArray(d.items) && d.items.length > 0) {
+        const lines = d.items
+          .map((it) => `${it.item || it.description || 'Item'} (${formatCurrency(it.amount ?? it.price ?? 0)})`)
+          .join('; ');
+        return [acct, ref, lines].filter(Boolean).join(' · ');
+      }
+      return [acct, ref].filter(Boolean).join(' · ');
+    }
+    case 'purchases': {
+      const sup = d.supplier ? `Supplier: ${d.supplier}` : '';
+      const loc = d.deliveryLocation ? `Deliver to: ${d.deliveryLocation}` : '';
+      if (Array.isArray(d.items) && d.items.length > 0) {
+        const lines = d.items
+          .map((it) => {
+            const name = it.item || it.name || 'Item';
+            const qty = it.quantity != null ? it.quantity : 1;
+            const pr = it.price != null ? formatCurrency(it.price) : '';
+            return pr ? `${name} ×${qty} (${pr})` : `${name} ×${qty}`;
+          })
+          .join('; ');
+        return [sup, loc, lines].filter(Boolean).join(' · ');
+      }
+      if (d.item && d.price != null) {
+        return [sup, loc, `${d.item} (${formatCurrency(d.price)})`].filter(Boolean).join(' · ');
+      }
+      return [sup, loc].filter(Boolean).join(' · ');
+    }
+    case 'order_payment': {
+      const parts = [];
+      if (d.paymentMethod) parts.push(`Method: ${d.paymentMethod}`);
+      if (Array.isArray(d.orderIds) && d.orderIds.length) parts.push(`Order IDs: ${d.orderIds.join(', ')}`);
+      if (d.orderId) parts.push(`Order #${d.orderId}`);
+      return parts.join(' · ');
+    }
+    case 'walk_in_sale':
+      return [d.customerName && `Customer: ${d.customerName}`, d.notes].filter(Boolean).join(' · ');
+    default:
+      return '';
+  }
 };
 
 const getStatusColor = (status) => {
@@ -95,6 +178,7 @@ const RiderCashAtHandDetail = () => {
   const [rejectSubmissionId, setRejectSubmissionId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
   const [confirmedSearch, setConfirmedSearch] = useState('');
+  const [detailsSubmission, setDetailsSubmission] = useState(null);
 
   const fetchRider = useCallback(async () => {
     if (!riderId) return;
@@ -193,6 +277,7 @@ const RiderCashAtHandDetail = () => {
       setRejectDialogOpen(false);
       setRejectSubmissionId(null);
       setRejectReason('');
+      setDetailsSubmission(null);
       await fetchSubmissions();
       await fetchLogs();
     } catch (err) {
@@ -202,57 +287,219 @@ const RiderCashAtHandDetail = () => {
     }
   };
 
+  const openDetails = (s) => setDetailsSubmission(s);
+  const closeDetails = () => setDetailsSubmission(null);
 
-  const renderSubmissionDetails = (s) => {
+  const handleApproveFromDetails = (submissionId) => {
+    closeDetails();
+    handleApprove(submissionId);
+  };
+
+  const handleRejectFromDetails = (submissionId) => {
+    closeDetails();
+    handleRejectClick(submissionId);
+  };
+
+  const renderSubmissionDetailsDialogContent = (s) => {
+    const d = s.details && typeof s.details === 'object' ? s.details : {};
     const orders = s.orders || [];
-    if (orders.length > 0) {
-      return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-          {orders.map((order) => {
-            const address = order.deliveryAddress ?? order.delivery_address ?? '';
-            return (
-              <Box
-                key={order.id}
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: 0.75
-                }}
-              >
-                <Chip
-                  size="small"
-                  label={`#${order.orderNumber ?? order.id}`}
-                  sx={{ mr: 0.5 }}
-                />
-                <Typography
-                  component="span"
-                  variant="body2"
-                  sx={{ color: colors.textSecondary }}
-                >
-                  {address || '—'}
-                </Typography>
-              </Box>
-            );
-          })}
+    const metaLine = (label, value) =>
+      value != null && value !== '' ? (
+        <Box key={label}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
+            {label}
+          </Typography>
+          <Typography variant="body2" sx={{ color: colors.textPrimary }}>
+            {value}
+          </Typography>
         </Box>
-      );
-    }
-    if (s.details && typeof s.details === 'object') {
-      if (s.submissionType === 'cash' && s.details.recipientName) return s.details.recipientName;
-      if (s.submissionType === 'general_expense' && s.details.nature) return s.details.nature;
-      if (s.submissionType === 'payment_to_office' && s.details.accountType) return `Payment to office: ${s.details.accountType}`;
-      if (s.submissionType === 'purchases' && s.details.supplier) return `Purchase from ${s.details.supplier}`;
-      if (s.submissionType === 'order_payment' && s.details.orderId) return `Order #${s.details.orderId}`;
-    }
-    return s.details && typeof s.details === 'object' ? JSON.stringify(s.details) : (s.details ?? '—');
+      ) : null;
+
+    return (
+      <Stack spacing={2} sx={{ pt: 0.5 }}>
+        <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+          <Chip size="small" label={getSubmissionTypeLabel(s.submissionType)} color="primary" variant="outlined" />
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+            ID #{s.id}
+          </Typography>
+        </Stack>
+
+        <Stack direction="row" spacing={3} flexWrap="wrap" alignItems="center">
+          <Box>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
+              Amount
+            </Typography>
+            <Typography variant="h6" sx={{ color: colors.textPrimary }}>
+              {formatCurrency(s.amount)}
+            </Typography>
+          </Box>
+          <Box>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block' }}>
+              Status
+            </Typography>
+            <Chip size="small" label={s.status} color={getStatusColor(s.status)} sx={{ mt: 0.25 }} />
+          </Box>
+        </Stack>
+
+        {orders.length > 0 && (
+          <Box>
+            <Typography variant="subtitle2" sx={{ mb: 1, color: colors.textPrimary }}>
+              Linked orders
+            </Typography>
+            <Stack spacing={1}>
+              {orders.map((order) => {
+                const address = order.deliveryAddress ?? order.delivery_address ?? '';
+                return (
+                  <Paper
+                    key={order.id}
+                    variant="outlined"
+                    sx={{ p: 1.5, backgroundColor: colors.paper, borderColor: colors.border }}
+                  >
+                    <Typography variant="body2" fontWeight={600} sx={{ color: colors.textPrimary }}>
+                      Order #{order.orderNumber ?? order.id}
+                      {order.customerName ? ` · ${order.customerName}` : ''}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5 }}>
+                      {address || 'No address'}
+                    </Typography>
+                    {order.totalAmount != null && (
+                      <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                        Total: {formatCurrency(order.totalAmount)} · Status: {order.status ?? '—'}
+                      </Typography>
+                    )}
+                  </Paper>
+                );
+              })}
+            </Stack>
+          </Box>
+        )}
+
+        {s.submissionType === 'purchases' && (
+          <Box>
+            {metaLine('Supplier', d.supplier)}
+            {metaLine('Delivery location', d.deliveryLocation)}
+            {Array.isArray(d.items) && d.items.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Items</Typography>
+                {d.items.map((it, idx) => (
+                  <Typography key={idx} variant="body2" sx={{ color: colors.textPrimary }}>
+                    {it.item || it.name || 'Item'} × {it.quantity ?? 1}
+                    {it.price != null ? ` · ${formatCurrency(it.price)}` : ''}
+                    {it.capacity ? ` · ${it.capacity}` : ''}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+            {d.item && d.price != null && !(Array.isArray(d.items) && d.items.length) && (
+              <Typography variant="body2" sx={{ mt: 1 }}>
+                {d.item} × {formatCurrency(d.price)}
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {s.submissionType === 'cash' && (
+          <Box>
+            {metaLine('Recipient', d.recipientName)}
+            {Array.isArray(d.items) && d.items.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Items</Typography>
+                {d.items.map((it, idx) => (
+                  <Typography key={idx} variant="body2">
+                    {it.item || it.name || 'Item'} × {it.quantity ?? 1}
+                    {it.price != null ? ` · ${formatCurrency(it.price)}` : ''}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {s.submissionType === 'general_expense' && (
+          <Box>
+            {metaLine('Nature', d.nature)}
+            {Array.isArray(d.items) && d.items.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Line items</Typography>
+                {d.items.map((it, idx) => (
+                  <Typography key={idx} variant="body2">
+                    {it.item || it.description || 'Item'} — {formatCurrency(it.amount ?? it.price ?? 0)}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {s.submissionType === 'payment_to_office' && (
+          <Box>
+            {metaLine('Account type', d.accountType)}
+            {metaLine('Reference', d.reference)}
+            {Array.isArray(d.items) && d.items.length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 0.5 }}>Items</Typography>
+                {d.items.map((it, idx) => (
+                  <Typography key={idx} variant="body2">
+                    {it.item || it.description || 'Item'} — {formatCurrency(it.amount ?? it.price ?? 0)}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Box>
+        )}
+
+        {s.submissionType === 'order_payment' && (
+          <Box>
+            {metaLine('Payment method', d.paymentMethod)}
+            {Array.isArray(d.orderIds) && d.orderIds.length > 0 && metaLine('Order IDs', d.orderIds.join(', '))}
+            {d.orderId != null && metaLine('Order ID', String(d.orderId))}
+          </Box>
+        )}
+
+        {s.submissionType === 'walk_in_sale' && (
+          <Box>
+            {metaLine('Customer', d.customerName)}
+            {metaLine('Notes', d.notes)}
+          </Box>
+        )}
+
+        {orders.length === 0 &&
+          (!d || Object.keys(d).length === 0) &&
+          ['purchases', 'cash', 'general_expense', 'payment_to_office', 'order_payment', 'walk_in_sale'].includes(
+            s.submissionType
+          ) && (
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              No additional structured details for this submission.
+            </Typography>
+          )}
+
+        <Divider sx={{ borderColor: colors.border }} />
+
+        <Stack spacing={1}>
+          {metaLine('Submitted', formatDate(s.createdAt))}
+          {s.status === 'approved' && (
+            <>
+              {metaLine('Approved by', s.approver?.name || s.approver?.username || '—')}
+              {metaLine('Approved at', s.approvedAt ? formatDate(s.approvedAt) : '—')}
+            </>
+          )}
+          {s.status === 'rejected' && (
+            <>
+              {metaLine('Rejected by', s.rejector?.name || s.rejector?.username || '—')}
+              {metaLine('Rejected at', s.rejectedAt ? formatDate(s.rejectedAt) : '—')}
+              {metaLine('Reason', s.rejectionReason || '—')}
+            </>
+          )}
+        </Stack>
+      </Stack>
+    );
   };
 
   const confirmedQuery = String(confirmedSearch || '').trim().toLowerCase();
   const submissionsForTable =
     submissionsSubTab === 1 && confirmedQuery
       ? submissions.filter((s) => {
-          const detailsText = String(renderSubmissionDetails(s) || '');
+          const detailsText = `${getSubmissionTypeLabel(s.submissionType)} ${getDetailsPlainSummary(s)}`;
           const haystack = `${s.id} ${s.submissionType} ${s.amount} ${detailsText}`;
           return haystack.toLowerCase().includes(confirmedQuery);
         })
@@ -342,45 +589,86 @@ const RiderCashAtHandDetail = () => {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Date</TableCell>
+                    <TableCell>Date posted</TableCell>
+                    <TableCell>Date approved</TableCell>
                     <TableCell>Type</TableCell>
+                    <TableCell sx={{ minWidth: 200 }}>Details</TableCell>
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>Status</TableCell>
-                    {(submissionsSubTab === 0 || submissions.some((s) => s.status === 'pending')) && (
-                      <TableCell align="right">Actions</TableCell>
-                    )}
+                    <TableCell align="right">Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {submissionsForTable.length === 0 ? (
                     <TableRow>
-                      <TableCell
-                        colSpan={submissionsSubTab === 0 ? 5 : 4}
-                        align="center"
-                        sx={{ color: colors.textSecondary, py: 3 }}
-                      >
+                      <TableCell colSpan={7} align="center" sx={{ color: colors.textSecondary, py: 3 }}>
                         No submissions in this category.
                       </TableCell>
                     </TableRow>
                   ) : (
                     submissionsForTable.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell sx={{ color: colors.textSecondary }}>{formatDate(s.createdAt)}</TableCell>
-                        <TableCell sx={{ color: colors.textPrimary }}>{getSubmissionTypeLabel(s.submissionType)}</TableCell>
-                        <TableCell align="right" sx={{ color: colors.textPrimary }}>{formatCurrency(s.amount)}</TableCell>
+                      <TableRow
+                        key={s.id}
+                        hover
+                        onClick={() => openDetails(s)}
+                        sx={{ cursor: 'pointer' }}
+                      >
+                        <TableCell sx={{ color: colors.textSecondary, whiteSpace: 'nowrap' }}>
+                          {formatDate(s.createdAt)}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textSecondary, whiteSpace: 'nowrap' }}>
+                          {s.approvedAt ? formatDate(s.approvedAt) : '—'}
+                        </TableCell>
+                        <TableCell sx={{ verticalAlign: 'top' }}>
+                          <Chip
+                            size="small"
+                            label={getSubmissionTypeLabel(s.submissionType)}
+                            variant="outlined"
+                            sx={{ borderColor: colors.border, color: colors.textPrimary }}
+                          />
+                        </TableCell>
+                        <TableCell sx={{ maxWidth: 400, verticalAlign: 'top' }}>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              color: colors.textSecondary,
+                              display: '-webkit-box',
+                              WebkitLineClamp: 3,
+                              WebkitBoxOrient: 'vertical',
+                              overflow: 'hidden',
+                              lineHeight: 1.35
+                            }}
+                            title={getDetailsPlainSummary(s) || undefined}
+                          >
+                            {getDetailsPlainSummary(s) || '—'}
+                          </Typography>
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary, whiteSpace: 'nowrap' }}>
+                          {formatCurrency(s.amount)}
+                        </TableCell>
                         <TableCell>
                           <Chip size="small" label={s.status} color={getStatusColor(s.status)} />
                         </TableCell>
-                        {(submissionsSubTab === 0 || submissions.some((x) => x.status === 'pending')) && (
-                          <TableCell align="right">
-                            {s.status === 'pending' ? (
-                              <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                        <TableCell align="right">
+                          <Stack
+                            direction="row"
+                            spacing={0.5}
+                            justifyContent="flex-end"
+                            alignItems="center"
+                            flexWrap="wrap"
+                            useFlexGap
+                          >
+                            {s.status === 'pending' && (
+                              <>
                                 <Button
                                   size="small"
                                   variant="contained"
                                   color="primary"
                                   disabled={actionLoadingId === s.id}
-                                  onClick={() => handleApprove(s.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleApprove(s.id);
+                                  }}
                                 >
                                   {actionLoadingId === s.id ? '…' : 'Approve'}
                                 </Button>
@@ -389,16 +677,17 @@ const RiderCashAtHandDetail = () => {
                                   variant="outlined"
                                   color="error"
                                   disabled={actionLoadingId === s.id}
-                                  onClick={() => handleRejectClick(s.id)}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleRejectClick(s.id);
+                                  }}
                                 >
                                   Reject
                                 </Button>
-                              </Box>
-                            ) : (
-                              '—'
+                              </>
                             )}
-                          </TableCell>
-                        )}
+                          </Stack>
+                        </TableCell>
                       </TableRow>
                     ))
                   )}
@@ -432,6 +721,38 @@ const RiderCashAtHandDetail = () => {
                 >
                   {rejectSubmissionId != null && actionLoadingId === rejectSubmissionId ? 'Rejecting…' : 'Reject'}
                 </Button>
+              </DialogActions>
+            </Dialog>
+
+            <Dialog
+              open={Boolean(detailsSubmission)}
+              onClose={closeDetails}
+              maxWidth="sm"
+              fullWidth
+              scroll="paper"
+            >
+              <DialogTitle sx={{ color: colors.textPrimary }}>Cash submission details</DialogTitle>
+              <DialogContent dividers>
+                {detailsSubmission && renderSubmissionDetailsDialogContent(detailsSubmission)}
+              </DialogContent>
+              <DialogActions sx={{ px: 3, pb: 2, flexWrap: 'wrap', gap: 1 }}>
+                <Button onClick={closeDetails} sx={{ color: colors.textSecondary }}>
+                  Close
+                </Button>
+                {detailsSubmission?.status === 'pending' && (
+                  <>
+                    <Button
+                      variant="outlined"
+                      color="error"
+                      onClick={() => handleRejectFromDetails(detailsSubmission.id)}
+                    >
+                      Reject
+                    </Button>
+                    <Button variant="contained" onClick={() => handleApproveFromDetails(detailsSubmission.id)}>
+                      Approve
+                    </Button>
+                  </>
+                )}
               </DialogActions>
             </Dialog>
           </Box>
@@ -471,13 +792,13 @@ const RiderCashAtHandDetail = () => {
                       const sortedEntries = [...logs].sort((a, b) => {
                         const dateA = new Date(a.date);
                         const dateB = new Date(b.date);
-                        return dateB - dateA;
+                        return dateB - dateA; // newest first
                       });
-                      let balanceAfter = totalCashAtHand;
                       const entryType = (entry) => {
                         const t = entry.type ?? entry.transaction_type ?? entry.Type;
                         return typeof t === 'string' ? t.toLowerCase() : t;
                       };
+                      let balanceAfter = totalCashAtHand;
                       const getLogType = (entry, isCredit) => {
                         const type = entryType(entry);
                         if (isCredit || type === 'cash_received') return 'Payment Received';

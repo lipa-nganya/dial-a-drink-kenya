@@ -47,17 +47,28 @@ const PendingSubmissionApproval = () => {
   const [submission, setSubmission] = useState(location.state?.submission || null);
   const [accounts, setAccounts] = useState([]);
   const [approvedSubmissions, setApprovedSubmissions] = useState([]);
+  const [rejectedSubmissions, setRejectedSubmissions] = useState([]);
 
   const [accountId, setAccountId] = useState('');
   const [transactionDate, setTransactionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [transactionCode, setTransactionCode] = useState('');
   const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
 
   // Default to account flow; account flow is not shown in UI.
   const [approvalMode, setApprovalMode] = useState('account'); // 'account' or 'supplier'
   const [suppliers, setSuppliers] = useState([]);
   const [supplierId, setSupplierId] = useState('');
+
+  const resetApprovalForm = () => {
+    setAccountId('');
+    setSupplierId('');
+    setTransactionCode('');
+    setReference('');
+    setTransactionDate(new Date().toISOString().slice(0, 10));
+    setApprovalMode('account');
+  };
 
   const driver = submission?.driver || null;
 
@@ -110,6 +121,21 @@ const PendingSubmissionApproval = () => {
     }
   };
 
+  const loadRejectedSubmissions = async (driverId) => {
+    if (!driverId) return;
+    try {
+      const res = await api.get(`/driver-wallet/${driverId}/cash-submissions`, {
+        params: { status: 'rejected', limit: 200 }
+      });
+      const data = res.data?.data ?? res.data;
+      const list = Array.isArray(data?.submissions) ? data.submissions : [];
+      setRejectedSubmissions(list);
+    } catch (err) {
+      // Non-fatal
+      console.error('Failed to load rejected submissions', err);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
     const init = async () => {
@@ -132,6 +158,7 @@ const PendingSubmissionApproval = () => {
   useEffect(() => {
     if (submission?.driver?.id) {
       loadApprovedSubmissions(submission.driver.id);
+      loadRejectedSubmissions(submission.driver.id);
     }
   }, [submission]);
 
@@ -145,18 +172,22 @@ const PendingSubmissionApproval = () => {
     }
   }, [submission]);
 
-  const similarApprovedTransactions = useMemo(() => {
+  const similarTransactions = useMemo(() => {
     const targetAmount = Number(amount || 0);
-    if (!approvedSubmissions || approvedSubmissions.length === 0) return [];
+    const all = [
+      ...(Array.isArray(approvedSubmissions) ? approvedSubmissions : []),
+      ...(Array.isArray(rejectedSubmissions) ? rejectedSubmissions : [])
+    ];
+    if (all.length === 0) return [];
 
-    return approvedSubmissions
+    return all
       .filter((s) => Number(s.amount || 0) === targetAmount)
       .sort((a, b) => {
-        const aTime = new Date(a.approvedAt || a.createdAt || 0).getTime();
-        const bTime = new Date(b.approvedAt || b.createdAt || 0).getTime();
+        const aTime = new Date(a.approvedAt || a.rejectedAt || a.createdAt || 0).getTime();
+        const bTime = new Date(b.approvedAt || b.rejectedAt || b.createdAt || 0).getTime();
         return bTime - aTime;
       });
-  }, [approvedSubmissions, amount]);
+  }, [approvedSubmissions, rejectedSubmissions, amount]);
 
   const accountById = useMemo(() => {
     const map = new Map();
@@ -219,6 +250,7 @@ const PendingSubmissionApproval = () => {
         setError(err.response?.data?.error || err.message || 'Failed to approve supplier payment');
       } finally {
         setSubmitting(false);
+        resetApprovalForm();
       }
       return;
     }
@@ -278,6 +310,31 @@ const PendingSubmissionApproval = () => {
       setError(err.response?.data?.error || err.message || 'Failed to approve submission');
     } finally {
       setSubmitting(false);
+      resetApprovalForm();
+    }
+  };
+
+  const handleReject = async () => {
+    if (!submission || !driver?.id) {
+      setError('Submission or rider not found');
+      return;
+    }
+    const ok = window.confirm('Reject this cash submission?');
+    if (!ok) return;
+    setRejecting(true);
+    setError(null);
+    try {
+      await api.post(`/driver-wallet/${driver.id}/cash-submissions/${submission.id}/reject`, {});
+      resetApprovalForm();
+      navigate(`/drivers/${driver?.id}/cash-at-hand`, {
+        replace: true,
+        state: { submissionsSubTab: 1 } // pending submissions tab
+      });
+    } catch (err) {
+      console.error('Error rejecting submission', err);
+      setError(err.response?.data?.error || err.message || 'Failed to reject submission');
+    } finally {
+      setRejecting(false);
     }
   };
 
@@ -439,10 +496,19 @@ const PendingSubmissionApproval = () => {
 
           <Box sx={{ mt: 1, display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
             <Button
+              type="button"
+              variant="outlined"
+              color="error"
+              onClick={handleReject}
+              disabled={submitting || rejecting}
+            >
+              {rejecting ? 'Rejecting…' : 'Reject'}
+            </Button>
+            <Button
               type="submit"
               variant="contained"
               sx={{ backgroundColor: colors.accentText, color: '#fff', fontWeight: 600 }}
-              disabled={submitting}
+              disabled={submitting || rejecting}
             >
               {submitting
                 ? 'Approving…'
@@ -467,7 +533,7 @@ const PendingSubmissionApproval = () => {
       </Paper>
 
       <Typography variant="h6" sx={{ mb: 1.5, color: colors.textPrimary, fontWeight: 600 }}>
-        Similar approved transactions
+        Similar transactions
       </Typography>
 
       <Paper sx={{ backgroundColor: colors.paper }}>
@@ -475,6 +541,7 @@ const PendingSubmissionApproval = () => {
           <Table size="small">
             <TableHead>
               <TableRow>
+                <TableCell>Status</TableCell>
                 <TableCell>Date</TableCell>
                 <TableCell align="right">Amount</TableCell>
                 <TableCell>Account</TableCell>
@@ -485,14 +552,14 @@ const PendingSubmissionApproval = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {similarApprovedTransactions.length === 0 ? (
+              {similarTransactions.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center" sx={{ py: 3, color: colors.textSecondary }}>
-                    No similar approved transactions found.
+                  <TableCell colSpan={8} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                    No similar transactions found.
                   </TableCell>
                 </TableRow>
               ) : (
-                similarApprovedTransactions.map((s) => {
+                similarTransactions.map((s) => {
                   const d = (s.details && typeof s.details === 'object') ? s.details : {};
                   const account = d.assetAccountId ? accountById.get(d.assetAccountId) : null;
                   const supplierName = d.supplierPayment?.supplierName || null;
@@ -505,8 +572,11 @@ const PendingSubmissionApproval = () => {
                     '—';
                   return (
                     <TableRow key={s.id}>
+                      <TableCell sx={{ color: colors.textSecondary, textTransform: 'capitalize' }}>
+                        {s.status || '—'}
+                      </TableCell>
                       <TableCell sx={{ color: colors.textSecondary }}>
-                        {formatDateTime(s.approvedAt || s.createdAt)}
+                        {formatDateTime(s.approvedAt || s.rejectedAt || s.createdAt)}
                       </TableCell>
                       <TableCell align="right" sx={{ color: colors.textPrimary }}>
                         {formatCurrency(s.amount)}

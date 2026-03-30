@@ -32,6 +32,7 @@ import {
   PersonAdd
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { validateSafaricomPhone } from '../utils/mpesaPhone';
 import AddressAutocomplete from './AddressAutocomplete';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -85,8 +86,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [selectedDriver, setSelectedDriver] = useState('');
   const [isStop, setIsStop] = useState(initialIsStop);
   const [stopDeductionAmount, setStopDeductionAmount] = useState('100');
-  const [sendSmsToCustomer, setSendSmsToCustomer] = useState(true); // Default to sending SMS
-  
+  const [sendSmsToCustomer, setSendSmsToCustomer] = useState(false);
+  const [isStaffPurchase, setIsStaffPurchase] = useState(false);
+  /** Matches backend/admin delivery settings (same logic as driver POS). */
+  const [convenienceFeeEstimate, setConvenienceFeeEstimate] = useState(0);
+
   // Create customer dialog state
   const [createCustomerDialogOpen, setCreateCustomerDialogOpen] = useState(false);
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -117,6 +121,33 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialIsStop]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [feeModeRes, withAlcoholRes, perKmWithRes] = await Promise.all([
+          api.get('/settings/deliveryFeeMode').catch(() => ({ data: null })),
+          api.get('/settings/deliveryFeeWithAlcohol').catch(() => ({ data: null })),
+          api.get('/settings/deliveryFeePerKmWithAlcohol').catch(() => ({ data: null }))
+        ]);
+        if (cancelled) return;
+        const mode = feeModeRes.data?.value || 'fixed';
+        const withAlc = parseFloat(withAlcoholRes.data?.value || '50');
+        const perKmWith = parseFloat(perKmWithRes.data?.value || '20');
+        const safeWith = Number.isFinite(withAlc) ? withAlc : 50;
+        const safePerKm = Number.isFinite(perKmWith) ? perKmWith : 20;
+        const est = mode === 'perKm' ? Math.ceil(5 * safePerKm) : safeWith;
+        setConvenienceFeeEstimate(est);
+      } catch {
+        if (!cancelled) setConvenienceFeeEstimate(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
 
   // Refetch products when tab becomes visible (e.g. after creating a purchase in another tab) so profit/loss uses latest purchase prices
   useEffect(() => {
@@ -344,6 +375,23 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       const parsed = parseInt(value, 10);
       return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
     };
+    const capacityUnitMultiplier = (capacityLabel) => {
+      const raw = String(capacityLabel || '').trim().toLowerCase();
+      if (!raw) return 1;
+      const compact = raw.replace(/\s+/g, '');
+      const match = compact.match(/^(\d+)(pack|pk).*/);
+      const n = match ? parseInt(match[1], 10) : NaN;
+      return Number.isFinite(n) && n > 0 ? n : 1;
+    };
+    const isCanPackSharedStockProduct = () => {
+      const values = Array.isArray(currentProduct?.capacityPricing)
+        ? currentProduct.capacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
+        : [];
+      const normalized = values.map((v) => normalizeCapacity(v));
+      const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
+      const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+      return hasPack && hasCan;
+    };
 
     const stockByCapacity =
       currentProduct.stockByCapacity && typeof currentProduct.stockByCapacity === 'object'
@@ -357,12 +405,26 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         const entry = Object.entries(stockByCapacity).find(
           ([cap]) => normalizeCapacity(cap) === target
         );
-        availableStock = entry ? toStockNumber(entry[1]) : 0;
+        if (entry) {
+          availableStock = toStockNumber(entry[1]);
+        } else if (isCanPackSharedStockProduct()) {
+          // Shared can stock model: missing pack key should still be purchasable from aggregate cans.
+          availableStock = toStockNumber(currentProduct.stock);
+        } else {
+          availableStock = 0;
+        }
       } else {
         availableStock = Object.values(stockByCapacity).reduce(
           (sum, qty) => sum + toStockNumber(qty),
           0
         );
+      }
+    }
+    // For pack capacities, stock is pooled in base units (cans) so compute max packs.
+    if (selectedCapacity) {
+      const multiplier = capacityUnitMultiplier(selectedCapacity);
+      if (multiplier > 1) {
+        availableStock = Math.floor(availableStock / multiplier);
       }
     }
 
@@ -588,9 +650,20 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setCartItems(cartItems.filter((_, i) => i !== index));
   };
 
-  const calculateTotal = () => {
-    return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  };
+  const itemsSubtotalRounded = useMemo(
+    () => Math.round(cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0)),
+    [cartItems]
+  );
+
+  const convenienceFeeLine = useMemo(
+    () => (isWalkIn ? 0 : Math.round(Number(convenienceFeeEstimate) || 0)),
+    [isWalkIn, convenienceFeeEstimate]
+  );
+
+  const customerChargeSubtotal = useMemo(
+    () => itemsSubtotalRounded + convenienceFeeLine,
+    [itemsSubtotalRounded, convenienceFeeLine]
+  );
 
   // Profit/loss: total selling price - total cost (purchase price × qty). Only when we have purchase prices.
   const { totalCost, profitLoss, hasPurchasePriceData } = useMemo(() => {
@@ -612,6 +685,48 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     };
   }, [cartItems, products]);
 
+  const selectedTerritoryDeliveryFee = useMemo(() => {
+    if (isWalkIn || !selectedTerritory) return null;
+    const t = territories.find((x) => String(x.id) === String(selectedTerritory));
+    if (!t) return null;
+    return Math.round(Number(t.deliveryFromCBD ?? 0));
+  }, [isWalkIn, selectedTerritory, territories]);
+
+  /** Dark menu surface so dropdown lists are readable on mobile (theme default paper is white). */
+  const selectMenuProps = useMemo(
+    () => ({
+      disablePortal: false,
+      anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+      transformOrigin: { vertical: 'top', horizontal: 'left' },
+      PaperProps: {
+        sx: {
+          maxHeight: 300,
+          zIndex: '1400 !important',
+          ...(isDarkMode
+            ? {
+                backgroundColor: '#1A1A1A',
+                color: colors.textPrimary,
+                border: `1px solid ${colors.border}`,
+                '& .MuiMenuItem-root': {
+                  color: colors.textPrimary,
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 224, 184, 0.12)'
+                  },
+                  '&.Mui-selected': {
+                    backgroundColor: 'rgba(0, 224, 184, 0.22)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 224, 184, 0.28)'
+                    }
+                  }
+                }
+              }
+            : {})
+        }
+      }
+    }),
+    [isDarkMode, colors.textPrimary, colors.border]
+  );
+
   const handleSubmit = async () => {
     setError('');
 
@@ -626,6 +741,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     if (!paymentMethod) {
       setError('Please select a payment type');
+      return;
+    }
+
+    if (isWalkIn && isStaffPurchase && !selectedDriver) {
+      setError('Please select a rider for staff purchase');
       return;
     }
 
@@ -659,12 +779,15 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         }
       }
 
-      // For walk-in (POS) orders, disallow pay_on_delivery at data level as well
+      // For walk-in (POS) orders, disallow pay_on_delivery at data level as well.
+      // Also, only allow cash_at_hand when it's a staff purchase.
       const effectivePaymentMethod = isWalkIn && paymentMethod === 'pay_on_delivery'
         ? 'cash'
-        : paymentMethod;
+        : (isWalkIn && paymentMethod === 'cash_at_hand' && !isStaffPurchase ? 'cash' : paymentMethod);
 
       const orderData = {
+        orderType: isWalkIn ? 'walk_in' : 'delivery',
+        isWalkIn: isWalkIn,
         customerName: isWalkIn ? 'POS' : (finalCustomer.customerName || finalCustomer.name || ''),
         customerPhone: isWalkIn ? null : (effectivePaymentMethod === 'mobile_money' && mpesaPhoneNumber.trim() ? mpesaPhoneNumber.trim() : (finalCustomer.phone || null)),
         customerEmail: isWalkIn ? null : (finalCustomer.email || null),
@@ -686,14 +809,30 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 : 'pay_on_delivery'))),
         paymentMethod: effectivePaymentMethod || null,
         paymentStatus: isWalkIn 
-          ? ((effectivePaymentMethod === 'cash' || effectivePaymentMethod === 'card') ? 'paid' : 'unpaid')
+          ? (
+              // Walk-in: cash/card/cash_at_hand are immediately received; M-Pesa is only paid once confirmed.
+              (effectivePaymentMethod === 'cash' || effectivePaymentMethod === 'card' || effectivePaymentMethod === 'cash_at_hand')
+                ? 'paid'
+                : (effectivePaymentMethod === 'mobile_money'
+                  ? (transactionCode.trim() ? 'paid' : 'unpaid')
+                  : 'unpaid')
+            )
           : ((effectivePaymentMethod === 'mobile_money' && !transactionCode.trim()) ? 'unpaid' : (effectivePaymentMethod === 'pay_on_delivery' ? 'unpaid' : (effectivePaymentMethod ? 'paid' : 'unpaid'))),
         status: isWalkIn 
-          ? ((paymentMethod === 'cash' || paymentMethod === 'card') ? 'completed' : 'in_progress') // Walk-in: 'completed' if paid, 'in_progress' if unpaid
+          ? (
+              (effectivePaymentMethod === 'cash' || effectivePaymentMethod === 'card' || effectivePaymentMethod === 'cash_at_hand')
+                ? 'completed'
+                : (effectivePaymentMethod === 'mobile_money'
+                  ? (transactionCode.trim() ? 'completed' : 'in_progress')
+                  : 'in_progress')
+            ) // Walk-in: do not complete until actually paid
           : deliveryStatus,
         adminOrder: true,
         branchId: branchId,
-        driverId: selectedDriver ? parseInt(selectedDriver) : null,
+        // Walk-in staff purchase uses a purchaser rider, not a delivery assignment.
+        staffPurchaseDriverId: isWalkIn && isStaffPurchase && selectedDriver ? parseInt(selectedDriver) : null,
+        // Delivery orders may still be assigned to a driver.
+        driverId: !isWalkIn && selectedDriver ? parseInt(selectedDriver) : null,
         territoryId: isWalkIn ? defaultTerritoryId : (selectedTerritory ? parseInt(selectedTerritory) : null),
         transactionCode: paymentMethod === 'mobile_money' && transactionCode ? transactionCode.trim() : null,
         isStop: isStop,
@@ -771,16 +910,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
-    // Validate phone number format (basic validation)
-    const cleanedPhone = mpesaPhoneNumber.replace(/\D/g, '');
-    if (cleanedPhone.length < 9) {
-      setError('Please enter a valid phone number');
+    if (!validateSafaricomPhone(mpesaPhoneNumber)) {
+      setError('Please enter a valid Safaricom number (e.g. 0712345678 or 254712345678)');
       return;
     }
 
-    // Calculate total amount
-    const totalAmount = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    
+    const totalAmount = customerChargeSubtotal;
+
     if (totalAmount <= 0) {
       setError('Order total must be greater than 0');
       return;
@@ -857,6 +993,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       }
 
       const orderData = {
+        orderType: isWalkIn ? 'walk_in' : 'delivery',
+        isWalkIn: isWalkIn,
         customerName: customerNameForOrder,
         customerPhone: customerPhoneForOrder,
         customerEmail: isWalkIn ? null : (finalCustomer?.email || null),
@@ -873,7 +1011,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         status: isWalkIn ? 'in_progress' : deliveryStatus, // Walk-in orders: 'in_progress' if unpaid, will be 'completed' when paid
         adminOrder: true,
         branchId: branchId,
-        driverId: selectedDriver ? parseInt(selectedDriver) : null,
+        staffPurchaseDriverId: isWalkIn && isStaffPurchase && selectedDriver ? parseInt(selectedDriver) : null,
+        driverId: !isWalkIn && selectedDriver ? parseInt(selectedDriver) : null,
         territoryId: isWalkIn ? defaultTerritoryId : (selectedTerritory ? parseInt(selectedTerritory) : null),
         transactionCode: null, // Will be populated after payment
         isStop: isStop,
@@ -1054,9 +1193,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   };
 
   const handlePromptCardPayment = async () => {
-    // Calculate total amount
-    const totalAmount = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    
+    const totalAmount = customerChargeSubtotal;
+
     if (totalAmount <= 0) {
       setError('Order total must be greater than 0');
       return;
@@ -1547,6 +1685,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   setCustomerSearch('');
                   setDeliveryStatus('completed');
                   setSelectedDriver(''); // Clear driver assignment for walk-in orders
+                  setIsStaffPurchase(false);
                   // Pay on delivery is not valid for walk-in/POS orders
                   if (paymentMethod === 'pay_on_delivery') {
                     setPaymentMethod('cash');
@@ -1557,31 +1696,54 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   setDeliveryStatus('confirmed');
                 }
               }}
-              MenuProps={{
-                disablePortal: false,
-                PaperProps: {
-                  style: {
-                    maxHeight: 300,
-                    zIndex: 1400
-                  },
-                  sx: {
-                    zIndex: '1400 !important'
-                  }
-                },
-                anchorOrigin: {
-                  vertical: 'bottom',
-                  horizontal: 'left'
-                },
-                transformOrigin: {
-                  vertical: 'top',
-                  horizontal: 'left'
-                }
-              }}
+              MenuProps={selectMenuProps}
             >
               <MenuItem value="delivery">Delivery</MenuItem>
               <MenuItem value="walk-in">Walk-in</MenuItem>
             </Select>
           </FormControl>
+
+          {/* Staff Purchase (walk-in only) */}
+          {isWalkIn && (
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={isStaffPurchase}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsStaffPurchase(checked);
+                    if (!checked) {
+                      setSelectedDriver('');
+                      if (paymentMethod === 'cash_at_hand') setPaymentMethod('cash');
+                    }
+                  }}
+                />
+              }
+              label="Staff purchase"
+            />
+          )}
+
+          {/* Rider dropdown (staff purchase only) */}
+          {isWalkIn && isStaffPurchase && (
+            <FormControl fullWidth>
+              <InputLabel>Select Rider</InputLabel>
+              <Select
+                value={selectedDriver}
+                label="Select Rider"
+                onChange={(e) => setSelectedDriver(e.target.value)}
+                MenuProps={selectMenuProps}
+              >
+                <MenuItem value="">
+                  <em>Select rider</em>
+                </MenuItem>
+                {drivers.map((driver) => (
+                  <MenuItem key={driver.id} value={driver.id}>
+                    {driver.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
 
           {/* Territory Selection - Only shown for delivery orders (optional) */}
           {!isWalkIn && (
@@ -1591,29 +1753,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 value={selectedTerritory}
                 label="Territory"
                 onChange={(e) => setSelectedTerritory(e.target.value)}
-                MenuProps={{
-                  disablePortal: false,
-                  PaperProps: {
-                    style: {
-                      maxHeight: 300,
-                      zIndex: 1400
-                    },
-                    sx: {
-                      zIndex: 1400
-                    }
-                  },
-                  anchorOrigin: {
-                    vertical: 'bottom',
-                    horizontal: 'left'
-                  },
-                  transformOrigin: {
-                    vertical: 'top',
-                    horizontal: 'left'
-                  },
-                  style: {
-                    zIndex: 1400
-                  }
-                }}
+                MenuProps={selectMenuProps}
               >
                 <MenuItem value="">
                   <em>No territory</em>
@@ -1792,6 +1932,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 value={selectedBranch}
                 label="Branch"
                 onChange={(e) => setSelectedBranch(e.target.value)}
+                MenuProps={selectMenuProps}
               >
                 {branches.map((branch) => (
                   <MenuItem key={branch.id} value={branch.id}>
@@ -1827,112 +1968,126 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             >
               Add Items
             </Typography>
-            <Box sx={{ 
-              display: 'flex', 
-              flexDirection: 'column',
-              gap: mobileSize ? 1.8 : 2,
-              mb: mobileSize ? 1.8 : 2
-            }}>
-              <Autocomplete
-                fullWidth
-                value={currentProduct}
-                onChange={(event, newValue) => setCurrentProduct(newValue)}
-                inputValue={productSearch}
-                onInputChange={(event, newInputValue, reason) => {
-                  setProductSearch(newInputValue);
-                  // Clear selection if input is cleared
-                  if (!newInputValue) {
-                    setCurrentProduct(null);
-                  }
+            <Box
+              sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: mobileSize ? 1.6 : 1.8,
+                mb: mobileSize ? 1.8 : 2
+              }}
+            >
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  alignItems: 'flex-end',
+                  gap: mobileSize ? 1 : 1.25
                 }}
-                options={products}
-                getOptionLabel={(option) => {
-                  if (!option) return '';
-                  return option.name || '';
-                }}
-                isOptionEqualToValue={(option, value) => {
-                  if (!option || !value) return false;
-                  return option.id === value.id;
-                }}
-                filterOptions={(options, { inputValue }) => {
-                  // Return all options if no input
-                  if (!inputValue || inputValue.trim().length === 0) {
-                    return options;
-                  }
-                  
-                  const searchTerm = inputValue.toLowerCase().trim();
-                  
-                  // Split search term by spaces, hyphens, and other separators to allow partial matching
-                  // e.g., "test-loc" will match products with "test" OR "loc" in the name
-                  const searchTerms = searchTerm.split(/[\s\-_]+/).filter(term => term.length > 0);
-                  
-                  // Filter options - handle null/undefined safely
-                  const filtered = options.filter(option => {
-                    if (!option) return false;
-                    const name = option.name;
-                    if (!name || typeof name !== 'string') return false;
-                    const nameLower = name.toLowerCase();
-                    
-                    // If search term has multiple parts (e.g., "test-loc"), match if ANY part is found
-                    if (searchTerms.length > 1) {
-                      return searchTerms.some(term => nameLower.includes(term));
+              >
+                <Autocomplete
+                  value={currentProduct}
+                  onChange={(event, newValue) => setCurrentProduct(newValue)}
+                  inputValue={productSearch}
+                  onInputChange={(event, newInputValue, reason) => {
+                    setProductSearch(newInputValue);
+                    // Clear selection if input is cleared
+                    if (!newInputValue) {
+                      setCurrentProduct(null);
+                    }
+                  }}
+                  options={products}
+                  getOptionLabel={(option) => {
+                    if (!option) return '';
+                    return option.name || '';
+                  }}
+                  isOptionEqualToValue={(option, value) => {
+                    if (!option || !value) return false;
+                    return option.id === value.id;
+                  }}
+                  filterOptions={(options, { inputValue }) => {
+                    // Return all options if no input
+                    if (!inputValue || inputValue.trim().length === 0) {
+                      return options;
                     }
                     
-                    // Single search term - exact substring match
-                    return nameLower.includes(searchTerm);
-                  });
-                  
-                  // Debug logging - explicit values
-                  console.log('=== Product Search Debug ===');
-                  console.log('Search term:', searchTerm);
-                  console.log('Total products:', options.length);
-                  console.log('Filtered count:', filtered.length);
-                  console.log('Sample product names:', options.slice(0, 5).map(o => o?.name));
-                  if (filtered.length > 0) {
-                    console.log('Filtered product names:', filtered.slice(0, 5).map(o => o?.name));
-                  } else {
-                    console.log('No products matched!');
-                    // Check if any product contains the search term (case-insensitive)
-                    const matchingProducts = options.filter(option => {
-                      if (!option || !option.name) return false;
-                      return option.name.toLowerCase().includes(searchTerm);
+                    const searchTerm = inputValue.toLowerCase().trim();
+                    
+                    // Split search term by spaces, hyphens, and other separators to allow partial matching
+                    // e.g., "test-loc" will match products with "test" OR "loc" in the name
+                    const searchTerms = searchTerm.split(/[\s\-_]+/).filter(term => term.length > 0);
+                    
+                    // Filter options - handle null/undefined safely
+                    const filtered = options.filter(option => {
+                      if (!option) return false;
+                      const name = option.name;
+                      if (!name || typeof name !== 'string') return false;
+                      const nameLower = name.toLowerCase();
+                      
+                      // If search term has multiple parts (e.g., "test-loc"), match if ANY part is found
+                      if (searchTerms.length > 1) {
+                        return searchTerms.some(term => nameLower.includes(term));
+                      }
+                      
+                      // Single search term - exact substring match
+                      return nameLower.includes(searchTerm);
                     });
-                    console.log('Products that should match:', matchingProducts.length);
-                    if (matchingProducts.length > 0) {
-                      console.log('Matching product names:', matchingProducts.slice(0, 5).map(o => o?.name));
-                    }
                     
-                    // If searching for "test", show all products with "test" or "loc" in name
-                    if (searchTerm.includes('test') || searchTerm.includes('loc')) {
-                      const testProducts = options.filter(option => {
+                    // Debug logging - explicit values
+                    console.log('=== Product Search Debug ===');
+                    console.log('Search term:', searchTerm);
+                    console.log('Total products:', options.length);
+                    console.log('Filtered count:', filtered.length);
+                    console.log('Sample product names:', options.slice(0, 5).map(o => o?.name));
+                    if (filtered.length > 0) {
+                      console.log('Filtered product names:', filtered.slice(0, 5).map(o => o?.name));
+                    } else {
+                      console.log('No products matched!');
+                      // Check if any product contains the search term (case-insensitive)
+                      const matchingProducts = options.filter(option => {
                         if (!option || !option.name) return false;
-                        const name = option.name.toLowerCase();
-                        return name.includes('test') || name.includes('loc');
+                        return option.name.toLowerCase().includes(searchTerm);
                       });
-                      console.log('Products with "test" or "loc" in name:', testProducts.length);
-                      if (testProducts.length > 0) {
-                        console.log('Product names with "test" or "loc":', testProducts.map(o => o?.name));
+                      console.log('Products that should match:', matchingProducts.length);
+                      if (matchingProducts.length > 0) {
+                        console.log('Matching product names:', matchingProducts.slice(0, 5).map(o => o?.name));
+                      }
+                      
+                      // If searching for "test", show all products with "test" or "loc" in name
+                      if (searchTerm.includes('test') || searchTerm.includes('loc')) {
+                        const testProducts = options.filter(option => {
+                          if (!option || !option.name) return false;
+                          const name = option.name.toLowerCase();
+                          return name.includes('test') || name.includes('loc');
+                        });
+                        console.log('Products with "test" or "loc" in name:', testProducts.length);
+                        if (testProducts.length > 0) {
+                          console.log('Product names with "test" or "loc":', testProducts.map(o => o?.name));
+                        }
                       }
                     }
-                  }
-                  console.log('===========================');
-                  
-                  return filtered;
-                }}
-                noOptionsText="No products found"
-                openOnFocus={true}
-                disablePortal={false}
-                ListboxProps={{
-                  style: { maxHeight: '300px' }
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Product"
-                    placeholder="Type product name..."
-                  />
-                )}
-                renderOption={(props, option) => {
+                    console.log('===========================');
+                    
+                    return filtered;
+                  }}
+                  noOptionsText="No products found"
+                  openOnFocus={true}
+                  disablePortal={false}
+                  ListboxProps={{
+                    style: { maxHeight: '300px' }
+                  }}
+                  sx={{
+                    flex: mobileSize ? '1 1 100%' : '1 1 320px',
+                    maxWidth: mobileSize ? '100%' : 420
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      size="small"
+                      label="Product"
+                      placeholder="Type product name..."
+                    />
+                  )}
+                  renderOption={(props, option) => {
                   const { key, ...restProps } = props;
 
                   const totalStock =
@@ -1943,6 +2098,29 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     option.stockByCapacity && typeof option.stockByCapacity === 'object'
                       ? option.stockByCapacity
                       : null;
+                  const normalizeCapacity = (value) =>
+                    (value || '')
+                      .toString()
+                      .trim()
+                      .toLowerCase()
+                      .replace(/\s+/g, '');
+                  const capacityUnitMultiplier = (capacityLabel) => {
+                    const raw = String(capacityLabel || '').trim().toLowerCase();
+                    if (!raw) return 1;
+                    const compact = raw.replace(/\s+/g, '');
+                    const match = compact.match(/^(\d+)(pack|pk).*/);
+                    const n = match ? parseInt(match[1], 10) : NaN;
+                    return Number.isFinite(n) && n > 0 ? n : 1;
+                  };
+                  const isCanPackSharedStockProduct = () => {
+                    const values = Array.isArray(option.capacityPricing)
+                      ? option.capacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
+                      : [];
+                    const normalized = values.map((v) => normalizeCapacity(v));
+                    const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
+                    const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+                    return hasPack && hasCan;
+                  };
 
                   const rows = [];
 
@@ -1972,10 +2150,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
                       if (price <= 0) return;
 
-                      const capStock =
+                      let capStock =
                         stockByCapacity && stockByCapacity[capacity] != null
                           ? stockByCapacity[capacity]
                           : totalStock;
+                      if (
+                        stockByCapacity &&
+                        stockByCapacity[capacity] == null &&
+                        isCanPackSharedStockProduct()
+                      ) {
+                        const multiplier = capacityUnitMultiplier(capacity);
+                        capStock = multiplier > 1 ? Math.floor(totalStock / multiplier) : totalStock;
+                      }
 
                       rows.push({
                         capacity,
@@ -2008,7 +2194,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                                   color="text.secondary"
                                   sx={{ display: 'block' }}
                                 >
-                                  {row.capacity} | {Math.round(row.price)} (Stock: {row.stock})
+                                    {row.capacity} - KES {Math.round(row.price)} (Stock: {row.stock})
                                 </Typography>
                               ))}
                             </Box>
@@ -2037,7 +2223,103 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     </li>
                   );
                 }}
-              />
+                />
+
+                {/* Unit Price (editable) */}
+                {currentProduct && (
+                  <TextField
+                    type="number"
+                    label="Unit Price"
+                    size="small"
+                    value={currentPrice}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      // Only allow whole numbers
+                      if (value === '' || /^\d+$/.test(value)) {
+                        setCurrentPrice(value);
+                      }
+                    }}
+                    inputProps={{ min: 0, step: 1 }}
+                    sx={{ width: mobileSize ? '100%' : 160 }}
+                  />
+                )}
+
+                {/* Quantity */}
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1
+                  }}
+                >
+                  <IconButton
+                    size="small"
+                    onClick={() => setCurrentQuantity(Math.max(1, currentQuantity - 1))}
+                    disabled={currentQuantity <= 1}
+                    sx={{
+                      backgroundColor: colors.accentText,
+                      color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                      width: mobileSize ? '34px' : '36px',
+                      height: mobileSize ? '34px' : '36px',
+                      '&:hover': {
+                        backgroundColor: '#00C4A3'
+                      },
+                      '&:disabled': {
+                        backgroundColor: colors.border,
+                        color: colors.textSecondary
+                      }
+                    }}
+                  >
+                    <Remove sx={{ fontSize: mobileSize ? '1.1rem' : '1.25rem' }} />
+                  </IconButton>
+                  <TextField
+                    type="number"
+                    label="Qty"
+                    size="small"
+                    value={currentQuantity}
+                    onChange={(e) => setCurrentQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                    inputProps={{ min: 1 }}
+                    sx={{
+                      width: mobileSize ? 110 : 120,
+                      '& .MuiInputBase-input': { textAlign: 'center' }
+                    }}
+                  />
+                  <IconButton
+                    size="small"
+                    onClick={() => setCurrentQuantity(currentQuantity + 1)}
+                    sx={{
+                      backgroundColor: colors.accentText,
+                      color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                      width: mobileSize ? '34px' : '36px',
+                      height: mobileSize ? '34px' : '36px',
+                      '&:hover': {
+                        backgroundColor: '#00C4A3'
+                      }
+                    }}
+                  >
+                    <Add sx={{ fontSize: mobileSize ? '1.1rem' : '1.25rem' }} />
+                  </IconButton>
+                </Box>
+
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={handleAddToCart}
+                  sx={{
+                    backgroundColor: colors.accentText,
+                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                    fontSize: mobileSize ? '0.85rem' : '0.9rem',
+                    padding: mobileSize ? '5px 12px' : '5px 12px',
+                    height: 36,
+                    minWidth: mobileSize ? '100%' : 96,
+                    '&:hover': { backgroundColor: '#00C4A3' }
+                  }}
+                >
+                  Add
+                </Button>
+              </Box>
+
               {/* Capacity Selection with Radio Buttons */}
               {currentProduct && Array.isArray(currentProduct.capacityPricing) && currentProduct.capacityPricing.length > 0 && (
                 <FormControl component="fieldset" fullWidth sx={{ mb: mobileSize ? 1.8 : 2 }}>
@@ -2156,109 +2438,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   </RadioGroup>
                 </FormControl>
               )}
-              {/* Unit Price Display */}
-              {currentProduct && (
-                <TextField
-                  type="number"
-                  label="Unit Price (KES)"
-                  value={currentPrice}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    // Only allow whole numbers
-                    if (value === '' || /^\d+$/.test(value)) {
-                      setCurrentPrice(value);
-                    }
-                  }}
-                  inputProps={{ min: 0, step: 1 }}
-                  fullWidth
-                  sx={{
-                    mb: mobileSize ? 1.8 : 2,
-                    '& .MuiInputLabel-root': {
-                      fontSize: mobileSize ? '0.9rem' : '1rem'
-                    },
-                    '& .MuiInputBase-input': {
-                      fontSize: mobileSize ? '0.9rem' : '1rem',
-                      padding: mobileSize ? '13.5px 14px' : '15px 14px'
-                    }
-                  }}
-                  helperText={Array.isArray(currentProduct.capacityPricing) && currentProduct.capacityPricing.length > 0 
-                    ? 'Price updates when you select a capacity above'
-                    : `Original price: KES ${Math.round(parseFloat(currentProduct.price || 0))}`}
-                />
-              )}
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                gap: 1 
-              }}>
-                <IconButton
-                  onClick={() => setCurrentQuantity(Math.max(1, currentQuantity - 1))}
-                  disabled={currentQuantity <= 1}
-                  sx={{
-                    backgroundColor: colors.accentText,
-                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                    width: mobileSize ? '36px' : '40px',
-                    height: mobileSize ? '36px' : '40px',
-                    '&:hover': {
-                      backgroundColor: '#00C4A3'
-                    },
-                    '&:disabled': {
-                      backgroundColor: colors.border,
-                      color: colors.textSecondary
-                    }
-                  }}
-                >
-                  <Remove sx={{ fontSize: mobileSize ? '1.2rem' : '1.5rem' }} />
-                </IconButton>
-                <TextField
-                  type="number"
-                  label="Quantity"
-                  value={currentQuantity}
-                  onChange={(e) => setCurrentQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  inputProps={{ min: 1 }}
-                  sx={{ 
-                    maxWidth: mobileSize ? '120px' : '150px',
-                    '& .MuiInputLabel-root': {
-                      fontSize: mobileSize ? '0.9rem' : '1rem'
-                    },
-                    '& .MuiInputBase-input': {
-                      fontSize: mobileSize ? '0.9rem' : '1rem',
-                      padding: mobileSize ? '13.5px 14px' : '15px 14px',
-                      textAlign: 'center'
-                    }
-                  }}
-                />
-                <IconButton
-                  onClick={() => setCurrentQuantity(currentQuantity + 1)}
-                  sx={{
-                    backgroundColor: colors.accentText,
-                    color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                    width: mobileSize ? '36px' : '40px',
-                    height: mobileSize ? '36px' : '40px',
-                    '&:hover': {
-                      backgroundColor: '#00C4A3'
-                    }
-                  }}
-                >
-                  <Add sx={{ fontSize: mobileSize ? '1.2rem' : '1.5rem' }} />
-                </IconButton>
-              </Box>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={handleAddToCart}
-                fullWidth
-                sx={{
-                  backgroundColor: colors.accentText,
-                  color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
-                  fontSize: mobileSize ? '0.9rem' : '1rem',
-                  padding: mobileSize ? '4.5px 18px' : '5px 20px',
-                  '&:hover': { backgroundColor: '#00C4A3' }
-                }}
-              >
-                Add
-              </Button>
             </Box>
           </Box>
 
@@ -2295,7 +2474,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                       <Box>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {item.name}
+                          {item.name}{item.capacity ? ` (${item.capacity})` : ''}
                         </Typography>
                         <Typography variant="caption" color="text.secondary">
                           Quantity: {item.quantity}
@@ -2325,18 +2504,46 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   </Box>
                 ))}
                 <Divider sx={{ my: 2 }} />
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                    Total:
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                    Items
                   </Typography>
-                  <Typography variant="h6" sx={{ fontWeight: 700, color: colors.accentText }}>
-                    KES {Math.round(calculateTotal())}
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    KES {itemsSubtotalRounded}
                   </Typography>
                 </Box>
+                {!isWalkIn && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                      Convenience fee
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      KES {convenienceFeeLine}
+                    </Typography>
+                  </Box>
+                )}
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                    Subtotal
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: colors.accentText }}>
+                    KES {customerChargeSubtotal}
+                  </Typography>
+                </Box>
+                {!isWalkIn && selectedTerritoryDeliveryFee != null && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                      Territory delivery fee
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
+                      KES {selectedTerritoryDeliveryFee}
+                    </Typography>
+                  </Box>
+                )}
                 {hasPurchasePriceData && (
                   <>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1 }}>
-                      <Typography variant="body2" sx={{ color: colors.textSecondary }}>Cost:</Typography>
+                      <Typography variant="body2" sx={{ color: colors.textSecondary }}>Total purchase cost:</Typography>
                       <Typography variant="body2" sx={{ color: colors.textSecondary }}>KES {Math.round(totalCost)}</Typography>
                     </Box>
                     <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', mt: 0.5 }}>
@@ -2372,12 +2579,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   setTransactionCode('');
                 }
               }}
+              MenuProps={selectMenuProps}
             >
               <MenuItem value="cash">Cash Received</MenuItem>
               {!isWalkIn && (
                 <MenuItem value="pay_on_delivery">Pay on Delivery</MenuItem>
               )}
               <MenuItem value="mobile_money">Mpesa</MenuItem>
+              {isWalkIn && isStaffPurchase && (
+                <MenuItem value="cash_at_hand">Cash at Hand</MenuItem>
+              )}
               <MenuItem value="card">Card</MenuItem>
             </Select>
           </FormControl>
@@ -2419,6 +2630,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
               >
                 {promptingPayment ? 'Prompting Customer...' : 'Prompt Customer for Payment'}
               </Button>
+              {isWalkIn && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Walk-in M-Pesa orders are not completed until payment is confirmed. Use the button above to send the STK prompt.
+                </Alert>
+              )}
               {promptingPayment && !paymentSuccess && (
                 <Box sx={{ mb: 2, p: 2, backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.1)' : 'rgba(0, 0, 0, 0.05)', borderRadius: 1 }}>
                   <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1 }}>
@@ -2505,6 +2721,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   value={cardPaymentType}
                   label="Card Payment Method"
                   onChange={(e) => setCardPaymentType(e.target.value)}
+                  MenuProps={selectMenuProps}
                 >
                   <MenuItem value="pesapal">PesaPal (Online)</MenuItem>
                   <MenuItem value="pdq">PDQ Machine</MenuItem>
@@ -2539,8 +2756,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   fullWidth
                   variant="contained"
                   onClick={() => {
-                    const totalAmount = cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                    setPdqPaymentData(prev => ({ ...prev, amount: Math.round(totalAmount) }));
+                    setPdqPaymentData(prev => ({ ...prev, amount: customerChargeSubtotal }));
                     setPdqDialogOpen(true);
                   }}
                   disabled={cartItems.length === 0}
@@ -2678,6 +2894,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 value={selectedDriver}
                 label="Assign Driver"
                 onChange={(e) => setSelectedDriver(e.target.value)}
+                MenuProps={selectMenuProps}
               >
                 <MenuItem value="">None</MenuItem>
                 {drivers.map((driver) => (

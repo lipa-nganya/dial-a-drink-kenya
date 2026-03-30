@@ -56,6 +56,16 @@
                     android:textColor="@color/text_secondary_dark"
                     android:textSize="12sp" />
 
+                <TextView
+                    android:id="@+id/dateApprovedText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="Approved: Jan 1, 2024"
+                    android:textColor="@color/text_secondary_dark"
+                    android:textSize="12sp"
+                    android:visibility="gone" />
+
             </LinearLayout>
 
             <TextView

@@ -57,7 +57,9 @@
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                app:endIconMode="dropdown_menu"
+                app:endIconTint="@color/text_primary_dark">
 
                 <androidx.appcompat.widget.AppCompatAutoCompleteTextView
                     android:id="@+id/orderTypeSpinner"
@@ -132,7 +134,7 @@
                 android:text="Send SMS notification to customer"
                 android:textColor="@color/text_primary_dark"
                 android:textSize="16sp"
-                android:checked="true" />
+                android:checked="false" />
 
             <!-- Cart Items List -->
             <androidx.recyclerview.widget.RecyclerView
@@ -180,7 +182,9 @@
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                app:endIconMode="dropdown_menu"
+                app:endIconTint="@color/text_primary_dark">
 
                 <androidx.appcompat.widget.AppCompatAutoCompleteTextView
                     android:id="@+id/riderSpinner"
@@ -251,7 +255,9 @@
                 app:boxStrokeWidth="2dp"
                 app:boxStrokeWidthFocused="2dp"
                 app:boxBackgroundColor="@color/paper_dark"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                app:endIconMode="dropdown_menu"
+                app:endIconTint="@color/text_primary_dark">
 
                 <androidx.appcompat.widget.AppCompatAutoCompleteTextView
                     android:id="@+id/territoryEditText"
@@ -270,14 +276,32 @@
             </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Payment Method -->
-            <androidx.appcompat.widget.AppCompatSpinner
-                android:id="@+id/paymentMethodSpinner"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/paymentMethodLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="16dp"
-                android:minHeight="56dp"
-                android:padding="16dp"
-                android:popupBackground="@color/paper_dark" />
+                android:hint="Payment Method"
+                app:hintTextColor="#FFFFFF"
+                app:boxStrokeColor="@color/dropdown_border_green"
+                app:boxStrokeWidth="2dp"
+                app:boxStrokeWidthFocused="2dp"
+                app:boxBackgroundColor="@color/paper_dark"
+                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                app:endIconMode="dropdown_menu"
+                app:endIconTint="@color/text_primary_dark">
+
+                <AutoCompleteTextView
+                    android:id="@+id/paymentMethodSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="none"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#FFFFFF"
+                    android:minHeight="56dp"
+                    android:padding="16dp"
+                    android:textSize="16sp" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <!-- Delivery Fee -->
             <com.google.android.material.textfield.TextInputLayout
@@ -296,7 +320,7 @@
                     android:id="@+id/deliveryFeeEditText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:hint="Delivery Fee"
+                    android:hint="Territory delivery fee"
                     android:inputType="numberDecimal"
                     android:textColor="#FFFFFF"
                     android:textColorHint="#FFFFFF"
@@ -335,7 +359,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Order Total"
+                            android:text="Items"
                             android:textColor="@color/text_primary_dark"
                             android:textSize="16sp"
                             android:paddingStart="4dp"
@@ -354,6 +378,7 @@
                     </LinearLayout>
 
                     <LinearLayout
+                        android:id="@+id/convenienceFeeRow"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="horizontal"
@@ -365,14 +390,14 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Delivery Fee"
-                            android:textColor="@color/text_primary_dark"
-                            android:textSize="16sp"
+                            android:text="Convenience fee"
+                            android:textColor="@color/text_secondary_dark"
+                            android:textSize="14sp"
                             android:paddingStart="4dp"
                             android:paddingEnd="8dp" />
 
                         <TextView
-                            android:id="@+id/deliveryFeeText"
+                            android:id="@+id/convenienceFeeText"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="KES 0"
@@ -403,7 +428,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Total"
+                            android:text="Subtotal"
                             android:textColor="@color/accent"
                             android:textSize="20sp"
                             android:textStyle="bold"
@@ -417,6 +442,37 @@
                             android:text="KES 0"
                             android:textColor="@color/accent"
                             android:textSize="20sp"
+                            android:textStyle="bold"
+                            android:paddingStart="8dp"
+                            android:paddingEnd="4dp" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="4dp"
+                        android:paddingTop="4dp"
+                        android:paddingBottom="4dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Territory delivery fee"
+                            android:textColor="@color/text_primary_dark"
+                            android:textSize="16sp"
+                            android:paddingStart="4dp"
+                            android:paddingEnd="8dp" />
+
+                        <TextView
+                            android:id="@+id/deliveryFeeText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="KES 0"
+                            android:textColor="@color/text_primary_dark"
+                            android:textSize="16sp"
                             android:textStyle="bold"
                             android:paddingStart="8dp"
                             android:paddingEnd="4dp" />

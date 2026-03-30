@@ -29,6 +29,11 @@ class LoansActivity : AppCompatActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (!SharedPrefs.isSuperAdmin(this)) {
+            Toast.makeText(this, "Only super admin can access Loans & Penalties", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
         binding = ActivityLoansBinding.inflate(layoutInflater)
         setContentView(binding.root)
         

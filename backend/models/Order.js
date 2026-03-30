@@ -25,6 +25,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false
     },
+    convenienceFee: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Customer-facing convenience fee (settings-based delivery fee).'
+    },
+    territoryDeliveryFee: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0,
+      comment: 'Internal territory delivery fee used for driver/savings/cash-at-hand accounting.'
+    },
     tipAmount: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
@@ -48,7 +60,7 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 'pay_on_delivery'
     },
     paymentMethod: {
-      type: DataTypes.ENUM('card', 'mobile_money', 'cash'),
+      type: DataTypes.ENUM('card', 'mobile_money', 'cash', 'cash_at_hand'),
       allowNull: true
     },
     driverId: {
@@ -58,6 +70,15 @@ module.exports = (sequelize, DataTypes) => {
         model: 'drivers',
         key: 'id'
       }
+    },
+    staffPurchaseDriverId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: 'drivers',
+        key: 'id'
+      },
+      comment: 'Walk-in staff purchase: rider who purchased (not delivering).'
     },
     driverAccepted: {
       type: DataTypes.BOOLEAN,

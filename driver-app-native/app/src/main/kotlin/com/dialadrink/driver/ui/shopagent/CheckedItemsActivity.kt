@@ -18,6 +18,8 @@ import com.dialadrink.driver.data.model.*
 import com.dialadrink.driver.databinding.ActivityCheckedItemsBinding
 import com.dialadrink.driver.databinding.ItemCheckedInventoryItemBinding
 import com.dialadrink.driver.utils.SharedPrefs
+import android.text.Editable
+import android.text.TextWatcher
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import java.io.IOException
@@ -234,7 +236,33 @@ class CheckedItemsActivity : AppCompatActivity() {
             fun bind(item: CountedInventoryItem) {
                 binding.itemNameText.text = item.item.name
                 binding.itemCategoryText.text = item.item.category?.name ?: "No category"
-                binding.countText.text = item.count.toString()
+                // Remove any previous watcher attached to this view
+                (binding.countEditText.tag as? TextWatcher)?.let { old ->
+                    binding.countEditText.removeTextChangedListener(old)
+                }
+
+                binding.countEditText.setText(item.count.toString())
+                binding.countEditText.setSelection(binding.countEditText.text?.length ?: 0)
+
+                val watcher = object : TextWatcher {
+                    override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                    override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                    override fun afterTextChanged(s: Editable?) {
+                        val raw = s?.toString() ?: ""
+                        val digitsOnly = raw.replace(Regex("[^0-9]"), "")
+                        if (raw != digitsOnly) {
+                            binding.countEditText.setText(digitsOnly)
+                            binding.countEditText.setSelection(digitsOnly.length)
+                            return
+                        }
+                        val next = digitsOnly.toIntOrNull() ?: 0
+                        item.count = next.coerceAtLeast(0)
+                        updateSubmitButton()
+                    }
+                }
+                binding.countEditText.addTextChangedListener(watcher)
+                binding.countEditText.tag = watcher
+
                 if (!item.capacity.isNullOrBlank()) {
                     binding.capacityText.visibility = View.VISIBLE
                     binding.capacityText.text = "Capacity: ${item.capacity}"
@@ -244,10 +272,14 @@ class CheckedItemsActivity : AppCompatActivity() {
 
                 binding.increaseButton.setOnClickListener {
                     onAction(item, CheckedItemAction.INCREASE)
+                    binding.countEditText.setText(item.count.toString())
+                    binding.countEditText.setSelection(binding.countEditText.text?.length ?: 0)
                 }
                 
                 binding.decreaseButton.setOnClickListener {
                     onAction(item, CheckedItemAction.DECREASE)
+                    binding.countEditText.setText(item.count.toString())
+                    binding.countEditText.setSelection(binding.countEditText.text?.length ?: 0)
                 }
                 
                 binding.deleteButton.setOnClickListener {

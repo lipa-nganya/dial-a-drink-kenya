@@ -35,6 +35,9 @@ router.post('/', async (req, res) => {
       territoryId,
       status,
       driverId,
+      staffPurchaseDriverId,
+      orderType,
+      isWalkIn,
       transactionCode,
       paymentStatus,
       isStop,
@@ -78,9 +81,19 @@ router.post('/', async (req, res) => {
       tipAmount
     }, null, 2));
     
-    // Check if this is a walk-in order (deliveryAddress is "In-Store Purchase" or customerPhone is "POS")
-    const isWalkInOrder = deliveryAddress === 'In-Store Purchase' || customerPhone === 'POS' ||
-                         (effectiveAdminOrder && customerPhone && customerPhone.trim() === 'POS');
+    // Check if this is a walk-in order.
+    // Prefer an explicit flag from admin clients; fall back to legacy heuristics.
+    const explicitWalkIn =
+      isWalkIn === true ||
+      String(orderType || '').toLowerCase() === 'walk_in' ||
+      String(orderType || '').toLowerCase() === 'walk-in' ||
+      String(orderType || '').toLowerCase() === 'walkin';
+
+    const isWalkInOrder =
+      explicitWalkIn ||
+      deliveryAddress === 'In-Store Purchase' ||
+      customerPhone === 'POS' ||
+      (effectiveAdminOrder && customerPhone && customerPhone.trim() === 'POS');
 
     // Normalize required-but-editable fields so we can allow creating orders without full customer details
     const safeCustomerName =
@@ -179,6 +192,14 @@ router.post('/', async (req, res) => {
     // Use normalized paymentMethod for the rest of the code
     const finalPaymentMethod = (paymentType === 'pay_now' && paymentMethod) ? String(paymentMethod).trim() : paymentMethod;
 
+    // Walk-in staff purchase invariants:
+    // - cash_at_hand is only meaningful for staff purchases
+    // - the purchaser rider must be provided, but the order should NOT be assigned to a delivery driver
+    const normalizedStaffPurchaseDriverId =
+      staffPurchaseDriverId === null || staffPurchaseDriverId === undefined || staffPurchaseDriverId === ''
+        ? null
+        : parseInt(staffPurchaseDriverId, 10);
+
     let tip = parseFloat(tipAmount) || 0;
     if (tip < 0) {
       return res.status(400).json({ error: 'Tip amount cannot be negative' });
@@ -227,6 +248,25 @@ router.post('/', async (req, res) => {
           .toLowerCase()
           .replace(/\s+/g, '');
 
+      /**
+       * For can/pack capacity variants, inventory is tracked in base "cans".
+       * Example: stock=10 means 10 cans; buying 1x "6 pack" consumes 6 cans.
+       */
+      const capacityUnitMultiplier = (capacityLabel) => {
+        const raw = (capacityLabel || '').toString().trim().toLowerCase();
+        if (!raw) return 1;
+        const compact = raw.replace(/\s+/g, '');
+        // Common pack labels: "6pack", "6-pack", "6 pk", "12pack", etc.
+        const packMatch = compact.match(/^(\d+)(pack|pk)$/) || compact.match(/^(\d+)(pack|pk).*/);
+        if (packMatch) {
+          const n = parseInt(packMatch[1], 10);
+          return Number.isFinite(n) && n > 0 ? n : 1;
+        }
+        // "1 can", "can", "single" => 1
+        if (compact.includes('can') || compact === 'single') return 1;
+        return 1;
+      };
+
       const parseStockValue = (value) => {
         const parsed = parseInt(value, 10);
         return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
@@ -249,6 +289,12 @@ router.post('/', async (req, res) => {
 
         if (selectedCapacity) {
           const target = normalizeCapacity(selectedCapacity);
+          const multiplier = capacityUnitMultiplier(selectedCapacity);
+          // For pack/can capacity variants, treat stock as pooled (base units).
+          // We compare against total units available (sum of capacity buckets), falling back to drink.stock.
+          if (multiplier > 1 || target.includes('can')) {
+            return entries.reduce((sum, [, qty]) => sum + parseStockValue(qty), 0) || parseStockValue(drink.stock);
+          }
           const direct = entries.find(([key]) => normalizeCapacity(key) === target);
           if (direct) {
             return parseStockValue(direct[1]);
@@ -277,8 +323,10 @@ router.post('/', async (req, res) => {
           return res.status(400).json({ error: `${drink.name} is not available` });
         }
 
+        const multiplier = capacityUnitMultiplier(item.selectedCapacity);
+        const requiredUnits = item.quantity * multiplier;
         const availableStock = resolveAvailableStock(drink, item.selectedCapacity);
-        if (availableStock < item.quantity) {
+        if (availableStock < requiredUnits) {
           await transaction.rollback();
           const suffix = item.selectedCapacity ? ` (${item.selectedCapacity})` : '';
           return res.status(400).json({
@@ -305,7 +353,8 @@ router.post('/', async (req, res) => {
         orderItems.push({
           drinkId: item.drinkId,
           quantity: item.quantity,
-          price: priceToUse
+          price: priceToUse,
+          selectedCapacity: item.selectedCapacity || null
         });
       }
 
@@ -366,45 +415,48 @@ router.post('/', async (req, res) => {
         console.warn('⚠️  WARNING: Order will be created WITHOUT a branch assignment. This should not happen if branches exist.');
       }
 
-      // Calculate delivery fee (after branch assignment, as it's needed for perKm mode)
-      // CRITICAL: Walk-in orders (POS orders) should NOT have delivery fees
+      // Fees:
+      // - Convenience fee: customer-facing fee from admin settings (fixed/perKm)
+      // - Territory delivery fee: internal fee from territory (used for savings/cash-at-hand), not charged to customer
+      //
+      // CRITICAL: Walk-in orders (POS orders) should NOT have either fee.
       // Walk-in orders are identified by: customerName === 'POS' OR deliveryAddress === 'In-Store Purchase'
       const isWalkInOrder = customerName === 'POS' || deliveryAddress === 'In-Store Purchase' || 
                            (deliveryAddress && deliveryAddress.includes('In-Store Purchase'));
       
-      let deliveryFee = 0;
+      let convenienceFee = 0;
       let deliveryDistance = null;
-      /** When set, order notes indicate fee came from territory (not settings-based calculation). */
-      let deliveryFeeFromTerritory = false;
+      let territoryDeliveryFee = 0;
 
       if (isWalkInOrder) {
         console.log(`🛍️  Walk-in order detected (customerName: ${customerName}, deliveryAddress: ${deliveryAddress}). Skipping delivery fee calculation.`);
       } else {
+        // Convenience fee always comes from admin settings (fixed/perKm).
+        const settingsFeeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
+        convenienceFee = settingsFeeResult.fee || 0;
+        deliveryDistance = settingsFeeResult.distance || null;
+
+        // Territory fee comes from selected territory (if any); fallback to convenience fee for backwards compatibility.
         const tidRaw = territoryId !== undefined && territoryId !== null && territoryId !== ''
           ? parseInt(territoryId, 10)
           : NaN;
         if (!Number.isNaN(tidRaw) && tidRaw > 0) {
           const territory = await db.Territory.findByPk(tidRaw, { transaction });
           if (territory) {
-            deliveryFee = parseFloat(territory.deliveryFromCBD) || 0;
-            deliveryDistance = null;
-            deliveryFeeFromTerritory = true;
-            console.log(`📍 Territory ${tidRaw} (${territory.name || 'unnamed'}): delivery fee KES ${deliveryFee} (deliveryFromCBD)`);
+            territoryDeliveryFee = parseFloat(territory.deliveryFromCBD) || 0;
+            console.log(`📍 Territory ${tidRaw} (${territory.name || 'unnamed'}): territory delivery fee KES ${territoryDeliveryFee} (deliveryFromCBD)`);
           } else {
-            const feeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
-            deliveryFee = feeResult.fee || 0;
-            deliveryDistance = feeResult.distance || null;
-            console.warn(`⚠️ territoryId ${tidRaw} not found; using settings-based delivery fee: KES ${deliveryFee}`);
+            territoryDeliveryFee = convenienceFee;
+            console.warn(`⚠️ territoryId ${tidRaw} not found; using convenience fee as territory delivery fee: KES ${territoryDeliveryFee}`);
           }
         } else {
-          const feeResult = await calculateDeliveryFee(normalizedItems, totalAmount, deliveryAddress, branchId);
-          deliveryFee = feeResult.fee || 0;
-          deliveryDistance = feeResult.distance || null;
-          console.log(`📦 No territory selected: settings-based delivery fee: KES ${deliveryFee}`);
+          territoryDeliveryFee = convenienceFee;
+          console.log(`📦 No territory selected: territory delivery fee defaults to convenience fee: KES ${territoryDeliveryFee}`);
         }
       }
       
-      const finalTotal = totalAmount + deliveryFee + tip;
+      // Customer is charged items total + convenience fee (+ tip).
+      const finalTotal = totalAmount + convenienceFee + tip;
 
       // Only assign driver if explicitly provided (for admin orders)
       // Automatic driver assignment has been removed - drivers must be manually assigned
@@ -424,6 +476,17 @@ router.post('/', async (req, res) => {
       const finalPaymentStatus = (effectiveAdminOrder && paymentStatus && ['pending', 'paid', 'unpaid'].includes(paymentStatus)) 
         ? paymentStatus 
         : 'pending';
+
+      // Walk-in staff purchase invariants:
+      // - cash_at_hand is only meaningful for staff purchases
+      // - purchaser rider must be provided
+      // - but the order should NOT be assigned to a delivery driver
+      if (isWalkInOrder && finalPaymentMethod === 'cash_at_hand' && finalPaymentStatus === 'paid') {
+        if (!normalizedStaffPurchaseDriverId || !Number.isInteger(normalizedStaffPurchaseDriverId) || normalizedStaffPurchaseDriverId <= 0) {
+          await transaction.rollback();
+          return res.status(400).json({ error: 'Staff purchase rider is required for cash at hand walk-in orders' });
+        }
+      }
       
       // For walk-in orders: never 'pending', use 'in_progress' if unpaid, 'completed' if paid
       // For admin orders, allow setting status if provided, otherwise default to 'pending'
@@ -473,15 +536,17 @@ router.post('/', async (req, res) => {
         customerEmail,
         deliveryAddress: safeDeliveryAddress,
         totalAmount: finalTotal,
+        convenienceFee: convenienceFee,
+        territoryDeliveryFee: territoryDeliveryFee,
         tipAmount: tip,
         notes: (() => {
           let noteParts = [];
           if (notes) noteParts.push(notes);
-          if (!isWalkInOrder && deliveryFee > 0) {
-            const deliveryFeeNote = deliveryFeeFromTerritory
-              ? `Delivery Fee: KES ${deliveryFee.toFixed(2)} (from territory)`
-              : `Delivery Fee: KES ${deliveryFee.toFixed(2)}`;
-            noteParts.push(deliveryFeeNote);
+          if (!isWalkInOrder && convenienceFee > 0) {
+            noteParts.push(`Convenience Fee: KES ${convenienceFee.toFixed(2)}`);
+          }
+          if (!isWalkInOrder && territoryDeliveryFee > 0) {
+            noteParts.push(`Territory Delivery Fee: KES ${territoryDeliveryFee.toFixed(2)}`);
           }
           if (tip > 0) noteParts.push(`Tip: KES ${tip.toFixed(2)}`);
           return noteParts.join('\n') || null;
@@ -491,6 +556,7 @@ router.post('/', async (req, res) => {
         paymentStatus: finalPaymentStatus,
         status: finalOrderStatus,
         driverId: assignedDriver ? assignedDriver.id : null, // Only assign driver if explicitly provided
+        staffPurchaseDriverId: isWalkInOrder ? normalizedStaffPurchaseDriverId : null,
         driverAccepted: null, // Explicitly set to null so order appears as pending
         branchId: branchId, // Assign closest branch
         adminOrder: effectiveAdminOrder,
@@ -536,8 +602,8 @@ router.post('/', async (req, res) => {
       }
 
       // Handle cash at hand payment for staff purchases (walk-in orders)
-      if (isWalkInOrder && paymentMethod === 'cash_at_hand' && finalPaymentStatus === 'paid' && driverId) {
-        const driver = await db.Driver.findByPk(parseInt(driverId), { transaction });
+      if (isWalkInOrder && paymentMethod === 'cash_at_hand' && finalPaymentStatus === 'paid' && normalizedStaffPurchaseDriverId) {
+        const driver = await db.Driver.findByPk(normalizedStaffPurchaseDriverId, { transaction });
         if (driver) {
           const currentCashAtHand = parseFloat(driver.cashAtHand || 0);
           const orderTotal = parseFloat(finalTotal) || 0;
@@ -548,7 +614,7 @@ router.post('/', async (req, res) => {
           // Create transaction record for cash at hand payment
           await db.Transaction.create({
             orderId: order.id,
-            driverId: parseInt(driverId),
+            driverId: normalizedStaffPurchaseDriverId,
             transactionType: 'cash_settlement',
             paymentMethod: 'cash',
             paymentProvider: 'cash_at_hand',
@@ -561,9 +627,9 @@ router.post('/', async (req, res) => {
           }, { transaction });
           
           console.log(`✅ Staff purchase paid from cash at hand for Order #${order.id}`);
-          console.log(`   Driver ${driverId} cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (+${orderTotal.toFixed(2)})`);
+          console.log(`   Staff purchaser (driver ${normalizedStaffPurchaseDriverId}) cash at hand: ${currentCashAtHand.toFixed(2)} → ${newCashAtHand.toFixed(2)} (+${orderTotal.toFixed(2)})`);
         } else {
-          console.warn(`⚠️ Driver ${driverId} not found for cash at hand payment on Order #${order.id}`);
+          console.warn(`⚠️ Driver ${normalizedStaffPurchaseDriverId} not found for cash at hand payment on Order #${order.id}`);
         }
       }
 
@@ -944,7 +1010,7 @@ router.get('/track/:token', async (req, res) => {
       include: [{
         model: db.OrderItem,
         as: 'items',
-        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
+        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
         include: [{
           model: db.Drink,
           as: 'drink',
@@ -994,7 +1060,7 @@ router.get('/:id/receipt', async (req, res) => {
         {
           model: db.OrderItem,
           as: 'items',
-          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
           include: [{
             model: db.Drink,
             as: 'drink',
@@ -1081,7 +1147,7 @@ router.get('/:id', async (req, res) => {
     const includes = [{
       model: db.OrderItem,
       as: 'items',
-      attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
+      attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
       include: [{
         model: db.Drink,
         as: 'drink',
@@ -1111,8 +1177,8 @@ router.get('/:id', async (req, res) => {
       orderData.orderItems = orderData.items;
     }
     
-    // Calculate delivery fee from order data (totalAmount - tipAmount - itemsTotal)
-    // Use the same calculation logic as getOrderFinancialBreakdown for consistency
+    // Convenience fee is customer-facing and equals (totalAmount - tipAmount - itemsTotal).
+    // Territory delivery fee is internal and stored on the order; never derive it from totalAmount.
     const itemsTotalRaw = (orderData.items || []).reduce((sum, item) => {
       const price = parseFloat(item.price || 0);
       const quantity = parseFloat(item.quantity || 0);
@@ -1122,9 +1188,13 @@ router.get('/:id', async (req, res) => {
     const tipAmount = parseFloat(orderData.tipAmount || 0);
     const totalAmount = parseFloat(orderData.totalAmount || 0);
     const deliveryFeeRaw = totalAmount - tipAmount - itemsTotal;
-    const deliveryFee = Number(Math.max(deliveryFeeRaw, 0).toFixed(2));
+    const convenienceFee = Number(Math.max(deliveryFeeRaw, 0).toFixed(2));
     
-    orderData.deliveryFee = deliveryFee;
+    orderData.deliveryFee = convenienceFee;
+    orderData.convenienceFee = convenienceFee;
+    if (orderData.territoryDeliveryFee === undefined) {
+      orderData.territoryDeliveryFee = 0;
+    }
     orderData.itemsTotal = itemsTotal;
     
     // For completed orders, include payment transaction data (transactionCode and transactionDate)
@@ -1368,7 +1438,7 @@ router.post('/find-all', async (req, res) => {
         {
           model: db.OrderItem,
           as: 'items',
-          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'createdAt', 'updatedAt'],
+          attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
           include: [{
             model: db.Drink,
             as: 'drink',
