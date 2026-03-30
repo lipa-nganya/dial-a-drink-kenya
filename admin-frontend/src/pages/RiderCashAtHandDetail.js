@@ -792,21 +792,13 @@ const RiderCashAtHandDetail = () => {
                       const sortedEntries = [...logs].sort((a, b) => {
                         const dateA = new Date(a.date);
                         const dateB = new Date(b.date);
-                        return dateA - dateB; // FIFO (oldest first)
+                        return dateB - dateA; // newest first
                       });
                       const entryType = (entry) => {
                         const t = entry.type ?? entry.transaction_type ?? entry.Type;
                         return typeof t === 'string' ? t.toLowerCase() : t;
                       };
-                      const deltaForEntry = (entry) => {
-                        const type = entryType(entry);
-                        const isCredit = type === 'cash_received';
-                        const amount = parseFloat(entry.amount || 0);
-                        return isCredit ? amount : -amount;
-                      };
-                      // Reconstruct starting balance for FIFO display.
-                      const startBalance = totalCashAtHand - sortedEntries.reduce((sum, e) => sum + deltaForEntry(e), 0);
-                      let runningBalance = startBalance;
+                      let balanceAfter = totalCashAtHand;
                       const getLogType = (entry, isCredit) => {
                         const type = entryType(entry);
                         if (isCredit || type === 'cash_received') return 'Payment Received';
@@ -830,9 +822,13 @@ const RiderCashAtHandDetail = () => {
                         const type = entryType(entry);
                         const isCredit = type === 'cash_received';
                         const amount = parseFloat(entry.amount || 0);
-                        runningBalance += isCredit ? amount : -amount;
-                        const currentBalance = runningBalance;
+                        const currentBalance = balanceAfter;
                         const orderNum = getOrderNumber(entry);
+                        if (isCredit) {
+                          balanceAfter -= amount;
+                        } else {
+                          balanceAfter += amount;
+                        }
                         return (
                           <TableRow key={entry.transactionId ?? entry.id ?? index} hover>
                             <TableCell sx={{ color: colors.textSecondary, fontWeight: 600 }}>

@@ -280,13 +280,13 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       });
     });
 
-    // Sort entries FIFO (oldest first), then stable tie-breakers so running-balance UI stays consistent
+    // Sort entries newest first, then stable tie-breakers so running-balance UI stays consistent
     entries.sort((a, b) => {
-      const tb = new Date(a.date).getTime() - new Date(b.date).getTime();
+      const tb = new Date(b.date).getTime() - new Date(a.date).getTime();
       if (tb !== 0) return tb;
-      const ob = (a.orderId || 0) - (b.orderId || 0);
+      const ob = (b.orderId || 0) - (a.orderId || 0);
       if (ob !== 0) return ob;
-      return (a.transactionId || 0) - (b.transactionId || 0);
+      return (b.transactionId || 0) - (a.transactionId || 0);
     });
 
     // CRITICAL: Return the synced database value to ensure consistency

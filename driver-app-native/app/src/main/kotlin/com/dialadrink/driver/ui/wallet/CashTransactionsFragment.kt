@@ -116,30 +116,21 @@ class CashTransactionsFragment : Fragment() {
         
         binding.emptyStateText.visibility = View.GONE
         
-        // Sort entries FIFO (oldest first), then stable tie-breakers (matches backend)
+        // Sort entries by date descending (newest first), then stable tie-breakers (matches backend)
         val sortedEntries = data.entries.sortedWith(
-            compareBy<CashAtHandEntry> {
+            compareByDescending<CashAtHandEntry> {
                 try {
                     parseApiDate(it.date)?.time ?: 0L
                 } catch (_: Exception) {
                     0L
                 }
-            }.thenBy { it.orderId ?: 0 }
-                .thenBy { it.transactionId ?: 0 }
+            }.thenByDescending { it.orderId ?: 0 }
+                .thenByDescending { it.transactionId ?: 0 }
         )
 
-        fun delta(entry: CashAtHandEntry): Double {
-            val amt = entry.amount
-            return when (entry.type) {
-                "cash_received" -> amt
-                "cash_submission" -> -amt
-                else -> -amt // cash_sent and any other outflows
-            }
-        }
-
-        // Reconstruct starting balance so we can display FIFO with a running balance.
-        val startBalance = data.totalCashAtHand - sortedEntries.sumOf { delta(it) }
-        var runningBalance = startBalance
+        // Calculate running balance backwards from current total (since we're displaying newest first)
+        // Start with current balance - this is the balance after the newest transaction
+        var balanceAfter = data.totalCashAtHand
         var lastGroupDate: String? = null
 
         // Keep first group comfortably below fixed header.
@@ -205,6 +196,7 @@ class CashTransactionsFragment : Fragment() {
             // Order Value column
             val orderValueDisplay = when {
                 entry.orderValue != null -> formatter.format(entry.orderValue)
+                entry.creditAmount != null -> formatter.format(entry.creditAmount)
                 entry.orderId != null && entry.type == "cash_received" && entry.deliveryFee != null ->
                     formatter.format(entry.amount + (entry.deliveryFee * 0.5))
                 else -> "—"
@@ -220,21 +212,21 @@ class CashTransactionsFragment : Fragment() {
                         ?: (entry.deliveryFee?.let { entry.amount + it * 0.5 })
                     debitText.text = territoryHalf?.let { formatter.format(it) } ?: "0"
                     creditText.text = fullOrder?.let { formatter.format(it) } ?: formatter.format(entry.amount)
-                    runningBalance += entry.amount
-                    balanceText.text = formatter.format(runningBalance)
+                    balanceText.text = formatter.format(balanceAfter)
+                    balanceAfter -= entry.amount
                 }
                 "cash_submission" -> {
                     debitText.text = "0"
                     creditText.text = formatter.format(entry.amount)
-                    runningBalance -= entry.amount
-                    balanceText.text = formatter.format(runningBalance)
+                    balanceText.text = formatter.format(balanceAfter)
+                    balanceAfter += entry.amount
                 }
                 else -> {
                     // cash_sent and any other outflows: money leaving cash at hand
                     debitText.text = "0"
                     creditText.text = formatter.format(entry.amount)
-                    runningBalance -= entry.amount
-                    balanceText.text = formatter.format(runningBalance)
+                    balanceText.text = formatter.format(balanceAfter)
+                    balanceAfter += entry.amount
                 }
             }
             

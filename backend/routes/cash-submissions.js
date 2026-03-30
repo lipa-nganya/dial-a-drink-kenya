@@ -910,7 +910,9 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
         const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
         const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
         const savings = deliveryFee * 0.5;
-        expectedTotal += (itemsTotal + savings);
+        // For order_payment, driver remits the full order value collected in cash:
+        // items total + convenience fee (delivery fee). Savings is handled separately.
+        expectedTotal += (itemsTotal + deliveryFee);
       }
 
       if (paymentMethodLower === 'customer_paid_to_office') {
@@ -1137,10 +1139,13 @@ router.get('/:driverId/orders-for-order-payment', async (req, res) => {
       if (adminCashAtHandOrderIds.has(order.id)) continue;
       try {
         const breakdown = await getOrderFinancialBreakdown(order.id);
+        // Driver should submit the FULL order value they received in cash:
+        // order value = order cost (items total) + convenience fee (customer delivery fee).
+        // Do NOT take 50% of convenience fee here.
         const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
         const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
         const savings = deliveryFee * 0.5;
-        const totalToSubmit = itemsTotal + savings;
+        const totalToSubmit = itemsTotal + deliveryFee;
         eligible.push({
           orderId: order.id,
           customerName: order.customerName || 'Customer',
