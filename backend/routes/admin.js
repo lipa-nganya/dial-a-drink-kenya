@@ -2196,6 +2196,216 @@ router.put('/drivers/:driverId/cash-at-hand-opening-balance', verifyAdmin, requi
   }
 });
 
+/**
+ * Upsert savings log overrides (Debit / Credit / Balance columns).
+ * Debit/Credit adjustments change driver_wallets.savings by the net difference from the natural line.
+ * balanceAfter is display-only.
+ * Body: { entryKey, debitAmount?, creditAmount?, balanceAfter? } — null clears an override field.
+ */
+router.put('/drivers/:driverId/savings-log-display', verifyAdmin, requireSuperSuperAdmin, async (req, res) => {
+  try {
+    const driverId = parseInt(req.params.driverId, 10);
+    const { entryKey, debitAmount, creditAmount, balanceAfter } = req.body || {};
+    const adminId = req.admin?.id != null ? parseInt(req.admin.id, 10) : null;
+    const b = req.body || {};
+    const isDeleteAllClear =
+      Object.prototype.hasOwnProperty.call(b, 'debitAmount') &&
+      Object.prototype.hasOwnProperty.call(b, 'creditAmount') &&
+      Object.prototype.hasOwnProperty.call(b, 'balanceAfter') &&
+      b.debitAmount === null &&
+      b.creditAmount === null &&
+      b.balanceAfter === null;
+
+    if (!Number.isFinite(driverId) || driverId < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid driver id' });
+    }
+    if (!entryKey || typeof entryKey !== 'string' || entryKey.length > 255) {
+      return res.status(400).json({ success: false, error: 'entryKey is required (max 255 chars)' });
+    }
+    if (!/^savings_tx:[0-9]+$/.test(entryKey)) {
+      return res.status(400).json({ success: false, error: 'Invalid entryKey format' });
+    }
+
+    const driverWallet = await db.DriverWallet.findOne({ where: { driverId } });
+    if (!driverWallet) {
+      return res.status(404).json({ success: false, error: 'Driver wallet not found' });
+    }
+
+    const parseOpt = (v) => {
+      if (v === undefined) return undefined;
+      if (v === null || v === '') return null;
+      const n = parseFloat(v);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new Error('Amounts must be non-negative numbers or null');
+      }
+      return n;
+    };
+
+    let debitParsed;
+    let creditParsed;
+    let balanceParsed;
+    try {
+      debitParsed = parseOpt(debitAmount);
+      creditParsed = parseOpt(creditAmount);
+      balanceParsed = parseOpt(balanceAfter);
+    } catch (e) {
+      return res.status(400).json({ success: false, error: e.message });
+    }
+
+    const existing = await db.DriverSavingsLogOverride.findOne({ where: { driverId, entryKey } });
+
+    const txId = parseInt(entryKey.split(':')[1], 10);
+    const tx = await db.Transaction.findOne({ where: { id: txId, driverId } });
+    if (!tx) {
+      if (existing && isDeleteAllClear) {
+        await existing.destroy();
+        return res.json({ success: true, data: null, deleted: true });
+      }
+      return res.status(404).json({ success: false, error: 'No matching savings transaction for this entry key' });
+    }
+
+    const naturalNet = (() => {
+      const amt = Math.abs(parseFloat(tx.amount || 0)) || 0;
+      if (tx.transactionType === 'savings_credit') return amt;
+      if (tx.transactionType === 'delivery_fee_debit' && tx.paymentProvider === 'stop_deduction') return -amt;
+      // Fallback: respect sign if present
+      return parseFloat(tx.amount || 0) || 0;
+    })();
+
+    const computeNetFromOverride = (o) => {
+      if (!o) return naturalNet;
+      const hasD = o.debitAmount != null;
+      const hasC = o.creditAmount != null;
+      if (!hasD && !hasC) return naturalNet;
+      const d = parseFloat(hasD ? o.debitAmount : 0) || 0;
+      const c = parseFloat(hasC ? o.creditAmount : 0) || 0;
+      return c - d;
+    };
+
+    const roundMoney = (x) => Math.round((Number(x) + Number.EPSILON) * 100) / 100;
+
+    if (existing && isDeleteAllClear) {
+      const transaction = await db.sequelize.transaction();
+      try {
+        const prevNet = computeNetFromOverride(existing);
+        const reverseDelta = roundMoney(-(prevNet - naturalNet));
+        if (reverseDelta !== 0) {
+          await driverWallet.increment({ savings: reverseDelta }, { transaction });
+        }
+        await existing.destroy({ transaction });
+        await transaction.commit();
+        return res.json({ success: true, data: null, deleted: true });
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    }
+
+    const nextDebit = debitParsed !== undefined ? debitParsed : (existing?.debitAmount ?? null);
+    const nextCredit = creditParsed !== undefined ? creditParsed : (existing?.creditAmount ?? null);
+
+    const prevNet = computeNetFromOverride(existing ? { debitAmount: existing.debitAmount, creditAmount: existing.creditAmount } : null);
+    const nextNet = computeNetFromOverride({ debitAmount: nextDebit, creditAmount: nextCredit });
+
+    const debitOrCreditInRequest = debitParsed !== undefined || creditParsed !== undefined;
+
+    const transaction = await db.sequelize.transaction();
+    try {
+      if (debitOrCreditInRequest) {
+        const delta = roundMoney(nextNet - prevNet);
+        if (delta !== 0) {
+          await driverWallet.increment({ savings: delta }, { transaction });
+        }
+      }
+
+      const updateFields = { updatedByAdminId: adminId };
+      if (debitParsed !== undefined) updateFields.debitAmount = debitParsed;
+      if (creditParsed !== undefined) updateFields.creditAmount = creditParsed;
+      if (balanceParsed !== undefined) updateFields.balanceAfter = balanceParsed;
+
+      let row;
+      if (existing) {
+        await existing.update(updateFields, { transaction });
+        await existing.reload({ transaction });
+        row = existing;
+      } else {
+        const hasAny = [debitParsed, creditParsed, balanceParsed].some((v) => v !== undefined && v !== null);
+        if (!hasAny) {
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            error: 'Provide at least one non-null debitAmount, creditAmount, or balanceAfter'
+          });
+        }
+        const createData = { driverId, entryKey, updatedByAdminId: adminId };
+        if (debitParsed !== undefined) createData.debitAmount = debitParsed;
+        if (creditParsed !== undefined) createData.creditAmount = creditParsed;
+        if (balanceParsed !== undefined) createData.balanceAfter = balanceParsed;
+        row = await db.DriverSavingsLogOverride.create(createData, { transaction });
+      }
+
+      await transaction.commit();
+      return res.json({
+        success: true,
+        data: row.toJSON ? row.toJSON() : row
+      });
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error saving savings log display:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to save' });
+  }
+});
+
+/**
+ * Set optional savings statement opening balance (balance before the oldest savings transaction).
+ * Stored on driver_wallets.savingsOpeningBalance.
+ * Body: { savingsOpeningBalance: number | null } — null clears.
+ */
+router.put('/drivers/:driverId/savings-opening-balance', verifyAdmin, requireSuperSuperAdmin, async (req, res) => {
+  try {
+    const driverId = parseInt(req.params.driverId, 10);
+    const { savingsOpeningBalance } = req.body || {};
+    if (!Number.isFinite(driverId) || driverId < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid driver id' });
+    }
+
+    const wallet = await db.DriverWallet.findOne({ where: { driverId } });
+    if (!wallet) {
+      return res.status(404).json({ success: false, error: 'Driver wallet not found' });
+    }
+
+    let value = null;
+    if (savingsOpeningBalance !== undefined && savingsOpeningBalance !== null && savingsOpeningBalance !== '') {
+      const n = parseFloat(savingsOpeningBalance);
+      if (!Number.isFinite(n) || n < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Opening balance must be a non-negative number or null to clear'
+        });
+      }
+      value = n;
+    }
+
+    await wallet.update({ savingsOpeningBalance: value });
+    await wallet.reload();
+
+    const raw = wallet.savingsOpeningBalance;
+    const parsed = raw != null && raw !== '' ? parseFloat(raw) : null;
+    return res.json({
+      success: true,
+      data: {
+        savingsOpeningBalance: parsed != null && Number.isFinite(parsed) ? parsed : null
+      }
+    });
+  } catch (error) {
+    console.error('Error saving savings opening balance:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to save' });
+  }
+});
+
 // Get all drivers with completed orders (for admin completed screen)
 router.get('/drivers/completed', verifyAdmin, async (req, res) => {
   try {

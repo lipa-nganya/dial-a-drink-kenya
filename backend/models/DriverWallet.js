@@ -44,6 +44,13 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: false,
       defaultValue: 0,
       comment: 'Driver-owned savings (withheld delivery fees). This is leverage, not revenue.'
+    },
+    savingsOpeningBalance: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      defaultValue: null,
+      comment:
+        'Optional statement opening balance (before oldest savings transaction). When set, admin savings running balances are computed forward from this value.'
     }
   }, {
     tableName: 'driver_wallets',
