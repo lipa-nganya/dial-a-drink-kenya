@@ -321,19 +321,6 @@ const InventoryPage = () => {
     }
   };
 
-  const refetchCategoriesAndBrands = async () => {
-    try {
-      const [categoriesResponse, brandsResponse] = await Promise.all([
-        api.get('/categories'),
-        api.get('/brands/all')
-      ]);
-      setCategories(categoriesResponse.data || []);
-      setBrands(brandsResponse.data || []);
-    } catch (error) {
-      console.error('Error refetching categories/brands:', error);
-    }
-  };
-
   // When returning from another tab (e.g. Add Purchase) or Copilot, refresh drinks so stock levels stay current.
   useEffect(() => {
     const onVisibilityChange = () => {
