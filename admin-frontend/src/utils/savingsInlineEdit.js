@@ -1,8 +1,3 @@
-const toType = (row) => {
-  const t = row?.transactionType ?? row?.type;
-  return typeof t === 'string' ? t.toLowerCase() : t;
-};
-
 export function getDefaultSavingsDebitCreditStrings(row) {
   const amt = parseFloat(row?.amount || 0) || 0;
   const hasD = row?.debitAmount != null && row.debitAmount !== '';
