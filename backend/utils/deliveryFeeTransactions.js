@@ -86,13 +86,14 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
   const isPayNowWithoutDriver = paymentType === 'pay_now' && !driverId;
 
   const breakdown = await getOrderFinancialBreakdown(orderId);
-  const deliveryFeeAmount = toNumeric(breakdown.deliveryFee);
+  const convenienceFeeAmount = toNumeric(breakdown.deliveryFee);
+  const territoryDeliveryFeeAmount = toNumeric(orderModel.territoryDeliveryFee ?? convenienceFeeAmount);
 
-  if (deliveryFeeAmount < 0.009) {
+  if (territoryDeliveryFeeAmount < 0.009) {
     return {
       skipped: true,
       reason: 'no_delivery_fee',
-      deliveryFee: deliveryFeeAmount
+      deliveryFee: territoryDeliveryFeeAmount
     };
   }
 
@@ -182,7 +183,7 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
 
   // Merchant no longer gets any delivery fee - 100% goes to driver
   // Pay Now: 50% driver savings, 50% driver wallet. Pay on Delivery: 50% savings, 50% + order total to cash at hand.
-  const driverPayAmount = driverId ? deliveryFeeAmount : 0; // Full delivery fee to driver when driver assigned
+  const driverPayAmount = driverId ? territoryDeliveryFeeAmount : 0; // Territory delivery fee to driver when assigned
   const merchantAmount = 0; // No merchant cut of delivery fee
 
   const deliveryTransactions = await db.Transaction.findAll({

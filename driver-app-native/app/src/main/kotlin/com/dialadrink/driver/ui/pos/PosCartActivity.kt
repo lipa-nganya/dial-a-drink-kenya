@@ -24,10 +24,12 @@ import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.*
 import com.dialadrink.driver.databinding.ActivityPosCartBinding
+import com.dialadrink.driver.utils.MpesaPhoneUtils
 import com.dialadrink.driver.utils.SharedPrefs
 // Removed Google Places SDK imports - now using backend API for cost savings
 import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
+import retrofit2.Response
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -37,9 +39,10 @@ class PosCartActivity : AppCompatActivity() {
     private val territories = mutableListOf<Territory>()
     private var selectedTerritory: Territory? = null
     private var selectedPaymentMethod: String? = null
-    private val deliveryPaymentMethods = listOf("Swipe on Delivery", "Pay on Delivery", "Already Paid")
-    private val walkInPaymentMethods = listOf("Cash", "Mpesa (prompt)")
-    private val staffPurchasePaymentMethods = listOf("Cash", "Mpesa (prompt)", "Cash at Hand")
+    // Keep labels aligned with admin web for consistency.
+    private val deliveryPaymentMethods = listOf("Cash", "Pay on Delivery", "Mpesa", "Card")
+    private val walkInPaymentMethods = listOf("Cash", "Mpesa", "Card")
+    private val staffPurchasePaymentMethods = listOf("Cash", "Mpesa", "Cash at Hand")
     private val paymentMethods = mutableListOf<String>() // Will be set based on order type
     private lateinit var paymentMethodAdapter: ArrayAdapter<String>
     private var customerExists = false
@@ -71,6 +74,9 @@ class PosCartActivity : AppCompatActivity() {
     private lateinit var orderTypeAdapter: ArrayAdapter<String>
     private lateinit var territoryAdapter: ArrayAdapter<String>
 
+    /** From GET /api/settings (fixed or per-km estimate). */
+    private var convenienceFeeEstimate = 0.0
+
     companion object {
         const val CART_EXTRA = "cart"
     }
@@ -80,6 +86,19 @@ class PosCartActivity : AppCompatActivity() {
         binding = ActivityPosCartBinding.inflate(layoutInflater)
         setContentView(binding.root)
         applyInputTextColors()
+        // Territory delivery fee is derived from the selected territory; it should not be edited manually.
+        try {
+            binding.deliveryFeeEditText.apply {
+                keyListener = null
+                isFocusable = false
+                isFocusableInTouchMode = false
+                isClickable = false
+                isLongClickable = false
+                setTextIsSelectable(false)
+            }
+        } catch (_: Exception) {
+            // ignore
+        }
 
         setSupportActionBar(binding.toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
@@ -118,7 +137,7 @@ class PosCartActivity : AppCompatActivity() {
         
         // Update UI after everything is set up
         adapter.notifyDataSetChanged()
-        updateTotals()
+        loadConvenienceFeeSettings()
     }
 
     private fun applyInputTextColors() {
@@ -136,6 +155,8 @@ class PosCartActivity : AppCompatActivity() {
 
         binding.deliveryFeeEditText.setTextColor(textColor)
         binding.deliveryFeeEditText.setHintTextColor(hintColor)
+
+        binding.convenienceFeeText.setTextColor(textColor)
     }
     
     private fun setupStopCheckbox() {
@@ -822,7 +843,7 @@ class PosCartActivity : AppCompatActivity() {
             }
         })
         
-        AlertDialog.Builder(this)
+        AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog_Black)
             .setTitle("Create New Customer")
             .setView(dialogView)
             .setPositiveButton("Create") { _, _ ->
@@ -990,7 +1011,11 @@ class PosCartActivity : AppCompatActivity() {
                     setupCustomerPhoneField()
                 }
                 
-                updateTotals()
+                if (!isWalkIn) {
+                    loadConvenienceFeeSettings()
+                } else {
+                    updateTotals()
+                }
                 // Save form fields when order type changes
                 saveFormFieldsToPrefs()
         }
@@ -1028,59 +1053,35 @@ class PosCartActivity : AppCompatActivity() {
     }
 
     private fun setupPaymentMethodSpinner() {
-        // Initialize with delivery payment methods (default)
+        // Initialize adapter once; options are populated by updatePaymentMethodsForWalkIn/Delivery.
         paymentMethods.clear()
-        paymentMethods.add("Select Payment Method") // Placeholder at position 0
-        paymentMethods.addAll(deliveryPaymentMethods)
-        
-        paymentMethodAdapter = ArrayAdapter(this, R.layout.spinner_item_pos_dark, paymentMethods)
-        paymentMethodAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_pos_dark)
-        binding.paymentMethodSpinner.adapter = paymentMethodAdapter
-        
-        // Set default selection to "Select Payment Method" (position 0)
-        binding.paymentMethodSpinner.setSelection(0)
+        paymentMethods.add("Select Payment Method")
+        paymentMethodAdapter = ArrayAdapter(this, R.layout.item_dropdown_dark, paymentMethods)
+        binding.paymentMethodSpinner.setAdapter(paymentMethodAdapter)
+        binding.paymentMethodSpinner.setText("Select Payment Method", false)
         selectedPaymentMethod = null
-        
-        binding.paymentMethodSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                // Position 0 is "Select Payment Method" placeholder - don't set a payment method
-                if (position == 0) {
-                    selectedPaymentMethod = null
-                    return
-                }
-                
-                // Adjust position since we added placeholder at position 0
-                val actualPosition = position - 1
-                
-                if (isWalkIn) {
-                    // Walk-in payment methods: Cash, Mpesa (prompt), or Cash at Hand (if staff purchase)
-                    selectedPaymentMethod = when (actualPosition) {
-                        0 -> "cash" // Cash
-                        1 -> "mpesa_prompt" // Mpesa (prompt)
-                        2 -> "cash_at_hand" // Cash at Hand (staff purchase only)
-                        else -> null
-                    }
-                } else {
-                    // Delivery payment methods: Swipe on Delivery, Pay on Delivery, Already Paid
-                    selectedPaymentMethod = when (actualPosition) {
-                        0 -> "swipe_on_delivery" // Swipe on Delivery
-                        1 -> "pay_on_delivery" // Pay on Delivery
-                        2 -> "already_paid" // Already Paid
-                        else -> null
-                    }
-                }
-                
-                // If walk-in, update phone number based on payment method
-                if (isWalkIn) {
-                    updatePhoneNumberForWalkInCash()
-                }
-                // Save form fields when payment method changes
-                saveFormFieldsToPrefs()
+
+        attachPaymentMethodDropdownListener()
+
+        if (isWalkIn) updatePaymentMethodsForWalkIn() else updatePaymentMethodsForDelivery()
+    }
+
+    private fun attachPaymentMethodDropdownListener() {
+        binding.paymentMethodSpinner.setOnItemClickListener { parent, _, position, _ ->
+            val label = parent?.adapter?.getItem(position)?.toString() ?: return@setOnItemClickListener
+            selectedPaymentMethod = when (label) {
+                "Cash" -> "cash"
+                "Pay on Delivery" -> "pay_on_delivery"
+                "Mpesa" -> "mpesa_prompt"
+                "Card" -> "card"
+                "Cash at Hand" -> "cash_at_hand"
+                else -> null // includes "Select Payment Method"
             }
-            
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
-                selectedPaymentMethod = null
+
+            if (isWalkIn) {
+                updatePhoneNumberForWalkInCash()
             }
+            saveFormFieldsToPrefs()
         }
     }
     
@@ -1222,9 +1223,6 @@ class PosCartActivity : AppCompatActivity() {
             return
         }
         
-        // Temporarily remove listener to prevent triggering during update
-        binding.paymentMethodSpinner.onItemSelectedListener = null
-        
         paymentMethods.clear()
         paymentMethods.add("Select Payment Method") // Placeholder at position 0
         if (isStaffPurchase) {
@@ -1233,57 +1231,10 @@ class PosCartActivity : AppCompatActivity() {
             paymentMethods.addAll(walkInPaymentMethods)
         }
         
-        // Create a new adapter to ensure spinner refreshes properly
-        paymentMethodAdapter = ArrayAdapter(this, R.layout.spinner_item_pos_dark, paymentMethods)
-        paymentMethodAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_pos_dark)
-        binding.paymentMethodSpinner.adapter = paymentMethodAdapter
-        
-        // Reset to "Select Payment Method" placeholder
-        binding.paymentMethodSpinner.setSelection(0, false) // false = don't trigger listener
+        paymentMethodAdapter = ArrayAdapter(this, R.layout.item_dropdown_dark, paymentMethods)
+        binding.paymentMethodSpinner.setAdapter(paymentMethodAdapter)
+        binding.paymentMethodSpinner.setText("Select Payment Method", false)
         selectedPaymentMethod = null
-        
-        // Reattach listener
-        binding.paymentMethodSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                // Position 0 is "Select Payment Method" placeholder - don't set a payment method
-                if (position == 0) {
-                    selectedPaymentMethod = null
-                    return
-                }
-                
-                // Adjust position since we added placeholder at position 0
-                val actualPosition = position - 1
-                
-                if (isWalkIn) {
-                    // Walk-in payment methods: Cash, Mpesa (prompt), or Cash at Hand (if staff purchase)
-                    selectedPaymentMethod = when (actualPosition) {
-                        0 -> "cash" // Cash
-                        1 -> "mpesa_prompt" // Mpesa (prompt)
-                        2 -> "cash_at_hand" // Cash at Hand (staff purchase only)
-                        else -> null
-                    }
-                } else {
-                    // Delivery payment methods: Swipe on Delivery, Pay on Delivery, Already Paid
-                    selectedPaymentMethod = when (actualPosition) {
-                        0 -> "swipe_on_delivery" // Swipe on Delivery
-                        1 -> "pay_on_delivery" // Pay on Delivery
-                        2 -> "already_paid" // Already Paid
-                        else -> null
-                    }
-                }
-                
-                // If walk-in, update phone number based on payment method
-                if (isWalkIn) {
-                    updatePhoneNumberForWalkInCash()
-                }
-                // Save form fields when payment method changes
-                saveFormFieldsToPrefs()
-            }
-            
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
-                selectedPaymentMethod = null
-            }
-        }
     }
     
     private fun updatePaymentMethodsForDelivery() {
@@ -1292,64 +1243,14 @@ class PosCartActivity : AppCompatActivity() {
             return
         }
         
-        // Temporarily remove listener to prevent triggering during update
-        binding.paymentMethodSpinner.onItemSelectedListener = null
-        
         paymentMethods.clear()
         paymentMethods.add("Select Payment Method") // Placeholder at position 0
         paymentMethods.addAll(deliveryPaymentMethods)
         
-        // Create a new adapter to ensure spinner refreshes properly
-        paymentMethodAdapter = ArrayAdapter(this, R.layout.spinner_item_pos_dark, paymentMethods)
-        paymentMethodAdapter.setDropDownViewResource(R.layout.spinner_dropdown_item_pos_dark)
-        binding.paymentMethodSpinner.adapter = paymentMethodAdapter
-        
-        // Reset to "Select Payment Method" placeholder
-        binding.paymentMethodSpinner.setSelection(0, false) // false = don't trigger listener
+        paymentMethodAdapter = ArrayAdapter(this, R.layout.item_dropdown_dark, paymentMethods)
+        binding.paymentMethodSpinner.setAdapter(paymentMethodAdapter)
+        binding.paymentMethodSpinner.setText("Select Payment Method", false)
         selectedPaymentMethod = null
-        
-        // Reattach listener
-        binding.paymentMethodSpinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: android.view.View?, position: Int, id: Long) {
-                // Position 0 is "Select Payment Method" placeholder - don't set a payment method
-                if (position == 0) {
-                    selectedPaymentMethod = null
-                    return
-                }
-                
-                // Adjust position since we added placeholder at position 0
-                val actualPosition = position - 1
-                
-                if (isWalkIn) {
-                    // Walk-in payment methods: Cash, Mpesa (prompt), or Cash at Hand (if staff purchase)
-                    selectedPaymentMethod = when (actualPosition) {
-                        0 -> "cash" // Cash
-                        1 -> "mpesa_prompt" // Mpesa (prompt)
-                        2 -> "cash_at_hand" // Cash at Hand (staff purchase only)
-                        else -> null
-                    }
-                } else {
-                    // Delivery payment methods: Swipe on Delivery, Pay on Delivery, Already Paid
-                    selectedPaymentMethod = when (actualPosition) {
-                        0 -> "swipe_on_delivery" // Swipe on Delivery
-                        1 -> "pay_on_delivery" // Pay on Delivery
-                        2 -> "already_paid" // Already Paid
-                        else -> null
-                    }
-                }
-                
-                // If walk-in, update phone number based on payment method
-                if (isWalkIn) {
-                    updatePhoneNumberForWalkInCash()
-                }
-                // Save form fields when payment method changes
-                saveFormFieldsToPrefs()
-            }
-            
-            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {
-                selectedPaymentMethod = null
-            }
-        }
     }
     
     private fun updatePhoneNumberForWalkInCash() {
@@ -1399,21 +1300,23 @@ class PosCartActivity : AppCompatActivity() {
 
     private fun showPaymentMethodDialog() {
         // Payment method is now handled by spinner, but keep this for backward compatibility if needed
-        val options = arrayOf("Pay on Delivery", "Swipe on Delivery", "Already Paid")
+        val options = arrayOf("Cash", "Pay on Delivery", "Mpesa", "Card")
         val currentIndex = when (selectedPaymentMethod) {
-            "pay_on_delivery" -> 0
-            "card" -> 1
-            "cash" -> 2
-            else -> 0 // Default to "Pay on Delivery"
+            "cash" -> 0
+            "pay_on_delivery" -> 1
+            "mpesa_prompt" -> 2
+            "card" -> 3
+            else -> 1 // Default to "Pay on Delivery"
         }
         
         AlertDialog.Builder(this)
             .setTitle("Select Payment Method")
             .setSingleChoiceItems(options, currentIndex) { dialog, which ->
                 selectedPaymentMethod = when (which) {
-                    0 -> "pay_on_delivery"
-                    1 -> "card"
-                    2 -> "cash"
+                    0 -> "cash"
+                    1 -> "pay_on_delivery"
+                    2 -> "mpesa_prompt"
+                    3 -> "card"
                     else -> "pay_on_delivery"
                 }
                 dialog.dismiss()
@@ -1474,17 +1377,50 @@ class PosCartActivity : AppCompatActivity() {
     }
     
 
+    private fun parseSettingDouble(res: Response<SettingResponse>, default: Double): Double {
+        return if (res.isSuccessful) res.body()?.value?.toDoubleOrNull() ?: default else default
+    }
+
+    private fun loadConvenienceFeeSettings() {
+        lifecycleScope.launch {
+            try {
+                if (!ApiClient.isInitialized()) {
+                    ApiClient.init(this@PosCartActivity)
+                }
+                val api = ApiClient.getApiService()
+                val modeRes = api.getSetting("deliveryFeeMode")
+                val withRes = api.getSetting("deliveryFeeWithAlcohol")
+                val perKmWithRes = api.getSetting("deliveryFeePerKmWithAlcohol")
+                val mode = if (modeRes.isSuccessful) modeRes.body()?.value ?: "fixed" else "fixed"
+                val withAlc = parseSettingDouble(withRes, 50.0)
+                val perKmWith = parseSettingDouble(perKmWithRes, 20.0)
+                convenienceFeeEstimate = when (mode) {
+                    "perKm" -> kotlin.math.ceil(5 * perKmWith)
+                    else -> withAlc
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("PosCartActivity", "loadConvenienceFeeSettings: ${e.message}", e)
+                convenienceFeeEstimate = 0.0
+            }
+            updateTotals()
+        }
+    }
+
     private fun updateTotals() {
         val orderTotal = cart.sumOf { it.price * it.quantity }
-        val deliveryFee = binding.deliveryFeeEditText.text.toString().toDoubleOrNull() ?: 0.0
-        val total = orderTotal + deliveryFee
-        
+        val territoryFee = binding.deliveryFeeEditText.text.toString().toDoubleOrNull() ?: 0.0
+        val convenience = if (isWalkIn) 0.0 else convenienceFeeEstimate
+        val orderValue = orderTotal + convenience
+
         binding.orderTotalText.text = currencyFormatter.format(orderTotal)
-        binding.deliveryFeeText.text = currencyFormatter.format(deliveryFee)
-        binding.totalText.text = currencyFormatter.format(total)
-        
-        // Calculate and display profit/loss
-        calculateAndDisplayProfitLoss(orderTotal, deliveryFee)
+        binding.convenienceFeeText.text = currencyFormatter.format(convenience)
+        binding.deliveryFeeText.text = currencyFormatter.format(territoryFee)
+        binding.totalText.text = currencyFormatter.format(orderValue)
+
+        binding.convenienceFeeRow.visibility = if (isWalkIn) View.GONE else View.VISIBLE
+
+        // Calculate and display profit/loss (territory fee is the internal cost driver for margin)
+        calculateAndDisplayProfitLoss(orderTotal, territoryFee)
     }
     
     private fun calculateAndDisplayProfitLoss(orderTotal: Double, deliveryFee: Double) {
@@ -1547,32 +1483,40 @@ class PosCartActivity : AppCompatActivity() {
                 // Determine payment method and status based on selection
                 // Map internal payment method values to backend enum values
                 val internalPaymentMethod = selectedPaymentMethod!!
+                // Walk-in orders should never be sent to Unassigned. Treat walk-in Mpesa as already paid.
+                val walkInTreatMpesaAsPaid = isWalkIn && internalPaymentMethod == "mpesa_prompt"
                 val paymentType = when (internalPaymentMethod) {
                     "cash" -> "pay_now"
                     "cash_at_hand" -> "pay_now" // Cash at hand - paid from driver's cash at hand
-                    "mpesa_prompt" -> "pay_on_delivery" // Mpesa prompt - will be prompted after order creation
+                    "mpesa_prompt" -> if (walkInTreatMpesaAsPaid) "pay_now" else "pay_on_delivery" // Walk-in Mpesa is paid; delivery Mpesa prompt is pay_on_delivery
                     "pay_on_delivery" -> "pay_on_delivery"
-                    "swipe_on_delivery" -> "pay_on_delivery" // Swipe on delivery - card payment on delivery
-                    "already_paid" -> "pay_now" // Already paid
+                    "card" -> "pay_now"
+                    // Backward compatibility (older saved selections)
+                    "already_paid" -> "pay_now"
+                    "swipe_on_delivery" -> "pay_on_delivery"
                     else -> if (isWalkIn) "pay_now" else "pay_on_delivery"
                 }
                 // Map to backend enum values: 'card', 'mobile_money', 'cash'
                 val paymentMethod = when (internalPaymentMethod) {
                     "cash" -> "cash"
-                    "cash_at_hand" -> "cash" // Cash at hand is treated as cash
-                    "mpesa_prompt" -> "mobile_money" // Mpesa prompt uses mobile_money
+                    "cash_at_hand" -> "cash_at_hand" // Staff purchase: paid from driver's cash at hand (backend updates cashAtHand + logs)
+                    "mpesa_prompt" -> if (walkInTreatMpesaAsPaid) "mobile_money" else "mobile_money" // Mpesa prompt uses mobile_money
                     "pay_on_delivery" -> null // Pay on delivery - no specific method yet (rider will collect)
-                    "swipe_on_delivery" -> "card" // Swipe on delivery uses card
-                    "already_paid" -> "card" // Already paid - assume card (could be card or mobile_money, defaulting to card)
+                    "card" -> "card"
+                    // Backward compatibility (older saved selections)
+                    "already_paid" -> "cash"
+                    "swipe_on_delivery" -> "card"
                     else -> if (isWalkIn) "cash" else null
                 }
                 val paymentStatus = when (internalPaymentMethod) {
                     "cash" -> "paid" // Cash collected immediately
                     "cash_at_hand" -> "paid" // Paid from driver's cash at hand
-                    "mpesa_prompt" -> "unpaid" // Will prompt customer for Mpesa payment
+                    "mpesa_prompt" -> if (walkInTreatMpesaAsPaid) "paid" else "unpaid" // Walk-in Mpesa treated as paid
                     "pay_on_delivery" -> "unpaid" // Rider will collect payment
-                    "swipe_on_delivery" -> "unpaid" // Rider will swipe card on delivery
-                    "already_paid" -> "paid" // Already paid
+                    "card" -> "paid"
+                    // Backward compatibility (older saved selections)
+                    "already_paid" -> "paid"
+                    "swipe_on_delivery" -> "unpaid"
                     else -> if (isWalkIn) "paid" else "unpaid"
                 }
                 
@@ -1588,7 +1532,8 @@ class PosCartActivity : AppCompatActivity() {
                             PosOrderItem(
                                 drinkId = it.drinkId,
                                 quantity = it.quantity,
-                                selectedPrice = it.price
+                                selectedPrice = it.price,
+                                selectedCapacity = it.capacity
                             )
                         }
                         
@@ -1609,7 +1554,8 @@ class PosCartActivity : AppCompatActivity() {
                         val orderStatus = if (isWalkIn) {
                             // Walk-in orders: 'in_progress' if unpaid, 'completed' if paid
                             when (internalPaymentMethod) {
-                                "cash", "cash_at_hand" -> "completed" // Paid immediately
+                                "cash", "cash_at_hand", "card" -> "completed" // Paid immediately
+                                "mpesa_prompt" -> if (walkInTreatMpesaAsPaid) "completed" else "in_progress"
                                 else -> "in_progress" // Unpaid
                             }
                         } else {
@@ -1618,7 +1564,8 @@ class PosCartActivity : AppCompatActivity() {
                         val finalPaymentStatus = if (isWalkIn) {
                             // Walk-in orders: unpaid unless cash or cash_at_hand (paid immediately)
                             when (internalPaymentMethod) {
-                                "cash", "cash_at_hand" -> "paid"
+                                "cash", "cash_at_hand", "card" -> "paid"
+                                "mpesa_prompt" -> if (walkInTreatMpesaAsPaid) "paid" else "unpaid"
                                 else -> "unpaid"
                             }
                         } else {
@@ -1696,8 +1643,8 @@ class PosCartActivity : AppCompatActivity() {
                         // Clear cart and form fields on successful order
                         clearCartAndFormFields()
                         
-                        // If walk-in order with Mpesa prompt payment, prompt customer for payment
-                        if (isWalkIn && internalPaymentMethod == "mpesa_prompt" && phone.isNotEmpty() && phone != "POS") {
+                        // If Mpesa prompt is selected for delivery orders, prompt customer for payment (admin-web consistent flow).
+                        if (!isWalkIn && internalPaymentMethod == "mpesa_prompt" && phone.isNotEmpty() && phone != "POS") {
                             promptCustomerForPayment(order.id, phone)
                         } else {
                             Toast.makeText(this@PosCartActivity, "Order submitted successfully", Toast.LENGTH_SHORT).show()
@@ -1790,11 +1737,16 @@ class PosCartActivity : AppCompatActivity() {
     private fun promptCustomerForPayment(orderId: Int, customerPhone: String) {
         lifecycleScope.launch {
             try {
+                if (!MpesaPhoneUtils.isValidSafaricomMpesa(customerPhone)) {
+                    Toast.makeText(this@PosCartActivity, "Enter a valid Safaricom customer number for M-Pesa (e.g. 0712345678)", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                val normalizedPhone = MpesaPhoneUtils.normalizeKenyaMpesaPhone(customerPhone)
                 if (!ApiClient.isInitialized()) {
                     ApiClient.init(this@PosCartActivity)
                 }
                 
-                val request = PromptOrderPaymentRequest(customerPhone = customerPhone)
+                val request = PromptOrderPaymentRequest(customerPhone = normalizedPhone)
                 val response = ApiClient.getApiService().promptOrderPayment(orderId, request)
                 
                 if (response.isSuccessful && response.body()?.success == true) {

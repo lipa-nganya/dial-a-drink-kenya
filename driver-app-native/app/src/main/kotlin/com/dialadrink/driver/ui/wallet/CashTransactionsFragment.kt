@@ -12,12 +12,14 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.dialadrink.driver.R
 import com.dialadrink.driver.data.api.ApiClient
+import com.dialadrink.driver.data.model.CashAtHandEntry
 import com.dialadrink.driver.data.model.CashAtHandResponse
 import com.dialadrink.driver.databinding.FragmentWalletTransactionsBinding
 import com.dialadrink.driver.utils.SharedPrefs
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.*
 
 class CashTransactionsFragment : Fragment() {
@@ -26,12 +28,19 @@ class CashTransactionsFragment : Fragment() {
     
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+        isLenient = false
     }
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("UTC")
+        isLenient = false
     }
     private val apiDateFormat2 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("UTC")
+        isLenient = false
+    }
+    private val displayGroupDateFormat = SimpleDateFormat("EEEE, MMM d, yyyy", Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+        isLenient = false
     }
     
     override fun onCreateView(
@@ -57,6 +66,7 @@ class CashTransactionsFragment : Fragment() {
         
         binding.loadingProgress.visibility = View.VISIBLE
         binding.emptyStateText.visibility = View.GONE
+        binding.fixedHeaderCard.visibility = View.GONE
         
         lifecycleScope.launch {
             try {
@@ -85,6 +95,8 @@ class CashTransactionsFragment : Fragment() {
         binding.transactionsContainer.visibility = View.GONE
         val tableContainer = binding.root.findViewById<View>(R.id.tableContainer)
         tableContainer?.visibility = View.VISIBLE
+        binding.fixedHeaderCard.visibility = View.VISIBLE
+        binding.tableHeaderRow.visibility = View.GONE
         
         val tableLayout = binding.transactionsTable
         tableLayout.removeAllViews()
@@ -97,31 +109,74 @@ class CashTransactionsFragment : Fragment() {
         // Current cash at hand is already shown above the Transactions | Logs tabs.
         
         if (data.entries.isEmpty()) {
+            binding.fixedHeaderCard.visibility = View.GONE
             binding.emptyStateText.visibility = View.VISIBLE
             return
         }
         
         binding.emptyStateText.visibility = View.GONE
         
-        // Sort entries by date descending (newest first) - latest transactions at top
-        val sortedEntries = data.entries.sortedByDescending { entry ->
-            try {
-                val date = try {
-                    apiDateFormat.parse(entry.date)
-                } catch (e: Exception) {
-                    apiDateFormat2.parse(entry.date)
+        // Sort entries FIFO (oldest first), then stable tie-breakers (matches backend)
+        val sortedEntries = data.entries.sortedWith(
+            compareBy<CashAtHandEntry> {
+                try {
+                    parseApiDate(it.date)?.time ?: 0L
+                } catch (_: Exception) {
+                    0L
                 }
-                date?.time ?: 0L
-            } catch (e: Exception) {
-                0L
+            }.thenBy { it.orderId ?: 0 }
+                .thenBy { it.transactionId ?: 0 }
+        )
+
+        fun delta(entry: CashAtHandEntry): Double {
+            val amt = entry.amount
+            return when (entry.type) {
+                "cash_received" -> amt
+                "cash_submission" -> -amt
+                else -> -amt // cash_sent and any other outflows
             }
         }
-        
-        // Calculate running balance backwards from current total (since we're displaying newest first)
-        // Start with current balance - this is the balance after the newest transaction
-        var balanceAfter = data.totalCashAtHand
+
+        // Reconstruct starting balance so we can display FIFO with a running balance.
+        val startBalance = data.totalCashAtHand - sortedEntries.sumOf { delta(it) }
+        var runningBalance = startBalance
+        var lastGroupDate: String? = null
+
+        // Keep first group comfortably below fixed header.
+        // Use measured header height (when available) so we don't overlap on different devices.
+        val fixedHeaderHeightPx = binding.fixedHeaderCard.height.takeIf { it > 0 } ?: 72
+        val spacerHeightPx = (fixedHeaderHeightPx + 24).coerceAtLeast(88)
+        val topSpacerRow = TableRow(requireContext()).apply { minimumHeight = spacerHeightPx }
+        tableLayout.addView(topSpacerRow)
         
         sortedEntries.forEach { entry ->
+            val groupDate = try {
+                val date = parseApiDate(entry.date)
+                date?.let { dateFormat.format(it) } ?: "Unknown Date"
+            } catch (e: Exception) {
+                "Unknown Date"
+            }
+
+            if (lastGroupDate != groupDate) {
+                val groupRow = TableRow(requireContext()).apply {
+                    setPadding(0, 2, 0, 0)
+                }
+                val groupLabel = TextView(requireContext()).apply {
+                    layoutParams = TableRow.LayoutParams(
+                        TableRow.LayoutParams.MATCH_PARENT,
+                        TableRow.LayoutParams.WRAP_CONTENT
+                    )
+                    text = formatGroupDateForDisplay(groupDate)
+                    textSize = 12f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setTextColor(requireContext().getColor(R.color.accent))
+                    setPadding(16, 4, 16, 2)
+                }
+                groupRow.addView(groupLabel)
+                tableLayout.addView(groupRow)
+                lastGroupDate = groupDate
+            }
+
             val row = LayoutInflater.from(requireContext()).inflate(
                 R.layout.item_cash_transaction_row,
                 tableLayout,
@@ -137,7 +192,7 @@ class CashTransactionsFragment : Fragment() {
             
             val deliveryFeeDisplay = when {
                 entry.orderId == null -> "—"
-                entry.deliveryFee != null -> "KES ${formatter.format(entry.deliveryFee)}"
+                entry.deliveryFee != null -> formatter.format(entry.deliveryFee)
                 else -> "—"
             }
             orderNumText.text = deliveryFeeDisplay
@@ -145,40 +200,42 @@ class CashTransactionsFragment : Fragment() {
             // Extract delivery address from description
             // Description format might be: "Cash received for Order #123 - [Address]" or similar
             val deliveryAddress = extractDeliveryAddress(entry.description, entry.customerName)
-            deliveryAddressText.text = deliveryAddress
+            deliveryAddressText.text = formatDescriptionWithOrderNumber(entry.orderId, deliveryAddress)
             
-            // Format date as YYYY-MM-DD
-            try {
-                val date = try {
-                    apiDateFormat.parse(entry.date)
-                } catch (e: Exception) {
-                    apiDateFormat2.parse(entry.date)
-                }
-                dateText.text = date?.let { dateFormat.format(it) } ?: entry.date.substring(0, 10).takeIf { entry.date.length >= 10 } ?: entry.date
-            } catch (e: Exception) {
-                // Try to extract date part if full date string
-                dateText.text = entry.date.substring(0, 10).takeIf { entry.date.length >= 10 } ?: entry.date
+            // Order Value column
+            val orderValueDisplay = when {
+                entry.orderValue != null -> formatter.format(entry.orderValue)
+                entry.orderId != null && entry.type == "cash_received" && entry.deliveryFee != null ->
+                    formatter.format(entry.amount + (entry.deliveryFee * 0.5))
+                else -> "—"
             }
+            dateText.text = orderValueDisplay
             
-            // Set debit/credit amounts and calculate balance
-            // balanceAfter is the balance after this transaction
-            // We need to calculate balance before to move to the next (older) transaction
-            if (entry.type == "cash_received") {
-                // Cash received = Debit (increases balance)
-                // Balance before = balance after - amount
-                debitText.text = formatter.format(entry.amount)
-                creditText.text = "0"
-                balanceText.text = formatter.format(balanceAfter)
-                // Move to balance before this transaction for next iteration
-                balanceAfter -= entry.amount
-            } else {
-                // Cash sent = Credit (decreases balance)
-                // Balance before = balance after + amount
-                debitText.text = "0"
-                creditText.text = formatter.format(entry.amount)
-                balanceText.text = formatter.format(balanceAfter)
-                // Move to balance before this transaction for next iteration
-                balanceAfter += entry.amount
+            when (entry.type) {
+                "cash_received" -> {
+                    // DBT = 50% territory withheld, CRT = full order value (net cash at hand += CRT - DBT)
+                    val territoryHalf = entry.debitAmount
+                        ?: (entry.deliveryFee?.let { it * 0.5 })
+                    val fullOrder = entry.creditAmount ?: entry.orderValue
+                        ?: (entry.deliveryFee?.let { entry.amount + it * 0.5 })
+                    debitText.text = territoryHalf?.let { formatter.format(it) } ?: "0"
+                    creditText.text = fullOrder?.let { formatter.format(it) } ?: formatter.format(entry.amount)
+                    runningBalance += entry.amount
+                    balanceText.text = formatter.format(runningBalance)
+                }
+                "cash_submission" -> {
+                    debitText.text = "0"
+                    creditText.text = formatter.format(entry.amount)
+                    runningBalance -= entry.amount
+                    balanceText.text = formatter.format(runningBalance)
+                }
+                else -> {
+                    // cash_sent and any other outflows: money leaving cash at hand
+                    debitText.text = "0"
+                    creditText.text = formatter.format(entry.amount)
+                    runningBalance -= entry.amount
+                    balanceText.text = formatter.format(runningBalance)
+                }
             }
             
             tableLayout.addView(row)
@@ -219,6 +276,57 @@ class CashTransactionsFragment : Fragment() {
         
         // Fallback to description or customer name
         return description.ifEmpty { customerName ?: "N/A" }
+    }
+
+    private fun formatDescriptionWithOrderNumber(orderId: Int?, description: String): String {
+        if (orderId == null) return description
+        val cleaned = description.trim()
+        return if (cleaned.isEmpty()) {
+            "#$orderId"
+        } else {
+            "#$orderId • $cleaned"
+        }
+    }
+
+    private fun formatGroupDateForDisplay(groupDate: String): String {
+        if (groupDate == "Unknown Date") return groupDate
+        return try {
+            val parsed = dateFormat.parse(groupDate)
+            if (parsed != null) displayGroupDateFormat.format(parsed) else groupDate
+        } catch (e: Exception) {
+            groupDate
+        }
+    }
+
+    private fun parseApiDate(raw: String?): Date? {
+        if (raw.isNullOrBlank()) return null
+        val value = raw.trim()
+        val parsed = try {
+            apiDateFormat.parse(value)
+        } catch (_: Exception) {
+            try {
+                apiDateFormat2.parse(value)
+            } catch (_: Exception) {
+                try {
+                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSSXXX", Locale.getDefault()).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                        isLenient = false
+                    }.parse(value)
+                } catch (_: Exception) {
+                    try {
+                        SimpleDateFormat("yyyy-MM-dd HH:mm:ssXXX", Locale.getDefault()).apply {
+                            timeZone = TimeZone.getTimeZone("UTC")
+                            isLenient = false
+                        }.parse(value)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }
+        }
+        if (parsed == null) return null
+        val year = Calendar.getInstance().apply { time = parsed }.get(Calendar.YEAR)
+        return if (year in 2000..2100) parsed else null
     }
     
     override fun onDestroyView() {

@@ -203,7 +203,22 @@ class InProgressOrdersActivity : AppCompatActivity() {
         binding.swipeRefresh.isRefreshing = false
         binding.emptyStateText.visibility = View.GONE
         removeOrderCards()
-        orders.forEach { order ->
+        val filteredOrders = if (isAdminMode) {
+            orders.filter { order ->
+                val isDeliveryOrder = !order.deliveryAddress.equals("In-Store Purchase", ignoreCase = true)
+                val hasAssignedDriver = (order.driverId ?: 0) > 0 || order.driver != null
+                isDeliveryOrder && hasAssignedDriver
+            }
+        } else {
+            orders
+        }
+
+        if (filteredOrders.isEmpty()) {
+            showEmptyState("No in-progress delivery orders with assigned driver")
+            return
+        }
+
+        filteredOrders.forEach { order ->
             val card = createOrderCard(order)
             binding.ordersContainer.addView(card)
         }
@@ -243,15 +258,20 @@ class InProgressOrdersActivity : AppCompatActivity() {
                 }
             }
             
-            // Build location text with status
+            // Build location text
             val locationText = buildString {
                 append(order.deliveryAddress ?: "Address not provided")
                 if (isAdminMode && order.driver != null) {
                     append("\nDriver: ${order.driver?.name ?: "Unknown"}")
                 }
-                append("\nStatus: $statusText")
             }
             cardBinding.locationText.text = locationText
+
+            // Show status clearly on its own row
+            cardBinding.driverLabel.visibility = View.VISIBLE
+            cardBinding.driverLabel.text = "Order Status:"
+            cardBinding.driverStatusText.visibility = View.VISIBLE
+            cardBinding.driverStatusText.text = statusText
             
             // Hide accept/reject buttons for in-progress orders (they're already accepted)
             cardBinding.acceptButton.visibility = View.GONE
@@ -267,7 +287,20 @@ class InProgressOrdersActivity : AppCompatActivity() {
             
             // Make card clickable to view details (optional - can navigate to order detail)
             card.setOnClickListener {
-                Toast.makeText(this, "Order #${order.id ?: "N/A"} - $statusText", Toast.LENGTH_SHORT).show()
+                if (isAdminMode) {
+                    val orderId = order.id
+                    if (orderId != null) {
+                        val intent = Intent(this, com.dialadrink.driver.ui.admin.AssignRiderActivity::class.java).apply {
+                            putExtra("open_order_id", orderId)
+                            putExtra("open_order_direct", true)
+                        }
+                        startActivity(intent)
+                    } else {
+                        Toast.makeText(this, "Order ID missing", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(this, "Order #${order.id ?: "N/A"} - $statusText", Toast.LENGTH_SHORT).show()
+                }
             }
             
             return card
@@ -292,10 +325,10 @@ class InProgressOrdersActivity : AppCompatActivity() {
     private fun calculateProfitLoss(order: Order): Double? {
         try {
             val totalAmount = order.totalAmount ?: 0.0
-            val deliveryFee = order.deliveryFee ?: 0.0
+            val territoryDeliveryFee = order.territoryDeliveryFee ?: order.deliveryFee
             val orderItems = order.items ?: emptyList()
             
-            Log.d(TAG, "💰 Calculating profit/loss for Order #${order.id}: totalAmount=$totalAmount, deliveryFee=$deliveryFee, itemsCount=${orderItems.size}")
+            Log.d(TAG, "💰 Calculating profit/loss for Order #${order.id}: totalAmount=$totalAmount, territoryDeliveryFee=$territoryDeliveryFee, itemsCount=${orderItems.size}")
             
             if (orderItems.isEmpty()) {
                 Log.d(TAG, "⚠️ Order #${order.id} has no items, cannot calculate profit/loss")
@@ -331,8 +364,8 @@ class InProgressOrdersActivity : AppCompatActivity() {
             
             // Only return profit/loss if at least one item has a purchase price
             return if (hasPurchasePrice) {
-                val profit = totalAmount - totalPurchaseCost - deliveryFee
-                Log.d(TAG, "✅ Order #${order.id} profit/loss: $profit (totalAmount=$totalAmount - purchaseCost=$totalPurchaseCost - deliveryFee=$deliveryFee)")
+                val profit = totalAmount - totalPurchaseCost - territoryDeliveryFee
+                Log.d(TAG, "✅ Order #${order.id} profit/loss: $profit (totalAmount=$totalAmount - purchaseCost=$totalPurchaseCost - territoryDeliveryFee=$territoryDeliveryFee)")
                 profit
             } else {
                 Log.d(TAG, "⚠️ Order #${order.id} has no items with purchase price, cannot calculate profit/loss")

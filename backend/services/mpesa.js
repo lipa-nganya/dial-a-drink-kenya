@@ -221,12 +221,15 @@ function generatePassword() {
  * Format phone number to M-Pesa format (254XXXXXXXXX)
  */
 function formatPhoneNumber(phone) {
-  if (!phone || typeof phone !== 'string') {
+  if (phone === null || phone === undefined) {
     throw new Error('Phone number is required');
   }
 
-  // Remove all non-digit characters
-  let cleaned = phone.replace(/\D/g, '');
+  // Remove all non-digit characters (coerce numbers/strings from JSON/body parsers)
+  let cleaned = String(phone).replace(/\D/g, '');
+  if (!cleaned) {
+    throw new Error('Phone number is required');
+  }
   
   // Handle different formats
   if (cleaned.startsWith('0')) {

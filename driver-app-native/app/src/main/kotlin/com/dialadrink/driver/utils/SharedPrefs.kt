@@ -174,6 +174,23 @@ object SharedPrefs {
     fun getAdminUsername(context: Context): String? {
         return getPrefs(context).getString("admin_username", null)
     }
+
+    fun saveAdminRole(context: Context, role: String?) {
+        val prefs = getPrefs(context)
+        if (role.isNullOrBlank()) {
+            prefs.edit().remove("admin_role").apply()
+        } else {
+            prefs.edit().putString("admin_role", role).apply()
+        }
+    }
+
+    fun getAdminRole(context: Context): String? {
+        return getPrefs(context).getString("admin_role", null)
+    }
+
+    fun isSuperAdmin(context: Context): Boolean {
+        return getAdminRole(context).equals("super_admin", ignoreCase = true)
+    }
     
     fun setAdminLoggedIn(context: Context, loggedIn: Boolean) {
         getPrefs(context).edit().putBoolean("admin_logged_in", loggedIn).apply()

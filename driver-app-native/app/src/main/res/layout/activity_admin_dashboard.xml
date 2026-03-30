@@ -146,62 +146,19 @@
                             android:layout_marginBottom="8dp" />
 
                         <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Assign Rider"
-                            android:textColor="@color/text_primary_dark"
-                            android:textSize="16sp"
-                            android:textStyle="bold" />
-                    </LinearLayout>
-                </com.google.android.material.card.MaterialCardView>
-
-                <!-- Pending Button -->
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/pendingCard"
-                    android:layout_width="0dp"
-                    android:layout_height="120dp"
-                    android:layout_columnWeight="1"
-                    android:layout_row="1"
-                    android:layout_column="0"
-                    android:layout_margin="8dp"
-                    app:cardBackgroundColor="@color/paper_dark"
-                    app:cardCornerRadius="12dp"
-                    app:cardElevation="4dp"
-                    app:strokeWidth="1dp"
-                    app:strokeColor="@color/border_dark"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:foreground="?attr/selectableItemBackground">
-
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:orientation="vertical"
-                        android:gravity="center"
-                        android:padding="16dp">
-
-                        <ImageView
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:src="@android:drawable/ic_menu_today"
-                            android:tint="@color/accent"
-                            android:tintMode="src_in"
-                            android:alpha="1.0"
-                            android:layout_marginBottom="8dp" />
-
-                        <TextView
-                            android:id="@+id/pendingCountText"
+                            android:id="@+id/assignRiderCountText"
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="0"
                             android:textColor="@color/accent"
                             android:textSize="24sp"
                             android:textStyle="bold" />
-                        
+
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Pending"
+                            android:layout_marginTop="2dp"
+                            android:text="Assign Rider"
                             android:textColor="@color/text_primary_dark"
                             android:textSize="16sp"
                             android:textStyle="bold" />
@@ -215,7 +172,7 @@
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"
                     android:layout_row="1"
-                    android:layout_column="1"
+                    android:layout_column="0"
                     android:layout_margin="8dp"
                     app:cardBackgroundColor="@color/paper_dark"
                     app:cardCornerRadius="12dp"
@@ -267,8 +224,8 @@
                     android:layout_width="0dp"
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"
-                    android:layout_row="2"
-                    android:layout_column="0"
+                    android:layout_row="1"
+                    android:layout_column="1"
                     android:layout_margin="8dp"
                     app:cardBackgroundColor="@color/paper_dark"
                     app:cardCornerRadius="12dp"
@@ -309,7 +266,7 @@
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"
                     android:layout_row="2"
-                    android:layout_column="1"
+                    android:layout_column="0"
                     android:layout_margin="8dp"
                     app:cardBackgroundColor="@color/paper_dark"
                     app:cardCornerRadius="12dp"
@@ -354,6 +311,7 @@
                     android:layout_columnWeight="1"
                     android:layout_row="3"
                     android:layout_column="0"
+                    android:layout_columnSpan="2"
                     android:layout_margin="8dp"
                     app:cardBackgroundColor="@color/paper_dark"
                     app:cardCornerRadius="12dp"
@@ -396,7 +354,7 @@
                     android:layout_width="0dp"
                     android:layout_height="120dp"
                     android:layout_columnWeight="1"
-                    android:layout_row="3"
+                    android:layout_row="2"
                     android:layout_column="1"
                     android:layout_margin="8dp"
                     app:cardBackgroundColor="@color/paper_dark"

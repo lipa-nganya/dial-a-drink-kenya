@@ -19,6 +19,32 @@ const normalizeCapacity = (value) =>
     .toLowerCase()
     .replace(/\s+/g, '');
 
+/**
+ * Inventory for can/pack capacity variants is tracked in base "cans".
+ * Example: stock=10 means 10 cans; 1x "6 pack" consumes 6 cans.
+ */
+const capacityUnitMultiplier = (capacityLabel) => {
+  const raw = (capacityLabel || '').toString().trim().toLowerCase();
+  if (!raw) return 1;
+  const compact = raw.replace(/\s+/g, '');
+  const packMatch = compact.match(/^(\d+)(pack|pk)$/) || compact.match(/^(\d+)(pack|pk).*/);
+  if (packMatch) {
+    const n = parseInt(packMatch[1], 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  }
+  if (compact.includes('can') || compact === 'single') return 1;
+  return 1;
+};
+
+const findBaseUnitCapacityKey = (stockByCapacity) => {
+  const keys = Object.keys(stockByCapacity || {});
+  const candidates = keys.filter((k) => {
+    const n = normalizeCapacity(k);
+    return n === 'can' || n === '1can' || n === 'single' || n === '1';
+  });
+  return candidates[0] || null;
+};
+
 const capacityPriceCandidates = (entry) => {
   if (!entry || typeof entry !== 'object') return [];
   const values = [];
@@ -48,6 +74,13 @@ const resolveCapacityFromOrderItemPrice = (drink, item) => {
     return (matches[0].capacity || matches[0].size || '').toString().trim() || null;
   }
   return null;
+};
+
+/** Prefer persisted line capacity; fall back to price matching for legacy rows. */
+const resolveCapacityForOrderItem = (drink, item) => {
+  const sel = (item.selectedCapacity || '').toString().trim();
+  if (sel) return sel;
+  return resolveCapacityFromOrderItemPrice(drink, item);
 };
 
 const sumStockByCapacity = (stockByCapacity) =>
@@ -134,10 +167,16 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
 
         if (hasStockByCapacity) {
           const byCap = { ...drink.stockByCapacity };
-          let remainingToDeduct = quantity;
-          const matchedCapacity = resolveCapacityFromOrderItemPrice(drink, item);
+          const matchedCapacity = resolveCapacityForOrderItem(drink, item);
+          const multiplier = capacityUnitMultiplier(matchedCapacity);
+          let remainingToDeduct = quantity * multiplier;
           if (matchedCapacity) {
-            const key = Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizeCapacity(matchedCapacity));
+            // If the order item is a pack, deduct from base-unit capacity bucket if present.
+            const preferredKey =
+              multiplier > 1 ? findBaseUnitCapacityKey(byCap) : null;
+            const key =
+              preferredKey ||
+              Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizeCapacity(matchedCapacity));
             if (key) {
               const current = Math.max(0, toInt(byCap[key], 0));
               const deduct = Math.min(current, remainingToDeduct);
@@ -170,7 +209,10 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           }, { transaction });
         } else {
           // Calculate new stock (ensure it doesn't go below 0)
-          newStock = Math.max(0, currentStock - quantity);
+          const matchedCapacity = resolveCapacityForOrderItem(drink, item);
+          const multiplier = capacityUnitMultiplier(matchedCapacity);
+          const unitsToDeduct = quantity * multiplier;
+          newStock = Math.max(0, currentStock - unitsToDeduct);
           await drink.update({
             stock: newStock,
             isAvailable: newStock > 0
@@ -318,13 +360,19 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
 
         if (hasStockByCapacity) {
           const byCap = { ...drink.stockByCapacity };
-          const matchedCapacity = resolveCapacityFromOrderItemPrice(drink, item);
+          const matchedCapacity = resolveCapacityForOrderItem(drink, item);
           if (matchedCapacity) {
-            const key = Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizeCapacity(matchedCapacity));
+            const mult = capacityUnitMultiplier(matchedCapacity);
+            const unitsToRestore = quantity * mult;
+            const preferredKey =
+              mult > 1 ? findBaseUnitCapacityKey(byCap) : null;
+            const key =
+              preferredKey ||
+              Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizeCapacity(matchedCapacity));
             if (key) {
-              byCap[key] = Math.max(0, toInt(byCap[key], 0)) + quantity;
+              byCap[key] = Math.max(0, toInt(byCap[key], 0)) + unitsToRestore;
             } else {
-              byCap[matchedCapacity] = quantity;
+              byCap[matchedCapacity] = unitsToRestore;
             }
           } else {
             // If unknown capacity, restore to first configured capacity key.

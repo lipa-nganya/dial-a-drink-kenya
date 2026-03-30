@@ -278,7 +278,13 @@ class CompletedOrdersActivity : AppCompatActivity() {
         rowBinding.locationText.text = order.deliveryAddress ?: "Address not provided"
         rowBinding.orderValueText.text = "KES ${String.format("%.2f", order.totalAmount)}"
         rowBinding.paymentMethodText.text = getPaymentMethodLabel(order.paymentMethod)
-        rowBinding.deliveryFeeText.text = "KES ${String.format("%.2f", order.deliveryFee ?: 0.0)}"
+        val territoryDeliveryFee = (order.territoryDeliveryFee ?: order.deliveryFee) ?: 0.0
+        if (territoryDeliveryFee > 0.009) {
+            rowBinding.deliveryFeeText.visibility = View.VISIBLE
+            rowBinding.deliveryFeeText.text = "KES ${String.format("%.2f", territoryDeliveryFee)}"
+        } else {
+            rowBinding.deliveryFeeText.visibility = View.GONE
+        }
 
         row.setOnClickListener {
             openOrderDetails(order.id)
@@ -401,7 +407,7 @@ class CompletedOrdersActivity : AppCompatActivity() {
             val orderDate = parseOrderDate(order.createdAt) ?: return@forEach
 
             // Use delivery fee only for earnings (not order cost)
-            val deliveryFee = order.deliveryFee ?: 0.0
+            val deliveryFee = order.territoryDeliveryFee ?: order.deliveryFee
 
             // Count and sum for today
             if (orderDate >= todayStart.time) {

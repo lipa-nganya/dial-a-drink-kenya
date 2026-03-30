@@ -92,7 +92,7 @@ def getLocalApiBaseUrl() {
     // Local API URL (ngrok) - can be overridden via gradle.properties
     // Default to dev backend URL if no local URL is provided
     def apiUrl = project.findProperty('LOCAL_API_BASE_URL') 
-        ?: 'https://deliveryos-backend-p6bkgryxqa-uc.a.run.app'
+        ?: 'https://homiest-psychopharmacologic-anaya.ngrok-free.dev'
     // Remove /api suffix if present (ApiClient.kt adds it)
     return apiUrl.replace('/api', '').replace('/api/', '')
 }

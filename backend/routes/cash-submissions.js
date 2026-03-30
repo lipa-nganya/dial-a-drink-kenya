@@ -29,6 +29,46 @@ function addQtyToStockByCapacity(byCapInput, capacityLabel, qtyToAdd) {
   return byCap;
 }
 
+/**
+ * For products sold as can/pack variants (e.g. 1 can, 6 pack, 12 pack, 24 pack),
+ * aggregate stock is tracked in base units and must be incremented directly, not
+ * recalculated as sum(stockByCapacity) because that can inflate totals.
+ */
+function isCanPackSharedStockDrink(drink) {
+  const capacityValues = [];
+  if (Array.isArray(drink?.capacity)) {
+    capacityValues.push(...drink.capacity);
+  }
+  if (Array.isArray(drink?.capacityPricing)) {
+    drink.capacityPricing.forEach((entry) => {
+      if (entry && typeof entry === 'object') {
+        capacityValues.push(entry.capacity || entry.size);
+      }
+    });
+  }
+
+  const normalized = capacityValues
+    .map((v) => normalizeCapacityKey(v))
+    .filter(Boolean);
+
+  const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
+  const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+  return hasPack && hasCan;
+}
+
+function findBaseCanCapacityKey(byCapInput) {
+  const byCap =
+    byCapInput && typeof byCapInput === 'object' && !Array.isArray(byCapInput)
+      ? byCapInput
+      : {};
+  const keys = Object.keys(byCap);
+  const preferred = keys.find((k) => {
+    const n = normalizeCapacityKey(k);
+    return n === '1can' || n === 'can' || n === 'single';
+  });
+  return preferred || null;
+}
+
 // Admin routes - must be defined BEFORE driver routes to avoid route conflicts
 // Admin routes - require admin authentication
 router.use('/admin', verifyAdmin);
@@ -158,20 +198,28 @@ async function applyPurchaseInventoryAndAccountSideEffects({
             const before = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
               ? { ...drink.stockByCapacity }
               : {};
+            const useSharedCanStock = isCanPackSharedStockDrink(drink);
+            const targetCapacity = useSharedCanStock
+              ? (findBaseCanCapacityKey(before) || '1 can')
+              : capacity;
             const beforeKey = Object.keys(before).find(
-              (k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)
+              (k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)
             );
             const prevVal = beforeKey != null ? parseInt(before[beforeKey], 10) || 0 : 0;
-            const byCap = addQtyToStockByCapacity(before, capacity, qty);
+            const byCap = addQtyToStockByCapacity(before, targetCapacity, qty);
             const mergedKey =
-              Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)) ||
-              String(capacity).trim();
+              Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)) ||
+              String(targetCapacity).trim();
 
-            // Keep overall stock in sync with per-capacity totals
-            const totalStock = Object.values(byCap).reduce((sum, value) => {
-              const n = typeof value === 'number' ? value : parseInt(value, 10);
-              return sum + (Number.isNaN(n) ? 0 : n);
-            }, 0);
+            // For can/pack shared-stock products, aggregate stock should be additive from existing stock.
+            // For true per-capacity products, aggregate stock remains sum(stockByCapacity).
+            const currentStock = parseFloat(drink.stock || 0) || 0;
+            const totalStock = useSharedCanStock
+              ? currentStock + qty
+              : Object.values(byCap).reduce((sum, value) => {
+                  const n = typeof value === 'number' ? value : parseInt(value, 10);
+                  return sum + (Number.isNaN(n) ? 0 : n);
+                }, 0);
 
             await drink.update({
               stockByCapacity: byCap,
@@ -381,10 +429,19 @@ router.post('/admin/cash-submissions', async (req, res) => {
         return sendError(res, 'For general expenses, either items array or nature is required', 400);
       }
     } else if (submissionType === 'payment_to_office') {
-      // Payment to office requires accountType, and can have items array
-      if (!details || !details.accountType || !['mpesa', 'till', 'bank', 'paybill', 'pdq'].includes(details.accountType)) {
-        console.log('❌ Missing or invalid accountType for payment to office:', details?.accountType);
-        return sendError(res, 'For payment to office, accountType must be one of: mpesa, till, bank, paybill, pdq', 400);
+      // Payment to office: accountType used to be required, but driver app removed the field.
+      // Keep validation only when it is provided (backward compatible).
+      const acct = details?.accountType;
+      if (acct != null && acct !== '') {
+        const normalizedAcct = String(acct).toLowerCase().trim();
+        if (!['mpesa', 'till', 'bank', 'paybill', 'pdq'].includes(normalizedAcct)) {
+          console.log('❌ Invalid accountType for payment to office:', acct);
+          return sendError(res, 'For payment to office, accountType must be one of: mpesa, till, bank, paybill, pdq', 400);
+        }
+        // Normalize stored value for consistency
+        if (details && typeof details === 'object') {
+          details.accountType = normalizedAcct;
+        }
       }
       // Items array is optional for payment_to_office
     } else if (submissionType === 'walk_in_sale') {
@@ -626,23 +683,31 @@ router.post('/admin/cash-submissions', async (req, res) => {
               : null;
 
             if (capacity) {
-              const before = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
+            const before = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
                 ? { ...drink.stockByCapacity }
                 : {};
-              const beforeKey = Object.keys(before).find(
-                (k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)
-              );
+            const useSharedCanStock = isCanPackSharedStockDrink(drink);
+            const targetCapacity = useSharedCanStock
+              ? (findBaseCanCapacityKey(before) || '1 can')
+              : capacity;
+            const beforeKey = Object.keys(before).find(
+              (k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)
+            );
               const prevVal = beforeKey != null ? parseInt(before[beforeKey], 10) || 0 : 0;
-              const byCap = addQtyToStockByCapacity(before, capacity, qty);
+            const byCap = addQtyToStockByCapacity(before, targetCapacity, qty);
               const mergedKey =
-                Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(capacity)) ||
-                String(capacity).trim();
+              Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)) ||
+              String(targetCapacity).trim();
 
-              // Keep overall stock in sync with per-capacity totals
-              const totalStock = Object.values(byCap).reduce((sum, value) => {
-                const n = typeof value === 'number' ? value : parseInt(value, 10);
-                return sum + (Number.isNaN(n) ? 0 : n);
-              }, 0);
+            // For can/pack shared-stock products, aggregate stock should be additive from existing stock.
+            // For true per-capacity products, aggregate stock remains sum(stockByCapacity).
+            const currentStock = parseFloat(drink.stock || 0) || 0;
+            const totalStock = useSharedCanStock
+              ? currentStock + qty
+              : Object.values(byCap).reduce((sum, value) => {
+                  const n = typeof value === 'number' ? value : parseInt(value, 10);
+                  return sum + (Number.isNaN(n) ? 0 : n);
+                }, 0);
 
               await drink.update({
                 stockByCapacity: byCap,
@@ -906,10 +971,19 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
         return sendError(res, 'For general expenses, either items array or nature is required', 400);
       }
     } else if (submissionType === 'payment_to_office') {
-      // Payment to office requires accountType, and can have items array
-      if (!details || !details.accountType || !['mpesa', 'till', 'bank', 'paybill', 'pdq'].includes(details.accountType)) {
-        console.log('❌ Missing or invalid accountType for payment to office:', details?.accountType);
-        return sendError(res, 'For payment to office, accountType must be one of: mpesa, till, bank, paybill, pdq', 400);
+      // Payment to office: accountType used to be required, but driver app removed the field.
+      // Keep validation only when it is provided (backward compatible).
+      const acct = details?.accountType;
+      if (acct != null && acct !== '') {
+        const normalizedAcct = String(acct).toLowerCase().trim();
+        if (!['mpesa', 'till', 'bank', 'paybill', 'pdq'].includes(normalizedAcct)) {
+          console.log('❌ Invalid accountType for payment to office:', acct);
+          return sendError(res, 'For payment to office, accountType must be one of: mpesa, till, bank, paybill, pdq', 400);
+        }
+        // Normalize stored value for consistency
+        if (details && typeof details === 'object') {
+          details.accountType = normalizedAcct;
+        }
       }
       // Items array is optional for payment_to_office
     } else if (submissionType === 'walk_in_sale') {

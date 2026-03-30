@@ -19,14 +19,14 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
     const { categorySlug, productSlug } = req.params;
 
     // Resolve attributes so we include nbv only when the column exists
-    let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+    let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
     try {
       const [cols] = await db.sequelize.query(
         "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
       );
       const colSet = new Set((cols || []).map(c => c.column_name.toLowerCase()));
       if (colSet.has('nbv')) {
-        drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
+        drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
       }
       if (colSet.has('clicks')) {
         drinkAttributes = drinkAttributes.concat(['clicks']);
@@ -36,7 +36,8 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
     // Find product by slug and include its category.
     const drink = await db.Drink.findOne({
       where: {
-        slug: productSlug
+        slug: productSlug,
+        isPublished: true
       },
       attributes: drinkAttributes,
       include: [{

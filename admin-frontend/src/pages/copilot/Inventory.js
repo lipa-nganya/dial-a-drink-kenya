@@ -1339,15 +1339,9 @@ const Inventory = () => {
       return mainStock;
     }
 
-    if (byCap && byCap[capacityLabel] == null) {
-      // Only fallback when the drink actually offers this capacity.
-      const itemCaps = Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0
-        ? item.capacityPricing.map((p) => p?.capacity).filter(Boolean)
-        : Array.isArray(item?.capacity)
-          ? item.capacity.filter(Boolean)
-          : [];
-      if (itemCaps.includes(capacityLabel)) return mainStock;
-    }
+    // When stockByCapacity exists, a missing capacity key should be treated as zero.
+    // Falling back to mainStock for every missing capacity duplicates totals across variants.
+    if (byCap && byCap[capacityLabel] == null) return 0;
 
     // Fallback: if item has exactly one capacity and matches this column, use main stock.
     const itemCaps = Array.isArray(item?.capacityPricing) && item.capacityPricing.length > 0

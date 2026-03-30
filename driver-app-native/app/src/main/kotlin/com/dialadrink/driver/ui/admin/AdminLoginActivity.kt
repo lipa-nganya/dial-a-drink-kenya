@@ -92,6 +92,7 @@ class AdminLoginActivity : AppCompatActivity() {
                         SharedPrefs.saveAdminId(this@AdminLoginActivity, loginResponse.user.id)
                         SharedPrefs.saveAdminUsername(this@AdminLoginActivity, loginResponse.user.username)
                         SharedPrefs.saveAdminPhone(this@AdminLoginActivity, cleanedPhone)
+                        SharedPrefs.saveAdminRole(this@AdminLoginActivity, loginResponse.user.role)
                         // Save admin token for API authentication
                         if (loginResponse.token != null && loginResponse.token.isNotEmpty()) {
                             SharedPrefs.saveAdminToken(this@AdminLoginActivity, loginResponse.token)

@@ -1434,7 +1434,7 @@ Welcome aboard! 🎉`;
         </CardContent>
       </Card>
 
-      {/* Delivery Fee Settings */}
+      {/* Convenience Fee Settings (customer-facing delivery fee from admin settings) */}
       <Card sx={{ mb: 4, backgroundColor: colors.paper }}>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -1442,10 +1442,10 @@ Welcome aboard! 🎉`;
               <LocalShipping sx={{ fontSize: 32, color: colors.accentText }} />
               <Box>
                 <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600 }}>
-                  Delivery Fee Settings
+                  Convenience Fee Settings
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Configure delivery fees and terms
+                  Configure customer-facing convenience fees and terms
                 </Typography>
               </Box>
             </Box>
@@ -1665,7 +1665,7 @@ Welcome aboard! 🎉`;
                                 Amount
                               </ToggleButton>
                               <ToggleButton value="percentage" aria-label="percentage of delivery fee">
-                                % of Delivery Fee
+                                % of Convenience Fee
                               </ToggleButton>
                             </ToggleButtonGroup>
                           </Box>
@@ -1746,11 +1746,11 @@ Welcome aboard! 🎉`;
                         </Box>
                       </Grid>
 
-                      {/* Delivery Fee Calculation Mode */}
+                      {/* Convenience Fee Calculation Mode */}
                       <Grid item xs={12} md={6}>
                       <Box sx={{ mb: 2, p: 2, border: `1px solid ${colors.border}`, borderRadius: 1, backgroundColor: isDarkMode ? 'rgba(255, 255, 255, 0.03)' : 'rgba(0, 0, 0, 0.02)' }}>
                         <Typography variant="subtitle2" sx={{ mb: 2, color: colors.textSecondary }}>
-                          Delivery Fee Calculation Mode
+                          Convenience Fee Calculation Mode
                         </Typography>
                         <ToggleButtonGroup
                           value={deliverySettings.deliveryFeeMode}
@@ -1789,7 +1789,7 @@ Welcome aboard! 🎉`;
                             <Grid item xs={12} md={6}>
                               <TextField
                                 fullWidth
-                                label="Delivery Fee (With Alcohol)"
+                                label="Convenience Fee (With Alcohol)"
                                 type="number"
                                 value={deliverySettings.deliveryFeeWithAlcohol}
                                 onChange={(e) => setDeliverySettings(prev => ({
@@ -1820,7 +1820,7 @@ Welcome aboard! 🎉`;
                             <Grid item xs={12} md={6}>
                               <TextField
                                 fullWidth
-                                label="Delivery Fee (Without Alcohol)"
+                                label="Convenience Fee (Without Alcohol)"
                                 type="number"
                                 value={deliverySettings.deliveryFeeWithoutAlcohol}
                                 onChange={(e) => setDeliverySettings(prev => ({
@@ -1854,7 +1854,7 @@ Welcome aboard! 🎉`;
                             <Grid item xs={12} md={6}>
                               <TextField
                                 fullWidth
-                                label="Delivery Fee Per KM (With Alcohol)"
+                                label="Convenience Fee Per KM (With Alcohol)"
                                 type="number"
                                 value={deliverySettings.deliveryFeePerKmWithAlcohol}
                                 onChange={(e) => setDeliverySettings(prev => ({
@@ -1888,7 +1888,7 @@ Welcome aboard! 🎉`;
                             <Grid item xs={12} md={6}>
                               <TextField
                                 fullWidth
-                                label="Delivery Fee Per KM (Without Alcohol)"
+                                label="Convenience Fee Per KM (Without Alcohol)"
                                 type="number"
                                 value={deliverySettings.deliveryFeePerKmWithoutAlcohol}
                                 onChange={(e) => setDeliverySettings(prev => ({

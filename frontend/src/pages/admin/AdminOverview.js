@@ -1037,7 +1037,7 @@ const AdminOverview = () => {
         ))}
       </Box>
 
-      {/* Delivery Fee Settings */}
+      {/* Convenience Fee Settings */}
       <Card sx={{ mt: 4, backgroundColor: '#121212' }}>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
@@ -1045,7 +1045,7 @@ const AdminOverview = () => {
               <LocalShipping sx={{ fontSize: 32, color: '#00E0B8' }} />
               <Box>
                 <Typography variant="h5" sx={{ color: '#00E0B8', fontWeight: 600 }}>
-                  Delivery Fee Settings
+                  Convenience Fee Settings
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Configure delivery fees and terms
@@ -1146,7 +1146,7 @@ const AdminOverview = () => {
                     <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
-                        label="Delivery Fee (With Alcohol)"
+                        label="Convenience Fee (With Alcohol)"
                         type="number"
                         value={deliverySettings.deliveryFeeWithAlcohol}
                         onChange={(e) => setDeliverySettings(prev => ({
@@ -1167,7 +1167,7 @@ const AdminOverview = () => {
                     <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
-                        label="Delivery Fee (Without Alcohol)"
+                        label="Convenience Fee (Without Alcohol)"
                         type="number"
                         value={deliverySettings.deliveryFeeWithoutAlcohol}
                         onChange={(e) => setDeliverySettings(prev => ({

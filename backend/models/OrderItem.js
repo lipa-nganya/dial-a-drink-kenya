@@ -29,6 +29,10 @@ module.exports = (sequelize, DataTypes) => {
     price: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false
+    },
+    selectedCapacity: {
+      type: DataTypes.STRING,
+      allowNull: true
     }
   }, {
     tableName: 'order_items',

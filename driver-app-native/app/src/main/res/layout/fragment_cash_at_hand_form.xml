@@ -292,7 +292,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginBottom="12dp"
-                        android:hint="Recipient Name"
+                        android:hint="Recipient"
                         android:visibility="gone"
                         app:boxBackgroundMode="outline"
                         app:boxBackgroundColor="@color/paper_dark"
@@ -437,35 +437,7 @@
 
                     </com.google.android.material.textfield.TextInputLayout>
 
-                    <!-- Payment to Office Fields -->
-                    <com.google.android.material.textfield.TextInputLayout
-                        android:id="@+id/accountTypeLayout"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:layout_marginBottom="12dp"
-                        android:hint="Account Type"
-                        android:visibility="gone"
-                        app:boxBackgroundMode="outline"
-                        app:boxBackgroundColor="@color/paper_dark"
-                        app:boxStrokeColor="@color/form_field_border_light_green"
-                        app:hintTextColor="#FFFFFF"
-                        app:hintEnabled="true"
-                        app:boxStrokeWidth="2dp"
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        app:endIconMode="dropdown_menu">
-
-                        <AutoCompleteTextView
-                            android:id="@+id/accountTypeSpinner"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="none"
-                        android:textColor="#FFFFFF"
-                        android:textColorHint="#FFFFFF"
-                            android:minHeight="56dp"
-                            android:padding="16dp"
-                            android:textSize="16sp" />
-
-                    </com.google.android.material.textfield.TextInputLayout>
+                    <!-- Payment to Office: no account type. Use Add Item + items list. -->
 
                 </LinearLayout>
 

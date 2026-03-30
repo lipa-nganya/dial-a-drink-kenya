@@ -55,6 +55,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { getBackendUrl } from '../utils/backendUrl';
 import { getOrderStatusChipProps, getPaymentStatusChipProps, getPaymentMethodChipProps } from '../utils/chipStyles';
+import { formatMpesaPhoneNumber, validateSafaricomPhone } from '../utils/mpesaPhone';
 import NewOrderDialog from '../components/NewOrderDialog';
 import { useJsApiLoader } from '@react-google-maps/api';
 import AddressAutocomplete from '../components/AddressAutocomplete';
@@ -113,6 +114,9 @@ const Orders = () => {
   const [editDeliveryFeeDialogOpen, setEditDeliveryFeeDialogOpen] = useState(false);
   const [newDeliveryFee, setNewDeliveryFee] = useState('');
   const [updatingDeliveryFee, setUpdatingDeliveryFee] = useState(false);
+  const [editConvenienceFeeDialogOpen, setEditConvenienceFeeDialogOpen] = useState(false);
+  const [newConvenienceFee, setNewConvenienceFee] = useState('');
+  const [updatingConvenienceFee, setUpdatingConvenienceFee] = useState(false);
   const [selectedTerritoryId, setSelectedTerritoryId] = useState('');
   const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ customer: false, deliveryFee: false, territory: false });
   const updatedFeeTimeoutRef = useRef(null);
@@ -131,7 +135,9 @@ const Orders = () => {
   const openOrderDetails = (order) => {
     let orderWithBreakdown = { ...order };
 
-    if (orderWithBreakdown.deliveryFee === undefined || orderWithBreakdown.itemsTotal === undefined) {
+    // deliveryFee in this screen should represent the *territory delivery fee* (internal),
+    // not the customer-facing convenience fee.
+    if (orderWithBreakdown.itemsTotal === undefined) {
       const itemsTotal =
         orderWithBreakdown.items?.reduce(
           (sum, item) =>
@@ -142,11 +148,43 @@ const Orders = () => {
 
       const tipAmount = parseFloat(orderWithBreakdown.tipAmount || 0);
       const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
-      const deliveryFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
+      const convenienceFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
 
       orderWithBreakdown.itemsTotal = Math.round(Number(itemsTotal));
-      orderWithBreakdown.deliveryFee = Math.round(Number(deliveryFee));
+      orderWithBreakdown.convenienceFee = Math.round(Number(convenienceFee));
     }
+
+    // Prefer backend-provided territoryDeliveryFee; fallback to existing deliveryFee or convenienceFee.
+    const territoryFeeFallback =
+      orderWithBreakdown.deliveryFee !== undefined
+        ? orderWithBreakdown.deliveryFee
+        : orderWithBreakdown.convenienceFee;
+
+    orderWithBreakdown.deliveryFee = Math.round(
+      Number(
+        orderWithBreakdown.territoryDeliveryFee ??
+          orderWithBreakdown.territory?.deliveryFromCBD ??
+          territoryFeeFallback ??
+          0
+      )
+    );
+
+    const itemsTotalNum =
+      parseFloat(orderWithBreakdown.itemsTotal) ||
+      (orderWithBreakdown.items?.reduce(
+        (sum, item) =>
+          sum +
+          (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)),
+        0
+      ) || 0);
+    const tipAmt = parseFloat(orderWithBreakdown.tipAmount || 0);
+    const totalAmt = parseFloat(orderWithBreakdown.totalAmount || 0);
+    if (orderWithBreakdown.convenienceFee === undefined || orderWithBreakdown.convenienceFee === null) {
+      orderWithBreakdown.convenienceFee = Math.round(
+        Math.max(totalAmt - tipAmt - itemsTotalNum, 0)
+      );
+    }
+    orderWithBreakdown.orderValue = Math.round(Math.max(totalAmt - tipAmt, 0));
 
     setSelectedOrderForDetail(orderWithBreakdown);
     originalOrderDetailRef.current = {
@@ -782,6 +820,15 @@ const Orders = () => {
   // Apply filters to orders
   const applyFilters = (ordersList, orderStatus, transactionStatus, search, customFilter, tabFilter, cancelledView = cancelledSubTab) => {
     let filtered = [...ordersList];
+    const isWalkInOrder = (order) => {
+      const addr = String(order?.deliveryAddress || '');
+      return (
+        addr === 'In-Store Purchase' ||
+        addr.includes('In-Store Purchase') ||
+        String(order?.customerPhone || '') === 'POS' ||
+        String(order?.customerName || '') === 'POS'
+      );
+    };
 
     // Apply tab-based filtering first
     if (tabFilter === 'pending') {
@@ -789,7 +836,9 @@ const Orders = () => {
     } else if (tabFilter === 'completed') {
       filtered = filtered.filter(order => order.status === 'completed');
     } else if (tabFilter === 'unassigned') {
-      filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
+      filtered = filtered
+        .filter(order => !isWalkInOrder(order))
+        .filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
     } else if (tabFilter === 'confirmed') {
       filtered = filtered.filter(order => order.status === 'confirmed');
     } else if (tabFilter === 'out_for_delivery') {
@@ -950,31 +999,6 @@ const Orders = () => {
       console.error('Error cancelling order:', error);
       setCancelReasonError(error.response?.data?.error || 'Failed to cancel order');
     }
-  };
-
-  // Phone number formatting and validation
-  const formatMpesaPhoneNumber = (phone) => {
-    if (!phone) return '';
-    
-    // Remove all non-digit characters
-    let cleaned = phone.replace(/\D/g, '');
-    
-    // If starts with 0, replace with 254
-    if (cleaned.startsWith('0')) {
-      cleaned = '254' + cleaned.substring(1);
-    } else if (!cleaned.startsWith('254')) {
-      // If doesn't start with 254 and is 9 digits, add 254
-      if (cleaned.length === 9 && cleaned.startsWith('7')) {
-        cleaned = '254' + cleaned;
-      }
-    }
-    
-    return cleaned;
-  };
-
-  const validateSafaricomPhone = (phone) => {
-    const cleaned = phone.replace(/\D/g, '');
-    return cleaned.length >= 9 && (cleaned.startsWith('07') || cleaned.startsWith('2547') || (cleaned.startsWith('7') && cleaned.length === 9));
   };
 
   const handleOpenPaymentDialog = (order) => {
@@ -1208,6 +1232,50 @@ const Orders = () => {
     }
   };
 
+  const handleUpdateConvenienceFee = async () => {
+    if (!selectedOrderForDetail) return;
+    setUpdatingConvenienceFee(true);
+    try {
+      const feeValue = parseFloat(newConvenienceFee);
+      if (Number.isNaN(feeValue) || feeValue < 0) {
+        alert('Please enter a valid convenience fee amount');
+        return;
+      }
+
+      const response = await api.patch(
+        `/admin/orders/${selectedOrderForDetail.id}/convenience-fee`,
+        { convenienceFee: feeValue }
+      );
+
+      if (response.data?.success) {
+        const order = response.data?.order;
+        const breakdown = response.data?.breakdown;
+        setSelectedOrderForDetail((prev) => ({
+          ...prev,
+          ...(order && {
+            totalAmount: order.totalAmount,
+            convenienceFee: order.convenienceFee
+          }),
+          ...(breakdown && {
+            itemsTotal: breakdown.itemsTotal,
+            totalAmount: breakdown.totalAmount
+          })
+        }));
+        await fetchOrders();
+        setEditConvenienceFeeDialogOpen(false);
+        setNewConvenienceFee('');
+        alert('Convenience fee updated successfully');
+      } else {
+        alert(response.data?.error || 'Failed to update convenience fee');
+      }
+    } catch (error) {
+      console.error('Error updating convenience fee:', error);
+      alert(error.response?.data?.error || error.message || 'Failed to update convenience fee');
+    } finally {
+      setUpdatingConvenienceFee(false);
+    }
+  };
+
   const handleUpdateItemsSubtotal = async () => {
     if (!selectedOrderForDetail) return;
 
@@ -1343,11 +1411,16 @@ const Orders = () => {
           territory: territory
             ? { id: territory.id, name: territory.name }
             : null,
+          // IMPORTANT: On this screen, `deliveryFee` represents the INTERNAL territory delivery fee.
+          // `bd.deliveryFee` is the customer-facing convenience fee derived from totalAmount/itemsTotal.
           ...(bd && {
-            deliveryFee: bd.deliveryFee,
             totalAmount: bd.totalAmount,
             itemsTotal: bd.itemsTotal
-          })
+          }),
+          territoryDeliveryFee: updatedOrder.territoryDeliveryFee ?? prev.territoryDeliveryFee,
+          deliveryFee:
+            updatedOrder.territoryDeliveryFee ??
+            prev.deliveryFee
         }));
 
         setOrders((prev) =>
@@ -1360,10 +1433,13 @@ const Orders = () => {
                     ? { id: territory.id, name: territory.name }
                     : null,
                   ...(bd && {
-                    deliveryFee: bd.deliveryFee,
                     totalAmount: bd.totalAmount,
                     itemsTotal: bd.itemsTotal
-                  })
+                  }),
+                  territoryDeliveryFee:
+                    updatedOrder.territoryDeliveryFee ?? o.territoryDeliveryFee,
+                  deliveryFee:
+                    updatedOrder.territoryDeliveryFee ?? o.deliveryFee
                 }
               : o
           )
@@ -1379,10 +1455,13 @@ const Orders = () => {
                     ? { id: territory.id, name: territory.name }
                     : null,
                   ...(bd && {
-                    deliveryFee: bd.deliveryFee,
                     totalAmount: bd.totalAmount,
                     itemsTotal: bd.itemsTotal
-                  })
+                  }),
+                  territoryDeliveryFee:
+                    updatedOrder.territoryDeliveryFee ?? o.territoryDeliveryFee,
+                  deliveryFee:
+                    updatedOrder.territoryDeliveryFee ?? o.deliveryFee
                 }
               : o
           )
@@ -1414,7 +1493,7 @@ const Orders = () => {
               setSelectedOrderForDetail((prev) => ({
                 ...(order || prev),
                 deliveryFee:
-                  breakdown?.deliveryFee ??
+                  order?.territoryDeliveryFee ??
                   order?.deliveryFee ??
                   prev.deliveryFee,
                 totalAmount:
@@ -2066,10 +2145,24 @@ const Orders = () => {
                             {order.paymentType === 'pay_now' ? 'Paid Now' : 'Pay on Delivery'}
                           </Typography>
                           {(() => {
-                            // Calculate profit/loss
+                            // Calculate profit/loss (subtract territory delivery fee, not convenience fee)
                             const totalAmount = parseFloat(order.totalAmount) || 0;
-                            const deliveryFee = parseFloat(order.deliveryFee) || 0;
+                            const tipAmount = parseFloat(order.tipAmount) || 0;
                             const orderItems = order.items || order.orderItems || [];
+                            const itemsSubtotal = orderItems.reduce(
+                              (sum, item) =>
+                                sum +
+                                (parseFloat(item.price || 0) * (parseInt(item.quantity, 10) || 0)),
+                              0
+                            );
+                            const convenienceFee =
+                              order.convenienceFee != null && order.convenienceFee !== ''
+                                ? parseFloat(order.convenienceFee)
+                                : Math.max(0, totalAmount - tipAmount - itemsSubtotal);
+                            const territoryDeliveryFee =
+                              order.territoryDeliveryFee != null && order.territoryDeliveryFee !== ''
+                                ? parseFloat(order.territoryDeliveryFee)
+                                : convenienceFee;
                             
                             let totalPurchaseCost = 0;
                             orderItems.forEach(item => {
@@ -2086,7 +2179,7 @@ const Orders = () => {
                               }
                             });
                             
-                            const profit = totalAmount - totalPurchaseCost - deliveryFee;
+                            const profit = totalAmount - totalPurchaseCost - territoryDeliveryFee;
                             
                             if (totalPurchaseCost > 0) {
                               const profitAmount = Math.abs(profit);
@@ -2829,6 +2922,9 @@ const Orders = () => {
                                   )
                                 }
                               >
+                                <MenuItem value={selectedOrderForDetail.status || ''} disabled>
+                                  {String(selectedOrderForDetail.status || '—').replace(/_/g, ' ')}
+                                </MenuItem>
                                 {options.map((option) => (
                                   <MenuItem
                                     key={option.value}
@@ -2873,23 +2969,13 @@ const Orders = () => {
                           </Select>
                         </FormControl>
                         <TextField
-                          label="Delivery Fee (KES)"
+                          label="Territory Delivery Fee (KES)"
                           type="number"
                           size="small"
                           value={
                             selectedOrderForDetail.deliveryFee ?? ''
                           }
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setSelectedOrderForDetail((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    deliveryFee: value
-                                  }
-                                : prev
-                            );
-                          }}
+                          disabled
                           sx={{ maxWidth: 200 }}
                         />
                       </Box>
@@ -2909,9 +2995,34 @@ const Orders = () => {
                       {selectedOrderForDetail.items.map((item, index) => (
                         <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 1, borderBottom: `1px solid ${colors.border}` }}>
                           <Box>
-                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                              {item.drink?.name || 'Unknown Item'}
-                            </Typography>
+                            {(() => {
+                              const inferCapacityFromPrice = () => {
+                                const rows = Array.isArray(item.drink?.capacityPricing) ? item.drink.capacityPricing : [];
+                                const itemPrice = Number(item.price);
+                                if (!rows.length || !Number.isFinite(itemPrice)) return null;
+                                const exactMatch = rows.find((row) => {
+                                  const rowPrice = Number(
+                                    row?.currentPrice ??
+                                    row?.price ??
+                                    row?.originalPrice
+                                  );
+                                  return Number.isFinite(rowPrice) && Math.abs(rowPrice - itemPrice) < 0.01;
+                                });
+                                const label = exactMatch?.capacity ?? exactMatch?.size;
+                                if (label == null || String(label).trim() === '') return null;
+                                return String(label).trim();
+                              };
+                              const capacity =
+                                (item.selectedCapacity != null && String(item.selectedCapacity).trim() !== '' && String(item.selectedCapacity).trim()) ||
+                                (item.capacity != null && String(item.capacity).trim() !== '' && String(item.capacity).trim()) ||
+                                inferCapacityFromPrice() ||
+                                null;
+                              return (
+                                <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                                  {item.drink?.name || 'Unknown Item'}{capacity ? ` (${capacity})` : ''}
+                                </Typography>
+                              );
+                            })()}
                             {item.quantity > 1 && (
                               <Typography variant="caption" color="text.secondary">
                                 Quantity: {item.quantity}
@@ -2998,15 +3109,15 @@ const Orders = () => {
                         </Box>
                       </Box>
                     )}
-                    {/* Delivery Fee in Summary */}
-                    {selectedOrderForDetail.deliveryFee !== undefined && (
+                    {/* Convenience Fee (customer-facing) */}
+                    {selectedOrderForDetail.convenienceFee !== undefined && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <Typography variant="body1">
-                          <strong>Delivery Fee:</strong>
+                          <strong>Convenience Fee:</strong>
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography variant="body1">
-                            KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
+                            KES {Math.round(Number(selectedOrderForDetail.convenienceFee || 0))}
                           </Typography>
                           {selectedOrderForDetail.status !== 'completed' &&
                             selectedOrderForDetail.status !== 'cancelled' &&
@@ -3014,13 +3125,26 @@ const Orders = () => {
                               <IconButton
                                 size="small"
                                 onClick={() => {
-                                  setNewDeliveryFee(String(selectedOrderForDetail.deliveryFee ?? ''));
-                                  setEditDeliveryFeeDialogOpen(true);
+                                  setNewConvenienceFee(String(selectedOrderForDetail.convenienceFee ?? ''));
+                                  setEditConvenienceFeeDialogOpen(true);
                                 }}
                               >
                                 <Edit fontSize="small" />
                               </IconButton>
                             )}
+                        </Box>
+                      </Box>
+                    )}
+                    {/* Territory Delivery Fee in Summary */}
+                    {selectedOrderForDetail.deliveryFee !== undefined && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <Typography variant="body1">
+                          <strong>Territory Delivery Fee:</strong>
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Typography variant="body1">
+                            KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
+                          </Typography>
                         </Box>
                       </Box>
                     )}
@@ -3059,8 +3183,8 @@ const Orders = () => {
                         }
                       });
                       const totalAmount = parseFloat(selectedOrderForDetail.totalAmount) || 0;
-                      const deliveryFee = parseFloat(selectedOrderForDetail.deliveryFee) || 0;
-                      const profitLoss = totalAmount - totalPurchaseCost - deliveryFee;
+                      const territoryDeliveryFee = parseFloat(selectedOrderForDetail.deliveryFee) || 0;
+                      const profitLoss = totalAmount - totalPurchaseCost - territoryDeliveryFee;
                       if (totalPurchaseCost > 0) {
                         return (
                           <>
@@ -3109,6 +3233,21 @@ const Orders = () => {
                           {selectedOrderForDetail.paymentMethod === 'mobile_money' ? 'M-Pesa' : 
                            selectedOrderForDetail.paymentMethod === 'cash' ? 'Cash' : 
                            selectedOrderForDetail.paymentMethod}
+                        </Typography>
+                      </Box>
+                    )}
+                    {selectedOrderForDetail.staffPurchaseDriverId && (
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="body1">
+                          <strong>Staff Purchase:</strong>
+                        </Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          {(() => {
+                            const purchaser = drivers.find(d => d.id === selectedOrderForDetail.staffPurchaseDriverId);
+                            return purchaser?.name
+                              ? `${purchaser.name} (Rider #${selectedOrderForDetail.staffPurchaseDriverId})`
+                              : `Rider #${selectedOrderForDetail.staffPurchaseDriverId}`;
+                          })()}
                         </Typography>
                       </Box>
                     )}
@@ -3414,7 +3553,7 @@ const Orders = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Edit Delivery Fee Dialog */}
+      {/* Edit Territory Delivery Fee Dialog */}
       <Dialog
         open={editDeliveryFeeDialogOpen}
         onClose={() => {
@@ -3425,18 +3564,18 @@ const Orders = () => {
         fullWidth
       >
         <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
-          Edit Delivery Fee
+          Edit Territory Delivery Fee
         </DialogTitle>
         <DialogContent>
           {selectedOrderForDetail && (
             <Box sx={{ pt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Current Delivery Fee: KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
+                Current Territory Delivery Fee: KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
               </Typography>
               <TextField
                 autoFocus
                 fullWidth
-                label="New Delivery Fee"
+                label="New Territory Delivery Fee"
                 type="number"
                 value={newDeliveryFee}
                 onChange={(e) => setNewDeliveryFee(e.target.value)}
@@ -3479,7 +3618,77 @@ const Orders = () => {
               }
             }}
           >
-            {updatingDeliveryFee ? 'Updating...' : 'Update Delivery Fee'}
+            {updatingDeliveryFee ? 'Updating...' : 'Update Territory Delivery Fee'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Convenience Fee Dialog */}
+      <Dialog
+        open={editConvenienceFeeDialogOpen}
+        onClose={() => {
+          setEditConvenienceFeeDialogOpen(false);
+          setNewConvenienceFee('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: colors.accentText, fontWeight: 700 }}>
+          Edit Convenience Fee
+        </DialogTitle>
+        <DialogContent>
+          {selectedOrderForDetail && (
+            <Box sx={{ pt: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Current Convenience Fee: KES {Math.round(Number(selectedOrderForDetail.convenienceFee || 0))}
+              </Typography>
+              <TextField
+                autoFocus
+                fullWidth
+                label="New Convenience Fee"
+                type="number"
+                value={newConvenienceFee}
+                onChange={(e) => setNewConvenienceFee(e.target.value)}
+                InputProps={{
+                  startAdornment: <InputAdornment position="start">KES</InputAdornment>
+                }}
+                inputProps={{
+                  min: 0,
+                  step: 0.01
+                }}
+                sx={{ mt: 2 }}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setEditConvenienceFeeDialogOpen(false);
+              setNewConvenienceFee('');
+            }}
+            disabled={updatingConvenienceFee}
+            sx={{ color: colors.textSecondary }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUpdateConvenienceFee}
+            variant="contained"
+            disabled={updatingConvenienceFee}
+            sx={{
+              backgroundColor: colors.accentText,
+              color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+              '&:hover': {
+                backgroundColor: '#00C4A3'
+              },
+              '&:disabled': {
+                backgroundColor: colors.border,
+                color: colors.textSecondary
+              }
+            }}
+          >
+            {updatingConvenienceFee ? 'Updating...' : 'Update Convenience Fee'}
           </Button>
         </DialogActions>
       </Dialog>

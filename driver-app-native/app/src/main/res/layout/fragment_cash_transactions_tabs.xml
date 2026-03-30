@@ -6,7 +6,7 @@
     android:orientation="vertical"
     android:background="@color/background_dark">
 
-    <!-- Sub-tabs for Transactions: Pending, Approved, Rejected, All -->
+    <!-- Sub-tabs under Submissions: Pending, Approved, Rejected -->
     <com.google.android.material.tabs.TabLayout
         android:id="@+id/transactionsTabLayout"
         android:layout_width="match_parent"
@@ -17,9 +17,6 @@
         app:tabSelectedTextColor="@color/accent"
         app:tabIndicatorColor="@color/accent"
         app:tabBackground="@color/paper_dark">
-
-        <com.google.android.material.tabs.TabItem
-            android:text="All" />
 
         <com.google.android.material.tabs.TabItem
             android:text="Pending" />

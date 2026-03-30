@@ -38,6 +38,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatMpesaPhoneNumber, validateSafaricomPhone } from '../utils/mpesaPhone';
 import { useCustomer } from '../contexts/CustomerContext';
 import { useCart } from '../contexts/CartContext';
 import io from 'socket.io-client';
@@ -321,30 +322,6 @@ const MyOrders = () => {
       case 'cancelled': return 'Cancelled';
       default: return status;
     }
-  };
-
-  const formatMpesaPhoneNumber = (phone) => {
-    if (!phone) return '';
-    
-    // Remove all non-digit characters
-    let cleaned = phone.replace(/\D/g, '');
-    
-    // If starts with 0, replace with 254
-    if (cleaned.startsWith('0')) {
-      cleaned = '254' + cleaned.substring(1);
-    } else if (!cleaned.startsWith('254')) {
-      // If doesn't start with 254 and is 9 digits, add 254
-      if (cleaned.length === 9 && cleaned.startsWith('7')) {
-        cleaned = '254' + cleaned;
-      }
-    }
-    
-    return cleaned;
-  };
-
-  const validateSafaricomPhone = (phone) => {
-    const cleaned = phone.replace(/\D/g, '');
-    return cleaned.length >= 9 && (cleaned.startsWith('07') || cleaned.startsWith('2547') || (cleaned.startsWith('7') && cleaned.length === 9));
   };
 
   const handleOpenPaymentDialog = (order) => {

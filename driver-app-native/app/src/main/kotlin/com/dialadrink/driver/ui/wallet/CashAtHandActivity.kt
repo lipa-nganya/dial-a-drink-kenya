@@ -25,12 +25,12 @@ class CashAtHandActivity : AppCompatActivity() {
         setupMainTabs()
         loadCashAtHand()
 
-        // Default: show Transactions > Logs when opening this screen
+        // Default: first main tab is Transactions area; open inner Logs tab
         binding.mainViewPager.setCurrentItem(0, false)
         binding.mainViewPager.post {
             try {
                 val transactionsFragment = supportFragmentManager.fragments.find { it is TransactionsFragment } as? TransactionsFragment
-                transactionsFragment?.switchToMainSubTab(0) // Logs tab
+                transactionsFragment?.switchToMainSubTab(0) // Logs
             } catch (e: Exception) {
                 // ignore
             }
@@ -141,8 +141,7 @@ class CashAtHandActivity : AppCompatActivity() {
     }
     
     /**
-     * Switch to a specific main tab (0 = Cash At Hand, 1 = Transactions)
-     * This method is public so fragments can navigate between tabs
+     * Main tabs: 0 = Transactions area (Logs / Submissions / Transactions), 1 = Create Submission.
      */
     fun switchToMainTab(position: Int) {
         if (::binding.isInitialized) {
@@ -153,29 +152,28 @@ class CashAtHandActivity : AppCompatActivity() {
     private fun handleDeepLink(intent: Intent) {
         val submissionId = intent.getStringExtra("submissionId")
         if (submissionId != null) {
-            // Switch to Transactions main tab in CashAtHandActivity (position 0)
+            // Main tab 0 = Transactions area (Logs / Submissions / Transactions)
             binding.mainViewPager.setCurrentItem(0, true)
-            
-            // Wait a bit for the fragment to be created, then switch to appropriate sub-tab
+
             binding.mainViewPager.post {
-            val type = intent.getStringExtra("type")
-            try {
-                val transactionsFragment = supportFragmentManager.fragments.find { it is TransactionsFragment } as? TransactionsFragment
-                when (type) {
-                    "cash_submission_approved" -> {
-                        transactionsFragment?.switchToTransactionsSubTab(2) // Approved tab (Transactions > Approved, position 2)
-                        Toast.makeText(this, "Submission approved", Toast.LENGTH_SHORT).show()
+                val type = intent.getStringExtra("type")
+                try {
+                    val transactionsFragment =
+                        supportFragmentManager.fragments.find { it is TransactionsFragment } as? TransactionsFragment
+                    when (type) {
+                        "cash_submission_approved" -> {
+                            transactionsFragment?.switchToTransactionsSubTab(1) // Approved under Submissions
+                            Toast.makeText(this, "Submission approved", Toast.LENGTH_SHORT).show()
+                        }
+                        "cash_submission_rejected" -> {
+                            transactionsFragment?.switchToTransactionsSubTab(2) // Rejected under Submissions
+                            Toast.makeText(this, "Submission rejected", Toast.LENGTH_SHORT).show()
+                        }
+                        else -> {
+                            transactionsFragment?.switchToTransactionsSubTab(0) // Pending under Submissions
+                        }
                     }
-                    "cash_submission_rejected" -> {
-                        transactionsFragment?.switchToTransactionsSubTab(3) // Rejected tab (Transactions > Rejected, position 3)
-                        Toast.makeText(this, "Submission rejected", Toast.LENGTH_SHORT).show()
-                    }
-                    else -> {
-                        transactionsFragment?.switchToTransactionsSubTab(1) // Pending tab (Transactions > Pending, position 1)
-                    }
-                }
-            } catch (e: Exception) {
-                // Fragment not found, ignore
+                } catch (_: Exception) {
                 }
             }
         }

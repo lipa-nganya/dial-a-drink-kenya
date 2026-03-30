@@ -56,6 +56,7 @@ const RiderDetails = () => {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersPage, setOrdersPage] = useState(0);
   const [ordersRowsPerPage, setOrdersRowsPerPage] = useState(10);
+  const [ordersSearch, setOrdersSearch] = useState('');
   const [savingsBalance, setSavingsBalance] = useState(null);
   const [savingsLoading, setSavingsLoading] = useState(false);
   const [transactionTab, setTransactionTab] = useState('orders'); // 'orders', 'cash-at-hand', 'savings', 'loans'
@@ -249,6 +250,7 @@ const RiderDetails = () => {
 
 
   const handleAddPenalty = async () => {
+    if (!isSuperAdmin) return;
     if (!penaltyAmount || !penaltyReason || parseFloat(penaltyAmount) <= 0) {
       return;
     }
@@ -294,6 +296,7 @@ const RiderDetails = () => {
   };
 
   const handleAddLoan = async () => {
+    if (!isSuperAdmin) return;
     if (!loanAmount || !loanReason || parseFloat(loanAmount) <= 0) {
       return;
     }
@@ -412,16 +415,40 @@ const RiderDetails = () => {
     return 'default';
   };
 
-  const paginatedOrders = orders.slice(
+  const normalizedOrdersSearch = String(ordersSearch || '').trim().toLowerCase();
+  const filteredOrders = normalizedOrdersSearch
+    ? (orders || []).filter((o) => {
+        const haystack = [
+          o?.id,
+          o?.customerName,
+          o?.customerPhone,
+          o?.deliveryAddress,
+          o?.status,
+          o?.paymentStatus,
+          o?.paymentMethod
+        ]
+          .filter((v) => v !== null && v !== undefined)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(normalizedOrdersSearch);
+      })
+    : (orders || []);
+
+  const paginatedOrders = filteredOrders.slice(
     ordersPage * ordersRowsPerPage,
     ordersPage * ordersRowsPerPage + ordersRowsPerPage
   );
 
   // Reset to first page when orders list changes (e.g. different rider)
   useEffect(() => {
-    const maxPage = Math.max(0, Math.ceil(orders.length / ordersRowsPerPage) - 1);
+    const maxPage = Math.max(0, Math.ceil(filteredOrders.length / ordersRowsPerPage) - 1);
     if (ordersPage > maxPage) setOrdersPage(0);
-  }, [orders.length, ordersRowsPerPage, ordersPage]);
+  }, [filteredOrders.length, ordersRowsPerPage, ordersPage]);
+
+  // Reset paging when search changes
+  useEffect(() => {
+    setOrdersPage(0);
+  }, [normalizedOrdersSearch]);
 
   const handleOrdersPageChange = (_, newPage) => setOrdersPage(newPage);
   const handleOrdersRowsPerPageChange = (e) => {
@@ -573,38 +600,42 @@ const RiderDetails = () => {
                 )}
               </Box>
               <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
-                <Button
-                  variant="contained"
-                  startIcon={<Add />}
-                  onClick={() => setAddLoanDialogOpen(true)}
-                  sx={{
-                    backgroundColor: colors.accentText,
-                    color: '#FFFFFF',
-                    '&:hover': {
+                {isSuperAdmin && (
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => setAddLoanDialogOpen(true)}
+                    sx={{
                       backgroundColor: colors.accentText,
-                      opacity: 0.9,
-                      color: '#FFFFFF'
-                    }
-                  }}
-                >
-                  Add Loan
-                </Button>
-                <Button
-                  variant="contained"
-                  startIcon={<Add />}
-                  onClick={() => setAddPenaltyDialogOpen(true)}
-                  sx={{
-                    backgroundColor: '#f44336',
-                    color: '#FFFFFF',
-                    '&:hover': {
-                      backgroundColor: '#d32f2f',
-                      opacity: 0.9,
-                      color: '#FFFFFF'
-                    }
-                  }}
-                >
-                  Add Penalty
-                </Button>
+                      color: '#FFFFFF',
+                      '&:hover': {
+                        backgroundColor: colors.accentText,
+                        opacity: 0.9,
+                        color: '#FFFFFF'
+                      }
+                    }}
+                  >
+                    Add Loan
+                  </Button>
+                )}
+                {isSuperAdmin && (
+                  <Button
+                    variant="contained"
+                    startIcon={<Add />}
+                    onClick={() => setAddPenaltyDialogOpen(true)}
+                    sx={{
+                      backgroundColor: '#f44336',
+                      color: '#FFFFFF',
+                      '&:hover': {
+                        backgroundColor: '#d32f2f',
+                        opacity: 0.9,
+                        color: '#FFFFFF'
+                      }
+                    }}
+                  >
+                    Add Penalty
+                  </Button>
+                )}
                 {isSuperAdmin && (
                   <Button
                     variant="contained"
@@ -676,6 +707,32 @@ const RiderDetails = () => {
             <Assignment sx={{ color: colors.accentText }} />
             Orders assigned to {rider?.name || 'this rider'}
           </Typography>
+          <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              fullWidth
+              value={ordersSearch}
+              onChange={(e) => setOrdersSearch(e.target.value)}
+              placeholder="Search orders (e.g. #123, name, phone, address, status...)"
+              sx={{ maxWidth: 520 }}
+              InputProps={{
+                sx: { backgroundColor: colors.paper }
+              }}
+            />
+            {normalizedOrdersSearch && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setOrdersSearch('')}
+                sx={{ borderColor: colors.border, color: colors.textPrimary }}
+              >
+                Clear
+              </Button>
+            )}
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              Showing {filteredOrders.length} / {orders.length}
+            </Typography>
+          </Box>
           <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
         {ordersLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -696,10 +753,12 @@ const RiderDetails = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {orders.length === 0 ? (
+                {filteredOrders.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} align="center" sx={{ py: 3, color: colors.textSecondary }}>
-                      No orders assigned to this rider.
+                      {orders.length === 0
+                        ? 'No orders assigned to this rider.'
+                        : 'No orders match your search.'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -711,9 +770,9 @@ const RiderDetails = () => {
                       <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                         {(() => {
                           const totalAmount = Number(order.totalAmount || 0);
-                          const deliveryFee = Number(order.deliveryFee || 0);
-                          const value = totalAmount - deliveryFee;
-                          return `KES ${Math.round(value > 0 ? value : 0)}`;
+                          const tipAmount = Number(order.tipAmount || 0);
+                          const orderValue = totalAmount - tipAmount;
+                          return `KES ${Math.round(orderValue > 0 ? orderValue : 0)}`;
                         })()}
                       </TableCell>
                       <TableCell>
@@ -745,10 +804,10 @@ const RiderDetails = () => {
                 )}
               </TableBody>
             </Table>
-            {orders.length > 0 && (
+            {filteredOrders.length > 0 && (
               <TablePagination
                 component="div"
-                count={orders.length}
+                count={filteredOrders.length}
                 page={ordersPage}
                 onPageChange={handleOrdersPageChange}
                 rowsPerPage={ordersRowsPerPage}

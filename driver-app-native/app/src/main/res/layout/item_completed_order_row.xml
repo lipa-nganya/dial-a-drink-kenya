@@ -55,6 +55,8 @@
             android:textSize="12sp"
             android:maxLines="1"
             android:ellipsize="end" />
+
+        <!-- Note: header label is not shown here; this column now represents Territory Delivery Fee -->
     </LinearLayout>
 
 </LinearLayout>

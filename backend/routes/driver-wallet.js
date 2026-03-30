@@ -53,15 +53,18 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         paymentStatus: 'paid',
         status: { [Op.in]: ['delivered', 'completed'] }
       },
-      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'status', 'deliveryAddress'],
-      order: [['createdAt', 'DESC']]
+      attributes: ['id', 'customerName', 'totalAmount', 'createdAt', 'updatedAt', 'driverPayCreditedAt', 'status', 'deliveryAddress', 'territoryDeliveryFee'],
+      order: [['updatedAt', 'DESC']]
     });
 
     let cashCollected = 0;
     for (const order of cashOrders) {
       try {
         const breakdown = await getOrderFinancialBreakdown(order.id);
-        cashCollected += (breakdown.itemsTotal || 0) + (breakdown.deliveryFee || 0) * 0.5;
+        const convenienceFee = (breakdown.deliveryFee || 0);
+        const territoryFee = parseFloat(order.territoryDeliveryFee ?? convenienceFee) || 0;
+        const orderValue = (breakdown.itemsTotal || 0) + convenienceFee;
+        cashCollected += orderValue - territoryFee * 0.5;
       } catch (e) {
         console.warn(`Cash at hand: could not get breakdown for order ${order.id}:`, e.message);
       }
@@ -75,9 +78,9 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         status: { [Op.in]: ['completed', 'pending'] }, // Include pending for savings withdrawals
         amount: { [Op.lt]: 0 }
       },
-      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider'],
+      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider', 'transactionDate'],
       include: [
-        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress'], required: false }
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee'], required: false }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -90,14 +93,28 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         status: { [Op.in]: ['completed', 'pending'] },
         amount: { [Op.gt]: 0 }
       },
-      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider'],
+      attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider', 'transactionDate'],
       include: [
-        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress'], required: false }
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee'], required: false }
       ],
       order: [['createdAt', 'DESC']]
     });
     
     const orderIdsWithSettlementFromTx = new Set((cashSettlementsNegative || []).map(tx => tx.orderId).filter(Boolean));
+
+    // Ledger rows created on order completion (COD net cash-at-hand) — avoid duplicating the same order in the synthetic loop below
+    const completionLedgerRows = await db.Transaction.findAll({
+      where: {
+        driverId: driverId,
+        transactionType: 'cash_settlement',
+        paymentProvider: 'order_completion',
+        status: { [Op.in]: ['completed', 'pending'] }
+      },
+      attributes: ['orderId']
+    });
+    const orderIdsWithCompletionLedger = new Set(
+      (completionLedgerRows || []).map((t) => t.orderId).filter(Boolean)
+    );
 
     const approvedCashSubmissions = await db.CashSubmission.findAll({
       where: { driverId: driverId, status: 'approved' },
@@ -133,21 +150,38 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     // Format entries for response
     const entries = [];
 
-    // Add cash order entries (50% delivery fee + order total per Pay on Delivery cash order)
+    // Add cash order entries (Pay on Delivery cash).
+    // Description must be location-only: first 2 words, nothing else.
     for (const order of cashOrders) {
-      let amount = 0;
+      if (orderIdsWithCompletionLedger.has(order.id)) {
+        continue;
+      }
+      let orderValue = 0;
+      let withheldAmount = 0;
+      let netChange = 0;
       try {
         const breakdown = await getOrderFinancialBreakdown(order.id);
-        amount = (breakdown.itemsTotal || 0) + (breakdown.deliveryFee || 0) * 0.5;
+        const itemsTotal = parseFloat(breakdown.itemsTotal || 0) || 0;
+        const convenienceFee = parseFloat(breakdown.deliveryFee || 0) || 0;
+        const territoryFee = parseFloat(order.territoryDeliveryFee ?? convenienceFee) || 0;
+        orderValue = itemsTotal + convenienceFee;
+        withheldAmount = territoryFee * 0.5;
+        netChange = orderValue - withheldAmount;
       } catch (e) {}
       entries.push({
         type: 'cash_received',
-        logType: 'Payment Received',
+        logType: 'Order Completed',
         orderId: order.id,
+        deliveryFee: withheldAmount * 2, // full (100%) territory delivery fee
+        orderValue: orderValue,
+        // Cash at hand log columns: DBT = 50% territory withheld, CRT = full order value collected (net = CRT - DBT)
+        debitAmount: withheldAmount,
+        creditAmount: orderValue,
         customerName: order.customerName,
-        amount,
-        date: order.createdAt,
-        description: formatDescriptionFromAddressNoSuffix(order.deliveryAddress) || order.deliveryAddress || 'Cash received'
+        amount: netChange,
+        // Use completion/accounting timestamp instead of placement time.
+        date: order.driverPayCreditedAt || order.updatedAt || order.createdAt,
+        description: formatDescriptionFromAddressNoSuffix(order.deliveryAddress) || ''
       });
     }
 
@@ -168,10 +202,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       let description;
       if (isSavingsWithdrawal) {
         description = `Savings withdrawal`;
+      } else if (tx.paymentProvider === 'order_completion') {
+        description = formatDescriptionFromAddressNoSuffix(tx.order?.deliveryAddress) || '';
       } else if (isPayNowDeliveryFeeSettlement(tx)) {
-        description = tx.orderId ? `Cash at hand − 50% delivery fee (Order #${tx.orderId})` : 'Cash at hand − 50% delivery fee';
+        description = formatDescriptionFromAddressNoSuffix(tx.order?.deliveryAddress) || '';
       } else if (tx.order && tx.order.deliveryAddress) {
-        description = formatDescriptionFromAddressNoSuffix(tx.order.deliveryAddress) || tx.notes || 'Cash remitted to business';
+        description = formatDescriptionFromAddressNoSuffix(tx.order.deliveryAddress) || '';
       } else {
         description = tx.notes || `Cash remitted to business`;
       }
@@ -187,6 +223,8 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         logType,
         transactionId: tx.id,
         orderId: tx.orderId || null,
+        deliveryFee: tx.orderId ? (parseFloat(tx.order?.territoryDeliveryFee || 0) || null) : null,
+        orderValue: null,
         amount: Math.abs(txAmount),
         date: tx.transactionDate || tx.createdAt,
         description: description,
@@ -242,8 +280,14 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       });
     });
 
-    // Sort entries by date (newest first)
-    entries.sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Sort entries FIFO (oldest first), then stable tie-breakers so running-balance UI stays consistent
+    entries.sort((a, b) => {
+      const tb = new Date(a.date).getTime() - new Date(b.date).getTime();
+      if (tb !== 0) return tb;
+      const ob = (a.orderId || 0) - (b.orderId || 0);
+      if (ob !== 0) return ob;
+      return (a.transactionId || 0) - (b.transactionId || 0);
+    });
 
     // CRITICAL: Return the synced database value to ensure consistency
     // This value matches what's stored in drivers.cashAtHand and what admin panel shows
@@ -326,8 +370,9 @@ router.post('/:driverId/order-payment-stk-push', async (req, res) => {
 
       const breakdown = await getOrderFinancialBreakdown(orderId);
       const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
-      const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
-      const savings = deliveryFee * 0.5;
+      const convenienceFee = parseFloat(breakdown.deliveryFee) || 0;
+      const territoryFee = parseFloat(order.territoryDeliveryFee ?? convenienceFee) || 0;
+      const savings = territoryFee * 0.5;
       submitAmount += (itemsTotal + savings);
     }
 
@@ -523,7 +568,7 @@ router.post('/:driverId/cash-at-hand/submit', async (req, res) => {
     }
 
     // Format phone number for M-Pesa
-    const cleanedPhone = driver.phoneNumber.replace(/\D/g, '');
+    const cleanedPhone = String(driver.phoneNumber ?? '').replace(/\D/g, '');
     let formattedPhone = cleanedPhone;
     if (cleanedPhone.startsWith('0')) {
       formattedPhone = '254' + cleanedPhone.substring(1);
@@ -1046,7 +1091,7 @@ router.post('/:driverId/withdraw', async (req, res) => {
     }
 
     // Format phone number
-    const cleanedPhone = phoneNumber.replace(/\D/g, '');
+    const cleanedPhone = String(phoneNumber ?? '').replace(/\D/g, '');
     let formattedPhone = cleanedPhone;
     if (cleanedPhone.startsWith('0')) {
       formattedPhone = '254' + cleanedPhone.substring(1);

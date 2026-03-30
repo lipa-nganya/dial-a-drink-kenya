@@ -462,12 +462,19 @@ const Header = () => {
               </Box>
           
           {!isMobile && (
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', gap: { md: 0.25, lg: 0.5 }, alignItems: 'center', flexWrap: 'nowrap' }}>
               {/* Search in main nav - desktop (wider + live drink name suggestions) */}
               <Box
                 component="form"
                 onSubmit={handleSearchSubmit}
-                sx={{ display: 'flex', alignItems: 'center', mr: 1, minWidth: 320, maxWidth: 480, flex: '0 1 420px' }}
+                sx={{
+                  display: { md: 'none', lg: 'flex' },
+                  alignItems: 'center',
+                  mr: 0.5,
+                  minWidth: { lg: 220, xl: 260 },
+                  maxWidth: { lg: 320, xl: 380 },
+                  flex: { lg: '0 1 300px', xl: '0 1 340px' }
+                }}
               >
                 <Autocomplete
                   freeSolo
@@ -530,21 +537,21 @@ const Header = () => {
               <Button
                 color="inherit"
                 onClick={() => navigate('/')}
-                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, px: 0.8, whiteSpace: 'nowrap' }}
               >
                 Home
               </Button>
               <Button
                 color="inherit"
                 onClick={() => navigate('/menu')}
-                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, px: 0.8, whiteSpace: 'nowrap' }}
               >
                 Menu
               </Button>
               <Button
                 color="inherit"
                 onClick={() => navigate(isLoggedIn ? '/orders' : '/login')}
-                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, px: 0.8, whiteSpace: 'nowrap' }}
               >
                 My Orders
               </Button>
@@ -552,7 +559,7 @@ const Header = () => {
                 <Button
                   color="inherit"
                   onClick={() => navigate('/profile')}
-                  sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                  sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, px: 0.8, whiteSpace: 'nowrap' }}
                   startIcon={<Person />}
                 >
                   Profile
@@ -561,7 +568,7 @@ const Header = () => {
                 <Button
                   color="inherit"
                   onClick={() => navigate('/login')}
-                  sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5 }}
+                  sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, px: 0.8, whiteSpace: 'nowrap' }}
                   startIcon={<Login />}
                 >
                   Login
@@ -575,7 +582,7 @@ const Header = () => {
                     <ShoppingCart />
                   </Badge>
                 }
-                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, color: colors.textPrimary }}
+                sx={{ textTransform: 'none', fontSize: '0.85rem', py: 0.5, px: 0.8, color: colors.textPrimary, whiteSpace: 'nowrap' }}
               >
                 Cart
               </Button>
@@ -586,16 +593,23 @@ const Header = () => {
                 startIcon={<Phone />}
                 sx={{ 
                   textTransform: 'none', 
-                  fontSize: '0.85rem', 
+                  fontSize: { md: '0.75rem', lg: '0.8rem' },
                   py: 0.5, 
                   color: colors.textPrimary,
-                  ml: 1,
+                  ml: 0.5,
+                  px: 0.6,
+                  whiteSpace: 'nowrap',
                   '&:hover': {
                     backgroundColor: 'rgba(0, 0, 0, 0.05)'
                   }
                 }}
               >
-                +254 723 688 108
+                <Box component="span" sx={{ display: { md: 'none', xl: 'inline' } }}>
+                  +254 723 688 108
+                </Box>
+                <Box component="span" sx={{ display: { md: 'inline', xl: 'none' } }}>
+                  0723 688 108
+                </Box>
               </Button>
             </Box>
           )}

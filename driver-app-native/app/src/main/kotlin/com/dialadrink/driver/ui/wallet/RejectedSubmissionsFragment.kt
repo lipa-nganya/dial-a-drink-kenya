@@ -105,6 +105,7 @@ class RejectedSubmissionsFragment : Fragment() {
             val customerNameText = card.findViewById<TextView>(R.id.customerNameText)
             val amountText = card.findViewById<TextView>(R.id.amountText)
             val dateText = card.findViewById<TextView>(R.id.dateText)
+            val dateApprovedText = card.findViewById<TextView>(R.id.dateApprovedText)
             val receiptNumberText = card.findViewById<TextView>(R.id.receiptNumberText)
             
             descriptionText.text = getSubmissionDescription(submission)
@@ -112,16 +113,20 @@ class RejectedSubmissionsFragment : Fragment() {
             amountText.text = "-${formatter.format(submission.amount)}"
             amountText.setTextColor(requireContext().getColor(android.R.color.holo_red_light))
             
+            // Date posted
             try {
-                val date = try {
-                    apiDateFormat.parse(submission.rejectedAt ?: submission.createdAt)
+                val posted = try {
+                    apiDateFormat.parse(submission.createdAt)
                 } catch (e: Exception) {
-                    apiDateFormat2.parse(submission.rejectedAt ?: submission.createdAt)
+                    apiDateFormat2.parse(submission.createdAt)
                 }
-                dateText.text = date?.let { dateFormat.format(it) } ?: submission.createdAt
+                dateText.text = "Posted: " + (posted?.let { dateFormat.format(it) } ?: submission.createdAt)
             } catch (e: Exception) {
-                dateText.text = submission.createdAt
+                dateText.text = "Posted: " + submission.createdAt
             }
+
+            // No approved date for rejected submissions
+            dateApprovedText.visibility = View.GONE
             
             val rejectionReason = submission.rejectionReason ?: "No reason provided"
             receiptNumberText.text = "Rejected: $rejectionReason"

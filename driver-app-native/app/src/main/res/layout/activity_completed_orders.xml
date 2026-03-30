@@ -469,7 +469,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1.2"
                             android:gravity="end"
-                            android:text="Delivery Fee"
+                            android:text="Territory Delivery Fee"
                             android:textStyle="bold"
                             android:textSize="12sp"
                             android:textColor="@color/accent" />

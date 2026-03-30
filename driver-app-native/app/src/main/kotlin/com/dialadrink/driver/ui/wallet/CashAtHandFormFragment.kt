@@ -21,6 +21,7 @@ import com.dialadrink.driver.data.model.CreateCashSubmissionRequest
 import com.dialadrink.driver.data.model.OrderForOrderPayment
 import com.dialadrink.driver.data.model.OrderPaymentStkPushRequest
 import com.dialadrink.driver.databinding.FragmentCashAtHandFormBinding
+import com.dialadrink.driver.utils.MpesaPhoneUtils
 import com.dialadrink.driver.utils.SharedPrefs
 import kotlinx.coroutines.launch
 
@@ -36,7 +37,6 @@ class CashAtHandFormFragment : Fragment() {
     
     private var selectedSubmissionType: String? = null
     private val submissionTypes = listOf("Orders", "Purchases", "Cash", "General Expense", "Payment to Office")
-    private val accountTypes = listOf("cash", "mpesa", "till", "bank", "paybill", "pdq")
     private val submissionItems = mutableListOf<PurchaseItem>()
     private var eligibleOrderPayments: List<OrderForOrderPayment> = emptyList()
     private val selectedOrderIds = linkedSetOf<Int>()
@@ -65,7 +65,6 @@ class CashAtHandFormFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
         
         setupSubmissionTypeDropdown()
-        setupAccountTypeDropdown()
         setupPaymentTypeDropdown()
         setupSubmitButton()
         setupAmountInput()
@@ -229,26 +228,6 @@ class CashAtHandFormFragment : Fragment() {
         }
     }
     
-    private fun setupAccountTypeDropdown() {
-        val adapter = ArrayAdapter(requireContext(), R.layout.item_dropdown_dark, accountTypes.map { it.uppercase() })
-        (binding.accountTypeLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
-            autoComplete.setAdapter(adapter)
-            
-            val drawable = android.graphics.drawable.ColorDrawable(resources.getColor(R.color.paper_dark, null))
-            autoComplete.setDropDownBackgroundDrawable(drawable)
-            
-            autoComplete.setTextColor(Color.parseColor("#FFFFFF"))
-            autoComplete.setHintTextColor(Color.parseColor("#B0B0B0"))
-            
-            // Apply green border using helper function
-            applyGreenBorderToLayout(binding.accountTypeLayout)
-            
-            binding.accountTypeLayout.defaultHintTextColor = android.content.res.ColorStateList.valueOf(
-                Color.parseColor("#FFFFFF")
-            )
-        }
-    }
-
     private fun setupPaymentTypeDropdown() {
         val adapter = ArrayAdapter(requireContext(), R.layout.item_dropdown_dark, orderPaymentMethods)
         (binding.paymentTypeLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
@@ -269,7 +248,6 @@ class CashAtHandFormFragment : Fragment() {
         binding.deliveryLocationLayout.visibility = View.GONE
         binding.recipientNameLayout.visibility = View.GONE
         binding.natureLayout.visibility = View.GONE
-        binding.accountTypeLayout.visibility = View.GONE
         binding.orderPaymentOrderLayout.visibility = View.GONE
         binding.orderPaymentOrdersSection.visibility = View.GONE
         binding.orderPaymentPhoneLayout.visibility = View.GONE
@@ -306,7 +284,6 @@ class CashAtHandFormFragment : Fragment() {
                 binding.priceLayout.visibility = View.GONE
                 binding.deliveryLocationLayout.visibility = View.GONE
                 binding.natureLayout.visibility = View.GONE
-                binding.accountTypeLayout.visibility = View.GONE
                 binding.orderPaymentOrderLayout.visibility = View.GONE // legacy single-order dropdown
 
                 binding.orderPaymentOrdersSection.visibility = View.VISIBLE
@@ -365,9 +342,10 @@ class CashAtHandFormFragment : Fragment() {
                 // Amount and Payment Type are hidden for General Expense
             }
             "payment_to_office" -> {
-                binding.itemLayout.hint = "Sender"  // Renamed from "Payment Item/Description"
+                binding.itemLayout.hint = "Sender"
                 binding.priceLayout.hint = "Amount (KES)"
-                binding.accountTypeLayout.visibility = View.VISIBLE
+                binding.recipientNameLayout.visibility = View.VISIBLE
+                binding.recipientNameLayout.hint = "Recipient"
                 binding.addItemButton.visibility = View.VISIBLE
                 // Amount and Payment Type are hidden for Payment to Office
             }
@@ -403,7 +381,13 @@ class CashAtHandFormFragment : Fragment() {
 
                 orders.forEach { order ->
                     val cb = com.google.android.material.checkbox.MaterialCheckBox(requireContext()).apply {
-                        text = "${firstTwoWords(order.deliveryAddress)} • ${order.customerName} • Delivery Fee: KES ${String.format("%.0f", order.deliveryFee)} • Total: KES ${String.format("%.0f", order.totalToSubmit)}"
+                            val territoryFee = order.deliveryFee
+                            val territoryFeePart = if (territoryFee > 0.009) {
+                                " • Territory Delivery Fee: KES ${String.format("%.0f", territoryFee)}"
+                            } else {
+                                ""
+                            }
+                            text = "${firstTwoWords(order.deliveryAddress)} • ${order.customerName}$territoryFeePart • Total: KES ${String.format("%.0f", order.totalToSubmit)}"
                         setTextColor(Color.parseColor("#FFFFFF"))
                         isChecked = false
                         setOnCheckedChangeListener { _, isChecked ->
@@ -553,8 +537,13 @@ class CashAtHandFormFragment : Fragment() {
                         binding.errorText.visibility = View.VISIBLE
                         return
                     }
+                    if (!MpesaPhoneUtils.isValidSafaricomMpesa(phone)) {
+                        binding.errorText.text = "Enter a valid Safaricom number (e.g. 0712345678)"
+                        binding.errorText.visibility = View.VISIBLE
+                        return
+                    }
                     // Initiate STK push; successful payment will auto-approve and link orders via callback/poll.
-                    initiateOrderPaymentStkPush(driverId, selectedOrderIds.toList(), phone)
+                    initiateOrderPaymentStkPush(driverId, selectedOrderIds.toList(), MpesaPhoneUtils.normalizeKenyaMpesaPhone(phone))
                     return
                 }
 
@@ -613,13 +602,6 @@ class CashAtHandFormFragment : Fragment() {
                 Pair(totalAmount, detailsMap)
             }
             "payment_to_office" -> {
-                val accountType = (binding.accountTypeLayout.editText as? AutoCompleteTextView)?.text?.toString()?.trim()?.lowercase()
-                if (accountType.isNullOrEmpty()) {
-                    binding.errorText.text = "Please select account type"
-                    binding.errorText.visibility = View.VISIBLE
-                    return
-                }
-                
                 // Payment to Office: items array only (no amount or payment type)
                 if (items.isEmpty()) {
                     binding.errorText.text = "Please add at least one item"
@@ -627,10 +609,11 @@ class CashAtHandFormFragment : Fragment() {
                     return
                 }
                 val totalAmount = items.sumOf { (it["price"] as? Number)?.toDouble() ?: 0.0 }
-                val detailsMap = mutableMapOf<String, Any>(
-                    "accountType" to accountType,
-                    "items" to items
-                )
+                val detailsMap = mutableMapOf<String, Any>("items" to items)
+                val recipient = binding.recipientNameEditText.text.toString().trim()
+                if (recipient.isNotEmpty()) {
+                    detailsMap["recipientName"] = recipient
+                }
                 Pair(totalAmount, detailsMap)
             }
             else -> {
@@ -696,7 +679,6 @@ class CashAtHandFormFragment : Fragment() {
         binding.deliveryLocationEditText.text?.clear()
         binding.recipientNameEditText.text?.clear()
         binding.natureEditText.text?.clear()
-        binding.accountTypeLayout.editText?.text?.clear()
         binding.amountEditText.text?.clear()
         binding.paymentTypeLayout.editText?.text?.clear()
         binding.orderPaymentPhoneEditText.text?.clear()
@@ -739,7 +721,6 @@ class CashAtHandFormFragment : Fragment() {
             binding.deliveryLocationLayout,
             binding.recipientNameLayout,
             binding.natureLayout,
-            binding.accountTypeLayout,
             binding.amountLayout,
             binding.paymentTypeLayout,
             binding.orderPaymentPhoneLayout
@@ -773,12 +754,6 @@ class CashAtHandFormFragment : Fragment() {
         }
         
         (binding.submissionTypeLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
-            autoComplete.setTextColor(textPrimary)
-            autoComplete.setHintTextColor(textSecondary)
-            autoComplete.invalidate()
-        }
-        
-        (binding.accountTypeLayout.editText as? AutoCompleteTextView)?.let { autoComplete ->
             autoComplete.setTextColor(textPrimary)
             autoComplete.setHintTextColor(textSecondary)
             autoComplete.invalidate()

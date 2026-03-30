@@ -22,6 +22,7 @@ import { Add, Remove, Delete, ShoppingCart, CreditCard, PhoneAndroid, LocalShipp
 import { useCart } from '../contexts/CartContext';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { formatMpesaPhoneNumber, validateSafaricomPhone } from '../utils/mpesaPhone';
 import AddressAutocomplete from '../components/AddressAutocomplete';
 import { sanitizeCustomerNotes } from '../utils/sanitizeNotes';
 
@@ -397,34 +398,6 @@ const Cart = () => {
     });
   };
 
-  // Validate and format Safaricom phone number
-  const formatMpesaPhoneNumber = (phone) => {
-    if (!phone) return '';
-    
-    // Remove all non-digit characters
-    let cleaned = phone.replace(/\D/g, '');
-    
-    // If starts with 0, replace with 254
-    if (cleaned.startsWith('0')) {
-      cleaned = '254' + cleaned.substring(1);
-    } else if (!cleaned.startsWith('254')) {
-      // If doesn't start with 254 and is 9 digits, add 254
-      if (cleaned.length === 9 && cleaned.startsWith('7')) {
-        cleaned = '254' + cleaned;
-      }
-    }
-    
-    return cleaned;
-  };
-
-  // Validate Safaricom phone number format
-  const validateSafaricomPhone = (phone) => {
-    // Remove all non-digit characters
-    const cleaned = phone.replace(/\D/g, '');
-    // Check if it's a valid Safaricom format (07, 2547, or 7XXXXXXXXX)
-    return cleaned.length >= 9 && (cleaned.startsWith('07') || cleaned.startsWith('2547') || (cleaned.startsWith('7') && cleaned.length === 9));
-  };
-
   // Format order message for WhatsApp
   const formatOrderMessage = (orderId, totalAmount) => {
     let message = `🍷 *Dial A Drink Kenya - New Order*\n\n`;
@@ -453,7 +426,7 @@ const Cart = () => {
     });
     message += `\n*Order Summary:*\n`;
     message += `Subtotal: KES ${Math.round(getTotalPrice())}\n`;
-    message += `Delivery Fee: KES ${Math.round(deliveryFee)}\n`;
+    message += `Convenience Fee: KES ${Math.round(deliveryFee)}\n`;
     message += `*Total: KES ${Math.round(totalAmount)}*\n\n`;
     message += `*Payment Method:* ${paymentType === 'pay_now' ? 'Pay Now' : 'Pay on Delivery'}`;
     if (paymentType === 'pay_now' && paymentMethod) {

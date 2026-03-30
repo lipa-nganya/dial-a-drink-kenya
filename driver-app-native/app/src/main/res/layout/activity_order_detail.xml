@@ -128,7 +128,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:text="Territory: N/A • Delivery Fee: KES 0"
+            android:text="Territory: N/A"
             android:textColor="@color/text_primary_dark"
             android:textSize="16sp"
             android:textStyle="bold"
@@ -178,23 +178,36 @@
             app:layout_constraintTop_toBottomOf="@id/navigateToCustomerButton" />
 
         <TextView
+            android:id="@+id/orderValueText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Order Value: KES 0"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/itemsText" />
+
+        <TextView
             android:id="@+id/deliveryFeeText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="Delivery Fee: KES 0"
+            android:text="Territory Delivery Fee: KES 0"
             android:textColor="@color/text_primary_dark"
             android:textSize="16sp"
             android:textStyle="bold"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/itemsText" />
+            app:layout_constraintTop_toBottomOf="@id/orderValueText" />
 
         <TextView
             android:id="@+id/totalAmountText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="KES 1,500"
+            android:text="Total: KES 1,500"
             android:textColor="@color/accent"
             android:textSize="20sp"
             android:textStyle="bold"

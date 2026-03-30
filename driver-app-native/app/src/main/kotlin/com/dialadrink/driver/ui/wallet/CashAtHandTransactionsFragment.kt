@@ -99,8 +99,8 @@ class CashAtHandTransactionsFragment : Fragment() {
         
         val formatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
         
-        // Sort entries by date descending (newest first)
-        val sortedEntries = data.entries.sortedByDescending { entry ->
+        // Sort entries FIFO (oldest first)
+        val sortedEntries = data.entries.sortedBy { entry ->
             try {
                 val date = try {
                     apiDateFormat.parse(entry.date)

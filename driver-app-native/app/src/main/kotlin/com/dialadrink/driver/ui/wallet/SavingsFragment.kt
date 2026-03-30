@@ -28,6 +28,7 @@ import com.google.android.material.tabs.TabLayout
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.*
 
 class SavingsFragment : Fragment() {
@@ -59,23 +60,31 @@ class SavingsFragment : Fragment() {
     }
     
     private fun setupTabs() {
-        binding.savingsTabs.addTab(binding.savingsTabs.newTab().setText("Savings Transactions"))
+        binding.savingsTabs.removeAllTabs()
         binding.savingsTabs.addTab(binding.savingsTabs.newTab().setText("Logs"))
+        binding.savingsTabs.addTab(binding.savingsTabs.newTab().setText("Transactions"))
         
         binding.savingsTabs.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab?) {
                 when (tab?.position) {
                     0 -> {
-                        // Savings Transactions tab
-                        binding.savingsTransactionsContainer.visibility = View.VISIBLE
-                        binding.logsTableContainer.visibility = View.GONE
-                        binding.logsEmptyText.visibility = View.GONE
-                    }
-                    1 -> {
                         // Logs tab
+                        binding.savingsTopSection.visibility = View.GONE
                         binding.savingsTransactionsContainer.visibility = View.GONE
                         binding.logsTableContainer.visibility = View.VISIBLE
+                        binding.fixedSavingsHeaderCard.visibility = View.VISIBLE
+                        binding.logsTableHeaderRow.visibility = View.GONE
                         displayLogs()
+                    }
+                    1 -> {
+                        // Transactions tab
+                        binding.savingsTopSection.visibility = View.VISIBLE
+                        binding.savingsTransactionsContainer.visibility = View.VISIBLE
+                        binding.logsTableContainer.visibility = View.GONE
+                        binding.fixedSavingsHeaderCard.visibility = View.GONE
+                        binding.logsTableHeaderRow.visibility = View.VISIBLE
+                        binding.logsEmptyText.visibility = View.GONE
+                        walletData?.let { displaySavingsTransactions(it) }
                     }
                 }
             }
@@ -83,6 +92,15 @@ class SavingsFragment : Fragment() {
             override fun onTabUnselected(tab: TabLayout.Tab?) {}
             override fun onTabReselected(tab: TabLayout.Tab?) {}
         })
+
+        // Default to Logs first (left tab)
+        binding.savingsTabs.getTabAt(0)?.select()
+        binding.savingsTopSection.visibility = View.GONE
+        binding.savingsTransactionsContainer.visibility = View.GONE
+        binding.logsTableContainer.visibility = View.VISIBLE
+        binding.fixedSavingsHeaderCard.visibility = View.VISIBLE
+        binding.logsTableHeaderRow.visibility = View.GONE
+        displayLogs()
     }
     
     private fun setupWithdrawButton() {
@@ -265,15 +283,23 @@ class SavingsFragment : Fragment() {
     
     private val dateFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+        isLenient = false
     }
     private val dateFormatShort = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+        isLenient = false
     }
     private val apiDateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("UTC")
+        isLenient = false
     }
     private val apiDateFormat2 = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault()).apply {
         timeZone = TimeZone.getTimeZone("UTC")
+        isLenient = false
+    }
+    private val displayGroupDateFormat = SimpleDateFormat("EEEE, MMM d, yyyy", Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+        isLenient = false
     }
 
     private fun displayWallet(data: DriverWalletResponse) {
@@ -304,6 +330,12 @@ class SavingsFragment : Fragment() {
 
         // Display savings transactions (credits from orders and withdrawals)
         displaySavingsTransactions(data)
+
+        // Keep current tab content in sync with refreshed data
+        when (binding.savingsTabs.selectedTabPosition) {
+            0 -> displayLogs()
+            1 -> displaySavingsTransactions(data)
+        }
     }
 
     private fun displaySavingsTransactions(data: DriverWalletResponse) {
@@ -440,26 +472,60 @@ class SavingsFragment : Fragment() {
         
         val sortedTransactions = allTransactions.sortedByDescending { (type, tx) ->
             when (type) {
-                "credit", "debit" -> parseDate((tx as WalletTransaction).date).time
-                "withdrawal" -> parseDate((tx as WalletWithdrawal).date).time
+                "credit", "debit" -> parseDateOrNull((tx as WalletTransaction).date)?.time ?: 0L
+                "withdrawal" -> parseDateOrNull((tx as WalletWithdrawal).date)?.time ?: 0L
                 else -> 0L
             }
         }
         
         if (sortedTransactions.isEmpty()) {
             binding.logsTableContainer.visibility = View.GONE
+            binding.fixedSavingsHeaderCard.visibility = View.GONE
             binding.logsEmptyText.visibility = View.VISIBLE
             return
         }
         
         binding.logsEmptyText.visibility = View.GONE
         binding.logsTableContainer.visibility = View.VISIBLE
+        binding.fixedSavingsHeaderCard.visibility = View.VISIBLE
+        binding.logsTableHeaderRow.visibility = View.GONE
         
         // Calculate running balance - start from current savings and work backwards
         // Since we're displaying newest first, we need to calculate balance before each transaction
         var balanceAfter = currentSavings
+        var lastGroupDate: String? = null
+
+        // Keep first group comfortably below fixed header (same UX as Cash at Hand logs).
+        val fixedHeaderHeightPx = binding.fixedSavingsHeaderCard.height.takeIf { it > 0 } ?: 72
+        val spacerHeightPx = (fixedHeaderHeightPx + 24).coerceAtLeast(88)
+        val topSpacerRow = TableRow(requireContext()).apply { minimumHeight = spacerHeightPx }
+        tableLayout.addView(topSpacerRow)
         
         sortedTransactions.forEach { (type, tx) ->
+            val groupDate = when (type) {
+                "credit", "debit" -> formatGroupDate(parseDateOrNull((tx as WalletTransaction).date))
+                "withdrawal" -> formatGroupDate(parseDateOrNull((tx as WalletWithdrawal).date))
+                else -> "Unknown Date"
+            }
+
+            if (groupDate != lastGroupDate) {
+                val groupRow = TableRow(requireContext()).apply { setPadding(0, 2, 0, 0) }
+                val groupLabel = TextView(requireContext()).apply {
+                    layoutParams = TableRow.LayoutParams(
+                        TableRow.LayoutParams.MATCH_PARENT,
+                        TableRow.LayoutParams.WRAP_CONTENT
+                    )
+                    text = groupDate
+                    textSize = 12f
+                    setTypeface(typeface, android.graphics.Typeface.BOLD)
+                    setTextColor(requireContext().getColor(R.color.accent))
+                    setPadding(16, 4, 16, 2)
+                }
+                groupRow.addView(groupLabel)
+                tableLayout.addView(groupRow)
+                lastGroupDate = groupDate
+            }
+
             val row = LayoutInflater.from(requireContext()).inflate(
                 R.layout.item_cash_transaction_row,
                 tableLayout,
@@ -476,16 +542,10 @@ class SavingsFragment : Fragment() {
             when (type) {
                 "credit" -> {
                     val creditTx = tx as WalletTransaction
-                    orderNumText.text = (creditTx.orderId ?: creditTx.orderNumber)?.let { "#$it" } ?: "—"
                     val address = creditTx.orderLocation ?: creditTx.customerName ?: "N/A"
-                    deliveryAddressText.text = address
-                    
-                    try {
-                        val date = parseDate(creditTx.date)
-                        dateText.text = dateFormatShort.format(date)
-                    } catch (e: Exception) {
-                        dateText.text = creditTx.date.substring(0, 10).takeIf { creditTx.date.length >= 10 } ?: creditTx.date
-                    }
+                    deliveryAddressText.text = formatDescriptionWithOrderNumber((creditTx.orderId ?: creditTx.orderNumber), address)
+                    dateText.text = "Savings"
+                    orderNumText.text = formatter.format(Math.abs(creditTx.amount) * 2)
                     
                     // Credit transaction (money in, increases savings) = Credit column
                     debitText.text = "0"
@@ -497,16 +557,10 @@ class SavingsFragment : Fragment() {
                 "debit" -> {
                     // Stop deduction transaction (money out, decreases savings) = Debit column
                     val debitTx = tx as WalletTransaction
-                    orderNumText.text = (debitTx.orderId ?: debitTx.orderNumber)?.let { "#$it" } ?: "—"
                     val address = debitTx.orderLocation ?: debitTx.customerName ?: "N/A"
-                    deliveryAddressText.text = address
-                    
-                    try {
-                        val date = parseDate(debitTx.date)
-                        dateText.text = dateFormatShort.format(date)
-                    } catch (e: Exception) {
-                        dateText.text = debitTx.date.substring(0, 10).takeIf { debitTx.date.length >= 10 } ?: debitTx.date
-                    }
+                    deliveryAddressText.text = formatDescriptionWithOrderNumber((debitTx.orderId ?: debitTx.orderNumber), address)
+                    dateText.text = "Savings"
+                    orderNumText.text = "—"
                     
                     // Debit transaction (money out, decreases savings) = Debit column
                     val amountAbs = Math.abs(debitTx.amount)
@@ -518,15 +572,9 @@ class SavingsFragment : Fragment() {
                 }
                 "withdrawal" -> {
                     val withdrawalTx = tx as WalletWithdrawal
-                    orderNumText.text = "—"
                     deliveryAddressText.text = "Withdrawal"
-                    
-                    try {
-                        val date = parseDate(withdrawalTx.date)
-                        dateText.text = dateFormatShort.format(date)
-                    } catch (e: Exception) {
-                        dateText.text = withdrawalTx.date.substring(0, 10).takeIf { withdrawalTx.date.length >= 10 } ?: withdrawalTx.date
-                    }
+                    dateText.text = "Withdrawal"
+                    orderNumText.text = "—"
                     
                     // Withdrawal transaction (money out, decreases savings) = Debit column
                     debitText.text = formatter.format(withdrawalTx.amount)
@@ -542,14 +590,52 @@ class SavingsFragment : Fragment() {
     }
     
     private fun parseDate(dateString: String): Date {
-        return try {
-            apiDateFormat.parse(dateString) ?: apiDateFormat2.parse(dateString) ?: Date()
-        } catch (e: Exception) {
+        return parseDateOrNull(dateString) ?: Date()
+    }
+
+    private fun parseDateOrNull(dateString: String?): Date? {
+        if (dateString.isNullOrBlank()) return null
+        val value = dateString.trim()
+        val parsed = try {
+            apiDateFormat.parse(value)
+        } catch (_: Exception) {
             try {
-                apiDateFormat2.parse(dateString) ?: Date()
-            } catch (e2: Exception) {
-                Date()
+                apiDateFormat2.parse(value)
+            } catch (_: Exception) {
+                try {
+                    SimpleDateFormat("yyyy-MM-dd HH:mm:ss.SSSXXX", Locale.getDefault()).apply {
+                        timeZone = TimeZone.getTimeZone("UTC")
+                        isLenient = false
+                    }.parse(value)
+                } catch (_: Exception) {
+                    try {
+                        SimpleDateFormat("yyyy-MM-dd HH:mm:ssXXX", Locale.getDefault()).apply {
+                            timeZone = TimeZone.getTimeZone("UTC")
+                            isLenient = false
+                        }.parse(value)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
             }
+        }
+        if (parsed == null) return null
+        val year = Calendar.getInstance().apply { time = parsed }.get(Calendar.YEAR)
+        return if (year in 2000..2100) parsed else null
+    }
+
+    private fun formatGroupDate(date: Date?): String {
+        if (date == null) return "Unknown Date"
+        return displayGroupDateFormat.format(date)
+    }
+
+    private fun formatDescriptionWithOrderNumber(orderId: Int?, description: String): String {
+        if (orderId == null) return description
+        val cleaned = description.trim()
+        return if (cleaned.isEmpty()) {
+            "#$orderId"
+        } else {
+            "#$orderId • $cleaned"
         }
     }
     

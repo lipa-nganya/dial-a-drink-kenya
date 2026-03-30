@@ -104,6 +104,27 @@ const InventoryPage = () => {
       const parsed = parseInt(value, 10);
       return Number.isNaN(parsed) ? 0 : parsed;
     };
+    const capacityUnitMultiplier = (capacityLabel) => {
+      const raw = String(capacityLabel || '').trim().toLowerCase();
+      if (!raw) return 1;
+      const compact = raw.replace(/\s+/g, '');
+      const match = compact.match(/^(\d+)(pack|pk).*/);
+      const n = match ? parseInt(match[1], 10) : NaN;
+      return Number.isFinite(n) && n > 0 ? n : 1;
+    };
+    const isCanPackSharedStockDrink = (item) => {
+      const values = [];
+      const c = parseJsonIfString(item?.capacity);
+      const cp = parseJsonIfString(item?.capacityPricing);
+      if (Array.isArray(c)) values.push(...c);
+      if (Array.isArray(cp)) {
+        cp.forEach((entry) => values.push(entry?.capacity || entry?.size));
+      }
+      const normalized = values.map((v) => normalizeCapacityKey(v)).filter(Boolean);
+      const hasPack = normalized.some((v) => /^\d+(pack|pk)/.test(v) || v.includes('pack') || v.includes('pk'));
+      const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+      return hasPack && hasCan;
+    };
 
     const parsedStockByCapacity = parseJsonIfString(drink.stockByCapacity);
     const stockByCapacity =
@@ -138,6 +159,7 @@ const InventoryPage = () => {
     const stockByCapacityEntries = stockByCapacity
       ? Object.entries(stockByCapacity)
       : [];
+    const isSharedCanPack = isCanPackSharedStockDrink(drink);
 
     return uniqueCaps.map(cap => {
       let raw = null;
@@ -147,17 +169,61 @@ const InventoryPage = () => {
         raw = direct ? direct[1] : null;
       }
       const parsed = toInt(raw);
-      // If stockByCapacity is not initialized (or missing this capacity),
-      // fall back to aggregate stock so legacy items still show usable stock.
-      const stock = raw == null ? mainStock : parsed;
+      let stock;
+      if (isSharedCanPack) {
+        // Shared can stock model: capacities are availability views over the same can stock.
+        const multiplier = capacityUnitMultiplier(cap);
+        stock = multiplier > 1 ? Math.floor(mainStock / multiplier) : mainStock;
+      } else {
+        // Non-shared model: use capacity bucket, fallback to aggregate only when buckets are absent.
+        stock = stockByCapacity ? (raw == null ? 0 : parsed) : mainStock;
+      }
       return { capacity: cap, stock };
     });
+  };
+
+  const shouldHideZeroPackRow = (capacity, stock) => {
+    const cap = String(capacity || '').toLowerCase().replace(/\s+/g, '');
+    const isPack = /^\d+(pack|pk)/.test(cap) || cap.includes('pack') || cap.includes('pk');
+    return isPack && Number(stock) === 0;
   };
 
   // Item-level stock must be derived from per-capacity stock:
   // if one capacity has stock (e.g. 750ml), the whole item should be considered "in stock".
   const getTotalStock = (drink) => {
     if (!drink) return 0;
+    const parseJsonIfString = (value) => {
+      if (typeof value !== 'string') return value;
+      const trimmed = value.trim();
+      if (!trimmed) return value;
+      try {
+        return JSON.parse(trimmed);
+      } catch {
+        return value;
+      }
+    };
+    const normalizeCapacityKey = (value) =>
+      (value || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '');
+    const isCanPackSharedStockDrink = (item) => {
+      const values = [];
+      const c = parseJsonIfString(item?.capacity);
+      const cp = parseJsonIfString(item?.capacityPricing);
+      if (Array.isArray(c)) values.push(...c);
+      if (Array.isArray(cp)) cp.forEach((entry) => values.push(entry?.capacity || entry?.size));
+      const normalized = values.map((v) => normalizeCapacityKey(v)).filter(Boolean);
+      const hasPack = normalized.some((v) => /^\d+(pack|pk)/.test(v) || v.includes('pack') || v.includes('pk'));
+      const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+      return hasPack && hasCan;
+    };
+    if (isCanPackSharedStockDrink(drink)) {
+      const parsed = Number(drink.stock);
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
     const rows = getCapacityStockRows(drink);
     if (rows.length > 0) {
       return rows.reduce((sum, r) => sum + (Number(r.stock) || 0), 0);
@@ -445,6 +511,17 @@ const InventoryPage = () => {
       ));
     } catch (error) {
       console.error('Error updating drink availability:', error);
+    }
+  };
+
+  const handlePublishedToggle = async (drinkId, isPublished) => {
+    try {
+      await api.patch(`/admin/drinks/${drinkId}/published`, { isPublished });
+      setDrinks(drinks.map(drink =>
+        drink.id === drinkId ? { ...drink, isPublished } : drink
+      ));
+    } catch (error) {
+      console.error('Error updating drink published status:', error);
     }
   };
 
@@ -1220,9 +1297,11 @@ const InventoryPage = () => {
                       {(() => {
                         const rows = getCapacityStockRows(drink);
                         if (!rows.length) return null;
+                        const visibleRows = rows.filter(({ capacity, stock }) => !shouldHideZeroPackRow(capacity, stock));
+                        if (!visibleRows.length) return null;
                         return (
                           <Box sx={{ ml: 2.5, mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                            {rows.map(({ capacity, stock }, idx) => (
+                            {visibleRows.map(({ capacity, stock }, idx) => (
                               <Typography key={`${capacity}-${idx}`} variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
                                 Stock {stock}: {capacity}
                               </Typography>
@@ -1249,6 +1328,25 @@ const InventoryPage = () => {
                       label={
                         <Typography variant="body2" sx={{ fontSize: '0.8rem', color: colors.textPrimary }}>
                           {drink.isAvailable ? 'Available' : 'Out of Stock'}
+                        </Typography>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={drink.isPublished !== false}
+                          onChange={(e) => handlePublishedToggle(drink.id, e.target.checked)}
+                          size="small"
+                          sx={{
+                            '& .MuiSwitch-switchBase.Mui-checked': { color: '#00E0B8' },
+                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#00E0B8' }
+                          }}
+                        />
+                      }
+                      label={
+                        <Typography variant="body2" sx={{ fontSize: '0.8rem', color: colors.textPrimary }}>
+                          {drink.isPublished === false ? 'Unpublished' : 'Published'}
                         </Typography>
                       }
                     />
@@ -1486,9 +1584,11 @@ const InventoryPage = () => {
                       {(() => {
                         const rows = getCapacityStockRows(drink);
                         if (!rows.length) return null;
+                        const visibleRows = rows.filter(({ capacity, stock }) => !shouldHideZeroPackRow(capacity, stock));
+                        if (!visibleRows.length) return null;
                         return (
                           <Box sx={{ mt: 0.25, ml: 3, display: 'flex', flexDirection: 'column', gap: 0.1 }}>
-                            {rows.map(({ capacity, stock }, idx) => (
+                            {visibleRows.map(({ capacity, stock }, idx) => (
                               <Typography
                                 key={`${capacity}-${idx}`}
                                 variant="caption"
@@ -1580,6 +1680,32 @@ const InventoryPage = () => {
                         label={
                           <Typography variant="body2" sx={{ fontSize: '0.7rem', color: colors.textPrimary }}>
                             {drink.isAvailable ? 'Available' : 'Out of Stock'}
+                          </Typography>
+                        }
+                      />
+                    </Box>
+
+                    {/* Published Toggle */}
+                    <Box sx={{ mb: 1 }}>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={drink.isPublished !== false}
+                            onChange={(e) => handlePublishedToggle(drink.id, e.target.checked)}
+                            size="small"
+                            sx={{
+                              '& .MuiSwitch-switchBase.Mui-checked': {
+                                color: '#00E0B8',
+                              },
+                              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                                backgroundColor: '#00E0B8',
+                              },
+                            }}
+                          />
+                        }
+                        label={
+                          <Typography variant="body2" sx={{ fontSize: '0.7rem', color: colors.textPrimary }}>
+                            {drink.isPublished === false ? 'Unpublished' : 'Published'}
                           </Typography>
                         }
                       />
