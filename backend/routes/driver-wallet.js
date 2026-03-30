@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
+const { pickCashAtHandLogDate } = require('../utils/cashAtHandDates');
 
 // Helper function to format description using first 2 words of delivery address
 const formatDescriptionFromAddress = (deliveryAddress) => {
@@ -172,6 +173,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         type: 'cash_received',
         logType: 'Order Completed',
         orderId: order.id,
+        entryKey: `cod_order:${order.id}`,
         deliveryFee: withheldAmount * 2, // full (100%) territory delivery fee
         orderValue: orderValue,
         // Cash at hand log columns: DBT = 50% territory withheld, CRT = full order value collected (net = CRT - DBT)
@@ -180,7 +182,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         customerName: order.customerName,
         amount: netChange,
         // Use completion/accounting timestamp instead of placement time.
-        date: order.driverPayCreditedAt || order.updatedAt || order.createdAt,
+        date: pickCashAtHandLogDate(order.driverPayCreditedAt, order.updatedAt, order.createdAt),
         description: formatDescriptionFromAddressNoSuffix(order.deliveryAddress) || ''
       });
     }
@@ -239,12 +241,13 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         type: entryType,
         logType,
         transactionId: tx.id,
+        entryKey: `settlement_tx:${tx.id}`,
         orderId: tx.orderId || null,
         deliveryFee: tx.orderId ? (parseFloat(tx.order?.territoryDeliveryFee || 0) || null) : null,
         orderValue,
         creditAmount,
         amount: Math.abs(txAmount),
-        date: tx.transactionDate || tx.createdAt,
+        date: pickCashAtHandLogDate(tx.transactionDate, tx.createdAt),
         description: description,
         receiptNumber: tx.receiptNumber
       });
@@ -291,29 +294,65 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         logType: 'Submission',
         submissionType: submissionType || null,
         transactionId: submission.id,
+        entryKey: `submission:${submission.id}`,
         orderId: orderIdForSubmission,
         amount: parseFloat(submission.amount || 0),
-        date: submission.createdAt,
+        date: pickCashAtHandLogDate(submission.createdAt),
         description: description
       });
     });
 
     // Sort entries newest first, then stable tie-breakers so running-balance UI stays consistent
     entries.sort((a, b) => {
-      const tb = new Date(b.date).getTime() - new Date(a.date).getTime();
-      if (tb !== 0) return tb;
+      const ta = new Date(a.date).getTime();
+      const tb = new Date(b.date).getTime();
+      const safeA = Number.isNaN(ta) ? 0 : ta;
+      const safeB = Number.isNaN(tb) ? 0 : tb;
+      const tdiff = safeB - safeA;
+      if (tdiff !== 0) return tdiff;
       const ob = (b.orderId || 0) - (a.orderId || 0);
       if (ob !== 0) return ob;
       return (b.transactionId || 0) - (a.transactionId || 0);
     });
 
+    // Super-super-admin overrides: Debit/Credit adjust stored cash at hand via PUT /admin/drivers/.../cash-at-hand-log-display.
+    try {
+      const numericDriverId = parseInt(driverId, 10);
+      const overrides = await db.CashAtHandLogOverride.findAll({ where: { driverId: numericDriverId } });
+      const byKey = new Map(overrides.map((o) => [o.entryKey, o]));
+      for (const e of entries) {
+        const o = byKey.get(e.entryKey);
+        if (!o) continue;
+        if (o.debitAmount != null) e.debitAmount = parseFloat(o.debitAmount);
+        if (o.creditAmount != null) e.creditAmount = parseFloat(o.creditAmount);
+        if (o.balanceAfter != null) e.balanceAfterDisplay = parseFloat(o.balanceAfter);
+        if (e.type === 'cash_received' && (o.debitAmount != null || o.creditAmount != null)) {
+          const d = parseFloat(e.debitAmount != null ? e.debitAmount : 0);
+          const c = parseFloat(e.creditAmount != null ? e.creditAmount : 0);
+          e.amount = c - d;
+        } else if (o.debitAmount != null && e.type !== 'cash_received') {
+          e.amount = Math.abs(parseFloat(o.debitAmount));
+        }
+      }
+    } catch (mergeErr) {
+      console.warn('Cash at hand: could not merge log display overrides:', mergeErr.message);
+    }
+
     // CRITICAL: Return the synced database value to ensure consistency
     // This value matches what's stored in drivers.cashAtHand and what admin panel shows
     // Actual cash at hand = totalCashAtHand (value before pending submissions are approved)
     // Pending cash at hand = totalCashAtHand - sum(pending submission amounts) — value after all pending submissions are approved
+    const openingRaw = driver.cashAtHandOpeningBalance;
+    const cashAtHandOpeningBalance =
+      openingRaw != null && openingRaw !== '' ? parseFloat(openingRaw) : null;
+
     const payload = {
       totalCashAtHand: totalCashAtHand, // Synced database value from drivers.cashAtHand (Actual cash at hand)
       cashAtHand: totalCashAtHand, // Alias for consistency (some clients might use this field)
+      cashAtHandOpeningBalance:
+        cashAtHandOpeningBalance != null && Number.isFinite(cashAtHandOpeningBalance)
+          ? cashAtHandOpeningBalance
+          : null,
       entries: entries
     };
     // Always include pending cash at hand if there are any pending submissions (even if result is negative)
@@ -877,7 +916,7 @@ router.get('/:driverId', async (req, res) => {
         status: tx.status,
         paymentStatus: tx.paymentStatus,
         receiptNumber: tx.receiptNumber,
-        date: tx.transactionDate || tx.createdAt,
+        date: pickCashAtHandLogDate(tx.transactionDate, tx.createdAt),
         notes: tx.notes || `Savings withdrawal${tx.phoneNumber ? ` to ${tx.phoneNumber}` : ''}`,
         paymentProvider: tx.paymentProvider // Include paymentProvider to identify loan/penalty transactions
       }))

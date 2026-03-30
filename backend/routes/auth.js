@@ -237,7 +237,7 @@ router.post('/send-otp', async (req, res) => {
             [db.Sequelize.Op.in]: phoneVariations
           },
           role: {
-            [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
+            [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin', 'super_super_admin']
           }
         }
       });
@@ -678,7 +678,7 @@ router.post('/verify-otp', async (req, res) => {
           [db.Sequelize.Op.in]: phoneVariations
         },
         role: {
-          [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin']
+          [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin', 'super_super_admin']
         }
       }
     });
@@ -1625,7 +1625,7 @@ router.get('/check-phone-for-user-types', async (req, res) => {
     // Check for admin (not shop_agent)
     const admin = await db.Admin.findOne({
       where: {
-        role: { [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin'] },
+        role: { [db.Sequelize.Op.in]: ['admin', 'manager', 'super_admin', 'super_super_admin'] },
         mobileNumber: {
           [db.Sequelize.Op.in]: phoneVariations
         }

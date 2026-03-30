@@ -5,6 +5,7 @@ const { Op } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { calculateDeliveryFee } = require('../utils/calculateDeliveryFee');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
+const { getNaturalCashAtHandEntry, computeEffectiveNet } = require('../utils/cashAtHandNaturalEntry');
 const { creditWalletsOnDeliveryCompletion, repairSavingsForOrder, repairPayNowCashAtHandOnly } = require('../utils/walletCredits');
 const mpesaService = require('../services/mpesa');
 const pushNotifications = require('../services/pushNotifications');
@@ -44,6 +45,11 @@ const verifyAdmin = (req, res, next) => {
     console.warn('Admin auth token verification failed:', error.message);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+};
+
+const requireSuperSuperAdmin = (req, res, next) => {
+  if (req.admin && req.admin.role === 'super_super_admin') return next();
+  return res.status(403).json({ success: false, error: 'Only super-super admin can perform this action' });
 };
 
 const buildAdminUserResponse = (adminInstance) => {
@@ -1992,6 +1998,201 @@ router.get('/orders/pending', verifyAdmin, async (req, res) => {
       success: false,
       error: 'Failed to fetch pending orders' 
     });
+  }
+});
+
+/**
+ * Upsert cash-at-hand log display overrides (Debit / Credit / Balance columns).
+ * Debit/Credit adjustments change drivers.cashAtHand by the net difference from the natural line.
+ * balanceAfter is display-only (does not affect stored cash).
+ * Body: { entryKey, debitAmount?, creditAmount?, balanceAfter? } — null clears an override field.
+ */
+router.put('/drivers/:driverId/cash-at-hand-log-display', verifyAdmin, requireSuperSuperAdmin, async (req, res) => {
+  try {
+    const driverId = parseInt(req.params.driverId, 10);
+    const { entryKey, debitAmount, creditAmount, balanceAfter } = req.body || {};
+    const adminId = req.admin?.id != null ? parseInt(req.admin.id, 10) : null;
+    const b = req.body || {};
+    const isDeleteAllClear =
+      Object.prototype.hasOwnProperty.call(b, 'debitAmount') &&
+      Object.prototype.hasOwnProperty.call(b, 'creditAmount') &&
+      Object.prototype.hasOwnProperty.call(b, 'balanceAfter') &&
+      b.debitAmount === null &&
+      b.creditAmount === null &&
+      b.balanceAfter === null;
+
+    if (!Number.isFinite(driverId) || driverId < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid driver id' });
+    }
+    if (!entryKey || typeof entryKey !== 'string' || entryKey.length > 255) {
+      return res.status(400).json({ success: false, error: 'entryKey is required (max 255 chars)' });
+    }
+    if (!/^(cod_order|settlement_tx|submission):[0-9]+$/.test(entryKey)) {
+      return res.status(400).json({ success: false, error: 'Invalid entryKey format' });
+    }
+
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ success: false, error: 'Driver not found' });
+    }
+
+    const parseOpt = (v) => {
+      if (v === undefined) return undefined;
+      if (v === null || v === '') return null;
+      const n = parseFloat(v);
+      if (!Number.isFinite(n) || n < 0) {
+        throw new Error('Amounts must be non-negative numbers or null');
+      }
+      return n;
+    };
+
+    let debitParsed;
+    let creditParsed;
+    let balanceParsed;
+    try {
+      debitParsed = parseOpt(debitAmount);
+      creditParsed = parseOpt(creditAmount);
+      balanceParsed = parseOpt(balanceAfter);
+    } catch (e) {
+      return res.status(400).json({ success: false, error: e.message });
+    }
+
+    const existing = await db.CashAtHandLogOverride.findOne({ where: { driverId, entryKey } });
+    const natural = await getNaturalCashAtHandEntry(driverId, entryKey);
+
+    if (!natural) {
+      if (existing && isDeleteAllClear) {
+        await existing.destroy();
+        return res.json({ success: true, data: null, deleted: true });
+      }
+      return res.status(404).json({ success: false, error: 'No matching cash-at-hand line for this entry key' });
+    }
+
+    const roundMoney = (x) => Math.round((Number(x) + Number.EPSILON) * 100) / 100;
+
+    if (existing && isDeleteAllClear) {
+      const transaction = await db.sequelize.transaction();
+      try {
+        const prevNet = computeEffectiveNet(natural, existing);
+        const naturalNet = natural.naturalAmount;
+        const reverseDelta = roundMoney(-(prevNet - naturalNet));
+        if (reverseDelta !== 0) {
+          await driver.increment({ cashAtHand: reverseDelta }, { transaction });
+        }
+        await existing.destroy({ transaction });
+        await transaction.commit();
+        return res.json({ success: true, data: null, deleted: true });
+      } catch (err) {
+        await transaction.rollback();
+        throw err;
+      }
+    }
+
+    const nextDebit = debitParsed !== undefined ? debitParsed : (existing?.debitAmount ?? null);
+    const nextCredit = creditParsed !== undefined ? creditParsed : (existing?.creditAmount ?? null);
+
+    const prevOverride = existing
+      ? { debitAmount: existing.debitAmount, creditAmount: existing.creditAmount }
+      : null;
+    const prevNet = computeEffectiveNet(natural, prevOverride);
+    const nextNet = computeEffectiveNet(natural, { debitAmount: nextDebit, creditAmount: nextCredit });
+
+    const debitOrCreditInRequest = debitParsed !== undefined || creditParsed !== undefined;
+
+    const transaction = await db.sequelize.transaction();
+    try {
+      if (debitOrCreditInRequest) {
+        const delta = roundMoney(nextNet - prevNet);
+        if (delta !== 0) {
+          await driver.increment({ cashAtHand: delta }, { transaction });
+        }
+      }
+
+      const updateFields = { updatedByAdminId: adminId };
+      if (debitParsed !== undefined) updateFields.debitAmount = debitParsed;
+      if (creditParsed !== undefined) updateFields.creditAmount = creditParsed;
+      if (balanceParsed !== undefined) updateFields.balanceAfter = balanceParsed;
+
+      let row;
+      if (existing) {
+        await existing.update(updateFields, { transaction });
+        await existing.reload({ transaction });
+        row = existing;
+      } else {
+        const hasAny = [debitParsed, creditParsed, balanceParsed].some((v) => v !== undefined && v !== null);
+        if (!hasAny) {
+          await transaction.rollback();
+          return res.status(400).json({
+            success: false,
+            error: 'Provide at least one non-null debitAmount, creditAmount, or balanceAfter'
+          });
+        }
+        const createData = { driverId, entryKey, updatedByAdminId: adminId };
+        if (debitParsed !== undefined) createData.debitAmount = debitParsed;
+        if (creditParsed !== undefined) createData.creditAmount = creditParsed;
+        if (balanceParsed !== undefined) createData.balanceAfter = balanceParsed;
+        row = await db.CashAtHandLogOverride.create(createData, { transaction });
+      }
+
+      await transaction.commit();
+      return res.json({
+        success: true,
+        data: row.toJSON ? row.toJSON() : row
+      });
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Error saving cash-at-hand log display:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to save' });
+  }
+});
+
+/**
+ * Set optional cash-at-hand statement opening balance (balance before the oldest log line).
+ * When set, admin statement running balances are computed forward from this value.
+ * Body: { cashAtHandOpeningBalance: number | null } — null clears.
+ */
+router.put('/drivers/:driverId/cash-at-hand-opening-balance', verifyAdmin, requireSuperSuperAdmin, async (req, res) => {
+  try {
+    const driverId = parseInt(req.params.driverId, 10);
+    const { cashAtHandOpeningBalance } = req.body || {};
+    if (!Number.isFinite(driverId) || driverId < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid driver id' });
+    }
+    const driver = await db.Driver.findByPk(driverId);
+    if (!driver) {
+      return res.status(404).json({ success: false, error: 'Driver not found' });
+    }
+    let value = null;
+    if (
+      cashAtHandOpeningBalance !== undefined &&
+      cashAtHandOpeningBalance !== null &&
+      cashAtHandOpeningBalance !== ''
+    ) {
+      const n = parseFloat(cashAtHandOpeningBalance);
+      if (!Number.isFinite(n) || n < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Opening balance must be a non-negative number or null to clear'
+        });
+      }
+      value = n;
+    }
+    await driver.update({ cashAtHandOpeningBalance: value });
+    await driver.reload();
+    const raw = driver.cashAtHandOpeningBalance;
+    const parsed = raw != null && raw !== '' ? parseFloat(raw) : null;
+    return res.json({
+      success: true,
+      data: {
+        cashAtHandOpeningBalance: parsed != null && Number.isFinite(parsed) ? parsed : null
+      }
+    });
+  } catch (error) {
+    console.error('Error saving cash-at-hand opening balance:', error);
+    return res.status(500).json({ success: false, error: error.message || 'Failed to save' });
   }
 });
 

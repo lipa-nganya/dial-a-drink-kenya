@@ -43,6 +43,13 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: 0,
       comment: 'Cash at hand amount for the driver'
     },
+    cashAtHandOpeningBalance: {
+      type: DataTypes.DECIMAL(12, 2),
+      allowNull: true,
+      defaultValue: null,
+      comment:
+        'Optional statement opening balance (before oldest transaction). When set, admin cash-at-hand running balances are computed forward from this value.'
+    },
     creditLimit: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,

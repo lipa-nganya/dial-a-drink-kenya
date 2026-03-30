@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -45,6 +45,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
 import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
+import { buildCashAtHandStatementRows } from '../utils/cashAtHandStatementRows';
+import { formatCashAtHandDateOnly } from '../utils/cashAtHandDateDisplay';
+import { mergeLogsWithInlineDrafts, getDefaultDebitCreditStrings } from '../utils/cashAtHandInlineEdit';
 
 const RiderDetails = () => {
   const { riderId } = useParams();
@@ -52,6 +55,7 @@ const RiderDetails = () => {
   const { isDarkMode, colors } = useTheme();
   const { user } = useAdmin();
   const isSuperAdmin = user?.role === 'super_admin';
+  const isSuperSuperAdmin = user?.role === 'super_super_admin';
   
   const [rider, setRider] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -68,6 +72,8 @@ const RiderDetails = () => {
   const [cashAtHandLoading, setCashAtHandLoading] = useState(false);
   const [cashAtHandAmount, setCashAtHandAmount] = useState(null);
   const [cashAtHandSearch, setCashAtHandSearch] = useState('');
+  const [cashAtHandOpeningInput, setCashAtHandOpeningInput] = useState('');
+  const [cashAtHandOpeningSaving, setCashAtHandOpeningSaving] = useState(false);
   const [savingsData, setSavingsData] = useState(null);
   const [savingsTransactionsLoading, setSavingsTransactionsLoading] = useState(false);
   const [addLoanDialogOpen, setAddLoanDialogOpen] = useState(false);
@@ -84,6 +90,14 @@ const RiderDetails = () => {
   const [transactionApplyTo, setTransactionApplyTo] = useState('cash_at_hand');
   const [transactionReason, setTransactionReason] = useState('');
   const [addingTransaction, setAddingTransaction] = useState(false);
+  const [cashLogInlineDrafts, setCashLogInlineDrafts] = useState({});
+  const [cashLogInlineSavingKey, setCashLogInlineSavingKey] = useState(null);
+  const cashLogInlineDraftsRef = useRef({});
+  const cashLogSaveTimersRef = useRef({});
+
+  useEffect(() => {
+    cashLogInlineDraftsRef.current = cashLogInlineDrafts;
+  }, [cashLogInlineDrafts]);
 
   // Fetch rider details
   useEffect(() => {
@@ -457,65 +471,168 @@ const RiderDetails = () => {
 
   const normalizedCashAtHandSearch = String(cashAtHandSearch || '').trim().toLowerCase();
 
-  const cashAtHandStatementRows = useMemo(() => {
-    const rawEntries = Array.isArray(cashAtHandData?.entries) ? cashAtHandData.entries : [];
-    if (rawEntries.length === 0) return [];
+  const mergedCashAtHandEntries = useMemo(
+    () =>
+      mergeLogsWithInlineDrafts(
+        Array.isArray(cashAtHandData?.entries) ? cashAtHandData.entries : [],
+        cashLogInlineDrafts
+      ),
+    [cashAtHandData?.entries, cashLogInlineDrafts]
+  );
 
-    const entryType = (entry) => {
-      const t = entry.type ?? entry.transaction_type ?? entry.Type;
-      return typeof t === 'string' ? t.toLowerCase() : t;
-    };
+  const cashAtHandStatementRows = useMemo(
+    () =>
+      buildCashAtHandStatementRows(
+        mergedCashAtHandEntries,
+        cashAtHandData?.totalCashAtHand,
+        normalizedCashAtHandSearch,
+        {
+          openingBalance: cashAtHandData?.cashAtHandOpeningBalance
+        }
+      ),
+    [mergedCashAtHandEntries, cashAtHandData?.totalCashAtHand, normalizedCashAtHandSearch, cashAtHandData?.cashAtHandOpeningBalance]
+  );
 
-    const sortedEntries = [...rawEntries].sort((a, b) => {
-      const dateA = new Date(a.date);
-      const dateB = new Date(b.date);
-      return dateB - dateA; // newest first
-    });
+  useEffect(() => {
+    const o = cashAtHandData?.cashAtHandOpeningBalance;
+    const p = o != null && o !== '' ? parseFloat(o) : NaN;
+    if (Number.isFinite(p) && p >= 0) {
+      setCashAtHandOpeningInput(String(Math.round(p)));
+    } else {
+      setCashAtHandOpeningInput('');
+    }
+  }, [cashAtHandData?.cashAtHandOpeningBalance]);
 
-    const filteredEntries = normalizedCashAtHandSearch
-      ? sortedEntries.filter((entry) => {
-          const haystack = [
-            entry.date,
-            entry.orderId,
-            entry.order_id,
-            entry.transactionId,
-            entry.id,
-            entry.description,
-            entry.customerName,
-            entry.receiptNumber,
-            entryType(entry),
-            entry.amount
-          ]
-            .filter((v) => v !== null && v !== undefined)
-            .join(' ')
-            .toString()
-            .toLowerCase();
-          return haystack.includes(normalizedCashAtHandSearch);
-        })
-      : sortedEntries;
-
-    // Running balance displayed as "balance after this transaction" (matches UI approach for newest-first).
-    let balanceAfter = parseFloat(cashAtHandData?.totalCashAtHand || 0);
-
-    return filteredEntries.map((entry) => {
-      const type = entryType(entry);
-      const isCredit = type === 'cash_received';
-      const amount = parseFloat(entry.amount || 0);
-      const balance = balanceAfter;
-      if (isCredit) {
-        balanceAfter -= amount;
-      } else {
-        balanceAfter += amount;
+  const refreshCashAtHandFromApi = useCallback(async () => {
+    const cashResponse = await api.get(`/driver-wallet/${riderId}/cash-at-hand`);
+    let cashData = null;
+    if (cashResponse?.data?.success && cashResponse.data.data) {
+      cashData = cashResponse.data.data;
+    } else if (cashResponse?.data?.data) {
+      cashData = cashResponse.data.data;
+    } else if (cashResponse?.data) {
+      cashData = cashResponse.data;
+    }
+    if (cashData) {
+      setCashAtHandData(cashData);
+      if (cashData?.totalCashAtHand !== undefined) {
+        setCashAtHandAmount(parseFloat(cashData.totalCashAtHand || 0));
       }
-      return {
-        entry,
-        type,
-        isCredit,
-        amount,
-        balance
-      };
-    });
-  }, [cashAtHandData, normalizedCashAtHandSearch]);
+    }
+  }, [riderId]);
+
+  const parseCashLogField = (s) => {
+    const t = String(s ?? '').trim();
+    if (t === '') return null;
+    const n = parseFloat(t);
+    if (!Number.isFinite(n) || n < 0) throw new Error('Amounts must be non-negative numbers or blank');
+    return n;
+  };
+
+  const saveCashLogRow = useCallback(
+    async (entryKey) => {
+      const entry = cashAtHandData?.entries?.find((e) => e.entryKey === entryKey);
+      if (!entry?.entryKey) return;
+      const draft = cashLogInlineDraftsRef.current[entryKey] || {};
+      const defaults = getDefaultDebitCreditStrings(entry);
+      const debitStr = draft.debit !== undefined ? draft.debit : defaults.debit;
+      const creditStr = draft.credit !== undefined ? draft.credit : defaults.credit;
+      try {
+        setCashLogInlineSavingKey(entryKey);
+        await api.put(`/admin/drivers/${riderId}/cash-at-hand-log-display`, {
+          entryKey,
+          debitAmount: parseCashLogField(debitStr),
+          creditAmount: parseCashLogField(creditStr)
+        });
+        setCashLogInlineDrafts((prev) => {
+          const next = { ...prev };
+          delete next[entryKey];
+          return next;
+        });
+        await refreshCashAtHandFromApi();
+      } catch (e) {
+        alert(e.response?.data?.error || e.message || 'Failed to save');
+      } finally {
+        setCashLogInlineSavingKey(null);
+      }
+    },
+    [cashAtHandData?.entries, riderId, refreshCashAtHandFromApi]
+  );
+
+  const scheduleCashLogSave = useCallback(
+    (entryKey) => {
+      if (cashLogSaveTimersRef.current[entryKey]) {
+        clearTimeout(cashLogSaveTimersRef.current[entryKey]);
+      }
+      cashLogSaveTimersRef.current[entryKey] = setTimeout(() => {
+        saveCashLogRow(entryKey);
+      }, 850);
+    },
+    [saveCashLogRow]
+  );
+
+  const flushCashLogSave = useCallback(
+    (entryKey) => {
+      if (cashLogSaveTimersRef.current[entryKey]) {
+        clearTimeout(cashLogSaveTimersRef.current[entryKey]);
+        delete cashLogSaveTimersRef.current[entryKey];
+      }
+      saveCashLogRow(entryKey);
+    },
+    [saveCashLogRow]
+  );
+
+  const clearCashLogRowOverrides = useCallback(
+    async (entryKey) => {
+      if (!entryKey) return;
+      try {
+        setCashLogInlineSavingKey(entryKey);
+        await api.put(`/admin/drivers/${riderId}/cash-at-hand-log-display`, {
+          entryKey,
+          debitAmount: null,
+          creditAmount: null,
+          balanceAfter: null
+        });
+        setCashLogInlineDrafts((prev) => {
+          const next = { ...prev };
+          delete next[entryKey];
+          return next;
+        });
+        await refreshCashAtHandFromApi();
+      } catch (e) {
+        alert(e.response?.data?.error || e.message || 'Failed to clear');
+      } finally {
+        setCashLogInlineSavingKey(null);
+      }
+    },
+    [riderId, refreshCashAtHandFromApi]
+  );
+
+  const saveCashAtHandOpeningBalance = async () => {
+    const t = String(cashAtHandOpeningInput ?? '').trim();
+    try {
+      setCashAtHandOpeningSaving(true);
+      if (t === '') {
+        await api.put(`/admin/drivers/${riderId}/cash-at-hand-opening-balance`, {
+          cashAtHandOpeningBalance: null
+        });
+      } else {
+        const n = parseFloat(t);
+        if (!Number.isFinite(n) || n < 0) {
+          alert('Opening balance must be a non-negative number or blank to clear.');
+          return;
+        }
+        await api.put(`/admin/drivers/${riderId}/cash-at-hand-opening-balance`, {
+          cashAtHandOpeningBalance: n
+        });
+      }
+      await refreshCashAtHandFromApi();
+    } catch (e) {
+      alert(e.response?.data?.error || e.message || 'Failed to save opening balance');
+    } finally {
+      setCashAtHandOpeningSaving(false);
+    }
+  };
 
   const handleExportCashAtHandStatementCSV = () => {
     if (!cashAtHandStatementRows || cashAtHandStatementRows.length === 0) {
@@ -541,16 +658,18 @@ const RiderDetails = () => {
       'Balance (KES)'
     ];
 
-    const rows = cashAtHandStatementRows.map(({ entry, isCredit, amount, balance }) => {
+    const rows = cashAtHandStatementRows.map(({ entry, debitDisplay, creditDisplay, balance }) => {
       const orderId = entry.orderId ?? entry.order_id ?? '';
       const date = entry.date ? new Date(entry.date).toISOString() : '';
       const description = entry.description || entry.customerName || '';
+      const d = debitDisplay === '—' ? '' : debitDisplay;
+      const c = creditDisplay === '—' ? '' : creditDisplay;
       return [
         escapeCSV(date),
         escapeCSV(orderId ? `#${orderId}` : ''),
         escapeCSV(description),
-        escapeCSV(!isCredit ? Math.round(amount) : ''),
-        escapeCSV(isCredit ? Math.round(amount) : ''),
+        escapeCSV(d),
+        escapeCSV(c),
         escapeCSV(Math.round(balance))
       ].join(',');
     });
@@ -958,6 +1077,36 @@ const RiderDetails = () => {
               Export statement
             </Button>
           </Box>
+          {isSuperSuperAdmin && (
+            <Box
+              sx={{
+                mb: 2,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1,
+                flexWrap: 'wrap',
+                maxWidth: 720
+              }}
+            >
+              <TextField
+                size="small"
+                label="Statement opening balance (KES)"
+                helperText="Cash before the oldest transaction. Leave blank for auto."
+                value={cashAtHandOpeningInput}
+                onChange={(e) => setCashAtHandOpeningInput(e.target.value)}
+                sx={{ minWidth: 260, flex: '1 1 220px' }}
+              />
+              <Button
+                size="small"
+                variant="contained"
+                onClick={saveCashAtHandOpeningBalance}
+                disabled={cashAtHandOpeningSaving}
+                sx={{ mt: 0.5 }}
+              >
+                {cashAtHandOpeningSaving ? 'Saving…' : 'Save opening'}
+              </Button>
+            </Box>
+          )}
           <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
             <TextField
               size="small"
@@ -1012,40 +1161,128 @@ const RiderDetails = () => {
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Debit</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Credit</TableCell>
                     <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="right">Balance</TableCell>
+                    {isSuperSuperAdmin && (
+                      <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }} align="center" width={48}>
+                        Reset
+                      </TableCell>
+                    )}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {cashAtHandStatementRows.map(({ entry, isCredit, amount, balance }, index) => (
-                    <TableRow key={entry.transactionId ?? entry.id ?? index} hover>
-                      <TableCell sx={{ color: colors.textPrimary }}>
-                        {new Date(entry.date).toLocaleDateString('en-KE', {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </TableCell>
-                      <TableCell sx={{ color: colors.textPrimary }}>
-                        {entry.orderId != null || entry.order_id != null
-                          ? `#${entry.orderId ?? entry.order_id}`
-                          : '—'}
-                      </TableCell>
-                      <TableCell sx={{ color: colors.textPrimary }}>
-                        {entry.description || entry.customerName || 'N/A'}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                        {!isCredit ? `KES ${Math.round(amount)}` : '—'}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                        {isCredit ? `KES ${Math.round(amount)}` : '—'}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                        KES {Math.round(balance)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {cashAtHandStatementRows.map(({ entry, debitDisplay, creditDisplay, balance, type }, index) => {
+                    const ek = entry.entryKey;
+                    const defaults = ek ? getDefaultDebitCreditStrings(entry) : { debit: '', credit: '' };
+                    const draft = ek ? cashLogInlineDrafts[ek] || {} : {};
+                    const debitInput = draft.debit !== undefined ? draft.debit : defaults.debit;
+                    const creditInput = draft.credit !== undefined ? draft.credit : defaults.credit;
+                    const isCr = type === 'cash_received';
+                    const saving = ek && cashLogInlineSavingKey === ek;
+                    const inlineCellSx = {
+                      '& .MuiInputBase-input': { textAlign: 'right', py: 0.5, fontSize: '0.875rem' },
+                      maxWidth: 120
+                    };
+                    return (
+                      <TableRow key={entry.transactionId ?? entry.id ?? index} hover>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {formatCashAtHandDateOnly(entry.date, 'en-KE', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {entry.orderId != null || entry.order_id != null
+                            ? `#${entry.orderId ?? entry.order_id}`
+                            : '—'}
+                        </TableCell>
+                        <TableCell sx={{ color: colors.textPrimary }}>
+                          {entry.description || entry.customerName || 'N/A'}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary, verticalAlign: 'middle' }}>
+                          {isSuperSuperAdmin && ek ? (
+                            <TextField
+                              size="small"
+                              variant="standard"
+                              disabled={saving}
+                              placeholder="—"
+                              value={debitInput}
+                              onChange={(e) => {
+                                setCashLogInlineDrafts((prev) => ({
+                                  ...prev,
+                                  [ek]: { ...prev[ek], debit: e.target.value }
+                                }));
+                                scheduleCashLogSave(ek);
+                              }}
+                              onBlur={() => flushCashLogSave(ek)}
+                              sx={inlineCellSx}
+                            />
+                          ) : debitDisplay === '—' ? (
+                            '—'
+                          ) : (
+                            `KES ${debitDisplay}`
+                          )}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary, verticalAlign: 'middle' }}>
+                          {isSuperSuperAdmin && ek ? (
+                            isCr ? (
+                              <TextField
+                                size="small"
+                                variant="standard"
+                                disabled={saving}
+                                placeholder="—"
+                                value={creditInput}
+                                onChange={(e) => {
+                                  setCashLogInlineDrafts((prev) => ({
+                                    ...prev,
+                                    [ek]: { ...prev[ek], credit: e.target.value }
+                                  }));
+                                  scheduleCashLogSave(ek);
+                                }}
+                                onBlur={() => flushCashLogSave(ek)}
+                                sx={inlineCellSx}
+                              />
+                            ) : (
+                              '—'
+                            )
+                          ) : creditDisplay === '—' ? (
+                            '—'
+                          ) : (
+                            `KES ${creditDisplay}`
+                          )}
+                        </TableCell>
+                        <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                          KES {Math.round(balance)}
+                        </TableCell>
+                        {isSuperSuperAdmin && (
+                          <TableCell align="center" sx={{ verticalAlign: 'middle' }}>
+                            {ek ? (
+                              <IconButton
+                                size="small"
+                                aria-label="Clear overrides for this row"
+                                disabled={saving}
+                                onClick={() => clearCashLogRowOverrides(ek)}
+                                sx={{ color: colors.textSecondary }}
+                              >
+                                <Clear fontSize="small" />
+                              </IconButton>
+                            ) : (
+                              '—'
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
+          )}
+
+          {isSuperSuperAdmin && cashAtHandData?.entries?.length > 0 && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 1, color: colors.textSecondary }}>
+              Edit Debit and Credit inline; balance updates as you type. Values save automatically after a short pause or when
+              you leave a field. Reset clears all overrides for that row.
+            </Typography>
           )}
         </Box>
       )}
