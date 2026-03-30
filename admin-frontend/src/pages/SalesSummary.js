@@ -22,6 +22,7 @@ import Visibility from '@mui/icons-material/Visibility';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
+import { orderFinancialsForReporting } from '../utils/orderFinancials';
 
 const formatCurrency = (amount) => {
   const n = Number(amount);
@@ -30,32 +31,6 @@ const formatCurrency = (amount) => {
 };
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-function orderFinancials(order) {
-  const items = order.items || order.orderItems || [];
-  const totalAmount = parseFloat(order.totalAmount) || 0;
-  const tipAmount = parseFloat(order.tipAmount) || 0;
-  const itemsTotal = items.reduce((sum, it) => sum + (parseFloat(it.price || 0) * (parseInt(it.quantity, 10) || 0)), 0);
-  const convenienceFee =
-    order.convenienceFee != null && order.convenienceFee !== ''
-      ? parseFloat(order.convenienceFee)
-      : Math.max(0, totalAmount - tipAmount - itemsTotal);
-  const territoryDeliveryFee =
-    order.territoryDeliveryFee != null && order.territoryDeliveryFee !== ''
-      ? parseFloat(order.territoryDeliveryFee)
-      : convenienceFee;
-  let purchaseCost = 0;
-  items.forEach((it) => {
-    const pp = it.drink?.purchasePrice != null && it.drink.purchasePrice !== ''
-      ? parseFloat(it.drink.purchasePrice)
-      : null;
-    if (pp != null && !Number.isNaN(pp) && pp >= 0) {
-      purchaseCost += pp * (parseInt(it.quantity, 10) || 0);
-    }
-  });
-  const profit = totalAmount - purchaseCost - territoryDeliveryFee;
-  return { totalAmount, deliveryFee: territoryDeliveryFee, purchaseCost, profit, items };
-}
 
 const SalesSummary = () => {
   const navigate = useNavigate();
@@ -110,7 +85,7 @@ const SalesSummary = () => {
         });
       }
       const row = byDate.get(d);
-      const fin = orderFinancials(order);
+      const fin = orderFinancialsForReporting(order);
       row.salesCount += 1;
       row.salesValue += fin.totalAmount;
       row.purchaseValue += fin.purchaseCost;
@@ -133,7 +108,7 @@ const SalesSummary = () => {
     const items = [];
     (dayRow.orders || []).forEach((order) => {
       const riderLabel = getRiderLabel(order);
-      const fin = orderFinancials(order);
+      const fin = orderFinancialsForReporting(order);
       (fin.items || []).forEach((it) => {
         const qty = parseInt(it.quantity, 10) || 0;
         const sellingPrice = parseFloat(it.price) || 0;

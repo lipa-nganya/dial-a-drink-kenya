@@ -59,6 +59,7 @@ import { formatMpesaPhoneNumber, validateSafaricomPhone } from '../utils/mpesaPh
 import NewOrderDialog from '../components/NewOrderDialog';
 import { useJsApiLoader } from '@react-google-maps/api';
 import AddressAutocomplete from '../components/AddressAutocomplete';
+import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
@@ -133,58 +134,15 @@ const Orders = () => {
   const [processingCancellationRequest, setProcessingCancellationRequest] = useState(false);
 
   const openOrderDetails = (order) => {
-    let orderWithBreakdown = { ...order };
-
-    // deliveryFee in this screen should represent the *territory delivery fee* (internal),
-    // not the customer-facing convenience fee.
-    if (orderWithBreakdown.itemsTotal === undefined) {
-      const itemsTotal =
-        orderWithBreakdown.items?.reduce(
-          (sum, item) =>
-            sum +
-            (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)),
-          0
-        ) || 0;
-
-      const tipAmount = parseFloat(orderWithBreakdown.tipAmount || 0);
-      const totalAmount = parseFloat(orderWithBreakdown.totalAmount || 0);
-      const convenienceFee = Math.max(totalAmount - tipAmount - itemsTotal, 0);
-
-      orderWithBreakdown.itemsTotal = Math.round(Number(itemsTotal));
-      orderWithBreakdown.convenienceFee = Math.round(Number(convenienceFee));
-    }
-
-    // Prefer backend-provided territoryDeliveryFee; fallback to existing deliveryFee or convenienceFee.
-    const territoryFeeFallback =
-      orderWithBreakdown.deliveryFee !== undefined
-        ? orderWithBreakdown.deliveryFee
-        : orderWithBreakdown.convenienceFee;
-
-    orderWithBreakdown.deliveryFee = Math.round(
-      Number(
-        orderWithBreakdown.territoryDeliveryFee ??
-          orderWithBreakdown.territory?.deliveryFromCBD ??
-          territoryFeeFallback ??
-          0
-      )
-    );
-
-    const itemsTotalNum =
-      parseFloat(orderWithBreakdown.itemsTotal) ||
-      (orderWithBreakdown.items?.reduce(
-        (sum, item) =>
-          sum +
-          (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)),
-        0
-      ) || 0);
-    const tipAmt = parseFloat(orderWithBreakdown.tipAmount || 0);
-    const totalAmt = parseFloat(orderWithBreakdown.totalAmount || 0);
-    if (orderWithBreakdown.convenienceFee === undefined || orderWithBreakdown.convenienceFee === null) {
-      orderWithBreakdown.convenienceFee = Math.round(
-        Math.max(totalAmt - tipAmt - itemsTotalNum, 0)
-      );
-    }
-    orderWithBreakdown.orderValue = Math.round(Math.max(totalAmt - tipAmt, 0));
+    const amounts = computeOrderDisplayAmounts(order);
+    const orderWithBreakdown = {
+      ...order,
+      itemsTotal: Math.round(amounts.itemsSubtotal),
+      convenienceFee: Math.round(amounts.convenienceFee),
+      // deliveryFee on this screen = internal territory delivery fee (not customer convenience label only).
+      deliveryFee: Math.round(amounts.territoryDeliveryFee),
+      orderValue: Math.round(amounts.orderValue)
+    };
 
     setSelectedOrderForDetail(orderWithBreakdown);
     originalOrderDetailRef.current = {
@@ -2152,22 +2110,8 @@ const Orders = () => {
                           {(() => {
                             // Calculate profit/loss (subtract territory delivery fee, not convenience fee)
                             const totalAmount = parseFloat(order.totalAmount) || 0;
-                            const tipAmount = parseFloat(order.tipAmount) || 0;
                             const orderItems = order.items || order.orderItems || [];
-                            const itemsSubtotal = orderItems.reduce(
-                              (sum, item) =>
-                                sum +
-                                (parseFloat(item.price || 0) * (parseInt(item.quantity, 10) || 0)),
-                              0
-                            );
-                            const convenienceFee =
-                              order.convenienceFee != null && order.convenienceFee !== ''
-                                ? parseFloat(order.convenienceFee)
-                                : Math.max(0, totalAmount - tipAmount - itemsSubtotal);
-                            const territoryDeliveryFee =
-                              order.territoryDeliveryFee != null && order.territoryDeliveryFee !== ''
-                                ? parseFloat(order.territoryDeliveryFee)
-                                : convenienceFee;
+                            const { territoryDeliveryFee } = computeOrderDisplayAmounts(order);
                             
                             let totalPurchaseCost = 0;
                             orderItems.forEach(item => {
@@ -3115,44 +3059,40 @@ const Orders = () => {
                       </Box>
                     )}
                     {/* Convenience Fee (customer-facing) */}
-                    {selectedOrderForDetail.convenienceFee !== undefined && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body1">
+                        <strong>Convenience Fee:</strong>
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography variant="body1">
-                          <strong>Convenience Fee:</strong>
+                          KES {Math.round(Number(selectedOrderForDetail.convenienceFee || 0))}
                         </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body1">
-                            KES {Math.round(Number(selectedOrderForDetail.convenienceFee || 0))}
-                          </Typography>
-                          {selectedOrderForDetail.status !== 'completed' &&
-                            selectedOrderForDetail.status !== 'cancelled' &&
-                            selectedOrderForDetail.paymentStatus !== 'paid' && (
-                              <IconButton
-                                size="small"
-                                onClick={() => {
-                                  setNewConvenienceFee(String(selectedOrderForDetail.convenienceFee ?? ''));
-                                  setEditConvenienceFeeDialogOpen(true);
-                                }}
-                              >
-                                <Edit fontSize="small" />
-                              </IconButton>
-                            )}
-                        </Box>
+                        {selectedOrderForDetail.status !== 'completed' &&
+                          selectedOrderForDetail.status !== 'cancelled' &&
+                          selectedOrderForDetail.paymentStatus !== 'paid' && (
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                setNewConvenienceFee(String(selectedOrderForDetail.convenienceFee ?? ''));
+                                setEditConvenienceFeeDialogOpen(true);
+                              }}
+                            >
+                              <Edit fontSize="small" />
+                            </IconButton>
+                          )}
                       </Box>
-                    )}
+                    </Box>
                     {/* Territory Delivery Fee in Summary */}
-                    {selectedOrderForDetail.deliveryFee !== undefined && (
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Typography variant="body1">
+                        <strong>Territory Delivery Fee:</strong>
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Typography variant="body1">
-                          <strong>Territory Delivery Fee:</strong>
+                          KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
                         </Typography>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body1">
-                            KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
-                          </Typography>
-                        </Box>
                       </Box>
-                    )}
+                    </Box>
                     {/* Tip Amount */}
                     {selectedOrderForDetail.tipAmount && parseFloat(selectedOrderForDetail.tipAmount) > 0 && (
                       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>

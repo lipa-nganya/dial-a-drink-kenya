@@ -19,38 +19,13 @@ import Summarize from '@mui/icons-material/Summarize';
 import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
+import { orderFinancialsForReporting } from '../utils/orderFinancials';
 
 const formatCurrency = (amount) => {
   const n = Number(amount);
   if (Number.isNaN(n)) return 'KES 0';
   return `KES ${Math.round(n).toLocaleString()}`;
 };
-
-function orderFinancials(order) {
-  const items = order.items || order.orderItems || [];
-  const totalAmount = parseFloat(order.totalAmount) || 0;
-  const tipAmount = parseFloat(order.tipAmount) || 0;
-  const itemsTotal = items.reduce((sum, it) => sum + (parseFloat(it.price || 0) * (parseInt(it.quantity, 10) || 0)), 0);
-  const convenienceFee =
-    order.convenienceFee != null && order.convenienceFee !== ''
-      ? parseFloat(order.convenienceFee)
-      : Math.max(0, totalAmount - tipAmount - itemsTotal);
-  const territoryDeliveryFee =
-    order.territoryDeliveryFee != null && order.territoryDeliveryFee !== ''
-      ? parseFloat(order.territoryDeliveryFee)
-      : convenienceFee;
-  let purchaseCost = 0;
-  items.forEach((it) => {
-    const pp = it.drink?.purchasePrice != null && it.drink.purchasePrice !== ''
-      ? parseFloat(it.drink.purchasePrice)
-      : null;
-    if (pp != null && !Number.isNaN(pp) && pp >= 0) {
-      purchaseCost += pp * (parseInt(it.quantity, 10) || 0);
-    }
-  });
-  const profit = totalAmount - purchaseCost - territoryDeliveryFee;
-  return { totalAmount, itemsTotal, deliveryFee: territoryDeliveryFee, purchaseCost, profit, items };
-}
 
 const RiderProfits = () => {
   const navigate = useNavigate();
@@ -90,7 +65,7 @@ const RiderProfits = () => {
     orders.forEach((order) => {
       const driverId = order.driverId;
       if (driverId == null) return;
-      const fin = orderFinancials(order);
+      const fin = orderFinancialsForReporting(order);
       if (!byDriver.has(driverId)) {
         byDriver.set(driverId, {
           driverId,
