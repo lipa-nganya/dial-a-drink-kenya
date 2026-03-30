@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -36,7 +36,10 @@ import {
   Email,
   Person,
   Assignment,
-  Add
+  Add,
+  Search,
+  Clear,
+  Download
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
@@ -63,6 +66,7 @@ const RiderDetails = () => {
   const [cashAtHandData, setCashAtHandData] = useState(null);
   const [cashAtHandLoading, setCashAtHandLoading] = useState(false);
   const [cashAtHandAmount, setCashAtHandAmount] = useState(null);
+  const [cashAtHandSearch, setCashAtHandSearch] = useState('');
   const [savingsData, setSavingsData] = useState(null);
   const [savingsTransactionsLoading, setSavingsTransactionsLoading] = useState(false);
   const [addLoanDialogOpen, setAddLoanDialogOpen] = useState(false);
@@ -450,6 +454,121 @@ const RiderDetails = () => {
     setOrdersPage(0);
   }, [normalizedOrdersSearch]);
 
+  const normalizedCashAtHandSearch = String(cashAtHandSearch || '').trim().toLowerCase();
+
+  const cashAtHandStatementRows = useMemo(() => {
+    const rawEntries = Array.isArray(cashAtHandData?.entries) ? cashAtHandData.entries : [];
+    if (rawEntries.length === 0) return [];
+
+    const entryType = (entry) => {
+      const t = entry.type ?? entry.transaction_type ?? entry.Type;
+      return typeof t === 'string' ? t.toLowerCase() : t;
+    };
+
+    const sortedEntries = [...rawEntries].sort((a, b) => {
+      const dateA = new Date(a.date);
+      const dateB = new Date(b.date);
+      return dateB - dateA; // newest first
+    });
+
+    const filteredEntries = normalizedCashAtHandSearch
+      ? sortedEntries.filter((entry) => {
+          const haystack = [
+            entry.date,
+            entry.orderId,
+            entry.order_id,
+            entry.transactionId,
+            entry.id,
+            entry.description,
+            entry.customerName,
+            entry.receiptNumber,
+            entryType(entry),
+            entry.amount
+          ]
+            .filter((v) => v !== null && v !== undefined)
+            .join(' ')
+            .toString()
+            .toLowerCase();
+          return haystack.includes(normalizedCashAtHandSearch);
+        })
+      : sortedEntries;
+
+    // Running balance displayed as "balance after this transaction" (matches UI approach for newest-first).
+    let balanceAfter = parseFloat(cashAtHandData?.totalCashAtHand || 0);
+
+    return filteredEntries.map((entry) => {
+      const type = entryType(entry);
+      const isCredit = type === 'cash_received';
+      const amount = parseFloat(entry.amount || 0);
+      const balance = balanceAfter;
+      if (isCredit) {
+        balanceAfter -= amount;
+      } else {
+        balanceAfter += amount;
+      }
+      return {
+        entry,
+        type,
+        isCredit,
+        amount,
+        balance
+      };
+    });
+  }, [cashAtHandData, normalizedCashAtHandSearch]);
+
+  const handleExportCashAtHandStatementCSV = () => {
+    if (!cashAtHandStatementRows || cashAtHandStatementRows.length === 0) {
+      alert('No cash at hand transactions to export');
+      return;
+    }
+
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    const headers = [
+      'Date',
+      'Order #',
+      'Description',
+      'Debit (KES)',
+      'Credit (KES)',
+      'Balance (KES)'
+    ];
+
+    const rows = cashAtHandStatementRows.map(({ entry, isCredit, amount, balance }) => {
+      const orderId = entry.orderId ?? entry.order_id ?? '';
+      const date = entry.date ? new Date(entry.date).toISOString() : '';
+      const description = entry.description || entry.customerName || '';
+      return [
+        escapeCSV(date),
+        escapeCSV(orderId ? `#${orderId}` : ''),
+        escapeCSV(description),
+        escapeCSV(!isCredit ? Math.round(amount) : ''),
+        escapeCSV(isCredit ? Math.round(amount) : ''),
+        escapeCSV(Math.round(balance))
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeName = (rider?.name || `rider-${riderId}`).toString().replace(/[^a-z0-9-_]+/gi, '_');
+    const fileName = `cash-at-hand-statement-${safeName}.csv`;
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const handleOrdersPageChange = (_, newPage) => setOrdersPage(newPage);
   const handleOrdersRowsPerPageChange = (e) => {
     setOrdersRowsPerPage(parseInt(e.target.value, 10));
@@ -825,9 +944,48 @@ const RiderDetails = () => {
       {/* Cash at Hand Transaction Logs */}
       {transactionTab === 'cash-at-hand' && (
         <Box>
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.textPrimary }}>
-            Cash at Hand Transactions
-          </Typography>
+          <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+              Cash at Hand Transactions
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={handleExportCashAtHandStatementCSV}
+              disabled={cashAtHandLoading || cashAtHandStatementRows.length === 0}
+              sx={{ borderColor: colors.border, color: colors.textPrimary }}
+            >
+              Export statement
+            </Button>
+          </Box>
+          <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <TextField
+              size="small"
+              fullWidth
+              value={cashAtHandSearch}
+              onChange={(e) => setCashAtHandSearch(e.target.value)}
+              placeholder="Search cash at hand (order #, description, amount, date...)"
+              sx={{ maxWidth: 520 }}
+              InputProps={{
+                startAdornment: <Search sx={{ color: colors.textSecondary, mr: 1 }} />
+              }}
+            />
+            {normalizedCashAtHandSearch && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<Clear />}
+                onClick={() => setCashAtHandSearch('')}
+                sx={{ borderColor: colors.border, color: colors.textPrimary }}
+              >
+                Clear
+              </Button>
+            )}
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+              Showing {cashAtHandStatementRows.length} / {cashAtHandData?.entries?.length || 0}
+            </Typography>
+          </Box>
           {cashAtHandLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
@@ -836,6 +994,12 @@ const RiderDetails = () => {
             <Paper sx={{ p: 4, textAlign: 'center' }}>
               <Typography variant="h6" color="text.secondary">
                 No cash at hand transactions found
+              </Typography>
+            </Paper>
+          ) : cashAtHandStatementRows.length === 0 ? (
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography variant="h6" color="text.secondary">
+                No cash at hand transactions match your search.
               </Typography>
             </Paper>
           ) : (
@@ -852,61 +1016,34 @@ const RiderDetails = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {(() => {
-                    const entryType = (entry) => {
-                      const t = entry.type ?? entry.transaction_type ?? entry.Type;
-                      return typeof t === 'string' ? t.toLowerCase() : t;
-                    };
-                    // Sort entries by date descending (newest first)
-                    const sortedEntries = [...(cashAtHandData.entries || [])].sort((a, b) => {
-                      const dateA = new Date(a.date);
-                      const dateB = new Date(b.date);
-                      return dateB - dateA;
-                    });
-                    // Calculate running balance backwards from current total (same logic as Rider Cash at Hand Details)
-                    let balanceAfter = parseFloat(cashAtHandData.totalCashAtHand || 0);
-                    return sortedEntries.map((entry, index) => {
-                      const type = entryType(entry);
-                      // IMPORTANT: treat debits/credits based on entry.type from the API.
-                      // Do NOT infer credit purely from having an orderId; many debits are order-linked.
-                      const isCredit = type === 'cash_received';
-                      const amount = parseFloat(entry.amount || 0);
-                      const currentBalance = balanceAfter;
-                      if (isCredit) {
-                        balanceAfter -= amount;
-                      } else {
-                        balanceAfter += amount;
-                      }
-                      return (
-                        <TableRow key={entry.transactionId ?? entry.id ?? index} hover>
-                          <TableCell sx={{ color: colors.textPrimary }}>
-                            {new Date(entry.date).toLocaleDateString('en-KE', {
-                              year: 'numeric',
-                              month: 'short',
-                              day: 'numeric'
-                            })}
-                          </TableCell>
-                          <TableCell sx={{ color: colors.textPrimary }}>
-                            {entry.orderId != null || entry.order_id != null
-                              ? `#${entry.orderId ?? entry.order_id}`
-                              : '—'}
-                          </TableCell>
-                          <TableCell sx={{ color: colors.textPrimary }}>
-                            {entry.description || entry.customerName || 'N/A'}
-                          </TableCell>
-                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {!isCredit ? `KES ${Math.round(amount)}` : '—'}
-                          </TableCell>
-                          <TableCell align="right" sx={{ color: colors.textPrimary }}>
-                            {isCredit ? `KES ${Math.round(amount)}` : '—'}
-                          </TableCell>
-                          <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
-                            KES {Math.round(currentBalance)}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    });
-                  })()}
+                  {cashAtHandStatementRows.map(({ entry, isCredit, amount, balance }, index) => (
+                    <TableRow key={entry.transactionId ?? entry.id ?? index} hover>
+                      <TableCell sx={{ color: colors.textPrimary }}>
+                        {new Date(entry.date).toLocaleDateString('en-KE', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </TableCell>
+                      <TableCell sx={{ color: colors.textPrimary }}>
+                        {entry.orderId != null || entry.order_id != null
+                          ? `#${entry.orderId ?? entry.order_id}`
+                          : '—'}
+                      </TableCell>
+                      <TableCell sx={{ color: colors.textPrimary }}>
+                        {entry.description || entry.customerName || 'N/A'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                        {!isCredit ? `KES ${Math.round(amount)}` : '—'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                        {isCredit ? `KES ${Math.round(amount)}` : '—'}
+                      </TableCell>
+                      <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                        KES {Math.round(balance)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </TableContainer>
