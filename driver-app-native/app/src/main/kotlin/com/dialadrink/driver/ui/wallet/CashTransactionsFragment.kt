@@ -169,39 +169,20 @@ class CashTransactionsFragment : Fragment() {
             }
 
             val row = LayoutInflater.from(requireContext()).inflate(
-                R.layout.item_cash_transaction_row,
+                R.layout.item_cash_at_hand_log_row,
                 tableLayout,
                 false
             ) as TableRow
             
             val deliveryAddressText = row.findViewById<TextView>(R.id.deliveryAddressText)
-            val dateText = row.findViewById<TextView>(R.id.dateText)
-            val orderNumText = row.findViewById<TextView>(R.id.orderNumText)
             val debitText = row.findViewById<TextView>(R.id.debitText)
             val creditText = row.findViewById<TextView>(R.id.creditText)
             val balanceText = row.findViewById<TextView>(R.id.balanceText)
-            
-            val deliveryFeeDisplay = when {
-                entry.orderId == null -> "—"
-                entry.deliveryFee != null -> formatter.format(entry.deliveryFee)
-                else -> "—"
-            }
-            orderNumText.text = deliveryFeeDisplay
             
             // Extract delivery address from description
             // Description format might be: "Cash received for Order #123 - [Address]" or similar
             val deliveryAddress = extractDeliveryAddress(entry.description, entry.customerName)
             deliveryAddressText.text = formatDescriptionWithOrderNumber(entry.orderId, deliveryAddress)
-            
-            // Order Value column
-            val orderValueDisplay = when {
-                entry.orderValue != null -> formatter.format(entry.orderValue)
-                entry.creditAmount != null -> formatter.format(entry.creditAmount)
-                entry.orderId != null && entry.type == "cash_received" && entry.deliveryFee != null ->
-                    formatter.format(entry.amount + (entry.deliveryFee * 0.5))
-                else -> "—"
-            }
-            dateText.text = orderValueDisplay
             
             when (entry.type) {
                 "cash_received" -> {
