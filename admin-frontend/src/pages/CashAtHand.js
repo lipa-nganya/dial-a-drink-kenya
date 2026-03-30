@@ -46,6 +46,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { formatCashAtHandDateTime } from '../utils/cashAtHandDateDisplay';
 
 const CashAtHand = () => {
   const { colors } = useTheme();
@@ -334,15 +335,14 @@ const CashAtHand = () => {
     return `KES ${Math.round(Number(amount || 0))}`;
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+  const formatDate = (dateString) =>
+    formatCashAtHandDateTime(dateString, 'en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit'
     });
-  };
 
   const getSubmissionTypeLabel = (type) => {
     const labels = {
