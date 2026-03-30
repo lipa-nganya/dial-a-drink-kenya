@@ -721,6 +721,9 @@ router.get('/:driverId', async (req, res) => {
           paymentStatus: orderData.paymentStatus,
           paymentMethod: orderData.paymentMethod,
           totalAmount: orderData.totalAmount,
+          tipAmount: orderData.tipAmount,
+          convenienceFee: orderData.convenienceFee,
+          territoryDeliveryFee: orderData.territoryDeliveryFee,
           driverId: orderData.driverId,
           driverAccepted: orderData.driverAccepted,
           createdAt: orderData.createdAt

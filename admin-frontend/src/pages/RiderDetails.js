@@ -44,6 +44,7 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
+import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 
 const RiderDetails = () => {
   const { riderId } = useParams();
@@ -888,10 +889,8 @@ const RiderDetails = () => {
                       <TableCell sx={{ color: colors.textPrimary, maxWidth: 280 }}>{order.deliveryAddress || '—'}</TableCell>
                       <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                         {(() => {
-                          const totalAmount = Number(order.totalAmount || 0);
-                          const tipAmount = Number(order.tipAmount || 0);
-                          const orderValue = totalAmount - tipAmount;
-                          return `KES ${Math.round(orderValue > 0 ? orderValue : 0)}`;
+                          const { orderValue } = computeOrderDisplayAmounts(order);
+                          return `KES ${Math.round(orderValue)}`;
                         })()}
                       </TableCell>
                       <TableCell>
