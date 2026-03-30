@@ -194,7 +194,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       return n.includes('Cash at hand − 50% delivery fee') || n.includes('Pay Now: 50% delivery fee - cash at hand');
     };
 
-    allCashSettlements.forEach(tx => {
+    for (const tx of allCashSettlements) {
       const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' ||
         (tx.paymentProvider === 'mpesa' && tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal'))) ||
         (tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal')));
@@ -218,19 +218,37 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       const entryType = txAmount < 0 || isPayNowDeliveryFeeSettlement(tx) ? 'cash_sent' : 'cash_received';
       const logType = entryType === 'cash_received' ? 'Payment Received' : '—';
 
+      // Some legacy cash-at-hand rows (settlements/remittances) are order-linked but don't carry orderValue.
+      // Compute orderValue from persisted order totals + items so driver app can display it.
+      let orderValue = null;
+      let creditAmount = null;
+      if (tx.orderId) {
+        try {
+          const breakdown = await getOrderFinancialBreakdown(tx.orderId);
+          const itemsTotal = parseFloat(breakdown.itemsTotal || 0) || 0;
+          const convenienceFee = parseFloat(breakdown.deliveryFee || 0) || 0;
+          orderValue = itemsTotal + convenienceFee;
+          creditAmount = orderValue;
+        } catch (e) {
+          orderValue = null;
+          creditAmount = null;
+        }
+      }
+
       entries.push({
         type: entryType,
         logType,
         transactionId: tx.id,
         orderId: tx.orderId || null,
         deliveryFee: tx.orderId ? (parseFloat(tx.order?.territoryDeliveryFee || 0) || null) : null,
-        orderValue: null,
+        orderValue,
+        creditAmount,
         amount: Math.abs(txAmount),
         date: tx.transactionDate || tx.createdAt,
         description: description,
         receiptNumber: tx.receiptNumber
       });
-    });
+    }
 
     // Add approved cash submission entries (these reduce cash at hand)
     // Skip order_payment when already shown as cash_sent from cash_settlement (negative amount)
