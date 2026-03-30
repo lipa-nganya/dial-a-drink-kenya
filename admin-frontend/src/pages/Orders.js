@@ -744,6 +744,8 @@ const Orders = () => {
   const getStatusPriority = (status) => {
     const priorityMap = {
       'pending': 1,
+      // Used for walk-in POS orders that are created unpaid (e.g. M-Pesa prompt initiated)
+      'in_progress': 2,
       'confirmed': 2,
       'out_for_delivery': 3,
       'delivered': 5,
@@ -832,7 +834,8 @@ const Orders = () => {
 
     // Apply tab-based filtering first
     if (tabFilter === 'pending') {
-      filtered = filtered.filter(order => (order.status === 'pending' || order.status === 'confirmed') && !(order.cancellationRequested && order.cancellationApproved === null));
+      // Include in_progress so walk-in M-Pesa orders don't disappear from all tabs
+      filtered = filtered.filter(order => (order.status === 'pending' || order.status === 'confirmed' || order.status === 'in_progress') && !(order.cancellationRequested && order.cancellationApproved === null));
     } else if (tabFilter === 'completed') {
       filtered = filtered.filter(order => order.status === 'completed');
     } else if (tabFilter === 'unassigned') {
@@ -840,7 +843,9 @@ const Orders = () => {
         .filter(order => !isWalkInOrder(order))
         .filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
     } else if (tabFilter === 'confirmed') {
-      filtered = filtered.filter(order => order.status === 'confirmed');
+      // "In Progress" tab should include walk-in POS orders created unpaid (status=in_progress)
+      // as well as delivery orders that are confirmed/in-progress.
+      filtered = filtered.filter(order => order.status === 'confirmed' || order.status === 'in_progress');
     } else if (tabFilter === 'out_for_delivery') {
       filtered = filtered.filter(order => order.status === 'out_for_delivery');
     } else if (tabFilter === 'cancelled') {
@@ -3872,8 +3877,9 @@ const Orders = () => {
                 type="tel"
                 value={paymentPhone}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '').slice(0, 12);
-                  setPaymentPhone(value);
+                  // Allow users to type/paste common formats like "0712…", "2547…", "+254 7…".
+                  // We normalize/validate on submit via formatMpesaPhoneNumber/validateSafaricomPhone.
+                  setPaymentPhone(e.target.value);
                   setPaymentError('');
                 }}
                 placeholder="0712345678"
