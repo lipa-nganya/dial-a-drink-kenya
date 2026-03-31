@@ -735,6 +735,63 @@ const RiderDetails = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleExportSavingsStatementCSV = () => {
+    const rows = savingsTableModel.rows;
+    if (!rows || rows.length === 0) {
+      alert('No savings transactions to export');
+      return;
+    }
+
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const stringValue = String(value);
+      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+        return `"${stringValue.replace(/"/g, '""')}"`;
+      }
+      return stringValue;
+    };
+
+    const headers = [
+      'Date',
+      'Order #',
+      'Description',
+      'Debit (KES)',
+      'Credit (KES)',
+      'Balance (KES)'
+    ];
+
+    const csvRows = rows.map(({ row, debitDisplay, creditDisplay, balance }) => {
+      const orderId = row.orderId ?? row.orderNumber ?? '';
+      const dateVal = row.date || row.createdAt;
+      const date = dateVal ? new Date(dateVal).toISOString() : '';
+      const description = row.notes || row.orderLocation || row.customerName || '';
+      const d = debitDisplay === '—' ? '' : debitDisplay;
+      const c = creditDisplay === '—' ? '' : creditDisplay;
+      return [
+        escapeCSV(date),
+        escapeCSV(orderId ? `#${orderId}` : ''),
+        escapeCSV(description),
+        escapeCSV(d),
+        escapeCSV(c),
+        escapeCSV(Math.round(balance))
+      ].join(',');
+    });
+
+    const csvContent = [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const safeName = (rider?.name || `rider-${riderId}`).toString().replace(/[^a-z0-9-_]+/gi, '_');
+    const fileName = `savings-statement-${safeName}.csv`;
+    link.setAttribute('href', url);
+    link.setAttribute('download', fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const saveSavingsRow = useCallback(
     async (entryKey) => {
       if (!entryKey) return;
@@ -1468,9 +1525,21 @@ const RiderDetails = () => {
       {/* Savings Transaction Logs */}
       {transactionTab === 'savings' && (
         <Box>
-          <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: colors.textPrimary }}>
-            Savings Transactions
-          </Typography>
+          <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: colors.textPrimary }}>
+              Savings Transactions
+            </Typography>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<Download />}
+              onClick={handleExportSavingsStatementCSV}
+              disabled={savingsTransactionsLoading || savingsTableModel.rows.length === 0}
+              sx={{ borderColor: colors.border, color: colors.textPrimary }}
+            >
+              Export statement
+            </Button>
+          </Box>
           {isSuperSuperAdmin && (
             <Box
               sx={{
