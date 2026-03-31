@@ -84,6 +84,7 @@ const RiderDetails = () => {
   const savingsSaveTimersRef = useRef({});
   const [savingsOpeningInput, setSavingsOpeningInput] = useState('');
   const [savingsOpeningSaving, setSavingsOpeningSaving] = useState(false);
+  const [savingsSearch, setSavingsSearch] = useState('');
   const [addLoanDialogOpen, setAddLoanDialogOpen] = useState(false);
   const [loanAmount, setLoanAmount] = useState('');
   const [loanReason, setLoanReason] = useState('');
@@ -120,6 +121,29 @@ const RiderDetails = () => {
       setSavingsOpeningInput('');
     }
   }, [savingsData?.wallet?.savingsOpeningBalance]);
+
+  const savingsTableModel = useMemo(() => {
+    if (!savingsData) {
+      return { entries: [], rows: [], total: 0, shown: 0 };
+    }
+    const normalized = String(savingsSearch || '').trim().toLowerCase();
+    const credits = mergeSavingsRowsWithDrafts(savingsData.recentSavingsCredits || [], savingsInlineDrafts);
+    const withdrawals = savingsData.recentWithdrawals || [];
+    const entries = [
+      ...credits.map((c) => ({
+        ...c,
+        amount: parseFloat(c.amount || 0) || 0
+      })),
+      ...withdrawals.map((w) => ({
+        ...w,
+        amount: -(parseFloat(w.amount || 0) || 0)
+      }))
+    ];
+    const currentSavings = parseFloat(savingsData.wallet?.savings || 0);
+    const opening = savingsData.wallet?.savingsOpeningBalance;
+    const rows = buildSavingsStatementRows(entries, currentSavings, normalized, { openingBalance: opening });
+    return { entries, rows, total: entries.length, shown: rows.length };
+  }, [savingsData, savingsInlineDrafts, savingsSearch]);
 
   // Fetch rider details
   useEffect(() => {
@@ -1488,7 +1512,35 @@ const RiderDetails = () => {
               </Typography>
             </Paper>
           ) : (
-            <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
+            <>
+              <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  placeholder="Search savings (order #, description, amount, date...)"
+                  value={savingsSearch}
+                  onChange={(e) => setSavingsSearch(e.target.value)}
+                  sx={{ maxWidth: 520 }}
+                  InputProps={{
+                    startAdornment: <Search sx={{ color: colors.textSecondary, mr: 1 }} />
+                  }}
+                />
+                {String(savingsSearch || '').trim() && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<Clear />}
+                    onClick={() => setSavingsSearch('')}
+                    sx={{ borderColor: colors.border, color: colors.textPrimary }}
+                  >
+                    Clear
+                  </Button>
+                )}
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                  Showing {savingsTableModel.shown} / {savingsTableModel.total}
+                </Typography>
+              </Box>
+              <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
               <Table>
                 <TableHead>
                   <TableRow>
@@ -1507,29 +1559,23 @@ const RiderDetails = () => {
                 </TableHead>
                 <TableBody>
                   {(() => {
-                    const credits = mergeSavingsRowsWithDrafts(savingsData.recentSavingsCredits || [], savingsInlineDrafts);
-                    const withdrawals = savingsData.recentWithdrawals || [];
+                    const { entries, rows } = savingsTableModel;
 
-                    const entries = [
-                      ...credits.map((c) => ({
-                        ...c,
-                        amount: parseFloat(c.amount || 0) || 0 // already signed when overridden; otherwise positive credits / negative stop deductions
-                      })),
-                      ...withdrawals.map((w) => ({
-                        ...w,
-                        amount: -(parseFloat(w.amount || 0) || 0) // withdrawals reduce savings
-                      }))
-                    ];
-
-                    const currentSavings = parseFloat(savingsData.wallet?.savings || 0);
-                    const opening = savingsData.wallet?.savingsOpeningBalance;
-                    const rows = buildSavingsStatementRows(entries, currentSavings, '', { openingBalance: opening });
+                    if (entries.length === 0) {
+                      return (
+                        <TableRow>
+                          <TableCell colSpan={isSuperSuperAdmin ? 7 : 6} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                            No savings transactions found
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
 
                     if (rows.length === 0) {
                       return (
                         <TableRow>
                           <TableCell colSpan={isSuperSuperAdmin ? 7 : 6} align="center" sx={{ py: 3, color: colors.textSecondary }}>
-                            No savings transactions found
+                            No savings transactions match your search.
                           </TableCell>
                         </TableRow>
                       );
@@ -1635,6 +1681,7 @@ const RiderDetails = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+            </>
           )}
           {isSuperSuperAdmin && (
             <Typography variant="caption" sx={{ display: 'block', mt: 1, color: colors.textSecondary }}>
