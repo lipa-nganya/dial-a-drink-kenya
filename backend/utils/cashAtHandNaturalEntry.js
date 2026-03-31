@@ -66,7 +66,10 @@ async function getNaturalCashAtHandEntry(driverId, entryKey) {
       attributes: ['id', 'territoryDeliveryFee', 'deliveryAddress']
     });
     if (!order) return null;
-    if (orderIdsWithCompletionLedger.has(order.id)) return null;
+    // NOTE: The cash-at-hand endpoint may emit `cod_order:<orderId>` both for synthetic COD rows
+    // and for persisted completion-ledger rows (paymentProvider='order_completion').
+    // Admin overrides must be able to target either representation, so we do NOT reject when
+    // an order_completion ledger exists.
 
     let orderValue = 0;
     let withheldAmount = 0;
