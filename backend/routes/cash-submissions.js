@@ -75,7 +75,7 @@ router.use('/admin', verifyAdmin);
 
 const requireSuperAdmin = (req, res, next) => {
   const role = req.admin?.role || req.admin?.user?.role || null;
-  if (role !== 'super_admin') {
+  if (role !== 'super_admin' && role !== 'super_super_admin') {
     return sendError(res, 'Forbidden: super admin only', 403);
   }
   return next();
@@ -1577,8 +1577,8 @@ const handleApproveSubmission = async (req, res, submissionId, driverIdParam = n
     const adminId = req.admin.id;
     const adminRole = req.admin.role;
 
-    // Check if user is admin or super_admin
-    if (adminRole !== 'super_admin' && adminRole !== 'admin') {
+    // Check if user is admin or super_admin (super_super_admin inherits these permissions)
+    if (adminRole !== 'super_admin' && adminRole !== 'super_super_admin' && adminRole !== 'admin') {
       return sendError(res, 'Only admins can approve cash submissions', 403);
     }
 
@@ -1866,8 +1866,8 @@ const handleRejectSubmission = async (req, res, submissionId, driverIdParam = nu
     const adminId = req.admin.id;
     const adminRole = req.admin.role;
 
-    // Check if user is admin or super_admin
-    if (adminRole !== 'super_admin' && adminRole !== 'admin') {
+    // Check if user is admin or super_admin (super_super_admin inherits these permissions)
+    if (adminRole !== 'super_admin' && adminRole !== 'super_super_admin' && adminRole !== 'admin') {
       return sendError(res, 'Only admins can reject cash submissions', 403);
     }
 

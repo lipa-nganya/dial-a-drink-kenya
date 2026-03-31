@@ -1431,7 +1431,18 @@ const RiderDetails = () => {
                             : '—'}
                         </TableCell>
                         <TableCell sx={{ color: colors.textPrimary }}>
-                          {entry.description || entry.customerName || 'N/A'}
+                          {(() => {
+                            const t = (entry.type ?? entry.transaction_type ?? entry.Type);
+                            const type = typeof t === 'string' ? t.toLowerCase() : t;
+                            const orderNum = entry.orderId ?? entry.order_id ?? entry.details?.orderId ?? entry.details?.order_id ?? null;
+                            const base = (entry.description || entry.customerName || 'N/A').toString().trim();
+                            if (type === 'cash_submission') {
+                              const addr = base || 'N/A';
+                              const withOrder = orderNum != null ? `#${orderNum} ${addr}` : addr;
+                              return `${withOrder} submission`.replace(/\s+/g, ' ').trim();
+                            }
+                            return base || 'N/A';
+                          })()}
                         </TableCell>
                         <TableCell align="right" sx={{ color: colors.textPrimary, verticalAlign: 'middle' }}>
                           {isSuperSuperAdmin && ek ? (

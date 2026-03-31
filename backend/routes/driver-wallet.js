@@ -81,7 +81,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       },
       attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider', 'transactionDate'],
       include: [
-        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee'], required: false }
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee', 'paymentType', 'paymentMethod', 'paymentStatus'], required: false }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -96,7 +96,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       },
       attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider', 'transactionDate'],
       include: [
-        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee'], required: false }
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee', 'paymentType', 'paymentMethod', 'paymentStatus'], required: false }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -230,6 +230,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       let orderValue = null;
       let creditAmount = null;
       let debitAmount = null;
+      let looksLikePayNowTerritoryFeeRow = false;
       if (tx.orderId) {
         try {
           const breakdown = await getOrderFinancialBreakdown(tx.orderId);
@@ -242,7 +243,20 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
           if (tx.paymentProvider === 'order_completion') {
             debitAmount = halfTerritory;
             creditAmount = orderValue;
-          } else if (isPayNowDeliveryFeeSettlement(tx)) {
+          } else {
+            const orderPaymentTypeNorm = (tx.order?.paymentType || 'pay_on_delivery').toString().toLowerCase();
+            const method = (tx.order?.paymentMethod || '').toString();
+            const isNonCashSystemPayment = tx.order?.paymentStatus === 'paid' && (method === 'mobile_money' || method === 'card');
+            const isPayNowOrder = orderPaymentTypeNorm === 'pay_now' || isNonCashSystemPayment;
+            const absAmt = Math.abs(txAmount);
+            looksLikePayNowTerritoryFeeRow =
+              isPayNowOrder &&
+              Number.isFinite(halfTerritory) &&
+              halfTerritory > 0.009 &&
+              Math.abs(absAmt - halfTerritory) <= 0.01;
+          }
+
+          if (isPayNowDeliveryFeeSettlement(tx) || looksLikePayNowTerritoryFeeRow) {
             debitAmount = halfTerritory;
             creditAmount = null;
           } else {
@@ -252,11 +266,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
           orderValue = null;
           creditAmount = null;
           debitAmount = null;
+          looksLikePayNowTerritoryFeeRow = false;
         }
       }
 
       entries.push({
-        type: entryType,
+        type: looksLikePayNowTerritoryFeeRow ? 'cash_sent' : entryType,
         logType,
         transactionId: tx.id,
         // Represent COD completion ledger rows using the same entryKey as synthetic COD rows so

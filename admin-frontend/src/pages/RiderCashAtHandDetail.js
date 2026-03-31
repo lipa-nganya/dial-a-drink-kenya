@@ -421,11 +421,16 @@ const RiderCashAtHandDetail = () => {
       return 'Submission';
     };
     const getDescriptionPlain = (entry) => {
-      let desc = entry.description || entry.customerName || 'N/A';
-      if (typeof desc === 'string') {
-        desc = desc.replace(/\s+submission\s*$/i, '').trim();
+      const type = entryType(entry);
+      const orderNum = getOrderNumber(entry);
+      const baseDesc = (entry.description || entry.customerName || '').toString().trim();
+      if (type === 'cash_submission') {
+        // Match driver-app phrasing: Order # + Address + "submission"
+        const addr = baseDesc || 'N/A';
+        const withOrder = orderNum != null ? `#${orderNum} ${addr}` : addr;
+        return `${withOrder} submission`.replace(/\s+/g, ' ').trim();
       }
-      return desc || 'N/A';
+      return baseDesc || 'N/A';
     };
 
     const base = buildCashAtHandStatementRows(filteredCashLogs, totalCashAtHand, '', {
