@@ -1471,6 +1471,14 @@ class PosCartActivity : AppCompatActivity() {
             Toast.makeText(this, "Please select a payment method", Toast.LENGTH_SHORT).show()
             return
         }
+
+        // POS order creation requires an admin token (backend will reject adminOrder=true without it).
+        val adminToken = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(this)
+        if (adminToken.isNullOrBlank()) {
+            android.util.Log.e("PosCartActivity", "POS submit blocked: missing admin token")
+            Toast.makeText(this, "Please login as admin to create POS orders", Toast.LENGTH_LONG).show()
+            return
+        }
         
         // Set default customer name if not set (for walk-in orders)
         if (customerName.isEmpty()) {
@@ -1668,16 +1676,32 @@ class PosCartActivity : AppCompatActivity() {
                         returnEmptyCartResultAndFinish()
                     }
                 } else {
-                    val errorBody = response.body()
+                    // On non-2xx responses Retrofit sets body() to null; read errorBody() instead.
+                    val rawError = try {
+                        response.errorBody()?.string()
+                    } catch (e: Exception) {
+                        null
+                    }
+
                     val errorMessage = when {
-                        errorBody is ApiResponse<*> && errorBody.error != null -> errorBody.error
-                        errorBody is Map<*, *> && errorBody.containsKey("error") -> errorBody["error"].toString()
-                        errorBody is Map<*, *> && errorBody.containsKey("message") -> errorBody["message"].toString()
+                        !rawError.isNullOrBlank() -> {
+                            // Try to parse common backend shapes: { error }, { message }, { success:false,error }
+                            try {
+                                val json = com.google.gson.JsonParser.parseString(rawError).asJsonObject
+                                when {
+                                    json.has("error") -> json.get("error")?.asString ?: rawError
+                                    json.has("message") -> json.get("message")?.asString ?: rawError
+                                    else -> rawError
+                                }
+                            } catch (e: Exception) {
+                                rawError
+                            }
+                        }
                         else -> "Failed to submit order (Code: ${response.code()})"
                     }
                     
                     android.util.Log.e("PosCartActivity", "Order submission failed: $errorMessage")
-                    android.util.Log.e("PosCartActivity", "Response body: $errorBody")
+                    android.util.Log.e("PosCartActivity", "Response errorBody: $rawError")
                     android.util.Log.e("PosCartActivity", "Response code: ${response.code()}")
                     
                     Toast.makeText(this@PosCartActivity, errorMessage, Toast.LENGTH_LONG).show()

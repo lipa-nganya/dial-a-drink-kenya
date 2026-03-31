@@ -538,6 +538,9 @@ router.post('/', async (req, res) => {
         totalAmount: finalTotal,
         convenienceFee: convenienceFee,
         territoryDeliveryFee: territoryDeliveryFee,
+        // Keep payout tracking aligned with territory fee (even before driver assignment).
+        // Admin web expects driverPayAmount to mirror territoryDeliveryFee once a territory is selected.
+        driverPayAmount: !isWalkInOrder ? territoryDeliveryFee : 0,
         tipAmount: tip,
         notes: (() => {
           let noteParts = [];
@@ -661,6 +664,11 @@ router.post('/', async (req, res) => {
           model: db.Driver,
           as: 'driver',
           attributes: ['id', 'name', 'phoneNumber', 'pushToken']
+        },
+        {
+          model: db.Territory,
+          as: 'territory',
+          attributes: ['id', 'name', 'deliveryFromCBD']
         }
       ]
     });
