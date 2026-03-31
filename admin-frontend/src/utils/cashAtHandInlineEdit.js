@@ -22,9 +22,19 @@ export function getDefaultDebitCreditStrings(entry) {
     }
     return { debit: '', credit: String(Math.round(amountNet)) };
   }
+  const hasDebitCol = entry.debitAmount != null && entry.debitAmount !== '';
+  const hasCreditCol = entry.creditAmount != null && entry.creditAmount !== '';
   return {
-    debit: !isCredit ? String(Math.round(amountNet)) : '',
-    credit: isCredit ? String(Math.round(amountNet)) : ''
+    debit: hasDebitCol
+      ? String(Math.round(Number(entry.debitAmount)))
+      : !isCredit
+        ? String(Math.round(amountNet))
+        : '',
+    credit: hasCreditCol
+      ? String(Math.round(Number(entry.creditAmount)))
+      : isCredit
+        ? String(Math.round(amountNet))
+        : ''
   };
 }
 

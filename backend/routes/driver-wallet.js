@@ -221,19 +221,34 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       const logType = entryType === 'cash_received' ? 'Payment Received' : '—';
 
       // Some legacy cash-at-hand rows (settlements/remittances) are order-linked but don't carry orderValue.
-      // Compute orderValue from persisted order totals + items so driver app can display it.
+      // Compute orderValue from persisted order totals + items so admin debit/credit columns match business rules:
+      // - COD order_completion: CRT = items + convenience, DBT = 50% territory fee (driver collected cash).
+      // - Pay Now 50% fee row: DBT = 50% territory fee, CRT = — (driver did not collect order cash).
       let orderValue = null;
       let creditAmount = null;
+      let debitAmount = null;
       if (tx.orderId) {
         try {
           const breakdown = await getOrderFinancialBreakdown(tx.orderId);
           const itemsTotal = parseFloat(breakdown.itemsTotal || 0) || 0;
           const convenienceFee = parseFloat(breakdown.deliveryFee || 0) || 0;
+          const territoryFee = parseFloat(tx.order?.territoryDeliveryFee ?? convenienceFee) || 0;
+          const halfTerritory = territoryFee * 0.5;
           orderValue = itemsTotal + convenienceFee;
-          creditAmount = orderValue;
+
+          if (tx.paymentProvider === 'order_completion') {
+            debitAmount = halfTerritory;
+            creditAmount = orderValue;
+          } else if (isPayNowDeliveryFeeSettlement(tx)) {
+            debitAmount = halfTerritory;
+            creditAmount = null;
+          } else {
+            creditAmount = orderValue;
+          }
         } catch (e) {
           orderValue = null;
           creditAmount = null;
+          debitAmount = null;
         }
       }
 
@@ -245,6 +260,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         orderId: tx.orderId || null,
         deliveryFee: tx.orderId ? (parseFloat(tx.order?.territoryDeliveryFee || 0) || null) : null,
         orderValue,
+        debitAmount,
         creditAmount,
         amount: Math.abs(txAmount),
         date: pickCashAtHandLogDate(tx.transactionDate, tx.createdAt),
@@ -743,7 +759,9 @@ router.get('/:driverId', async (req, res) => {
       });
     }
 
-    // Get driver savings_credit transactions (50% of delivery fee credited to savings)
+    // Get driver savings_credit transactions (50% of delivery fee credited to savings).
+    // Do not cap rows: backfills often set createdAt to historical order completion, so a low limit
+    // (e.g. 50 newest by createdAt) would hide older credits even though they are valid rows.
     const savingsCreditTransactions = await db.Transaction.findAll({
       where: {
         driverId: driverId,
@@ -758,8 +776,7 @@ router.get('/:driverId', async (req, res) => {
         as: 'order',
         attributes: ['id', 'customerName', 'deliveryAddress', 'createdAt', 'status']
       }],
-      order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 savings credits
+      order: [['createdAt', 'DESC'], ['id', 'DESC']]
     });
 
     // Get stop deduction transactions (delivery_fee_debit with paymentProvider = 'stop_deduction')
@@ -777,8 +794,7 @@ router.get('/:driverId', async (req, res) => {
         as: 'order',
         attributes: ['id', 'customerName', 'deliveryAddress', 'createdAt', 'status', 'isStop', 'stopDeductionAmount']
       }],
-      order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 stop deductions
+      order: [['createdAt', 'DESC'], ['id', 'DESC']]
     });
 
     // Get cash settlement debits (driver remits collected cash)
