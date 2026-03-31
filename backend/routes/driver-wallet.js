@@ -200,11 +200,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' ||
         (tx.paymentProvider === 'mpesa' && tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal'))) ||
         (tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal')));
+      const isOrderCompletionLedger = tx.paymentProvider === 'order_completion';
 
       let description;
       if (isSavingsWithdrawal) {
         description = `Savings withdrawal`;
-      } else if (tx.paymentProvider === 'order_completion') {
+      } else if (isOrderCompletionLedger) {
         description = formatDescriptionFromAddressNoSuffix(tx.order?.deliveryAddress) || '';
       } else if (isPayNowDeliveryFeeSettlement(tx)) {
         description = formatDescriptionFromAddressNoSuffix(tx.order?.deliveryAddress) || '';
@@ -218,7 +219,9 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       // Cash at hand − 50% delivery fee should always be displayed as cash_sent (a debit),
       // even though its stored amount is positive.
       const entryType = txAmount < 0 || isPayNowDeliveryFeeSettlement(tx) ? 'cash_sent' : 'cash_received';
-      const logType = entryType === 'cash_received' ? 'Payment Received' : '—';
+      // Driver app and admin both expect COD completion rows to appear as "Order Completed" with DBT/CRT,
+      // even when persisted as a cash_settlement ledger row.
+      const logType = isOrderCompletionLedger ? 'Order Completed' : entryType === 'cash_received' ? 'Payment Received' : '—';
 
       // Some legacy cash-at-hand rows (settlements/remittances) are order-linked but don't carry orderValue.
       // Compute orderValue from persisted order totals + items so admin debit/credit columns match business rules:
@@ -256,7 +259,9 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         type: entryType,
         logType,
         transactionId: tx.id,
-        entryKey: `settlement_tx:${tx.id}`,
+        // Represent COD completion ledger rows using the same entryKey as synthetic COD rows so
+        // statement display (DBT/CRT) and admin overrides behave consistently.
+        entryKey: isOrderCompletionLedger && tx.orderId ? `cod_order:${tx.orderId}` : `settlement_tx:${tx.id}`,
         orderId: tx.orderId || null,
         deliveryFee: tx.orderId ? (parseFloat(tx.order?.territoryDeliveryFee || 0) || null) : null,
         orderValue,
