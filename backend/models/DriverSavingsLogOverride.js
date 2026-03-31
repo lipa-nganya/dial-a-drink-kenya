@@ -27,6 +27,11 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.DECIMAL(12, 2),
         allowNull: true
       },
+      hidden: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false
+      },
       updatedByAdminId: {
         type: DataTypes.INTEGER,
         allowNull: true

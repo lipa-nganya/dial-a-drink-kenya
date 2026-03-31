@@ -2060,6 +2060,11 @@ router.put('/drivers/:driverId/cash-at-hand-log-display', verifyAdmin, requireSu
     const existing = await db.CashAtHandLogOverride.findOne({ where: { driverId, entryKey } });
     const natural = await getNaturalCashAtHandEntry(driverId, entryKey);
 
+    // Clearing a row that has no overrides yet should be a no-op success.
+    if (!existing && isDeleteAllClear) {
+      return res.json({ success: true, data: null, deleted: false });
+    }
+
     if (!natural) {
       if (existing && isDeleteAllClear) {
         await existing.destroy();
@@ -2819,10 +2824,21 @@ router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
       await order.update({
         territoryId: newTerritoryId,
         territoryDeliveryFee: newTerritoryDeliveryFee,
+        // Keep payout tracking aligned with territory fee (even before driver assignment).
+        driverPayAmount: newTerritoryDeliveryFee,
         notes: oldNotes ? `${oldNotes}\n${territoryNote}` : territoryNote,
         // If a territory is explicitly selected, this fee is no longer distance-based.
         deliveryDistance: (newTerritoryId !== null && territoryRecord) ? null : order.deliveryDistance
       });
+    }
+
+    // Ensure driverPayAmount reflects the current territory delivery fee whenever territory changes,
+    // regardless of where the order was created (admin web / admin mobile / customer site).
+    // Do not require payment completion for tracking updates.
+    try {
+      await ensureDeliveryFeeSplit(order, { context: 'admin-territory-update', requirePayment: false, reloadOrder: true });
+    } catch (e) {
+      console.warn(`ensureDeliveryFeeSplit failed after territory update for order ${order.id}:`, e.message);
     }
 
     await order.reload({
@@ -3091,6 +3107,14 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
       territoryDeliveryFee: newTerritoryDeliveryFee,
       notes: oldNotes ? `${oldNotes}\n${deliveryFeeUpdateNote}` : deliveryFeeUpdateNote
     });
+
+    // Keep driverPayAmount in sync with territoryDeliveryFee edits (tracking),
+    // even if the order isn't paid yet.
+    try {
+      await ensureDeliveryFeeSplit(order, { context: 'admin-territory-fee-update', requirePayment: false, reloadOrder: true });
+    } catch (e) {
+      console.warn(`ensureDeliveryFeeSplit failed after delivery fee update for order ${order.id}:`, e.message);
+    }
 
     // Reload order with items for response
     const updatedOrder = await db.Order.findByPk(orderId, {

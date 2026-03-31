@@ -291,6 +291,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
 
     // Add approved cash submission entries (these reduce cash at hand)
     // Skip order_payment when already shown as cash_sent from cash_settlement (negative amount)
+    const orderPaymentOrderIdsShown = new Set();
     approvedCashSubmissions.forEach(submission => {
       if (submission.submissionType === 'order_payment' && submission.details?.orderId != null && orderIdsWithSettlementFromTx.has(submission.details.orderId)) return;
       const submissionType = submission.submissionType;
@@ -324,6 +325,11 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       }
 
       const orderIdForSubmission = submission.details?.orderId ?? (submission.orders && submission.orders.length > 0 ? submission.orders[0].id : null);
+      // Only show one approved order_payment submission per orderId (newest wins; submissions are sorted by createdAt desc).
+      if (submission.submissionType === 'order_payment' && orderIdForSubmission != null) {
+        if (orderPaymentOrderIdsShown.has(orderIdForSubmission)) return;
+        orderPaymentOrderIdsShown.add(orderIdForSubmission);
+      }
 
       entries.push({
         type: 'cash_submission',
