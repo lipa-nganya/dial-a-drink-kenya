@@ -98,8 +98,18 @@ export function buildCashAtHandStatementRows(rawEntries, totalCashAtHand, normal
         creditDisplay = Math.round(amountNet);
       }
     } else {
-      debitDisplay = !isCredit ? Math.round(amountNet) : '—';
-      creditDisplay = isCredit ? Math.round(amountNet) : '—';
+      const hasDebitCol = entry.debitAmount != null && entry.debitAmount !== '';
+      const hasCreditCol = entry.creditAmount != null && entry.creditAmount !== '';
+      debitDisplay = hasDebitCol
+        ? Math.round(Number(entry.debitAmount))
+        : !isCredit
+          ? Math.round(amountNet)
+          : '—';
+      creditDisplay = hasCreditCol
+        ? Math.round(Number(entry.creditAmount))
+        : isCredit
+          ? Math.round(amountNet)
+          : '—';
     }
 
     const balance =

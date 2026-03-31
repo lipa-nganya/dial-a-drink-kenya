@@ -81,7 +81,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       },
       attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider', 'transactionDate'],
       include: [
-        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee'], required: false }
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee', 'paymentType', 'paymentMethod', 'paymentStatus'], required: false }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -96,7 +96,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       },
       attributes: ['id', 'orderId', 'amount', 'createdAt', 'notes', 'receiptNumber', 'paymentProvider', 'transactionDate'],
       include: [
-        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee'], required: false }
+        { model: db.Order, as: 'order', attributes: ['id', 'deliveryAddress', 'territoryDeliveryFee', 'paymentType', 'paymentMethod', 'paymentStatus'], required: false }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -200,11 +200,12 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       const isSavingsWithdrawal = tx.paymentProvider === 'savings_withdrawal_record' ||
         (tx.paymentProvider === 'mpesa' && tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal'))) ||
         (tx.notes && (tx.notes.includes('Savings withdrawal') || tx.notes.includes('savings withdrawal')));
+      const isOrderCompletionLedger = tx.paymentProvider === 'order_completion';
 
       let description;
       if (isSavingsWithdrawal) {
         description = `Savings withdrawal`;
-      } else if (tx.paymentProvider === 'order_completion') {
+      } else if (isOrderCompletionLedger) {
         description = formatDescriptionFromAddressNoSuffix(tx.order?.deliveryAddress) || '';
       } else if (isPayNowDeliveryFeeSettlement(tx)) {
         description = formatDescriptionFromAddressNoSuffix(tx.order?.deliveryAddress) || '';
@@ -218,33 +219,68 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
       // Cash at hand − 50% delivery fee should always be displayed as cash_sent (a debit),
       // even though its stored amount is positive.
       const entryType = txAmount < 0 || isPayNowDeliveryFeeSettlement(tx) ? 'cash_sent' : 'cash_received';
-      const logType = entryType === 'cash_received' ? 'Payment Received' : '—';
+      // Driver app and admin both expect COD completion rows to appear as "Order Completed" with DBT/CRT,
+      // even when persisted as a cash_settlement ledger row.
+      const logType = isOrderCompletionLedger ? 'Order Completed' : entryType === 'cash_received' ? 'Payment Received' : '—';
 
       // Some legacy cash-at-hand rows (settlements/remittances) are order-linked but don't carry orderValue.
-      // Compute orderValue from persisted order totals + items so driver app can display it.
+      // Compute orderValue from persisted order totals + items so admin debit/credit columns match business rules:
+      // - COD order_completion: CRT = items + convenience, DBT = 50% territory fee (driver collected cash).
+      // - Pay Now 50% fee row: DBT = 50% territory fee, CRT = — (driver did not collect order cash).
       let orderValue = null;
       let creditAmount = null;
+      let debitAmount = null;
+      let looksLikePayNowTerritoryFeeRow = false;
       if (tx.orderId) {
         try {
           const breakdown = await getOrderFinancialBreakdown(tx.orderId);
           const itemsTotal = parseFloat(breakdown.itemsTotal || 0) || 0;
           const convenienceFee = parseFloat(breakdown.deliveryFee || 0) || 0;
+          const territoryFee = parseFloat(tx.order?.territoryDeliveryFee ?? convenienceFee) || 0;
+          const halfTerritory = territoryFee * 0.5;
           orderValue = itemsTotal + convenienceFee;
-          creditAmount = orderValue;
+
+          if (tx.paymentProvider === 'order_completion') {
+            debitAmount = halfTerritory;
+            creditAmount = orderValue;
+          } else {
+            const orderPaymentTypeNorm = (tx.order?.paymentType || 'pay_on_delivery').toString().toLowerCase();
+            const method = (tx.order?.paymentMethod || '').toString();
+            const isNonCashSystemPayment = tx.order?.paymentStatus === 'paid' && (method === 'mobile_money' || method === 'card');
+            const isPayNowOrder = orderPaymentTypeNorm === 'pay_now' || isNonCashSystemPayment;
+            const absAmt = Math.abs(txAmount);
+            looksLikePayNowTerritoryFeeRow =
+              isPayNowOrder &&
+              Number.isFinite(halfTerritory) &&
+              halfTerritory > 0.009 &&
+              Math.abs(absAmt - halfTerritory) <= 0.01;
+          }
+
+          if (isPayNowDeliveryFeeSettlement(tx) || looksLikePayNowTerritoryFeeRow) {
+            debitAmount = halfTerritory;
+            creditAmount = null;
+          } else {
+            creditAmount = orderValue;
+          }
         } catch (e) {
           orderValue = null;
           creditAmount = null;
+          debitAmount = null;
+          looksLikePayNowTerritoryFeeRow = false;
         }
       }
 
       entries.push({
-        type: entryType,
+        type: looksLikePayNowTerritoryFeeRow ? 'cash_sent' : entryType,
         logType,
         transactionId: tx.id,
-        entryKey: `settlement_tx:${tx.id}`,
+        // Represent COD completion ledger rows using the same entryKey as synthetic COD rows so
+        // statement display (DBT/CRT) and admin overrides behave consistently.
+        entryKey: isOrderCompletionLedger && tx.orderId ? `cod_order:${tx.orderId}` : `settlement_tx:${tx.id}`,
         orderId: tx.orderId || null,
         deliveryFee: tx.orderId ? (parseFloat(tx.order?.territoryDeliveryFee || 0) || null) : null,
         orderValue,
+        debitAmount,
         creditAmount,
         amount: Math.abs(txAmount),
         date: pickCashAtHandLogDate(tx.transactionDate, tx.createdAt),
@@ -743,7 +779,9 @@ router.get('/:driverId', async (req, res) => {
       });
     }
 
-    // Get driver savings_credit transactions (50% of delivery fee credited to savings)
+    // Get driver savings_credit transactions (50% of delivery fee credited to savings).
+    // Do not cap rows: backfills often set createdAt to historical order completion, so a low limit
+    // (e.g. 50 newest by createdAt) would hide older credits even though they are valid rows.
     const savingsCreditTransactions = await db.Transaction.findAll({
       where: {
         driverId: driverId,
@@ -758,8 +796,7 @@ router.get('/:driverId', async (req, res) => {
         as: 'order',
         attributes: ['id', 'customerName', 'deliveryAddress', 'createdAt', 'status']
       }],
-      order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 savings credits
+      order: [['createdAt', 'DESC'], ['id', 'DESC']]
     });
 
     // Get stop deduction transactions (delivery_fee_debit with paymentProvider = 'stop_deduction')
@@ -777,8 +814,7 @@ router.get('/:driverId', async (req, res) => {
         as: 'order',
         attributes: ['id', 'customerName', 'deliveryAddress', 'createdAt', 'status', 'isStop', 'stopDeductionAmount']
       }],
-      order: [['createdAt', 'DESC']],
-      limit: 50 // Last 50 stop deductions
+      order: [['createdAt', 'DESC'], ['id', 'DESC']]
     });
 
     // Get cash settlement debits (driver remits collected cash)

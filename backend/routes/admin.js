@@ -9471,7 +9471,7 @@ router.post('/drivers/:driverId/request-payment', verifyAdmin, async (req, res) 
 
 // ---------- Asset Accounts (admin only) ----------
 const requireSuperAdmin = (req, res, next) => {
-  if (req.admin && req.admin.role === 'super_admin') return next();
+  if (req.admin && (req.admin.role === 'super_admin' || req.admin.role === 'super_super_admin')) return next();
   return res.status(403).json({ error: 'Only super admin can perform this action' });
 };
 

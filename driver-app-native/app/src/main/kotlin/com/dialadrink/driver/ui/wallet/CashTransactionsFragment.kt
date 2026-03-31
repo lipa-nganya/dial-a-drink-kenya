@@ -182,7 +182,19 @@ class CashTransactionsFragment : Fragment() {
             // Extract delivery address from description
             // Description format might be: "Cash received for Order #123 - [Address]" or similar
             val deliveryAddress = extractDeliveryAddress(entry.description, entry.customerName)
-            deliveryAddressText.text = formatDescriptionWithOrderNumber(entry.orderId, deliveryAddress)
+            val deliveryAddressForRow = if (entry.type == "cash_submission") {
+                val base = deliveryAddress.trim()
+                if (base.isEmpty()) {
+                    "submission"
+                } else if (base.lowercase(Locale.getDefault()).endsWith("submission")) {
+                    base
+                } else {
+                    "$base submission"
+                }
+            } else {
+                deliveryAddress
+            }
+            deliveryAddressText.text = formatDescriptionWithOrderNumber(entry.orderId, deliveryAddressForRow)
             
             when (entry.type) {
                 "cash_received" -> {
@@ -197,15 +209,16 @@ class CashTransactionsFragment : Fragment() {
                     balanceAfter -= entry.amount
                 }
                 "cash_submission" -> {
-                    debitText.text = "0"
-                    creditText.text = formatter.format(entry.amount)
+                    // Submissions reduce cash at hand (debit)
+                    debitText.text = formatter.format(entry.amount)
+                    creditText.text = "0"
                     balanceText.text = formatter.format(balanceAfter)
                     balanceAfter += entry.amount
                 }
                 else -> {
                     // cash_sent and any other outflows: money leaving cash at hand
-                    debitText.text = "0"
-                    creditText.text = formatter.format(entry.amount)
+                    debitText.text = formatter.format(entry.amount)
+                    creditText.text = "0"
                     balanceText.text = formatter.format(balanceAfter)
                     balanceAfter += entry.amount
                 }
