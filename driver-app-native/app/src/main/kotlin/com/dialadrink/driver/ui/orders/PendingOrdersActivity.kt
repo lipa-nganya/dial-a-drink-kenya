@@ -31,6 +31,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import java.text.NumberFormat
+import java.util.Locale
 
 class PendingOrdersActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPendingOrdersBinding
@@ -247,9 +249,24 @@ class PendingOrdersActivity : AppCompatActivity() {
             
             // Customer name
             cardBinding.customerNameText.text = order.customerName ?: "Customer"
+
+            // Territory name (fallback to flat field if nested object is absent)
+            val territoryName = order.territory?.name ?: order.territoryName
+            cardBinding.territoryText.text = if (territoryName.isNullOrBlank()) "—" else territoryName
             
             // Location (delivery address)
             cardBinding.locationText.text = order.deliveryAddress ?: "Address not provided"
+
+            // Financial summary on pending card
+            val currencyFormatter = NumberFormat.getCurrencyInstance(Locale("en", "KE"))
+            val totalOrderValue = order.totalAmount
+            val territoryFee = when {
+                (order.territoryDeliveryFee ?: 0.0) > 0.0 -> order.territoryDeliveryFee ?: 0.0
+                (order.deliveryFee ?: 0.0) > 0.0 -> order.deliveryFee
+                else -> 0.0
+            }
+            cardBinding.totalOrderValueText.text = currencyFormatter.format(totalOrderValue)
+            cardBinding.territoryFeeText.text = currencyFormatter.format(territoryFee)
             
             // Driver assignment status (only show in admin mode)
             if (isAdminMode) {

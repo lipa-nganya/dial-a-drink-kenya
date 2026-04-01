@@ -411,7 +411,7 @@ object OrderRepository {
             // Use the dedicated pending orders endpoint (not the active orders endpoint)
             val response = ApiClient.getApiService().getPendingOrders(
                 driverId,
-                summary = true
+                summary = false
             )
             
             if (!response.isSuccessful || response.body() == null) {
@@ -522,13 +522,11 @@ object OrderRepository {
     
     /**
      * Get completed orders with optional date filtering
-     * By default returns last 10 completed orders
      */
     suspend fun getCompletedOrders(
         context: Context,
         fromDate: java.util.Date? = null,
-        toDate: java.util.Date? = null,
-        limit: Int = 10
+        toDate: java.util.Date? = null
     ): List<Order> {
         val driverId = SharedPrefs.getDriverId(context) ?: return emptyList()
 
@@ -558,14 +556,20 @@ object OrderRepository {
 
             var orders = apiResponse.data
 
+            // Exclude POS walk-in/in-store purchases from driver completed list.
+            orders = orders.filterNot { order ->
+                val customerName = order.customerName.trim().lowercase()
+                val deliveryAddress = order.deliveryAddress.trim().lowercase()
+                customerName == "pos" ||
+                    customerName == "pos customer" ||
+                    customerName == "walk in customer" ||
+                    deliveryAddress == "in-store purchase" ||
+                    deliveryAddress == "in store purchase"
+            }
+
             // Sort by date descending (most recent first)
             orders = orders.sortedByDescending { 
                 it.createdAt ?: ""
-            }
-
-            // If no date filter, limit to last 10
-            if (fromDate == null && toDate == null) {
-                orders = orders.take(limit)
             }
 
             orders

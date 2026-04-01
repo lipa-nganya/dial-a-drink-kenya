@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 import AdminSidebar from './AdminSidebar';
 import AdminTopBar from './AdminTopBar';
@@ -25,6 +25,38 @@ const AdminLayout = ({ children }) => {
   const handleMobileClose = () => {
     setMobileOpen(false);
   };
+
+  useEffect(() => {
+    const cleanupStaleBackdrop = () => {
+      if (typeof document === 'undefined') return;
+
+      const visibleBackdropExists = Array.from(document.querySelectorAll('.MuiBackdrop-root'))
+        .some((el) => {
+          const style = window.getComputedStyle(el);
+          return style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity || '1') > 0;
+        });
+
+      if (!visibleBackdropExists) return;
+
+      const visibleModalContentExists = Array.from(
+        document.querySelectorAll('.MuiDialog-paper, .MuiMenu-paper, .MuiPopover-paper')
+      ).some((el) => {
+        const style = window.getComputedStyle(el);
+        return style.display !== 'none' && style.visibility !== 'hidden' && parseFloat(style.opacity || '1') > 0;
+      });
+
+      if (visibleBackdropExists && !visibleModalContentExists) {
+        document.querySelectorAll('.MuiBackdrop-root').forEach((el) => el.remove());
+        document.body.classList.remove('MuiModal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
+      }
+    };
+
+    const intervalId = setInterval(cleanupStaleBackdrop, 1000);
+    cleanupStaleBackdrop();
+    return () => clearInterval(intervalId);
+  }, []);
 
   return (
     <Box 

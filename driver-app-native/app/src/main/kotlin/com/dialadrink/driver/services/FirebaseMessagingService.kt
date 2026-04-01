@@ -14,7 +14,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.dialadrink.driver.R
 import com.dialadrink.driver.ui.main.MainActivity
-import com.dialadrink.driver.ui.orders.OrderAcceptanceActivity
+import com.dialadrink.driver.ui.orders.PendingOrdersActivity
 import com.dialadrink.driver.ui.notifications.TestNotificationOverlayActivity
 import com.dialadrink.driver.ui.notifications.NotificationsActivity
 import com.dialadrink.driver.ui.wallet.CashAtHandActivity
@@ -62,15 +62,9 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
             } else if (type == "order-assigned" && orderId != null) {
                 // Clear cache so pending orders list refreshes with new order
                 handleOrderAssigned(orderId)
-                
-                // Always launch activity and show notification (works in foreground and background)
-                // When app is in background, FCM will handle the notification automatically
-                // When app is in foreground, onMessageReceived is called and we handle it here
-                wakeDeviceAndUnlock()
-                launchOrderAcceptanceActivity(orderId, remoteMessage)
-                
-                // Show notification even if activity is launched (for background cases)
-                // The notification ensures the user is alerted even if activity fails to launch
+
+                // Only show push notification for order assignment.
+                // Do NOT launch in-app overlay/activity or play forced sound.
                 showOrderNotification(remoteMessage, orderId)
                 return
             } else if (type == "order-reassigned" && orderId != null) {
@@ -119,11 +113,11 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "Notifications for new order assignments"
-                enableVibration(true)
-                vibrationPattern = longArrayOf(500, 100, 500, 100, 500, 100, 500)
+                enableVibration(false)
                 enableLights(true)
                 setShowBadge(true)
                 lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                setSound(null, null)
             }
             
             val notificationManager = getSystemService(NotificationManager::class.java)
@@ -181,8 +175,8 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
                 return
             }
             
-            // Bring app to foreground when order notification is received
-            val intent = Intent(this, com.dialadrink.driver.ui.orders.OrderAcceptanceActivity::class.java).apply {
+            // Push-only flow: open pending orders list when tapped (no overlay/sound screen).
+            val intent = Intent(this, PendingOrdersActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK
                 addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -201,14 +195,10 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
                 .setContentTitle(remoteMessage.notification?.title ?: "🚨 New Order Assigned!")
                 .setContentText(remoteMessage.notification?.body ?: "Tap to view order details")
                 .setAutoCancel(true)
-                .setSound(RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))
                 .setContentIntent(pendingIntent)
-                .setPriority(NotificationCompat.PRIORITY_MAX) // Use MAX priority for order notifications
-                .setDefaults(NotificationCompat.DEFAULT_ALL) // This includes sound, vibration, and lights
-                .setVibrate(longArrayOf(500, 100, 500, 100, 500, 100, 500))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setLights(0xFF00E0B8.toInt(), 1000, 1000)
-                .setCategory(NotificationCompat.CATEGORY_ALARM) // Category alarm ensures sound plays even in Do Not Disturb
-                .setFullScreenIntent(pendingIntent, true) // Show as heads-up notification (works in background too)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
             
             val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             notificationManager.notify(orderId, notificationBuilder.build())
@@ -381,36 +371,7 @@ class DriverFirebaseMessagingService : FirebaseMessagingService() {
         }
     }
     
-    private fun launchOrderAcceptanceActivity(orderId: Int, remoteMessage: RemoteMessage) {
-        try {
-            wakeDeviceAndUnlock()
-            bringAppToForeground()
-            
-            val customerName = remoteMessage.data["customerName"]
-            val deliveryAddress = remoteMessage.data["deliveryAddress"]
-            val totalAmount = remoteMessage.data["totalAmount"]?.toDoubleOrNull() ?: 0.0
-            val orderJson = remoteMessage.data["order"] // JSON string fallback
-            
-            val intent = Intent(this, com.dialadrink.driver.ui.orders.OrderAcceptanceActivity::class.java).apply {
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
-                addFlags(Intent.FLAG_ACTIVITY_BROUGHT_TO_FRONT)
-                addFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
-                addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
-                putExtra("orderId", orderId)
-                if (!customerName.isNullOrBlank()) putExtra("customerName", customerName)
-                if (!deliveryAddress.isNullOrBlank()) putExtra("deliveryAddress", deliveryAddress)
-                if (totalAmount > 0) putExtra("totalAmount", totalAmount)
-                if (!orderJson.isNullOrBlank()) putExtra("order", orderJson) // Pass JSON as fallback
-            }
-            startActivity(intent)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error launching OrderAcceptanceActivity", e)
-        }
-    }
+    // Intentionally removed auto-launch for order-assigned notifications.
     
     private fun handleCashSubmissionNotification(type: String, submissionId: String?, remoteMessage: RemoteMessage) {
         try {

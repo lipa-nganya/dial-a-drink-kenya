@@ -446,8 +446,15 @@ router.get('/:driverId/pending', async (req, res) => {
     
     console.log(`🔍 [PENDING ORDERS] Query for driver ${driverId}:`, JSON.stringify(whereClause, null, 2));
 
-    // Build includes - for summary mode, exclude all nested objects to shrink payload
-    const includes = [];
+    // Always include territory so pending cards can show territory name.
+    const includes = [
+      {
+        model: db.Territory,
+        as: 'territory',
+        required: false,
+        attributes: ['id', 'name', 'deliveryFromCBD']
+      }
+    ];
     
     if (summary !== 'true') {
       // Full mode: include items and drinks (for detail view)
@@ -513,9 +520,13 @@ router.get('/:driverId/pending', async (req, res) => {
           id: orderData.id,
           customerName: orderData.customerName,
           deliveryAddress: orderData.deliveryAddress,
+          territory: orderData.territory || null,
+          territoryName: orderData.territory?.name || null,
           status: orderData.status,
           paymentStatus: orderData.paymentStatus,
           totalAmount: orderData.totalAmount,
+          territoryDeliveryFee: orderData.territoryDeliveryFee,
+          deliveryFee: parseFloat(orderData.territoryDeliveryFee ?? 0) || 0,
           driverId: orderData.driverId,
           driverAccepted: orderData.driverAccepted,
           createdAt: orderData.createdAt
@@ -541,6 +552,8 @@ router.get('/:driverId/pending', async (req, res) => {
         if (orderData.items) {
           orderData.orderItems = orderData.items;
         }
+        // Keep a flat territory name fallback for mobile clients.
+        orderData.territoryName = orderData.territory?.name || null;
         
         // Add credit limit status for driver app to determine if update button should be disabled
         const creditCheck = await checkDriverCreditLimit(parseInt(driverId), true);
@@ -1391,6 +1404,12 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       methodLabel = 'driver M-Pesa';
       paymentMethod = 'mobile_money';
       paymentProvider = 'driver_mpesa_manual';
+    } else if (method === 'paid_to_office') {
+      // Operationally this is still treated as cash collected from customer.
+      // We auto-create a pending order_payment submission so office remittance flow starts immediately.
+      methodLabel = 'paid to office';
+      paymentMethod = 'cash';
+      paymentProvider = 'paid_to_office';
     } else if (method === 'card') {
       methodLabel = 'card payment';
       paymentMethod = 'card';
@@ -1586,6 +1605,66 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
       console.error('❌ Error syncing delivery fee transactions (driver cash confirmation):', syncError);
     }
 
+    // Auto-create pending order_payment cash submission for "Paid to Office".
+    // This keeps actual cash at hand unchanged until admin approval, while pending reflects reserved amount.
+    if (method === 'paid_to_office') {
+      try {
+        const existingLinks = await db.sequelize.query(
+          `SELECT cs.id
+           FROM cash_submissions cs
+           INNER JOIN cash_submission_orders cso ON cso."cashSubmissionId" = cs.id
+           WHERE cs."driverId" = :driverId
+             AND cs."submissionType" = 'order_payment'
+             AND cso."orderId" = :orderId
+             AND cs.status IN ('pending', 'approved')
+           LIMIT 1`,
+          {
+            type: db.sequelize.QueryTypes.SELECT,
+            replacements: { driverId: parseInt(driverId, 10), orderId: order.id }
+          }
+        ).catch(() => []);
+
+        if (!existingLinks || existingLinks.length === 0) {
+          const breakdown = await getOrderFinancialBreakdown(order.id);
+          const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
+          const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
+          const submissionAmount = Number((itemsTotal + deliveryFee).toFixed(2));
+
+          const detailsForSubmission = {
+            orderId: order.id,
+            orderIds: [order.id],
+            paymentMethod: 'paid_to_office',
+            source: 'driver_auto_paid_to_office'
+          };
+
+          const submission = await db.CashSubmission.create({
+            driverId: parseInt(driverId, 10),
+            submissionType: 'order_payment',
+            amount: submissionAmount,
+            details: detailsForSubmission,
+            status: 'pending'
+          });
+
+          await db.sequelize.query(
+            `INSERT INTO cash_submission_orders ("cashSubmissionId", "orderId", "createdAt", "updatedAt")
+             VALUES (:cashSubmissionId, :orderId, NOW(), NOW())`,
+            {
+              replacements: { cashSubmissionId: submission.id, orderId: order.id }
+            }
+          ).catch((err) => {
+            console.error('Failed to link auto paid-to-office submission to order:', err);
+          });
+
+          console.log(`✅ Auto-created pending paid-to-office submission #${submission.id} for order #${order.id} amount KES ${submissionAmount.toFixed(2)}`);
+        } else {
+          console.log(`ℹ️ Paid-to-office submission already exists for order #${order.id}, skipping auto-create.`);
+        }
+      } catch (autoSubmissionError) {
+        console.error(`❌ Error auto-creating paid-to-office submission for order #${order.id}:`, autoSubmissionError);
+        // Payment confirmation should remain successful even if auto submission fails.
+      }
+    }
+
     await order.reload({
       include: [
         {
@@ -1607,7 +1686,9 @@ router.post('/:orderId/confirm-cash-payment', async (req, res) => {
         transactionStatus: 'completed',
         paymentConfirmedAt: now.toISOString(),
         order: order.toJSON ? order.toJSON() : order,
-        message: `Payment confirmed manually for Order #${order.id}`
+        message: method === 'paid_to_office'
+          ? `Paid to Office confirmed for Order #${order.id}`
+          : `Payment confirmed manually for Order #${order.id}`
       };
 
       io.to(`order-${order.id}`).emit('payment-confirmed', payload);

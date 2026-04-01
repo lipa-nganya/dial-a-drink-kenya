@@ -216,6 +216,8 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
+          <Route path="/:categorySlug" element={<Menu />} />
+          <Route path="/menu/category/:categorySlug" element={<Menu />} />
           {/* Old product route - kept for backward compatibility and redirects */}
           <Route path="/product/:id" element={<ProductPage />} />
           <Route path="/brands" element={<Brands />} />

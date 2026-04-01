@@ -8,6 +8,7 @@ const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
 const pushNotifications = require('../services/pushNotifications');
 const whatsappService = require('../services/whatsapp');
+const smsService = require('../services/sms');
 const { getOrCreateHoldDriver } = require('../utils/holdDriver');
 
 const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber, req, context = 'Payment confirmation' }) => {
@@ -327,6 +328,53 @@ const finalizeOrderPayment = async ({ orderId, paymentTransaction, receiptNumber
         receiptNumber: normalizedReceipt
       });
       console.log(`📢 Sent 'new-order' socket notification for POS Order #${orderInstance.id} (M-Pesa)`);
+    }
+  }
+
+  // Send admin SMS notification for customer-site paid orders with explicit paid method.
+  // finalizeOrderPayment is shared by M-Pesa and PesaPal flows.
+  if (!orderWasPreviouslyPaid && !orderInstance.adminOrder && orderInstance.paymentStatus === 'paid') {
+    try {
+      const smsEnabledSetting = await db.Settings.findOne({
+        where: { key: 'smsEnabled' }
+      }).catch(() => null);
+      const isSmsEnabledNotifications = smsEnabledSetting?.value !== 'false';
+      if (!isSmsEnabledNotifications) {
+        console.log(`📱 SMS notifications disabled - skipping paid-order staff SMS for order #${orderInstance.id}`);
+      } else {
+        const activeNotifications = await db.OrderNotification.findAll({
+          where: { isActive: true }
+        });
+        if (activeNotifications.length > 0) {
+          const paidMethodLabel = (String(paymentProvider || '').toLowerCase() === 'pesapal') ? 'PESAPAL' : 'MPESA';
+          const smsMessage =
+            `Order ID: ${orderInstance.id}\n` +
+            `Customer: ${orderInstance.customerName}\n` +
+            `Phone: ${orderInstance.customerPhone}\n` +
+            `Total: KES ${parseFloat(orderInstance.totalAmount).toFixed(2)}\n` +
+            `Payment: PAID - ${paidMethodLabel}`;
+
+          const smsPromises = activeNotifications.map((notification) =>
+            smsService.sendSMS(notification.phoneNumber, smsMessage).catch((error) => {
+              console.error(`Failed to send paid-order SMS to ${notification.name} (${notification.phoneNumber}):`, error);
+              return { success: false, phone: notification.phoneNumber, error: error.message };
+            })
+          );
+
+          Promise.all(smsPromises).then((results) => {
+            const successful = results.filter((r) => r.success).length;
+            const failed = results.filter((r) => !r.success).length;
+            console.log(`📱 Paid-order SMS notifications sent: ${successful} successful, ${failed} failed`);
+          }).catch((error) => {
+            console.error('Error processing paid-order SMS notifications:', error);
+          });
+        } else {
+          console.log('📱 No active SMS notification recipients found for paid-order alert');
+        }
+      }
+    } catch (smsError) {
+      console.error(`❌ Error sending paid-order staff SMS for order #${orderInstance.id}:`, smsError);
+      // Never fail payment finalization due to SMS issues.
     }
   }
 

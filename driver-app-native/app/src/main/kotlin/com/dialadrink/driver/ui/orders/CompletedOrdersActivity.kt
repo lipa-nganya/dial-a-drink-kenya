@@ -234,7 +234,7 @@ class CompletedOrdersActivity : AppCompatActivity() {
     private fun showEmptyState(message: String) {
         binding.loadingProgress.visibility = View.GONE
         binding.swipeRefresh.isRefreshing = false
-        binding.tableHeader.visibility = View.GONE
+        binding.tableHeader.visibility = View.VISIBLE
         removeOrderCards()
         binding.emptyStateText.text = message
         binding.emptyStateText.visibility = View.VISIBLE
@@ -484,6 +484,7 @@ class CompletedOrdersActivity : AppCompatActivity() {
     private fun openOrderDetails(orderId: Int) {
         val intent = Intent(this, OrderDetailActivity::class.java)
         intent.putExtra("orderId", orderId)
+        intent.putExtra("fromCompletedOrders", true)
         startActivity(intent)
     }
 }

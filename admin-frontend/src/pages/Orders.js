@@ -47,7 +47,8 @@ import {
   Phone,
   Payment,
   CheckCircle,
-  AttachMoney
+  AttachMoney,
+  Close
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -1717,6 +1718,14 @@ const Orders = () => {
       progress
     });
   };
+
+  useEffect(() => {
+    if (!optimizationProgress.open) return undefined;
+    const timeoutId = setTimeout(() => {
+      setOptimizationProgress((prev) => ({ ...prev, open: false }));
+    }, 30000);
+    return () => clearTimeout(timeoutId);
+  }, [optimizationProgress.open]);
   
   const getNextStatusOptions = (currentStatus, paymentType, paymentStatus) => {
     const options = [];
@@ -4175,7 +4184,8 @@ const Orders = () => {
       `}</style>
       {/* Optimization Progress Dialog */}
       <Dialog 
-        open={optimizationProgress.open} 
+        open={optimizationProgress.open}
+        onClose={() => setOptimizationProgress((prev) => ({ ...prev, open: false }))}
         maxWidth="sm" 
         fullWidth
         PaperProps={{
@@ -4193,15 +4203,23 @@ const Orders = () => {
           color: colors.accentText, 
           fontWeight: 700,
           fontSize: '1.5rem',
-          textAlign: 'center',
           pb: 2,
           borderBottom: `1px solid ${colors.border}`
         }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-            <AutoAwesome sx={{ fontSize: '2rem' }} />
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Optimizing Routes
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <AutoAwesome sx={{ fontSize: '2rem' }} />
+              <Typography variant="h5" sx={{ fontWeight: 700 }}>
+                Optimizing Routes
+              </Typography>
+            </Box>
+            <IconButton
+              size="small"
+              onClick={() => setOptimizationProgress((prev) => ({ ...prev, open: false }))}
+              sx={{ color: colors.accentText }}
+            >
+              <Close />
+            </IconButton>
           </Box>
         </DialogTitle>
         <DialogContent sx={{ pt: 4, pb: 4 }}>

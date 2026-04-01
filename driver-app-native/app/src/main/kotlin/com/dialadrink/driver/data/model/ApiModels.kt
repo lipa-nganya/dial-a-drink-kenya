@@ -325,8 +325,10 @@ data class Order(
     val updatedAt: String? = null, // Order update timestamp
     val paymentType: String? = null, // "pay_now" or "pay_on_delivery"
     val paymentMethod: String? = null, // "card", "mobile_money", "cash"
+    val notes: String? = null,
     val branch: Branch? = null,
     val territory: Territory? = null,
+    val territoryName: String? = null,
     val transactionCode: String? = null, // M-Pesa transaction code (receiptNumber)
     val transactionDate: String? = null, // Transaction date/time
     @SerializedName("cancellationRequested") val cancellationRequested: Boolean? = null,

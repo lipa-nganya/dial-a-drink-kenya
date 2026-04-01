@@ -72,8 +72,15 @@ const getSubmissionTypeLabel = (type) => {
 /** One-line summary for table column search (no JSX). */
 const getDetailsPlainSummary = (s) => {
   const orders = s.orders || [];
+  const paymentMethod = String(s?.details?.paymentMethod || '').toLowerCase();
+  const paidToOfficeSuffix =
+    paymentMethod === 'paid_to_office' || paymentMethod === 'customer_paid_to_office'
+      ? ' (Paid to Office)'
+      : '';
   if (orders.length > 0) {
-    const nums = orders.map((o) => `#${o.orderNumber ?? o.id}`).join(', ');
+    const nums = orders
+      .map((o) => `#${o.orderNumber ?? o.id}${paidToOfficeSuffix}`)
+      .join(', ');
     return `${orders.length} order(s): ${nums}`;
   }
   const d = s.details;
@@ -138,9 +145,19 @@ const getDetailsPlainSummary = (s) => {
     }
     case 'order_payment': {
       const parts = [];
-      if (d.paymentMethod) parts.push(`Method: ${d.paymentMethod}`);
-      if (Array.isArray(d.orderIds) && d.orderIds.length) parts.push(`Order IDs: ${d.orderIds.join(', ')}`);
-      if (d.orderId) parts.push(`Order #${d.orderId}`);
+      if (d.paymentMethod) {
+        const pm = String(d.paymentMethod).toLowerCase();
+        if (pm === 'paid_to_office' || pm === 'customer_paid_to_office') {
+          parts.push('Method: Paid to Office');
+        } else {
+          parts.push(`Method: ${d.paymentMethod}`);
+        }
+      }
+      if (Array.isArray(d.orderIds) && d.orderIds.length) {
+        const labels = d.orderIds.map((id) => `#${id}${paidToOfficeSuffix}`).join(', ');
+        parts.push(`Order IDs: ${labels}`);
+      }
+      if (d.orderId) parts.push(`Order #${d.orderId}${paidToOfficeSuffix}`);
       return parts.join(' · ');
     }
     case 'walk_in_sale':
@@ -157,6 +174,22 @@ const getStatusColor = (status) => {
     case 'rejected': return 'error';
     default: return 'default';
   }
+};
+
+const getSubmissionReference = (submission) => {
+  const d = submission?.details;
+  if (!d || typeof d !== 'object') return '—';
+  const fromAccount = d.accountReference || d.reference;
+  const fromSupplier = d.supplierPayment?.reference;
+  const ref = fromAccount || fromSupplier || null;
+  return ref && String(ref).trim() ? String(ref).trim() : '—';
+};
+
+const getSubmissionTransactionCode = (submission) => {
+  const d = submission?.details;
+  if (!d || typeof d !== 'object') return '—';
+  const code = d.transactionCode || d.txCode || d.receiptNumber || null;
+  return code && String(code).trim() ? String(code).trim() : '—';
 };
 
 const RiderCashAtHandDetail = () => {
@@ -366,7 +399,7 @@ const RiderCashAtHandDetail = () => {
 
     const getLogTypeLabel = (entry, isCredit) => {
       const type = entryType(entry);
-      if (isCredit || type === 'cash_received') return 'Payment Received';
+      if (isCredit || type === 'cash_received') return 'Order';
       return 'Submission';
     };
 
@@ -417,7 +450,7 @@ const RiderCashAtHandDetail = () => {
     };
     const getLogTypeLabel = (entry, isCredit) => {
       const type = entryType(entry);
-      if (isCredit || type === 'cash_received') return 'Payment Received';
+      if (isCredit || type === 'cash_received') return 'Order';
       return 'Submission';
     };
     const getDescriptionPlain = (entry) => {
@@ -943,9 +976,17 @@ const RiderCashAtHandDetail = () => {
 
         {s.submissionType === 'order_payment' && (
           <Box>
-            {metaLine('Payment method', d.paymentMethod)}
-            {Array.isArray(d.orderIds) && d.orderIds.length > 0 && metaLine('Order IDs', d.orderIds.join(', '))}
-            {d.orderId != null && metaLine('Order ID', String(d.orderId))}
+            {metaLine(
+              'Payment method',
+              (() => {
+                const pm = String(d.paymentMethod || '').toLowerCase();
+                if (pm === 'paid_to_office' || pm === 'customer_paid_to_office') return 'Paid to Office';
+                return d.paymentMethod;
+              })()
+            )}
+            {/* Avoid duplicate Order ID fields when linked orders are already rendered above */}
+            {orders.length === 0 && Array.isArray(d.orderIds) && d.orderIds.length > 0 && metaLine('Order IDs', d.orderIds.join(', '))}
+            {orders.length === 0 && d.orderId != null && metaLine('Order ID', String(d.orderId))}
           </Box>
         )}
 
@@ -1087,6 +1128,8 @@ const RiderCashAtHandDetail = () => {
                     <TableCell>Date approved</TableCell>
                     <TableCell>Type</TableCell>
                     <TableCell sx={{ minWidth: 200 }}>Details</TableCell>
+                    {submissionsSubTab !== 0 && <TableCell>Reference</TableCell>}
+                    {submissionsSubTab !== 0 && <TableCell>Transaction Code</TableCell>}
                     <TableCell align="right">Amount</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell align="right">Actions</TableCell>
@@ -1095,7 +1138,7 @@ const RiderCashAtHandDetail = () => {
                 <TableBody>
                   {submissionsForTable.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} align="center" sx={{ color: colors.textSecondary, py: 3 }}>
+                      <TableCell colSpan={submissionsSubTab !== 0 ? 9 : 7} align="center" sx={{ color: colors.textSecondary, py: 3 }}>
                         No submissions in this category.
                       </TableCell>
                     </TableRow>
@@ -1137,6 +1180,20 @@ const RiderCashAtHandDetail = () => {
                             {getDetailsPlainSummary(s) || '—'}
                           </Typography>
                         </TableCell>
+                        {submissionsSubTab !== 0 && (
+                          <TableCell sx={{ color: colors.textSecondary, maxWidth: 180 }}>
+                            <Typography variant="body2" noWrap title={getSubmissionReference(s)}>
+                              {getSubmissionReference(s)}
+                            </Typography>
+                          </TableCell>
+                        )}
+                        {submissionsSubTab !== 0 && (
+                          <TableCell sx={{ color: colors.textSecondary, maxWidth: 180 }}>
+                            <Typography variant="body2" noWrap title={getSubmissionTransactionCode(s)}>
+                              {getSubmissionTransactionCode(s)}
+                            </Typography>
+                          </TableCell>
+                        )}
                         <TableCell align="right" sx={{ color: colors.textPrimary, whiteSpace: 'nowrap' }}>
                           {formatCurrency(s.amount)}
                         </TableCell>

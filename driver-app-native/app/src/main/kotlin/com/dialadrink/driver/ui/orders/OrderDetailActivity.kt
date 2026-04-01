@@ -50,6 +50,8 @@ class OrderDetailActivity : AppCompatActivity() {
     private var orderPaymentAlreadySubmitted: Boolean = false
     /** Prevent double-navigation when status updates arrive via socket + poll + UI. */
     private var hasRedirectedAfterCompletion: Boolean = false
+    /** When opened from Completed Orders list, stay on details page. */
+    private var openedFromCompletedOrders: Boolean = false
     
     private val currencyFormat = NumberFormat.getCurrencyInstance(Locale("en", "KE")).apply {
         maximumFractionDigits = 0
@@ -60,6 +62,7 @@ class OrderDetailActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityOrderDetailBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        openedFromCompletedOrders = intent.getBooleanExtra("fromCompletedOrders", false)
         
         orderId = intent.getIntExtra("orderId", -1)
         if (orderId == -1) {
@@ -266,7 +269,7 @@ class OrderDetailActivity : AppCompatActivity() {
 
         // If the driver just finished this order, return them to ongoing orders list.
         // This is triggered whether completion happens via button, poll, or socket.
-        if (!hasRedirectedAfterCompletion && (status == "completed" || status == "delivered")) {
+        if (!openedFromCompletedOrders && !hasRedirectedAfterCompletion && (status == "completed" || status == "delivered")) {
             hasRedirectedAfterCompletion = true
             navigateBackToOngoingOrders()
             return
@@ -521,9 +524,11 @@ class OrderDetailActivity : AppCompatActivity() {
     
     private fun buildPaymentInfo(order: Order): String {
         val paymentMethod = order.paymentMethod?.lowercase() ?: return ""
+        val notesLower = order.notes?.lowercase() ?: ""
+        val isPaidToOffice = notesLower.contains("paid to office")
         
         return when (paymentMethod) {
-            "cash" -> "Payment: Cash"
+            "cash" -> if (isPaidToOffice) "Payment: Paid to Office" else "Payment: Cash"
             "mobile_money" -> {
                 val transactionCode = order.transactionCode
                 val transactionDate = order.transactionDate
@@ -971,14 +976,16 @@ class OrderDetailActivity : AppCompatActivity() {
             
             AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog)
                 .setTitle("Payment Options")
-                .setMessage("How would you like to process payment?")
-                .setPositiveButton("M-Pesa Payment") { _, _ ->
+                .setMessage("Choose payment flow")
+                .setPositiveButton("Mpesa Prompt") { _, _ ->
                     initiateMpesaPayment(order)
                 }
-                .setNegativeButton("Received Cash") { _, _ ->
-                    confirmCashPayment()
+                .setNeutralButton("Paid to Office") { _, _ ->
+                    confirmCashPayment(method = "paid_to_office")
                 }
-                .setNeutralButton("Cancel", null)
+                .setNegativeButton("Received Cash") { _, _ ->
+                    confirmCashPayment(method = "cash")
+                }
                 .show()
         }
     }
@@ -1024,7 +1031,7 @@ class OrderDetailActivity : AppCompatActivity() {
         phoneLayout.hint = "Customer Phone Number"
         
         val dialog = AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog)
-            .setTitle("M-Pesa Payment - Order #$orderNumber")
+            .setTitle("Mpesa Prompt - Order #$orderNumber")
             .setView(dialogView)
             .setNegativeButton("Cancel", null)
             .create()
@@ -1078,7 +1085,7 @@ class OrderDetailActivity : AppCompatActivity() {
         }
     }
     
-    private fun confirmCashPayment() {
+    private fun confirmCashPayment(method: String = "cash") {
         // Validate this is a pay_on_delivery order
         currentOrder?.let { order ->
             val isPayOnDelivery = order.paymentType == null || order.paymentType.lowercase() != "pay_now"
@@ -1099,11 +1106,16 @@ class OrderDetailActivity : AppCompatActivity() {
             try {
                 val response = ApiClient.getApiService().confirmCashPayment(
                     orderId,
-                    ConfirmCashPaymentRequest(driverId, method = "cash")
+                    ConfirmCashPaymentRequest(driverId, method = method)
                 )
                 
                 if (response.isSuccessful && response.body()?.success == true) {
-                    Toast.makeText(this@OrderDetailActivity, "Cash payment confirmed", Toast.LENGTH_SHORT).show()
+                    val message = if (method == "paid_to_office") {
+                        "Paid to Office confirmed. Submission created (pending approval)."
+                    } else {
+                        "Cash payment confirmed"
+                    }
+                    Toast.makeText(this@OrderDetailActivity, message, Toast.LENGTH_SHORT).show()
                     loadOrderDetails() // Reload to show updated payment status
                 } else {
                     val errorMessage = response.body()?.error ?: "Failed to confirm cash payment"

@@ -79,6 +79,26 @@ const Cart = () => {
     return digits;
   };
 
+  const normalizeCapacity = (value) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '');
+
+  const isCanCapacityItem = (item) => {
+    const selectedCapacity = normalizeCapacity(item?.selectedCapacity);
+    return selectedCapacity.includes('can') || selectedCapacity === 'single';
+  };
+
+  const getCanEquivalentQty = (item) => {
+    const qty = Number(item?.quantity || 0);
+    const selectedCapacity = normalizeCapacity(item?.selectedCapacity);
+    const packMatch = selectedCapacity.match(/^(\d+)(pack|pk).*/);
+    const packSize = packMatch ? parseInt(packMatch[1], 10) : NaN;
+    const multiplier = Number.isFinite(packSize) && packSize > 0 ? packSize : 1;
+    return qty * multiplier;
+  };
+
   // Fetch delivery settings - always fetch fresh from admin settings API
   // This ensures we use current admin settings even when reordering
   useEffect(() => {
@@ -920,7 +940,9 @@ const Cart = () => {
               Cart Items ({items.length})
             </Typography>
             
-            {items.map((item) => (
+            {items.map((item) => {
+              const belowCanMinimum = isCanCapacityItem(item) && getCanEquivalentQty(item) < 6;
+              return (
               <Box key={item.drinkId}>
                 <Box sx={{ display: 'flex', alignItems: 'center', py: 2 }}>
                   <Box sx={{ flexGrow: 1 }}>
@@ -935,6 +957,11 @@ const Cart = () => {
                     <Typography variant="body2" color="text.secondary">
                       KES {Math.round(Number(item.price))} each
                     </Typography>
+                    {belowCanMinimum && (
+                      <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
+                        Minimum order is 6 cans (or equivalent pack quantity).
+                      </Alert>
+                    )}
                   </Box>
 
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -971,7 +998,8 @@ const Cart = () => {
                 </Box>
                 <Divider />
               </Box>
-            ))}
+              );
+            })}
             
             {/* ADD ITEMS Button */}
             <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
