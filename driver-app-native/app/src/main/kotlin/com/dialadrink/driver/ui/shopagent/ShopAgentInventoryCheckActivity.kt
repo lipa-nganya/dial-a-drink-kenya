@@ -141,9 +141,18 @@ class ShopAgentInventoryCheckActivity : AppCompatActivity() {
     }
     
     private fun addToCheckedItems(item: ShopAgentInventoryItem) {
-        val capacities = item.capacity?.filter { it.isNotBlank() }
-            ?: item.capacityPricing?.mapNotNull { it.effectiveCapacity }?.distinct()
-            ?: emptyList()
+        val capacitiesFromCapacity = item.capacity
+            ?.filter { it.isNotBlank() }
+            ?.takeIf { it.isNotEmpty() }
+
+        val capacitiesFromPricing = item.capacityPricing
+            ?.mapNotNull { it.effectiveCapacity }
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?.distinct()
+            ?.takeIf { it.isNotEmpty() }
+
+        val capacities = capacitiesFromCapacity ?: capacitiesFromPricing ?: emptyList()
 
         if (capacities.isNotEmpty()) {
             val options = capacities.toTypedArray()
@@ -283,10 +292,36 @@ class ShopAgentInventoryCheckActivity : AppCompatActivity() {
             fun bind(item: ShopAgentInventoryItem) {
                 binding.itemNameText.text = item.name
                 binding.itemCategoryText.text = item.category?.name ?: "No category"
-                val caps = item.capacity
+
+                val capacitiesFromCapacity = item.capacity
+                    ?.filter { it.isNotBlank() }
+                    ?.takeIf { it.isNotEmpty() }
+
+                val capacitiesFromPricing = item.capacityPricing
+                    ?.mapNotNull { it.effectiveCapacity }
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotBlank() }
+                    ?.distinct()
+                    ?.takeIf { it.isNotEmpty() }
+
+                val capacities = capacitiesFromCapacity ?: capacitiesFromPricing ?: emptyList()
+
                 val stockByCap = item.stockByCapacity
-                val stockText = if (!caps.isNullOrEmpty() && stockByCap != null) {
-                    caps.joinToString(", ") { cap -> "$cap: ${stockByCap[cap] ?: 0}" }
+                val stockText = if (capacities.isNotEmpty() && stockByCap != null) {
+                    val baseKey = findBaseUnitCapacityKey(stockByCap)
+                    val baseCans = (baseKey?.let { stockByCap[it] } ?: item.currentStock).coerceAtLeast(0)
+
+                    capacities.joinToString(", ") { cap ->
+                        val multiplier = capacityUnitMultiplier(cap)
+                        val normalized = normalizeCapacity(cap)
+
+                        val displayValue = when {
+                            multiplier > 1 -> baseCans / multiplier
+                            isCanCapacityLabel(normalized) -> baseCans
+                            else -> stockByCap[cap] ?: 0
+                        }
+                        "$cap: $displayValue"
+                    }
                 } else {
                     "Stock: ${item.currentStock}"
                 }
@@ -311,4 +346,48 @@ class ShopAgentInventoryCheckActivity : AppCompatActivity() {
         
         override fun getItemCount() = items.size
     }
+
+    private fun normalizeCapacity(value: String?): String {
+        return (value ?: "")
+            .toString()
+            .trim()
+            .lowercase()
+            .replace("\\s+".toRegex(), "")
+    }
+
+    private fun capacityUnitMultiplier(capacityLabel: String?): Int {
+        val raw = (capacityLabel ?: "").trim().lowercase()
+        if (raw.isBlank()) return 1
+
+        val compact = raw.replace("\\s+".toRegex(), "")
+
+        // e.g. "6 pack", "12 pk", ...
+        val packMatch = compact.matchRegex(Regex("^(\\d+)(pack|pk)$"))
+            ?: compact.matchRegex(Regex("^(\\d+)(pack|pk).*$"))
+
+        if (packMatch != null) {
+            val n = packMatch.groupValues.getOrNull(1)?.toIntOrNull()
+            return if (n != null && n > 0) n else 1
+        }
+
+        // e.g. "can", "1 can", "single" -> 1 base unit
+        if (compact.contains("can") || compact == "single" || compact == "1can" || compact == "1") return 1
+
+        return 1
+    }
+
+    private fun isCanCapacityLabel(normalizedCapacity: String?): Boolean {
+        val n = normalizedCapacity ?: ""
+        return n.contains("can") || n == "single" || n == "1can" || n == "1"
+    }
+
+    private fun findBaseUnitCapacityKey(stockByCapacity: Map<String, Int>?): String? {
+        val keys = stockByCapacity?.keys?.orEmpty() ?: emptySet()
+        return keys.firstOrNull { key ->
+            val n = normalizeCapacity(key)
+            n == "can" || n == "1can" || n == "single" || n == "1"
+        }
+    }
 }
+
+private fun String.matchRegex(regex: Regex): MatchResult? = regex.find(this)
