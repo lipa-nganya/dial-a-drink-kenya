@@ -55,6 +55,34 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/customerNameLabel" />
 
+        <!-- Territory Label -->
+        <TextView
+            android:id="@+id/territoryLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Territory:"
+            android:textColor="@color/text_secondary_dark"
+            android:textSize="12sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/customerNameText" />
+
+        <!-- Territory Name -->
+        <TextView
+            android:id="@+id/territoryText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="—"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/territoryLabel" />
+
         <!-- Location Label -->
         <TextView
             android:id="@+id/locationLabel"
@@ -65,7 +93,7 @@
             android:textColor="@color/text_secondary_dark"
             android:textSize="12sp"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/customerNameText" />
+            app:layout_constraintTop_toBottomOf="@id/territoryText" />
 
         <!-- Location (Delivery Address) -->
         <TextView
@@ -82,6 +110,58 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/locationLabel" />
 
+        <!-- Total Order Value Label -->
+        <TextView
+            android:id="@+id/totalOrderValueLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Total Order Value:"
+            android:textColor="@color/text_secondary_dark"
+            android:textSize="12sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/locationText" />
+
+        <!-- Total Order Value -->
+        <TextView
+            android:id="@+id/totalOrderValueText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="KES 0"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/totalOrderValueLabel" />
+
+        <!-- Territory Delivery Fee Label -->
+        <TextView
+            android:id="@+id/territoryFeeLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Territory Delivery Fee:"
+            android:textColor="@color/text_secondary_dark"
+            android:textSize="12sp"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/totalOrderValueText" />
+
+        <!-- Territory Delivery Fee -->
+        <TextView
+            android:id="@+id/territoryFeeText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="KES 0"
+            android:textColor="@color/text_primary_dark"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/territoryFeeLabel" />
+
         <!-- Driver Label -->
         <TextView
             android:id="@+id/driverLabel"
@@ -93,7 +173,7 @@
             android:textSize="12sp"
             android:visibility="gone"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/locationText" />
+            app:layout_constraintTop_toBottomOf="@id/territoryFeeText" />
 
         <!-- Driver Status -->
         <TextView

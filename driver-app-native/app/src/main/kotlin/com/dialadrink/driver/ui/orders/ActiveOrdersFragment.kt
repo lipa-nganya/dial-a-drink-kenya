@@ -96,13 +96,8 @@ class ActiveOrdersFragment : Fragment() {
                 createdAt = orderData.optString("createdAt", null)
             )
             
-            // Navigate to order acceptance screen
-            val intent = Intent(requireContext(), OrderAcceptanceActivity::class.java)
-            intent.putExtra("orderId", order.id)
-            intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            startActivity(intent)
-            
-            // Refresh orders list
+            // Do not auto-open overlay/activity on assignment; keep push-only alert behavior.
+            // Refresh orders list so pending/active data remains up to date.
             loadOrders()
         } catch (e: Exception) {
             Log.e(TAG, "❌ Error handling order-assigned event", e)

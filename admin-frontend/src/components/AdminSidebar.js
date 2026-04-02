@@ -223,7 +223,8 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
         open={mobileOpen}
         onClose={onMobileClose}
         ModalProps={{
-          keepMounted: true // Better open performance on mobile
+          keepMounted: true, // Better open performance on mobile
+          hideBackdrop: true // Prevent stuck backdrop from blocking the whole app
         }}
         sx={{
           display: { xs: 'block', sm: 'none' },

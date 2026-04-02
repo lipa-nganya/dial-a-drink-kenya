@@ -7258,6 +7258,45 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
     const { updateStock, notes } = req.body;
     const adminId = req.admin.id;
 
+    // Inventory helpers (can/pack is tracked in base "cans"):
+    // - Example: stock=10 means 10 cans; 1x "6 pack" consumes 6 cans.
+    const toInt = (value, fallback = 0) => {
+      const n = parseInt(value, 10);
+      return Number.isNaN(n) ? fallback : n;
+    };
+
+    const normalizeCapacity = (value) =>
+      (value || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '');
+
+    const capacityUnitMultiplier = (capacityLabel) => {
+      const raw = (capacityLabel || '').toString().trim().toLowerCase();
+      if (!raw) return 1;
+
+      const compact = raw.replace(/\s+/g, '');
+
+      const packMatch = compact.match(/^(\d+)(pack|pk)$/) || compact.match(/^(\d+)(pack|pk).*/);
+      if (packMatch) {
+        const n = parseInt(packMatch[1], 10);
+        return Number.isFinite(n) && n > 0 ? n : 1;
+      }
+
+      if (compact.includes('can') || compact === 'single' || compact === '1can' || compact === '1') return 1;
+      return 1;
+    };
+
+    const findBaseUnitCapacityKey = (stockByCapacity) => {
+      const keys = Object.keys(stockByCapacity || {});
+      const candidates = keys.filter((k) => {
+        const n = normalizeCapacity(k);
+        return n === 'can' || n === '1can' || n === 'single' || n === '1';
+      });
+      return candidates[0] || null;
+    };
+
     const inventoryCheck = await db.InventoryCheck.findByPk(checkId, {
       include: [
         {
@@ -7298,9 +7337,51 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
         const byCap = inventoryCheck.drink.stockByCapacity && typeof inventoryCheck.drink.stockByCapacity === 'object'
           ? { ...inventoryCheck.drink.stockByCapacity }
           : {};
-        byCap[capacity] = inventoryCheck.agentCount;
+
+        const multiplier = capacityUnitMultiplier(capacity);
+        const agentCount = toInt(inventoryCheck.agentCount, 0);
+
+        if (multiplier > 1) {
+          // Shop agents count pack-units; convert to base cans for storage.
+          const baseKey = findBaseUnitCapacityKey(byCap);
+          const baseCansForHeuristic = baseKey ? toInt(byCap[baseKey], 0) : toInt(inventoryCheck.drink.stock, 0);
+          const derivedPackCount = Math.floor(baseCansForHeuristic / multiplier);
+
+          // Backwards compatible heuristic:
+          // - If the agentCount looks like pack-units (around/under derivedPackCount), convert to cans.
+          // - Otherwise assume it's already in base-can units.
+          const cansToSet = agentCount <= derivedPackCount + 1 ? agentCount * multiplier : agentCount;
+
+          if (baseKey) {
+            byCap[baseKey] = cansToSet;
+
+            // When base unit exists, don't let pack keys pollute aggregate totals.
+            for (const key of Object.keys(byCap)) {
+              if (capacityUnitMultiplier(key) > 1) delete byCap[key];
+            }
+          } else {
+            // No base bucket exists; store cans directly on the selected capacity key.
+            byCap[capacity] = cansToSet;
+          }
+        } else {
+          // Can/single capacities are base can counts.
+          const normalizedCap = normalizeCapacity(capacity);
+          const matchingKey =
+            Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizedCap) ||
+            findBaseUnitCapacityKey(byCap) ||
+            capacity;
+
+          byCap[matchingKey] = agentCount;
+        }
+
         // Keep overall stock in sync so existing inventory views that rely on drink.stock still show correct totals
-        const totalStock = Object.values(byCap).reduce((sum, value) => {
+        const baseKeys = Object.keys(byCap).filter((k) => {
+          const n = normalizeCapacity(k);
+          return n === 'can' || n === '1can' || n === 'single' || n === '1';
+        });
+
+        const totalStock = (baseKeys.length > 0 ? baseKeys : Object.keys(byCap)).reduce((sum, key) => {
+          const value = byCap[key];
           const n = typeof value === 'number' ? value : parseInt(value, 10);
           return sum + (Number.isNaN(n) ? 0 : n);
         }, 0);

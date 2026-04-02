@@ -24,7 +24,6 @@ import {
 import {
   AddShoppingCart,
   Star,
-  Cancel,
   LocalOffer,
   LocalBar,
   Share,
@@ -293,19 +292,6 @@ const DrinkCard = ({ drink }) => {
       }}>
         {/* Status Label Above Name */}
         <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
-          {!drink.isAvailable && (
-            <Chip
-              icon={<Cancel />}
-              label="Out of Stock"
-              size="small"
-              sx={{ 
-                fontSize: '0.65rem', 
-                height: '20px',
-                backgroundColor: '#666',
-                color: '#F5F5F5'
-              }}
-            />
-          )}
           {drink.isAvailable && drink.isPopular && (
             <Chip
               icon={<Star />}
@@ -548,7 +534,6 @@ const DrinkCard = ({ drink }) => {
           size="small"
           startIcon={<AddShoppingCart />}
           onClick={handleAddToCart}
-          disabled={!drink.isAvailable}
           sx={{
             backgroundColor: '#FF6B6B',
             fontSize: '0.75rem',

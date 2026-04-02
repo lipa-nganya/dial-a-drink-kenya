@@ -679,7 +679,7 @@ const ProductPage = () => {
   const resolvedPrice = selectedCapacity
     ? getPriceForCapacity(selectedCapacity)
     : parseFloat(product.price) || 0;
-  const inStock = Boolean(product.isAvailable) && (parseInt(product.stock, 10) || 0) > 0;
+  const inStock = Boolean(product.isAvailable);
   const brandName = typeof product.brand === 'object' && product.brand !== null
     ? product.brand.name
     : product.brand;
@@ -748,7 +748,7 @@ const ProductPage = () => {
         {product.category && (
           <Link
             component={RouterLink}
-            to={`/menu?category=${product.categoryId}`}
+            to={`/${product.category?.slug || String(product.categoryId)}`}
             underline="hover"
             color="inherit"
           >
@@ -989,7 +989,6 @@ const ProductPage = () => {
               size="medium"
               startIcon={<AddShoppingCart />}
               onClick={handleAddToCart}
-              disabled={!product.isAvailable}
               sx={{
                 backgroundColor: '#FF6B6B',
                 py: 1,
@@ -1015,9 +1014,6 @@ const ProductPage = () => {
         <Grid item xs={12} md={7} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: 0 }}>
           {/* Status Chips */}
           <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', width: '100%' }}>
-            {!product.isAvailable && (
-              <Chip label="Out of Stock" color="error" size="small" />
-            )}
             {product.isAvailable && product.isPopular && (
               <Chip icon={<Star />} label="Popular" color="secondary" size="small" />
             )}
@@ -1322,7 +1318,6 @@ const ProductPage = () => {
                 size="medium"
                 startIcon={<AddShoppingCart />}
                 onClick={handleAddToCart}
-                disabled={!product.isAvailable}
                 sx={{
                   backgroundColor: '#FF6B6B',
                   py: 1,

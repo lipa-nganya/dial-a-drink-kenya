@@ -2339,6 +2339,58 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                       
                       // Deduplicate by capacity, keeping the first occurrence, and filter by valid price
                       const seen = new Set();
+                      const normalizeCapacity = (value) =>
+                        (value || '')
+                          .toString()
+                          .trim()
+                          .toLowerCase()
+                          .replace(/\s+/g, '');
+                      const toStockNumber = (value) => {
+                        const parsed = parseInt(value, 10);
+                        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+                      };
+                      const capacityUnitMultiplier = (capacityLabel) => {
+                        const raw = String(capacityLabel || '').trim().toLowerCase();
+                        if (!raw) return 1;
+                        const compact = raw.replace(/\s+/g, '');
+                        const match = compact.match(/^(\d+)(pack|pk).*/);
+                        const n = match ? parseInt(match[1], 10) : NaN;
+                        return Number.isFinite(n) && n > 0 ? n : 1;
+                      };
+                      const isCanPackSharedStockProduct = () => {
+                        const values = Array.isArray(currentProduct?.capacityPricing)
+                          ? currentProduct.capacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
+                          : [];
+                        const normalized = values.map((v) => normalizeCapacity(v));
+                        const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
+                        const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+                        return hasPack && hasCan;
+                      };
+                      const getCapacityStock = (capacity) => {
+                        const stockByCapacity =
+                          currentProduct?.stockByCapacity && typeof currentProduct.stockByCapacity === 'object'
+                            ? currentProduct.stockByCapacity
+                            : null;
+                        let availableStock = toStockNumber(currentProduct?.stock);
+                        if (stockByCapacity && Object.keys(stockByCapacity).length > 0) {
+                          const target = normalizeCapacity(capacity);
+                          const entry = Object.entries(stockByCapacity).find(
+                            ([cap]) => normalizeCapacity(cap) === target
+                          );
+                          if (entry) {
+                            availableStock = toStockNumber(entry[1]);
+                          } else if (isCanPackSharedStockProduct()) {
+                            availableStock = toStockNumber(currentProduct?.stock);
+                          } else {
+                            availableStock = 0;
+                          }
+                        }
+                        const multiplier = capacityUnitMultiplier(capacity);
+                        if (multiplier > 1) {
+                          availableStock = Math.floor(availableStock / multiplier);
+                        }
+                        return availableStock;
+                      };
                       const uniquePricing = currentProduct.capacityPricing
                         .filter((pricing, idx) => {
                           console.log(`[NewOrderDialog] Processing pricing ${idx}:`, JSON.stringify(pricing));
@@ -2392,6 +2444,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                       return uniquePricing.map((pricing, index) => {
                         const capacity = (pricing.capacity || pricing.size || '').trim();
                         const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || 0;
+                        const capacityStock = getCapacityStock(capacity);
+                        const isOutOfStock = capacityStock <= 0;
                         
                         return (
                           <FormControlLabel
@@ -2413,12 +2467,21 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                                 <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold' }}>
                                   KES {Math.round(price)}
                                 </Typography>
+                                {isOutOfStock && (
+                                  <Typography variant="caption" sx={{ color: '#d32f2f', fontWeight: 700 }}>
+                                    Out of stock
+                                  </Typography>
+                                )}
                               </Box>
                             }
                             sx={{
-                              border: `1px solid ${colors.border}`,
+                              border: `1px solid ${isOutOfStock ? '#d32f2f' : colors.border}`,
                               borderRadius: 1,
-                              backgroundColor: selectedCapacity === capacity ? (isDarkMode ? 'rgba(0, 224, 184, 0.2)' : 'rgba(0, 224, 184, 0.1)') : 'transparent',
+                              backgroundColor: selectedCapacity === capacity
+                                ? (isDarkMode ? 'rgba(0, 224, 184, 0.2)' : 'rgba(0, 224, 184, 0.1)')
+                                : (isOutOfStock
+                                  ? (isDarkMode ? 'rgba(211, 47, 47, 0.16)' : 'rgba(211, 47, 47, 0.08)')
+                                  : 'transparent'),
                               px: 2,
                               py: 0.5,
                               m: 0,

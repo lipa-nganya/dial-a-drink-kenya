@@ -250,6 +250,57 @@ const POS = () => {
     }
   };
 
+  const normalizeCapacityKey = (value) =>
+    (value || '')
+      .toString()
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, '');
+
+  const capacityUnitMultiplier = (capacityLabel) => {
+    const raw = String(capacityLabel || '').trim().toLowerCase();
+    if (!raw) return 1;
+    const compact = raw.replace(/\s+/g, '');
+    const match = compact.match(/^(\d+)(pack|pk).*/);
+    const n = match ? parseInt(match[1], 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  };
+
+  const isCanPackSharedStockProduct = (product) => {
+    const values = Array.isArray(product?.capacityPricing)
+      ? product.capacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
+      : [];
+    const normalized = values.map((v) => normalizeCapacityKey(v));
+    const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
+    const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+    return hasPack && hasCan;
+  };
+
+  const getCapacityStock = (product, capacity) => {
+    const stockByCapacity =
+      product?.stockByCapacity && typeof product.stockByCapacity === 'object'
+        ? product.stockByCapacity
+        : null;
+
+    let capStock =
+      stockByCapacity && stockByCapacity[capacity] != null
+        ? stockByCapacity[capacity]
+        : product?.stock ?? 0;
+
+    if (
+      stockByCapacity &&
+      stockByCapacity[capacity] == null &&
+      isCanPackSharedStockProduct(product)
+    ) {
+      const multiplier = capacityUnitMultiplier(capacity);
+      const totalStock = Number(product?.stock ?? 0) || 0;
+      capStock = multiplier > 1 ? Math.floor(totalStock / multiplier) : totalStock;
+    }
+
+    const parsed = Number(capStock);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+
   const handleAddItem = () => {
     if (!selectedProduct) {
       setError('Please select a product');
@@ -747,34 +798,6 @@ const POS = () => {
 
                       // Build capacity-level rows with price and stock (if available)
                       const rows = [];
-                      const stockByCapacity =
-                        option.stockByCapacity && typeof option.stockByCapacity === 'object'
-                          ? option.stockByCapacity
-                          : null;
-                      const normalizeCapacity = (value) =>
-                        (value || '')
-                          .toString()
-                          .trim()
-                          .toLowerCase()
-                          .replace(/\s+/g, '');
-                      const capacityUnitMultiplier = (capacityLabel) => {
-                        const raw = String(capacityLabel || '').trim().toLowerCase();
-                        if (!raw) return 1;
-                        const compact = raw.replace(/\s+/g, '');
-                        const match = compact.match(/^(\d+)(pack|pk).*/);
-                        const n = match ? parseInt(match[1], 10) : NaN;
-                        return Number.isFinite(n) && n > 0 ? n : 1;
-                      };
-                      const isCanPackSharedStockProduct = () => {
-                        const values = Array.isArray(option.capacityPricing)
-                          ? option.capacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
-                          : [];
-                        const normalized = values.map((v) => normalizeCapacity(v));
-                        const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
-                        const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
-                        return hasPack && hasCan;
-                      };
-
                       if (Array.isArray(option.capacityPricing) && option.capacityPricing.length > 0) {
                         option.capacityPricing.forEach((pricing) => {
                           if (!pricing || typeof pricing !== 'object') return;
@@ -800,24 +823,13 @@ const POS = () => {
 
                           if (price <= 0) return;
 
-                          let capStock =
-                            stockByCapacity && stockByCapacity[capacity] != null
-                              ? stockByCapacity[capacity]
-                              : option.stock ?? 0;
-                          if (
-                            stockByCapacity &&
-                            stockByCapacity[capacity] == null &&
-                            isCanPackSharedStockProduct()
-                          ) {
-                            const multiplier = capacityUnitMultiplier(capacity);
-                            const totalStock = Number(option.stock ?? 0) || 0;
-                            capStock = multiplier > 1 ? Math.floor(totalStock / multiplier) : totalStock;
-                          }
+                          const capStock = getCapacityStock(option, capacity);
 
                           rows.push({
                             capacity,
                             price,
-                            stock: capStock
+                            stock: capStock,
+                            outOfStock: capStock <= 0
                           });
                         });
                       }
@@ -834,10 +846,11 @@ const POS = () => {
                                   <Typography
                                     key={idx}
                                     variant="caption"
-                                    color="text.secondary"
+                                    color={row.outOfStock ? 'error.main' : 'text.secondary'}
                                     sx={{ display: 'block' }}
                                   >
                                     {row.capacity} - KES {Math.round(row.price)} (Stock: {row.stock})
+                                    {row.outOfStock ? ' - Out of stock' : ''}
                                   </Typography>
                                 ))}
                               </Box>
@@ -845,11 +858,12 @@ const POS = () => {
                             {rows.length === 0 && (
                               <Typography
                                 variant="caption"
-                                color="text.secondary"
+                                color={(Number(option.stock ?? 0) <= 0) ? 'error.main' : 'text.secondary'}
                                 sx={{ display: 'block' }}
                               >
                                 KES {Math.round(parseFloat(option.price || 0))} (Stock:{' '}
                                 {option.stock ?? 0})
+                                {(Number(option.stock ?? 0) <= 0) ? ' - Out of stock' : ''}
                               </Typography>
                             )}
                           </Box>
@@ -1024,6 +1038,8 @@ const POS = () => {
                             return uniquePricing.map((pricing, index) => {
                               const capacity = (pricing.capacity || pricing.size || '').trim();
                               const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || 0;
+                              const capStock = getCapacityStock(selectedProduct, capacity);
+                              const isOutOfStock = capStock <= 0;
                               
                               return (
                                 <FormControlLabel
@@ -1039,16 +1055,19 @@ const POS = () => {
                                   }
                                   label={
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                      <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 'bold' }}>
+                                      <Typography variant="body2" sx={{ color: isOutOfStock ? '#d32f2f' : colors.textPrimary, fontWeight: 'bold' }}>
                                         {capacity}
                                       </Typography>
                                       <Typography variant="body2" sx={{ color: colors.accentText, fontWeight: 'bold' }}>
                                         KES {Math.round(price)}
                                       </Typography>
+                                      <Typography variant="caption" sx={{ color: isOutOfStock ? '#d32f2f' : colors.textSecondary, fontWeight: 600 }}>
+                                        Stock: {capStock}{isOutOfStock ? ' (Out of stock)' : ''}
+                                      </Typography>
                                     </Box>
                                   }
                                   sx={{
-                                    border: `1px solid ${colors.border}`,
+                                    border: `1px solid ${isOutOfStock ? '#d32f2f' : colors.border}`,
                                     borderRadius: 1,
                                     backgroundColor: selectedCapacity === capacity ? (isDarkMode ? 'rgba(0, 224, 184, 0.2)' : 'rgba(0, 224, 184, 0.1)') : 'transparent',
                                     px: 2,

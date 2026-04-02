@@ -12,13 +12,14 @@ import {
   MenuItem,
 } from '@mui/material';
 import { Star } from '@mui/icons-material';
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { getSimilarDrinkSuggestions, drinkNameMatchesSearch } from '../utils/drinkSearch';
 
 const Menu = () => {
+  const { categorySlug } = useParams();
   const { colors } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drinks, setDrinks] = useState([]);
@@ -39,6 +40,12 @@ const Menu = () => {
   const [sortBy, setSortBy] = useState('');
   // When sort by quantity is selected, filter by a specific capacity ('' = show all)
   const [quantityCapacityFilter, setQuantityCapacityFilter] = useState('');
+  const toSlug = (value) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
 
   // Unique capacities from drinks that pass current category/search/subcategory filter (for quantity dropdown)
   // Must be defined before any useEffect or JSX that references it
@@ -123,6 +130,11 @@ const Menu = () => {
       const categoryId = parseInt(categoryParam, 10);
       if (!isNaN(categoryId)) {
         setSelectedCategory(categoryId);
+      } else {
+        const bySlug = categories.find((c) => (c.slug || toSlug(c.name)) === categoryParam);
+        if (bySlug?.id) {
+          setSelectedCategory(bySlug.id);
+        }
       }
     } else {
       setSelectedCategory(0);
@@ -140,7 +152,15 @@ const Menu = () => {
     if (searchParam != null) {
       setSearchTerm(searchParam);
     }
-  }, [searchParams]);
+  }, [searchParams, categories]);
+
+  useEffect(() => {
+    if (!categorySlug) return;
+    const matched = categories.find((c) => (c.slug || toSlug(c.name)) === categorySlug);
+    if (matched?.id) {
+      setSelectedCategory(matched.id);
+    }
+  }, [categorySlug, categories]);
   
   // Fetch subcategories when category changes
   useEffect(() => {

@@ -13,9 +13,16 @@ import { getBackendUrl } from '../utils/backendUrl';
 const CategoryCard = ({ category }) => {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
+  const toSlug = (value) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
 
   const handleClick = () => {
-    navigate(`/menu?category=${category.id}`);
+    const slug = category?.slug || toSlug(category?.name) || String(category?.id || '');
+    navigate(`/${slug}`);
   };
 
   // Helper function to get full image URL

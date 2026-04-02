@@ -204,8 +204,7 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           newStock = sumStockByCapacity(byCap);
           await drink.update({
             stockByCapacity: byCap,
-            stock: newStock,
-            isAvailable: newStock > 0
+            stock: newStock
           }, { transaction });
         } else {
           // Calculate new stock (ensure it doesn't go below 0)
@@ -214,8 +213,7 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           const unitsToDeduct = quantity * multiplier;
           newStock = Math.max(0, currentStock - unitsToDeduct);
           await drink.update({
-            stock: newStock,
-            isAvailable: newStock > 0
+            stock: newStock
           }, { transaction });
         }
 

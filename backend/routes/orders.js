@@ -95,11 +95,15 @@ router.post('/', async (req, res) => {
       customerPhone === 'POS' ||
       (effectiveAdminOrder && customerPhone && customerPhone.trim() === 'POS');
 
-    // Normalize required-but-editable fields so we can allow creating orders without full customer details
+    // Normalize required-but-editable fields so we can allow creating orders without full customer details.
+    // Naming defaults:
+    // - Explicit walk-in orders: "Walk in customer"
+    // - Other admin POS/mobile orders: "POS customer"
+    // - Non-admin/customer channel: "Customer"
     const safeCustomerName =
       customerName && customerName.trim()
         ? customerName.trim()
-        : (isWalkInOrder ? 'POS' : 'Customer');
+        : (explicitWalkIn ? 'Walk in customer' : (effectiveAdminOrder ? 'POS customer' : 'Customer'));
 
     const safeCustomerPhone =
       customerPhone && customerPhone.trim()
@@ -241,71 +245,6 @@ router.post('/', async (req, res) => {
         drinkAttributes.push('purchasePrice');
       }
       
-      const normalizeCapacity = (value) =>
-        (value || '')
-          .toString()
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, '');
-
-      /**
-       * For can/pack capacity variants, inventory is tracked in base "cans".
-       * Example: stock=10 means 10 cans; buying 1x "6 pack" consumes 6 cans.
-       */
-      const capacityUnitMultiplier = (capacityLabel) => {
-        const raw = (capacityLabel || '').toString().trim().toLowerCase();
-        if (!raw) return 1;
-        const compact = raw.replace(/\s+/g, '');
-        // Common pack labels: "6pack", "6-pack", "6 pk", "12pack", etc.
-        const packMatch = compact.match(/^(\d+)(pack|pk)$/) || compact.match(/^(\d+)(pack|pk).*/);
-        if (packMatch) {
-          const n = parseInt(packMatch[1], 10);
-          return Number.isFinite(n) && n > 0 ? n : 1;
-        }
-        // "1 can", "can", "single" => 1
-        if (compact.includes('can') || compact === 'single') return 1;
-        return 1;
-      };
-
-      const parseStockValue = (value) => {
-        const parsed = parseInt(value, 10);
-        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-      };
-
-      const resolveAvailableStock = (drink, selectedCapacity) => {
-        const byCapacity =
-          drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
-            ? drink.stockByCapacity
-            : null;
-
-        if (!byCapacity) {
-          return parseStockValue(drink.stock);
-        }
-
-        const entries = Object.entries(byCapacity);
-        if (entries.length === 0) {
-          return parseStockValue(drink.stock);
-        }
-
-        if (selectedCapacity) {
-          const target = normalizeCapacity(selectedCapacity);
-          const multiplier = capacityUnitMultiplier(selectedCapacity);
-          // For pack/can capacity variants, treat stock as pooled (base units).
-          // We compare against total units available (sum of capacity buckets), falling back to drink.stock.
-          if (multiplier > 1 || target.includes('can')) {
-            return entries.reduce((sum, [, qty]) => sum + parseStockValue(qty), 0) || parseStockValue(drink.stock);
-          }
-          const direct = entries.find(([key]) => normalizeCapacity(key) === target);
-          if (direct) {
-            return parseStockValue(direct[1]);
-          }
-          // If capacity-level stock exists but requested capacity is missing, treat as zero.
-          return 0;
-        }
-
-        return entries.reduce((sum, [, qty]) => sum + parseStockValue(qty), 0);
-      };
-
       let totalAmount = 0;
       const orderItems = [];
 
@@ -318,20 +257,56 @@ router.post('/', async (req, res) => {
           await transaction.rollback();
           return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
         }
-        if (drink.isAvailable === false) {
-          await transaction.rollback();
-          return res.status(400).json({ error: `${drink.name} is not available` });
-        }
 
-        const multiplier = capacityUnitMultiplier(item.selectedCapacity);
-        const requiredUnits = item.quantity * multiplier;
-        const availableStock = resolveAvailableStock(drink, item.selectedCapacity);
-        if (availableStock < requiredUnits) {
-          await transaction.rollback();
-          const suffix = item.selectedCapacity ? ` (${item.selectedCapacity})` : '';
-          return res.status(400).json({
-            error: `Insufficient stock for ${drink.name}${suffix}. Please reduce quantity and try again.`
-          });
+        // Customer-site constraint only:
+        // If a product has "can" capacity options, enforce a minimum of 6 can-equivalent units.
+        // Examples:
+        // - can/single => quantity must be >= 6
+        // - 6 pack => quantity 1 is valid
+        // - twin pack => quantity must be >= 3
+        if (!effectiveAdminOrder) {
+          const normalizeCapacity = (value) =>
+            String(value || '')
+              .trim()
+              .toLowerCase()
+              .replace(/\s+/g, '');
+
+          const capacityValuesFromPricing = Array.isArray(drink.capacityPricing)
+            ? drink.capacityPricing
+                .map((p) => (p && (p.capacity || p.size)) || null)
+                .filter(Boolean)
+            : [];
+          const capacityValuesFromDrinkCapacity = Array.isArray(drink.capacity)
+            ? drink.capacity.filter(Boolean)
+            : (drink.capacity ? [drink.capacity] : []);
+          const selectedCapacityRaw = item.selectedCapacity || '';
+          const normalizedSelectedCapacity = normalizeCapacity(selectedCapacityRaw);
+
+          const allCapacityValues = [
+            ...capacityValuesFromPricing,
+            ...capacityValuesFromDrinkCapacity,
+            selectedCapacityRaw
+          ].filter(Boolean);
+
+          const normalizedCapacityValues = allCapacityValues.map((v) => normalizeCapacity(v));
+          const hasCanCapacity = normalizedCapacityValues.some((v) => v.includes('can') || v === 'single');
+
+          if (hasCanCapacity) {
+            const packMatch = normalizedSelectedCapacity.match(/^(\d+)(pack|pk).*/);
+            const packSize = packMatch ? parseInt(packMatch[1], 10) : NaN;
+            const unitMultiplier = Number.isFinite(packSize) && packSize > 0
+              ? packSize
+              : 1;
+            const canEquivalentQty = item.quantity * unitMultiplier;
+
+            if (canEquivalentQty < 6) {
+              await transaction.rollback();
+              const suffix = selectedCapacityRaw ? ` (${selectedCapacityRaw})` : '';
+              return res.status(400).json({
+                error: `Minimum order for ${drink.name}${suffix} is 6 cans (or equivalent pack quantity).`
+              });
+            }
+          }
         }
 
         const priceToUse =

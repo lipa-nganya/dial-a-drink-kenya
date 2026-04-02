@@ -15,6 +15,12 @@ const CategoriesBar = () => {
 
   const isOnMenu = location.pathname === '/menu';
   const isDeliveryLocationPage = location.pathname.startsWith('/delivery-location/');
+  const toSlug = (value) =>
+    String(value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
 
   const selectedCategoryId = (isOnMenu || isDeliveryLocationPage) ? (() => {
     const cat = searchParams.get('category');
@@ -40,17 +46,18 @@ const CategoriesBar = () => {
     return () => { mounted = false; };
   }, []);
 
-  const handleCategoryClick = (categoryId) => {
+  const handleCategoryClick = (category) => {
     // On mobile, horizontal swipes inside a scroll container can still trigger
     // a click on the touched button. That navigation makes the scroll feel
     // "stuck" (snaps back to the selected category). Ignore clicks after a drag.
     if (isDraggingRef.current) return;
     // Stay on delivery location detail pages; filter via query string (same as menu UX)
     if (isDeliveryLocationPage) {
-      navigate({ pathname: location.pathname, search: `?category=${categoryId}` });
+      navigate({ pathname: location.pathname, search: `?category=${category.id}` });
       return;
     }
-    navigate(`/menu?category=${categoryId}`);
+    const slug = category?.slug || toSlug(category?.name) || String(category?.id || '');
+    navigate(`/${slug}`);
   };
 
   const handleAllCategoriesClick = () => {
@@ -131,7 +138,7 @@ const CategoriesBar = () => {
         return (
           <Button
             key={category.id}
-            onClick={() => handleCategoryClick(category.id)}
+            onClick={() => handleCategoryClick(category)}
             sx={{
               textTransform: 'uppercase',
               fontSize: '0.8rem',
