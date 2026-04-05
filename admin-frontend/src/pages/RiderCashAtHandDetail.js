@@ -69,17 +69,29 @@ const getSubmissionTypeLabel = (type) => {
   return labels[type] || type || '—';
 };
 
+/** First two whitespace-separated words of a delivery address (for compact Paid to Office hints). */
+const firstTwoAddressWords = (address) => {
+  const s = String(address ?? '').trim().replace(/\s+/g, ' ');
+  if (!s) return '';
+  const words = s.split(' ').filter(Boolean);
+  return words.slice(0, 2).join(' ');
+};
+
 /** One-line summary for table column search (no JSX). */
 const getDetailsPlainSummary = (s) => {
   const orders = s.orders || [];
   const paymentMethod = String(s?.details?.paymentMethod || '').toLowerCase();
-  const paidToOfficeSuffix =
-    paymentMethod === 'paid_to_office' || paymentMethod === 'customer_paid_to_office'
-      ? ' (Paid to Office)'
-      : '';
+  const isPaidToOffice =
+    paymentMethod === 'paid_to_office' || paymentMethod === 'customer_paid_to_office';
+  const paidToOfficeSuffix = isPaidToOffice ? ' (Paid to Office)' : '';
   if (orders.length > 0) {
     const nums = orders
-      .map((o) => `#${o.orderNumber ?? o.id}${paidToOfficeSuffix}`)
+      .map((o) => {
+        const label = `#${o.orderNumber ?? o.id}`;
+        if (!isPaidToOffice) return label;
+        const hint = firstTwoAddressWords(o.deliveryAddress ?? o.delivery_address);
+        return hint ? `${label} (Paid to Office · ${hint})` : `${label} (Paid to Office)`;
+      })
       .join(', ');
     return `${orders.length} order(s): ${nums}`;
   }
