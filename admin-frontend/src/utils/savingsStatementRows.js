@@ -42,7 +42,9 @@ export function buildSavingsStatementRows(rawEntries, currentSavings, normalized
 
   const openNum = openingBalance != null && openingBalance !== '' ? parseFloat(openingBalance) : NaN;
   const allHaveKeys = filtered.length > 0 && filtered.every((e) => e.entryKey);
-  const useOpening = allHaveKeys && Number.isFinite(openNum) && openNum >= 0;
+  // Only use forward opening-balance mode for a strictly positive opening. Treat 0 as "auto"
+  // (backward from current savings) so the running column matches wallet.savings.
+  const useOpening = allHaveKeys && Number.isFinite(openNum) && openNum > 0;
 
   let balanceByKey = null;
   if (useOpening) {
@@ -76,20 +78,18 @@ export function buildSavingsStatementRows(rawEntries, currentSavings, normalized
     const debit = amt < 0 ? Math.abs(amt) : 0;
     const credit = amt > 0 ? amt : 0;
 
-    const balance =
-      row.balanceAfterDisplay != null && row.balanceAfterDisplay !== ''
-        ? Math.round(Number(row.balanceAfterDisplay))
-        : useOpening && balanceByKey && row.entryKey && balanceByKey.has(row.entryKey)
-        ? balanceByKey.get(row.entryKey)
-        : Math.round(balanceAfter);
-
-    if (!useOpening) {
-      if (row.balanceAfterDisplay == null || row.balanceAfterDisplay === '') {
-        // Backward walk from current savings.
-        balanceAfter -= amt;
-      } else {
-        balanceAfter = Number(row.balanceAfterDisplay);
-      }
+    let balance;
+    if (useOpening) {
+      balance =
+        row.balanceAfterDisplay != null && row.balanceAfterDisplay !== ''
+          ? Math.round(Number(row.balanceAfterDisplay))
+          : balanceByKey && row.entryKey && balanceByKey.has(row.entryKey)
+          ? balanceByKey.get(row.entryKey)
+          : Math.round(balanceAfter);
+    } else {
+      // Reconcile from current wallet balance; ignore stale balanceAfterDisplay on rows.
+      balance = Math.round(balanceAfter);
+      balanceAfter -= amt;
     }
 
     return {

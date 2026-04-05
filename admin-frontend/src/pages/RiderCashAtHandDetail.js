@@ -228,6 +228,8 @@ const RiderCashAtHandDetail = () => {
   const [logsLoading, setLogsLoading] = useState(false);
   const [savingsLoading, setSavingsLoading] = useState(false);
   const [savingsRows, setSavingsRows] = useState([]);
+  const [savingsWithdrawals, setSavingsWithdrawals] = useState([]);
+  const [savingsWallet, setSavingsWallet] = useState(null);
   const [savingsBalance, setSavingsBalance] = useState(null);
   const [savingsSearch, setSavingsSearch] = useState('');
   const [savingsOpeningInput, setSavingsOpeningInput] = useState('');
@@ -318,8 +320,10 @@ const RiderCashAtHandDetail = () => {
       const res = await api.get(`/driver-wallet/${riderId}`);
       const data = res.data?.data ?? res.data;
       const wallet = data?.wallet || null;
+      setSavingsWallet(wallet);
       const raw = Array.isArray(data?.recentSavingsCredits) ? data.recentSavingsCredits : [];
       setSavingsRows(raw);
+      setSavingsWithdrawals(Array.isArray(data?.recentWithdrawals) ? data.recentWithdrawals : []);
       if (wallet?.savings !== undefined && wallet?.savings !== null && wallet?.savings !== '') {
         const s = parseFloat(wallet.savings);
         setSavingsBalance(Number.isFinite(s) ? s : null);
@@ -335,6 +339,8 @@ const RiderCashAtHandDetail = () => {
       }
     } catch {
       setSavingsRows([]);
+      setSavingsWithdrawals([]);
+      setSavingsWallet(null);
       setSavingsBalance(null);
       setSavingsOpeningInput('');
     } finally {
@@ -478,38 +484,29 @@ const RiderCashAtHandDetail = () => {
   }, [filteredCashLogs, totalCashAtHand, cashAtHandOpeningBalance]);
 
   const normalizedSavingsSearch = String(savingsSearch || '').trim().toLowerCase();
-  const filteredSavingsRows = useMemo(() => {
-    const merged = mergeSavingsRowsWithDrafts(savingsRows, savingsInlineDrafts);
-    if (!Array.isArray(merged) || merged.length === 0) return [];
-    const sorted = [...merged].sort((a, b) => cashAtHandDateSortMs(b.date) - cashAtHandDateSortMs(a.date));
-    if (!normalizedSavingsSearch) return sorted;
-    return sorted.filter((row) => {
-      const amount = parseFloat(row.amount || 0) || 0;
-      const haystack = [
-        row.date,
-        row.orderId,
-        row.orderNumber,
-        row.transactionType,
-        row.paymentProvider,
-        row.notes,
-        amount
-      ]
-        .filter((v) => v !== null && v !== undefined && v !== '')
-        .join(' ')
-        .toLowerCase();
-      return haystack.includes(normalizedSavingsSearch);
-    });
-  }, [savingsRows, savingsInlineDrafts, normalizedSavingsSearch]);
+
+  const savingsEntriesModel = useMemo(() => {
+    const credits = mergeSavingsRowsWithDrafts(savingsRows, savingsInlineDrafts);
+    const withdrawals = Array.isArray(savingsWithdrawals) ? savingsWithdrawals : [];
+    const entries = [
+      ...credits.map((c) => ({
+        ...c,
+        amount: parseFloat(c.amount || 0) || 0
+      })),
+      ...withdrawals.map((w) => ({
+        ...w,
+        amount: -(parseFloat(w.amount || 0) || 0)
+      }))
+    ];
+    return { entries, total: entries.length };
+  }, [savingsRows, savingsWithdrawals, savingsInlineDrafts]);
 
   const savingsStatementRows = useMemo(() => {
+    const { entries } = savingsEntriesModel;
     const current = parseFloat(savingsBalance || 0) || 0;
-    const entries = filteredSavingsRows.map((r) => ({
-      ...r,
-      amount: parseFloat(r.amount || 0) || 0 // signed
-    }));
-    const opening = savingsOpeningInput.trim() === '' ? null : parseFloat(savingsOpeningInput);
-    return buildSavingsStatementRows(entries, current, '', { openingBalance: opening });
-  }, [filteredSavingsRows, savingsBalance, savingsOpeningInput]);
+    const opening = savingsWallet?.savingsOpeningBalance;
+    return buildSavingsStatementRows(entries, current, normalizedSavingsSearch, { openingBalance: opening });
+  }, [savingsEntriesModel, savingsBalance, normalizedSavingsSearch, savingsWallet]);
 
   const saveSavingsRow = useCallback(
     async (entryKey) => {
@@ -1604,17 +1601,23 @@ const RiderCashAtHandDetail = () => {
                 </Button>
               )}
               <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                Showing {filteredSavingsRows.length} / {Array.isArray(savingsRows) ? savingsRows.length : 0}
+                Showing {savingsStatementRows.length} / {savingsEntriesModel.total}
               </Typography>
             </Box>
             {savingsLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                 <CircularProgress sx={{ color: colors.accent }} />
               </Box>
-            ) : filteredSavingsRows.length === 0 ? (
+            ) : savingsEntriesModel.total === 0 ? (
               <Paper sx={{ p: 4, textAlign: 'center', backgroundColor: colors.paper }}>
                 <Typography variant="body1" sx={{ color: colors.textSecondary }}>
-                  {savingsRows.length === 0 ? 'No savings transactions found' : 'No savings transactions match your search.'}
+                  No savings transactions found
+                </Typography>
+              </Paper>
+            ) : savingsStatementRows.length === 0 ? (
+              <Paper sx={{ p: 4, textAlign: 'center', backgroundColor: colors.paper }}>
+                <Typography variant="body1" sx={{ color: colors.textSecondary }}>
+                  No savings transactions match your search.
                 </Typography>
               </Paper>
             ) : (
