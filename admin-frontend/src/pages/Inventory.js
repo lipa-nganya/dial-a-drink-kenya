@@ -51,12 +51,13 @@ import { useAdmin } from '../contexts/AdminContext';
 import EditDrinkDialog from '../components/EditDrinkDialog';
 import InventoryChecks from '../components/InventoryChecks';
 import { getBackendUrl } from '../utils/backendUrl';
+import { hasSuperAdminPrivileges } from '../utils/adminRoles';
 import { Badge } from '@mui/material';
 
 const InventoryPage = () => {
   const { isDarkMode, colors } = useTheme();
   const { user, pendingInventoryChecksCount } = useAdmin();
-  const isSuperAdmin = user?.role === 'super_admin';
+  const isSuperAdmin = hasSuperAdminPrivileges(user?.role);
   const [drinks, setDrinks] = useState([]);
   const [filteredDrinks, setFilteredDrinks] = useState([]);
   const [categories, setCategories] = useState([]);

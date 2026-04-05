@@ -112,6 +112,15 @@ class AdminLoginActivity : AppCompatActivity() {
                 } else {
                     val errorBody = response.errorBody()?.string()
                     android.util.Log.e("AdminLoginActivity", "Login failed: $errorBody")
+                    if (response.code() == 403 && errorBody != null && errorBody.contains("ADMIN_PAYWALL")) {
+                        startActivity(
+                            Intent(this@AdminLoginActivity, AdminPaywallActivity::class.java).apply {
+                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                            }
+                        )
+                        finish()
+                        return@launch
+                    }
                     val errorMessage = try {
                         val errorResponse = ApiClient.gson.fromJson(errorBody, com.dialadrink.driver.data.model.ApiResponse::class.java)
                         errorResponse.error ?: "Invalid phone number or PIN"

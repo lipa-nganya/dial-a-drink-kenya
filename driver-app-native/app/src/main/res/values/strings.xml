@@ -23,6 +23,13 @@
     <!-- Order payment (cash submission) -->
     <string name="order_payment_breakdown">Order cost: KES %1$s + 50%% delivery fee (savings): KES %2$s = KES %3$s</string>
     
+    <!-- Admin access paywall -->
+    <string name="admin_paywall_message">Account temporarily in limited mode. Please contact site owner to restore full access.</string>
+    <string name="admin_paywall_contact_button">Contact site owner</string>
+    <string name="admin_paywall_contact_tel">tel:+254727893741</string>
+    <string name="admin_paywall_retry_login">Retry login</string>
+    <string name="admin_paywall_retry_login_timer">Retry login (%1$d:%2$02d)</string>
+
     <!-- Common -->
     <string name="loading">Loading…</string>
     <string name="error">Error</string>

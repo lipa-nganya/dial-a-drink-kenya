@@ -158,6 +158,12 @@
             android:parentActivityName=".ui.auth.PhoneNumberActivity"
             android:exported="false"
             android:theme="@style/Theme.DialADrinkDriver" />
+
+        <activity
+            android:name=".ui.admin.AdminPaywallActivity"
+            android:exported="false"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.DialADrinkDriver" />
         
         <activity
             android:name=".ui.admin.AdminDashboardActivity"

@@ -144,6 +144,12 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 403) {
+      const data = error.response?.data;
+      if (data?.code === 'ADMIN_PAYWALL' && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('admin-access-paywall'));
+      }
+    }
     if (error.response?.status === 401) {
       console.warn('Unauthorized access - admin token may be invalid or expired');
       localStorage.removeItem('adminToken');

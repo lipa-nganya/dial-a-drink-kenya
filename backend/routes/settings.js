@@ -225,6 +225,9 @@ Welcome aboard! 🎉`;
         // Default: 150 KES
         return res.json({ key: 'loanDeductionAmount', value: '150' });
       }
+      if (key === 'adminAccessPaywall') {
+        return res.json({ key: 'adminAccessPaywall', value: 'false' });
+      }
       return res.status(404).json({ error: 'Setting not found' });
     }
     
@@ -239,6 +242,12 @@ router.put('/:key', async (req, res) => {
   try {
     const { key } = req.params;
     const { value } = req.body;
+
+    if (key === 'adminAccessPaywall') {
+      return res.status(403).json({
+        error: 'This setting can only be updated by a super-super admin via PUT /api/admin/settings/admin-access-paywall.'
+      });
+    }
     
     // Allow empty string for certain settings like brandFocus
     if (value === undefined || value === null) {

@@ -12,7 +12,9 @@ import java.lang.reflect.Type
 data class ApiResponse<T>(
     val success: Boolean? = null,
     val data: T? = null,
-    val error: String? = null
+    val error: String? = null,
+    val code: String? = null,
+    val message: String? = null
 )
 
 // Auth Models

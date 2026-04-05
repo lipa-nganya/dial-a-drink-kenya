@@ -31,6 +31,7 @@ import Add from '@mui/icons-material/Add';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
+import { hasSuperAdminPrivileges } from '../utils/adminRoles';
 
 const Accounts = () => {
   const { colors } = useTheme();
@@ -56,7 +57,7 @@ const Accounts = () => {
   const [recentLoading, setRecentLoading] = useState(true);
   const [accountSearch, setAccountSearch] = useState('');
 
-  const isSuperAdmin = user?.role === 'super_admin';
+  const isSuperAdmin = hasSuperAdminPrivileges(user?.role);
 
   const fetchAccounts = useCallback(async () => {
     try {

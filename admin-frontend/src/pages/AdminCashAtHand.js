@@ -27,13 +27,14 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
+import { hasSuperAdminPrivileges } from '../utils/adminRoles';
 
 const formatCurrency = (amount) => `KES ${Math.round(Number(amount || 0)).toLocaleString()}`;
 
 const AdminCashAtHand = () => {
   const { colors } = useTheme();
   const { user } = useAdmin();
-  const isSuperAdmin = user?.role === 'super_admin';
+  const isSuperAdmin = hasSuperAdminPrivileges(user?.role);
   const navigate = useNavigate();
 
   const [loading, setLoading] = useState(true);

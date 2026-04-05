@@ -50,13 +50,14 @@ import { formatCashAtHandDateOnly } from '../utils/cashAtHandDateDisplay';
 import { mergeLogsWithInlineDrafts, getDefaultDebitCreditStrings } from '../utils/cashAtHandInlineEdit';
 import { mergeSavingsRowsWithDrafts, getDefaultSavingsDebitCreditStrings } from '../utils/savingsInlineEdit';
 import { buildSavingsStatementRows } from '../utils/savingsStatementRows';
+import { hasSuperAdminPrivileges } from '../utils/adminRoles';
 
 const RiderDetails = () => {
   const { riderId } = useParams();
   const navigate = useNavigate();
   const { isDarkMode, colors } = useTheme();
   const { user } = useAdmin();
-  const isSuperAdmin = user?.role === 'super_admin';
+  const isSuperAdmin = hasSuperAdminPrivileges(user?.role);
   const isSuperSuperAdmin = user?.role === 'super_super_admin';
   
   const [rider, setRider] = useState(null);

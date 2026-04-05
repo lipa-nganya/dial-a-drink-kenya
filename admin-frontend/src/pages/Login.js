@@ -17,6 +17,15 @@ import { useNavigate } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
+import AdminAccessPaywallScreen from '../components/AdminAccessPaywallScreen';
+import {
+  ADMIN_PAYWALL_SESSION_KEYS,
+  clearPaywallSession,
+  hasPaywallSession,
+  startPaywallCooldownSession,
+} from '../utils/adminPaywallSessionStorage';
+
+const LOGIN_PAYWALL_KEY = ADMIN_PAYWALL_SESSION_KEYS.login;
 
 const Login = () => {
   const navigate = useNavigate();
@@ -27,6 +36,9 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [paywallLocked, setPaywallLocked] = useState(
+    () => typeof window !== 'undefined' && hasPaywallSession(LOGIN_PAYWALL_KEY)
+  );
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,6 +52,7 @@ const Login = () => {
       });
 
       if (response.data.success && response.data.token) {
+        clearPaywallSession(LOGIN_PAYWALL_KEY);
         // Store token and user info
         localStorage.setItem('adminToken', response.data.token);
         localStorage.setItem('adminUser', JSON.stringify(response.data.user));
@@ -54,11 +67,25 @@ const Login = () => {
       }
     } catch (err) {
       console.error('Login error:', err);
+      if (err.response?.status === 403 && err.response?.data?.code === 'ADMIN_PAYWALL') {
+        startPaywallCooldownSession(LOGIN_PAYWALL_KEY);
+        setPaywallLocked(true);
+        return;
+      }
       setError(err.response?.data?.error || err.response?.data?.message || 'Login failed. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (paywallLocked) {
+    return (
+      <AdminAccessPaywallScreen
+        sessionStorageKey={LOGIN_PAYWALL_KEY}
+        onRetry={() => setPaywallLocked(false)}
+      />
+    );
+  }
 
   return (
     <Container maxWidth="sm" sx={{ 

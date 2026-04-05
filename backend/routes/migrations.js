@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
-const { verifyAdmin } = require('./admin');
+const { verifyAdmin, enforceAdminAccessPaywall } = require('./admin');
 
 // Run slug migrations (admin only)
-router.post('/run-slug-migrations', verifyAdmin, async (req, res) => {
+router.post('/run-slug-migrations', verifyAdmin, enforceAdminAccessPaywall, async (req, res) => {
   try {
     console.log('🚀 Running slug migrations...');
     

@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const mpesaService = require('../services/mpesa');
-const { verifyAdmin } = require('./admin');
+const { verifyAdmin, enforceAdminAccessPaywall } = require('./admin');
 const { creditWalletsOnDeliveryCompletion } = require('../utils/walletCredits');
 
 // In-memory cart storage (in production, use Redis or database)
@@ -44,7 +44,7 @@ function buildPhoneLookupVariants(phone) {
  * Create or get customer for POS
  * POST /api/pos/customer
  */
-router.post('/customer', verifyAdmin, async (req, res) => {
+router.post('/customer', verifyAdmin, enforceAdminAccessPaywall, async (req, res) => {
   try {
     const { phone, customerName, email } = req.body;
 
@@ -486,7 +486,7 @@ router.get('/drinks', async (req, res) => {
 });
 
 // Create POS order with cash payment
-router.post('/order/cash', verifyAdmin, async (req, res) => {
+router.post('/order/cash', verifyAdmin, enforceAdminAccessPaywall, async (req, res) => {
   const transaction = await db.sequelize.transaction();
   
   try {
@@ -637,7 +637,7 @@ router.post('/order/cash', verifyAdmin, async (req, res) => {
 });
 
 // Create POS order with M-Pesa payment
-router.post('/order/mpesa', verifyAdmin, async (req, res) => {
+router.post('/order/mpesa', verifyAdmin, enforceAdminAccessPaywall, async (req, res) => {
   const transaction = await db.sequelize.transaction();
   
   try {
