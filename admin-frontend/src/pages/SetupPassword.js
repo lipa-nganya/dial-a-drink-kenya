@@ -16,6 +16,15 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
 import { api } from '../services/api';
+import AdminAccessPaywallScreen from '../components/AdminAccessPaywallScreen';
+import {
+  ADMIN_PAYWALL_SESSION_KEYS,
+  clearPaywallSession,
+  hasPaywallSession,
+  startPaywallCooldownSession,
+} from '../utils/adminPaywallSessionStorage';
+
+const SETUP_PAYWALL_KEY = ADMIN_PAYWALL_SESSION_KEYS.setupPassword;
 
 const SetupPassword = () => {
   const navigate = useNavigate();
@@ -29,6 +38,9 @@ const SetupPassword = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [paywallLocked, setPaywallLocked] = useState(
+    () => typeof window !== 'undefined' && hasPaywallSession(SETUP_PAYWALL_KEY)
+  );
   const token = searchParams.get('token');
 
   useEffect(() => {
@@ -70,6 +82,7 @@ const SetupPassword = () => {
       });
 
       if (response.data.success) {
+        clearPaywallSession(SETUP_PAYWALL_KEY);
         // Store token and user info
         localStorage.setItem('adminToken', response.data.token);
         localStorage.setItem('adminUser', JSON.stringify(response.data.user));
@@ -88,11 +101,25 @@ const SetupPassword = () => {
       }
     } catch (err) {
       console.error('Setup password error:', err);
+      if (err.response?.status === 403 && err.response?.data?.code === 'ADMIN_PAYWALL') {
+        startPaywallCooldownSession(SETUP_PAYWALL_KEY);
+        setPaywallLocked(true);
+        return;
+      }
       setError(err.response?.data?.error || 'Failed to set password. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (paywallLocked) {
+    return (
+      <AdminAccessPaywallScreen
+        sessionStorageKey={SETUP_PAYWALL_KEY}
+        onRetry={() => setPaywallLocked(false)}
+      />
+    );
+  }
 
   if (success) {
     return (

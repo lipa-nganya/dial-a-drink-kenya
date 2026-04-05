@@ -55,6 +55,7 @@ import NotificationEditor from '../components/NotificationEditor';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAdmin } from '../contexts/AdminContext';
+import { hasSuperAdminPrivileges } from '../utils/adminRoles';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
 
@@ -483,7 +484,7 @@ const ShiftReportTab = () => {
 const Drivers = () => {
   const { isDarkMode, colors } = useTheme();
   const { user } = useAdmin();
-  const isSuperAdmin = user?.role === 'super_admin';
+  const isSuperAdmin = hasSuperAdminPrivileges(user?.role);
   const navigate = useNavigate();
   const [drivers, setDrivers] = useState([]);
   const [loading, setLoading] = useState(true);

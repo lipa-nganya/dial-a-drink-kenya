@@ -59,6 +59,7 @@ import {
   AccessTime
 } from '@mui/icons-material';
 import { api } from '../services/api';
+import { canManageAdminUsers } from '../utils/adminRoles';
 import { useTheme } from '../contexts/ThemeContext';
 import RichTextEditor from '../components/RichTextEditor';
 
@@ -219,6 +220,8 @@ const Settings = () => {
   const [userFormError, setUserFormError] = useState('');
   const [currentUserRole, setCurrentUserRole] = useState(null);
   const [editingUserId, setEditingUserId] = useState(null);
+  const [adminAccessPaywall, setAdminAccessPaywall] = useState(false);
+  const [adminAccessPaywallLoading, setAdminAccessPaywallLoading] = useState(false);
 
   // Calculate next loan deduction run time (runs every 15 minutes)
   const calculateNextDeductionTime = () => {
@@ -259,6 +262,41 @@ const Settings = () => {
       setCurrentUserRole(response.data.role);
     } catch (error) {
       console.error('Error fetching current user:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUserRole !== 'super_super_admin') return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await api.get('/settings/adminAccessPaywall');
+        if (!cancelled) {
+          setAdminAccessPaywall(String(res.data?.value || '').toLowerCase() === 'true');
+        }
+      } catch {
+        if (!cancelled) setAdminAccessPaywall(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserRole]);
+
+  const handleAdminAccessPaywallChange = async (enabled) => {
+    setAdminAccessPaywallLoading(true);
+    try {
+      await api.put('/admin/settings/admin-access-paywall', { enabled });
+      setAdminAccessPaywall(enabled);
+      setNotification({
+        message: enabled
+          ? 'Admin paywall enabled. Only Super-Super Admins can use admin web and admin mobile.'
+          : 'Admin paywall disabled. All admin roles can access admin web and admin mobile.'
+      });
+    } catch (e) {
+      setError(e.response?.data?.error || 'Failed to update admin access paywall');
+    } finally {
+      setAdminAccessPaywallLoading(false);
     }
   };
 
@@ -340,6 +378,13 @@ const Settings = () => {
         return;
       }
     } else {
+      if (
+        (userFormData.role === 'super_admin' || userFormData.role === 'super_super_admin') &&
+        currentUserRole !== 'super_super_admin'
+      ) {
+        setUserFormError('Only a super-super admin can invite this role');
+        return;
+      }
       // For admin and manager, validate username and email
       if (!userFormData.username.trim()) {
         setUserFormError('Username is required');
@@ -1119,6 +1164,30 @@ Welcome aboard! 🎉`;
         </Typography>
       </Box>
 
+      {currentUserRole === 'super_super_admin' && (
+        <Card sx={{ mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
+          <CardContent>
+            <Typography variant="h5" sx={{ color: colors.accentText, fontWeight: 600, mb: 1 }}>
+              Admin access paywall
+            </Typography>
+            <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>
+              When enabled, only Super-Super Admins may use the admin website and admin mobile app. Other admin roles see a full-screen lockout with a message about limited mode and cannot access admin features. The server blocks their API calls.
+            </Typography>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={adminAccessPaywall}
+                  onChange={(e) => handleAdminAccessPaywallChange(e.target.checked)}
+                  disabled={adminAccessPaywallLoading}
+                />
+              }
+              label={adminAccessPaywall ? 'Paywall ON (restricted)' : 'Paywall OFF (normal access)'}
+              sx={{ color: colors.textPrimary }}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {/* Success and error toasts - fixed position so visible without scrolling */}
       <Snackbar
         open={!!notification || !!error}
@@ -1151,8 +1220,8 @@ Welcome aboard! 🎉`;
         </Alert>
       </Snackbar>
 
-      {/* User Management Module - Admin and Super Admin Only */}
-      {(currentUserRole === 'admin' || currentUserRole === 'super_admin') && (
+      {/* User Management Module - Admin, Super Admin, Super-Super Admin */}
+      {canManageAdminUsers(currentUserRole) && (
         <Card sx={{ mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
           <CardContent>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -3434,6 +3503,12 @@ Welcome aboard! 🎉`;
               >
                 <MenuItem value="manager">Manager</MenuItem>
                 <MenuItem value="admin">Admin</MenuItem>
+                {currentUserRole === 'super_super_admin' && (
+                  <>
+                    <MenuItem value="super_admin">Super Admin</MenuItem>
+                    <MenuItem value="super_super_admin">Super-Super Admin</MenuItem>
+                  </>
+                )}
                 <MenuItem value="shop_agent">Shop Agent</MenuItem>
               </Select>
             </FormControl>

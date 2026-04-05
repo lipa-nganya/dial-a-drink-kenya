@@ -3,7 +3,7 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const bcrypt = require('bcryptjs');
-const { verifyAdmin } = require('./admin');
+const { verifyAdmin, enforceAdminAccessPaywall } = require('./admin');
 const { checkDriverCreditLimit } = require('../utils/creditLimit');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
@@ -1021,6 +1021,8 @@ router.use((req, res, next) => {
   }
   verifyAdmin(req, res, next);
 });
+
+router.use(enforceAdminAccessPaywall);
 
 /**
  * Get latest OTP for a driver (admin only)

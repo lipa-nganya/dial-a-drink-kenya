@@ -16,6 +16,12 @@ const {
   normalizePhoneNumber,
   generatePhoneVariants
 } = require('../utils/customerSync');
+const {
+  isAdminAccessPaywallEnabled,
+  enforceAdminAccessPaywall,
+  adminPaywallBody,
+  clearAdminAccessPaywallCache
+} = require('../middleware/adminAccessPaywall');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me-in-production';
 const ADMIN_TOKEN_TTL = process.env.ADMIN_TOKEN_TTL || '12h';
@@ -51,6 +57,43 @@ const requireSuperSuperAdmin = (req, res, next) => {
   if (req.admin && req.admin.role === 'super_super_admin') return next();
   return res.status(403).json({ success: false, error: 'Only super-super admin can perform this action' });
 };
+
+const ELEVATED_ADMIN_ROLES = new Set(['super_admin', 'super_super_admin']);
+const VALID_ADMIN_ROLES = ['admin', 'manager', 'shop_agent', 'super_admin', 'super_super_admin'];
+const EMAIL_INVITE_ROLES = ['manager', 'admin', 'super_admin', 'super_super_admin'];
+
+function assertEmailInviteRoleAllowed(callerRole, targetRole) {
+  const tr = String(targetRole || '').trim().toLowerCase();
+  if (!EMAIL_INVITE_ROLES.includes(tr)) {
+    return { ok: false, status: 400, error: 'Invalid role for email invite' };
+  }
+  if (ELEVATED_ADMIN_ROLES.has(tr) && callerRole !== 'super_super_admin') {
+    return {
+      ok: false,
+      status: 403,
+      error: 'Only a super-super admin can invite Super Admin or Super-Super Admin users'
+    };
+  }
+  return { ok: true };
+}
+
+function assertAdminRoleMutationAllowed(callerRole, previousRole, newRole) {
+  const pr = String(previousRole || '').trim().toLowerCase();
+  const nr = String(newRole || '').trim().toLowerCase();
+  if (!VALID_ADMIN_ROLES.includes(nr)) {
+    return { ok: false, status: 400, error: 'Invalid role' };
+  }
+  if (pr === nr) return { ok: true };
+  const touchesElevated = ELEVATED_ADMIN_ROLES.has(pr) || ELEVATED_ADMIN_ROLES.has(nr);
+  if (touchesElevated && callerRole !== 'super_super_admin') {
+    return {
+      ok: false,
+      status: 403,
+      error: 'Only a super-super admin can change Super Admin or Super-Super Admin roles'
+    };
+  }
+  return { ok: true };
+}
 
 const buildAdminUserResponse = (adminInstance) => {
   if (!adminInstance) {
@@ -335,14 +378,14 @@ router.get('/check-phone/:phone', async (req, res) => {
       }
     });
     
-    // Check for admin (admin, manager, super_admin roles)
+    // Check for admin (admin, manager, super_admin, super_super_admin roles)
     const admin = await db.Admin.findOne({
       where: {
         mobileNumber: {
           [Op.in]: phoneVariations
         },
         role: {
-          [Op.in]: ['admin', 'manager', 'super_admin']
+          [Op.in]: ['admin', 'manager', 'super_admin', 'super_super_admin']
         }
       },
       attributes: ['id', 'username', 'hasSetPin', 'mobileNumber', 'name']
@@ -426,7 +469,7 @@ router.post('/phone/:phone/set-pin', async (req, res) => {
           [Op.in]: phoneVariations
         },
         role: {
-          [Op.in]: ['admin', 'manager', 'super_admin']
+          [Op.in]: ['admin', 'manager', 'super_admin', 'super_super_admin']
         }
       }
     });
@@ -568,6 +611,10 @@ router.post('/auth/mobile-login', async (req, res) => {
       });
     }
 
+    if ((await isAdminAccessPaywallEnabled()) && admin.role !== 'super_super_admin') {
+      return res.status(403).json(adminPaywallBody());
+    }
+
     // Generate JWT token
     const tokenPayload = {
       id: admin.id,
@@ -665,6 +712,10 @@ router.post('/auth/login', async (req, res) => {
         success: false,
         error: 'Invalid username or password'
       });
+    }
+
+    if ((await isAdminAccessPaywallEnabled()) && adminUser.role !== 'super_super_admin') {
+      return res.status(403).json(adminPaywallBody());
     }
 
     const tokenPayload = {
@@ -826,6 +877,10 @@ router.post('/setup-password', async (req, res) => {
     adminUser.inviteTokenExpiry = null;
     await adminUser.save();
 
+    if ((await isAdminAccessPaywallEnabled()) && adminUser.role !== 'super_super_admin') {
+      return res.status(403).json(adminPaywallBody());
+    }
+
     // Issue JWT so user is logged in immediately
     const tokenPayload = {
       id: adminUser.id,
@@ -863,6 +918,31 @@ router.post('/setup-password', async (req, res) => {
 });
 
 router.use(verifyAdmin);
+router.use(enforceAdminAccessPaywall);
+
+/**
+ * Super-super admin only: enable/disable admin web + admin mobile access for non–super_super_admin users.
+ * PUT /api/admin/settings/admin-access-paywall
+ * body: { enabled: true | false }
+ */
+router.put('/settings/admin-access-paywall', requireSuperSuperAdmin, async (req, res) => {
+  try {
+    const raw = req.body?.enabled;
+    const enabled = raw === true || raw === 'true' || raw === 1 || raw === '1';
+    const value = enabled ? 'true' : 'false';
+    const [row] = await db.Settings.findOrCreate({
+      where: { key: 'adminAccessPaywall' },
+      defaults: { value: 'false' }
+    });
+    row.value = value;
+    await row.save();
+    clearAdminAccessPaywallCache();
+    return res.json({ success: true, key: 'adminAccessPaywall', value: row.value });
+  } catch (error) {
+    console.error('Error updating admin access paywall setting:', error);
+    return res.status(500).json({ success: false, error: 'Failed to update setting' });
+  }
+});
 
 // Get admin stats
 router.get('/stats', async (req, res) => {
@@ -5219,7 +5299,12 @@ router.put('/users/:id', async (req, res) => {
     }
 
     if (role !== undefined) {
-      updateData.role = role;
+      const nr = String(role).trim().toLowerCase();
+      const mutationCheck = assertAdminRoleMutationAllowed(req.admin.role, admin.role, nr);
+      if (!mutationCheck.ok) {
+        return res.status(mutationCheck.status).json({ error: mutationCheck.error });
+      }
+      updateData.role = nr;
     }
 
     if (hasNameColumn && name !== undefined) {
@@ -5546,11 +5631,17 @@ router.post('/users', async (req, res) => {
     const inviteToken = crypto.randomBytes(32).toString('hex');
     const inviteTokenExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
+    const finalInviteRole = String(role || 'manager').trim().toLowerCase();
+    const inviteRoleCheck = assertEmailInviteRoleAllowed(req.admin.role, finalInviteRole);
+    if (!inviteRoleCheck.ok) {
+      return res.status(inviteRoleCheck.status).json({ error: inviteRoleCheck.error });
+    }
+
     // Build create object with only existing fields
     const createData = {
       username,
       email,
-      role: role || 'manager',
+      role: finalInviteRole,
       password: null, // Password will be set when user accepts invite
       inviteToken,
       inviteTokenExpiry
@@ -9787,3 +9878,4 @@ router.post('/accounts/transactions', async (req, res) => {
 // Export router and verifyAdmin middleware for use in other routes
 module.exports = router;
 module.exports.verifyAdmin = verifyAdmin;
+module.exports.enforceAdminAccessPaywall = enforceAdminAccessPaywall;

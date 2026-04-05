@@ -66,6 +66,17 @@ object SharedPrefs {
     fun clearAdminToken(context: Context) {
         getPrefs(context).edit().remove("admin_token").apply()
     }
+
+    /** Clears admin auth so blocked users cannot keep using a stored JWT after paywall. */
+    fun clearAdminSession(context: Context) {
+        val prefs = getPrefs(context).edit()
+        prefs.remove("admin_token")
+        prefs.putBoolean("admin_logged_in", false)
+        prefs.remove("admin_id")
+        prefs.remove("admin_username")
+        prefs.remove("admin_role")
+        prefs.apply()
+    }
     
     // OTA Update tracking
     fun getOtaCount(context: Context): Int {
@@ -188,8 +199,11 @@ object SharedPrefs {
         return getPrefs(context).getString("admin_role", null)
     }
 
+    /** True for super_admin and super_super_admin (same elevated UI as admin web). */
     fun isSuperAdmin(context: Context): Boolean {
-        return getAdminRole(context).equals("super_admin", ignoreCase = true)
+        val r = getAdminRole(context) ?: return false
+        return r.equals("super_admin", ignoreCase = true) ||
+            r.equals("super_super_admin", ignoreCase = true)
     }
     
     fun setAdminLoggedIn(context: Context, loggedIn: Boolean) {

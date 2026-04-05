@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
+const { verifyAdmin, enforceAdminAccessPaywall } = require('./admin');
+
+router.use(verifyAdmin);
+router.use(enforceAdminAccessPaywall);
 
 // Admin endpoint: list drinks whose images are still on Cloudinary
 router.get('/drinks/missing-images', async (req, res) => {

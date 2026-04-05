@@ -12,6 +12,7 @@ import java.util.concurrent.TimeUnit
 
 object ApiClient {
     private var retrofit: Retrofit? = null
+    private var appContext: Context? = null
     private val baseUrl = BuildConfig.API_BASE_URL
     
     // Single Gson instance app-wide
@@ -25,6 +26,7 @@ object ApiClient {
     
     
     fun init(context: Context) {
+        appContext = context.applicationContext
         android.util.Log.e("ApiClient", "═══════════════════════════════════════════════════════")
         android.util.Log.e("ApiClient", "🔧 INITIALIZING API CLIENT")
         android.util.Log.e("ApiClient", "🔧 BuildConfig.API_BASE_URL: $baseUrl")
@@ -64,6 +66,33 @@ object ApiClient {
                 }
                 
                 chain.proceed(requestBuilder.build())
+            }
+            .addNetworkInterceptor { chain ->
+                val response = chain.proceed(chain.request())
+                val ctx = appContext
+                if (ctx == null || response.code != 403) {
+                    return@addNetworkInterceptor response
+                }
+                val adminTok = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(ctx)
+                if (adminTok.isNullOrEmpty()) {
+                    return@addNetworkInterceptor response
+                }
+                val peeked = try {
+                    response.peekBody(8192).string()
+                } catch (_: Exception) {
+                    ""
+                }
+                if (!peeked.contains("ADMIN_PAYWALL")) {
+                    return@addNetworkInterceptor response
+                }
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    com.dialadrink.driver.utils.SharedPrefs.clearAdminSession(ctx)
+                    val intent = android.content.Intent(ctx, com.dialadrink.driver.ui.admin.AdminPaywallActivity::class.java).apply {
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    }
+                    ctx.startActivity(intent)
+                }
+                response
             }
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)

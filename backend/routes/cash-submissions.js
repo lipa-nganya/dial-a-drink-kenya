@@ -4,7 +4,7 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const { sendSuccess, sendError } = require('../utils/apiResponse');
 const pushNotifications = require('../services/pushNotifications');
-const { verifyAdmin } = require('./admin');
+const { verifyAdmin, enforceAdminAccessPaywall } = require('./admin');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 
 /** Match capacity labels across spacing/casing so purchase lines update the same bucket as pricing. */
@@ -72,6 +72,7 @@ function findBaseCanCapacityKey(byCapInput) {
 // Admin routes - must be defined BEFORE driver routes to avoid route conflicts
 // Admin routes - require admin authentication
 router.use('/admin', verifyAdmin);
+router.use('/admin', enforceAdminAccessPaywall);
 
 const requireSuperAdmin = (req, res, next) => {
   const role = req.admin?.role || req.admin?.user?.role || null;
@@ -1457,7 +1458,7 @@ router.patch('/:driverId/cash-submissions/:id', async (req, res) => {
  * POST /api/driver-wallet/admin/cash-submissions/:id/purchase-status
  * body: { purchaseStatus: 'rejected' | 'approved' | 'pending' }
  */
-router.post('/admin/cash-submissions/:id/purchase-status', verifyAdmin, async (req, res) => {
+router.post('/admin/cash-submissions/:id/purchase-status', verifyAdmin, enforceAdminAccessPaywall, async (req, res) => {
   try {
     const { id } = req.params;
     const { purchaseStatus } = req.body || {};
@@ -1847,7 +1848,7 @@ router.post('/admin/cash-submissions/:id/approve', requireSuperAdmin, async (req
  * Approve cash submission (admin or super_admin)
  * POST /api/driver-wallet/:driverId/cash-submissions/:id/approve
  */
-router.post('/:driverId/cash-submissions/:id/approve', verifyAdmin, async (req, res) => {
+router.post('/:driverId/cash-submissions/:id/approve', verifyAdmin, enforceAdminAccessPaywall, async (req, res) => {
   return handleApproveSubmission(req, res);
 });
 
@@ -1966,7 +1967,7 @@ router.post('/admin/cash-submissions/:id/reject', requireSuperAdmin, async (req,
  * Reject cash submission (admin or super_admin)
  * POST /api/driver-wallet/:driverId/cash-submissions/:id/reject
  */
-router.post('/:driverId/cash-submissions/:id/reject', verifyAdmin, async (req, res) => {
+router.post('/:driverId/cash-submissions/:id/reject', verifyAdmin, enforceAdminAccessPaywall, async (req, res) => {
   return handleRejectSubmission(req, res);
 });
 
@@ -1975,7 +1976,7 @@ router.post('/:driverId/cash-submissions/:id/reject', verifyAdmin, async (req, r
  * POST /api/driver-wallet/:driverId/cash-at-hand/manual-transaction
  * body: { amount, transactionType: 'debit'|'credit', reason, applyTo: 'cash_at_hand'|'savings' }
  */
-router.post('/:driverId/cash-at-hand/manual-transaction', verifyAdmin, requireSuperAdmin, async (req, res) => {
+router.post('/:driverId/cash-at-hand/manual-transaction', verifyAdmin, enforceAdminAccessPaywall, requireSuperAdmin, async (req, res) => {
   try {
     const driverId = parseInt(req.params.driverId, 10);
     const amount = parseFloat(req.body?.amount);

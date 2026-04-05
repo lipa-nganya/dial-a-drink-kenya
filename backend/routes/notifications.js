@@ -1,14 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
-const { verifyAdmin } = require('./admin');
+const { verifyAdmin, enforceAdminAccessPaywall } = require('./admin');
 const pushNotifications = require('../services/pushNotifications');
+
+router.use(verifyAdmin);
+router.use(enforceAdminAccessPaywall);
 
 /**
  * Create and send notification to all drivers
  * POST /api/admin/notifications
  */
-router.post('/', verifyAdmin, async (req, res) => {
+router.post('/', async (req, res) => {
   console.log(`🔔 [POST /notifications] Request received from admin ${req.admin.id}`);
   try {
     const { title, preview, message } = req.body;
@@ -90,7 +93,7 @@ router.post('/', verifyAdmin, async (req, res) => {
  * Get all notifications
  * GET /api/admin/notifications
  */
-router.get('/', verifyAdmin, async (req, res) => {
+router.get('/', async (req, res) => {
   console.log(`🔔 [GET /notifications] Request received from admin ${req.admin.id}`);
   try {
     const notifications = await db.Notification.findAll({
@@ -149,7 +152,7 @@ router.get('/', verifyAdmin, async (req, res) => {
  * Get notification details with read/unread stats
  * GET /api/admin/notifications/:id
  */
-router.get('/:id', verifyAdmin, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
