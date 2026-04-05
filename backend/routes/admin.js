@@ -940,7 +940,16 @@ router.put('/settings/admin-access-paywall', requireSuperSuperAdmin, async (req,
     return res.json({ success: true, key: 'adminAccessPaywall', value: row.value });
   } catch (error) {
     console.error('Error updating admin access paywall setting:', error);
-    return res.status(500).json({ success: false, error: 'Failed to update setting' });
+    const expose =
+      process.env.NODE_ENV !== 'production' || process.env.ADMIN_PAYWALL_DEBUG === '1';
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to update setting',
+      ...(expose && {
+        details: error.message,
+        code: error.original?.code || error.parent?.code || undefined
+      })
+    });
   }
 });
 
