@@ -8247,8 +8247,16 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
           case 'cash':
           case 'Cash submission':
           case 'cash submission':
-            if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
-            else if (details.source) detailParts.push(`source: ${details.source}`);
+            if (details.recipientName) {
+              detailParts.push(`to: ${details.recipientName}`);
+            } else if (details.recipient) {
+              detailParts.push(`to: ${details.recipient}`);
+            } else if (details.source) {
+              detailParts.push(`source: ${details.source}`);
+            } else if (details.items && details.items.length > 0) {
+              const firstItem = details.items[0].item || 'Unknown';
+              detailParts.push(`for: ${firstItem}`);
+            }
             break;
           case 'general_expense':
             if (details.nature) detailParts.push(details.nature);
@@ -8337,8 +8345,16 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
         case 'cash':
         case 'Cash submission':
         case 'cash submission':
-          if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
-          else if (details.source) detailParts.push(`source: ${details.source}`);
+          if (details.recipientName) {
+            detailParts.push(`to: ${details.recipientName}`);
+          } else if (details.recipient) {
+            detailParts.push(`to: ${details.recipient}`);
+          } else if (details.source) {
+            detailParts.push(`source: ${details.source}`);
+          } else if (details.items && details.items.length > 0) {
+            const firstItem = details.items[0].item || 'Unknown';
+            detailParts.push(`for: ${firstItem}`);
+          }
           break;
         case 'general_expense':
           if (details.nature) detailParts.push(details.nature);
