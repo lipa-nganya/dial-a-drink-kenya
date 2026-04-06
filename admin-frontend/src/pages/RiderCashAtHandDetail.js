@@ -465,13 +465,10 @@ const RiderCashAtHandDetail = () => {
     };
     const getDescriptionPlain = (entry) => {
       const type = entryType(entry);
-      const orderNum = getOrderNumber(entry);
       const baseDesc = (entry.description || entry.customerName || '').toString().trim();
       if (type === 'cash_submission') {
-        // Match driver-app phrasing: Order # + Address + "submission"
-        const addr = baseDesc || 'N/A';
-        const withOrder = orderNum != null ? `#${orderNum} ${addr}` : addr;
-        return `${withOrder} submission`.replace(/\s+/g, ' ').trim();
+        // Use getDetailsPlainSummary for better formatting
+        return getDetailsPlainSummary(entry) || baseDesc || 'N/A';
       }
       return baseDesc || 'N/A';
     };
