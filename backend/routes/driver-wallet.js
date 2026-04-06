@@ -328,8 +328,18 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         } else {
           description = 'Cash expense';
         }
-      } else if (submissionType === 'general_expense' && submission.details?.nature) {
-        description = `Expense: ${submission.details.nature}`;
+      } else if (submissionType === 'general_expense') {
+        const d = submission.details || {};
+        if (d.nature) {
+          description = `Expense: ${d.nature}`;
+        } else if (d.description) {
+          description = `Expense: ${d.description}`;
+        } else if (Array.isArray(d.items) && d.items.length > 0) {
+          const firstItem = d.items[0].item || d.items[0].description || 'Unknown';
+          description = `Expense: ${firstItem}`;
+        } else {
+          description = 'General expense';
+        }
       } else if (submissionType === 'payment_to_office') {
         if (submission.details?.sender) {
           description = `Payment from: ${submission.details.sender}`;

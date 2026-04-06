@@ -409,6 +409,10 @@ const CashAtHand = () => {
       case 'general_expense':
         if (details.nature) detailParts.push(details.nature);
         else if (details.description) detailParts.push(details.description);
+        else if (Array.isArray(details.items) && details.items.length > 0) {
+          const firstItem = details.items[0].item || details.items[0].description || 'Unknown';
+          detailParts.push(`for: ${firstItem}`);
+        }
         break;
         
       case 'payment_to_office':
