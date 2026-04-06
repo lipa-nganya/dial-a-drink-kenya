@@ -46,6 +46,7 @@ import AdminLogin from './pages/admin/AdminLogin';
 import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
 import CanonicalHead from './components/CanonicalHead';
+import SEOHead from './components/SEOHead';
 import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
 import './App.css';
 
@@ -201,6 +202,7 @@ function AppContent() {
   
   return (
     <MUIThemeProvider theme={muiTheme}>
+      <SEOHead />
       <CanonicalHead />
       <CssBaseline />
       <div
