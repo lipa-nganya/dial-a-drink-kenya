@@ -8241,24 +8241,28 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
         const detailParts = [];
         switch (submission.submissionType) {
           case 'purchases':
-            if (details.supplier) detailParts.push(`Supplier: ${details.supplier}`);
+            if (details.supplier) detailParts.push(details.supplier);
+            if (details.item) detailParts.push(details.item);
             break;
           case 'cash':
-            if (details.recipientName) detailParts.push(`Recipient: ${details.recipientName}`);
+            if (details.recipientName) detailParts.push(details.recipientName);
+            else if (details.source) detailParts.push(details.source);
             break;
           case 'general_expense':
             if (details.nature) detailParts.push(details.nature);
+            else if (details.description) detailParts.push(details.description);
             break;
           case 'payment_to_office':
-            if (details.sender) detailParts.push(`Sender: ${details.sender}`);
+            if (details.sender) detailParts.push(details.sender);
+            else if (details.accountType) detailParts.push(details.accountType);
             break;
         }
         
-        // Add delivery address first 2 words if available
+        // Add delivery address first 2 words ONLY if there are orders
         if (submission.orders && submission.orders.length > 0 && submission.orders[0].deliveryAddress) {
           const addressWords = submission.orders[0].deliveryAddress.trim().split(/\s+/).slice(0, 2).join(' ');
-          if (addressWords && addressWords !== 'In-Store Purchase') {
-            detailParts.push(`Address: ${addressWords}`);
+          if (addressWords && addressWords !== 'In-Store Purchase' && addressWords !== 'In-Store') {
+            detailParts.push(addressWords);
           }
         }
         
@@ -8325,28 +8329,28 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
       const detailParts = [];
       switch (submission.submissionType) {
         case 'purchases':
-          if (details.supplier) detailParts.push(`Supplier: ${details.supplier}`);
-          if (details.item) detailParts.push(`Item: ${details.item}`);
+          if (details.supplier) detailParts.push(details.supplier);
+          if (details.item) detailParts.push(details.item);
           break;
         case 'cash':
-          if (details.recipientName) detailParts.push(`Recipient: ${details.recipientName}`);
-          if (details.source) detailParts.push(`Source: ${details.source}`);
+          if (details.recipientName) detailParts.push(details.recipientName);
+          else if (details.source) detailParts.push(details.source);
           break;
         case 'general_expense':
           if (details.nature) detailParts.push(details.nature);
-          if (details.description) detailParts.push(details.description);
+          else if (details.description) detailParts.push(details.description);
           break;
         case 'payment_to_office':
-          if (details.sender) detailParts.push(`Sender: ${details.sender}`);
-          if (details.accountType) detailParts.push(`Account: ${details.accountType}`);
+          if (details.sender) detailParts.push(details.sender);
+          else if (details.accountType) detailParts.push(details.accountType);
           break;
       }
       
-      // Add delivery address first 2 words if available
+      // Add delivery address first 2 words ONLY if there are orders
       if (submission.orders && submission.orders.length > 0 && submission.orders[0].deliveryAddress) {
         const addressWords = submission.orders[0].deliveryAddress.trim().split(/\s+/).slice(0, 2).join(' ');
-        if (addressWords && addressWords !== 'In-Store Purchase') {
-          detailParts.push(`Address: ${addressWords}`);
+        if (addressWords && addressWords !== 'In-Store Purchase' && addressWords !== 'In-Store') {
+          detailParts.push(addressWords);
         }
       }
       
