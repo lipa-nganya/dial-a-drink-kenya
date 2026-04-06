@@ -371,6 +371,8 @@ const CashAtHand = () => {
     const submissionType = submission.submissionType;
     const typeLabel = getSubmissionTypeLabel(submissionType);
     
+    console.log('🔍 Building description for submission:', { submissionType, details, orders: submission.orders });
+    
     // Start with submission type
     let description = typeLabel;
     
@@ -429,6 +431,8 @@ const CashAtHand = () => {
     if (detailParts.length > 0) {
       description += ` - ${detailParts.join(', ')}`;
     }
+    
+    console.log('✅ Final description:', description);
     
     return description;
   };
