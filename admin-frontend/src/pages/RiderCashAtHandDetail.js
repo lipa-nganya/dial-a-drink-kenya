@@ -124,18 +124,17 @@ const getDetailsPlainSummary = (s) => {
       return '';
     }
     case 'general_expense': {
-      const nature = d.nature ? `Nature: ${d.nature}` : '';
-      if (Array.isArray(d.items) && d.items.length > 0) {
-        const lines = d.items
-          .map((it) => {
-            const name = it.item || it.description || 'Item';
-            const amt = it.amount != null || it.price != null ? formatCurrency(it.amount ?? it.price) : '';
-            return amt ? `${name} (${amt})` : name;
-          })
-          .join('; ');
-        return [nature, lines].filter(Boolean).join(' · ');
+      if (d.nature) {
+        return `Nature: ${d.nature}`;
       }
-      return nature;
+      if (d.description) {
+        return d.description;
+      }
+      if (Array.isArray(d.items) && d.items.length > 0) {
+        const firstItem = d.items[0].item || d.items[0].description || 'No Description';
+        return `for: ${firstItem}`;
+      }
+      return 'No Description';
     }
     case 'payment_to_office': {
       const sender = d.sender ? `from: ${d.sender}` : '';
