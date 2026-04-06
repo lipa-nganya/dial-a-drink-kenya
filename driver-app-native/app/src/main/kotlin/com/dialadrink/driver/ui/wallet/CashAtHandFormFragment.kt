@@ -36,7 +36,7 @@ class CashAtHandFormFragment : Fragment() {
     private val binding get() = _binding!!
     
     private var selectedSubmissionType: String? = null
-    private val submissionTypes = listOf("Purchases", "Cash", "General Expense", "Payment to Office")
+    private val submissionTypes = listOf("Orders", "Purchases", "Cash", "General Expense", "Payment to Office")
     private val submissionItems = mutableListOf<PurchaseItem>()
     private var eligibleOrderPayments: List<OrderForOrderPayment> = emptyList()
     private val selectedOrderIds = linkedSetOf<Int>()
@@ -216,10 +216,11 @@ class CashAtHandFormFragment : Fragment() {
             
             autoComplete.setOnItemClickListener { _, _, position, _ ->
                 selectedSubmissionType = when (position) {
-                    0 -> "purchases"
-                    1 -> "cash"
-                    2 -> "general_expense"
-                    3 -> "payment_to_office"
+                    0 -> "order_payment"
+                    1 -> "purchases"
+                    2 -> "cash"
+                    3 -> "general_expense"
+                    4 -> "payment_to_office"
                     else -> null
                 }
                 updateDynamicFields()
