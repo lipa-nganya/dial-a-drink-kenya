@@ -141,18 +141,18 @@ class RejectedSubmissionsFragment : Fragment() {
             "purchases" -> {
                 val supplier = submission.details?.get("supplier")?.toString() ?: "Unknown Supplier"
                 val item = submission.details?.get("item")?.toString() ?: "Unknown"
-                "Purchase: $item from $supplier"
+                "Purchase: $supplier"
             }
             "cash" -> {
-                val source = submission.details?.get("source")?.toString() ?: "Unknown Source"
-                "Expense: $source"
+                val recipient = submission.details?.get("recipientName")?.toString() ?: "Unknown"
+                "Expense: Cash to $recipient"
             }
             "general_expense" -> {
-                val description = submission.details?.get("description")?.toString() ?: "No Description"
-                "Expense: $description"
+                val nature = submission.details?.get("nature")?.toString() ?: "No Description"
+                "Expense: $nature"
             }
             "payment_to_office" -> {
-                val sender = submission.details?.get("sender")?.toString() ?: "Unknown Sender"
+                val sender = submission.details?.get("sender")?.toString() ?: submission.details?.get("accountType")?.toString() ?: "Unknown"
                 "Payment to Office: $sender"
             }
             "order_payment" -> {
