@@ -803,7 +803,7 @@ const CashAtHand = () => {
                 <TableRow>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order #</TableCell>
-                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Description</TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Details</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Debit</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Credit</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Balance</TableCell>
@@ -830,7 +830,7 @@ const CashAtHand = () => {
                   // Add admin cash orders (from mark-payment-cash) as credits
                   transactions.filter(tx => tx.source === 'admin_cash_order' && tx.type === 'credit').forEach(tx => {
                     allLogEntries.push({
-                      id: tx.id,
+                      id: `admin-cash-tx-${tx.id}`,
                       date: tx.date,
                       description: tx.description + (tx.customerName ? ` - ${tx.customerName}` : ''),
                       debit: tx.amount,
@@ -864,7 +864,7 @@ const CashAtHand = () => {
                       const description = buildSubmissionDescription(submission, true);
                       
                       allLogEntries.push({
-                        id: `submission-${submission.id}`,
+                        id: `admin-submission-${submission.id}`,
                         date: submission.approvedAt || submission.createdAt,
                         description: description,
                         debit: 0,
