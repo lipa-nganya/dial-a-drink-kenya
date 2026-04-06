@@ -314,12 +314,30 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         } else if (submission.details?.item) {
           description = `Purchase: ${submission.details.item} from ${submission.details.supplier}`;
         }
-      } else if (submissionType === 'cash' && submission.details?.recipientName) {
-        description = `Cash to: ${submission.details.recipientName}`;
+      } else if (submissionType === 'cash') {
+        const d = submission.details || {};
+        if (d.recipientName) {
+          description = `Cash to: ${d.recipientName}`;
+        } else if (d.recipient) {
+          description = `Cash to: ${d.recipient}`;
+        } else if (d.source) {
+          description = `Cash source: ${d.source}`;
+        } else if (Array.isArray(d.items) && d.items.length > 0) {
+          const firstItem = d.items[0].item || d.items[0].name || 'Unknown';
+          description = `Cash for: ${firstItem}`;
+        } else {
+          description = 'Cash expense';
+        }
       } else if (submissionType === 'general_expense' && submission.details?.nature) {
         description = `Expense: ${submission.details.nature}`;
-      } else if (submissionType === 'payment_to_office' && submission.details?.accountType) {
-        description = `Payment to office: ${submission.details.accountType}`;
+      } else if (submissionType === 'payment_to_office') {
+        if (submission.details?.sender) {
+          description = `Payment from: ${submission.details.sender}`;
+        } else if (submission.details?.accountType) {
+          description = `Payment to office: ${submission.details.accountType}`;
+        } else {
+          description = 'Payment to office';
+        }
       } else if (submissionType === 'order_payment' && (submission.details?.orderId != null)) {
         description = `Order payment #${submission.details.orderId}`;
       }

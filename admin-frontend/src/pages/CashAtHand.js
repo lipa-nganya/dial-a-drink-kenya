@@ -352,7 +352,8 @@ const CashAtHand = () => {
       payment_to_office: 'Payment to Office',
       walk_in_sale: 'Walk-in Sale',
       order_payment: 'Order Payment',
-      'Cash submission': 'Expense' // Handle legacy format
+      'Cash submission': 'Cash Expense', // Handle legacy format
+      'cash submission': 'Cash Expense' // Handle lowercase legacy format
     };
     
     // Handle null, undefined, or empty string
@@ -386,13 +387,23 @@ const CashAtHand = () => {
     
     switch (submissionType) {
       case 'purchases':
-        if (details.supplier) detailParts.push(details.supplier);
+        if (details.supplier) detailParts.push(`from: ${details.supplier}`);
         if (details.item) detailParts.push(details.item);
         break;
         
       case 'cash':
-        if (details.recipientName) detailParts.push(details.recipientName);
-        else if (details.source) detailParts.push(details.source);
+      case 'Cash submission':
+      case 'cash submission':
+        if (details.recipientName) {
+          detailParts.push(`to: ${details.recipientName}`);
+        } else if (details.recipient) {
+          detailParts.push(`to: ${details.recipient}`);
+        } else if (details.source) {
+          detailParts.push(`source: ${details.source}`);
+        } else if (details.items && details.items.length > 0) {
+          const firstItem = details.items[0].item || 'Unknown';
+          detailParts.push(`for: ${firstItem}`);
+        }
         break;
         
       case 'general_expense':
@@ -401,18 +412,18 @@ const CashAtHand = () => {
         break;
         
       case 'payment_to_office':
-        if (details.sender) detailParts.push(details.sender);
+        if (details.sender) detailParts.push(`from: ${details.sender}`);
         else if (details.accountType) detailParts.push(details.accountType);
         break;
         
       default:
         // For other types, try to show any available detail
-        if (details.recipientName) detailParts.push(details.recipientName);
+        if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
+        else if (details.sender) detailParts.push(`from: ${details.sender}`);
         else if (details.nature) detailParts.push(details.nature);
         else if (details.description) detailParts.push(details.description);
-        else if (details.sender) detailParts.push(details.sender);
-        else if (details.source) detailParts.push(details.source);
-        else if (details.supplier) detailParts.push(details.supplier);
+        else if (details.source) detailParts.push(`source: ${details.source}`);
+        else if (details.supplier) detailParts.push(`from: ${details.supplier}`);
         break;
     }
     
@@ -800,7 +811,7 @@ const CashAtHand = () => {
                 <TableRow>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Date</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Order #</TableCell>
-                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Description</TableCell>
+                  <TableCell sx={{ color: colors.accentText, fontWeight: 600 }}>Details</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Debit</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Credit</TableCell>
                   <TableCell sx={{ color: colors.accentText, fontWeight: 600 }} align="right">Balance</TableCell>
@@ -827,7 +838,7 @@ const CashAtHand = () => {
                   // Add admin cash orders (from mark-payment-cash) as credits
                   transactions.filter(tx => tx.source === 'admin_cash_order' && tx.type === 'credit').forEach(tx => {
                     allLogEntries.push({
-                      id: tx.id,
+                      id: `admin-cash-tx-${tx.id}`,
                       date: tx.date,
                       description: tx.description + (tx.customerName ? ` - ${tx.customerName}` : ''),
                       debit: tx.amount,
@@ -861,7 +872,7 @@ const CashAtHand = () => {
                       const description = buildSubmissionDescription(submission, true);
                       
                       allLogEntries.push({
-                        id: `submission-${submission.id}`,
+                        id: `admin-submission-${submission.id}`,
                         date: submission.approvedAt || submission.createdAt,
                         description: description,
                         debit: 0,
