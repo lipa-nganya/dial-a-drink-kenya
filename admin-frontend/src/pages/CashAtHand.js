@@ -416,8 +416,18 @@ const CashAtHand = () => {
         break;
         
       case 'payment_to_office':
-        if (details.sender) detailParts.push(`from: ${details.sender}`);
+        // Recipient/sender info
+        if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
+        else if (details.recipient) detailParts.push(`to: ${details.recipient}`);
+        else if (details.sender) detailParts.push(`from: ${details.sender}`);
+        
+        // Account info
+        if (details.assetAccountName) detailParts.push(`via: ${details.assetAccountName}`);
+        else if (details.accountReference) detailParts.push(`ref: ${details.accountReference}`);
         else if (details.accountType) detailParts.push(details.accountType);
+        
+        // Transaction code
+        if (details.transactionCode) detailParts.push(`code: ${details.transactionCode}`);
         break;
         
       default:
