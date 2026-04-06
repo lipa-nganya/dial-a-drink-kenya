@@ -154,12 +154,11 @@ class ApprovedSubmissionsFragment : Fragment() {
         return when (submission.submissionType) {
             "purchases" -> {
                 val supplier = submission.details?.get("supplier")?.toString() ?: "Unknown Supplier"
-                val item = submission.details?.get("item")?.toString() ?: "Unknown"
                 "Purchase: $supplier"
             }
             "cash" -> {
                 val recipient = submission.details?.get("recipientName")?.toString() ?: "Unknown"
-                "Expense: Cash to $recipient"
+                "Expense: $recipient"
             }
             "general_expense" -> {
                 val nature = submission.details?.get("nature")?.toString() ?: "No Description"

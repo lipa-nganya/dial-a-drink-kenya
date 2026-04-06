@@ -365,6 +365,74 @@ const CashAtHand = () => {
     ).join(' ');
   };
 
+  // Build detailed description for submissions based on type and details
+  const buildSubmissionDescription = (submission, includeOrderInfo = true) => {
+    const details = submission.details || {};
+    const submissionType = submission.submissionType;
+    const typeLabel = getSubmissionTypeLabel(submissionType);
+    
+    // Start with submission type
+    let description = typeLabel;
+    
+    // Add order info if available and requested
+    if (includeOrderInfo && submission.orders && submission.orders.length > 0) {
+      const orderInfo = submission.orders.map(o => `Order #${o.id}`).join(', ');
+      description += ` - ${orderInfo}`;
+    }
+    
+    // Add specific details based on submission type
+    const detailParts = [];
+    
+    switch (submissionType) {
+      case 'purchases':
+        if (details.supplier) detailParts.push(`Supplier: ${details.supplier}`);
+        if (details.item) detailParts.push(`Item: ${details.item}`);
+        break;
+        
+      case 'cash':
+        if (details.recipientName) detailParts.push(`Recipient: ${details.recipientName}`);
+        if (details.source) detailParts.push(`Source: ${details.source}`);
+        break;
+        
+      case 'general_expense':
+        if (details.nature) detailParts.push(details.nature);
+        if (details.description) detailParts.push(details.description);
+        break;
+        
+      case 'payment_to_office':
+        if (details.sender) detailParts.push(`Sender: ${details.sender}`);
+        if (details.accountType) detailParts.push(`Account: ${details.accountType}`);
+        break;
+        
+      default:
+        // For other types, try to show any available detail
+        if (details.recipientName) detailParts.push(`Recipient: ${details.recipientName}`);
+        if (details.nature) detailParts.push(details.nature);
+        if (details.description) detailParts.push(details.description);
+        if (details.sender) detailParts.push(`Sender: ${details.sender}`);
+        if (details.source) detailParts.push(`Source: ${details.source}`);
+        break;
+    }
+    
+    // Add delivery address first 2 words if available from orders
+    if (submission.orders && submission.orders.length > 0) {
+      const firstOrder = submission.orders[0];
+      if (firstOrder.deliveryAddress) {
+        const addressWords = firstOrder.deliveryAddress.trim().split(/\s+/).slice(0, 2).join(' ');
+        if (addressWords && addressWords !== 'In-Store Purchase') {
+          detailParts.push(`Address: ${addressWords}`);
+        }
+      }
+    }
+    
+    // Append detail parts if any
+    if (detailParts.length > 0) {
+      description += ` - ${detailParts.join(', ')}`;
+    }
+    
+    return description;
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'approved':
@@ -769,14 +837,9 @@ const CashAtHand = () => {
                   
                   // Add approved driver submissions as debits (cash received from drivers increases cash at hand)
                   getApprovedDriverSubmissions.forEach(submission => {
-                    const orderInfo = submission.orders && submission.orders.length > 0
-                      ? submission.orders.map(o => `Order #${o.id}`).join(', ')
-                      : '';
-                    let description = `${submission.driver?.name || 'Driver'}`;
-                    if (orderInfo) {
-                      description += ` - ${orderInfo}`;
-                    }
-                    description += ` (${getSubmissionTypeLabel(submission.submissionType)})`;
+                    const driverName = submission.driver?.name || 'Driver';
+                    const submissionDesc = buildSubmissionDescription(submission, true);
+                    const description = `${driverName} - ${submissionDesc}`;
                     
                     allLogEntries.push({
                       id: `driver-submission-${submission.id}`,
@@ -793,20 +856,7 @@ const CashAtHand = () => {
                   submissions
                     .filter(s => s.status === 'approved' && s.admin !== null && !s.driver)
                     .forEach(submission => {
-                      const orderInfo = submission.orders && submission.orders.length > 0
-                        ? submission.orders.map(o => `Order #${o.id}`).join(', ')
-                        : '';
-                      let description = getSubmissionTypeLabel(submission.submissionType);
-                      if (orderInfo) {
-                        description += ` - ${orderInfo}`;
-                      }
-                      if (submission.details && typeof submission.details === 'object') {
-                        if (submission.details.recipientName) {
-                          description += ` (${submission.details.recipientName})`;
-                        } else if (submission.details.nature) {
-                          description += ` (${submission.details.nature})`;
-                        }
-                      }
+                      const description = buildSubmissionDescription(submission, true);
                       
                       allLogEntries.push({
                         id: `submission-${submission.id}`,

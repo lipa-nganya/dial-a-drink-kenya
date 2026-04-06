@@ -165,5 +165,17 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Helper function to safely extract array data from API responses.
+ * Prevents "filter is not a function" errors when backend returns error objects instead of arrays.
+ * 
+ * @param {any} data - The response.data from an API call
+ * @param {Array} fallback - Fallback value if data is not an array (default: [])
+ * @returns {Array} The data if it's an array, otherwise the fallback
+ */
+export const ensureArray = (data, fallback = []) => {
+  return Array.isArray(data) ? data : fallback;
+};
+
 export { api };
 

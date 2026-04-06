@@ -145,7 +145,7 @@ class RejectedSubmissionsFragment : Fragment() {
             }
             "cash" -> {
                 val recipient = submission.details?.get("recipientName")?.toString() ?: "Unknown"
-                "Expense: Cash to $recipient"
+                "Expense: $recipient"
             }
             "general_expense" -> {
                 val nature = submission.details?.get("nature")?.toString() ?: "No Description"
