@@ -157,7 +157,7 @@ const AdminOverview = () => {
     try {
       const response = await api.get('/admin/latest-orders');
       console.log('📦 Latest orders response:', response.data);
-      setLatestOrders(response.data || []);
+      setLatestOrders(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching latest orders:', error);
       setLatestOrders([]);
@@ -177,7 +177,7 @@ const AdminOverview = () => {
     try {
       const response = await api.get('/admin/latest-transactions');
       console.log('💰 Latest transactions response:', response.data);
-      setLatestTransactions(response.data || []);
+      setLatestTransactions(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching latest transactions:', error);
       setLatestTransactions([]);
@@ -193,7 +193,7 @@ const AdminOverview = () => {
       nextDay.setDate(nextDay.getDate() + 1);
 
       const response = await api.get('/admin/orders');
-      const orders = response.data || [];
+      const orders = Array.isArray(response.data) ? response.data : [];
 
       const completedOrders = orders.filter(order => {
         const isCompleted = order.status === 'completed' || order.status === 'delivered';

@@ -227,7 +227,7 @@ const Orders = () => {
   const fetchTerritories = async () => {
     try {
       const response = await api.get('/territories');
-      setTerritories(response.data || []);
+      setTerritories(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching territories:', error);
     }
@@ -309,7 +309,7 @@ const Orders = () => {
   const fetchBranches = async () => {
     try {
       const response = await api.get('/branches?activeOnly=true');
-      setBranches(response.data || []);
+      setBranches(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching branches:', error);
     }
@@ -734,7 +734,7 @@ const Orders = () => {
     try {
       setLoading(true);
       const response = await api.get('/admin/orders');
-      let orders = response.data || [];
+      let orders = Array.isArray(response.data) ? response.data : [];
       
       // Filter out any undefined or null orders
       orders = orders.filter(order => order != null);
