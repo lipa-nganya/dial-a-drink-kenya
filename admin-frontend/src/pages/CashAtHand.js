@@ -352,7 +352,8 @@ const CashAtHand = () => {
       payment_to_office: 'Payment to Office',
       walk_in_sale: 'Walk-in Sale',
       order_payment: 'Order Payment',
-      'Cash submission': 'Expense' // Handle legacy format
+      'Cash submission': 'Cash Expense', // Handle legacy format
+      'cash submission': 'Cash Expense' // Handle lowercase legacy format
     };
     
     // Handle null, undefined, or empty string
@@ -386,13 +387,15 @@ const CashAtHand = () => {
     
     switch (submissionType) {
       case 'purchases':
-        if (details.supplier) detailParts.push(details.supplier);
+        if (details.supplier) detailParts.push(`from: ${details.supplier}`);
         if (details.item) detailParts.push(details.item);
         break;
         
       case 'cash':
-        if (details.recipientName) detailParts.push(details.recipientName);
-        else if (details.source) detailParts.push(details.source);
+      case 'Cash submission':
+      case 'cash submission':
+        if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
+        else if (details.source) detailParts.push(`source: ${details.source}`);
         break;
         
       case 'general_expense':
@@ -401,18 +404,18 @@ const CashAtHand = () => {
         break;
         
       case 'payment_to_office':
-        if (details.sender) detailParts.push(details.sender);
+        if (details.sender) detailParts.push(`from: ${details.sender}`);
         else if (details.accountType) detailParts.push(details.accountType);
         break;
         
       default:
         // For other types, try to show any available detail
-        if (details.recipientName) detailParts.push(details.recipientName);
+        if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
+        else if (details.sender) detailParts.push(`from: ${details.sender}`);
         else if (details.nature) detailParts.push(details.nature);
         else if (details.description) detailParts.push(details.description);
-        else if (details.sender) detailParts.push(details.sender);
-        else if (details.source) detailParts.push(details.source);
-        else if (details.supplier) detailParts.push(details.supplier);
+        else if (details.source) detailParts.push(`source: ${details.source}`);
+        else if (details.supplier) detailParts.push(`from: ${details.supplier}`);
         break;
     }
     

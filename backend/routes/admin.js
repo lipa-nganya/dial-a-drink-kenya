@@ -8241,19 +8241,21 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
         const detailParts = [];
         switch (submission.submissionType) {
           case 'purchases':
-            if (details.supplier) detailParts.push(details.supplier);
+            if (details.supplier) detailParts.push(`from: ${details.supplier}`);
             if (details.item) detailParts.push(details.item);
             break;
           case 'cash':
-            if (details.recipientName) detailParts.push(details.recipientName);
-            else if (details.source) detailParts.push(details.source);
+          case 'Cash submission':
+          case 'cash submission':
+            if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
+            else if (details.source) detailParts.push(`source: ${details.source}`);
             break;
           case 'general_expense':
             if (details.nature) detailParts.push(details.nature);
             else if (details.description) detailParts.push(details.description);
             break;
           case 'payment_to_office':
-            if (details.sender) detailParts.push(details.sender);
+            if (details.sender) detailParts.push(`from: ${details.sender}`);
             else if (details.accountType) detailParts.push(details.accountType);
             break;
         }
@@ -8329,19 +8331,21 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
       const detailParts = [];
       switch (submission.submissionType) {
         case 'purchases':
-          if (details.supplier) detailParts.push(details.supplier);
+          if (details.supplier) detailParts.push(`from: ${details.supplier}`);
           if (details.item) detailParts.push(details.item);
           break;
         case 'cash':
-          if (details.recipientName) detailParts.push(details.recipientName);
-          else if (details.source) detailParts.push(details.source);
+        case 'Cash submission':
+        case 'cash submission':
+          if (details.recipientName) detailParts.push(`to: ${details.recipientName}`);
+          else if (details.source) detailParts.push(`source: ${details.source}`);
           break;
         case 'general_expense':
           if (details.nature) detailParts.push(details.nature);
           else if (details.description) detailParts.push(details.description);
           break;
         case 'payment_to_office':
-          if (details.sender) detailParts.push(details.sender);
+          if (details.sender) detailParts.push(`from: ${details.sender}`);
           else if (details.accountType) detailParts.push(details.accountType);
           break;
       }
