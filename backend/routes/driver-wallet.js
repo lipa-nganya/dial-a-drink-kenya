@@ -314,12 +314,29 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         } else if (submission.details?.item) {
           description = `Purchase: ${submission.details.item} from ${submission.details.supplier}`;
         }
-      } else if (submissionType === 'cash' && submission.details?.recipientName) {
-        description = `Cash to: ${submission.details.recipientName}`;
+      } else if (submissionType === 'cash') {
+        if (submission.details?.recipientName) {
+          description = `Cash to: ${submission.details.recipientName}`;
+        } else if (submission.details?.recipient) {
+          description = `Cash to: ${submission.details.recipient}`;
+        } else if (submission.details?.source) {
+          description = `Cash source: ${submission.details.source}`;
+        } else if (submission.details?.items && Array.isArray(submission.details.items) && submission.details.items.length > 0) {
+          const firstItem = submission.details.items[0].item || submission.details.items[0].name || 'Unknown';
+          description = `Cash for: ${firstItem}`;
+        } else {
+          description = 'Cash expense';
+        }
       } else if (submissionType === 'general_expense' && submission.details?.nature) {
         description = `Expense: ${submission.details.nature}`;
-      } else if (submissionType === 'payment_to_office' && submission.details?.accountType) {
-        description = `Payment to office: ${submission.details.accountType}`;
+      } else if (submissionType === 'payment_to_office') {
+        if (submission.details?.sender) {
+          description = `Payment from: ${submission.details.sender}`;
+        } else if (submission.details?.accountType) {
+          description = `Payment to office: ${submission.details.accountType}`;
+        } else {
+          description = 'Payment to office';
+        }
       } else if (submissionType === 'order_payment' && (submission.details?.orderId != null)) {
         description = `Order payment #${submission.details.orderId}`;
       }
