@@ -139,25 +139,30 @@ class RejectedSubmissionsFragment : Fragment() {
     private fun getSubmissionDescription(submission: CashSubmission): String {
         return when (submission.submissionType) {
             "purchases" -> {
-                val supplier = submission.details?.get("supplier")?.toString() ?: "Unknown"
-                val item = submission.details?.get("item")?.toString() ?: "Unknown"
-                "Purchase: $item from $supplier"
+                val supplier = submission.details?.get("supplier")?.toString()
+                val item = submission.details?.get("item")?.toString()
+                when {
+                    !supplier.isNullOrEmpty() && !item.isNullOrEmpty() -> "Purchase: $item from $supplier"
+                    !item.isNullOrEmpty() -> "Purchase: $item"
+                    !supplier.isNullOrEmpty() -> "Purchase from $supplier"
+                    else -> "Purchase"
+                }
             }
             "cash" -> {
-                val recipient = submission.details?.get("recipientName")?.toString() ?: "Unknown"
-                "Cash to: $recipient"
+                val recipient = submission.details?.get("recipientName")?.toString()
+                if (!recipient.isNullOrEmpty()) "Expense: Cash to $recipient" else "Expense"
             }
             "general_expense" -> {
-                val nature = submission.details?.get("nature")?.toString() ?: "Unknown"
-                "Expense: $nature"
+                val nature = submission.details?.get("nature")?.toString()
+                if (!nature.isNullOrEmpty()) "Expense: $nature" else "General Expense"
             }
             "payment_to_office" -> {
-                val accountType = submission.details?.get("accountType")?.toString() ?: "Unknown"
-                "Payment to office: $accountType"
+                val accountType = submission.details?.get("accountType")?.toString()
+                if (!accountType.isNullOrEmpty()) "Payment to Office: $accountType" else "Payment to Office"
             }
             "order_payment" -> {
-                val orderId = submission.details?.get("orderId")?.toString() ?: ""
-                if (orderId.isNotEmpty()) "Order Payment: Order #$orderId" else "Order Payment"
+                val orderId = submission.details?.get("orderId")?.toString()
+                if (!orderId.isNullOrEmpty()) "Order Payment: Order #$orderId" else "Order Payment"
             }
             else -> "Cash Submission"
         }
