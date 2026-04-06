@@ -8066,7 +8066,7 @@ router.get('/cash-at-hand', verifyAdmin, async (req, res) => {
         { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'], required: false },
         { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false },
         { model: db.Admin, as: 'approver', attributes: ['id', 'username', 'name'], required: false },
-        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt'], required: false }
+        { model: db.Order, as: 'orders', attributes: ['id', 'customerName', 'totalAmount', 'status', 'createdAt', 'deliveryAddress'], required: false }
       ],
       order: [['createdAt', 'DESC']]
     });
@@ -8209,7 +8209,7 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
           {
             model: db.Order,
             as: 'orders',
-            attributes: ['id', 'customerName'],
+            attributes: ['id', 'customerName', 'deliveryAddress'],
             required: false
           }
         ],
@@ -8217,11 +8217,13 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
       });
 
       approvedDriverSubmissions.forEach(submission => {
+        const details = submission.details || {};
         const orderInfo = submission.orders && submission.orders.length > 0
           ? submission.orders.map(o => `Order #${o.id}`).join(', ')
           : '';
         const typeLabel = {
-          'cash': 'Cash',
+          'cash': 'Expense',
+          'purchases': 'Purchase',
           'general_expense': 'General Expense',
           'payment_to_office': 'Payment to Office',
           'walk_in_sale': 'Walk-in Sale',
@@ -8229,8 +8231,40 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
         }[submission.submissionType] || submission.submissionType;
 
         let description = submission.driver?.name || 'Driver';
-        if (orderInfo) description += ` - ${orderInfo}`;
-        description += ` (${typeLabel})`;
+        description += ` - ${typeLabel}`;
+        
+        if (orderInfo) {
+          description += ` - ${orderInfo}`;
+        }
+        
+        // Add specific details based on submission type
+        const detailParts = [];
+        switch (submission.submissionType) {
+          case 'purchases':
+            if (details.supplier) detailParts.push(`Supplier: ${details.supplier}`);
+            break;
+          case 'cash':
+            if (details.recipientName) detailParts.push(`Recipient: ${details.recipientName}`);
+            break;
+          case 'general_expense':
+            if (details.nature) detailParts.push(details.nature);
+            break;
+          case 'payment_to_office':
+            if (details.sender) detailParts.push(`Sender: ${details.sender}`);
+            break;
+        }
+        
+        // Add delivery address first 2 words if available
+        if (submission.orders && submission.orders.length > 0 && submission.orders[0].deliveryAddress) {
+          const addressWords = submission.orders[0].deliveryAddress.trim().split(/\s+/).slice(0, 2).join(' ');
+          if (addressWords && addressWords !== 'In-Store Purchase') {
+            detailParts.push(`Address: ${addressWords}`);
+          }
+        }
+        
+        if (detailParts.length > 0) {
+          description += ` - ${detailParts.join(', ')}`;
+        }
 
         transactions.push({
           id: `driver-submission-${submission.id}`,
@@ -8259,7 +8293,7 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
         {
           model: db.Order,
           as: 'orders',
-          attributes: ['id', 'customerName'],
+          attributes: ['id', 'customerName', 'deliveryAddress'],
           required: false
         }
       ],
@@ -8267,13 +8301,14 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
     });
 
     adminSubmissions.forEach(submission => {
+      const details = submission.details || {};
       const orderInfo = submission.orders && submission.orders.length > 0
         ? submission.orders.map(o => `Order #${o.id}`).join(', ')
         : '';
       
       const typeLabel = {
-        'cash': 'Cash',
-        'purchases': 'Purchases',
+        'cash': 'Expense',
+        'purchases': 'Purchase',
         'general_expense': 'General Expense',
         'payment_to_office': 'Payment to Office',
         'walk_in_sale': 'Walk-in Sale',
@@ -8281,17 +8316,42 @@ router.get('/cash-at-hand/transactions', verifyAdmin, async (req, res) => {
       }[submission.submissionType] || submission.submissionType;
 
       let description = typeLabel;
+      
       if (orderInfo) {
         description += ` - ${orderInfo}`;
       }
-      if (submission.details && typeof submission.details === 'object') {
-        if (submission.details.recipientName) {
-          description += ` (${submission.details.recipientName})`;
-        } else if (submission.details.nature) {
-          description += ` (${submission.details.nature})`;
-        } else if (submission.details.supplier) {
-          description += ` (${submission.details.supplier})`;
+      
+      // Add specific details based on submission type
+      const detailParts = [];
+      switch (submission.submissionType) {
+        case 'purchases':
+          if (details.supplier) detailParts.push(`Supplier: ${details.supplier}`);
+          if (details.item) detailParts.push(`Item: ${details.item}`);
+          break;
+        case 'cash':
+          if (details.recipientName) detailParts.push(`Recipient: ${details.recipientName}`);
+          if (details.source) detailParts.push(`Source: ${details.source}`);
+          break;
+        case 'general_expense':
+          if (details.nature) detailParts.push(details.nature);
+          if (details.description) detailParts.push(details.description);
+          break;
+        case 'payment_to_office':
+          if (details.sender) detailParts.push(`Sender: ${details.sender}`);
+          if (details.accountType) detailParts.push(`Account: ${details.accountType}`);
+          break;
+      }
+      
+      // Add delivery address first 2 words if available
+      if (submission.orders && submission.orders.length > 0 && submission.orders[0].deliveryAddress) {
+        const addressWords = submission.orders[0].deliveryAddress.trim().split(/\s+/).slice(0, 2).join(' ');
+        if (addressWords && addressWords !== 'In-Store Purchase') {
+          detailParts.push(`Address: ${addressWords}`);
         }
+      }
+      
+      if (detailParts.length > 0) {
+        description += ` - ${detailParts.join(', ')}`;
       }
 
       const isWalkInSale = submission.submissionType === 'walk_in_sale';
