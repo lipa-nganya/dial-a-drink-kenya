@@ -165,7 +165,15 @@ class PendingSubmissionsFragment : Fragment() {
                 "Expense: $recipient"
             }
             "general_expense" -> {
-                val nature = submission.details?.get("nature")?.toString() ?: "No Description"
+                val nature = submission.details?.get("nature")?.toString()
+                    ?: submission.details?.get("description")?.toString()
+                    ?: run {
+                        val items = submission.details?.get("items") as? List<*>
+                        if (!items.isNullOrEmpty()) {
+                            val firstItem = items[0] as? Map<*, *>
+                            firstItem?.get("item")?.toString() ?: "No Description"
+                        } else "No Description"
+                    }
                 "Expense: $nature"
             }
             "payment_to_office" -> {
