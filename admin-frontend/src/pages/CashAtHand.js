@@ -346,14 +346,23 @@ const CashAtHand = () => {
 
   const getSubmissionTypeLabel = (type) => {
     const labels = {
-      purchases: 'Purchases',
-      cash: 'Cash',
+      purchases: 'Purchase',
+      cash: 'Expense',
       general_expense: 'General Expense',
       payment_to_office: 'Payment to Office',
       walk_in_sale: 'Walk-in Sale',
       order_payment: 'Order Payment'
     };
-    return labels[type] || type;
+    
+    // Handle null, undefined, or empty string
+    if (!type || type.trim() === '') {
+      return 'Unknown Type';
+    }
+    
+    // Return the label or capitalize the type if not found
+    return labels[type] || type.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
   };
 
   const getStatusColor = (status) => {
