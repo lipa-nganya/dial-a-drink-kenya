@@ -331,7 +331,7 @@ const ProductPage = () => {
       
       // Fetch products from the same category
       const response = await api.get('/drinks');
-      const allProducts = response.data || [];
+      const allProducts = Array.isArray(response.data) ? response.data : [];
       
       // Filter related products (same category, exclude current product, limit to 4)
       const related = allProducts

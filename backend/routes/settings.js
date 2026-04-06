@@ -228,6 +228,12 @@ Welcome aboard! 🎉`;
       if (key === 'adminAccessPaywall') {
         return res.json({ key: 'adminAccessPaywall', value: 'false' });
       }
+      if (key === 'seoMetaTitle') {
+        return res.json({ key: 'seoMetaTitle', value: 'Alcohol Delivery Nairobi - Dial A Drink Kenya - 24 hours Fast Delivery' });
+      }
+      if (key === 'seoMetaDescription') {
+        return res.json({ key: 'seoMetaDescription', value: 'Alcohol delivery in Nairobi and its environs in under 30 minutes! Wide variety of whisky, wine, cognacs, gin etc Call 0723688108 to order.' });
+      }
       return res.status(404).json({ error: 'Setting not found' });
     }
     

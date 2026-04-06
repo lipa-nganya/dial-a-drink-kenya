@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -47,6 +47,7 @@ import AdminLogin from './pages/admin/AdminLogin';
 import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
 import CanonicalHead from './components/CanonicalHead';
+import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
 import './App.css';
 
 const getMUITheme = () => {
@@ -188,6 +189,16 @@ function AppContent() {
   const isAdminLogin = location.pathname === '/admin/login';
   const { snackbarOpen, setSnackbarOpen, snackbarMessage } = useCart();
   const muiTheme = getMUITheme();
+  
+  // Start health check service to keep backend warm
+  useEffect(() => {
+    startHealthCheck();
+    
+    // Cleanup on unmount
+    return () => {
+      stopHealthCheck();
+    };
+  }, []);
   
   return (
     <MUIThemeProvider theme={muiTheme}>
