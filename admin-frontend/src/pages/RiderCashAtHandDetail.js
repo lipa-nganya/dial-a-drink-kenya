@@ -108,17 +108,20 @@ const getDetailsPlainSummary = (s) => {
   if (!d || typeof d !== 'object') return '';
   switch (s.submissionType) {
     case 'cash': {
-      if (Array.isArray(d.items) && d.items.length > 0) {
-        return d.items
-          .map((it) => {
-            const name = it.item || it.name || 'Item';
-            const qty = it.quantity != null ? it.quantity : 1;
-            const pr = it.price != null ? formatCurrency(it.price) : '';
-            return pr ? `${name} ×${qty} (${pr})` : `${name} ×${qty}`;
-          })
-          .join('; ');
+      if (d.recipientName) {
+        return `to: ${d.recipientName}`;
       }
-      return d.recipientName ? `Recipient: ${d.recipientName}` : '';
+      if (d.recipient) {
+        return `to: ${d.recipient}`;
+      }
+      if (d.source) {
+        return `source: ${d.source}`;
+      }
+      if (Array.isArray(d.items) && d.items.length > 0) {
+        const firstItem = d.items[0].item || d.items[0].name || 'Unknown';
+        return `for: ${firstItem}`;
+      }
+      return '';
     }
     case 'general_expense': {
       const nature = d.nature ? `Nature: ${d.nature}` : '';
@@ -135,34 +138,14 @@ const getDetailsPlainSummary = (s) => {
       return nature;
     }
     case 'payment_to_office': {
-      const acct = d.accountType ? `Account: ${d.accountType}` : '';
-      const ref = d.reference ? `Ref: ${d.reference}` : '';
-      if (Array.isArray(d.items) && d.items.length > 0) {
-        const lines = d.items
-          .map((it) => `${it.item || it.description || 'Item'} (${formatCurrency(it.amount ?? it.price ?? 0)})`)
-          .join('; ');
-        return [acct, ref, lines].filter(Boolean).join(' · ');
-      }
-      return [acct, ref].filter(Boolean).join(' · ');
+      const sender = d.sender ? `from: ${d.sender}` : '';
+      const acct = d.accountType || '';
+      return [sender, acct].filter(Boolean).join(', ');
     }
     case 'purchases': {
-      const sup = d.supplier ? `Supplier: ${d.supplier}` : '';
-      const loc = d.deliveryLocation ? `Deliver to: ${d.deliveryLocation}` : '';
-      if (Array.isArray(d.items) && d.items.length > 0) {
-        const lines = d.items
-          .map((it) => {
-            const name = it.item || it.name || 'Item';
-            const qty = it.quantity != null ? it.quantity : 1;
-            const pr = it.price != null ? formatCurrency(it.price) : '';
-            return pr ? `${name} ×${qty} (${pr})` : `${name} ×${qty}`;
-          })
-          .join('; ');
-        return [sup, loc, lines].filter(Boolean).join(' · ');
-      }
-      if (d.item && d.price != null) {
-        return [sup, loc, `${d.item} (${formatCurrency(d.price)})`].filter(Boolean).join(' · ');
-      }
-      return [sup, loc].filter(Boolean).join(' · ');
+      const sup = d.supplier ? `from: ${d.supplier}` : '';
+      const item = d.item || (Array.isArray(d.items) && d.items.length > 0 ? d.items[0].item || d.items[0].name : '');
+      return [sup, item].filter(Boolean).join(', ');
     }
     case 'order_payment': {
       const parts = [];
