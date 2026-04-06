@@ -845,10 +845,16 @@ router.post('/:driverId/cash-submissions', async (req, res) => {
     const { driverId } = req.params;
     const { submissionType, amount, details, orderId: bodyOrderId, orderIds: bodyOrderIds } = req.body;
 
+    // Block order_payment submissions from drivers (only allowed via admin panel)
+    if (submissionType === 'order_payment') {
+      console.log('❌ Driver attempted to create order_payment submission - blocked');
+      return sendError(res, 'Order payment submissions are not allowed from the driver app. Please contact admin.', 403);
+    }
+
     // Validate required fields
-    if (!submissionType || !['purchases', 'cash', 'general_expense', 'payment_to_office', 'walk_in_sale', 'order_payment'].includes(submissionType)) {
+    if (!submissionType || !['purchases', 'cash', 'general_expense', 'payment_to_office', 'walk_in_sale'].includes(submissionType)) {
       console.log('❌ Invalid submission type:', submissionType);
-      return sendError(res, 'Invalid submission type. Must be one of: purchases, cash, general_expense, payment_to_office, walk_in_sale, order_payment', 400);
+      return sendError(res, 'Invalid submission type. Must be one of: purchases, cash, general_expense, payment_to_office, walk_in_sale', 400);
     }
 
     let submissionAmount = amount != null ? parseFloat(amount) : 0;
