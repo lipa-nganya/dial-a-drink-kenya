@@ -315,14 +315,15 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
           description = `Purchase: ${submission.details.item} from ${submission.details.supplier}`;
         }
       } else if (submissionType === 'cash') {
-        if (submission.details?.recipientName) {
-          description = `Cash to: ${submission.details.recipientName}`;
-        } else if (submission.details?.recipient) {
-          description = `Cash to: ${submission.details.recipient}`;
-        } else if (submission.details?.source) {
-          description = `Cash source: ${submission.details.source}`;
-        } else if (submission.details?.items && Array.isArray(submission.details.items) && submission.details.items.length > 0) {
-          const firstItem = submission.details.items[0].item || submission.details.items[0].name || 'Unknown';
+        const d = submission.details || {};
+        if (d.recipientName) {
+          description = `Cash to: ${d.recipientName}`;
+        } else if (d.recipient) {
+          description = `Cash to: ${d.recipient}`;
+        } else if (d.source) {
+          description = `Cash source: ${d.source}`;
+        } else if (Array.isArray(d.items) && d.items.length > 0) {
+          const firstItem = d.items[0].item || d.items[0].name || 'Unknown';
           description = `Cash for: ${firstItem}`;
         } else {
           description = 'Cash expense';
