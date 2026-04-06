@@ -341,10 +341,34 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
           description = 'General expense';
         }
       } else if (submissionType === 'payment_to_office') {
-        if (submission.details?.sender) {
-          description = `Payment from: ${submission.details.sender}`;
-        } else if (submission.details?.accountType) {
-          description = `Payment to office: ${submission.details.accountType}`;
+        const d = submission.details || {};
+        const parts = [];
+        
+        // Recipient/sender info
+        if (d.recipientName) {
+          parts.push(`to: ${d.recipientName}`);
+        } else if (d.recipient) {
+          parts.push(`to: ${d.recipient}`);
+        } else if (d.sender) {
+          parts.push(`from: ${d.sender}`);
+        }
+        
+        // Account info
+        if (d.assetAccountName) {
+          parts.push(`via: ${d.assetAccountName}`);
+        } else if (d.accountReference) {
+          parts.push(`ref: ${d.accountReference}`);
+        } else if (d.accountType) {
+          parts.push(d.accountType);
+        }
+        
+        // Transaction code if available
+        if (d.transactionCode) {
+          parts.push(`code: ${d.transactionCode}`);
+        }
+        
+        if (parts.length > 0) {
+          description = `Payment: ${parts.slice(0, 3).join(', ')}`;
         } else {
           description = 'Payment to office';
         }

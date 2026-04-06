@@ -137,9 +137,40 @@ const getDetailsPlainSummary = (s) => {
       return 'No Description';
     }
     case 'payment_to_office': {
-      const sender = d.sender ? `from: ${d.sender}` : '';
-      const acct = d.accountType || '';
-      return [sender, acct].filter(Boolean).join(', ');
+      const parts = [];
+      
+      // Recipient/sender info
+      if (d.recipientName) {
+        parts.push(`to: ${d.recipientName}`);
+      } else if (d.recipient) {
+        parts.push(`to: ${d.recipient}`);
+      } else if (d.sender) {
+        parts.push(`from: ${d.sender}`);
+      }
+      
+      // Account info
+      if (d.assetAccountName) {
+        parts.push(`via: ${d.assetAccountName}`);
+      } else if (d.accountReference) {
+        parts.push(`ref: ${d.accountReference}`);
+      } else if (d.accountType) {
+        parts.push(d.accountType);
+      }
+      
+      // Transaction code if available
+      if (d.transactionCode) {
+        parts.push(`code: ${d.transactionCode}`);
+      }
+      
+      // Item if available
+      if (Array.isArray(d.items) && d.items.length > 0) {
+        const firstItem = d.items[0].item || d.items[0].name;
+        if (firstItem && parts.length < 3) {
+          parts.push(`for: ${firstItem}`);
+        }
+      }
+      
+      return parts.slice(0, 3).join(', ');
     }
     case 'purchases': {
       const sup = d.supplier ? `from: ${d.supplier}` : '';
