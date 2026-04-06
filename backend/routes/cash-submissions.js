@@ -1140,13 +1140,12 @@ router.get('/:driverId/orders-for-order-payment', async (req, res) => {
       if (adminCashAtHandOrderIds.has(order.id)) continue;
       try {
         const breakdown = await getOrderFinancialBreakdown(order.id);
-        // Driver submits: order value - 50% of territory delivery fee
-        // order value = items total + delivery fee
-        // Driver keeps 50% of delivery fee as savings
+        // Driver submits: items total only (order value - 50% territory delivery fee)
+        // Driver keeps: 50% of territory delivery fee as savings
         const itemsTotal = parseFloat(breakdown.itemsTotal) || 0;
         const deliveryFee = parseFloat(breakdown.deliveryFee) || 0;
         const savings = deliveryFee * 0.5;
-        const totalToSubmit = itemsTotal + (deliveryFee * 0.5);
+        const totalToSubmit = itemsTotal;
         eligible.push({
           orderId: order.id,
           customerName: order.customerName || 'Customer',
