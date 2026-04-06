@@ -40,7 +40,7 @@ const Offers = () => {
       console.log('Fetching limited time offers...');
       const response = await api.get('/drinks/offers');
       console.log('Offers response:', response.data);
-      setOffers(response.data);
+      setOffers(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching offers:', error);
       setError('Failed to load offers');

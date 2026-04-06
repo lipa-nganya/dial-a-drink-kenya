@@ -148,7 +148,7 @@ const LocationDetails = () => {
   const fetchSubcategories = async (categoryId) => {
     try {
       const response = await api.get(`/subcategories?categoryId=${categoryId}`);
-      setSubcategories(response.data);
+      setSubcategories(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
       console.error('Error fetching subcategories:', error);
       setSubcategories([]);

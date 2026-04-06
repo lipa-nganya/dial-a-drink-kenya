@@ -48,8 +48,9 @@ const Brands = () => {
       setLoading(true);
       setError('');
       const response = await api.get('/brands');
-      setBrands(response.data);
-      setFilteredBrands(response.data);
+      const brandsData = Array.isArray(response.data) ? response.data : [];
+      setBrands(brandsData);
+      setFilteredBrands(brandsData);
     } catch (err) {
       console.error('Error fetching brands:', err);
       setError('Failed to load brands. Please try again later.');
