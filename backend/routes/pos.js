@@ -59,14 +59,22 @@ router.post('/customer', verifyAdmin, enforceAdminAccessPaywall, async (req, res
     console.log(`🔍 POS: Creating/getting customer with phone: ${phone}`);
     console.log(`📋 Normalized phone: ${normalizedPhone}`);
 
-    // Check if customer already exists
+    // Check if customer already exists - use both exact match and LIKE for robustness
     const existingCustomer = await db.Customer.findOne({
       where: {
         [Op.or]: [
           { phone: normalizedPhone },
           { username: normalizedPhone },
           ...variants.map(v => ({ phone: v })),
-          ...variants.map(v => ({ username: v }))
+          ...variants.map(v => ({ username: v })),
+          // Add LIKE queries for partial matches (handles whitespace, formatting differences)
+          { phone: { [Op.like]: `%${normalizedPhone}%` } },
+          { username: { [Op.like]: `%${normalizedPhone}%` } },
+          // Also try matching last 9 digits (handles country code variations)
+          ...(normalizedPhone.length >= 9 ? [
+            { phone: { [Op.like]: `%${normalizedPhone.slice(-9)}` } },
+            { username: { [Op.like]: `%${normalizedPhone.slice(-9)}` } }
+          ] : [])
         ]
       }
     });
@@ -88,29 +96,79 @@ router.post('/customer', verifyAdmin, enforceAdminAccessPaywall, async (req, res
 
     // Create new customer
     console.log(`➕ Creating new customer: ${customerName || 'POS Customer'} (${normalizedPhone})`);
-    const newCustomer = await db.Customer.create({
-      phone: normalizedPhone,
-      username: normalizedPhone,
-      customerName: customerName || 'POS Customer',
-      email: email || null
-    });
+    
+    try {
+      const newCustomer = await db.Customer.create({
+        phone: normalizedPhone,
+        username: normalizedPhone,
+        customerName: customerName || 'POS Customer',
+        email: email || null
+      });
 
-    console.log(`✅ Customer created: ${newCustomer.id} - ${newCustomer.customerName}`);
-    res.json({
-      success: true,
-      customer: {
-        id: newCustomer.id,
-        name: newCustomer.customerName || newCustomer.username || 'Customer',
-        username: newCustomer.username,
-        email: newCustomer.email,
-        phone: newCustomer.phone,
-        customerName: newCustomer.customerName
+      console.log(`✅ Customer created: ${newCustomer.id} - ${newCustomer.customerName}`);
+      res.json({
+        success: true,
+        customer: {
+          id: newCustomer.id,
+          name: newCustomer.customerName || newCustomer.username || 'Customer',
+          username: newCustomer.username,
+          email: newCustomer.email,
+          phone: newCustomer.phone,
+          customerName: newCustomer.customerName
+        }
+      });
+    } catch (createError) {
+      // If creation fails due to unique constraint, try to find the customer again with broader search
+      if (createError.name === 'SequelizeUniqueConstraintError') {
+        console.log('⚠️ Unique constraint error, attempting broader search...');
+        
+        // Try finding with LIKE query for phone variations
+        const customerWithLike = await db.Customer.findOne({
+          where: {
+            [Op.or]: [
+              { phone: { [Op.like]: `%${normalizedPhone}%` } },
+              { username: { [Op.like]: `%${normalizedPhone}%` } },
+              { phone: { [Op.like]: `%${normalizedPhone.slice(-9)}%` } }, // Last 9 digits
+              { username: { [Op.like]: `%${normalizedPhone.slice(-9)}%` } }
+            ]
+          }
+        });
+        
+        if (customerWithLike) {
+          console.log(`✅ Found existing customer via broader search: ${customerWithLike.id}`);
+          return res.json({
+            success: true,
+            customer: {
+              id: customerWithLike.id,
+              name: customerWithLike.customerName || customerWithLike.username || 'Customer',
+              username: customerWithLike.username,
+              email: customerWithLike.email,
+              phone: customerWithLike.phone,
+              customerName: customerWithLike.customerName
+            }
+          });
+        }
       }
-    });
+      
+      // If still can't find/create, throw the error
+      throw createError;
+    }
   } catch (error) {
     console.error('❌ Error creating/getting POS customer:', error);
+    console.error('Error name:', error.name);
     console.error('Error stack:', error.stack);
-    res.status(500).json({ error: 'Failed to create/get customer', details: error.message });
+    
+    // Provide more specific error message
+    let errorMessage = 'Failed to create/get customer';
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      errorMessage = 'A customer with this phone number already exists. Please try searching for the customer instead.';
+    }
+    
+    res.status(500).json({ 
+      error: errorMessage, 
+      details: error.message,
+      constraint: error.name === 'SequelizeUniqueConstraintError' ? error.fields : undefined
+    });
   }
 });
 
