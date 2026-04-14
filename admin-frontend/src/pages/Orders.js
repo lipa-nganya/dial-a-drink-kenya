@@ -160,7 +160,7 @@ const Orders = () => {
   };
   
   // Route Optimisation state (kept for fetchRiderRoutes function which is still called)
-  const [orderTab, setOrderTab] = useState('unassigned'); // 'completed', 'pending', 'unassigned', 'confirmed', 'out_for_delivery', 'cancelled'
+  const [orderTab, setOrderTab] = useState('pending'); // 'completed', 'pending', 'unassigned', 'confirmed', 'out_for_delivery', 'cancelled'
   const [cancelledSubTab, setCancelledSubTab] = useState('cancelled'); // 'cancelled' | 'cancellation-requests'
   // eslint-disable-next-line no-unused-vars
   const [riderRoutes, setRiderRoutes] = useState([]);
