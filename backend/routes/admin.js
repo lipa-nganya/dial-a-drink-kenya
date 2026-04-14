@@ -954,7 +954,7 @@ router.put('/settings/admin-access-paywall', requireSuperSuperAdmin, async (req,
 });
 
 // Get admin stats
-router.get('/stats', async (req, res) => {
+router.get('/stats', verifyAdmin, async (req, res) => {
   try {
     // Get total orders count
     const totalOrders = await db.Order.count();
