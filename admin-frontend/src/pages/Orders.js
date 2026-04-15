@@ -33,7 +33,11 @@ import {
   Card,
   CardContent,
   Divider,
-  Snackbar
+  Snackbar,
+  useMediaQuery,
+  useTheme as useMuiTheme,
+  Stack,
+  Grid
 } from '@mui/material';
 import {
   ShoppingCart,
@@ -48,7 +52,9 @@ import {
   Payment,
   CheckCircle,
   AttachMoney,
-  Close
+  Close,
+  LocationOn,
+  LocalShipping
 } from '@mui/icons-material';
 import { api } from '../services/api';
 import io from 'socket.io-client';
@@ -67,6 +73,8 @@ const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
 
 const Orders = () => {
   const { isDarkMode, colors } = useTheme();
+  const muiTheme = useMuiTheme();
+  const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const location = useLocation();
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
@@ -1848,11 +1856,16 @@ const Orders = () => {
             setPage(0);
             applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, newValue, cancelledSubTab);
           }}
+          variant={isMobile ? "scrollable" : "standard"}
+          scrollButtons={isMobile ? "auto" : false}
+          allowScrollButtonsMobile
           sx={{
             '& .MuiTab-root': {
               minHeight: 48,
               color: colors.textSecondary,
-              fontSize: '0.95rem',
+              fontSize: isMobile ? '0.85rem' : '0.95rem',
+              minWidth: isMobile ? 'auto' : 160,
+              px: isMobile ? 2 : 3,
               '&.Mui-selected': {
                 color: colors.accentText,
                 fontWeight: 600
@@ -1935,7 +1948,7 @@ const Orders = () => {
         {/* Search Input */}
         <TextField
           size="small"
-          placeholder="Search by order number or customer name..."
+          placeholder={isMobile ? "Search orders..." : "Search by order number or customer name..."}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           InputProps={{
@@ -1957,7 +1970,8 @@ const Orders = () => {
             ),
           }}
             sx={{
-              minWidth: 300,
+              minWidth: isMobile ? '100%' : 300,
+              flexGrow: isMobile ? 1 : 0,
               '& .MuiOutlinedInput-root': {
                 '& fieldset': {
                   borderColor: colors.accentText,
@@ -1979,7 +1993,7 @@ const Orders = () => {
             }}
         />
 
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 200, flexGrow: isMobile ? 1 : 0 }}>
           <InputLabel>Filter by Order Status</InputLabel>
           <Select
             value={orderStatusFilter}
@@ -2008,7 +2022,7 @@ const Orders = () => {
           </Select>
         </FormControl>
 
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 200, flexGrow: isMobile ? 1 : 0 }}>
           <InputLabel>Filter by Transaction Status</InputLabel>
           <Select
             value={transactionStatusFilter}
@@ -2067,7 +2081,136 @@ const Orders = () => {
             No orders found
           </Typography>
         </Paper>
+      ) : isMobile ? (
+        // Mobile Card View
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {filteredOrders.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((order) => {
+            const isUnpaidDelivered = order.status === 'delivered' && order.paymentStatus === 'unpaid';
+            const hasPendingCancellation = order.cancellationRequested && order.cancellationApproved === null;
+            const paymentStatusChip = getPaymentStatusChipProps(order.paymentStatus, order.status);
+            const orderStatusChip = getOrderStatusChipProps(order.status);
+            
+            return (
+              <Card
+                key={order.id}
+                onClick={() => openOrderDetails(order)}
+                sx={{
+                  backgroundColor: hasPendingCancellation 
+                    ? 'rgba(255, 193, 7, 0.1)' 
+                    : isUnpaidDelivered 
+                      ? 'rgba(255, 51, 102, 0.05)' 
+                      : colors.paper,
+                  borderLeft: hasPendingCancellation ? '4px solid #FFC107' : isUnpaidDelivered ? '4px solid #f44336' : 'none',
+                  cursor: 'pointer',
+                  '&:active': {
+                    backgroundColor: hasPendingCancellation 
+                      ? 'rgba(255, 193, 7, 0.2)' 
+                      : isUnpaidDelivered 
+                        ? 'rgba(255, 51, 102, 0.1)' 
+                        : 'rgba(0, 224, 184, 0.05)'
+                  }
+                }}
+              >
+                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                  {/* Header: Order ID and Amount */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1.5 }}>
+                    <Box>
+                      <Typography variant="h6" sx={{ fontWeight: 700, fontSize: '1.1rem', mb: 0.5 }}>
+                        #{order.id}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(order.createdAt).toLocaleDateString('en-GB', {
+                          day: 'numeric',
+                          month: 'short',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ textAlign: 'right' }}>
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: colors.accentText }}>
+                        KES {Math.round(Number(order.totalAmount))}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {order.paymentType === 'pay_now' ? 'Paid Now' : 'Cash on Delivery'}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  <Divider sx={{ my: 1.5 }} />
+
+                  {/* Customer Info */}
+                  <Box sx={{ mb: 1.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                      <Person fontSize="small" sx={{ color: 'text.secondary' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {order.customerName}
+                      </Typography>
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 3.5 }}>
+                      <Phone fontSize="small" sx={{ color: 'text.secondary' }} />
+                      <Typography variant="caption" color="text.secondary">
+                        {order.customerPhone || 'N/A'}
+                      </Typography>
+                    </Box>
+                  </Box>
+
+                  {/* Delivery Address */}
+                  {order.deliveryAddress && order.deliveryAddress !== 'In-Store Purchase' && (
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 1.5 }}>
+                      <LocationOn fontSize="small" sx={{ color: 'text.secondary', mt: 0.25 }} />
+                      <Typography variant="body2" color="text.secondary" sx={{ flex: 1, wordBreak: 'break-word' }}>
+                        {order.deliveryAddress.split(',').slice(0, 2).join(',')}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Driver Info */}
+                  {order.driverId && order.driver && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+                      <LocalShipping fontSize="small" sx={{ color: 'text.secondary' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {order.driver.name}
+                      </Typography>
+                      {order.driverAccepted === true && (
+                        <Chip label="Accepted" size="small" color="success" sx={{ height: 20, fontSize: '0.7rem' }} />
+                      )}
+                    </Box>
+                  )}
+
+                  {/* Status Chips */}
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
+                    {orderStatusChip && (
+                      <Chip
+                        size="small"
+                        {...orderStatusChip}
+                        sx={{ ...orderStatusChip.sx, fontSize: '0.75rem' }}
+                      />
+                    )}
+                    {paymentStatusChip && (
+                      <Chip
+                        size="small"
+                        {...paymentStatusChip}
+                        sx={{ ...paymentStatusChip.sx, fontSize: '0.75rem' }}
+                      />
+                    )}
+                    {order.deliveryAddress === 'In-Store Purchase' && (
+                      <Chip label="POS" size="small" color="success" sx={{ fontSize: '0.75rem' }} />
+                    )}
+                    {hasPendingCancellation && (
+                      <Chip label="Cancellation Req" color="warning" size="small" sx={{ fontSize: '0.75rem' }} />
+                    )}
+                    {isUnpaidDelivered && (
+                      <Chip label="Unpaid!" color="error" size="small" sx={{ fontSize: '0.75rem' }} />
+                    )}
+                  </Box>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </Box>
       ) : (
+        // Desktop Table View
         <TableContainer component={Paper}>
           <Table>
             <TableHead>
@@ -2418,7 +2561,8 @@ const Orders = () => {
               setRowsPerPage(parseInt(event.target.value, 10));
               setPage(0);
             }}
-            rowsPerPageOptions={[10, 25, 50, 100]}
+            rowsPerPageOptions={isMobile ? [5, 10, 25] : [10, 25, 50, 100]}
+            labelRowsPerPage={isMobile ? 'Per page:' : 'Rows per page:'}
             sx={{
               backgroundColor: colors.paper,
               borderTop: `1px solid ${colors.border}`,
