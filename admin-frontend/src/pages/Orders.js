@@ -35,9 +35,7 @@ import {
   Divider,
   Snackbar,
   useMediaQuery,
-  useTheme as useMuiTheme,
-  Stack,
-  Grid
+  useTheme as useMuiTheme
 } from '@mui/material';
 import {
   ShoppingCart,
