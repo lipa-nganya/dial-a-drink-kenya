@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
   let queryTimeout = null;
   
   try {
-    const { category, search, popular, available_only, brandId } = req.query;
+    const { category, search, popular, available_only, brandId, brandFocus } = req.query;
     let whereClause = {};
 
     // Customer site should only show published drinks
@@ -40,6 +40,10 @@ router.get('/', async (req, res) => {
     
     if (popular === 'true') {
       whereClause.isPopular = true;
+    }
+    
+    if (brandFocus === 'true') {
+      whereClause.isBrandFocus = true;
     }
     
     // Add query timeout to prevent hanging on database connection issues
@@ -149,6 +153,8 @@ router.get('/', async (req, res) => {
       console.log(`✅ Returning ${drinks.length} drinks`);
       
       if (!res.headersSent) {
+        // Add cache headers to reduce database load (5 minutes)
+        res.set('Cache-Control', 'public, max-age=300, s-maxage=300');
         res.json(drinks);
       }
     } catch (queryError) {

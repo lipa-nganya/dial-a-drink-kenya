@@ -41,29 +41,9 @@ const Home = () => {
     fetchLimitedTimeOffers();
   }, []);
 
-  // Refetch hero image when page becomes visible (user switches back to tab)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        fetchHeroImage();
-        fetchHeroLinkSettings();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    // Also refetch periodically (every 5 minutes) to catch updates
-    const intervalId = setInterval(() => {
-      fetchHeroImage();
-      fetchHeroLinkSettings();
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      clearInterval(intervalId);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Note: Removed frequent polling to reduce database load
+  // Hero image only fetches once on page load
+  // If hero image needs to update more frequently, consider using WebSocket or longer polling interval (30+ minutes)
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '/assets/images/ads/hero-ad.png';
@@ -176,18 +156,15 @@ const Home = () => {
       const brandFocusId = brandFocusResponse.data?.value;
       
       if (brandFocusId) {
-        // Fetch drinks with brand focus enabled for the selected brand
-        const drinksResponse = await api.get('/drinks');
-        const allDrinks = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+        // Use backend filtering to get only brand focus drinks for this brand
         const brandFocusIdNum = parseInt(brandFocusId);
-        const filtered = allDrinks.filter(drink => {
-          // Check if drink has brand focus enabled
-          if (drink.isBrandFocus !== true) return false;
-          
-          // Check brand match - use brandId as primary check, brand.id as fallback
-          const drinkBrandId = drink.brandId || (drink.brand && drink.brand.id);
-          return drinkBrandId === brandFocusIdNum;
+        const drinksResponse = await api.get('/drinks', {
+          params: { 
+            brandId: brandFocusIdNum,
+            brandFocus: 'true'
+          }
         });
+        const filtered = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
         console.log('Brand Focus - Setting ID:', brandFocusIdNum, 'Filtered drinks:', filtered.length, filtered.map(d => ({ id: d.id, name: d.name, brandId: d.brandId })));
         setBrandFocusDrinks(filtered);
       } else {
