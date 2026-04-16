@@ -622,7 +622,16 @@ router.post('/', async (req, res) => {
         })));
       }
       console.error('Error creating order:', error);
-      res.status(500).json({ error: error.message });
+      try {
+        await transaction.rollback();
+      } catch (rollbackErr) {
+        console.error('Error rolling back transaction:', rollbackErr);
+      }
+      return res.status(500).json({ error: error.message });
+    }
+
+    if (!createdOrderId) {
+      return res.status(500).json({ error: 'Order was not created' });
     }
 
     const completeOrder = await db.Order.findByPk(createdOrderId, {
@@ -893,7 +902,9 @@ router.post('/', async (req, res) => {
     return res.status(201).json(completeOrder);
   } catch (error) {
     console.error('Error creating order:', error);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      return res.status(500).json({ error: error.message });
+    }
   }
 });
 
@@ -955,10 +966,12 @@ router.post('/find', async (req, res) => {
     });
   } catch (error) {
     console.error('Error finding order:', error);
-    res.status(500).json({ 
-      success: false,
-      error: 'Failed to find order' 
-    });
+    if (!res.headersSent) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to find order'
+      });
+    }
   }
 });
 
