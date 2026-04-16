@@ -125,12 +125,9 @@ router.post('/heroImage/upload', (req, res) => {
 // Get setting by key
 router.get('/:key', async (req, res) => {
   try {
-    // Add no-cache headers to prevent browser/proxy caching of settings
-    res.set({
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0'
-    });
+    // Cache settings for 10 minutes to reduce database load
+    // Settings like hero image, brand focus, etc. don't change frequently
+    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
 
     const { key } = req.params;
     const setting = await db.Settings.findOne({ where: { key } });
@@ -277,6 +274,59 @@ router.put('/:key', async (req, res) => {
 });
 
 // Get all settings
+// Get multiple settings in one query (for homepage optimization)
+router.get('/batch/:keys', async (req, res) => {
+  try {
+    // Cache for 10 minutes
+    res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+    
+    const { keys } = req.params;
+    const keyArray = keys.split(',').map(k => k.trim());
+    
+    const settings = await db.Settings.findAll({
+      where: { key: keyArray }
+    });
+    
+    // Convert to key-value object
+    const result = {};
+    settings.forEach(setting => {
+      result[setting.key] = {
+        key: setting.key,
+        value: setting.value,
+        updatedAt: setting.updatedAt
+      };
+    });
+    
+    // Add defaults for missing keys
+    keyArray.forEach(key => {
+      if (!result[key]) {
+        if (key === 'heroImage') {
+          result[key] = {
+            key: 'heroImage',
+            value: '/assets/images/ads/hero-ad.png',
+            updatedAt: new Date(0).toISOString()
+          };
+        } else if (key === 'seoMetaTitle') {
+          result[key] = {
+            key: 'seoMetaTitle',
+            value: 'Alcohol Delivery Nairobi - Dial A Drink Kenya - 24 hours Fast Delivery'
+          };
+        } else if (key === 'seoMetaDescription') {
+          result[key] = {
+            key: 'seoMetaDescription',
+            value: 'Alcohol delivery in Nairobi and its environs in under 30 minutes! Wide variety of whisky, wine, cognacs, gin etc Call 0723688108 to order.'
+          };
+        }
+      }
+    });
+    
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching batch settings:', error);
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
 router.get('/', async (req, res) => {
   try {
     const settings = await db.Settings.findAll();
