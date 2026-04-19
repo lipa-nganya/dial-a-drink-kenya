@@ -48,7 +48,7 @@ const InventoryChecks = () => {
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [recountDialogOpen, setRecountDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState(null);
-  const [updateStock, setUpdateStock] = useState(false);
+  const [updateStock, setUpdateStock] = useState(true);
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
 
@@ -300,6 +300,7 @@ const InventoryChecks = () => {
                           startIcon={<CheckCircle />}
                           onClick={() => {
                             setSelectedCheck(check);
+                            setUpdateStock(true);
                             setApproveDialogOpen(true);
                           }}
                         >

@@ -7477,13 +7477,9 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
           byCap[matchingKey] = agentCount;
         }
 
-        // Keep overall stock in sync so existing inventory views that rely on drink.stock still show correct totals
-        const baseKeys = Object.keys(byCap).filter((k) => {
-          const n = normalizeCapacity(k);
-          return n === 'can' || n === '1can' || n === 'single' || n === '1';
-        });
-
-        const totalStock = (baseKeys.length > 0 ? baseKeys : Object.keys(byCap)).reduce((sum, key) => {
+        // Sum every capacity bucket (pouches, ml, cans, etc.). Old logic only summed "can" keys,
+        // so pouch-only SKUs ended up with stock=0 while stockByCapacity was correct.
+        const totalStock = Object.keys(byCap).reduce((sum, key) => {
           const value = byCap[key];
           const n = typeof value === 'number' ? value : parseInt(value, 10);
           return sum + (Number.isNaN(n) ? 0 : n);
@@ -7495,11 +7491,71 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
           isAvailable: totalStock > 0
         });
       } else {
-        await inventoryCheck.drink.update({
-          stock: inventoryCheck.agentCount,
-          // Customer site uses `isAvailable` for the Out of Stock state.
-          isAvailable: inventoryCheck.agentCount > 0
-        });
+        // Shop-agent flow often omits `capacity`; only updating drink.stock left stockByCapacity at 0,
+        // so admin/customer UIs that read per-capacity stock still showed 0.
+        const agentCount = toInt(inventoryCheck.agentCount, 0);
+        const drink = inventoryCheck.drink;
+        const rawByCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? drink.stockByCapacity : null;
+
+        if (rawByCap && Object.keys(rawByCap).length > 0) {
+          const byCap = { ...rawByCap };
+          const keys = Object.keys(byCap);
+          const pricing = Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [];
+          const orderedCaps = pricing.map((p) => String(p.capacity || p.size || '').trim()).filter(Boolean);
+
+          if (keys.length === 1) {
+            byCap[keys[0]] = agentCount;
+          } else if (orderedCaps.length === 1) {
+            const targetCap = orderedCaps[0];
+            const nk = normalizeCapacity(targetCap);
+            const matchKey = keys.find((k) => normalizeCapacity(k) === nk);
+            if (matchKey) {
+              keys.forEach((k) => {
+                byCap[k] = k === matchKey ? agentCount : 0;
+              });
+            } else {
+              keys.forEach((k) => {
+                byCap[k] = 0;
+              });
+              byCap[targetCap] = agentCount;
+            }
+          } else {
+            let assigned = false;
+            for (const cap of orderedCaps) {
+              const matchKey = keys.find((k) => normalizeCapacity(k) === normalizeCapacity(cap));
+              if (matchKey) {
+                for (const k of keys) {
+                  byCap[k] = k === matchKey ? agentCount : 0;
+                }
+                assigned = true;
+                break;
+              }
+            }
+            if (!assigned) {
+              byCap[keys[0]] = agentCount;
+              for (let i = 1; i < keys.length; i += 1) {
+                byCap[keys[i]] = 0;
+              }
+            }
+          }
+
+          const totalStock = Object.keys(byCap).reduce((sum, key) => {
+            const value = byCap[key];
+            const n = typeof value === 'number' ? value : parseInt(value, 10);
+            return sum + (Number.isNaN(n) ? 0 : n);
+          }, 0);
+
+          await drink.update({
+            stockByCapacity: byCap,
+            stock: totalStock,
+            isAvailable: totalStock > 0
+          });
+        } else {
+          await drink.update({
+            stock: agentCount,
+            isAvailable: agentCount > 0
+          });
+        }
       }
     }
 
