@@ -92,77 +92,57 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
   const [subcategories, setSubcategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
 
+  const applyDrinkToForm = (d) => {
+    const brandId = d.brandId || (d.brand && d.brand.id) || '';
+    const purchasePriceValue =
+      d.purchasePrice !== undefined && d.purchasePrice !== null ? String(d.purchasePrice).trim() : '';
+
+    const capacityPricingRaw = d.capacityPricing ?? d.capacity_pricing ?? null;
+    let capacityPricingNormalized = normalizeCapacityPricingForForm(capacityPricingRaw);
+    let capacityDerived = deriveCapacitiesForForm(d);
+    if (capacityPricingNormalized.length === 0 && (d.price != null || d.originalPrice != null)) {
+      const p = Number(d.price ?? d.originalPrice) || 0;
+      const op = Number(d.originalPrice ?? d.price) || p;
+      capacityPricingNormalized = [{ capacity: 'Default', originalPrice: op, currentPrice: p }];
+      if (capacityDerived.length === 0) capacityDerived = ['Default'];
+    }
+    setFormData({
+      name: d.name || '',
+      description: d.description || '',
+      isAvailable: d.isAvailable !== undefined ? d.isAvailable : true,
+      isPopular: d.isPopular || false,
+      isBrandFocus: d.isBrandFocus || false,
+      limitedTimeOffer: d.limitedTimeOffer || false,
+      image: d.image || '',
+      categoryId: d.categoryId || '',
+      subCategoryId: d.subCategoryId || '',
+      brandId: brandId ? brandId.toString() : '',
+      capacity: capacityDerived,
+      capacityPricing: capacityPricingNormalized,
+      abv: d.abv || '',
+      nbv: d.nbv !== undefined && d.nbv !== null && d.nbv !== '' ? String(d.nbv) : '',
+      stock: d.stock !== undefined && d.stock !== null ? d.stock : 0,
+      purchasePrice: purchasePriceValue,
+      pageTitle: d.pageTitle || '',
+      keywords: d.keywords || '',
+      youtubeUrl: d.youtubeUrl || '',
+      tags: Array.isArray(d.tags) ? d.tags : d.tags ? [d.tags] : []
+    });
+    if (d.categoryId) {
+      fetchSubcategories(d.categoryId);
+    }
+    setImagePreview(d.image || '');
+  };
+
+  // Inventory list payload is slim; load full drink (SEO, tags, etc.) when editing.
   useEffect(() => {
-    if (drink) {
-      // Get brandId from drink.brandId or drink.brand?.id
-      const brandId = drink.brandId || (drink.brand && drink.brand.id) || '';
-      
-      // Debug purchasePrice
-      console.log('🔍 EditDrinkDialog - Loading drink:', {
-        id: drink.id,
-        name: drink.name,
-        purchasePrice: drink.purchasePrice,
-        purchasePriceType: typeof drink.purchasePrice,
-        hasPurchasePrice: 'purchasePrice' in drink,
-        allKeys: Object.keys(drink)
-      });
-      
-      const purchasePriceValue = drink.purchasePrice !== undefined && drink.purchasePrice !== null 
-        ? String(drink.purchasePrice).trim() 
-        : '';
-      
-      console.log('🔍 PurchasePrice value to set:', purchasePriceValue);
-      
-      const capacityPricingRaw = drink.capacityPricing ?? drink.capacity_pricing ?? null;
-      let capacityPricingNormalized = normalizeCapacityPricingForForm(capacityPricingRaw);
-      let capacityDerived = deriveCapacitiesForForm(drink);
-      // If no capacities/pricing from API but drink has price, show at least one row so price is visible
-      if (capacityPricingNormalized.length === 0 && (drink.price != null || drink.originalPrice != null)) {
-        const p = Number(drink.price ?? drink.originalPrice) || 0;
-        const op = Number(drink.originalPrice ?? drink.price) || p;
-        capacityPricingNormalized = [{ capacity: 'Default', originalPrice: op, currentPrice: p }];
-        if (capacityDerived.length === 0) capacityDerived = ['Default'];
-      }
-      const newFormData = {
-        name: drink.name || '',
-        description: drink.description || '',
-        isAvailable: drink.isAvailable !== undefined ? drink.isAvailable : true,
-        isPopular: drink.isPopular || false,
-        isBrandFocus: drink.isBrandFocus || false,
-        limitedTimeOffer: drink.limitedTimeOffer || false,
-        image: drink.image || '',
-        categoryId: drink.categoryId || '',
-        subCategoryId: drink.subCategoryId || '',
-        brandId: brandId ? brandId.toString() : '',
-        capacity: capacityDerived,
-        capacityPricing: capacityPricingNormalized,
-        abv: drink.abv || '',
-        nbv: drink.nbv !== undefined && drink.nbv !== null && drink.nbv !== '' ? String(drink.nbv) : '',
-        stock: drink.stock !== undefined && drink.stock !== null ? drink.stock : 0,
-        purchasePrice: purchasePriceValue,
-        pageTitle: drink.pageTitle || '',
-        keywords: drink.keywords || '',
-        youtubeUrl: drink.youtubeUrl || '',
-        tags: Array.isArray(drink.tags) ? drink.tags : (drink.tags ? [drink.tags] : [])
-      };
-      
-      console.log('🔍 FormData being set:', {
-        purchasePrice: newFormData.purchasePrice,
-        purchasePriceType: typeof newFormData.purchasePrice,
-        purchasePriceLength: newFormData.purchasePrice ? newFormData.purchasePrice.length : 0
-      });
-      
-      setFormData(newFormData);
-      // Fetch subcategories for the drink's category
-      if (drink.categoryId) {
-        fetchSubcategories(drink.categoryId);
-      }
-      setImagePreview(drink.image || '');
-    } else {
-      // Reset form for new drink creation
+    if (!open) return;
+
+    if (!drink) {
       setFormData({
         name: '',
         description: '',
@@ -187,9 +167,40 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       });
       setImagePreview('');
       setSubcategories([]);
+      setError(null);
+      return;
     }
+
+    if (!drink.id) {
+      return;
+    }
+
+    let cancelled = false;
+    setDetailLoading(true);
     setError(null);
-  }, [drink, open]);
+    applyDrinkToForm(drink);
+
+    api
+      .get(`/admin/drinks/${drink.id}`)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        applyDrinkToForm(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error('EditDrinkDialog: failed to load full drink, using list row', err);
+        applyDrinkToForm(drink);
+        setError(err.response?.data?.error || err.message || 'Could not load full product');
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyDrinkToForm closes over fetchSubcategories
+  }, [open, drink?.id]);
 
   // Ensure the dialog always reflects the latest categories/brands,
   // especially after adding them in Copilot Inventory Settings.
