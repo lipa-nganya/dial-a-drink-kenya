@@ -465,7 +465,7 @@ const ensureDeliveryFeeSplit = async (orderInstance, options = {}) => {
   // For pay_now orders without driver: Leave driver transactions alone until driver is assigned
 
   return {
-    deliveryFee: deliveryFeeAmount,
+    deliveryFee: territoryDeliveryFeeAmount,
     driverPayAmount,
     merchantAmount,
     driverTransactionId: driverTransaction?.id || null,
