@@ -6,6 +6,16 @@ const shouldUseSsl = (() => {
   return !databaseUrl.includes('/cloudsql/');
 })();
 
+/** Admin dashboards run heavy queries; default 5s was aborting large ORDER BY + JOINs. */
+const dbStatementTimeoutMs = (() => {
+  const raw = process.env.DB_STATEMENT_TIMEOUT_MS;
+  if (raw !== undefined && raw !== '') {
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 60000;
+  }
+  return 60000;
+})();
+
 module.exports = {
   development: {
     username: process.env.DB_USER || 'postgres',
@@ -39,8 +49,8 @@ module.exports = {
       if (isCloudSql) {
         return {
           connectTimeout: 10000, // 10 second connection timeout
-          statement_timeout: 5000, // 5 second statement timeout
-          query_timeout: 5000 // 5 second query timeout
+          statement_timeout: dbStatementTimeoutMs,
+          query_timeout: dbStatementTimeoutMs
         };
       }
       
@@ -52,13 +62,13 @@ module.exports = {
               rejectUnauthorized: false
             },
             connectTimeout: 10000,
-            statement_timeout: 5000,
-            query_timeout: 5000
+            statement_timeout: dbStatementTimeoutMs,
+            query_timeout: dbStatementTimeoutMs
           }
         : {
             connectTimeout: 10000,
-            statement_timeout: 5000,
-            query_timeout: 5000
+            statement_timeout: dbStatementTimeoutMs,
+            query_timeout: dbStatementTimeoutMs
           };
     })(),
     pool: {

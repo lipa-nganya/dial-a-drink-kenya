@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../models');
-const { Op } = require('sequelize');
+const { Op, QueryTypes } = require('sequelize');
 const { getOrderFinancialBreakdown } = require('../utils/orderFinancials');
 const { calculateDeliveryFee } = require('../utils/calculateDeliveryFee');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
@@ -953,132 +953,68 @@ router.put('/settings/admin-access-paywall', requireSuperSuperAdmin, async (req,
   }
 });
 
-// Get admin stats
-router.get('/stats', verifyAdmin, async (req, res) => {
+// Get admin stats (single aggregate query — avoids loading every paid order into memory and stays under DB timeouts)
+router.get('/stats', async (req, res) => {
   try {
-    // Get total orders count
-    const totalOrders = await db.Order.count();
-
-    // Get pending orders count
-    // Include all orders with status 'pending' (regardless of driver assignment or acceptance)
-    // Also include 'confirmed' orders
-    const pendingOrders = await db.Order.count({
-      where: {
-        status: {
-          [Op.in]: ['pending', 'confirmed']
-        }
-      }
-    });
-
-    // Get today's orders
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayOrders = await db.Order.count({
-      where: {
-        createdAt: {
-          [Op.gte]: today
-        }
-      }
-    });
 
-    // Get today's revenue (excluding tips - tips go to drivers, not business)
-    // Revenue = totalAmount - tipAmount (order + delivery fee only)
-    const todayPaidOrders = await db.Order.findAll({
-      where: {
-        createdAt: {
-          [Op.gte]: today
-        },
-        paymentStatus: 'paid'
-      },
-      attributes: ['totalAmount', 'tipAmount']
-    });
-    const todayRevenue = todayPaidOrders.reduce((sum, order) => {
-      const orderAmount = parseFloat(order.totalAmount) || 0;
-      const tipAmount = parseFloat(order.tipAmount) || 0;
-      return sum + (orderAmount - tipAmount); // Exclude tip
-    }, 0);
+    const rows = await db.sequelize.query(
+      `
+      SELECT
+        (SELECT COUNT(*)::bigint FROM orders) AS "totalOrders",
+        (SELECT COUNT(*)::bigint FROM orders WHERE status IN ('pending', 'confirmed')) AS "pendingOrders",
+        (SELECT COUNT(*)::bigint FROM orders WHERE "createdAt" >= :startOfToday) AS "todayOrders",
+        (SELECT COALESCE(SUM(CAST("totalAmount" AS NUMERIC) - COALESCE(CAST("tipAmount" AS NUMERIC), 0)), 0)
+           FROM orders WHERE "paymentStatus" = 'paid' AND "createdAt" >= :startOfToday) AS "todayRevenue",
+        (SELECT COALESCE(SUM(CAST("totalAmount" AS NUMERIC) - COALESCE(CAST("tipAmount" AS NUMERIC), 0)), 0)
+           FROM orders WHERE "paymentStatus" = 'paid') AS "totalRevenue",
+        (SELECT COALESCE(SUM(COALESCE(CAST("tipAmount" AS NUMERIC), 0)), 0)
+           FROM orders WHERE "paymentStatus" = 'paid' AND "createdAt" >= :startOfToday) AS "todayTips",
+        (SELECT COALESCE(SUM(COALESCE(CAST("tipAmount" AS NUMERIC), 0)), 0)
+           FROM orders WHERE "paymentStatus" = 'paid') AS "totalTips",
+        (SELECT COUNT(*)::bigint FROM transactions WHERE "transactionType" = 'tip' AND status = 'completed') AS "totalTipTransactions",
+        (SELECT COUNT(*)::bigint FROM transactions WHERE "transactionType" = 'tip' AND status = 'completed' AND "createdAt" >= :startOfToday) AS "todayTipTransactions",
+        (SELECT COUNT(*)::bigint FROM orders WHERE status = 'cancelled') AS "cancelledOrders",
+        (SELECT COUNT(*)::bigint FROM drinks) AS "totalDrinks",
+        (SELECT COUNT(*)::bigint FROM drinks WHERE "isAvailable" IS TRUE) AS "availableItems",
+        (SELECT COUNT(*)::bigint FROM drinks WHERE NOT ("isAvailable" IS TRUE)) AS "outOfStockItems",
+        (SELECT COUNT(*)::bigint FROM drinks WHERE "limitedTimeOffer" IS TRUE OR "isOnOffer" IS TRUE) AS "limitedOfferItems"
+      `,
+      {
+        replacements: { startOfToday: today },
+        type: QueryTypes.SELECT
+      }
+    );
 
-    // Get total revenue (excluding tips)
-    const allPaidOrders = await db.Order.findAll({
-      where: {
-        paymentStatus: 'paid'
-      },
-      attributes: ['totalAmount', 'tipAmount']
-    });
-    const totalRevenue = allPaidOrders.reduce((sum, order) => {
-      const orderAmount = parseFloat(order.totalAmount) || 0;
-      const tipAmount = parseFloat(order.tipAmount) || 0;
-      return sum + (orderAmount - tipAmount); // Exclude tip
-    }, 0);
+    const row = rows[0];
+    if (!row) {
+      return res.status(500).json({ error: 'Failed to fetch stats' });
+    }
 
-    // Get tip stats
-    const todayTips = todayPaidOrders.reduce((sum, order) => {
-      return sum + (parseFloat(order.tipAmount) || 0);
-    }, 0);
-    const totalTips = allPaidOrders.reduce((sum, order) => {
-      return sum + (parseFloat(order.tipAmount) || 0);
-    }, 0);
-    const totalTipTransactions = await db.Transaction.count({
-      where: {
-        transactionType: 'tip',
-        status: 'completed'
-      }
-    });
-    const todayTipTransactions = await db.Transaction.count({
-      where: {
-        transactionType: 'tip',
-        status: 'completed',
-        createdAt: {
-          [Op.gte]: today
-        }
-      }
-    });
-
-    // Cancelled orders count
-    const cancelledOrders = await db.Order.count({
-      where: { status: 'cancelled' }
-    });
-
-    // Inventory stats
-    const totalDrinks = await db.Drink.count();
-    const availableItems = await db.Drink.count({
-      where: {
-        isAvailable: true
-      }
-    });
-    const outOfStockItems = await db.Drink.count({
-      where: {
-        isAvailable: {
-          [Op.not]: true
-        }
-      }
-    });
-    const limitedOfferItems = await db.Drink.count({
-      where: {
-        [Op.or]: [
-          { limitedTimeOffer: true },
-          { isOnOffer: true }
-        ]
-      }
-    });
+    const num = (v) => {
+      if (v == null) return 0;
+      if (typeof v === 'bigint') return Number(v);
+      const n = parseFloat(v);
+      return Number.isFinite(n) ? n : 0;
+    };
 
     res.json({
-      totalOrders,
-      pendingOrders,
-      cancelledOrders,
-      todayOrders,
-      todayRevenue: parseFloat(todayRevenue) || 0,
-      totalRevenue: parseFloat(totalRevenue) || 0,
-      totalDrinks,
-      totalItems: totalDrinks,
-      availableItems,
-      outOfStockItems,
-      limitedOfferItems,
-      // Tip stats
-      todayTips: parseFloat(todayTips) || 0,
-      totalTips: parseFloat(totalTips) || 0,
-      totalTipTransactions: totalTipTransactions || 0,
-      todayTipTransactions: todayTipTransactions || 0
+      totalOrders: num(row.totalOrders),
+      pendingOrders: num(row.pendingOrders),
+      cancelledOrders: num(row.cancelledOrders),
+      todayOrders: num(row.todayOrders),
+      todayRevenue: num(row.todayRevenue),
+      totalRevenue: num(row.totalRevenue),
+      totalDrinks: num(row.totalDrinks),
+      totalItems: num(row.totalDrinks),
+      availableItems: num(row.availableItems),
+      outOfStockItems: num(row.outOfStockItems),
+      limitedOfferItems: num(row.limitedOfferItems),
+      todayTips: num(row.todayTips),
+      totalTips: num(row.totalTips),
+      totalTipTransactions: num(row.totalTipTransactions),
+      todayTipTransactions: num(row.todayTipTransactions)
     });
   } catch (error) {
     console.error('Error fetching admin stats:', error);
@@ -2773,6 +2709,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       {
         model: db.OrderItem,
         as: 'items',
+        separate: true,
         required: false,
         attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
         include: [
@@ -2787,6 +2724,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       {
         model: db.Transaction,
         as: 'transactions',
+        separate: true,
         required: false,
         attributes: ['id', 'orderId', 'driverId', 'driverWalletId', 'transactionType', 'paymentMethod', 'paymentProvider', 'amount', 'status', 'paymentStatus', 'receiptNumber', 'checkoutRequestID', 'merchantRequestID', 'phoneNumber', 'transactionDate', 'notes', 'createdAt', 'updatedAt']
       },
