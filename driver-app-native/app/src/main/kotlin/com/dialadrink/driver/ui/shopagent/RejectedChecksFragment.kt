@@ -111,7 +111,8 @@ class RejectedChecksFragment : Fragment() {
                     items = listOf(
                         InventoryCheckItem(
                             drinkId = check.drink?.id ?: 0,
-                            count = newCount
+                            count = newCount,
+                            capacity = check.capacity?.takeIf { it.isNotBlank() }
                         )
                     )
                 )

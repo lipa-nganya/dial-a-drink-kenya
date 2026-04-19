@@ -140,32 +140,34 @@ class ShopAgentInventoryCheckActivity : AppCompatActivity() {
         adapter.notifyDataSetChanged()
     }
     
+    /** Includes capacity arrays, pricing rows, and keys from stockByCapacity so checks always tag a bucket when possible. */
+    private fun resolveCapacities(item: ShopAgentInventoryItem): List<String> {
+        val fromCapacity = item.capacity.orEmpty()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        val fromPricing = item.capacityPricing.orEmpty()
+            .mapNotNull { it.effectiveCapacity?.trim()?.takeIf { c -> c.isNotBlank() } }
+        val fromStock = item.stockByCapacity.orEmpty().keys
+            .mapNotNull { it.trim().takeIf { c -> c.isNotBlank() } }
+        return (fromCapacity + fromPricing + fromStock).distinct().sorted()
+    }
+
     private fun addToCheckedItems(item: ShopAgentInventoryItem) {
-        val capacitiesFromCapacity = item.capacity
-            ?.filter { it.isNotBlank() }
-            ?.takeIf { it.isNotEmpty() }
-
-        val capacitiesFromPricing = item.capacityPricing
-            ?.mapNotNull { it.effectiveCapacity }
-            ?.map { it.trim() }
-            ?.filter { it.isNotBlank() }
-            ?.distinct()
-            ?.takeIf { it.isNotEmpty() }
-
-        val capacities = capacitiesFromCapacity ?: capacitiesFromPricing ?: emptyList()
-
-        if (capacities.isNotEmpty()) {
-            val options = capacities.toTypedArray()
-            android.app.AlertDialog.Builder(this)
-                .setTitle("Select capacity")
-                .setItems(options) { _, which ->
-                    val selectedCapacity = options[which]
-                    addCountedItem(item, selectedCapacity)
-                }
-                .setNegativeButton("Cancel", null)
-                .show()
-        } else {
-            addCountedItem(item, null)
+        val capacities = resolveCapacities(item)
+        when {
+            capacities.size > 1 -> {
+                val options = capacities.toTypedArray()
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("Select capacity")
+                    .setItems(options) { _, which ->
+                        val selectedCapacity = options[which]
+                        addCountedItem(item, selectedCapacity)
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+            capacities.size == 1 -> addCountedItem(item, capacities[0])
+            else -> addCountedItem(item, null)
         }
     }
 
