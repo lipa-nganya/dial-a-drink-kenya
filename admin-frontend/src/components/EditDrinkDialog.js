@@ -445,6 +445,15 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
           </Alert>
         )}
 
+        {detailLoading && drink?.id && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <CircularProgress size={18} />
+            <Typography variant="caption" color="text.secondary">
+              Loading full product…
+            </Typography>
+          </Box>
+        )}
+
         <Box sx={{ width: '100%' }}>
           {/* Basic Information */}
           <Typography variant="h6" sx={{ color: colors.accentText, mb: 2 }}>
