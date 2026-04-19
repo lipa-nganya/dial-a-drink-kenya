@@ -2092,7 +2092,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
                   const totalStock =
                     option.stock !== undefined && option.stock !== null ? option.stock : 0;
-                  const stockColor = totalStock > 0 ? '#2196F3' : '#F44336';
 
                   const stockByCapacity =
                     option.stockByCapacity && typeof option.stockByCapacity === 'object'
@@ -2171,6 +2170,17 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     });
                   }
 
+                  // Blue label = combined total across capacities; lines = each capacity’s count.
+                  // For can+pack “shared stock” items, rows are views of the same physical pool — sum(rows)
+                  // would double-count; use aggregate `stock` (e.g. total cans) as the combined total.
+                  let headerStock = totalStock;
+                  if (rows.length > 0) {
+                    headerStock = isCanPackSharedStockProduct()
+                      ? Number(totalStock) || 0
+                      : rows.reduce((s, r) => s + (Number(r.stock) || 0), 0);
+                  }
+                  const stockColor = headerStock > 0 ? '#2196F3' : '#F44336';
+
                   return (
                     <li key={option.id} {...restProps}>
                       <Box
@@ -2217,7 +2227,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                             ml: 2
                           }}
                         >
-                          Stock: {totalStock}
+                          Stock: {headerStock}
                         </Typography>
                       </Box>
                     </li>
