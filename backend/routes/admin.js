@@ -1145,84 +1145,149 @@ router.get('/merchant-wallet', async (req, res) => {
   }
 });
 
-// Get all drinks (admin)
+/** Large / rarely needed on inventory grid — still returned from GET /admin/drinks/:id for edit. (Tags kept for list/tag tools.) */
+const ADMIN_DRINKS_LIST_OMIT = new Set(['keywords', 'youtubeUrl', 'pageTitle', 'clicks']);
+
+let cachedDrinkSchemaAttributes = { expires: 0, all: null };
+
+async function getAllDrinkAttributesFromDbSchema() {
+  const ttlMs = 15 * 60 * 1000;
+  const now = Date.now();
+  if (cachedDrinkSchemaAttributes.all && now < cachedDrinkSchemaAttributes.expires) {
+    return cachedDrinkSchemaAttributes.all;
+  }
+
+  let validDrinkAttributes;
+  try {
+    const [existingDrinkColumns] = await db.sequelize.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
+    );
+    const drinkColumnNames = new Set(existingDrinkColumns.map((col) => col.column_name.toLowerCase()));
+
+    validDrinkAttributes = [];
+    for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
+      const dbColumnName = attrDef.field || attrName;
+      if (drinkColumnNames.has(dbColumnName.toLowerCase())) {
+        validDrinkAttributes.push(attrName);
+      }
+    }
+    if (!validDrinkAttributes.includes('capacity') && drinkColumnNames.has('capacity')) {
+      validDrinkAttributes.push('capacity');
+    }
+    if (!validDrinkAttributes.includes('capacityPricing') && drinkColumnNames.has('capacitypricing')) {
+      validDrinkAttributes.push('capacityPricing');
+    }
+    if (!validDrinkAttributes.includes('stockByCapacity')) {
+      const hasStockByCapCol = [...drinkColumnNames].some(
+        (n) => n === 'stockbycapacity' || n === 'stock_by_capacity'
+      );
+      if (hasStockByCapCol) {
+        validDrinkAttributes.push('stockByCapacity');
+      }
+    }
+    if (!validDrinkAttributes.includes('purchasePrice')) {
+      const hasPurchasePriceCol = [...drinkColumnNames].some(
+        (n) => n === 'purchaseprice' || n === 'purchase_price'
+      );
+      if (hasPurchasePriceCol) {
+        validDrinkAttributes.push('purchasePrice');
+      }
+    }
+  } catch (schemaError) {
+    console.warn('⚠️ Could not query information_schema for drinks, using default attributes:', schemaError.message);
+    validDrinkAttributes = [
+      'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+      'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+      'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'stockByCapacity', 'purchasePrice', 'slug',
+      'createdAt', 'updatedAt'
+    ];
+  }
+
+  cachedDrinkSchemaAttributes = { all: validDrinkAttributes, expires: now + ttlMs };
+  return validDrinkAttributes;
+}
+
+const adminDrinkListIncludes = [
+  {
+    model: db.Category,
+    as: 'category',
+    attributes: ['id', 'name'],
+    required: false
+  },
+  {
+    model: db.SubCategory,
+    as: 'subCategory',
+    required: false,
+    attributes: ['id', 'name', 'categoryId']
+  },
+  {
+    model: db.Brand,
+    as: 'brand',
+    required: false,
+    attributes: ['id', 'name']
+  }
+];
+
+const adminDrinkDetailIncludes = [
+  {
+    model: db.Category,
+    as: 'category',
+    attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
+    required: false
+  },
+  {
+    model: db.SubCategory,
+    as: 'subCategory',
+    required: false,
+    attributes: ['id', 'name', 'categoryId', 'createdAt', 'updatedAt']
+  },
+  {
+    model: db.Brand,
+    as: 'brand',
+    required: false,
+    attributes: ['id', 'name', 'description', 'isActive', 'createdAt', 'updatedAt']
+  }
+];
+
+// Get all drinks (admin) — slim payload + cached schema (inventory grid)
 router.get('/drinks', async (req, res) => {
   try {
-    // Get actual columns that exist in the database for Drink
-    let validDrinkAttributes;
-    try {
-      const [existingDrinkColumns] = await db.sequelize.query(
-        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
-      );
-      const drinkColumnNames = new Set(existingDrinkColumns.map(col => col.column_name.toLowerCase()));
-      
-      // Map model attributes to database column names and filter to only existing columns
-      validDrinkAttributes = [];
-      for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
-        const dbColumnName = attrDef.field || attrName;
-        // Check if the database column exists (case-insensitive)
-        if (drinkColumnNames.has(dbColumnName.toLowerCase())) {
-          validDrinkAttributes.push(attrName);
-        }
-      }
-      // Ensure capacity and capacityPricing are included when columns exist (Sequelize default column names are camelCase, lowercased in PG)
-      if (!validDrinkAttributes.includes('capacity') && drinkColumnNames.has('capacity')) {
-        validDrinkAttributes.push('capacity');
-      }
-      if (!validDrinkAttributes.includes('capacityPricing') && drinkColumnNames.has('capacitypricing')) {
-        validDrinkAttributes.push('capacityPricing');
-      }
-      // Per-capacity stock + purchase cost — required for admin inventory / purchases UI
-      if (!validDrinkAttributes.includes('stockByCapacity')) {
-        const hasStockByCapCol = [...drinkColumnNames].some(
-          (n) => n === 'stockbycapacity' || n === 'stock_by_capacity'
-        );
-        if (hasStockByCapCol) {
-          validDrinkAttributes.push('stockByCapacity');
-        }
-      }
-      if (!validDrinkAttributes.includes('purchasePrice')) {
-        const hasPurchasePriceCol = [...drinkColumnNames].some(
-          (n) => n === 'purchaseprice' || n === 'purchase_price'
-        );
-        if (hasPurchasePriceCol) {
-          validDrinkAttributes.push('purchasePrice');
-        }
-      }
-    } catch (schemaError) {
-      // Fallback: use a safe default set of attributes if schema query fails (exclude purchasePrice)
-      console.warn('⚠️ Could not query information_schema for drinks, using default attributes:', schemaError.message);
-      validDrinkAttributes = [
-        'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
-        'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-        'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'stockByCapacity', 'purchasePrice', 'createdAt', 'updatedAt'
-      ];
-    }
-    
+    const allAttrs = await getAllDrinkAttributesFromDbSchema();
+    const listAttrs = allAttrs.filter((a) => !ADMIN_DRINKS_LIST_OMIT.has(a));
+
     const drinks = await db.Drink.findAll({
-      attributes: validDrinkAttributes,
-      include: [{
-        model: db.Category,
-        as: 'category',
-        attributes: ['id', 'name', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
-        required: false
-      }, {
-        model: db.SubCategory,
-        as: 'subCategory',
-        required: false,
-        attributes: ['id', 'name', 'categoryId', 'createdAt', 'updatedAt']
-      }, {
-        model: db.Brand,
-        as: 'brand',
-        required: false,
-        attributes: ['id', 'name', 'description', 'isActive', 'createdAt', 'updatedAt']
-      }],
+      attributes: listAttrs,
+      include: adminDrinkListIncludes,
       order: [['name', 'ASC']]
     });
 
     res.json(drinks);
   } catch (error) {
     console.error('Error fetching drinks:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
+// Single drink (admin) — full columns for edit dialog
+router.get('/drinks/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (Number.isNaN(id)) {
+      return res.status(400).json({ error: 'Invalid drink id' });
+    }
+    const allAttrs = await getAllDrinkAttributesFromDbSchema();
+    const drink = await db.Drink.findByPk(id, {
+      attributes: allAttrs,
+      include: adminDrinkDetailIncludes
+    });
+    if (!drink) {
+      return res.status(404).json({ error: 'Drink not found' });
+    }
+    res.json(drink);
+  } catch (error) {
+    console.error('Error fetching drink:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
     }
