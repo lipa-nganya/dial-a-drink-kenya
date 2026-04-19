@@ -7358,7 +7358,16 @@ router.get('/inventory-checks', verifyAdmin, async (req, res) => {
 router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) => {
   try {
     const { checkId } = req.params;
-    const { updateStock, notes } = req.body;
+    const { updateStock, notes } = req.body || {};
+    const shouldUpdateStock =
+      updateStock === true ||
+      updateStock === 'true' ||
+      updateStock === 1 ||
+      updateStock === '1';
+    const checkIdNum = parseInt(checkId, 10);
+    if (!Number.isFinite(checkIdNum)) {
+      return res.status(400).json({ success: false, error: 'Invalid check id' });
+    }
     const adminId = req.admin.id;
 
     // Inventory helpers (can/pack is tracked in base "cans"):
@@ -7400,7 +7409,7 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
       return candidates[0] || null;
     };
 
-    const inventoryCheck = await db.InventoryCheck.findByPk(checkId, {
+    const inventoryCheck = await db.InventoryCheck.findByPk(checkIdNum, {
       include: [
         {
           model: db.Drink,
@@ -7429,10 +7438,11 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
       notes: notes || inventoryCheck.notes
     });
 
-    // If updateStock is true, update the drink stock to match agent count
-    // - When capacity is set: update only that capacity in stockByCapacity, and keep aggregate stock in sync for legacy views
-    // - When capacity is not set: update the main stock field
-    if (updateStock === true && inventoryCheck.drink) {
+    // When shouldUpdateStock is true, update drink stock to match agent count (checkbox on admin UI).
+    // - When capacity is set: update that bucket in stockByCapacity and sync aggregate stock
+    // - When capacity is not set: update main stock and/or distribute across stockByCapacity when present
+    if (shouldUpdateStock && inventoryCheck.drink) {
+      await inventoryCheck.drink.reload();
       const capacity = inventoryCheck.capacity && String(inventoryCheck.capacity).trim() !== ''
         ? String(inventoryCheck.capacity).trim()
         : null;
@@ -7569,13 +7579,13 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
           const message = {
             sound: 'default',
             title: '✅ Inventory Check Approved',
-            body: `Your inventory check for ${inventoryCheck.drink?.name || 'item'} has been approved.${updateStock === true ? ' Stock has been updated.' : ''}`,
+            body: `Your inventory check for ${inventoryCheck.drink?.name || 'item'} has been approved.${shouldUpdateStock ? ' Stock has been updated.' : ''}`,
             data: {
               type: 'inventory-check-approved',
               checkId: String(inventoryCheck.id),
               drinkId: String(inventoryCheck.drinkId),
               drinkName: inventoryCheck.drink?.name || 'Item',
-              stockUpdated: String(updateStock === true),
+              stockUpdated: String(shouldUpdateStock),
               channelId: 'inventory-checks'
             },
             priority: 'high',
@@ -7612,7 +7622,7 @@ router.post('/inventory-checks/:checkId/approve', verifyAdmin, async (req, res) 
         id: inventoryCheck.id,
         status: inventoryCheck.status,
         approvedBy: adminId,
-        stockUpdated: updateStock === true
+        stockUpdated: shouldUpdateStock
       }
     });
   } catch (error) {

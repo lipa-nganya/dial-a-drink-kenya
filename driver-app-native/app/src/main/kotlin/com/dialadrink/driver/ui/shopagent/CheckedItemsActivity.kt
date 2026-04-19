@@ -116,6 +116,16 @@ class CheckedItemsActivity : AppCompatActivity() {
         binding.submitButton.text = "Submit Inventory Check ($itemCount items)"
         binding.submitButton.isEnabled = checkedItems.isNotEmpty()
     }
+
+    /** Prefer explicit capacity; if missing and stock is only in one bucket, send that key for correct stockByCapacity updates. */
+    private fun effectiveCapacityForSubmit(countedItem: CountedInventoryItem): String? {
+        countedItem.capacity?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
+        val keys = countedItem.item.stockByCapacity?.keys
+            ?.mapNotNull { it.trim().takeIf { k -> k.isNotBlank() } }
+            ?.distinct()
+            ?: emptyList()
+        return keys.singleOrNull()
+    }
     
     private fun submitInventoryCheck() {
         if (checkedItems.isEmpty()) {
@@ -127,7 +137,7 @@ class CheckedItemsActivity : AppCompatActivity() {
             InventoryCheckItem(
                 drinkId = countedItem.item.id,
                 count = countedItem.count,
-                capacity = countedItem.capacity?.takeIf { it.isNotBlank() }
+                capacity = effectiveCapacityForSubmit(countedItem)
             )
         }
         

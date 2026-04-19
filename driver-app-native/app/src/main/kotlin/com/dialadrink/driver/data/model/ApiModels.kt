@@ -179,6 +179,7 @@ data class InventoryCheckHistoryItem(
     val drink: InventoryCheckDrink?,
     val agentCount: Int,
     val databaseCount: Int,
+    val capacity: String? = null,
     val status: String,
     val isFlagged: Boolean,
     val approvedBy: InventoryCheckApprover?,

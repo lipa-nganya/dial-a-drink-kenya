@@ -587,17 +587,31 @@ router.get('/inventory-items', async (req, res) => {
         data: {
           success: true,
           items: drinks.map(drink => {
-            const capacities = Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []);
+            const rawCapacities = Array.isArray(drink.capacity) ? drink.capacity : (drink.capacity ? [drink.capacity] : []);
             const capacityPricing = Array.isArray(drink.capacityPricing) ? drink.capacityPricing : [];
             const stockByCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? drink.stockByCapacity : {};
-            const hasCapacities = capacities.length > 0 || capacityPricing.length > 0;
+            const fromPricing = capacityPricing
+              .map((p) => {
+                if (!p || typeof p !== 'object') return '';
+                const c = p.capacity != null && String(p.capacity).trim() !== '' ? String(p.capacity).trim() : '';
+                const s = p.size != null && String(p.size).trim() !== '' ? String(p.size).trim() : '';
+                return c || s;
+              })
+              .filter(Boolean);
+            const stockKeys = Object.keys(stockByCap).map((k) => String(k).trim()).filter(Boolean);
+            const merged = new Set();
+            for (const c of rawCapacities.map((x) => String(x).trim()).filter(Boolean)) merged.add(c);
+            for (const c of fromPricing) merged.add(c);
+            for (const c of stockKeys) merged.add(c);
+            const capacitiesArr = [...merged].sort((a, b) => a.localeCompare(b));
+            const hasCapacities = capacitiesArr.length > 0;
             return {
               id: drink.id,
               name: drink.name,
               barcode: drink.barcode,
               currentStock: drink.stock || 0,
               stockByCapacity: hasCapacities ? stockByCap : null,
-              capacity: hasCapacities ? capacities : null,
+              capacity: hasCapacities ? capacitiesArr : null,
               capacityPricing: hasCapacities ? capacityPricing : null,
               isAvailable: drink.isAvailable,
               category: drink.category ? {

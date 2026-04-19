@@ -108,8 +108,8 @@ const InventoryChecks = () => {
     try {
       setProcessing(true);
       const response = await api.post(`/admin/inventory-checks/${selectedCheck.id}/approve`, {
-        updateStock,
-        notes
+        updateStock: Boolean(updateStock),
+        notes: notes ?? ''
       });
 
       if (response.data.success) {
