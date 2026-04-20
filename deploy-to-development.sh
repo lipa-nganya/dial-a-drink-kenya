@@ -140,11 +140,6 @@ gcloud run deploy "$SERVICE_NAME" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
     --update-env-vars "$UPDATE_ENV_VARS" \
-    --memory 512Mi \
-    --timeout 300 \
-    --max-instances 10 \
-    --min-instances 0 \
-    --cpu 1 \
     --project "$PROJECT_ID" 2>&1
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \

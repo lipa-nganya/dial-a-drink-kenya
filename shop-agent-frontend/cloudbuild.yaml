@@ -39,8 +39,7 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      - '--memory'
-      - '256Mi'
+      # Memory/CPU: omit so Cloud Run keeps console settings on each deploy
       - '--set-env-vars'
       - 'REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api'
 

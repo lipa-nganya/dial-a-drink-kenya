@@ -106,11 +106,6 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$PROD_CONNECTION" \
     --set-env-vars "NODE_ENV=production,DATABASE_URL=$PROD_DATABASE_URL,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$EXISTING_GOOGLE_CLOUD_PROJECT,GCP_PROJECT=$EXISTING_GCP_PROJECT,HOST=$EXISTING_HOST" \
-    --memory 512Mi \
-    --timeout 300 \
-    --max-instances 10 \
-    --min-instances 0 \
-    --cpu 1 \
     --project "$PROJECT_ID" || {
     echo "❌ Backend deployment failed"
     exit 1
@@ -198,8 +193,7 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      - '--memory'
-      - '256Mi'
+      # Memory preserved from Cloud Console (omit so deploy does not reset it)
       - '--set-env-vars'
       - 'REACT_APP_API_URL=$PROD_BACKEND_URL'
 

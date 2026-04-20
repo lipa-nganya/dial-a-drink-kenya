@@ -55,9 +55,7 @@ gcloud run deploy deliveryos-backend \
   --image gcr.io/drink-suite/deliveryos-backend \
   --platform managed \
   --allow-unauthenticated \
-  --update-env-vars "NODE_ENV=production,FRONTEND_URL=$FRONTEND_URL_VALUE,ADMIN_URL=$ADMIN_URL_VALUE" \
-  --memory 512Mi \
-  --timeout 300
+  --update-env-vars "NODE_ENV=production,FRONTEND_URL=$FRONTEND_URL_VALUE,ADMIN_URL=$ADMIN_URL_VALUE"
 
 echo ""
 echo "✅ Backend deployed successfully!"

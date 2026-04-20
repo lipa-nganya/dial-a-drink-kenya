@@ -55,8 +55,6 @@ gcloud run jobs create $JOB_NAME \
   --add-cloudsql-instances="drink-suite:us-central1:drink-suite-db" \
   --max-retries=1 \
   --task-timeout=600 \
-  --memory=512Mi \
-  --cpu=1 \
   --quiet
 
 echo "✅ Job created"

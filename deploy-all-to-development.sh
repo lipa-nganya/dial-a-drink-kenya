@@ -105,8 +105,6 @@ gcloud builds submit --config=cloudbuild-dev.yaml . || {
             --region $REGION \
             --platform managed \
             --allow-unauthenticated \
-            --memory 512Mi \
-            --timeout 300 \
             --add-cloudsql-instances dialadrink-production:us-central1:dialadrink-db-dev \
             --update-env-vars "NODE_ENV=development,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,HOST=0.0.0.0" \
             --project "$PROJECT_ID"
