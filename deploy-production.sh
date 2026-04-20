@@ -74,8 +74,6 @@ else
     --set-cloudsql-instances="$PROD_CONNECTION" \
     --max-retries=1 \
     --task-timeout=600 \
-    --memory=512Mi \
-    --cpu=1 \
     --project="$PROJECT_ID" \
     --quiet 2>/dev/null; then
     echo "   Executing migration job..."
@@ -99,11 +97,6 @@ gcloud run deploy "$BACKEND_SERVICE" \
   --region "$REGION" \
   --allow-unauthenticated \
   --add-cloudsql-instances "$PROD_CONNECTION" \
-  --memory 512Mi \
-  --timeout 300 \
-  --max-instances 10 \
-  --min-instances 0 \
-  --cpu 1 \
   --project "$PROJECT_ID" || { echo "❌ Backend deploy failed"; exit 1; }
 BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format="value(status.url)")
 echo "✅ Backend: $BACKEND_URL"

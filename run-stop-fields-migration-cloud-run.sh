@@ -58,8 +58,6 @@ gcloud run jobs create $JOB_NAME \
   --set-cloudsql-instances=$CONNECTION_NAME \
   --max-retries=1 \
   --task-timeout=600 \
-  --memory=512Mi \
-  --cpu=1 \
   --quiet
 
 echo "✅ Job created"

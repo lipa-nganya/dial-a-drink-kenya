@@ -1,3 +1,6 @@
 # https://www.robotstxt.org/robotstxt.html
 User-agent: *
 Disallow:
+
+# XML sitemap (do not submit the HTML page /sitemap in Search Console)
+Sitemap: https://dialadrinkkenya.com/sitemap.xml

@@ -37,10 +37,7 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      - '--memory'
-      - '512Mi'
-      - '--timeout'
-      - '300'
+      # Memory/CPU/scaling/timeout: omit so Cloud Run keeps console settings on each deploy
       - '--add-cloudsql-instances'
       - 'dialadrink-production:us-central1:dialadrink-db-dev'
       - '--update-env-vars'

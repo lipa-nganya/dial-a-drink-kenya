@@ -217,11 +217,6 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --allow-unauthenticated \
     --update-env-vars "$ENV_VARS" \
     --add-cloudsql-instances "$PROD_CONNECTION" \
-    --memory 512Mi \
-    --timeout 300 \
-    --max-instances 10 \
-    --min-instances 0 \
-    --cpu 1 \
     --project "$PROJECT_ID" 2>&1
 
 # Get service URL

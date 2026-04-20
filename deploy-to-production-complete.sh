@@ -85,8 +85,6 @@ gcloud run jobs create $MIGRATION_JOB_NAME \
   --set-cloudsql-instances=$PROD_CONNECTION \
   --max-retries=1 \
   --task-timeout=600 \
-  --memory=512Mi \
-  --cpu=1 \
   --project=$PROJECT_ID \
   --quiet || {
     echo "⚠️  Job creation failed, will run migration after backend deployment"
@@ -221,11 +219,6 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$PROD_CONNECTION" \
     --set-env-vars "NODE_ENV=production,DATABASE_URL=$PROD_DATABASE_URL,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$EXISTING_GOOGLE_CLOUD_PROJECT,GCP_PROJECT=$EXISTING_GCP_PROJECT,HOST=$EXISTING_HOST,MPESA_CONSUMER_KEY=$MPESA_CONSUMER_KEY,MPESA_CONSUMER_SECRET=$MPESA_CONSUMER_SECRET,MPESA_SHORTCODE=$MPESA_SHORTCODE,MPESA_PASSKEY=$MPESA_PASSKEY,MPESA_PAYBILL_ACCOUNT=$MPESA_PAYBILL_ACCOUNT,MPESA_ENVIRONMENT=$MPESA_ENVIRONMENT,MPESA_CALLBACK_URL=$MPESA_CALLBACK_URL,PESAPAL_CONSUMER_KEY=$PESAPAL_CONSUMER_KEY,PESAPAL_CONSUMER_SECRET=$PESAPAL_CONSUMER_SECRET,PESAPAL_ENVIRONMENT=$PESAPAL_ENVIRONMENT,PESAPAL_IPN_CALLBACK_URL=$PESAPAL_IPN_CALLBACK_URL,GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY,SMTP_HOST=$EXISTING_SMTP_HOST,SMTP_PORT=$EXISTING_SMTP_PORT,SMTP_SECURE=$EXISTING_SMTP_SECURE,SMTP_USER=$EXISTING_SMTP_USER,SMTP_PASS=$EXISTING_SMTP_PASS,SMTP_FROM=$EXISTING_SMTP_FROM" \
-    --memory 512Mi \
-    --timeout 300 \
-    --max-instances 10 \
-    --min-instances 0 \
-    --cpu 1 \
     --project "$PROJECT_ID" || {
     echo "❌ Backend deployment failed"
     exit 1
@@ -267,8 +260,6 @@ if [ -z "$MIGRATION_JOB_NAME" ] || [ $? -ne 0 ]; then
       --set-cloudsql-instances=$PROD_CONNECTION \
       --max-retries=1 \
       --task-timeout=600 \
-      --memory=512Mi \
-      --cpu=1 \
       --project=$PROJECT_ID \
       --quiet
     

@@ -86,11 +86,6 @@ if needs_update "$BACKEND_SERVICE"; then
         --allow-unauthenticated \
         --add-cloudsql-instances "$CONNECTION_NAME" \
         --set-env-vars "NODE_ENV=production,DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${CONNECTION_NAME},FRONTEND_URL=${EXISTING_FRONTEND_URL},ADMIN_URL=${EXISTING_ADMIN_URL},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},HOST=0.0.0.0" \
-        --memory 512Mi \
-        --timeout 300 \
-        --max-instances 10 \
-        --min-instances 0 \
-        --cpu 1 \
         --project "$PROJECT_ID" || {
         echo -e "${RED}❌ Backend deployment failed${NC}"
         exit 1

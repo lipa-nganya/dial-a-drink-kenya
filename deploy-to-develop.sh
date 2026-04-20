@@ -101,8 +101,6 @@ gcloud builds submit --config=cloudbuild-dev.yaml . || {
             --region $REGION \
             --platform managed \
             --allow-unauthenticated \
-            --memory 512Mi \
-            --timeout 300 \
             --add-cloudsql-instances dialadrink-production:us-central1:dialadrink-db-dev \
             --update-env-vars NODE_ENV=development,FRONTEND_URL=https://dialadrink.thewolfgang.tech,ADMIN_URL=https://dialadrink-admin.thewolfgang.tech,HOST=0.0.0.0
     else

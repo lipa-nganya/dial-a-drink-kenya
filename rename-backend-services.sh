@@ -42,9 +42,7 @@ gcloud run deploy deliveryos-backend-dev \
   --platform managed \
   --allow-unauthenticated \
   --project $PROJECT_ID \
-  --set-env-vars "$DEV_ENV_VARS" \
-  --memory 512Mi \
-  --timeout 300
+  --set-env-vars "$DEV_ENV_VARS"
 
 echo ""
 echo "🔧 Creating deliveryos-backend-prod (production)..."
@@ -54,9 +52,7 @@ gcloud run deploy deliveryos-backend-prod \
   --platform managed \
   --allow-unauthenticated \
   --project $PROJECT_ID \
-  --set-env-vars "$PROD_ENV_VARS" \
-  --memory 512Mi \
-  --timeout 300
+  --set-env-vars "$PROD_ENV_VARS"
 
 echo ""
 echo "✅ New services created!"

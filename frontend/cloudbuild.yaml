@@ -41,8 +41,7 @@ steps:
       - '--platform'
       - 'managed'
       - '--allow-unauthenticated'
-      - '--memory'
-      - '256Mi'
+      # Memory/CPU: omit so Cloud Run keeps console settings on each deploy
       - '--set-env-vars'
       - 'REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api,REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
 

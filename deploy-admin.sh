@@ -24,8 +24,7 @@ gcloud run deploy deliveryos-admin \
   --source . \
   --platform managed \
   --allow-unauthenticated \
-  --update-env-vars "REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api" \
-  --memory 256Mi
+  --update-env-vars "REACT_APP_API_URL=https://deliveryos-backend-p6bkgryxqa-uc.a.run.app/api"
 
 echo ""
 echo "✅ Admin Frontend deployed successfully!"

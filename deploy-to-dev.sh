@@ -142,11 +142,6 @@ gcloud run deploy "$SERVICE_NAME" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
     --update-env-vars "NODE_ENV=development,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$EXISTING_GOOGLE_CLOUD_PROJECT,GCP_PROJECT=$EXISTING_GCP_PROJECT,HOST=0.0.0.0" \
-    --memory 512Mi \
-    --timeout 300 \
-    --max-instances 10 \
-    --min-instances 0 \
-    --cpu 1 \
     --project "$PROJECT_ID" || {
     echo -e "${RED}❌ Deployment failed${NC}"
     exit 1

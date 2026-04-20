@@ -47,8 +47,6 @@ gcloud run deploy deliveryos-backend-dev \
   --set-env-vars "NODE_ENV=development,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID" \
   --update-env-vars "DATABASE_URL=postgresql://${DEV_DB_USER}:${DEV_DB_PASSWORD}@/${DEV_DB_NAME}?host=/cloudsql/${DEV_CONNECTION}" \
   --update-env-vars "FRONTEND_URL=https://dialadrink.thewolfgang.tech,ADMIN_URL=https://dialadrink-admin.thewolfgang.tech" \
-  --memory 512Mi \
-  --timeout 300 \
   --project $PROJECT_ID
 
 echo ""
@@ -65,8 +63,6 @@ gcloud run deploy deliveryos-backend-prod \
   --set-env-vars "NODE_ENV=production,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID" \
   --update-env-vars "DATABASE_URL=postgresql://${PROD_DB_USER}:${PROD_DB_PASSWORD}@/${PROD_DB_NAME}?host=/cloudsql/${PROD_CONNECTION}" \
   --update-env-vars "FRONTEND_URL=https://ruakadrinksdelivery.co.ke,ADMIN_URL=https://dial-a-drink-admin.netlify.app" \
-  --memory 512Mi \
-  --timeout 300 \
   --project $PROJECT_ID
 
 echo ""
