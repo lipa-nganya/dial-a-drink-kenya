@@ -1,5 +1,11 @@
-# Cloud Build configuration for Customer Frontend
-# This file enables automatic deployments from GitHub to Cloud Run
+# Cloud Build: customer frontend → GCR → Cloud Run
+#
+# Builds embed the Maps key via --build-arg (_GOOGLE_MAPS_API_KEY).
+# Setting GOOGLE_MAPS_API_KEY only on Cloud Run does NOT bake it into the JS; add
+# substitution _GOOGLE_MAPS_API_KEY on your trigger or pass --substitutions when submitting.
+#
+# Build + both pushes run in ONE step so the image exists in the local daemon before push
+# (avoids “image not found” when push/deploy ran in separate steps).
 
 steps:
   - name: 'gcr.io/cloud-builders/docker'
@@ -19,14 +25,8 @@ steps:
           --build-arg REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api \
           --build-arg REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY} \
           .
-
-  # Push before deploy: the top-level `images:` pushes only AFTER all steps, so Cloud Run
-  # would otherwise try to pull an image that is not in the registry yet.
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA']
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/dialadrink-frontend:latest']
+        docker push "$${IMG}:$SHORT_SHA"
+        docker push "$${IMG}:latest"
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -44,22 +44,14 @@ steps:
       - 'managed'
       - '--quiet'
       - '--allow-unauthenticated'
-      # Memory/CPU: omit so Cloud Run keeps console settings on each deploy
       - '--set-env-vars'
       - 'REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api,REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
 
-images:
-  - 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA'
-  - 'gcr.io/$PROJECT_ID/dialadrink-frontend:latest'
-
-# machineType must be a supported value (e.g. E2_HIGHCPU_8, E2_MEDIUM). E2_HIGHCPU_4 is not valid and fails gcloud.
 options:
   machineType: 'E2_HIGHCPU_8'
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'
 
-# Substitution variables - must be set via Cloud Build trigger or --substitutions flag
-# Example: gcloud builds submit --substitutions=SHORT_SHA=$(git rev-parse --short HEAD),_GOOGLE_MAPS_API_KEY=...
 substitutions:
-  _GOOGLE_MAPS_API_KEY: '' # REQUIRED for React embed (or use Secret Manager + trigger)
+  _GOOGLE_MAPS_API_KEY: ''
