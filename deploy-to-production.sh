@@ -3,9 +3,9 @@
 # Updates container images only — does NOT read or write secrets (DATABASE_URL, MPesa, SMTP,
 # API keys). Configure those in GCP only: Cloud Run → service → Variables & Secrets / Secret Manager.
 #
-# Optional for frontend Cloud Build (React embeds maps at build time):
-#   export GOOGLE_MAPS_API_KEY_FOR_BUILD="your-key"
-# Or set _GOOGLE_MAPS_API_KEY on the Cloud Build trigger instead of using this script for frontends.
+# Frontend Cloud Build needs a Maps key at build time. Resolved in order:
+#   GOOGLE_MAPS_API_KEY_FOR_BUILD → GOOGLE_MAPS_API_KEY → Secret Manager secret "google-maps-api-key"
+# Or use a Cloud Build trigger with _GOOGLE_MAPS_API_KEY (no local env needed).
 
 set -e
 
@@ -102,15 +102,18 @@ echo "✅ Backend deployment completed!"
 echo "🌐 Service URL: $SERVICE_URL"
 echo ""
 
-# Frontends need a Maps key at build time (React). Do not commit keys — export for local runs only.
+# Frontends need a Maps key at build time (React). Do not commit keys.
 SHORT_SHA=$(date +%s | shasum -a 256 2>/dev/null | head -c 8 || date +%s | sha256sum 2>/dev/null | head -c 8 || echo "$(date +%s)")
-GOOGLE_MAPS_KEY="${GOOGLE_MAPS_API_KEY_FOR_BUILD:-}"
+GOOGLE_MAPS_KEY="${GOOGLE_MAPS_API_KEY_FOR_BUILD:-${GOOGLE_MAPS_API_KEY:-}}"
+if [ -z "$GOOGLE_MAPS_KEY" ]; then
+    GOOGLE_MAPS_KEY="$(gcloud secrets versions access latest --secret=google-maps-api-key --project="$PROJECT_ID" 2>/dev/null || true)"
+fi
 
 # Step 5: Deploy Customer Frontend to Cloud Run
 echo "🌐 Step 5: Deploying Customer Frontend to Cloud Run..."
 if [ -z "$GOOGLE_MAPS_KEY" ]; then
-    echo "⚠️  GOOGLE_MAPS_API_KEY_FOR_BUILD is not set."
-    echo "   Export it before running this script, or deploy the customer frontend from a Cloud Build trigger with _GOOGLE_MAPS_API_KEY."
+    echo "⚠️  No Maps API key for frontend build (set GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY_FOR_BUILD, or Secret Manager secret google-maps-api-key)."
+    echo "   Or deploy frontends via a Cloud Build trigger with _GOOGLE_MAPS_API_KEY."
     echo "   Skipping customer frontend build."
 else
     cd /Users/maria/dial-a-drink/frontend
@@ -135,7 +138,7 @@ fi
 echo ""
 echo "🌐 Step 6: Deploying Admin Frontend to Cloud Run..."
 if [ -z "$GOOGLE_MAPS_KEY" ]; then
-    echo "⚠️  Skipping admin frontend (set GOOGLE_MAPS_API_KEY_FOR_BUILD to build locally)."
+    echo "⚠️  Skipping admin frontend (same Maps key resolution as customer frontend)."
 else
     cd /Users/maria/dial-a-drink/admin-frontend
     echo "🔨 Building and deploying admin frontend..."
@@ -172,5 +175,5 @@ echo "🔐 Secrets: unchanged (managed in GCP only)"
 echo ""
 echo "📋 Next Steps:"
 echo "1. Test backend API: curl $SERVICE_URL/api/health"
-echo "2. For frontend deploys from this machine: export GOOGLE_MAPS_API_KEY_FOR_BUILD before running"
+echo "2. Frontend builds: export GOOGLE_MAPS_API_KEY (or GOOGLE_MAPS_API_KEY_FOR_BUILD), or use Secret google-maps-api-key / Cloud Build trigger"
 echo ""
