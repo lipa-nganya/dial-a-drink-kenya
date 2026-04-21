@@ -40,7 +40,8 @@ module.exports = (sequelize, DataTypes) => {
           } catch (error) {
             console.error('Error generating category slug:', error);
             // Fallback to name-based slug
-            category.slug = category.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+            const { normalizeSlug } = require('../utils/slugCanonical');
+            category.slug = normalizeSlug(category.name);
           }
         }
       },

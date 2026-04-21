@@ -9,19 +9,15 @@ import {
 import { LocalBar } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { getBackendUrl } from '../utils/backendUrl';
+import { normalizeSlug } from '../utils/slugCanonical';
 
 const CategoryCard = ({ category }) => {
   const navigate = useNavigate();
   const [imageError, setImageError] = useState(false);
-  const toSlug = (value) =>
-    String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
 
   const handleClick = () => {
-    const slug = category?.slug || toSlug(category?.name) || String(category?.id || '');
+    const slug =
+      normalizeSlug(category?.slug || category?.name || '') || String(category?.id || '');
     navigate(`/${slug}`);
   };
 

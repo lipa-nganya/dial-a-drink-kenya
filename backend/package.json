@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "echo 'No build step required for Node.js'",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/slugCanonical.test.js",
     "postinstall": "echo 'Backend dependencies installed successfully'",
     "scrape-tags": "node scripts/scrape-tags-from-dialadrinkkenya.js",
     "import-scraped-tags": "node scripts/sync-tags-via-browser-export.js",

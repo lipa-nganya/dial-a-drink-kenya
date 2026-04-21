@@ -1,3 +1,5 @@
+import { normalizeSlug } from './slugCanonical';
+
 /**
  * Canonical URL helpers for Google Search (duplicate / user-selected canonical).
  * Production customer site always uses https://dialadrinkkenya.com (apex, no www).
@@ -127,11 +129,15 @@ export function buildCanonicalUrl(pathname, search = '') {
 export function buildProductCanonicalUrl(product) {
   const origin = getCanonicalSiteOrigin();
   if (!product) return `${origin}/`;
-  if (product.slug && product.category?.slug) {
-    return `${origin}/${product.category.slug}/${product.slug}`;
+  const catSeg = product.category
+    ? normalizeSlug(product.category.slug || product.category.name || '')
+    : '';
+  const prodSeg = product.slug ? normalizeSlug(product.slug) : '';
+  if (catSeg && prodSeg) {
+    return `${origin}/${catSeg}/${prodSeg}`;
   }
   if (product.slug) {
-    return `${origin}/product/${product.slug}`;
+    return `${origin}/product/${normalizeSlug(product.slug) || product.slug}`;
   }
   return `${origin}/product/${product.id}`;
 }

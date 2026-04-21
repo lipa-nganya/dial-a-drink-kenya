@@ -3,6 +3,7 @@ import { Box, Button } from '@mui/material';
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { normalizeSlug } from '../utils/slugCanonical';
 
 const CategoriesBar = () => {
   const navigate = useNavigate();
@@ -15,13 +16,6 @@ const CategoriesBar = () => {
 
   const isOnMenu = location.pathname === '/menu';
   const isDeliveryLocationPage = location.pathname.startsWith('/delivery-location/');
-  const toSlug = (value) =>
-    String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-
   const selectedCategoryId = (isOnMenu || isDeliveryLocationPage) ? (() => {
     const cat = searchParams.get('category');
     if (cat == null || cat === '') return null;
@@ -56,7 +50,8 @@ const CategoriesBar = () => {
       navigate({ pathname: location.pathname, search: `?category=${category.id}` });
       return;
     }
-    const slug = category?.slug || toSlug(category?.name) || String(category?.id || '');
+    const slug =
+      normalizeSlug(category?.slug || category?.name || '') || String(category?.id || '');
     navigate(`/${slug}`);
   };
 

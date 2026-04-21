@@ -17,6 +17,7 @@ import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { getSimilarDrinkSuggestions, drinkNameMatchesSearch } from '../utils/drinkSearch';
+import { normalizeSlug } from '../utils/slugCanonical';
 
 const Menu = () => {
   const { categorySlug } = useParams();
@@ -41,12 +42,7 @@ const Menu = () => {
   const [sortBy, setSortBy] = useState('');
   // When sort by quantity is selected, filter by a specific capacity ('' = show all)
   const [quantityCapacityFilter, setQuantityCapacityFilter] = useState('');
-  const toSlug = (value) =>
-    String(value || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
+  const categoryPathKey = (c) => (c ? normalizeSlug(c.slug || c.name) : '');
 
   // Unique capacities from drinks that pass current category/search/subcategory filter (for quantity dropdown)
   // Must be defined before any useEffect or JSX that references it
@@ -132,7 +128,7 @@ const Menu = () => {
       if (!isNaN(categoryId)) {
         setSelectedCategory(categoryId);
       } else {
-        const bySlug = categories.find((c) => (c.slug || toSlug(c.name)) === categoryParam);
+        const bySlug = categories.find((c) => categoryPathKey(c) === normalizeSlug(categoryParam));
         if (bySlug?.id) {
           setSelectedCategory(bySlug.id);
         }
@@ -157,7 +153,7 @@ const Menu = () => {
 
   useEffect(() => {
     if (!categorySlug) return;
-    const matched = categories.find((c) => (c.slug || toSlug(c.name)) === categorySlug);
+    const matched = categories.find((c) => categoryPathKey(c) === normalizeSlug(categorySlug));
     if (matched?.id) {
       setSelectedCategory(matched.id);
     }
@@ -169,16 +165,21 @@ const Menu = () => {
     if (loading || !categorySlug) return;
     if (!Array.isArray(categories) || !Array.isArray(drinks)) return;
 
-    const matchedCat = categories.find((c) => (c.slug || toSlug(c.name)) === categorySlug);
+    const matchedCat = categories.find((c) => categoryPathKey(c) === normalizeSlug(categorySlug));
     if (matchedCat) return;
 
-    const drink = drinks.find((d) => d && String(d.slug) === categorySlug);
+    const drink = drinks.find(
+      (d) => d && (String(d.slug) === categorySlug || normalizeSlug(d.slug) === normalizeSlug(categorySlug))
+    );
     if (!drink?.category) return;
 
-    const catSlug = drink.category.slug || toSlug(drink.category.name);
-    if (!catSlug || !drink.slug) return;
+    const catSlug = drink.category.slug
+      ? normalizeSlug(drink.category.slug)
+      : normalizeSlug(drink.category.name);
+    const productSlug = drink.slug ? normalizeSlug(drink.slug) : '';
+    if (!catSlug || !productSlug) return;
 
-    navigate(`/${catSlug}/${drink.slug}`, { replace: true });
+    navigate(`/${catSlug}/${productSlug}`, { replace: true });
   }, [loading, categorySlug, categories, drinks, navigate]);
   
   // Fetch subcategories when category changes

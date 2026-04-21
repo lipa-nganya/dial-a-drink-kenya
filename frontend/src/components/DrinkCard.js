@@ -36,6 +36,7 @@ import { useNavigate } from 'react-router-dom';
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getBackendUrl } from '../utils/backendUrl';
+import { normalizeSlug } from '../utils/slugCanonical';
 
 const DrinkCard = ({ drink }) => {
   const navigate = useNavigate();
@@ -141,11 +142,13 @@ const DrinkCard = ({ drink }) => {
   };
 
   const handleCardClick = () => {
-    // Use category-based URL if both category and product slugs are available
-    // Pass the full drink object via router state so the ProductPage
-    // can render immediately without a blank loading state.
-    if (drink.category?.slug && drink.slug) {
-      navigate(`/${drink.category.slug}/${drink.slug}`, { state: { drink } });
+    const catSeg = drink.category
+      ? normalizeSlug(drink.category.slug || drink.category.name || '')
+      : '';
+    const prodSeg = drink.slug ? normalizeSlug(drink.slug) : '';
+    // Use canonical path segments (aligned with DB + API)
+    if (catSeg && prodSeg) {
+      navigate(`/${catSeg}/${prodSeg}`, { state: { drink } });
     } else {
       // Fallback to old format:
       // `/product/:id` is backed by `/drinks/:id`, so we must use `drink.id`
@@ -156,10 +159,14 @@ const DrinkCard = ({ drink }) => {
 
   // Get product URL for sharing
   const getProductUrl = () => {
-    if (drink.category?.slug && drink.slug) {
-      return `${window.location.origin}/${drink.category.slug}/${drink.slug}`;
+    const catSeg = drink.category
+      ? normalizeSlug(drink.category.slug || drink.category.name || '')
+      : '';
+    const prodSeg = drink.slug ? normalizeSlug(drink.slug) : '';
+    if (catSeg && prodSeg) {
+      return `${window.location.origin}/${catSeg}/${prodSeg}`;
     } else if (drink.slug) {
-      return `${window.location.origin}/product/${drink.slug}`;
+      return `${window.location.origin}/product/${normalizeSlug(drink.slug)}`;
     } else {
       return `${window.location.origin}/product/${drink.id}`;
     }

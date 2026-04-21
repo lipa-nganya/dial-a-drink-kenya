@@ -27,6 +27,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useCustomer } from '../contexts/CustomerContext';
 import CategoriesBar from './CategoriesBar';
 import { api } from '../services/api';
+import { normalizeSlug } from '../utils/slugCanonical';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ const Header = () => {
   const navigateToDrink = useCallback((drink) => {
     if (!drink) return;
     if (drink.category?.slug && drink.slug) {
-      navigate(`/${drink.category.slug}/${drink.slug}`, { state: { drink } });
+      navigate(`/${normalizeSlug(drink.category.slug)}/${normalizeSlug(drink.slug)}`, { state: { drink } });
     } else {
       navigate(`/product/${drink.id}`, { state: { drink } });
     }

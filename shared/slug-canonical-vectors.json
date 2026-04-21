@@ -1,0 +1,9 @@
+[
+  { "input": "", "expected": "" },
+  { "input": "  MUCHO  ", "expected": "mucho" },
+  { "input": "mucho-", "expected": "mucho" },
+  { "input": "--Wine--", "expected": "wine" },
+  { "input": "Jacob's Creek--Rose", "expected": "jacob-s-creek-rose" },
+  { "input": "foo__bar::baz", "expected": "foo-bar-baz" },
+  { "input": "123", "expected": "123" }
+]

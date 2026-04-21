@@ -43,6 +43,7 @@ import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
 import { stripHtml } from '../utils/stripHtml';
 import { ensureCanonicalLink, buildProductCanonicalUrl } from '../utils/seoCanonical';
+import { normalizeSlug } from '../utils/slugCanonical';
 import { buildBrandPath } from '../utils/brandSlug';
 import DrinkCard from '../components/DrinkCard';
 
@@ -168,7 +169,7 @@ const ProductPage = () => {
       // and we now have proper category + product slugs, redirect to the
       // new category-based URL so dev matches local (e.g. /wine/slug).
       if (!isCategoryBasedUrl && product.category?.slug && product.slug) {
-        navigate(`/${product.category.slug}/${product.slug}`, { replace: true });
+        navigate(`/${normalizeSlug(product.category.slug)}/${normalizeSlug(product.slug)}`, { replace: true });
         return;
       }
       
@@ -462,9 +463,9 @@ const ProductPage = () => {
   const getProductUrl = () => {
     if (!product) return '';
     if (product.category?.slug && product.slug) {
-      return `${window.location.origin}/${product.category.slug}/${product.slug}`;
+      return `${window.location.origin}/${normalizeSlug(product.category.slug)}/${normalizeSlug(product.slug)}`;
     } else if (product.slug) {
-      return `${window.location.origin}/product/${product.slug}`;
+      return `${window.location.origin}/product/${normalizeSlug(product.slug)}`;
     } else {
       return `${window.location.origin}/product/${product.id}`;
     }
@@ -762,7 +763,11 @@ const ProductPage = () => {
         {product.category && (
           <Link
             component={RouterLink}
-            to={`/${product.category?.slug || String(product.categoryId)}`}
+            to={
+              product.category?.slug
+                ? `/${normalizeSlug(product.category.slug)}`
+                : `/${String(product.categoryId)}`
+            }
             underline="hover"
             color="inherit"
           >
