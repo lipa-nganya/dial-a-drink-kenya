@@ -119,21 +119,9 @@ echo "   No Cloud Run frontend services needed."
 echo ""
 
 # ============================================
-# 3. Run Database Migrations
+# 3. Driver App Build Instructions
 # ============================================
-echo "🔨 Step 3: Checking Database Migrations..."
-echo ""
-echo "⚠️  Database migrations should be run manually to ensure safety."
-echo "   To run migrations, use:"
-echo "   ./backend/scripts/run-migrations-cloud-sql.sh"
-echo "   OR"
-echo "   ./backend/scripts/run-migrations-via-cloud-run.sh"
-echo ""
-
-# ============================================
-# 4. Driver App Build Instructions
-# ============================================
-echo "🔨 Step 4: Driver App Build Instructions..."
+echo "🔨 Step 3: Driver App Build Instructions..."
 echo ""
 echo "📱 To build the driver app APK for dev:"
 echo "   1. Open Android Studio"
@@ -162,8 +150,7 @@ echo "   Environment: sandbox"
 echo ""
 echo "📝 Next Steps:"
 echo "   1. Configure PesaPal Dashboard (see below)"
-echo "   2. Run database migrations if needed"
-echo "   3. Build driver app APK"
+echo "   2. Build driver app APK"
 echo ""
 echo "═══════════════════════════════════════════════════════"
 echo "🔗 PesaPal Dashboard Configuration"

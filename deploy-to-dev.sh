@@ -4,8 +4,7 @@
 # 1. Git push to GitHub (triggers Netlify for frontend auto-deploy)
 # 2. Backend deployment to existing Google Cloud Run service
 # 3. CORS maintenance (already configured in backend/app.js)
-# 4. Database migrations check (none needed - email OTP uses existing schema)
-# 5. Android app build instructions
+# 4. Android app build instructions
 
 set -e  # Exit on error
 
@@ -86,16 +85,8 @@ git push origin "$CURRENT_BRANCH" || {
 echo -e "${GREEN}✅ Git changes pushed (Netlify will auto-deploy frontend)${NC}"
 echo ""
 
-# Step 4: Database migrations check
-echo -e "${GREEN}🗄️  Step 4: Checking database migrations...${NC}"
-echo "Email OTP feature uses existing schema:"
-echo "  ✓ otps table (phoneNumber field supports 'email:user@example.com' format)"
-echo "  ✓ customers table (email column already exists)"
-echo "✅ No new migrations required"
-echo ""
-
-# Step 5: Deploy backend to Google Cloud Run
-echo -e "${GREEN}☁️  Step 5: Deploying backend to Google Cloud Run...${NC}"
+# Step 4: Deploy backend to Google Cloud Run
+echo -e "${GREEN}☁️  Step 4: Deploying backend to Google Cloud Run...${NC}"
 echo "Service: $SERVICE_NAME"
 echo "Region: $REGION"
 echo ""
@@ -160,8 +151,8 @@ echo ""
 
 cd ..
 
-# Step 6: CORS verification
-echo -e "${GREEN}🔒 Step 6: CORS Configuration${NC}"
+# Step 5: CORS verification
+echo -e "${GREEN}🔒 Step 5: CORS Configuration${NC}"
 echo "CORS is configured in backend/app.js with the following origins:"
 echo "  ✓ Netlify domains (*.netlify.app)"
 echo "  ✓ Development domains (dialadrink.thewolfgang.tech, dialadrink-admin.thewolfgang.tech)"
@@ -170,8 +161,8 @@ echo "  ✓ Cloud Run services (*.run.app)"
 echo "✅ CORS maintained - no changes needed"
 echo ""
 
-# Step 7: Android app build instructions
-echo -e "${GREEN}📱 Step 7: Android App Build Instructions${NC}"
+# Step 6: Android app build instructions
+echo -e "${GREEN}📱 Step 6: Android App Build Instructions${NC}"
 echo "================================================"
 echo "To build the Android app for development:"
 echo ""
@@ -188,7 +179,7 @@ echo "APK will be at:"
 echo "  app/build/outputs/apk/production/release/app-production-release.apk"
 echo ""
 
-# Step 8: Summary
+# Step 7: Summary
 echo -e "${GREEN}✅ Deployment Summary:${NC}"
 echo "================================================"
 echo "✓ Git changes pushed to GitHub"
@@ -196,7 +187,6 @@ echo "✓ Frontend will auto-deploy via Netlify (from GitHub)"
 echo "✓ Backend deployed to: $SERVICE_NAME"
 echo "✓ Service URL: $FINAL_SERVICE_URL"
 echo "✓ CORS maintained (configured in backend/app.js)"
-echo "✓ Database migrations: None required (uses existing schema)"
 echo "✓ Android app: Build manually using instructions above"
 echo ""
 echo -e "${GREEN}🎉 Deployment to development completed!${NC}"

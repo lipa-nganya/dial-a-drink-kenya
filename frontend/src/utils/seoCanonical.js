@@ -10,7 +10,11 @@ const TRACKING_PARAM_KEYS = new Set([
   'msclkid',
   '_ga',
   'mc_cid',
-  'mc_eid'
+  'mc_eid',
+  'srsltid', // Google search result click id
+  'dclid',
+  'wbraid',
+  'gbraid'
 ]);
 
 /**
@@ -47,6 +51,35 @@ export function getCanonicalSiteOrigin() {
 }
 
 /**
+ * Params that create duplicate URLs for the same listing (sort/pagination/filters).
+ * Canonical should point at the stable category path (see Google duplicate canonical guidance).
+ */
+const LISTING_DEDUP_PARAM_KEYS = new Set([
+  'sort',
+  'page',
+  'subcategory',
+  'category',
+  'quantity',
+  'capacity'
+]);
+
+/**
+ * Remove listing/facet params from query string (keep `search` for real search URLs).
+ */
+export function stripListingDedupParams(search) {
+  if (!search || search === '?') return '';
+  const q = search.startsWith('?') ? search.slice(1) : search;
+  const params = new URLSearchParams(q);
+  for (const key of [...params.keys()]) {
+    if (LISTING_DEDUP_PARAM_KEYS.has(key.toLowerCase())) {
+      params.delete(key);
+    }
+  }
+  const out = params.toString();
+  return out ? `?${out}` : '';
+}
+
+/**
  * Strip marketing/tracking params so ?utm_*=… does not create duplicate URLs.
  */
 export function stripTrackingSearchParams(search) {
@@ -77,11 +110,14 @@ export function normalizePathname(pathname) {
 
 /**
  * Full canonical URL for current route (used site-wide).
+ * Drops tracking + listing pagination/sort so /rum?sort=x&page=2 → /rum (apex origin).
  */
 export function buildCanonicalUrl(pathname, search = '') {
   const origin = getCanonicalSiteOrigin();
   const path = normalizePathname(pathname);
-  const query = typeof search === 'string' ? stripTrackingSearchParams(search) : '';
+  let query = typeof search === 'string' ? search : '';
+  query = stripListingDedupParams(query);
+  query = stripTrackingSearchParams(query);
   return `${origin}${path === '/' ? '/' : path}${query}`;
 }
 

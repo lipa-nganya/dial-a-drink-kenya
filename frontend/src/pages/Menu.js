@@ -12,7 +12,7 @@ import {
   MenuItem,
 } from '@mui/material';
 import { Star } from '@mui/icons-material';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -20,6 +20,7 @@ import { getSimilarDrinkSuggestions, drinkNameMatchesSearch } from '../utils/dri
 
 const Menu = () => {
   const { categorySlug } = useParams();
+  const navigate = useNavigate();
   const { colors } = useTheme();
   const [searchParams, setSearchParams] = useSearchParams();
   const [drinks, setDrinks] = useState([]);
@@ -161,6 +162,24 @@ const Menu = () => {
       setSelectedCategory(matched.id);
     }
   }, [categorySlug, categories]);
+
+  // SEO: legacy single-segment URLs (/product-slug) hit this route as a fake "category".
+  // Redirect to canonical /:categorySlug/:productSlug so Google stops seeing duplicates.
+  useEffect(() => {
+    if (loading || !categorySlug) return;
+    if (!Array.isArray(categories) || !Array.isArray(drinks)) return;
+
+    const matchedCat = categories.find((c) => (c.slug || toSlug(c.name)) === categorySlug);
+    if (matchedCat) return;
+
+    const drink = drinks.find((d) => d && String(d.slug) === categorySlug);
+    if (!drink?.category) return;
+
+    const catSlug = drink.category.slug || toSlug(drink.category.name);
+    if (!catSlug || !drink.slug) return;
+
+    navigate(`/${catSlug}/${drink.slug}`, { replace: true });
+  }, [loading, categorySlug, categories, drinks, navigate]);
   
   // Fetch subcategories when category changes
   useEffect(() => {

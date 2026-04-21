@@ -44,10 +44,6 @@ echo ""
 echo "☁️  Step 3: Deploying backend to Cloud Run..."
 cd backend
 
-# Get existing env vars
-EXISTING_FRONTEND_URL="https://dialadrink.thewolfgang.tech"
-EXISTING_ADMIN_URL="https://dialadrink-admin.thewolfgang.tech"
-
 # Build image
 echo "🔨 Building Docker image..."
 IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-backend-dev:$(date +%s)"
@@ -64,7 +60,6 @@ gcloud run deploy "$SERVICE_NAME" \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --set-env-vars "NODE_ENV=development,DATABASE_URL=postgresql://dialadrink_app:o61yqm5fLiTwWnk5@/dialadrink_dev?host=/cloudsql/$CONNECTION_NAME,FRONTEND_URL=$EXISTING_FRONTEND_URL,ADMIN_URL=$EXISTING_ADMIN_URL,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID,HOST=0.0.0.0" \
     --project "$PROJECT_ID" 2>&1
 
 # Get service URL

@@ -26,9 +26,10 @@ fi
 echo ""
 
 # Get latest image
+IMAGE_BASE="gcr.io/$PROJECT_ID/deliveryos-production-backend"
+
 echo "2. Finding latest backend image..."
-# Get just the tag (not full path)
-LATEST_TAG=$(gcloud container images list-tags gcr.io/$PROJECT_ID/deliveryos-backend-prod \
+LATEST_TAG=$(gcloud container images list-tags "$IMAGE_BASE" \
     --limit=1 \
     --format="value(tags[0])" \
     --sort-by=~timestamp 2>/dev/null)
@@ -36,22 +37,20 @@ LATEST_TAG=$(gcloud container images list-tags gcr.io/$PROJECT_ID/deliveryos-bac
 if [ -z "$LATEST_TAG" ]; then
     echo "❌ No images found. Building new one..."
     cd backend
-    IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-backend-prod:$(date +%s)"
+    IMAGE_TAG="${IMAGE_BASE}:$(date +%s)"
     echo "Building: $IMAGE_TAG"
     gcloud builds submit --tag "$IMAGE_TAG" .
     LATEST_IMAGE="$IMAGE_TAG"
     cd ..
 else
-    # Construct full image path
-    LATEST_IMAGE="gcr.io/$PROJECT_ID/deliveryos-backend-prod:$LATEST_TAG"
+    LATEST_IMAGE="${IMAGE_BASE}:${LATEST_TAG}"
     echo "✅ Found image: $LATEST_IMAGE"
-    
-    # Verify image exists
+
     echo "Verifying image exists..."
     if ! gcloud container images describe "$LATEST_IMAGE" &>/dev/null; then
         echo "⚠️  Image not found, building new one..."
         cd backend
-        IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-backend-prod:$(date +%s)"
+        IMAGE_TAG="${IMAGE_BASE}:$(date +%s)"
         echo "Building: $IMAGE_TAG"
         gcloud builds submit --tag "$IMAGE_TAG" .
         LATEST_IMAGE="$IMAGE_TAG"
@@ -62,35 +61,18 @@ else
 fi
 echo ""
 
-# Get current env vars
-echo "3. Getting current environment variables..."
-CURRENT_ENV=$(gcloud run services describe "$SERVICE" \
-    --region "$REGION" \
-    --project "$PROJECT_ID" \
-    --format="get(spec.template.spec.containers[0].env)" 2>/dev/null || echo "")
-
-FRONTEND_URL=$(echo "$CURRENT_ENV" | grep -oP "FRONTEND_URL.*?value': '\K[^']*" || echo "https://ruakadrinksdelivery.co.ke")
-ADMIN_URL=$(echo "$CURRENT_ENV" | grep -oP "ADMIN_URL.*?value': '\K[^']*" || echo "https://dial-a-drink-admin.netlify.app")
-GOOGLE_CLOUD_PROJECT=$(echo "$CURRENT_ENV" | grep -oP "GOOGLE_CLOUD_PROJECT.*?value': '\K[^']*" || echo "$PROJECT_ID")
-GCP_PROJECT=$(echo "$CURRENT_ENV" | grep -oP "GCP_PROJECT.*?value': '\K[^']*" || echo "$PROJECT_ID")
-
-echo "   FRONTEND_URL: $FRONTEND_URL"
-echo "   ADMIN_URL: $ADMIN_URL"
-echo ""
-
-# Deploy
-echo "4. Deploying to Cloud Run..."
+# Deploy (image only — DATABASE_URL and other secrets unchanged in GCP)
+echo "3. Deploying to Cloud Run..."
 gcloud run deploy "$SERVICE" \
     --image "$LATEST_IMAGE" \
     --platform managed \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --set-env-vars "NODE_ENV=production,DATABASE_URL=postgresql://dialadrink_app:E7A3IIa60hFD3bkGH1XAiryvB@/dialadrink_prod?host=/cloudsql/${CONNECTION_NAME},FRONTEND_URL=${FRONTEND_URL},ADMIN_URL=${ADMIN_URL},GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},GCP_PROJECT=${GCP_PROJECT},HOST=0.0.0.0" \
     --project "$PROJECT_ID"
 
 echo ""
-echo "5. Verifying deployment..."
+echo "4. Verifying deployment..."
 NEW_REVISION=$(gcloud run revisions list --service "$SERVICE" \
     --region "$REGION" \
     --project "$PROJECT_ID" \
