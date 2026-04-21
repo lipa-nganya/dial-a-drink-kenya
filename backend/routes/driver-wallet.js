@@ -270,6 +270,19 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         }
       }
 
+      // CRT/DBT columns are computed from live order breakdown; stored tx.amount can lag after admin edits.
+      // Running-balance UI uses entry.amount — keep it aligned with credit − debit for COD completion rows.
+      let resolvedAmount = Math.abs(txAmount);
+      if (
+        tx.paymentProvider === 'order_completion' &&
+        debitAmount != null &&
+        creditAmount != null &&
+        Number.isFinite(parseFloat(debitAmount)) &&
+        Number.isFinite(parseFloat(creditAmount))
+      ) {
+        resolvedAmount = Number((parseFloat(creditAmount) - parseFloat(debitAmount)).toFixed(2));
+      }
+
       entries.push({
         type: looksLikePayNowTerritoryFeeRow ? 'cash_sent' : entryType,
         logType,
@@ -282,7 +295,7 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         orderValue,
         debitAmount,
         creditAmount,
-        amount: Math.abs(txAmount),
+        amount: resolvedAmount,
         date: pickCashAtHandLogDate(tx.transactionDate, tx.createdAt),
         description: description,
         receiptNumber: tx.receiptNumber

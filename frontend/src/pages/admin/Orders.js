@@ -51,6 +51,8 @@ const Orders = () => {
   const [error, setError] = useState(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
+  /** all | unassigned | driver id string */
+  const [riderFilter, setRiderFilter] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [drivers, setDrivers] = useState([]);
   const [driverDialogOpen, setDriverDialogOpen] = useState(false);
@@ -125,7 +127,7 @@ const Orders = () => {
               : order
           );
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter);
+          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchTerm);
           return sorted;
         });
       }
@@ -270,6 +272,19 @@ const Orders = () => {
       });
     }
 
+    if (riderFilter !== 'all') {
+      if (riderFilter === 'unassigned') {
+        filtered = filtered.filter(
+          (order) => !order.driverId || order.driver?.name === 'HOLD Driver'
+        );
+      } else {
+        const rid = parseInt(riderFilter, 10);
+        if (!Number.isNaN(rid)) {
+          filtered = filtered.filter((order) => Number(order.driverId) === rid);
+        }
+      }
+    }
+
     // Sort filtered results
     const sorted = sortOrdersByStatus(filtered);
     setFilteredOrders(sorted);
@@ -279,7 +294,7 @@ const Orders = () => {
   useEffect(() => {
     applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchTerm);
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
-  }, [orderStatusFilter, transactionStatusFilter, searchTerm, orders]);
+  }, [orderStatusFilter, transactionStatusFilter, riderFilter, searchTerm, orders]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     try {
@@ -539,13 +554,52 @@ const Orders = () => {
           </Select>
         </FormControl>
 
-        {(orderStatusFilter !== 'all' || transactionStatusFilter !== 'all' || searchTerm.trim()) && (
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 220 } }}>
+          <InputLabel>Rider</InputLabel>
+          <Select
+            value={riderFilter}
+            label="Rider"
+            onChange={(e) => setRiderFilter(e.target.value)}
+            sx={{
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: '#00E0B8',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: '#00C4A3',
+              },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderColor: '#00E0B8',
+              },
+            }}
+          >
+            <MenuItem value="all">All riders</MenuItem>
+            <MenuItem value="unassigned">Unassigned / HOLD</MenuItem>
+            {[...(drivers || [])]
+              .filter((d) => d && d.id != null && String(d.name || '').trim() !== 'HOLD Driver')
+              .sort((a, b) =>
+                String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+                  sensitivity: 'base',
+                })
+              )
+              .map((d) => (
+                <MenuItem key={d.id} value={String(d.id)}>
+                  {d.name || `Rider #${d.id}`}
+                </MenuItem>
+              ))}
+          </Select>
+        </FormControl>
+
+        {(orderStatusFilter !== 'all' ||
+          transactionStatusFilter !== 'all' ||
+          searchTerm.trim() ||
+          riderFilter !== 'all') && (
           <Button
             variant="outlined"
             size="small"
             onClick={() => {
               setOrderStatusFilter('all');
               setTransactionStatusFilter('all');
+              setRiderFilter('all');
               setSearchTerm('');
             }}
             sx={{

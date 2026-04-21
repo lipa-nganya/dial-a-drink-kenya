@@ -69,6 +69,39 @@ import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
 
+/** Matches admin API: amounts editable unless cancelled, or incomplete paid/completed combos. Paid + completed is allowed (reconciliation). */
+function canEditOrderFinancialAmounts(order) {
+  if (!order || order.status === 'cancelled') return false;
+  const completedWithoutPay = order.status === 'completed' && order.paymentStatus !== 'paid';
+  const paidNotCompleted = order.paymentStatus === 'paid' && order.status !== 'completed';
+  return !(completedWithoutPay || paidNotCompleted);
+}
+
+/** Sum of line item price × quantity. When present, this is the real subtotal; do not trust a stale `itemsTotal` field. */
+function sumLineItemsSubtotal(order) {
+  const items = order?.items || [];
+  if (!items.length) return null;
+  let sum = 0;
+  for (const item of items) {
+    sum += parseFloat(item.price || 0) * (parseFloat(item.quantity || 0) || 0);
+  }
+  return Number(sum.toFixed(2));
+}
+
+/**
+ * Customer-facing total for the summary and orders list: line items + convenience fee + tip.
+ * Matches order detail breakdown; ignores stale `order.totalAmount` after edits.
+ * Territory delivery fee is internal accounting and is not added to customer total here.
+ */
+function computeOrderSummaryCustomerTotal(order) {
+  if (!order) return 0;
+  const amounts = computeOrderDisplayAmounts(order);
+  const fromLines = sumLineItemsSubtotal(order);
+  const itemsPart =
+    fromLines != null ? fromLines : amounts.itemsSubtotal;
+  return Number((itemsPart + amounts.convenienceFee + amounts.tipAmount).toFixed(2));
+}
+
 const Orders = () => {
   const { isDarkMode, colors } = useTheme();
   const muiTheme = useMuiTheme();
@@ -81,6 +114,8 @@ const Orders = () => {
   const [error, setError] = useState(null);
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
+  /** all | unassigned | driver id string */
+  const [riderFilter, setRiderFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [customFilter, setCustomFilter] = useState(null);
   const [drivers, setDrivers] = useState([]);
@@ -855,6 +890,19 @@ const Orders = () => {
       });
     }
 
+    if (riderFilter !== 'all') {
+      if (riderFilter === 'unassigned') {
+        filtered = filtered.filter(
+          (order) => !order.driverId || order.driver?.name === 'HOLD Driver'
+        );
+      } else {
+        const rid = parseInt(riderFilter, 10);
+        if (!Number.isNaN(rid)) {
+          filtered = filtered.filter((order) => Number(order.driverId) === rid);
+        }
+      }
+    }
+
     // Sort filtered results
     const sorted = sortOrdersByStatus(filtered);
     setFilteredOrders(sorted);
@@ -892,7 +940,7 @@ const Orders = () => {
   useEffect(() => {
     applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderStatusFilter, transactionStatusFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
+  }, [orderStatusFilter, transactionStatusFilter, riderFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     if (newStatus === 'cancelled') {
@@ -1120,12 +1168,23 @@ const Orders = () => {
       if (response.data.success) {
         // Update the order detail with the new data and breakdown so total/delivery fee display correctly
         const { order, breakdown } = response.data;
-        setSelectedOrderForDetail(prev => ({
-          ...(order || prev),
-          totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? prev?.totalAmount,
-          deliveryFee: breakdown?.deliveryFee ?? prev?.deliveryFee,
-          itemsTotal: breakdown?.itemsTotal ?? prev?.itemsTotal
-        }));
+        setSelectedOrderForDetail((prev) => {
+          const merged = {
+            ...prev,
+            ...(order || {}),
+            items: order?.items ?? prev?.items
+          };
+          const amounts = computeOrderDisplayAmounts(merged);
+          const lineSum = sumLineItemsSubtotal(merged);
+          return {
+            ...merged,
+            itemsTotal: breakdown?.itemsTotal ?? lineSum ?? prev?.itemsTotal,
+            totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? merged.totalAmount,
+            convenienceFee: Math.round(amounts.convenienceFee),
+            deliveryFee: Math.round(amounts.territoryDeliveryFee),
+            territoryDeliveryFee: merged.territoryDeliveryFee ?? prev?.territoryDeliveryFee
+          };
+        });
 
         // Refresh the orders list to reflect the change
         await fetchOrders();
@@ -1264,12 +1323,25 @@ const Orders = () => {
 
       if (response.data?.success) {
         const { order, breakdown } = response.data;
-        setSelectedOrderForDetail(prev => ({
-          ...(order || prev),
-          deliveryFee: breakdown?.deliveryFee ?? prev?.deliveryFee,
-          totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? prev?.totalAmount,
-          itemsTotal: breakdown?.itemsTotal ?? prev?.itemsTotal
-        }));
+        setSelectedOrderForDetail((prev) => {
+          const merged = {
+            ...prev,
+            ...(order || {}),
+            items: order?.items ?? prev?.items
+          };
+          const amounts = computeOrderDisplayAmounts(merged);
+          const lineSum = sumLineItemsSubtotal(merged);
+          return {
+            ...merged,
+            itemsTotal: breakdown?.itemsTotal ?? lineSum ?? merged.itemsTotal,
+            convenienceFee: Math.round(amounts.convenienceFee),
+            // Screen uses deliveryFee for INTERNAL territory fee — never use breakdown.deliveryFee (customer residual).
+            deliveryFee: Math.round(amounts.territoryDeliveryFee),
+            territoryDeliveryFee:
+              merged.territoryDeliveryFee ?? amounts.territoryDeliveryFee ?? prev?.territoryDeliveryFee,
+            totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? merged.totalAmount
+          };
+        });
         await fetchOrders();
         setEditItemsSubtotalDialogOpen(false);
         setNewItemsSubtotal('');
@@ -1355,13 +1427,23 @@ const Orders = () => {
         }
       }
 
-      // 3) Save territory
+      // 3) Save territory — only when the dropdown changed. PATCH /territory always reapplies the
+      // territory master delivery fee (deliveryFromCBD) and would wipe a custom territoryDeliveryFee (e.g. 600 → 10).
       const territoryId =
         selectedTerritoryId === '' || selectedTerritoryId == null
           ? null
           : parseInt(selectedTerritoryId, 10);
 
-      if (territoryId === null || !Number.isNaN(territoryId)) {
+      const existingTerritoryId =
+        selectedOrderForDetail.territoryId ?? selectedOrderForDetail.territory?.id ?? null;
+      const territorySelectionChanged =
+        (existingTerritoryId == null ? null : Number(existingTerritoryId)) !==
+        (territoryId == null || Number.isNaN(territoryId) ? null : territoryId);
+
+      if (
+        territorySelectionChanged &&
+        (territoryId === null || !Number.isNaN(territoryId))
+      ) {
         const territoryPayload =
           territoryId === null ? { territoryId: null } : { territoryId };
 
@@ -1438,12 +1520,10 @@ const Orders = () => {
         );
       }
 
-      // 4) Save delivery fee (only if it was explicitly changed and order is still editable)
+      // 4) Save delivery fee when it was changed and backend allows edits (includes paid + completed)
       if (
         recentlyUpdatedInOrderDetail.deliveryFee &&
-        selectedOrderForDetail.status !== 'completed' &&
-        selectedOrderForDetail.status !== 'cancelled' &&
-        selectedOrderForDetail.paymentStatus !== 'paid'
+        canEditOrderFinancialAmounts(selectedOrderForDetail)
       ) {
         const rawFee = selectedOrderForDetail.deliveryFee;
         const deliveryFeeValue =
@@ -2018,13 +2098,52 @@ const Orders = () => {
           </Select>
         </FormControl>
 
-        {(orderStatusFilter !== 'all' || transactionStatusFilter !== 'all' || searchQuery) && (
+        <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 220, flexGrow: isMobile ? 1 : 0 }}>
+          <InputLabel>Rider</InputLabel>
+          <Select
+            value={riderFilter}
+            label="Rider"
+            onChange={(e) => setRiderFilter(e.target.value)}
+            sx={{
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: colors.accentText,
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': {
+                borderColor: '#00C4A3',
+              },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                borderColor: colors.accentText,
+              },
+            }}
+          >
+            <MenuItem value="all">All riders</MenuItem>
+            <MenuItem value="unassigned">Unassigned / HOLD</MenuItem>
+            {[...drivers]
+              .filter((d) => d && d.id != null && String(d.name || '').trim() !== 'HOLD Driver')
+              .sort((a, b) =>
+                String(a.name || '').localeCompare(String(b.name || ''), undefined, {
+                  sensitivity: 'base'
+                })
+              )
+              .map((d) => (
+                <MenuItem key={d.id} value={String(d.id)}>
+                  {d.name || `Rider #${d.id}`}
+                </MenuItem>
+              ))}
+          </Select>
+        </FormControl>
+
+        {(orderStatusFilter !== 'all' ||
+          transactionStatusFilter !== 'all' ||
+          searchQuery ||
+          riderFilter !== 'all') && (
           <Button
             variant="outlined"
             size="small"
             onClick={() => {
               setOrderStatusFilter('all');
               setTransactionStatusFilter('all');
+              setRiderFilter('all');
               setSearchQuery('');
             }}
             sx={{
@@ -2099,7 +2218,7 @@ const Orders = () => {
                     </Box>
                     <Box sx={{ textAlign: 'right' }}>
                       <Typography variant="h6" sx={{ fontWeight: 700, color: colors.accentText }}>
-                        KES {Math.round(Number(order.totalAmount))}
+                        KES {Math.round(computeOrderSummaryCustomerTotal(order))}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {order.paymentType === 'pay_now' ? 'Paid Now' : 'Cash on Delivery'}
@@ -2251,7 +2370,7 @@ const Orders = () => {
                     <TableCell>
                       <Box>
                         <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '1rem' }}>
-                          KES {Math.round(Number(order.totalAmount))}
+                          KES {Math.round(computeOrderSummaryCustomerTotal(order))}
                         </Typography>
                         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
                           <Typography variant="caption">
@@ -2259,7 +2378,7 @@ const Orders = () => {
                           </Typography>
                           {(() => {
                             // Calculate profit/loss (subtract territory delivery fee, not convenience fee)
-                            const totalAmount = parseFloat(order.totalAmount) || 0;
+                            const totalAmount = computeOrderSummaryCustomerTotal(order);
                             const orderItems = order.items || order.orderItems || [];
                             const { territoryDeliveryFee } = computeOrderDisplayAmounts(order);
                             
@@ -2748,7 +2867,7 @@ const Orders = () => {
                   Customer: {selectedOrder.customerName}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Amount: KES {Math.round(Number(selectedOrder.totalAmount))}
+                  Amount: KES {Math.round(computeOrderSummaryCustomerTotal(selectedOrder))}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Address: {selectedOrder.deliveryAddress}
@@ -3064,6 +3183,17 @@ const Orders = () => {
                             {territories.map((t) => (
                               <MenuItem key={t.id} value={t.id}>
                                 {t.name}
+                                <Typography
+                                  component="span"
+                                  sx={{
+                                    color: colors.textSecondary,
+                                    fontSize: '0.85rem',
+                                    ml: 0.75,
+                                    fontWeight: 400
+                                  }}
+                                >
+                                  (KES {Math.round(Number(t.deliveryFromCBD ?? 0)).toLocaleString('en-KE')})
+                                </Typography>
                               </MenuItem>
                             ))}
                           </Select>
@@ -3075,7 +3205,14 @@ const Orders = () => {
                           value={
                             selectedOrderForDetail.deliveryFee ?? ''
                           }
-                          disabled
+                          disabled={!canEditOrderFinancialAmounts(selectedOrderForDetail)}
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            setSelectedOrderForDetail((prev) =>
+                              prev ? { ...prev, deliveryFee: v } : prev
+                            );
+                            setRecentlyUpdatedInOrderDetail((r) => ({ ...r, deliveryFee: true }));
+                          }}
                           sx={{ maxWidth: 200 }}
                         />
                       </Box>
@@ -3138,9 +3275,7 @@ const Orders = () => {
                             <Typography variant="body1" sx={{ fontWeight: 600, color: colors.accentText }}>
                               KES {Math.round(Number(item.price || 0))}
                             </Typography>
-                            {selectedOrderForDetail.status !== 'completed' && 
-                             selectedOrderForDetail.status !== 'cancelled' && 
-                             selectedOrderForDetail.paymentStatus !== 'paid' && (
+                            {canEditOrderFinancialAmounts(selectedOrderForDetail) && (
                               <IconButton
                                 size="small"
                                 onClick={() => {
@@ -3181,24 +3316,23 @@ const Orders = () => {
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <Typography variant="body1">
                             KES {(() => {
-                              const itemsTotal = selectedOrderForDetail.itemsTotal ||
-                                selectedOrderForDetail.items.reduce((sum, item) =>
-                                  sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
-                                );
+                              const fromLines = sumLineItemsSubtotal(selectedOrderForDetail);
+                              const itemsTotal =
+                                fromLines != null
+                                  ? fromLines
+                                  : Number(selectedOrderForDetail.itemsTotal || 0);
                               return Math.round(Number(itemsTotal));
                             })()}
                           </Typography>
-                          {selectedOrderForDetail.status !== 'completed' &&
-                            selectedOrderForDetail.status !== 'cancelled' &&
-                            selectedOrderForDetail.paymentStatus !== 'paid' && (
+                          {canEditOrderFinancialAmounts(selectedOrderForDetail) && (
                               <IconButton
                                 size="small"
                                 onClick={() => {
+                                  const fromLines = sumLineItemsSubtotal(selectedOrderForDetail);
                                   const current =
-                                    selectedOrderForDetail.itemsTotal ||
-                                    selectedOrderForDetail.items.reduce((sum, item) =>
-                                      sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
-                                    );
+                                    fromLines != null
+                                      ? fromLines
+                                      : Number(selectedOrderForDetail.itemsTotal || 0);
                                   setNewItemsSubtotal(String(Math.round(Number(current))));
                                   setEditItemsSubtotalDialogOpen(true);
                                 }}
@@ -3218,9 +3352,7 @@ const Orders = () => {
                         <Typography variant="body1">
                           KES {Math.round(Number(selectedOrderForDetail.convenienceFee || 0))}
                         </Typography>
-                        {selectedOrderForDetail.status !== 'completed' &&
-                          selectedOrderForDetail.status !== 'cancelled' &&
-                          selectedOrderForDetail.paymentStatus !== 'paid' && (
+                        {canEditOrderFinancialAmounts(selectedOrderForDetail) && (
                             <IconButton
                               size="small"
                               onClick={() => {
@@ -3242,6 +3374,19 @@ const Orders = () => {
                         <Typography variant="body1">
                           KES {Math.round(Number(selectedOrderForDetail.deliveryFee || 0))}
                         </Typography>
+                        {canEditOrderFinancialAmounts(selectedOrderForDetail) && (
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              setNewDeliveryFee(
+                                String(Math.round(Number(selectedOrderForDetail.deliveryFee || 0)))
+                              );
+                              setEditDeliveryFeeDialogOpen(true);
+                            }}
+                          >
+                            <Edit fontSize="small" />
+                          </IconButton>
+                        )}
                       </Box>
                     </Box>
                     {/* Tip Amount */}
@@ -3262,7 +3407,8 @@ const Orders = () => {
                         <strong>Total Amount:</strong>
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 600, color: '#FF3366' }}>
-                        KES {Math.round(Number(selectedOrderForDetail.totalAmount))}
+                        KES{' '}
+                        {Math.round(computeOrderSummaryCustomerTotal(selectedOrderForDetail))}
                       </Typography>
                     </Box>
                     {/* Cost & Profit/Loss when we have purchase prices */}
@@ -3278,7 +3424,8 @@ const Orders = () => {
                           }
                         }
                       });
-                      const totalAmount = parseFloat(selectedOrderForDetail.totalAmount) || 0;
+                      const totalAmount =
+                        computeOrderSummaryCustomerTotal(selectedOrderForDetail);
                       const territoryDeliveryFee = parseFloat(selectedOrderForDetail.deliveryFee) || 0;
                       const profitLoss = totalAmount - totalPurchaseCost - territoryDeliveryFee;
                       if (totalPurchaseCost > 0) {
@@ -3806,7 +3953,14 @@ const Orders = () => {
           {selectedOrderForDetail && (
             <Box sx={{ pt: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Current Items Subtotal: KES {Math.round(Number(selectedOrderForDetail.itemsTotal || 0))}
+                Current Items Subtotal: KES{' '}
+                {Math.round(
+                  Number(
+                    sumLineItemsSubtotal(selectedOrderForDetail) ??
+                      selectedOrderForDetail.itemsTotal ??
+                      0
+                  )
+                )}
               </Typography>
               <TextField
                 autoFocus

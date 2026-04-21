@@ -49,11 +49,14 @@ import DrinkCard from '../components/DrinkCard';
 const ProductPage = () => {
   // Support both URL formats:
   // New: /:categorySlug/:productSlug (e.g., /wine/1659-sauvignon-blanc-750ml)
+  // Legacy index: /products/:productSlug (wrong path segment; resolved via GET /drinks/:slug then redirect)
   // Old: /product/:id (e.g., /product/306)
   const params = useParams();
   const { categorySlug, productSlug, id } = params;
-  const isCategoryBasedUrl = Boolean(categorySlug && productSlug);
   const location = useLocation();
+  const isLegacyIndexedProductsUrl = /^\/products\/[^/]+$/i.test(location.pathname);
+  const isCategoryBasedUrl =
+    Boolean(categorySlug && productSlug) && !isLegacyIndexedProductsUrl;
   const initialProduct = location.state?.drink || null;
   const navigate = useNavigate();
   const { addToCart } = useCart();
@@ -95,6 +98,10 @@ const ProductPage = () => {
       ((isCategoryBasedUrl &&
         initialProduct.slug === productSlug &&
         initialProduct.category?.slug === categorySlug) ||
+        (isLegacyIndexedProductsUrl &&
+          productSlug &&
+          initialProduct.slug === productSlug &&
+          initialHasCanonicalSlugs) ||
         (isLegacyProductRoute &&
           String(initialProduct.id) === String(id) &&
           initialHasCanonicalSlugs));
@@ -118,7 +125,7 @@ const ProductPage = () => {
       return;
     }
     fetchProduct();
-  }, [categorySlug, productSlug, id]);
+  }, [categorySlug, productSlug, id, location.pathname]);
 
   // Measure full text height for the expandable "For More About" card so the
   // maxHeight transitions animate smoothly.
@@ -239,6 +246,13 @@ const ProductPage = () => {
         // New format: /:categorySlug/:productSlug
         // Fetch via API: /api/products/:categorySlug/:productSlug
         response = await api.get(`/products/${categorySlug}/${productSlug}`);
+      } else if (
+        isLegacyIndexedProductsUrl &&
+        productSlug &&
+        /^\/products\/[^/]+$/i.test(location.pathname)
+      ) {
+        // Indexed /products/:slug — lookup by slug only (same as /product/:slug API)
+        response = await api.get(`/drinks/${encodeURIComponent(productSlug)}`);
       } else {
         // Old format: /product/:id
         response = await api.get(`/drinks/${id}`);

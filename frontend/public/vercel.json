@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/products/:slug",
+      "destination": "https://deliveryos-production-backend-805803410802.us-central1.run.app/api/http-redirect/products/:slug"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

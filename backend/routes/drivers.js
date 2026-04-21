@@ -1200,13 +1200,18 @@ router.get('/', async (req, res) => {
             paymentStatus: 'paid',
             status: { [Op.in]: ['delivered', 'completed'] }
           },
-          attributes: ['id']
+          attributes: ['id', 'territoryDeliveryFee']
         });
         let cashCollected = 0;
         for (const order of cashOrders) {
           try {
             const breakdown = await getOrderFinancialBreakdown(order.id);
-            cashCollected += (breakdown.itemsTotal || 0) + (breakdown.deliveryFee || 0) * 0.5;
+            const convenienceFee = parseFloat(breakdown.deliveryFee || 0) || 0;
+            const territoryFee =
+              parseFloat(order.territoryDeliveryFee ?? convenienceFee) || 0;
+            const orderValue = (parseFloat(breakdown.itemsTotal) || 0) + convenienceFee;
+            // Same net as calculateDeliveryAccounting / walletCredits for COD cash
+            cashCollected += orderValue - territoryFee * 0.5;
           } catch (e) {}
         }
 
@@ -1217,13 +1222,16 @@ router.get('/', async (req, res) => {
             paymentStatus: 'paid',
             status: { [Op.in]: ['delivered', 'completed'] }
           },
-          attributes: ['id']
+          attributes: ['id', 'territoryDeliveryFee']
         });
         let cashDeductionPayNow = 0;
         for (const order of payNowOrders) {
           try {
             const breakdown = await getOrderFinancialBreakdown(order.id);
-            cashDeductionPayNow += (breakdown.deliveryFee || 0) * 0.5;
+            const convenienceFee = parseFloat(breakdown.deliveryFee || 0) || 0;
+            const territoryFee =
+              parseFloat(order.territoryDeliveryFee ?? convenienceFee) || 0;
+            cashDeductionPayNow += territoryFee * 0.5;
           } catch (e) {}
         }
         
