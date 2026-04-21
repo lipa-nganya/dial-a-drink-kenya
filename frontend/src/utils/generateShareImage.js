@@ -1,3 +1,5 @@
+import { normalizeSlug } from './slugCanonical';
+
 /**
  * Get full image URL for a product
  */
@@ -232,8 +234,8 @@ export const shareProduct = async (product) => {
           text: `Check out ${product.name} at Dial A Drink Kenya! ${getPriceText(product)}`,
           files: [file],
           url: product.category?.slug && product.slug
-            ? `${window.location.origin}/${product.category.slug}/${product.slug}`
-            : `${window.location.origin}/product/${product.slug || product.id}`
+            ? `${window.location.origin}/${normalizeSlug(product.category.slug)}/${normalizeSlug(product.slug)}`
+            : `${window.location.origin}/product/${normalizeSlug(product.slug) || product.id}`
         });
         return;
       } catch (error) {

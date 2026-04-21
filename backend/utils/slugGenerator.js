@@ -1,3 +1,5 @@
+const { normalizeSlug } = require('./slugCanonical');
+
 /**
  * Generate SEO-friendly slug from product name, brand, and capacity
  * @param {string} name - Product name
@@ -48,6 +50,8 @@ function generateSlug(name, brand = null, capacity = null) {
 
   // Remove leading and trailing hyphens
   slug = slug.replace(/^-+|-+$/g, '');
+
+  slug = normalizeSlug(slug);
 
   // Ensure slug is not empty
   if (!slug) {
@@ -139,6 +143,8 @@ function generateCategorySlugFromName(categoryName) {
 
   // Remove leading and trailing hyphens
   slug = slug.replace(/^-+|-+$/g, '');
+
+  slug = normalizeSlug(slug);
 
   // Ensure slug is not empty
   if (!slug) {

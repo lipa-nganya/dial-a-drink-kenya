@@ -9,6 +9,15 @@ const router = express.Router();
 const db = require('../models');
 const { Op } = require('sequelize');
 const { generateCategorySlugFromName } = require('../utils/slugGenerator');
+const { normalizeSlug } = require('../utils/slugCanonical');
+
+function categorySlugMatchesUrl(category, categorySlugFromUrl) {
+  if (!category || !categorySlugFromUrl) return false;
+  const u = normalizeSlug(categorySlugFromUrl);
+  const fromName = normalizeSlug(generateCategorySlugFromName(category.name));
+  const fromDb = category.slug ? normalizeSlug(category.slug) : '';
+  return u === fromName || (fromDb && u === fromDb);
+}
 
 /**
  * Get product by category slug and product slug
@@ -34,10 +43,16 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
     } catch (_) { /* use default */ }
 
     // Find product by slug and include its category.
+    const slugNorm = normalizeSlug(productSlug);
+    const slugVariants = [...new Set([productSlug, slugNorm].filter(Boolean))];
+    if (slugVariants.length === 0) {
+      return res.status(404).json({ error: 'Product not found in this category' });
+    }
+
     const drink = await db.Drink.findOne({
       where: {
-        slug: productSlug,
-        isPublished: true
+        isPublished: true,
+        slug: { [Op.in]: slugVariants }
       },
       attributes: drinkAttributes,
       include: [{
@@ -67,8 +82,7 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
       return res.status(404).json({ error: 'Category not found for this product' });
     }
 
-    const computedCategorySlug = generateCategorySlugFromName(drink.category.name);
-    if (computedCategorySlug !== categorySlug) {
+    if (!categorySlugMatchesUrl(drink.category, categorySlug)) {
       return res.status(404).json({ error: 'Product not found in this category' });
     }
 
