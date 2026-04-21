@@ -2,32 +2,24 @@
 # This file enables automatic deployments from GitHub main branch to Cloud Run
 
 steps:
-  # Build the container image with production backend URL
   - name: 'gcr.io/cloud-builders/docker'
+    env:
+      - 'DOCKER_BUILDKIT=1'
+    entrypoint: bash
     args:
-      - 'build'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin:$SHORT_SHA'
-      - '-t'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin:latest'
-      - '--build-arg'
-      - 'REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api'
-      - '--build-arg'
-      - 'REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
-      - '.'
+      - '-c'
+      - |
+        set -euo pipefail
+        IMG="gcr.io/$PROJECT_ID/deliveryos-admin"
+        docker pull "$${IMG}:latest" || true
+        docker build \
+          --cache-from "$${IMG}:latest" \
+          -t "$${IMG}:$SHORT_SHA" \
+          -t "$${IMG}:latest" \
+          --build-arg REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api \
+          --build-arg REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY} \
+          .
 
-  # Push the container image to Container Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin:$SHORT_SHA'
-
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'push'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin:latest'
-
-  # Deploy container image to Cloud Run (production)
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -52,7 +44,7 @@ images:
   - 'gcr.io/$PROJECT_ID/deliveryos-admin:latest'
 
 options:
-  machineType: 'E2_HIGHCPU_8'
+  machineType: 'E2_HIGHCPU_4'
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'
@@ -61,5 +53,3 @@ timeout: '1200s'
 # Example: gcloud builds submit --substitutions=_GOOGLE_MAPS_API_KEY=your_key_here
 substitutions:
   _GOOGLE_MAPS_API_KEY: ''  # REQUIRED: Set this in Cloud Build trigger configuration
-
-

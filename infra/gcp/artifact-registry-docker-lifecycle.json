@@ -1,0 +1,12 @@
+{
+  "rules": [
+    {
+      "description": "Remove untagged Docker images older than 7 days (orphaned digests when tags move to new images)",
+      "action": { "type": "DELETE" },
+      "condition": {
+        "tagState": "UNTAGGED",
+        "olderThan": "604800s"
+      }
+    }
+  ]
+}

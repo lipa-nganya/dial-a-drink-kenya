@@ -9,7 +9,8 @@
   status = 200
   force = true
 
-# Legacy Google URLs (/products/:slug) — proxy to backend; response is 301 to canonical /:category/:slug
+# Production customer site (dialadrinkkenya.com, etc.) is served from GCP Cloud Run + nginx
+# (see frontend/Dockerfile, frontend/nginx.conf). Netlify previews only — legacy /products/:slug → API 301
 [[redirects]]
   from = "/products/*"
   to = "https://deliveryos-production-backend-805803410802.us-central1.run.app/api/http-redirect/products/:splat"

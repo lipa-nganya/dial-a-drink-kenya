@@ -1,0 +1,40 @@
+# Run GCR untagged digest cleanup (safe: only manifests with no tags).
+#
+# Use this so item (1) is one click / schedulable instead of only local shell:
+#
+#   gcloud builds submit --config=infra/gcp/cloudbuild-gcr-cleanup.yaml --project=YOUR_PROJECT .
+#
+# Cloud Scheduler (weekly): target a trigger that runs this config on main/develop.
+#
+# IAM: the Cloud Build service account needs permission to delete images in gcr.io for
+# this project (e.g. roles/storage.admin on the GCS buckets backing GCR, or the role
+# Google documents for Container Registry cleanup).
+
+steps:
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-c'
+      - |
+        set -euo pipefail
+        if [[ -f /workspace/scripts/gcp/gcr-delete-untagged-digests.sh ]]; then
+          cd /workspace
+        elif [[ -f scripts/gcp/gcr-delete-untagged-digests.sh ]]; then
+          cd .
+        else
+          echo "Expected scripts/gcp/gcr-delete-untagged-digests.sh under workspace root (pwd=$(pwd))." >&2
+          exit 1
+        fi
+        chmod +x scripts/gcp/gcr-delete-untagged-digests.sh
+        export GCP_PROJECT_ID="${PROJECT_ID}"
+        if [[ -n "${_IMAGES}" ]]; then export IMAGES="${_IMAGES}"; fi
+        ./scripts/gcp/gcr-delete-untagged-digests.sh
+
+substitutions:
+  # Optional: space-separated image names under gcr.io/$PROJECT_ID/ (default list in script if empty)
+  _IMAGES: ''
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '1800s'
