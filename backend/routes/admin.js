@@ -7,6 +7,14 @@ const { calculateDeliveryFee } = require('../utils/calculateDeliveryFee');
 const { ensureDeliveryFeeSplit } = require('../utils/deliveryFeeTransactions');
 const { getNaturalCashAtHandEntry, computeEffectiveNet } = require('../utils/cashAtHandNaturalEntry');
 const { creditWalletsOnDeliveryCompletion, repairSavingsForOrder, repairPayNowCashAtHandOnly } = require('../utils/walletCredits');
+const {
+  captureFinancialSnapshot,
+  reconcilePaidCompletedOrderFinances
+} = require('../utils/reconcilePaidCompletedOrder');
+const {
+  loadOrderWithTransactions,
+  shouldReconcilePaidCompletedAmountEdit
+} = require('../utils/orderEffectivePaymentStatus');
 const mpesaService = require('../services/mpesa');
 const pushNotifications = require('../services/pushNotifications');
 const jwt = require('jsonwebtoken');
@@ -2861,19 +2869,19 @@ router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
     const { orderId } = req.params;
     const { territoryId } = req.body;
 
-    const order = await db.Order.findByPk(orderId, {
-      include: [{
-        model: db.OrderItem,
-        as: 'items',
-        attributes: ['id', 'drinkId', 'quantity', 'price']
-      }]
-    });
+    const order = await loadOrderWithTransactions(orderId, { includeOrderItems: true });
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    if (order.status === 'completed' || order.status === 'cancelled') {
-      return res.status(400).json({ error: 'Cannot edit territory for completed or cancelled orders' });
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit territory for cancelled orders' });
+    }
+
+    const isPaidCompleted = shouldReconcilePaidCompletedAmountEdit(order);
+    let snapshotBefore = null;
+    if (isPaidCompleted) {
+      snapshotBefore = await captureFinancialSnapshot(orderId);
     }
 
     const newTerritoryId = territoryId === '' || territoryId === null || territoryId === undefined ? null : parseInt(territoryId, 10);
@@ -2905,30 +2913,60 @@ router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
       // - Territory delivery fee is internal accounting only and must NOT change what the customer pays.
       // Therefore: do NOT change totalAmount here.
       const convenienceFee = parseFloat(order.convenienceFee ?? breakdown.deliveryFee ?? 0) || 0;
-      const newTerritoryDeliveryFee =
-        newTerritoryId !== null && territoryRecord
-          ? (parseFloat(territoryRecord.deliveryFromCBD) || 0)
-          : convenienceFee;
+      const previousTerritoryId = order.territoryId != null ? Number(order.territoryId) : null;
+      const territoryActuallyChanged =
+        (previousTerritoryId ?? null) !== (newTerritoryId ?? null);
+
+      let newTerritoryDeliveryFee;
+      if (!territoryActuallyChanged && newTerritoryId !== null) {
+        // Same territory re-saved (e.g. admin "Save" without changing dropdown): keep custom internal fee,
+        // do not reset to territory master deliveryFromCBD (often much lower than admin-adjusted fee).
+        newTerritoryDeliveryFee =
+          parseFloat(order.territoryDeliveryFee ?? convenienceFee) || 0;
+      } else if (newTerritoryId !== null && territoryRecord) {
+        newTerritoryDeliveryFee = parseFloat(territoryRecord.deliveryFromCBD) || 0;
+      } else {
+        newTerritoryDeliveryFee = convenienceFee;
+      }
 
       const oldNotes = order.notes || '';
-      const territoryNote = `[${new Date().toISOString()}] Territory updated: territory delivery fee set to KES ${newTerritoryDeliveryFee.toFixed(2)}${newTerritoryId ? ' (from territory)' : ' (defaults to convenience fee)'}`;
+      const territoryNote =
+        territoryActuallyChanged || !newTerritoryId
+          ? `[${new Date().toISOString()}] Territory updated: territory delivery fee set to KES ${newTerritoryDeliveryFee.toFixed(2)}${newTerritoryId ? ' (from territory)' : ' (defaults to convenience fee)'}`
+          : null;
 
       await order.update({
         territoryId: newTerritoryId,
         territoryDeliveryFee: newTerritoryDeliveryFee,
         // Keep payout tracking aligned with territory fee (even before driver assignment).
         driverPayAmount: newTerritoryDeliveryFee,
-        notes: oldNotes ? `${oldNotes}\n${territoryNote}` : territoryNote,
+        ...(territoryNote
+          ? { notes: oldNotes ? `${oldNotes}\n${territoryNote}` : territoryNote }
+          : {}),
         // If a territory is explicitly selected, this fee is no longer distance-based.
         deliveryDistance: (newTerritoryId !== null && territoryRecord) ? null : order.deliveryDistance
       });
     }
 
-    // Ensure driverPayAmount reflects the current territory delivery fee whenever territory changes,
-    // regardless of where the order was created (admin web / admin mobile / customer site).
-    // Do not require payment completion for tracking updates.
+    if (isPaidCompleted && snapshotBefore) {
+      try {
+        await reconcilePaidCompletedOrderFinances(orderId, snapshotBefore, req);
+      } catch (recErr) {
+        console.error('reconcilePaidCompletedOrderFinances after territory edit:', recErr);
+        return res.status(500).json({
+          error: 'Failed to reconcile wallets after territory change',
+          details: recErr.message
+        });
+      }
+    }
+
     try {
-      await ensureDeliveryFeeSplit(order, { context: 'admin-territory-update', requirePayment: false, reloadOrder: true });
+      const orderForSplit = await db.Order.findByPk(orderId);
+      await ensureDeliveryFeeSplit(orderForSplit, {
+        context: 'admin-territory-update',
+        requirePayment: isPaidCompleted ? true : false,
+        reloadOrder: true
+      });
     } catch (e) {
       console.warn(`ensureDeliveryFeeSplit failed after territory update for order ${order.id}:`, e.message);
     }
@@ -2959,7 +2997,23 @@ router.patch('/orders/:orderId/territory', verifyAdmin, async (req, res) => {
 
     const io = req.app.get('io');
     if (io) {
-      io.to('admin').emit('order-updated', { orderId: order.id, order: orderData });
+      io.to('admin').emit('order-updated', {
+        orderId: order.id,
+        order: orderData,
+        reason: 'territory-updated'
+      });
+      if (isPaidCompleted) {
+        io.to(`order-${orderId}`).emit('order-status-updated', {
+          orderId: parseInt(orderId, 10),
+          reason: 'order_amounts_updated'
+        });
+        if (order.driverId) {
+          io.to(`driver-${order.driverId}`).emit('order-status-updated', {
+            orderId: parseInt(orderId, 10),
+            reason: 'order_amounts_updated'
+          });
+        }
+      }
     }
 
     res.json(breakdownOut ? { ...orderData, breakdown: breakdownOut } : orderData);
@@ -2987,19 +3041,19 @@ router.patch('/orders/:orderId/items/:itemId/price', verifyAdmin, async (req, re
     const newPrice = parseFloat(price);
 
     // Find the order first to check status
-    const order = await db.Order.findByPk(orderId);
+    const order = await loadOrderWithTransactions(orderId);
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Check if order is cancelled or completed (prevent editing completed orders)
-    if (order.status === 'completed' || order.status === 'cancelled') {
-      return res.status(400).json({ error: 'Cannot edit prices for completed or cancelled orders' });
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit prices for cancelled orders' });
     }
 
-    // Check if order has been paid (prevent editing paid orders)
-    if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Cannot edit prices for orders that have been paid' });
+    const isPaidCompleted = shouldReconcilePaidCompletedAmountEdit(order);
+    let snapshotBefore = null;
+    if (isPaidCompleted) {
+      snapshotBefore = await captureFinancialSnapshot(orderId);
     }
 
     // Find the order item
@@ -3032,6 +3086,39 @@ router.patch('/orders/:orderId/items/:itemId/price', verifyAdmin, async (req, re
       totalAmount: newTotalAmount,
       notes: oldNotes ? `${oldNotes}\n${priceUpdateNote}` : priceUpdateNote
     });
+
+    if (isPaidCompleted && snapshotBefore) {
+      try {
+        await reconcilePaidCompletedOrderFinances(orderId, snapshotBefore, req);
+      } catch (recErr) {
+        console.error('reconcilePaidCompletedOrderFinances after item price edit:', recErr);
+        return res.status(500).json({ error: 'Failed to reconcile wallets after price change', details: recErr.message });
+      }
+    }
+
+    try {
+      const reloaded = await db.Order.findByPk(orderId);
+      await ensureDeliveryFeeSplit(reloaded, {
+        context: 'admin-item-price-update',
+        requirePayment: isPaidCompleted ? true : false,
+        reloadOrder: true
+      });
+    } catch (e) {
+      console.warn(`ensureDeliveryFeeSplit failed after item price update for order ${orderId}:`, e.message);
+    }
+
+    const io = req.app.get('io');
+    if (io && isPaidCompleted) {
+      io.to('admin').emit('order-updated', { orderId: parseInt(orderId, 10), reason: 'item-price' });
+      io.to(`order-${orderId}`).emit('order-status-updated', { orderId: parseInt(orderId, 10), reason: 'order_amounts_updated' });
+      const od = await db.Order.findByPk(orderId);
+      if (od?.driverId) {
+        io.to(`driver-${od.driverId}`).emit('order-status-updated', {
+          orderId: parseInt(orderId, 10),
+          reason: 'order_amounts_updated'
+        });
+      }
+    }
 
     // Reload order with items for response
     const updatedOrder = await db.Order.findByPk(orderId, {
@@ -3080,14 +3167,17 @@ router.patch('/orders/:orderId/items-subtotal', verifyAdmin, async (req, res) =>
       return res.status(400).json({ error: 'Valid itemsSubtotal is required' });
     }
 
-    const order = await db.Order.findByPk(orderId);
+    const order = await loadOrderWithTransactions(orderId);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (order.status === 'completed' || order.status === 'cancelled') {
-      return res.status(400).json({ error: 'Cannot edit items subtotal for completed or cancelled orders' });
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit items subtotal for cancelled orders' });
     }
-    if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Cannot edit items subtotal for orders that have been paid' });
+
+    const isPaidCompleted = shouldReconcilePaidCompletedAmountEdit(order);
+    let snapshotBefore = null;
+    if (isPaidCompleted) {
+      snapshotBefore = await captureFinancialSnapshot(orderId);
     }
 
     const t = await db.sequelize.transaction();
@@ -3129,6 +3219,26 @@ router.patch('/orders/:orderId/items-subtotal', verifyAdmin, async (req, res) =>
 
       await t.commit();
 
+      if (isPaidCompleted && snapshotBefore) {
+        try {
+          await reconcilePaidCompletedOrderFinances(orderId, snapshotBefore, req);
+        } catch (recErr) {
+          console.error('reconcilePaidCompletedOrderFinances after items subtotal edit:', recErr);
+          return res.status(500).json({ error: 'Failed to reconcile wallets after items subtotal change', details: recErr.message });
+        }
+      }
+
+      try {
+        const reloaded = await db.Order.findByPk(orderId);
+        await ensureDeliveryFeeSplit(reloaded, {
+          context: 'admin-items-subtotal-update',
+          requirePayment: isPaidCompleted ? true : false,
+          reloadOrder: true
+        });
+      } catch (e) {
+        console.warn(`ensureDeliveryFeeSplit failed after items subtotal update for order ${orderId}:`, e.message);
+      }
+
       const updatedOrder = await db.Order.findByPk(orderId, {
         include: [{
           model: db.OrderItem,
@@ -3136,6 +3246,18 @@ router.patch('/orders/:orderId/items-subtotal', verifyAdmin, async (req, res) =>
           include: [{ model: db.Drink, as: 'drink' }]
         }]
       });
+
+      const io = req.app.get('io');
+      if (io && isPaidCompleted) {
+        io.to('admin').emit('order-updated', { orderId: parseInt(orderId, 10), reason: 'items-subtotal' });
+        io.to(`order-${orderId}`).emit('order-status-updated', { orderId: parseInt(orderId, 10), reason: 'order_amounts_updated' });
+        if (updatedOrder.driverId) {
+          io.to(`driver-${updatedOrder.driverId}`).emit('order-status-updated', {
+            orderId: parseInt(orderId, 10),
+            reason: 'order_amounts_updated'
+          });
+        }
+      }
 
       return res.json({
         success: true,
@@ -3175,35 +3297,45 @@ router.patch('/orders/:orderId/delivery-fee', verifyAdmin, async (req, res) => {
 
     const newTerritoryDeliveryFee = parseFloat(deliveryFee);
 
-    // Find the order first to check status
-    const order = await db.Order.findByPk(orderId);
+    const order = await loadOrderWithTransactions(orderId);
     if (!order) {
       return res.status(404).json({ error: 'Order not found' });
     }
 
-    // Check if order is cancelled or completed (prevent editing completed orders)
-    if (order.status === 'completed' || order.status === 'cancelled') {
-      return res.status(400).json({ error: 'Cannot edit delivery fee for completed or cancelled orders' });
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit delivery fee for cancelled orders' });
     }
 
-    // Check if order has been paid (prevent editing paid orders)
-    if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Cannot edit delivery fee for orders that have been paid' });
+    const isPaidCompleted = shouldReconcilePaidCompletedAmountEdit(order);
+    let snapshotBefore = null;
+    if (isPaidCompleted) {
+      snapshotBefore = await captureFinancialSnapshot(orderId);
     }
 
-    // Update territory delivery fee only.
-    // Customer-facing totalAmount is itemsTotal + convenienceFee + tip, so it must NOT change here.
     const oldNotes = order.notes || '';
     const deliveryFeeUpdateNote = `[${new Date().toISOString()}] Territory delivery fee updated: KES ${(parseFloat(order.territoryDeliveryFee ?? 0) || 0).toFixed(2)} → KES ${newTerritoryDeliveryFee.toFixed(2)}`;
-    await order.update({ 
+    await order.update({
       territoryDeliveryFee: newTerritoryDeliveryFee,
+      driverPayAmount: newTerritoryDeliveryFee,
       notes: oldNotes ? `${oldNotes}\n${deliveryFeeUpdateNote}` : deliveryFeeUpdateNote
     });
 
-    // Keep driverPayAmount in sync with territoryDeliveryFee edits (tracking),
-    // even if the order isn't paid yet.
+    if (isPaidCompleted && snapshotBefore) {
+      try {
+        await reconcilePaidCompletedOrderFinances(orderId, snapshotBefore, req);
+      } catch (recErr) {
+        console.error('reconcilePaidCompletedOrderFinances after territory fee edit:', recErr);
+        return res.status(500).json({ error: 'Failed to reconcile wallets after territory fee change', details: recErr.message });
+      }
+    }
+
     try {
-      await ensureDeliveryFeeSplit(order, { context: 'admin-territory-fee-update', requirePayment: false, reloadOrder: true });
+      const reloaded = await db.Order.findByPk(orderId);
+      await ensureDeliveryFeeSplit(reloaded, {
+        context: 'admin-territory-fee-update',
+        requirePayment: isPaidCompleted ? true : false,
+        reloadOrder: true
+      });
     } catch (e) {
       console.warn(`ensureDeliveryFeeSplit failed after delivery fee update for order ${order.id}:`, e.message);
     }
@@ -3258,14 +3390,17 @@ router.patch('/orders/:orderId/convenience-fee', verifyAdmin, async (req, res) =
       return res.status(400).json({ error: 'Valid convenience fee is required' });
     }
 
-    const order = await db.Order.findByPk(orderId);
+    const order = await loadOrderWithTransactions(orderId);
     if (!order) return res.status(404).json({ error: 'Order not found' });
 
-    if (order.status === 'completed' || order.status === 'cancelled') {
-      return res.status(400).json({ error: 'Cannot edit convenience fee for completed or cancelled orders' });
+    if (order.status === 'cancelled') {
+      return res.status(400).json({ error: 'Cannot edit convenience fee for cancelled orders' });
     }
-    if (order.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Cannot edit convenience fee for orders that have been paid' });
+
+    const isPaidCompleted = shouldReconcilePaidCompletedAmountEdit(order);
+    let snapshotBefore = null;
+    if (isPaidCompleted) {
+      snapshotBefore = await captureFinancialSnapshot(orderId);
     }
 
     const breakdownBefore = await getOrderFinancialBreakdown(orderId);
@@ -3283,6 +3418,26 @@ router.patch('/orders/:orderId/convenience-fee', verifyAdmin, async (req, res) =
       notes: oldNotes ? `${oldNotes}\n${note}` : note
     });
 
+    if (isPaidCompleted && snapshotBefore) {
+      try {
+        await reconcilePaidCompletedOrderFinances(orderId, snapshotBefore, req);
+      } catch (recErr) {
+        console.error('reconcilePaidCompletedOrderFinances after convenience fee edit:', recErr);
+        return res.status(500).json({ error: 'Failed to reconcile wallets after convenience fee change', details: recErr.message });
+      }
+    }
+
+    try {
+      const reloaded = await db.Order.findByPk(orderId);
+      await ensureDeliveryFeeSplit(reloaded, {
+        context: 'admin-convenience-fee-update',
+        requirePayment: isPaidCompleted ? true : false,
+        reloadOrder: true
+      });
+    } catch (e) {
+      console.warn(`ensureDeliveryFeeSplit failed after convenience fee update for order ${orderId}:`, e.message);
+    }
+
     const updatedOrder = await db.Order.findByPk(orderId, {
       include: [{
         model: db.OrderItem,
@@ -3291,6 +3446,18 @@ router.patch('/orders/:orderId/convenience-fee', verifyAdmin, async (req, res) =
       }]
     });
     const updatedBreakdown = await getOrderFinancialBreakdown(orderId);
+
+    const io = req.app.get('io');
+    if (io && isPaidCompleted) {
+      io.to('admin').emit('order-updated', { orderId: parseInt(orderId, 10), reason: 'convenience-fee' });
+      io.to(`order-${orderId}`).emit('order-status-updated', { orderId: parseInt(orderId, 10), reason: 'order_amounts_updated' });
+      if (updatedOrder.driverId) {
+        io.to(`driver-${updatedOrder.driverId}`).emit('order-status-updated', {
+          orderId: parseInt(orderId, 10),
+          reason: 'order_amounts_updated'
+        });
+      }
+    }
 
     return res.json({
       success: true,

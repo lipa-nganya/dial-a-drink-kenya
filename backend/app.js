@@ -214,6 +214,8 @@ app.use('/api/categories', require('./routes/categories'));
 app.use('/api/subcategories', require('./routes/subcategories'));
 app.use('/api/brands', require('./routes/brands'));
 app.use('/api/import-brands', require('./routes/import-brands'));
+// Legacy /products/:slug storefront URLs → 301 canonical (proxied by Netlify/nginx)
+app.use('/api/http-redirect', require('./routes/http-redirects'));
 app.use('/api/products', require('./routes/products')); // Category-based product routes
 app.use('/api/drinks', require('./routes/drinks'));
 app.use('/api/suppliers', require('./routes/suppliers'));

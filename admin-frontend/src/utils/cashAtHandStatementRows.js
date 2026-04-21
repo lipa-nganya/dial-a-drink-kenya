@@ -1,5 +1,19 @@
 import { cashAtHandDateSortMs } from './cashAtHandDateDisplay';
 
+/** Net cash impact for statement math; matches displayed CRT − DBT when both are present. */
+function netMoveFromEntry(entry, typeLower) {
+  const isCashReceived = typeLower === 'cash_received';
+  const hasD = entry.debitAmount != null && entry.debitAmount !== '';
+  const hasC = entry.creditAmount != null && entry.creditAmount !== '';
+  if (isCashReceived && hasD && hasC) {
+    return (
+      Number(entry.creditAmount != null ? entry.creditAmount : 0) -
+      Number(entry.debitAmount != null ? entry.debitAmount : 0)
+    );
+  }
+  return parseFloat(entry.amount || 0);
+}
+
 /**
  * Build rows for admin cash-at-hand statement (newest first, running balance).
  * Uses optional balanceAfterDisplay and debit/credit amounts from API (including display overrides).
@@ -63,8 +77,8 @@ export function buildCashAtHandStatementRows(rawEntries, totalCashAtHand, normal
 
     let running = openNum;
     for (const entry of oldestFirst) {
-      const move = parseFloat(entry.amount || 0);
       const type = entryType(entry);
+      const move = netMoveFromEntry(entry, type);
       const isCredit = type === 'cash_received';
       if (entry.balanceAfterDisplay != null && entry.balanceAfterDisplay !== '') {
         running = Number(entry.balanceAfterDisplay);
@@ -119,7 +133,7 @@ export function buildCashAtHandStatementRows(rawEntries, totalCashAtHand, normal
         ? balanceByKey.get(entry.entryKey)
         : Math.round(balanceAfter);
 
-    const move = parseFloat(entry.amount || 0);
+    const move = netMoveFromEntry(entry, type);
     if (!useOpening) {
       if (entry.balanceAfterDisplay == null || entry.balanceAfterDisplay === '') {
         if (isCredit) {
@@ -136,7 +150,7 @@ export function buildCashAtHandStatementRows(rawEntries, totalCashAtHand, normal
       entry,
       type,
       isCredit,
-      amount: amountNet,
+      amount: move,
       debitDisplay,
       creditDisplay,
       balance

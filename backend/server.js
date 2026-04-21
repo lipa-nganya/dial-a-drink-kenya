@@ -26,6 +26,8 @@ const PORT = process.env.PORT || 5001;
 
 // Create minimal app with health check endpoint
 const minimalApp = express();
+/** Swapped to false until full Express app attaches; avoids 404 on /api/* during startup */
+let fullApplicationAttached = false;
 
 // CORS middleware for minimal app (before routes)
 const allowedOrigins = [
@@ -97,6 +99,18 @@ minimalApp.get('/', (req, res) => {
   });
 });
 
+// Until the full app mounts, non-health /api routes would otherwise 404 (minimal router has no admin API)
+minimalApp.use((req, res, next) => {
+  if (!fullApplicationAttached && req.path.startsWith('/api/') && req.path !== '/api/health') {
+    return res.status(503).json({
+      error:
+        'API is still loading. Wait until the backend logs "Full Express app attached to server", then refresh.',
+      code: 'SERVER_STARTING'
+    });
+  }
+  next();
+});
+
 const server = http.createServer(minimalApp);
 
 // Start server IMMEDIATELY - before loading anything else
@@ -142,6 +156,7 @@ async function loadFullApplication() {
     server.removeAllListeners('request');
     // Attach the full Express app as the request handler
     server.on('request', app);
+    fullApplicationAttached = true;
     console.log('✅ Full Express app attached to server');
     
     // Load models with error handling

@@ -9,6 +9,14 @@
   status = 200
   force = true
 
+# Production customer site (dialadrinkkenya.com, etc.) is served from GCP Cloud Run + nginx
+# (see frontend/Dockerfile, frontend/nginx.conf). Netlify previews only — legacy /products/:slug → API 301
+[[redirects]]
+  from = "/products/*"
+  to = "https://deliveryos-production-backend-805803410802.us-central1.run.app/api/http-redirect/products/:splat"
+  status = 200
+  force = true
+
 # Static SEO files live in publish dir; this ensures they are never rewritten if misconfigured upstream.
 [[headers]]
   for = "/sitemap.xml"

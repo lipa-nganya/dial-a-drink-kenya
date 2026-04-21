@@ -236,6 +236,8 @@ function AppContent() {
           <Route path="/menu/category/:categorySlug" element={<Menu />} />
           {/* Old product route - kept for backward compatibility and redirects */}
           <Route path="/product/:id" element={<ProductPage />} />
+          {/* Legacy URLs indexed as /products/:slug (must be before /:categorySlug/:productSlug or "products" is mistaken for category) */}
+          <Route path="/products/:productSlug" element={<ProductPage />} />
           <Route path="/brands" element={<Brands />} />
           <Route path="/brands/:identifier" element={<BrandDetail />} />
           <Route path="/offers" element={<Offers />} />

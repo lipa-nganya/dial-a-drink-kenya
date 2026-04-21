@@ -6,9 +6,25 @@ const DEFAULT_PRODUCTION_API_BASE =
   process.env.REACT_APP_PRODUCTION_API_BASE ||
   'https://deliveryos-production-backend-805803410802.us-central1.run.app/api';
 
+/**
+ * REST routes are mounted under /api (e.g. /api/admin/stats). Axios uses paths like "/admin/stats".
+ * Netlify/cloud env often sets REACT_APP_API_URL to the bare Cloud Run URL without "/api", which yields 404.
+ */
+const normalizeApiBaseUrl = (baseUrl) => {
+  if (!baseUrl || typeof baseUrl !== 'string') {
+    return DEFAULT_PRODUCTION_API_BASE;
+  }
+  const trimmed = baseUrl.trim().replace(/\/+$/, '');
+  if (trimmed.toLowerCase().endsWith('/api')) return trimmed;
+  return `${trimmed}/api`;
+};
+
 const resolveApiBaseUrl = () => {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-  const isLocalHost = ['localhost', '127.0.0.1'].includes(hostname) || hostname.endsWith('.local');
+  const isLocalHost =
+    ['localhost', '127.0.0.1', '::1'].includes(hostname) ||
+    hostname === '[::1]' ||
+    hostname.endsWith('.local');
   const isLanHost = /^10\.|^192\.168\.|^172\.(1[6-9]|2[0-9]|3[0-1])/.test(hostname || '');
   
   // CRITICAL: Always use localhost when running locally, regardless of REACT_APP_API_URL
@@ -85,7 +101,7 @@ const resolveApiBaseUrl = () => {
 // This ensures the hostname is checked when the code runs, not when it's bundled
 const getApiBaseUrl = () => {
   const { url } = resolveApiBaseUrl();
-  return url;
+  return normalizeApiBaseUrl(url);
 };
 
 // Create axios instance with empty baseURL - we'll set it in the interceptor
