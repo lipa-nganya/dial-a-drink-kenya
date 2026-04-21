@@ -20,6 +20,14 @@ steps:
           --build-arg REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY} \
           .
 
+  # Push before deploy: the top-level `images:` pushes only AFTER all steps, so Cloud Run
+  # would otherwise try to pull an image that is not in the registry yet.
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/dialadrink-frontend:$SHORT_SHA']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/$PROJECT_ID/dialadrink-frontend:latest']
+
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
@@ -52,6 +60,6 @@ options:
 timeout: '1200s'
 
 # Substitution variables - must be set via Cloud Build trigger or --substitutions flag
-# Example: gcloud builds submit --substitutions=_GOOGLE_MAPS_API_KEY=your_key_here
+# Example: gcloud builds submit --substitutions=SHORT_SHA=$(git rev-parse --short HEAD),_GOOGLE_MAPS_API_KEY=...
 substitutions:
-  _GOOGLE_MAPS_API_KEY: ''  # REQUIRED: Set this in Cloud Build trigger configuration
+  _GOOGLE_MAPS_API_KEY: '' # REQUIRED for React embed (or use Secret Manager + trigger)
