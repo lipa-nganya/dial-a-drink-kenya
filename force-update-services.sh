@@ -9,9 +9,6 @@ BACKEND_SERVICE="deliveryos-production-backend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-prod"
-DB_USER="dialadrink_app"
-DB_NAME="dialadrink_prod"
-DB_PASSWORD="E7A3IIa60hFD3bkGH1XAiryvB"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -59,33 +56,21 @@ echo "Last update: $BACKEND_LAST_UPDATE"
 if needs_update "$BACKEND_SERVICE"; then
     echo -e "${YELLOW}⚠️  Backend needs update. Deploying...${NC}"
     cd backend
-    
-    # Get existing env vars
-    EXISTING_ENV=$(gcloud run services describe "$BACKEND_SERVICE" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --format="get(spec.template.spec.containers[0].env)" 2>/dev/null || echo "")
-    
-    EXISTING_FRONTEND_URL=$(echo "$EXISTING_ENV" | grep -o "FRONTEND_URL.*value': '[^']*" | sed "s/.*value': '\([^']*\).*/\1/" || echo "https://ruakadrinksdelivery.co.ke")
-    EXISTING_ADMIN_URL=$(echo "$EXISTING_ENV" | grep -o "ADMIN_URL.*value': '[^']*" | sed "s/.*value': '\([^']*\).*/\1/" || echo "https://dial-a-drink-admin.netlify.app")
-    
-    # Build new image
-    IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-backend-prod:force-$(date +%s)"
+
+    IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-production-backend:force-$(date +%s)"
     echo "Building: $IMAGE_TAG"
     gcloud builds submit --tag "$IMAGE_TAG" . || {
         echo -e "${RED}❌ Backend build failed${NC}"
         exit 1
     }
-    
-    # Deploy with --no-traffic first, then switch
-    echo "Deploying new revision..."
+
+    echo "Deploying new revision (image only; env unchanged in GCP)..."
     gcloud run deploy "$BACKEND_SERVICE" \
         --image "$IMAGE_TAG" \
         --platform managed \
         --region "$REGION" \
         --allow-unauthenticated \
         --add-cloudsql-instances "$CONNECTION_NAME" \
-        --set-env-vars "NODE_ENV=production,DATABASE_URL=postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${CONNECTION_NAME},FRONTEND_URL=${EXISTING_FRONTEND_URL},ADMIN_URL=${EXISTING_ADMIN_URL},GOOGLE_CLOUD_PROJECT=${PROJECT_ID},GCP_PROJECT=${PROJECT_ID},HOST=0.0.0.0" \
         --project "$PROJECT_ID" || {
         echo -e "${RED}❌ Backend deployment failed${NC}"
         exit 1

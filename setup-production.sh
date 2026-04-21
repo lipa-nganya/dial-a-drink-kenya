@@ -159,7 +159,7 @@ echo "   postgresql://${DB_USER}:${DB_PASSWORD}@/${DB_NAME}?host=/cloudsql/${CON
 echo ""
 echo "📝 Next Steps:"
 echo "   1. Save the database password securely"
-echo "   2. Run migrations: ./backend/scripts/run-production-migrations.sh"
+echo "   2. Apply schema changes when needed (run backend migration scripts manually with DATABASE_URL — not via deploy scripts)"
 echo "   3. Deploy backend: ./deploy-backend-production.sh"
 echo "   4. Set up Netlify production sites"
 echo "   5. Build Android production app"

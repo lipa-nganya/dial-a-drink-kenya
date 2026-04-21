@@ -4,7 +4,6 @@
 # 1. Backend deployment to Google Cloud Run (develop)
 # 2. Frontend push to GitHub (for Netlify)
 # 3. Android app build and deployment
-# 4. Database migrations
 
 set -e  # Exit on error
 
@@ -54,14 +53,8 @@ git merge main --no-edit || echo "Merge completed or conflicts need resolution"
 echo -e "\n${GREEN}📤 Step 6: Pushing to GitHub (triggers Netlify deployment)...${NC}"
 git push origin develop || echo "Push failed or already up to date"
 
-# Step 8: Run database migrations
-echo -e "\n${GREEN}🗄️  Step 7: Running database migrations...${NC}"
-cd backend
-node scripts/create-penalties-table-direct.js || echo "Migration script completed or table already exists"
-cd ..
-
-# Step 9: Deploy backend to Google Cloud Run (develop)
-echo -e "\n${GREEN}☁️  Step 8: Deploying backend to Google Cloud Run (develop)...${NC}"
+# Step 7: Deploy backend to Google Cloud Run (develop)
+echo -e "\n${GREEN}☁️  Step 7: Deploying backend to Google Cloud Run (develop)...${NC}"
 echo "Using account: dialadrinkkenya254@gmail.com"
 echo "Service: deliveryos-development-backend"
 
@@ -110,8 +103,8 @@ gcloud builds submit --config=cloudbuild-dev.yaml . || {
 
 cd ..
 
-# Step 10: Build Android app for developdebug
-echo -e "\n${GREEN}📱 Step 9: Building Android app for developdebug...${NC}"
+# Step 8: Build Android app for developdebug
+echo -e "\n${GREEN}📱 Step 8: Building Android app for developdebug...${NC}"
 cd driver-app-native
 
 # Check if Android SDK is available
@@ -136,11 +129,10 @@ fi
 
 cd ..
 
-# Step 11: Summary
+# Step 9: Summary
 echo -e "\n${GREEN}✅ Deployment Summary:${NC}"
 echo "================================================"
 echo "✓ Git changes committed and pushed to develop"
-echo "✓ Database migrations run"
 echo "✓ Backend deployed to: $SERVICE_NAME"
 echo "✓ Frontend changes pushed (Netlify will auto-deploy)"
 echo "✓ Android app built for developdebug"

@@ -2,7 +2,7 @@
 # This file deploys to deliveryos-production-backend from main branch
 #
 # Caching: pull :latest + --cache-from reuses layers; DOCKER_BUILDKIT=1 for buildx cache.
-# Machine: E2_HIGHCPU_4 (tune in options if builds are too slow).
+# Machine: only supported types (e.g. E2_HIGHCPU_8, E2_MEDIUM); invalid values fail gcloud builds submit.
 # Registry: gcr.io — use scripts/gcp/gcr-delete-untagged-digests.sh + Artifact Registry lifecycle after migration.
 
 steps:
@@ -48,7 +48,7 @@ images:
   - 'gcr.io/$PROJECT_ID/deliveryos-backend:latest'
 
 options:
-  machineType: 'E2_HIGHCPU_4'
+  machineType: 'E2_HIGHCPU_8'
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'

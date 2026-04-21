@@ -26,42 +26,29 @@ if [ "$ONGOING" -gt 0 ]; then
 fi
 
 echo ""
+IMAGE_BASE="gcr.io/$PROJECT_ID/deliveryos-production-backend"
+
 echo "📦 Getting Latest Built Image..."
-LATEST_IMAGE=$(gcloud container images list-tags gcr.io/$PROJECT_ID/deliveryos-backend-prod \
+LATEST_TAG=$(gcloud container images list-tags "$IMAGE_BASE" \
     --limit=1 \
     --format="value(tags[0])" \
     --sort-by=~timestamp 2>/dev/null)
 
-if [ -z "$LATEST_IMAGE" ]; then
+if [ -z "$LATEST_TAG" ]; then
     echo "❌ No images found. Building new image..."
     cd backend
-    IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-backend-prod:$(date +%s)"
+    IMAGE_TAG="${IMAGE_BASE}:$(date +%s)"
     echo "Building: $IMAGE_TAG"
     gcloud builds submit --tag "$IMAGE_TAG" .
     LATEST_IMAGE="$IMAGE_TAG"
     cd ..
 else
+    LATEST_IMAGE="${IMAGE_BASE}:${LATEST_TAG}"
     echo "✅ Found latest image: $LATEST_IMAGE"
 fi
 
 echo ""
-echo "📋 Getting Current Environment Variables..."
-CURRENT_ENV=$(gcloud run services describe "$SERVICE" \
-    --region "$REGION" \
-    --project "$PROJECT_ID" \
-    --format="get(spec.template.spec.containers[0].env)" 2>/dev/null || echo "")
-
-# Extract env vars
-FRONTEND_URL=$(echo "$CURRENT_ENV" | grep -oP "FRONTEND_URL.*?value': '\K[^']*" || echo "https://ruakadrinksdelivery.co.ke")
-ADMIN_URL=$(echo "$CURRENT_ENV" | grep -oP "ADMIN_URL.*?value': '\K[^']*" || echo "https://dial-a-drink-admin.netlify.app")
-GOOGLE_CLOUD_PROJECT=$(echo "$CURRENT_ENV" | grep -oP "GOOGLE_CLOUD_PROJECT.*?value': '\K[^']*" || echo "$PROJECT_ID")
-GCP_PROJECT=$(echo "$CURRENT_ENV" | grep -oP "GCP_PROJECT.*?value': '\K[^']*" || echo "$PROJECT_ID")
-
-echo "Frontend URL: $FRONTEND_URL"
-echo "Admin URL: $ADMIN_URL"
-echo ""
-
-echo "🚀 Deploying Backend..."
+echo "🚀 Deploying Backend (image only — env unchanged in GCP)..."
 echo "======================"
 gcloud run deploy "$SERVICE" \
     --image "$LATEST_IMAGE" \
@@ -69,7 +56,6 @@ gcloud run deploy "$SERVICE" \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
-    --set-env-vars "NODE_ENV=production,DATABASE_URL=postgresql://dialadrink_app:E7A3IIa60hFD3bkGH1XAiryvB@/dialadrink_prod?host=/cloudsql/${CONNECTION_NAME},FRONTEND_URL=${FRONTEND_URL},ADMIN_URL=${ADMIN_URL},GOOGLE_CLOUD_PROJECT=${GOOGLE_CLOUD_PROJECT},GCP_PROJECT=${GCP_PROJECT},HOST=0.0.0.0" \
     --project "$PROJECT_ID"
 
 echo ""

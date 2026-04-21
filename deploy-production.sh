@@ -1,5 +1,5 @@
 #!/bin/bash
-# Production deployment: backend + frontends (GCloud Cloud Run), migrations, Android code push.
+# Production deployment: backend + frontends (GCloud Cloud Run), Android code push.
 # No credentials in repo: DATABASE_URL and secrets are read from existing backend service.
 # Account: dialadrinkkenya254@gmail.com
 # Does NOT create new services; updates existing: deliveryos-production-backend,
@@ -44,52 +44,9 @@ gcloud builds submit --tag "${BACKEND_IMAGE}:latest" . || { echo "❌ Backend bu
 cd ..
 echo "✅ Backend image built"
 
-# Step 2: Run database migrations (SEO columns, etc.) via Cloud Run Job
-# DATABASE_URL is read from existing backend service; not stored or echoed.
+# Step 2: Deploy backend (existing service; keeps existing env vars and CORS)
 echo ""
-echo "📊 Step 2: Running database migrations (SEO columns, slugs support)"
-echo "====================================================================="
-SVC_JSON=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format=json 2>/dev/null || echo "{}")
-DATABASE_URL=""
-if [ -n "$SVC_JSON" ]; then
-  DATABASE_URL=$(echo "$SVC_JSON" | jq -r '.spec.template.spec.containers[0].env[]? | select(.name=="DATABASE_URL") | .value // empty')
-fi
-if [ -z "$DATABASE_URL" ]; then
-  echo "⚠️  Could not read DATABASE_URL from $BACKEND_SERVICE. Skipping migration job."
-  echo "   Run migrations manually with DATABASE_URL set (e.g. from Secret Manager or env)."
-else
-  MIGRATION_JOB="prod-migration-$(date +%s)"
-  echo "   Creating one-off job: $MIGRATION_JOB"
-  ENV_FILE=$(mktemp)
-  trap "rm -f $ENV_FILE" EXIT
-  echo "NODE_ENV: production" > "$ENV_FILE"
-  # Quote DATABASE_URL so special characters in connection string are safe
-  printf 'DATABASE_URL: "%s"\n' "$(echo "$DATABASE_URL" | sed 's/"/\\"/g')" >> "$ENV_FILE"
-  if gcloud run jobs create "$MIGRATION_JOB" \
-    --image="${BACKEND_IMAGE}:latest" \
-    --region="$REGION" \
-    --env-vars-file="$ENV_FILE" \
-    --command="node" \
-    --args="scripts/run-cloud-sql-migrations.js" \
-    --set-cloudsql-instances="$PROD_CONNECTION" \
-    --max-retries=1 \
-    --task-timeout=600 \
-    --project="$PROJECT_ID" \
-    --quiet 2>/dev/null; then
-    echo "   Executing migration job..."
-    gcloud run jobs execute "$MIGRATION_JOB" --region="$REGION" --project="$PROJECT_ID" --wait || true
-    gcloud run jobs delete "$MIGRATION_JOB" --region="$REGION" --project="$PROJECT_ID" --quiet 2>/dev/null || true
-    echo "✅ Migration job finished"
-  else
-    echo "⚠️  Migration job creation failed; continuing. Run migrations manually if needed."
-  fi
-  rm -f "$ENV_FILE"
-  trap - EXIT
-fi
-
-# Step 3: Deploy backend (existing service; keeps existing env vars and CORS)
-echo ""
-echo "📦 Step 3: Deploying backend to $BACKEND_SERVICE"
+echo "📦 Step 2: Deploying backend to $BACKEND_SERVICE"
 echo "==============================================="
 gcloud run deploy "$BACKEND_SERVICE" \
   --image "${BACKEND_IMAGE}:latest" \
@@ -101,9 +58,9 @@ gcloud run deploy "$BACKEND_SERVICE" \
 BACKEND_URL=$(gcloud run services describe "$BACKEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format="value(status.url)")
 echo "✅ Backend: $BACKEND_URL"
 
-# Step 4: Deploy customer and admin frontends (existing GCloud services)
+# Step 3: Deploy customer and admin frontends (existing GCloud services)
 echo ""
-echo "🌐 Step 4: Deploying frontends (GCloud Cloud Run)"
+echo "🌐 Step 3: Deploying frontends (GCloud Cloud Run)"
 echo "=================================================="
 echo "   (Each frontend build runs in Cloud Build: npm install + build + deploy. Can take 10–15 min if queue is busy.)"
 echo "   Monitor: https://console.cloud.google.com/cloud-build/builds?project=$PROJECT_ID"
@@ -133,9 +90,9 @@ cd ..
 ADMIN_URL=$(gcloud run services describe "$ADMIN_FRONTEND_SERVICE" --region "$REGION" --project "$PROJECT_ID" --format="value(status.url)" 2>/dev/null || echo "")
 echo "✅ Admin frontend: $ADMIN_URL"
 
-# Step 5: Push Android app code to production (git)
+# Step 4: Push Android app code to production (git)
 echo ""
-echo "📱 Step 5: Pushing Android app code to production"
+echo "📱 Step 4: Pushing Android app code to production"
 echo "================================================="
 if git status --short driver-app-native 2>/dev/null | grep -q . || ! git diff --quiet main -- driver-app-native 2>/dev/null; then
   CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "develop")
@@ -168,7 +125,6 @@ echo "   Backend:    $BACKEND_URL"
 echo "   Customer:   $CUSTOMER_URL"
 echo "   Admin:      $ADMIN_URL"
 echo "   CORS:       unchanged (from existing backend env)"
-echo "   Migrations: SEO columns applied if needed"
 echo ""
 echo "   Optional: To sync slugs/tags/pageTitle from local to production DB, run (with env set, no credentials in repo):"
 echo "   SOURCE_DATABASE_URL=... DATABASE_URL=... node backend/scripts/sync-tags-from-local-to-dev.js"

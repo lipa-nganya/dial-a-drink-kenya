@@ -1,5 +1,4 @@
-# Cloud Build configuration for Admin Frontend - Production
-# This file enables automatic deployments from GitHub main branch to Cloud Run
+# Cloud Build: admin frontend → GCR → Cloud Run (see frontend/cloudbuild.yaml header).
 
 steps:
   - name: 'gcr.io/cloud-builders/docker'
@@ -10,7 +9,7 @@ steps:
       - '-c'
       - |
         set -euo pipefail
-        IMG="gcr.io/$PROJECT_ID/deliveryos-admin"
+        IMG="gcr.io/$PROJECT_ID/dialadrink-admin"
         docker pull "$${IMG}:latest" || true
         docker build \
           --cache-from "$${IMG}:latest" \
@@ -19,6 +18,8 @@ steps:
           --build-arg REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api \
           --build-arg REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY} \
           .
+        docker push "$${IMG}:$SHORT_SHA"
+        docker push "$${IMG}:latest"
 
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
@@ -26,30 +27,26 @@ steps:
       - 'run'
       - 'deploy'
       - 'deliveryos-admin-frontend'
+      - '--project'
+      - '$PROJECT_ID'
       - '--image'
-      - 'gcr.io/$PROJECT_ID/deliveryos-admin:$SHORT_SHA'
+      - 'gcr.io/$PROJECT_ID/dialadrink-admin:$SHORT_SHA'
       - '--region'
       - 'us-central1'
       - '--platform'
       - 'managed'
+      - '--quiet'
       - '--allow-unauthenticated'
       - '--port'
       - '8080'
-      # Memory/CPU boost: omit so Cloud Run keeps console settings on each deploy
       - '--set-env-vars'
       - 'REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-central1.run.app/api,REACT_APP_GOOGLE_MAPS_API_KEY=${_GOOGLE_MAPS_API_KEY}'
 
-images:
-  - 'gcr.io/$PROJECT_ID/deliveryos-admin:$SHORT_SHA'
-  - 'gcr.io/$PROJECT_ID/deliveryos-admin:latest'
-
 options:
-  machineType: 'E2_HIGHCPU_4'
+  machineType: 'E2_HIGHCPU_8'
   logging: CLOUD_LOGGING_ONLY
 
 timeout: '1200s'
 
-# Substitution variables - must be set via Cloud Build trigger or --substitutions flag
-# Example: gcloud builds submit --substitutions=_GOOGLE_MAPS_API_KEY=your_key_here
 substitutions:
-  _GOOGLE_MAPS_API_KEY: ''  # REQUIRED: Set this in Cloud Build trigger configuration
+  _GOOGLE_MAPS_API_KEY: ''

@@ -1,79 +1,72 @@
 #!/bin/bash
-# Setup Development and Production Backend Services
+# Roll new backend container images for development and production Cloud Run services.
+#
+# Does NOT embed DATABASE_URL or other secrets — those stay in GCP (Console / Secret Manager).
+# Requires services to exist with env already configured. First-time setup: set DATABASE_URL
+# and related vars in Cloud Run before using this script.
 
 set -e
 
 PROJECT_ID="dialadrink-production"
 REGION="us-central1"
 
-# Development Database
-DEV_DB_INSTANCE="dialadrink-db-dev"
-DEV_DB_NAME="dialadrink_dev"
-DEV_DB_USER="dialadrink_app"
-DEV_DB_PASSWORD="o61yqm5fLiTwWnk5"
+DEV_SERVICE="deliveryos-development-backend"
 DEV_CONNECTION="dialadrink-production:us-central1:dialadrink-db-dev"
+DEV_IMAGE="gcr.io/${PROJECT_ID}/deliveryos-backend-dev"
 
-# Production Database
-PROD_DB_INSTANCE="dialadrink-db-prod"
-PROD_DB_NAME="dialadrink_prod"
-PROD_DB_USER="dialadrink_app"
-PROD_DB_PASSWORD="E7A3IIa60hFD3bkGH1XAiryvB"
+PROD_SERVICE="deliveryos-production-backend"
 PROD_CONNECTION="dialadrink-production:us-central1:dialadrink-db-prod"
+PROD_IMAGE="gcr.io/${PROJECT_ID}/deliveryos-production-backend"
 
-echo "🚀 Setting up Development and Production Backend Services"
-echo "=========================================================="
+echo "🚀 Rolling backend images (dev + prod)"
+echo "========================================"
+echo "   Project: $PROJECT_ID"
+echo "   Dev service:  $DEV_SERVICE"
+echo "   Prod service: $PROD_SERVICE"
 echo ""
 
-# Set project
-gcloud config set project $PROJECT_ID
+gcloud config set project "$PROJECT_ID"
 
-# Build Docker image
-echo "📦 Building Docker image..."
+echo "📦 Building development backend image..."
 cd backend
-gcloud builds submit --tag gcr.io/$PROJECT_ID/deliveryos-backend:latest .
+DEV_TAG="${DEV_IMAGE}:$(date +%s)"
+gcloud builds submit --tag "$DEV_TAG" .
 cd ..
 
 echo ""
-echo "🔧 Deploying Development Backend..."
-echo ""
-
-# Deploy Development Backend
-gcloud run deploy deliveryos-backend-dev \
-  --image gcr.io/$PROJECT_ID/deliveryos-backend:latest \
+echo "🔧 Deploying $DEV_SERVICE (image only; env unchanged)..."
+gcloud run deploy "$DEV_SERVICE" \
+  --image "$DEV_TAG" \
   --platform managed \
-  --region $REGION \
+  --region "$REGION" \
   --allow-unauthenticated \
-  --add-cloudsql-instances=$DEV_CONNECTION \
-  --set-env-vars "NODE_ENV=development,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID" \
-  --update-env-vars "DATABASE_URL=postgresql://${DEV_DB_USER}:${DEV_DB_PASSWORD}@/${DEV_DB_NAME}?host=/cloudsql/${DEV_CONNECTION}" \
-  --update-env-vars "FRONTEND_URL=https://dialadrink.thewolfgang.tech,ADMIN_URL=https://dialadrink-admin.thewolfgang.tech" \
-  --project $PROJECT_ID
+  --add-cloudsql-instances="$DEV_CONNECTION" \
+  --project "$PROJECT_ID"
 
 echo ""
-echo "🔧 Deploying Production Backend..."
-echo ""
+echo "📦 Building production backend image..."
+cd backend
+PROD_TAG="${PROD_IMAGE}:$(date +%s)"
+gcloud builds submit --tag "$PROD_TAG" .
+cd ..
 
-# Deploy Production Backend
-gcloud run deploy deliveryos-backend-prod \
-  --image gcr.io/$PROJECT_ID/deliveryos-backend:latest \
+echo ""
+echo "🔧 Deploying $PROD_SERVICE (image only; env unchanged)..."
+gcloud run deploy "$PROD_SERVICE" \
+  --image "$PROD_TAG" \
   --platform managed \
-  --region $REGION \
+  --region "$REGION" \
   --allow-unauthenticated \
-  --add-cloudsql-instances=$PROD_CONNECTION \
-  --set-env-vars "NODE_ENV=production,GOOGLE_CLOUD_PROJECT=$PROJECT_ID,GCP_PROJECT=$PROJECT_ID" \
-  --update-env-vars "DATABASE_URL=postgresql://${PROD_DB_USER}:${PROD_DB_PASSWORD}@/${PROD_DB_NAME}?host=/cloudsql/${PROD_CONNECTION}" \
-  --update-env-vars "FRONTEND_URL=https://ruakadrinksdelivery.co.ke,ADMIN_URL=https://dial-a-drink-admin.netlify.app" \
-  --project $PROJECT_ID
+  --add-cloudsql-instances="$PROD_CONNECTION" \
+  --project "$PROJECT_ID"
 
 echo ""
-echo "✅ Backend services deployed!"
+echo "✅ Backend images rolled."
 echo ""
-echo "📋 Service URLs:"
-gcloud run services list --region $REGION --format="table(metadata.name,status.url)" --project $PROJECT_ID
+gcloud run services list --region "$REGION" --format="table(metadata.name,status.url)" --project "$PROJECT_ID"
 
 echo ""
-echo "📝 Next Steps:"
-echo "  1. Update frontend API configurations with new backend URLs"
-echo "  2. Update driver app gradle.properties"
-echo "  3. Update backend CORS for all frontend sites"
-echo "  4. Run database migrations on both databases"
+echo "📝 Next steps:"
+echo "  1. Verify health: curl \$(gcloud run services describe $DEV_SERVICE --region=$REGION --project=$PROJECT_ID --format='value(status.url)')/api/health"
+echo "  2. Update frontend / driver app API URLs if services were new"
+echo "  3. Schema changes: run migration scripts manually when needed (not part of this script)"

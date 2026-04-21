@@ -7,7 +7,6 @@
 # - No new backend service (updates deliveryos-development-backend)
 # - No new frontend services (Netlify picks up from GitHub)
 # - Pushes Android app code to GitHub (develop); build separately if needed
-# - Database migrations: run via Cloud SQL Proxy + DATABASE_URL in env (no credentials in this script)
 # - GCloud account: dialadrinkkenya254@gmail.com (set with gcloud config; never commit keys)
 #
 # Prerequisites:
@@ -54,7 +53,7 @@ echo "📋 Step 3: Git push (Netlify will auto-deploy frontend)..."
 git checkout develop 2>/dev/null || git checkout -b develop 2>/dev/null || true
 git add -A 2>/dev/null || true
 if ! git diff --staged --quiet 2>/dev/null; then
-    git commit -m "Deploy to development: inventory tags & pageTitle, migrations, backend updates" 2>/dev/null || true
+    git commit -m "Deploy to development: inventory tags & pageTitle, backend updates" 2>/dev/null || true
 fi
 git push origin develop 2>/dev/null || { echo "   ⚠️  Push failed or already up to date"; }
 echo "   ✅ Frontend will deploy from Netlify (from GitHub)"
@@ -150,26 +149,7 @@ echo "   ✅ Backend URL: $SERVICE_URL"
 cd ..
 echo ""
 
-# Step 5: Database migrations (run with Cloud SQL Proxy + local .env; no credentials in script)
-echo "🗄️  Step 5: Database migrations..."
-if [ -n "$DATABASE_URL" ]; then
-    echo "   Running migrations (DATABASE_URL is set in your environment; never logged)..."
-    (cd backend && NODE_ENV=development CLOUD_RUN_SERVICE=deliveryos-development-backend ./scripts/run-migrations-cloud-sql.sh) 2>&1 || {
-        echo "   ⚠️  Migration script failed. Check errors above."
-    }
-else
-    echo "   Migrations require DATABASE_URL (never commit it)."
-    echo "   To run migrations manually:"
-    echo "      1. Start Cloud SQL Proxy:"
-    echo "         cloud_sql_proxy -instances=$CONNECTION_NAME=tcp:5432 &"
-    echo "      2. In another terminal, set DATABASE_URL in .env (do not commit):"
-    echo "         postgresql://USER:PASSWORD@localhost:5432/dialadrink_dev"
-    echo "      3. Run: cd backend && NODE_ENV=development ./scripts/run-cloud-sql-migrations.js"
-    echo "         (or: source .env && ./scripts/run-migrations-cloud-sql.sh)"
-fi
-echo ""
-
-# Step 6: CORS and summary
+# Step 5: CORS and summary
 echo "🔒 CORS: Maintained (backend/app.js uses FRONTEND_URL, ADMIN_URL)"
 echo ""
 echo "=========================================="
@@ -178,7 +158,6 @@ echo "=========================================="
 echo "   Backend:  $SERVICE_URL"
 echo "   Frontend: Netlify (from GitHub develop)"
 echo "   Android:  driver-app-native (push to GitHub done; build APK: cd driver-app-native && ./gradlew assembleDevelopmentDebug)"
-echo "   Migrations: See Step 5 if not run automatically"
 echo ""
 echo "   Health: curl $SERVICE_URL/api/health"
 echo ""

@@ -1,10 +1,9 @@
 #!/bin/bash
 # Deploy all changes to development environment
 # This script handles:
-# 1. Database migrations
-# 2. Backend deployment to Google Cloud Run (development)
-# 3. Frontend push to GitHub (triggers Netlify)
-# 4. Android app builds for developmentdebug variant
+# 1. Backend deployment to Google Cloud Run (development)
+# 2. Frontend push to GitHub (triggers Netlify)
+# 3. Android app builds for developmentdebug variant
 
 set -e  # Exit on error
 
@@ -55,21 +54,8 @@ git checkout develop 2>/dev/null || git checkout -b develop
 echo -e "\n${GREEN}🔄 Step 6: Merging main into develop...${NC}"
 git merge main --no-edit || echo "Merge completed or conflicts need resolution"
 
-# Step 7: Run database migrations
-echo -e "\n${GREEN}🗄️  Step 7: Running database migrations...${NC}"
-cd backend
-
-# Run stop fields migration (idempotent - safe to run multiple times)
-echo "Running stop fields migration..."
-node scripts/run-stop-fields-migration.js || {
-    echo -e "${YELLOW}⚠️  Migration script failed or fields already exist${NC}"
-    echo "This is okay if the fields already exist in the database"
-}
-
-cd ..
-
-# Step 8: Deploy backend to Google Cloud Run (development)
-echo -e "\n${GREEN}☁️  Step 8: Deploying backend to Google Cloud Run (development)...${NC}"
+# Step 7: Deploy backend to Google Cloud Run (development)
+echo -e "\n${GREEN}☁️  Step 7: Deploying backend to Google Cloud Run (development)...${NC}"
 echo "Using account: $GCLOUD_ACCOUNT"
 echo "Service: $SERVICE_NAME"
 
@@ -115,12 +101,12 @@ gcloud builds submit --config=cloudbuild-dev.yaml . || {
 
 cd ..
 
-# Step 9: Push to GitHub (triggers Netlify for frontend/admin web)
-echo -e "\n${GREEN}📤 Step 9: Pushing to GitHub (triggers Netlify deployment)...${NC}"
+# Step 8: Push to GitHub (triggers Netlify for frontend/admin web)
+echo -e "\n${GREEN}📤 Step 8: Pushing to GitHub (triggers Netlify deployment)...${NC}"
 git push origin develop || echo "Push failed or already up to date"
 
-# Step 10: Build Android app for developmentdebug
-echo -e "\n${GREEN}📱 Step 10: Building Android app for developmentdebug...${NC}"
+# Step 9: Build Android app for developmentdebug
+echo -e "\n${GREEN}📱 Step 9: Building Android app for developmentdebug...${NC}"
 cd driver-app-native
 
 # Check if Android SDK is available
@@ -147,11 +133,10 @@ fi
 
 cd ..
 
-# Step 11: Summary
+# Step 10: Summary
 echo -e "\n${GREEN}✅ Deployment Summary:${NC}"
 echo "================================================"
 echo "✓ Git changes committed and pushed to develop"
-echo "✓ Database migrations checked/run"
 echo "✓ Backend deployed to: $SERVICE_NAME"
 echo "✓ Frontend changes pushed (Netlify will auto-deploy)"
 echo "✓ Android app built for developmentdebug"
