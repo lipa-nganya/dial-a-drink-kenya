@@ -9,6 +9,9 @@
 
 set -e
 
+# Avoid hidden interactive prompts from gcloud (can look like a hang).
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
 PROJECT_ID="dialadrink-production"
 REGION="us-central1"
 BACKEND_SERVICE="deliveryos-production-backend"
@@ -77,13 +80,19 @@ echo "☁️  Step 4: Deploying backend to Cloud Run (new image only; env unchan
 cd backend
 
 echo "🔨 Building Docker image..."
+echo "   ⏳ Cloud Build often takes 3–12 minutes (upload, Docker layers, npm ci, push)."
+echo "   ⏳ Long gaps between log lines are normal — not frozen unless it exceeds ~20 min."
+echo "   Started: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 IMAGE_TAG="gcr.io/$PROJECT_ID/deliveryos-production-backend:$(date +%s)"
+# Do not lower gcloud verbosity here — Cloud Build logs are the main sign of life during long steps.
 gcloud builds submit --tag "$IMAGE_TAG" . 2>&1
 
+echo "   Finished build: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "✅ Image built: $IMAGE_TAG"
 echo ""
 
 echo "🚀 Deploying to Cloud Run (no --update-env-vars — secrets remain as configured in GCP)..."
+echo "   ⏳ Deploy waits until the new revision is ready (usually 1–4 minutes)."
 gcloud run deploy "$BACKEND_SERVICE" \
     --image "$IMAGE_TAG" \
     --platform managed \
@@ -91,6 +100,8 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$PROD_CONNECTION" \
     --project "$PROJECT_ID" 2>&1
+
+echo "   Finished deploy: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 SERVICE_URL=$(gcloud run services describe "$BACKEND_SERVICE" \
     --region "$REGION" \
@@ -163,7 +174,8 @@ echo "📱 Step 7: Android app — build separately if needed (driver-app-native
 echo ""
 
 echo "✅ Step 8: Verifying backend health..."
-HEALTH_RESPONSE=$(curl -s "$SERVICE_URL/api/health" || echo "Failed")
+# Bound wait so a wedged service does not stall the script forever.
+HEALTH_RESPONSE=$(curl -sS --connect-timeout 15 --max-time 45 "$SERVICE_URL/api/health" || echo "Failed")
 echo "   Backend health check returned: $HEALTH_RESPONSE"
 echo ""
 

@@ -4,6 +4,8 @@
 
 set -e
 
+export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+
 if [ -f "production-config.env" ]; then
     # shellcheck disable=SC1091
     source production-config.env
