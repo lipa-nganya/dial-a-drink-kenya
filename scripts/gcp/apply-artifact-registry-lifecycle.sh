@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Attach Artifact Registry lifecycle policy from infra/gcp/artifact-registry-docker-lifecycle.json
-# to Docker repositories (same policy can be reused across repos).
+# Apply Artifact Registry cleanup policies from infra/gcp/artifact-registry-docker-lifecycle.json
+# to Docker repositories (same policy file can be reused across repos).
 #
-# Prerequisites: repos must live in Artifact Registry:
-#   us-central1-docker.pkg.dev/$PROJECT/cloud-run-docker/...
+# Uses: gcloud artifacts repositories set-cleanup-policies (--policy JSON array format).
+# See: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
 #
 # Projects still pushing only to gcr.io/$PROJECT_ID/ should run gcr-delete-untagged-digests.sh
 # instead (see script header).
@@ -27,7 +27,7 @@ fi
 REPOS="${AR_REPOSITORY_LIST:-}"
 
 if [[ -z "$REPOS" ]]; then
-  echo "Applying lifecycle to Artifact Registry Docker repositories in project=${PROJECT_ID} region=${REGION}..."
+  echo "Applying cleanup policies to Artifact Registry Docker repositories in project=${PROJECT_ID} region=${REGION}..."
 
   LIST_OUT=
   if ! LIST_OUT=$(gcloud artifacts repositories list \
@@ -48,22 +48,22 @@ if [[ -z "$REPOS" ]]; then
   while IFS= read -r FULL; do
     [[ -z "$FULL" ]] && continue
     SHORT="${FULL##*/}"
-    echo "Updating lifecycle: repository=${SHORT}"
-    gcloud artifacts repositories update "${SHORT}" \
+    echo "Setting cleanup policies: repository=${SHORT}"
+    gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
       --project="${PROJECT_ID}" \
       --location="${REGION}" \
-      --lifecycle-policy="${POLICY}"
+      --policy="${POLICY}"
   done <<< "$LIST_OUT"
 else
   IFS=',' read -ra LIST <<< "${REPOS}"
   for SHORT in "${LIST[@]}"; do
     SHORT="$(echo "${SHORT}" | xargs)"
     [[ -z "${SHORT}" ]] && continue
-    echo "Updating lifecycle: repository=${SHORT}"
-    gcloud artifacts repositories update "${SHORT}" \
+    echo "Setting cleanup policies: repository=${SHORT}"
+    gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
       --project="${PROJECT_ID}" \
       --location="${REGION}" \
-      --lifecycle-policy="${POLICY}"
+      --policy="${POLICY}"
   done
 fi
 

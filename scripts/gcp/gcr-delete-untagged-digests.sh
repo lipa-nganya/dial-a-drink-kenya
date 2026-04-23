@@ -20,6 +20,7 @@ fi
 
 DEFAULT_IMAGES=(
   deliveryos-backend
+  deliveryos-production-backend
   dialadrink-frontend
   deliveryos-admin
   deliveryos-admin-dev

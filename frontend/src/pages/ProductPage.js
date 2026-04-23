@@ -45,7 +45,10 @@ import { stripHtml } from '../utils/stripHtml';
 import {
   ensureCanonicalLink,
   buildProductCanonicalUrl,
-  getCanonicalSiteOrigin
+  buildProductSchemaImageList,
+  getCanonicalSiteOrigin,
+  stripTrackingSearchParams,
+  normalizePathname
 } from '../utils/seoCanonical';
 import { normalizeSlug } from '../utils/slugCanonical';
 import { buildBrandPath } from '../utils/brandSlug';
@@ -163,6 +166,25 @@ const ProductPage = () => {
     }
   }, [pendingScrollToTop, product?.id, imageLoaded, imageError]);
 
+  /** Replace stale or alternate category segments with canonical path (indexed URLs, external links). */
+  useEffect(() => {
+    if (!product || loading) return;
+    if (!isCategoryBasedUrl) return;
+    let canonPath;
+    try {
+      canonPath = normalizePathname(new URL(buildProductCanonicalUrl(product)).pathname);
+    } catch {
+      return;
+    }
+    const cur = normalizePathname(location.pathname);
+    if (canonPath === cur) return;
+    navigate(`${canonPath}${stripTrackingSearchParams(location.search)}`, {
+      replace: true,
+      state: { drink: product }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when identity or route changes
+  }, [product?.id, loading, isCategoryBasedUrl, location.pathname, location.search, navigate]);
+
   useEffect(() => {
     if (product) {
       fetchRelatedProducts();
@@ -250,7 +272,37 @@ const ProductPage = () => {
       if (isCategoryBasedUrl) {
         // New format: /:categorySlug/:productSlug
         // Fetch via API: /api/products/:categorySlug/:productSlug
-        response = await api.get(`/products/${categorySlug}/${productSlug}`);
+        try {
+          response = await api.get(`/products/${categorySlug}/${productSlug}`);
+        } catch (e) {
+          // Stale index / wrong category segment in URL (e.g. GSC) — resolve by slug only, then client corrects path
+          const st = e?.response?.status;
+          if (st === 404 && productSlug) {
+            let bySlug;
+            try {
+              bySlug = await api.get(`/drinks/${encodeURIComponent(productSlug)}`);
+            } catch {
+              throw e;
+            }
+            const d = bySlug.data;
+            const catSeg = normalizeSlug(d.category?.slug || d.category?.name || '');
+            const prodSeg = normalizeSlug(d.slug || '');
+            if (catSeg && prodSeg) {
+              const want = normalizePathname(`/${catSeg}/${prodSeg}`);
+              const cur = normalizePathname(location.pathname);
+              const q = stripTrackingSearchParams(location.search);
+              if (want !== cur) {
+                navigate(`${want}${q}`, { replace: true, state: { drink: d } });
+                return;
+              }
+              response = { data: d };
+            } else {
+              throw e;
+            }
+          } else {
+            throw e;
+          }
+        }
       } else if (
         isLegacyIndexedProductsUrl &&
         productSlug &&
@@ -704,17 +756,18 @@ const ProductPage = () => {
     : product.brand;
   const normalizedBarcode = product.barcode != null ? String(product.barcode).trim() : '';
   const isGtinCandidate = /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(normalizedBarcode);
-  /** Google merchant listing: incomplete OfferShippingDetails (missing deliveryTime, etc.) marks items invalid. Prefer org-level shipping/returns; keep Offer minimal. */
+  /** JSON-LD image: must be absolute HTTPS (Rich Results reject data:, http, or malformed URLs). */
   const canonicalOrigin = getCanonicalSiteOrigin();
-  let absoluteImageUrl = '';
-  if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
-    absoluteImageUrl = imageUrl;
-  } else if (imageUrl) {
-    absoluteImageUrl = `${canonicalOrigin}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+  let resolvedForSchema = '';
+  if (imageUrl && !imageUrl.startsWith('data:') && /^https?:\/\//i.test(imageUrl)) {
+    resolvedForSchema = imageUrl;
+  } else if (imageUrl && !imageUrl.startsWith('data:')) {
+    resolvedForSchema = `${canonicalOrigin}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
   }
-  const schemaImages = absoluteImageUrl
-    ? [absoluteImageUrl]
-    : [`${canonicalOrigin}/assets/images/drinks/placeholder.svg`];
+  const schemaImages = buildProductSchemaImageList({
+    resolvedUrl: resolvedForSchema,
+    canonicalOrigin
+  });
   const rawOfferPrice = parseFloat(resolvedPrice);
   const schemaPrice = Number.isFinite(rawOfferPrice)
     ? Math.round(rawOfferPrice * 100) / 100

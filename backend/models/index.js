@@ -15,6 +15,11 @@ if (isLocal() && process.env.DATABASE_URL) {
 }
 
 let sequelize;
+const parsePositiveInt = (value, fallback) => {
+  if (value === undefined || value === null || value === '') return fallback;
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+};
 try {
   if (dbConfig.use_env_variable) {
     const databaseUrl = process.env[dbConfig.use_env_variable];
@@ -48,15 +53,24 @@ try {
       const isProxyConnection = /localhost(:\d+)?|127\.0\.0\.1(:\d+)?|\/cloudsql\/|cloud-sql-proxy-dev(:\d+)?/.test(databaseUrl);
       const sslConfig = isProxyConnection ? null : (dbConfig.dialectOptions?.ssl);
       const baseDialectOptions = dbConfig.dialectOptions || {};
+      // Respect env/config pool sizing; fixed max=10 caused connection exhaustion on Cloud SQL.
+      const configuredPool = dbConfig.pool || {};
+      const poolMax = parsePositiveInt(process.env.DB_POOL_MAX, parsePositiveInt(configuredPool.max, 5));
+      const poolMinDefault = configuredPool.min !== undefined ? configuredPool.min : 0;
+      const poolMin = Math.max(0, parseInt(process.env.DB_POOL_MIN ?? poolMinDefault, 10) || 0);
+      const poolAcquire = parsePositiveInt(process.env.DB_POOL_ACQUIRE_MS, parsePositiveInt(configuredPool.acquire, 15000));
+      const poolIdle = parsePositiveInt(process.env.DB_POOL_IDLE_MS, parsePositiveInt(configuredPool.idle, 10000));
+      const poolEvict = parsePositiveInt(process.env.DB_POOL_EVICT_MS, parsePositiveInt(configuredPool.evict, 1000));
+
       sequelize = new Sequelize(sanitizedUrl, {
         ...dbConfig,
-        // min: 1 reduces total DB connections across many Cloud Run instances (helps avoid max_connections).
+        // Keep min=0 by default to avoid reserving idle connections on every Cloud Run instance.
         pool: {
-          max: 10,
-          min: 1,
-          acquire: 15000,
-          idle: 10000,
-          evict: 1000
+          max: poolMax,
+          min: Math.min(poolMin, poolMax),
+          acquire: poolAcquire,
+          idle: poolIdle,
+          evict: poolEvict
         },
         dialectOptions: {
           ...baseDialectOptions,

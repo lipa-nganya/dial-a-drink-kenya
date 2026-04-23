@@ -1,10 +1,20 @@
 node_modules
 npm-debug.log
 .git
+.gitignore
 .env
+.env.*
 coverage
 logs
 tmp
 .DS_Store
 
+# Lean image / smaller Artifact Registry pushes — not needed at runtime
+tests/
+examples/
+**/*.md
+*.log
+backend.log
+backend-restart.log
+error-screenshot.png
 
