@@ -86,6 +86,18 @@ const resolveCapacityForOrderItem = (drink, item) => {
 const sumStockByCapacity = (stockByCapacity) =>
   Object.values(stockByCapacity || {}).reduce((sum, value) => sum + Math.max(0, toInt(value, 0)), 0);
 
+const parseStockByCapacity = (value) => {
+  if (!value) return null;
+  if (typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string') return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Decreases inventory stock for all items in a completed order
  * @param {number} orderId - The order ID
@@ -161,12 +173,13 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           continue;
         }
 
-        const hasStockByCapacity = drink.stockByCapacity && typeof drink.stockByCapacity === 'object';
+        const parsedStockByCapacity = parseStockByCapacity(drink.stockByCapacity);
+        const hasStockByCapacity = !!parsedStockByCapacity;
         let oldStock = currentStock;
         let newStock = currentStock;
 
         if (hasStockByCapacity) {
-          const byCap = { ...drink.stockByCapacity };
+          const byCap = { ...parsedStockByCapacity };
           const matchedCapacity = resolveCapacityForOrderItem(drink, item);
           const multiplier = capacityUnitMultiplier(matchedCapacity);
           let remainingToDeduct = quantity * multiplier;
@@ -352,12 +365,13 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
           continue;
         }
 
-        const hasStockByCapacity = drink.stockByCapacity && typeof drink.stockByCapacity === 'object';
+        const parsedStockByCapacity = parseStockByCapacity(drink.stockByCapacity);
+        const hasStockByCapacity = !!parsedStockByCapacity;
         let oldStock = currentStock;
         let newStock = currentStock;
 
         if (hasStockByCapacity) {
-          const byCap = { ...drink.stockByCapacity };
+          const byCap = { ...parsedStockByCapacity };
           const matchedCapacity = resolveCapacityForOrderItem(drink, item);
           if (matchedCapacity) {
             const mult = capacityUnitMultiplier(matchedCapacity);

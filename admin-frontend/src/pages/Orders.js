@@ -68,6 +68,7 @@ import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
+const ORDERS_SUMMARY_QUERY = '/admin/orders?summary=1&limit=150';
 
 /** Matches admin API: amounts editable unless cancelled, or incomplete paid/completed combos. Paid + completed is allowed (reconciliation). */
 function canEditOrderFinancialAmounts(order) {
@@ -390,8 +391,8 @@ const Orders = () => {
       
       // Fetch the full order details with items and transactions
       try {
-        const response = await api.get(`/admin/orders`);
-        const allOrders = response.data;
+        const response = await api.get(ORDERS_SUMMARY_QUERY);
+        const allOrders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
         
         // Find the new order (should be the most recent, so check first few)
         const newOrder = allOrders.find(o => o.id === data.order?.id) || allOrders[0];
@@ -774,8 +775,8 @@ const Orders = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/admin/orders');
-      let orders = Array.isArray(response.data) ? response.data : [];
+      const response = await api.get(ORDERS_SUMMARY_QUERY);
+      let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
       
       // Filter out any undefined or null orders
       orders = orders.filter(order => order != null);
@@ -810,6 +811,8 @@ const Orders = () => {
   // Get transaction status for an order
   const getOrderTransactionStatus = (order) => {
     if (!order.transactions || order.transactions.length === 0) {
+      if (order.paymentStatus === 'paid') return 'completed';
+      if (order.paymentStatus === 'failed') return 'failed';
       return 'pending'; // No transaction created yet
     }
     // Get the most recent transaction
@@ -1662,7 +1665,7 @@ const Orders = () => {
       setRoutesLoading(true);
       const [ridersResponse, ordersResponse, locationsResponse] = await Promise.all([
         api.get('/drivers'),
-        api.get('/admin/orders'),
+        api.get('/admin/orders?summary=1&limit=300'),
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
       
@@ -1672,7 +1675,9 @@ const Orders = () => {
         ? ridersData 
         : (ridersData && Array.isArray(ridersData.data) ? ridersData.data : []);
       setAllRiders(fetchedRiders);
-      const allOrders = ordersResponse.data || [];
+      const allOrders = Array.isArray(ordersResponse.data)
+        ? ordersResponse.data
+        : (ordersResponse.data?.orders || []);
       
       // Store rider locations
       const locationsMap = {};

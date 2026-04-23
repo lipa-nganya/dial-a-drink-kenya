@@ -78,9 +78,9 @@ const InventoryPage = () => {
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
   const [offerFilter, setOfferFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [inventoryView, setInventoryView] = useState('grid'); // 'grid' | 'list'
+  const [inventoryView, setInventoryView] = useState('list'); // 'grid' | 'list'
   
-  const itemsPerPage = 16; // 4 rows × 4 columns
+  const itemsPerPage = 40;
 
   // Helper to build per-capacity stock rows, e.g. "Stock 6: 1.5 litre"
   const getCapacityStockRows = (drink) => {
