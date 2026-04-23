@@ -49,29 +49,55 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
       return res.status(404).json({ error: 'Product not found in this category' });
     }
 
-    const drink = await db.Drink.findOne({
+    const includeModels = [{
+      model: db.Category,
+      as: 'category',
+      attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
+      required: false
+    }, {
+      model: db.SubCategory,
+      as: 'subCategory',
+      required: false,
+      attributes: ['id', 'name', 'categoryId']
+    }, {
+      model: db.Brand,
+      as: 'brand',
+      required: false,
+      attributes: ['id', 'name']
+    }];
+
+    const drinks = await db.Drink.findAll({
       where: {
         isPublished: true,
         slug: { [Op.in]: slugVariants }
       },
       attributes: drinkAttributes,
-      include: [{
-        model: db.Category,
-        as: 'category',
-        attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive', 'createdAt', 'updatedAt'],
-        required: false
-      }, {
-        model: db.SubCategory,
-        as: 'subCategory',
-        required: false,
-        attributes: ['id', 'name', 'categoryId']
-      }, {
-        model: db.Brand,
-        as: 'brand',
-        required: false,
-        attributes: ['id', 'name']
-      }]
+      include: includeModels
     });
+
+    if (!drinks || drinks.length === 0) {
+      return res.status(404).json({ error: 'Product not found in this category' });
+    }
+
+    /** Prefer rows whose category segment matches the URL (correct deep links). */
+    let drink = drinks.find((d) => d.category && categorySlugMatchesUrl(d.category, categorySlug));
+
+    /**
+     * If no category match but the slug resolves to exactly one published product, still return it.
+     * Indexed URLs often use an outdated or alternate category segment vs DB (Search Console,
+     * redirects, name-based slug tweaks) — returning 404 broke traffic from Google with ?srsltid etc.
+     */
+    if (!drink && drinks.length === 1) {
+      drink = drinks[0];
+    }
+
+    /** Same slug reused for multiple products — category segment is required to disambiguate. */
+    if (!drink && drinks.length > 1) {
+      return res.status(404).json({
+        error: 'Product not found in this category',
+        detail: 'Multiple products share this slug; URL category must match.'
+      });
+    }
 
     if (!drink) {
       return res.status(404).json({ error: 'Product not found in this category' });
@@ -80,13 +106,6 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
     // If there is a category, compute its slug from the name and verify it matches.
     if (!drink.category || !drink.category.name) {
       return res.status(404).json({ error: 'Category not found for this product' });
-    }
-
-    const categoryUrlOk = categorySlugMatchesUrl(drink.category, categorySlug);
-    if (!categoryUrlOk) {
-      console.warn(
-        `[products] Category segment mismatch for drink ${drink.id}: URL="/${categorySlug}/…" vs product category slug="${drink.category.slug}" — returning product so client can canonicalize`
-      );
     }
 
     // Record product details view (clicks) - fire and forget, raw SQL so it works even if model/column was not migrated yet
@@ -105,10 +124,10 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
       } catch (_) { /* ignore */ }
     });
 
-    // Ensure the response always has a category.slug value, even if the DB column is null
     const computedCategorySlug =
-      normalizeSlug(drink.category.slug || '') ||
-      normalizeSlug(generateCategorySlugFromName(drink.category.name));
+      normalizeSlug(drink.category.slug || generateCategorySlugFromName(drink.category.name || '')) || '';
+
+    // Ensure the response always has a category.slug value, even if the DB column is null
     if (!drink.category.slug && computedCategorySlug) {
       drink.category.slug = computedCategorySlug;
     }

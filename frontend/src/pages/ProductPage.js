@@ -45,7 +45,9 @@ import { stripHtml } from '../utils/stripHtml';
 import {
   ensureCanonicalLink,
   buildProductCanonicalUrl,
-  getCanonicalSiteOrigin
+  getCanonicalSiteOrigin,
+  stripTrackingSearchParams,
+  normalizePathname
 } from '../utils/seoCanonical';
 import { normalizeSlug } from '../utils/slugCanonical';
 import { buildBrandPath } from '../utils/brandSlug';
@@ -163,6 +165,25 @@ const ProductPage = () => {
     }
   }, [pendingScrollToTop, product?.id, imageLoaded, imageError]);
 
+  /** Replace stale or alternate category segments with canonical path (indexed URLs, external links). */
+  useEffect(() => {
+    if (!product || loading) return;
+    if (!isCategoryBasedUrl) return;
+    let canonPath;
+    try {
+      canonPath = normalizePathname(new URL(buildProductCanonicalUrl(product)).pathname);
+    } catch {
+      return;
+    }
+    const cur = normalizePathname(location.pathname);
+    if (canonPath === cur) return;
+    navigate(`${canonPath}${stripTrackingSearchParams(location.search)}`, {
+      replace: true,
+      state: { drink: product }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when identity or route changes
+  }, [product?.id, loading, isCategoryBasedUrl, location.pathname, location.search, navigate]);
+
   useEffect(() => {
     if (product) {
       fetchRelatedProducts();
@@ -176,30 +197,7 @@ const ProductPage = () => {
         navigate(`/${normalizeSlug(product.category.slug)}/${normalizeSlug(product.slug)}`, { replace: true });
         return;
       }
-
-      // Wrong category segment (indexed URL, slug regen, or drift) — same product slug; fix path without dropping ?query (srsltid, utm_*).
-      if (isCategoryBasedUrl && product.category && product.slug) {
-        try {
-          const expectedPath = new URL(buildProductCanonicalUrl(product)).pathname.replace(/\/$/, '') || '/';
-          const currentPath = location.pathname.replace(/\/$/, '') || '/';
-          if (expectedPath !== currentPath) {
-            navigate(`${expectedPath}${location.search || ''}`, { replace: true });
-            return;
-          }
-        } catch {
-          const catSeg = normalizeSlug(product.category.slug || product.category.name || '');
-          const prodSeg = normalizeSlug(product.slug);
-          if (catSeg && prodSeg) {
-            const want = `/${catSeg}/${prodSeg}`;
-            const have = location.pathname.replace(/\/$/, '') || '/';
-            if (want !== have) {
-              navigate(`${want}${location.search || ''}`, { replace: true });
-              return;
-            }
-          }
-        }
-      }
-
+      
       // Prefer slug-based canonical when product data is canonical (overrides pathname-based from CanonicalHead)
       ensureCanonicalLink(buildProductCanonicalUrl(product));
       
@@ -273,7 +271,37 @@ const ProductPage = () => {
       if (isCategoryBasedUrl) {
         // New format: /:categorySlug/:productSlug
         // Fetch via API: /api/products/:categorySlug/:productSlug
-        response = await api.get(`/products/${categorySlug}/${productSlug}`);
+        try {
+          response = await api.get(`/products/${categorySlug}/${productSlug}`);
+        } catch (e) {
+          // Stale index / wrong category segment in URL (e.g. GSC) — resolve by slug only, then client corrects path
+          const st = e?.response?.status;
+          if (st === 404 && productSlug) {
+            let bySlug;
+            try {
+              bySlug = await api.get(`/drinks/${encodeURIComponent(productSlug)}`);
+            } catch {
+              throw e;
+            }
+            const d = bySlug.data;
+            const catSeg = normalizeSlug(d.category?.slug || d.category?.name || '');
+            const prodSeg = normalizeSlug(d.slug || '');
+            if (catSeg && prodSeg) {
+              const want = normalizePathname(`/${catSeg}/${prodSeg}`);
+              const cur = normalizePathname(location.pathname);
+              const q = stripTrackingSearchParams(location.search);
+              if (want !== cur) {
+                navigate(`${want}${q}`, { replace: true, state: { drink: d } });
+                return;
+              }
+              response = { data: d };
+            } else {
+              throw e;
+            }
+          } else {
+            throw e;
+          }
+        }
       } else if (
         isLegacyIndexedProductsUrl &&
         productSlug &&
