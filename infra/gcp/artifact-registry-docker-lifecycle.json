@@ -7,6 +7,14 @@
         "tagState": "UNTAGGED",
         "olderThan": "604800s"
       }
+    },
+    {
+      "description": "Remove tagged images older than 120 days (timestamped deploy tags accumulate; lengthen if you need older rollbacks)",
+      "action": { "type": "DELETE" },
+      "condition": {
+        "tagState": "TAGGED",
+        "olderThan": "10368000s"
+      }
     }
   ]
 }
