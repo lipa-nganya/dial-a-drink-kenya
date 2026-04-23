@@ -108,7 +108,6 @@ const DrinkCard = ({ drink }) => {
       // Select the most expensive capacity
       const mostExpensive = capacitiesWithPrices[0];
       setSelectedCapacity(mostExpensive.capacity);
-      console.log(`[DrinkCard] Auto-selected most expensive capacity for ${drink.name}: ${mostExpensive.capacity} (KES ${Math.round(mostExpensive.price)})`);
     } else if (availableCapacities.length === 0) {
       // No capacities - clear selection
       setSelectedCapacity('');
@@ -235,6 +234,9 @@ const DrinkCard = ({ drink }) => {
     }
   };
 
+  // Compute image source once per render to avoid repeated string work in JSX.
+  const imageSrc = getImageUrl(drink.image);
+
   return (
     <Card
       onClick={handleCardClick}
@@ -268,11 +270,13 @@ const DrinkCard = ({ drink }) => {
           overflow: 'hidden'
         }}
       >
-        {getImageUrl(drink.image) && !imageError ? (
+        {imageSrc && !imageError ? (
           <CardMedia
             component="img"
-            image={getImageUrl(drink.image)}
+            image={imageSrc}
             alt={drink.name}
+            loading="lazy"
+            decoding="async"
             sx={{ 
               objectFit: 'contain', 
               width: '100%',
@@ -611,4 +615,4 @@ const DrinkCard = ({ drink }) => {
   );
 };
 
-export default DrinkCard;
+export default React.memo(DrinkCard);

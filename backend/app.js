@@ -218,6 +218,7 @@ app.use('/api/import-brands', require('./routes/import-brands'));
 app.use('/api/http-redirect', require('./routes/http-redirects'));
 app.use('/api/products', require('./routes/products')); // Category-based product routes
 app.use('/api/drinks', require('./routes/drinks'));
+app.use('/api/sitemaps', require('./routes/sitemaps'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/pos', require('./routes/pos'));

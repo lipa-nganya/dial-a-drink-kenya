@@ -205,8 +205,8 @@ const Menu = () => {
   // Reset displayed items when filters change
   useEffect(() => {
     setItemsToShow(itemsPerLoad);
-    // Scroll to top smoothly when category/search changes
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Avoid smooth-scroll animation work during filter changes on low-end mobiles.
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }, [selectedCategory, selectedSubcategory, searchTerm, sortBy, quantityCapacityFilter]);
 
   // Update displayed drinks when filtered drinks or itemsToShow changes
