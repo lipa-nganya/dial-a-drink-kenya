@@ -42,7 +42,11 @@ import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
 import { getBackendUrl } from '../utils/backendUrl';
 import { stripHtml } from '../utils/stripHtml';
-import { ensureCanonicalLink, buildProductCanonicalUrl } from '../utils/seoCanonical';
+import {
+  ensureCanonicalLink,
+  buildProductCanonicalUrl,
+  getCanonicalSiteOrigin
+} from '../utils/seoCanonical';
 import { normalizeSlug } from '../utils/slugCanonical';
 import { buildBrandPath } from '../utils/brandSlug';
 import DrinkCard from '../components/DrinkCard';
@@ -700,44 +704,53 @@ const ProductPage = () => {
     : product.brand;
   const normalizedBarcode = product.barcode != null ? String(product.barcode).trim() : '';
   const isGtinCandidate = /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(normalizedBarcode);
+  /** Google merchant listing: incomplete OfferShippingDetails (missing deliveryTime, etc.) marks items invalid. Prefer org-level shipping/returns; keep Offer minimal. */
+  const canonicalOrigin = getCanonicalSiteOrigin();
+  let absoluteImageUrl = '';
+  if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
+    absoluteImageUrl = imageUrl;
+  } else if (imageUrl) {
+    absoluteImageUrl = `${canonicalOrigin}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+  }
+  const schemaImages = absoluteImageUrl
+    ? [absoluteImageUrl]
+    : [`${canonicalOrigin}/assets/images/drinks/placeholder.svg`];
+  const rawOfferPrice = parseFloat(resolvedPrice);
+  const schemaPrice = Number.isFinite(rawOfferPrice)
+    ? Math.round(rawOfferPrice * 100) / 100
+    : 0;
+  const validUntil = new Date();
+  validUntil.setFullYear(validUntil.getFullYear() + 1);
+  const priceValidUntil = validUntil.toISOString().slice(0, 10);
+
+  let gtinFields = {};
+  if (isGtinCandidate) {
+    const len = normalizedBarcode.length;
+    if (len === 8) gtinFields = { gtin8: normalizedBarcode };
+    else if (len === 12) gtinFields = { gtin12: normalizedBarcode };
+    else if (len === 13) gtinFields = { gtin13: normalizedBarcode };
+    else if (len === 14) gtinFields = { gtin14: normalizedBarcode };
+  }
+
   const productStructuredData = {
-    '@context': 'https://schema.org',
+    '@context': 'https://schema.org/',
     '@type': 'Product',
     name: product.name,
-    image: imageUrl ? [imageUrl] : undefined,
+    image: schemaImages,
     description: productDescription || `${product.name} from Dial a Drink Kenya.`,
     brand: brandName ? { '@type': 'Brand', name: brandName } : undefined,
     sku: product.id != null ? String(product.id) : undefined,
-    ...(isGtinCandidate ? { gtin: normalizedBarcode } : {}),
+    ...gtinFields,
     offers: {
       '@type': 'Offer',
       url: buildProductCanonicalUrl(product),
       priceCurrency: 'KES',
-      price: Number(resolvedPrice).toFixed(2),
+      price: schemaPrice,
+      priceValidUntil,
       availability: inStock
         ? 'https://schema.org/InStock'
         : 'https://schema.org/OutOfStock',
-      itemCondition: 'https://schema.org/NewCondition',
-      shippingDetails: {
-        '@type': 'OfferShippingDetails',
-        shippingDestination: {
-          '@type': 'DefinedRegion',
-          addressCountry: 'KE'
-        },
-        shippingRate: {
-          '@type': 'MonetaryAmount',
-          value: '0.00',
-          currency: 'KES'
-        }
-      },
-      hasMerchantReturnPolicy: {
-        '@type': 'MerchantReturnPolicy',
-        applicableCountry: 'KE',
-        returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
-        merchantReturnDays: 2,
-        returnMethod: 'https://schema.org/ReturnByMail',
-        returnFees: 'https://schema.org/FreeReturn'
-      }
+      itemCondition: 'https://schema.org/NewCondition'
     }
   };
 
