@@ -40,6 +40,8 @@ const POS = () => {
   const [drinks, setDrinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [customersLoading, setCustomersLoading] = useState(false);
   
   // Account and Customer
   const [accountId, setAccountId] = useState('');
@@ -74,51 +76,75 @@ const POS = () => {
     fetchData();
   }, []);
 
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchProducts(productSearch);
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productSearch]);
+
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchCustomers(customerSearch);
+    }, 250);
+
+    return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customerSearch]);
+
+  const fetchProducts = async (searchTerm = '') => {
+    try {
+      setProductsLoading(true);
+      const response = await api.get('/pos/drinks', {
+        params: {
+          search: searchTerm || undefined,
+          limit: searchTerm && searchTerm.trim() ? 50 : 30,
+          offset: 0
+        }
+      });
+
+      const drinksData = response.data;
+      const drinksArray = Array.isArray(drinksData)
+        ? drinksData
+        : (drinksData?.products || []);
+      setDrinks(drinksArray);
+    } catch (err) {
+      console.error('Error fetching POS products:', err);
+      setError(err.response?.data?.error || 'Failed to load products');
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const fetchCustomers = async (searchTerm = '') => {
+    const term = (searchTerm || '').trim();
+    if (term.length < 3) {
+      setCustomers([]);
+      return;
+    }
+
+    try {
+      setCustomersLoading(true);
+      const response = await api.get('/pos/customers/search', {
+        params: { q: term }
+      });
+      const results = Array.isArray(response?.data?.data) ? response.data.data : [];
+      setCustomers(results);
+    } catch (err) {
+      console.error('Error searching POS customers:', err);
+      setCustomers([]);
+    } finally {
+      setCustomersLoading(false);
+    }
+  };
+
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [drinksResponse, accountsResponse, customersResponse] = await Promise.all([
-        api.get('/pos/drinks').catch(() => api.get('/drinks')),
-        api.get('/admin/accounts').catch(() => ({ data: [] })),
-        api.get('/admin/customers').catch(() => ({ data: { customers: [] } }))
-      ]);
-      
-      // Handle POS endpoint response format: { products: [...], total, ... }
-      // or regular drinks endpoint: [...]
-      const drinksData = drinksResponse.data;
-      const drinksArray = Array.isArray(drinksData) 
-        ? drinksData 
-        : (drinksData?.products || []);
-      
-      // Debug logging to verify data structure
-      console.log('[POS] Drinks response:', {
-        isArray: Array.isArray(drinksData),
-        hasProducts: !!drinksData?.products,
-        productsLength: drinksData?.products?.length || 0,
-        drinksArrayLength: drinksArray.length,
-        firstDrink: drinksArray[0] ? {
-          id: drinksArray[0].id,
-          name: drinksArray[0].name,
-          hasCapacityPricing: !!drinksArray[0].capacityPricing,
-          capacityPricing: drinksArray[0].capacityPricing
-        } : null
-      });
-      
-      setDrinks(drinksArray);
+      const accountsResponse = await api.get('/admin/accounts').catch(() => ({ data: [] }));
       setAccounts(accountsResponse.data || []);
-      
-      // Handle paginated response from /admin/customers
-      let customersArray = [];
-      if (customersResponse.data) {
-        if (Array.isArray(customersResponse.data)) {
-          // Direct array (legacy format)
-          customersArray = customersResponse.data;
-        } else if (customersResponse.data.customers && Array.isArray(customersResponse.data.customers)) {
-          // Paginated response: { customers: [...], total: ... }
-          customersArray = customersResponse.data.customers;
-        }
-      }
-      setCustomers(customersArray);
     } catch (err) {
       console.error('Error fetching POS data:', err);
       setError(err.response?.data?.error || 'Failed to load POS data');
@@ -129,6 +155,7 @@ const POS = () => {
 
   const handleCustomerSearch = async (searchValue) => {
     setCustomerSearch(searchValue);
+    setCustomerPhone(searchValue || '');
     
     // If search value looks like a phone number and no customer is selected, check if customer exists
     if (searchValue && !selectedCustomer) {
@@ -257,6 +284,18 @@ const POS = () => {
       .toLowerCase()
       .replace(/\s+/g, '');
 
+  const parseStockByCapacity = (value) => {
+    if (!value) return null;
+    if (typeof value === 'object' && !Array.isArray(value)) return value;
+    if (typeof value !== 'string') return null;
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
   const capacityUnitMultiplier = (capacityLabel) => {
     const raw = String(capacityLabel || '').trim().toLowerCase();
     if (!raw) return 1;
@@ -277,15 +316,22 @@ const POS = () => {
   };
 
   const getCapacityStock = (product, capacity) => {
-    const stockByCapacity =
-      product?.stockByCapacity && typeof product.stockByCapacity === 'object'
-        ? product.stockByCapacity
-        : null;
+    const stockByCapacity = parseStockByCapacity(product?.stockByCapacity);
 
-    let capStock =
+    const exactStock =
       stockByCapacity && stockByCapacity[capacity] != null
         ? stockByCapacity[capacity]
-        : product?.stock ?? 0;
+        : null;
+
+    const normalizedCapacity = normalizeCapacityKey(capacity);
+    const normalizedMatch = stockByCapacity
+      ? Object.entries(stockByCapacity).find(([key]) => normalizeCapacityKey(key) === normalizedCapacity)
+      : null;
+
+    let capStock =
+      exactStock != null
+        ? exactStock
+        : (normalizedMatch ? normalizedMatch[1] : (product?.stock ?? 0));
 
     if (
       stockByCapacity &&
@@ -496,6 +542,7 @@ const POS = () => {
                     <Autocomplete
                       freeSolo
                       options={customers}
+                    loading={customersLoading}
                       getOptionLabel={(option) => {
                         if (typeof option === 'string') return option;
                         const name = option.customerName || option.name || 'Unknown';
@@ -770,6 +817,7 @@ const POS = () => {
                 <TableCell>
                   <Autocomplete
                     options={drinks}
+                    loading={productsLoading}
                     getOptionLabel={(option) => option.name || ''}
                     isOptionEqualToValue={(option, value) => option?.id === value?.id}
                     value={selectedProduct}
@@ -793,6 +841,7 @@ const POS = () => {
                         return option.name.toLowerCase().includes(searchTerm);
                       });
                     }}
+                    noOptionsText={productSearch.trim().length < 2 ? 'Type at least 2 letters to search products' : 'No products found'}
                     renderOption={(props, option) => {
                       const { key, ...restProps } = props;
 

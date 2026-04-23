@@ -577,7 +577,8 @@ router.post('/order/cash', verifyAdmin, enforceAdminAccessPaywall, async (req, r
       orderItems.push({
         drinkId: item.drinkId,
         quantity: item.quantity,
-        price: priceToUse
+        price: priceToUse,
+        selectedCapacity: item.selectedCapacity ? String(item.selectedCapacity).trim() : null
       });
     }
 
@@ -608,7 +609,8 @@ router.post('/order/cash', verifyAdmin, enforceAdminAccessPaywall, async (req, r
         orderId: order.id,
         drinkId: item.drinkId,
         quantity: item.quantity,
-        price: item.price
+        price: item.price,
+        selectedCapacity: item.selectedCapacity || null
       }, { transaction });
     }
 
@@ -733,7 +735,8 @@ router.post('/order/mpesa', verifyAdmin, enforceAdminAccessPaywall, async (req, 
       orderItems.push({
         drinkId: item.drinkId,
         quantity: item.quantity,
-        price: priceToUse
+        price: priceToUse,
+        selectedCapacity: item.selectedCapacity ? String(item.selectedCapacity).trim() : null
       });
     }
 
@@ -764,7 +767,8 @@ router.post('/order/mpesa', verifyAdmin, enforceAdminAccessPaywall, async (req, 
         orderId: order.id,
         drinkId: item.drinkId,
         quantity: item.quantity,
-        price: item.price
+        price: item.price,
+        selectedCapacity: item.selectedCapacity || null
       }, { transaction });
     }
 
