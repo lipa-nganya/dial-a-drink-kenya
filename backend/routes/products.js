@@ -82,8 +82,11 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
       return res.status(404).json({ error: 'Category not found for this product' });
     }
 
-    if (!categorySlugMatchesUrl(drink.category, categorySlug)) {
-      return res.status(404).json({ error: 'Product not found in this category' });
+    const categoryUrlOk = categorySlugMatchesUrl(drink.category, categorySlug);
+    if (!categoryUrlOk) {
+      console.warn(
+        `[products] Category segment mismatch for drink ${drink.id}: URL="/${categorySlug}/…" vs product category slug="${drink.category.slug}" — returning product so client can canonicalize`
+      );
     }
 
     // Record product details view (clicks) - fire and forget, raw SQL so it works even if model/column was not migrated yet
@@ -103,7 +106,10 @@ router.get('/:categorySlug/:productSlug', async (req, res) => {
     });
 
     // Ensure the response always has a category.slug value, even if the DB column is null
-    if (!drink.category.slug) {
+    const computedCategorySlug =
+      normalizeSlug(drink.category.slug || '') ||
+      normalizeSlug(generateCategorySlugFromName(drink.category.name));
+    if (!drink.category.slug && computedCategorySlug) {
       drink.category.slug = computedCategorySlug;
     }
 

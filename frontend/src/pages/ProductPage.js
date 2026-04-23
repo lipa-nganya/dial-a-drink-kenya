@@ -176,7 +176,30 @@ const ProductPage = () => {
         navigate(`/${normalizeSlug(product.category.slug)}/${normalizeSlug(product.slug)}`, { replace: true });
         return;
       }
-      
+
+      // Wrong category segment (indexed URL, slug regen, or drift) — same product slug; fix path without dropping ?query (srsltid, utm_*).
+      if (isCategoryBasedUrl && product.category && product.slug) {
+        try {
+          const expectedPath = new URL(buildProductCanonicalUrl(product)).pathname.replace(/\/$/, '') || '/';
+          const currentPath = location.pathname.replace(/\/$/, '') || '/';
+          if (expectedPath !== currentPath) {
+            navigate(`${expectedPath}${location.search || ''}`, { replace: true });
+            return;
+          }
+        } catch {
+          const catSeg = normalizeSlug(product.category.slug || product.category.name || '');
+          const prodSeg = normalizeSlug(product.slug);
+          if (catSeg && prodSeg) {
+            const want = `/${catSeg}/${prodSeg}`;
+            const have = location.pathname.replace(/\/$/, '') || '/';
+            if (want !== have) {
+              navigate(`${want}${location.search || ''}`, { replace: true });
+              return;
+            }
+          }
+        }
+      }
+
       // Prefer slug-based canonical when product data is canonical (overrides pathname-based from CanonicalHead)
       ensureCanonicalLink(buildProductCanonicalUrl(product));
       
