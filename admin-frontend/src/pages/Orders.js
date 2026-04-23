@@ -68,7 +68,6 @@ import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
-const ORDERS_SUMMARY_QUERY = '/admin/orders?summary=1&limit=150';
 
 /** Matches admin API: amounts editable unless cancelled, or incomplete paid/completed combos. Paid + completed is allowed (reconciliation). */
 function canEditOrderFinancialAmounts(order) {
@@ -176,7 +175,7 @@ const Orders = () => {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [processingCancellationRequest, setProcessingCancellationRequest] = useState(false);
 
-  const openOrderDetails = (order) => {
+  const openOrderDetails = async (order) => {
     const amounts = computeOrderDisplayAmounts(order);
     const orderWithBreakdown = {
       ...order,
@@ -199,6 +198,25 @@ const Orders = () => {
     );
     setRecentlyUpdatedInOrderDetail({ deliveryFee: false, territory: false });
     setOrderDetailDialogOpen(true);
+
+    try {
+      const response = await api.get(`/admin/orders?orderId=${order.id}`);
+      const fullOrder = Array.isArray(response.data)
+        ? response.data[0]
+        : (Array.isArray(response.data?.orders) ? response.data.orders[0] : null);
+      if (!fullOrder) return;
+
+      const fullAmounts = computeOrderDisplayAmounts(fullOrder);
+      setSelectedOrderForDetail({
+        ...fullOrder,
+        itemsTotal: Math.round(fullAmounts.itemsSubtotal),
+        convenienceFee: Math.round(fullAmounts.convenienceFee),
+        deliveryFee: Math.round(fullAmounts.territoryDeliveryFee),
+        orderValue: Math.round(fullAmounts.orderValue)
+      });
+    } catch (err) {
+      console.error('Failed to load full order details:', err);
+    }
   };
   
   // Route Optimisation state (kept for fetchRiderRoutes function which is still called)
@@ -391,7 +409,7 @@ const Orders = () => {
       
       // Fetch the full order details with items and transactions
       try {
-        const response = await api.get(ORDERS_SUMMARY_QUERY);
+        const response = await api.get('/admin/orders');
         const allOrders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
         
         // Find the new order (should be the most recent, so check first few)
@@ -775,7 +793,7 @@ const Orders = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await api.get(ORDERS_SUMMARY_QUERY);
+      const response = await api.get('/admin/orders');
       let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
       
       // Filter out any undefined or null orders
@@ -1665,7 +1683,7 @@ const Orders = () => {
       setRoutesLoading(true);
       const [ridersResponse, ordersResponse, locationsResponse] = await Promise.all([
         api.get('/drivers'),
-        api.get('/admin/orders?summary=1&limit=300'),
+        api.get('/admin/orders'),
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
       
