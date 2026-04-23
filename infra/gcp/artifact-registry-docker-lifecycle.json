@@ -1,20 +1,18 @@
-{
-  "rules": [
-    {
-      "description": "Remove untagged Docker images older than 7 days (orphaned digests when tags move to new images)",
-      "action": { "type": "DELETE" },
-      "condition": {
-        "tagState": "UNTAGGED",
-        "olderThan": "604800s"
-      }
-    },
-    {
-      "description": "Remove tagged images older than 120 days (timestamped deploy tags accumulate; lengthen if you need older rollbacks)",
-      "action": { "type": "DELETE" },
-      "condition": {
-        "tagState": "TAGGED",
-        "olderThan": "10368000s"
-      }
+[
+  {
+    "name": "delete-untagged-7d",
+    "action": { "type": "Delete" },
+    "condition": {
+      "tagState": "untagged",
+      "olderThan": "7d"
     }
-  ]
-}
+  },
+  {
+    "name": "delete-tagged-120d",
+    "action": { "type": "Delete" },
+    "condition": {
+      "tagState": "tagged",
+      "olderThan": "120d"
+    }
+  }
+]
