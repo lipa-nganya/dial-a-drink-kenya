@@ -2729,6 +2729,8 @@ router.get('/orders/unassigned', verifyAdmin, async (req, res) => {
 // Get all orders (admin)
 router.get('/orders', verifyAdmin, async (req, res) => {
   try {
+    const orderIdFilter = parseInt(req.query.orderId, 10);
+    const hasOrderIdFilter = Number.isFinite(orderIdFilter) && orderIdFilter > 0;
     const summaryMode = req.query.summary === '1' || req.query.summary === 'true';
     const limit = Math.min(Math.max(parseInt(req.query.limit || '120', 10) || 120, 1), 300);
     const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
@@ -2855,6 +2857,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
 
     const ordersResult = await db.Order.findAndCountAll({
       attributes: orderAttributes,
+      where: hasOrderIdFilter ? { id: orderIdFilter } : undefined,
       include: orderIncludes,
       order: [['createdAt', 'DESC']],
       ...(summaryMode ? { limit, offset, distinct: true } : {})
