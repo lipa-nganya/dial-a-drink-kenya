@@ -204,8 +204,8 @@ const Orders = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/admin/orders');
-      let orders = response.data;
+      const response = await api.get('/admin/orders?summary=1&limit=150');
+      let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
       
       // Additional sync: Check each order and ensure paymentStatus matches transaction status
       orders = orders.map(order => {
@@ -236,6 +236,8 @@ const Orders = () => {
   // Get transaction status for an order
   const getOrderTransactionStatus = (order) => {
     if (!order.transactions || order.transactions.length === 0) {
+      if (order.paymentStatus === 'paid') return 'completed';
+      if (order.paymentStatus === 'failed') return 'failed';
       return 'pending'; // No transaction created yet
     }
     // Get the most recent transaction
@@ -683,10 +685,10 @@ const Orders = () => {
                     </TableCell>
                     <TableCell>
                       <Typography variant="body2">
-                        {order.items?.length || 0} item(s)
+                        {(order.items?.length || Number(order.itemsCount) || 0)} item(s)
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {order.items?.slice(0, 2).map(item => item.drink?.name).join(', ')}
+                        {order.items?.slice(0, 2).map(item => item.drink?.name).join(', ') || 'Details on open'}
                         {order.items?.length > 2 && '...'}
                       </Typography>
                     </TableCell>

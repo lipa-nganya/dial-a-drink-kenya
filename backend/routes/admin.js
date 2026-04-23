@@ -1223,12 +1223,6 @@ const adminDrinkListIncludes = [
     required: false
   },
   {
-    model: db.SubCategory,
-    as: 'subCategory',
-    required: false,
-    attributes: ['id', 'name', 'categoryId']
-  },
-  {
     model: db.Brand,
     as: 'brand',
     required: false,
@@ -2735,6 +2729,9 @@ router.get('/orders/unassigned', verifyAdmin, async (req, res) => {
 // Get all orders (admin)
 router.get('/orders', verifyAdmin, async (req, res) => {
   try {
+    const summaryMode = req.query.summary === '1' || req.query.summary === 'true';
+    const limit = Math.min(Math.max(parseInt(req.query.limit || '120', 10) || 120, 1), 300);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
     // Get actual columns that exist in the database for Order
     let validOrderAttributes;
     try {
@@ -2778,56 +2775,91 @@ router.get('/orders', verifyAdmin, async (req, res) => {
     }
     
     // Build includes array conditionally
-    const orderIncludes = [
-      {
-        model: db.OrderItem,
-        as: 'items',
-        separate: true,
-        required: false,
-        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
-        include: [
+    const orderIncludes = summaryMode
+      ? [
           {
-            model: db.Drink,
-            as: 'drink',
+            model: db.Driver,
+            as: 'driver',
             required: false,
-            attributes: validDrinkAttributesForOrders
+            attributes: ['id', 'name', 'phoneNumber', 'status']
+          },
+          {
+            model: db.Territory,
+            as: 'territory',
+            required: false,
+            attributes: ['id', 'name']
+          },
+          {
+            model: db.Admin,
+            as: 'servicedByAdmin',
+            required: false,
+            attributes: ['id', 'username', 'email', 'name']
           }
         ]
-      },
-      {
-        model: db.Transaction,
-        as: 'transactions',
-        separate: true,
-        required: false,
-        attributes: ['id', 'orderId', 'driverId', 'driverWalletId', 'transactionType', 'paymentMethod', 'paymentProvider', 'amount', 'status', 'paymentStatus', 'receiptNumber', 'checkoutRequestID', 'merchantRequestID', 'phoneNumber', 'transactionDate', 'notes', 'createdAt', 'updatedAt']
-      },
-      {
-        model: db.Driver,
-        as: 'driver',
-        required: false,
-        attributes: ['id', 'name', 'phoneNumber', 'status']
-      },
-      {
-        model: db.Territory,
-        as: 'territory',
-        required: false,
-        attributes: ['id', 'name']
-      },
-      {
-        model: db.Admin,
-        as: 'servicedByAdmin',
-        required: false,
-        attributes: ['id', 'username', 'email', 'name']
-      }
-    ];
+      : [
+          {
+            model: db.OrderItem,
+            as: 'items',
+            separate: true,
+            required: false,
+            attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
+            include: [
+              {
+                model: db.Drink,
+                as: 'drink',
+                required: false,
+                attributes: validDrinkAttributesForOrders
+              }
+            ]
+          },
+          {
+            model: db.Transaction,
+            as: 'transactions',
+            separate: true,
+            required: false,
+            attributes: ['id', 'orderId', 'driverId', 'driverWalletId', 'transactionType', 'paymentMethod', 'paymentProvider', 'amount', 'status', 'paymentStatus', 'receiptNumber', 'checkoutRequestID', 'merchantRequestID', 'phoneNumber', 'transactionDate', 'notes', 'createdAt', 'updatedAt']
+          },
+          {
+            model: db.Driver,
+            as: 'driver',
+            required: false,
+            attributes: ['id', 'name', 'phoneNumber', 'status']
+          },
+          {
+            model: db.Territory,
+            as: 'territory',
+            required: false,
+            attributes: ['id', 'name']
+          },
+          {
+            model: db.Admin,
+            as: 'servicedByAdmin',
+            required: false,
+            attributes: ['id', 'username', 'email', 'name']
+          }
+        ];
     
     // Branch association removed - no longer relevant/displayed
     
-    const orders = await db.Order.findAll({
-      attributes: validOrderAttributes,
+    const orderAttributes = summaryMode
+      ? [
+          ...validOrderAttributes,
+          [
+            db.Sequelize.literal(
+              '(SELECT COUNT(*) FROM order_items oi WHERE oi."orderId" = "Order"."id")'
+            ),
+            'itemsCount'
+          ]
+        ]
+      : validOrderAttributes;
+
+    const ordersResult = await db.Order.findAndCountAll({
+      attributes: orderAttributes,
       include: orderIncludes,
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      ...(summaryMode ? { limit, offset, distinct: true } : {})
     });
+    const orders = ordersResult.rows || [];
 
     // Map items to orderItems for compatibility
     const ordersWithMappedItems = orders.map(order => {
@@ -2837,6 +2869,15 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       }
       return orderData;
     });
+
+    if (summaryMode) {
+      return res.json({
+        orders: ordersWithMappedItems,
+        total: ordersResult.count || 0,
+        limit,
+        offset
+      });
+    }
 
     res.json(ordersWithMappedItems);
   } catch (error) {
