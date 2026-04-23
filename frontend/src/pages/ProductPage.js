@@ -45,6 +45,7 @@ import { stripHtml } from '../utils/stripHtml';
 import {
   ensureCanonicalLink,
   buildProductCanonicalUrl,
+  buildProductSchemaImageList,
   getCanonicalSiteOrigin,
   stripTrackingSearchParams,
   normalizePathname
@@ -755,17 +756,18 @@ const ProductPage = () => {
     : product.brand;
   const normalizedBarcode = product.barcode != null ? String(product.barcode).trim() : '';
   const isGtinCandidate = /^\d{8}$|^\d{12}$|^\d{13}$|^\d{14}$/.test(normalizedBarcode);
-  /** Google merchant listing: incomplete OfferShippingDetails (missing deliveryTime, etc.) marks items invalid. Prefer org-level shipping/returns; keep Offer minimal. */
+  /** JSON-LD image: must be absolute HTTPS (Rich Results reject data:, http, or malformed URLs). */
   const canonicalOrigin = getCanonicalSiteOrigin();
-  let absoluteImageUrl = '';
-  if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
-    absoluteImageUrl = imageUrl;
-  } else if (imageUrl) {
-    absoluteImageUrl = `${canonicalOrigin}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+  let resolvedForSchema = '';
+  if (imageUrl && !imageUrl.startsWith('data:') && /^https?:\/\//i.test(imageUrl)) {
+    resolvedForSchema = imageUrl;
+  } else if (imageUrl && !imageUrl.startsWith('data:')) {
+    resolvedForSchema = `${canonicalOrigin}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
   }
-  const schemaImages = absoluteImageUrl
-    ? [absoluteImageUrl]
-    : [`${canonicalOrigin}/assets/images/drinks/placeholder.svg`];
+  const schemaImages = buildProductSchemaImageList({
+    resolvedUrl: resolvedForSchema,
+    canonicalOrigin
+  });
   const rawOfferPrice = parseFloat(resolvedPrice);
   const schemaPrice = Number.isFinite(rawOfferPrice)
     ? Math.round(rawOfferPrice * 100) / 100

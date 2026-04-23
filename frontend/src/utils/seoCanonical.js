@@ -143,6 +143,40 @@ export function buildProductCanonicalUrl(product) {
 }
 
 /**
+ * Product JSON-LD `image` must be absolute HTTPS URLs crawlable by Google — not data: URIs or malformed strings.
+ * @param {{ resolvedUrl: string, canonicalOrigin?: string }} opts — resolvedUrl from getImageUrl() / similar
+ * @returns {string[]} Non-empty array of strings for schema.org image
+ */
+export function buildProductSchemaImageList(opts) {
+  const origin = (opts.canonicalOrigin || getCanonicalSiteOrigin()).replace(/\/$/, '');
+  const fallback = `${origin}/assets/images/drinks/placeholder.svg`;
+  let raw = (opts.resolvedUrl || '').trim();
+
+  // data: URIs are invalid for Rich Results Product image (use visible <img> only).
+  if (!raw || raw.startsWith('data:')) {
+    return [fallback];
+  }
+
+  try {
+    if (raw.startsWith('//')) {
+      raw = `https:${raw}`;
+    } else if (/^http:\/\//i.test(raw)) {
+      raw = raw.replace(/^http:/i, 'https:');
+    } else if (!/^https:\/\//i.test(raw)) {
+      raw = raw.startsWith('/') ? `${origin}${raw}` : `${origin}/${raw}`;
+    }
+
+    const u = new URL(raw);
+    if (u.protocol !== 'https:') {
+      return [fallback];
+    }
+    return [u.href];
+  } catch {
+    return [fallback];
+  }
+}
+
+/**
  * Ensure a single <link rel="canonical"> in document head.
  */
 export function ensureCanonicalLink(href) {
