@@ -4,7 +4,6 @@ import {
   Typography,
   Box,
   Card,
-  CardMedia,
   CardContent,
   Button,
   Chip,
@@ -20,7 +19,13 @@ import {
   FormControl,
   InputLabel,
   Paper,
-  Pagination
+  Pagination,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow
 } from '@mui/material';
 import {
   LocalBar,
@@ -58,7 +63,7 @@ const InventoryPage = () => {
   const [offerFilter, setOfferFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   
-  const itemsPerPage = 16; // 4 rows × 4 columns
+  const itemsPerPage = 40; // list view default
 
   // Helper function to get full image URL
   const getImageUrl = (imagePath) => {
@@ -590,232 +595,77 @@ const InventoryPage = () => {
         </Card>
       ) : (
         <>
-          <Box sx={{ 
-            display: 'grid',
-            gridTemplateColumns: {
-              xs: '1fr',
-              sm: 'repeat(2, 1fr)',
-              md: 'repeat(3, 1fr)',
-              lg: 'repeat(4, 1fr)'
-            },
-            gap: 2,
-            justifyContent: 'center'
-          }}>
-            {paginatedDrinks.map((drink) => (
-              <Card 
-                key={drink.id}
-                sx={{ 
-                  width: '100%',
-                  height: '100%',
-                  minHeight: '380px',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  backgroundColor: '#fff',
-                  transition: 'transform 0.2s',
-                  '&:hover': {
-                    transform: 'translateY(-2px)',
-                    boxShadow: 2
-                  }
-                }}
-              >
-                <Box
-                  sx={{
-                    width: '100%',
-                    height: '180px',
-                    minHeight: '180px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: '#fff',
-                    overflow: 'hidden'
-                  }}
-                >
-                  <CardMedia
-                    component="img"
-                    image={getImageUrl(drink.image)}
-                    alt={drink.name}
-                    sx={{ 
-                      objectFit: 'contain', 
-                      width: '100%',
-                      height: '100%',
-                      p: 1
-                    }}
-                  />
-                </Box>
-                <CardContent sx={{ flexGrow: 1, overflow: 'visible', display: 'flex', flexDirection: 'column', backgroundColor: '#fff' }}>
-                  {/* Status Label Above Name */}
-                  <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center' }}>
-                    {!drink.isAvailable ? (
-                      <Chip
-                        icon={<Cancel />}
-                        label="Out of Stock"
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: '#666',
-                          color: '#F5F5F5'
-                        }}
-                      />
-                    ) : drink.isPopular ? (
-                      <Chip
-                        icon={<LocalBar />}
-                        label="Popular"
-                        size="small"
-                        sx={{ 
-                          fontSize: '0.65rem', 
-                          height: '20px',
-                          backgroundColor: '#FF3366',
-                          color: '#F5F5F5'
-                        }}
-                      />
-                    ) : null}
-                  </Box>
-
-                  {/* Drink Name */}
-                  <Typography variant="subtitle1" component="div" sx={{ fontSize: '0.9rem', fontWeight: 'bold', mb: 0.5, color: '#000' }}>
-                    {drink.name}
-                  </Typography>
-
-                  {/* Hide description for Soft Drinks */}
-                  {drink.category?.name !== 'Soft Drinks' && drink.description && (
-                    <Typography
-                      variant="body2"
-                      sx={{ mb: 1, minHeight: '30px', fontSize: '0.75rem', color: '#000' }}
-                    >
-                      {stripHtml(drink.description)}
-                    </Typography>
-                  )}
-
-                  {/* Price Display */}
-                  <Box sx={{ mb: 1 }}>
-                    {drink.isOnOffer && drink.originalPrice ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            textDecoration: 'line-through', 
-                            color: '#666', 
-                            fontSize: '0.65rem' 
-                          }}
-                        >
-                          KES {Math.round(Number(drink.originalPrice))}
+          <TableContainer component={Paper}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>ID</TableCell>
+                  <TableCell>Name</TableCell>
+                  <TableCell>Category</TableCell>
+                  <TableCell>Brand</TableCell>
+                  <TableCell align="right">Price</TableCell>
+                  <TableCell>Stock</TableCell>
+                  <TableCell>Availability</TableCell>
+                  <TableCell>Updated</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {paginatedDrinks.map((drink) => (
+                  <TableRow key={drink.id} hover>
+                    <TableCell>#{drink.id}</TableCell>
+                    <TableCell>
+                      <Box>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {drink.name}
                         </Typography>
-                        <Typography 
-                          variant="body2" 
-                          sx={{ 
-                            color: '#FF3366', 
-                            fontWeight: 'bold', 
-                            fontSize: '0.7rem' 
-                          }}
-                        >
-                          KES {Math.round(Number(drink.price))}
-                        </Typography>
+                        {!!drink.description && (
+                          <Typography variant="caption" color="text.secondary">
+                            {stripHtml(drink.description).slice(0, 70)}
+                            {stripHtml(drink.description).length > 70 ? '…' : ''}
+                          </Typography>
+                        )}
                       </Box>
-                    ) : (
-                      <Typography 
-                        variant="body2" 
-                        sx={{ 
-                          color: '#000', 
-                          fontWeight: 'bold', 
-                          fontSize: '0.7rem' 
+                    </TableCell>
+                    <TableCell>{drink.category?.name || '-'}</TableCell>
+                    <TableCell>{drink.brand?.name || '-'}</TableCell>
+                    <TableCell align="right">KES {Math.round(Number(drink.price || 0))}</TableCell>
+                    <TableCell>{Number.isFinite(Number(drink.stock)) ? Number(drink.stock) : '-'}</TableCell>
+                    <TableCell>
+                      <FormControlLabel
+                        control={
+                          <Switch
+                            checked={!!drink.isAvailable}
+                            onChange={(e) => handleAvailabilityToggle(drink.id, e.target.checked)}
+                            size="small"
+                          />
+                        }
+                        label={drink.isAvailable ? 'Available' : 'Out'}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      {drink.updatedAt ? new Date(drink.updatedAt).toLocaleDateString() : '-'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        variant="contained"
+                        size="small"
+                        startIcon={<Edit />}
+                        onClick={() => handleEditDrink(drink)}
+                        sx={{
+                          backgroundColor: '#00E0B8',
+                          color: '#0D0D0D',
+                          '&:hover': { backgroundColor: '#00C4A3' }
                         }}
                       >
-                        KES {Math.round(Number(drink.price))}
-                      </Typography>
-                    )}
-                  </Box>
-
-                  {/* ABV Display */}
-                  {drink.abv && (
-                    <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', mb: 1, mt: 0 }}>
-                      <Chip
-                        label={`${Number(drink.abv)}% ABV`}
-                        size="small"
-                        sx={{
-                          backgroundColor: '#FF3366',
-                          color: '#F5F5F5',
-                          fontSize: '0.65rem',
-                          height: '20px'
-                        }}
-                      />
-                    </Box>
-                  )}
-
-                  {/* Category */}
-                  {drink.category && (
-                    <Box sx={{ mb: 1 }}>
-                      <Chip
-                        label={drink.category.name}
-                        size="small"
-                        sx={{
-                          fontSize: '0.65rem',
-                          height: '20px',
-                          backgroundColor: '#121212',
-                          color: '#00E0B8'
-                        }}
-                      />
-                    </Box>
-                  )}
-
-                  {/* Availability Toggle */}
-                  <Box sx={{ mb: 1, mt: 'auto' }}>
-                    <FormControlLabel
-                      control={
-                        <Switch
-                          checked={drink.isAvailable}
-                          onChange={(e) => handleAvailabilityToggle(drink.id, e.target.checked)}
-                          size="small"
-                          sx={{
-                            '& .MuiSwitch-switchBase.Mui-checked': {
-                              color: '#00E0B8',
-                            },
-                            '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                              backgroundColor: '#00E0B8',
-                            },
-                          }}
-                        />
-                      }
-                      label={
-                        <Typography variant="body2" sx={{ fontSize: '0.7rem', color: '#000' }}>
-                          {drink.isAvailable ? 'Available' : 'Out of Stock'}
-                        </Typography>
-                      }
-                    />
-                  </Box>
-
-                  {/* Edit Button */}
-                  <Box sx={{ mt: 'auto', mb: 1 }}>
-                    <Button
-                      fullWidth
-                      variant="contained"
-                      startIcon={<Edit />}
-                      onClick={() => handleEditDrink(drink)}
-                      size="small"
-                      sx={{
-                        backgroundColor: '#00E0B8',
-                        color: '#0D0D0D',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        py: 0.5,
-                        '&:hover': {
-                          backgroundColor: '#00C4A3',
-                          transform: 'translateY(-1px)'
-                        }
-                      }}
-                    >
-                      Edit Product
-                    </Button>
-                  </Box>
-
-                  {/* Last Updated */}
-                  <Typography variant="caption" sx={{ fontSize: '0.6rem', color: '#666', mt: 0.5, display: 'block', textAlign: 'center' }}>
-                    Updated: {new Date(drink.updatedAt).toLocaleDateString()}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
-          </Box>
+                        Edit
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
           {totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
               <Pagination
