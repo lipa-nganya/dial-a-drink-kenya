@@ -69,6 +69,18 @@ const requireSuperSuperAdmin = (req, res, next) => {
 const ELEVATED_ADMIN_ROLES = new Set(['super_admin', 'super_super_admin']);
 const VALID_ADMIN_ROLES = ['admin', 'manager', 'shop_agent', 'super_admin', 'super_super_admin'];
 const EMAIL_INVITE_ROLES = ['manager', 'admin', 'super_admin', 'super_super_admin'];
+const ADMIN_ORDER_SAFE_ATTRIBUTES = [
+  'id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress',
+  'totalAmount', 'convenienceFee', 'territoryDeliveryFee', 'tipAmount',
+  'status', 'paymentStatus', 'paymentType', 'paymentMethod',
+  'driverId', 'staffPurchaseDriverId', 'notes', 'createdAt', 'updatedAt'
+];
+const ADMIN_ORDER_ITEM_DRINK_ATTRIBUTES = [
+  'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId',
+  'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer',
+  'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv',
+  'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
+];
 
 function assertEmailInviteRoleAllowed(callerRole, targetRole) {
   const tr = String(targetRole || '').trim().toLowerCase();
@@ -2734,47 +2746,6 @@ router.get('/orders', verifyAdmin, async (req, res) => {
     const summaryMode = req.query.summary === '1' || req.query.summary === 'true';
     const limit = Math.min(Math.max(parseInt(req.query.limit || '120', 10) || 120, 1), 300);
     const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
-    // Get actual columns that exist in the database for Order
-    let validOrderAttributes;
-    try {
-      const [existingOrderColumns] = await db.sequelize.query(
-        "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
-      );
-      const orderColumnNames = new Set(existingOrderColumns.map(col => col.column_name.toLowerCase()));
-      
-      // Map model attributes to database column names and filter to only existing columns
-      validOrderAttributes = [];
-      for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
-        const dbColumnName = attrDef.field || attrName;
-        // Check if the database column exists (case-insensitive)
-        if (orderColumnNames.has(dbColumnName.toLowerCase())) {
-          validOrderAttributes.push(attrName);
-        }
-      }
-    } catch (schemaError) {
-      // Fallback: use a safe default set of attributes if schema query fails
-      console.warn('⚠️ Could not query information_schema for orders, using default attributes:', schemaError.message);
-      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'convenienceFee', 'territoryDeliveryFee', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'staffPurchaseDriverId', 'notes', 'createdAt', 'updatedAt'];
-    }
-
-    // Get actual columns that exist for Drink (used in order items) so we don't select e.g. nbv if migration not run
-    let validDrinkAttributesForOrders;
-    try {
-      const [existingDrinkColumns] = await db.sequelize.query(
-        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
-      );
-      const drinkColumnNames = new Set(existingDrinkColumns.map(col => col.column_name.toLowerCase()));
-      validDrinkAttributesForOrders = [];
-      for (const [attrName, attrDef] of Object.entries(db.Drink.rawAttributes)) {
-        const dbColumnName = attrDef.field || attrName;
-        if (drinkColumnNames.has(dbColumnName.toLowerCase())) {
-          validDrinkAttributesForOrders.push(attrName);
-        }
-      }
-    } catch (schemaError) {
-      console.warn('⚠️ Could not query information_schema for drinks (orders include), using default attributes:', schemaError.message);
-      validDrinkAttributesForOrders = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'];
-    }
     
     // Build includes array conditionally
     const orderIncludes = summaryMode
@@ -2810,7 +2781,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
                 model: db.Drink,
                 as: 'drink',
                 required: false,
-                attributes: validDrinkAttributesForOrders
+                attributes: ADMIN_ORDER_ITEM_DRINK_ATTRIBUTES
               }
             ]
           },
@@ -2845,7 +2816,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
     
     const orderAttributes = summaryMode
       ? [
-          ...validOrderAttributes,
+          ...ADMIN_ORDER_SAFE_ATTRIBUTES,
           [
             db.Sequelize.literal(
               '(SELECT COUNT(*) FROM order_items oi WHERE oi."orderId" = "Order"."id")'
@@ -2853,7 +2824,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
             'itemsCount'
           ]
         ]
-      : validOrderAttributes;
+      : ADMIN_ORDER_SAFE_ATTRIBUTES;
 
     const ordersResult = await db.Order.findAndCountAll({
       attributes: orderAttributes,

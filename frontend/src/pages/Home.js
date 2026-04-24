@@ -15,8 +15,8 @@ import { Link } from 'react-router-dom';
 import { buildBrandPath } from '../utils/brandSlug';
 
 const Home = () => {
-  const [drinks, setDrinks] = useState([]);
-  const [drinksLoading, setDrinksLoading] = useState(true);
+  const [popularDrinks, setPopularDrinks] = useState([]);
+  const [popularDrinksLoading, setPopularDrinksLoading] = useState(true);
   /** null = not loaded yet (avoid flashing cached bundled default hero before API returns) */
   const [heroImage, setHeroImage] = useState(null);
   const heroImageUrlRef = useRef(null); // Base image URL from settings (no cache-bust query)
@@ -36,7 +36,7 @@ const Home = () => {
   useEffect(() => {
     fetchHeroImage();
     fetchHeroLinkSettings();
-    fetchDrinks();
+    fetchPopularDrinks();
     fetchBrandFocusDrinks();
     fetchLimitedTimeOffers();
   }, []);
@@ -137,14 +137,18 @@ const Home = () => {
     }
   };
 
-  const fetchDrinks = async () => {
+  const fetchPopularDrinks = async () => {
     try {
-      const response = await api.get('/drinks');
-      setDrinks(Array.isArray(response.data) ? response.data : []);
+      const response = await api.get('/drinks', {
+        params: { popular: 'true' }
+      });
+      const drinks = Array.isArray(response.data) ? response.data : [];
+      setPopularDrinks(drinks);
     } catch (error) {
-      console.error('Error fetching drinks:', error);
+      console.error('Error fetching popular drinks:', error);
+      setPopularDrinks([]);
     } finally {
-      setDrinksLoading(false);
+      setPopularDrinksLoading(false);
     }
   };
 
@@ -381,14 +385,14 @@ const Home = () => {
               Popular Drinks
             </Typography>
             
-            {drinksLoading ? (
+            {popularDrinksLoading ? (
               <Typography textAlign="center">Loading popular drinks...</Typography>
             ) : (
               (() => {
-                let popularDrinks = drinks.filter(drink => drink && drink.isPopular);
+                let sortedPopularDrinks = popularDrinks.filter(drink => drink && drink.isPopular);
                 
                 // Sort: available items first, then by name
-                popularDrinks.sort((a, b) => {
+                sortedPopularDrinks.sort((a, b) => {
                   // First sort by availability (available items first)
                   if (a.isAvailable !== b.isAvailable) {
                     return b.isAvailable ? 1 : -1; // true (available) comes before false (out of stock)
@@ -399,7 +403,7 @@ const Home = () => {
                   return nameA.localeCompare(nameB);
                 });
                 
-                if (popularDrinks.length === 0) {
+                if (sortedPopularDrinks.length === 0) {
                   return (
                     <Typography textAlign="center" color="text.secondary">
                       No popular drinks available at the moment.
@@ -419,7 +423,7 @@ const Home = () => {
                     gap: { xs: 1, sm: 2 },
                     width: '100%'
                   }}>
-                    {popularDrinks.slice(0, 8).map((drink) => (
+                    {sortedPopularDrinks.slice(0, 8).map((drink) => (
                       <DrinkCard key={drink.id} drink={drink} />
                     ))}
                   </Box>
