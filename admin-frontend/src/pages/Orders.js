@@ -68,6 +68,7 @@ import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
+const ORDERS_SUMMARY_QUERY = '/admin/orders?summary=1&limit=150';
 
 /** Matches admin API: amounts editable unless cancelled, or incomplete paid/completed combos. Paid + completed is allowed (reconciliation). */
 function canEditOrderFinancialAmounts(order) {
@@ -97,6 +98,18 @@ function computeOrderSummaryCustomerTotal(order) {
   if (!order) return 0;
   const amounts = computeOrderDisplayAmounts(order);
   const fromLines = sumLineItemsSubtotal(order);
+  const hasLineItems = Array.isArray(order?.items) && order.items.length > 0;
+  const hasStoredItemsTotal =
+    order?.itemsTotal !== null &&
+    order?.itemsTotal !== undefined &&
+    order?.itemsTotal !== '' &&
+    Number.isFinite(Number(order.itemsTotal));
+
+  // Summary payloads intentionally omit items; in that case trust totalAmount directly.
+  if (!hasLineItems && !hasStoredItemsTotal && Number.isFinite(Number(order.totalAmount))) {
+    return Number(Number(order.totalAmount).toFixed(2));
+  }
+
   const itemsPart =
     fromLines != null ? fromLines : amounts.itemsSubtotal;
   return Number((itemsPart + amounts.convenienceFee + amounts.tipAmount).toFixed(2));
@@ -163,6 +176,7 @@ const Orders = () => {
   const [selectedTerritoryId, setSelectedTerritoryId] = useState('');
   const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ customer: false, deliveryFee: false, territory: false });
   const updatedFeeTimeoutRef = useRef(null);
+  const ordersRefreshTimeoutRef = useRef(null);
   const [savingOrderDetails, setSavingOrderDetails] = useState(false);
   const originalOrderDetailRef = useRef(null);
   
@@ -279,8 +293,10 @@ const Orders = () => {
 
   useEffect(() => {
     const feeTimeoutRef = updatedFeeTimeoutRef;
+    const refreshTimeoutRef = ordersRefreshTimeoutRef;
     return () => {
       if (feeTimeoutRef.current) clearTimeout(feeTimeoutRef.current);
+      if (refreshTimeoutRef.current) clearTimeout(refreshTimeoutRef.current);
     };
   }, []);
 
@@ -406,57 +422,15 @@ const Orders = () => {
     // Listen for new orders
     socket.on('new-order', async (data) => {
       console.log('✅ New order received via Socket.IO:', data);
-      
-      // Fetch the full order details with items and transactions
-      try {
-        const response = await api.get('/admin/orders');
-        const allOrders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
-        
-        // Find the new order (should be the most recent, so check first few)
-        const newOrder = allOrders.find(o => o.id === data.order?.id) || allOrders[0];
-        
-        if (newOrder) {
-          // Add or update order, then sort by status
-          setOrders(prevOrders => {
-            // Check if order already exists
-            const existingIndex = prevOrders.findIndex(o => o.id === newOrder.id);
-            let updated;
-            
-            if (existingIndex >= 0) {
-              // Update existing order
-              updated = [...prevOrders];
-              updated[existingIndex] = newOrder;
-            } else {
-              // Add new order
-              updated = [newOrder, ...prevOrders];
-            }
-            
-            // Sort by status priority
-            const sorted = sortOrdersByStatus(updated);
-            // Apply filters after update
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
-            return sorted;
-          });
-        }
-      } catch (error) {
-        console.error('Error fetching new order details:', error);
-        // Fallback: if order data is in the event, use it
-        if (data.order) {
-          setOrders(prevOrders => {
-            const exists = prevOrders.some(o => o.id === data.order.id);
-            if (!exists) {
-              return [data.order, ...prevOrders];
-            }
-            return prevOrders;
-          });
-        }
-      }
+
+      // Coalesce bursty socket events into a single summary refresh.
+      scheduleOrdersRefresh(400);
     });
 
     // Listen for order updates (including driver assignment)
     socket.on('order-updated', async (data) => {
       console.log('✅ Order updated via Socket.IO:', data);
-      await fetchOrders(); // Refresh orders list
+      scheduleOrdersRefresh();
     });
 
     // Listen for driver order response
@@ -514,7 +488,7 @@ const Orders = () => {
       });
       
       // Refresh orders to get latest data
-      await fetchOrders();
+      scheduleOrdersRefresh();
     });
 
     // Listen for order status updates from driver app
@@ -790,10 +764,10 @@ const Orders = () => {
     });
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = async ({ background = false } = {}) => {
     try {
-      setLoading(true);
-      const response = await api.get('/admin/orders');
+      if (!background) setLoading(true);
+      const response = await api.get(ORDERS_SUMMARY_QUERY);
       let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
 
       // Filter out any undefined or null orders
@@ -826,8 +800,15 @@ const Orders = () => {
       console.error('Error fetching orders:', error);
       setError(error.response?.data?.error || error.message || 'Error loading orders');
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
+  };
+
+  const scheduleOrdersRefresh = (delayMs = 900) => {
+    if (ordersRefreshTimeoutRef.current) clearTimeout(ordersRefreshTimeoutRef.current);
+    ordersRefreshTimeoutRef.current = setTimeout(() => {
+      fetchOrders({ background: true });
+    }, delayMs);
   };
 
   // Get transaction status for an order
@@ -1709,7 +1690,7 @@ const Orders = () => {
       setRoutesLoading(true);
       const [ridersResponse, ordersResponse, locationsResponse] = await Promise.all([
         api.get('/drivers'),
-        api.get('/admin/orders'),
+        api.get('/admin/orders?summary=1&limit=300'),
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
       
