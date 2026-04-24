@@ -4,6 +4,8 @@ const db = require('../models');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
+const sharp = require('sharp');
 const { Storage } = require('@google-cloud/storage');
 
 const heroImageUploadDir = path.join(__dirname, '../public/uploads/hero');
@@ -51,20 +53,37 @@ const getStorageClient = () => {
   return storageClient;
 };
 
-const uploadHeroToCloudStorage = async (localFilePath, originalName) => {
-  const extension = path.extname(originalName || localFilePath || '') || '.png';
-  const filename = `hero-${Date.now()}-${Math.round(Math.random() * 1e9)}${extension}`;
+const uploadHeroToCloudStorage = async (localFilePath) => {
+  const filename = `hero-${Date.now()}-${Math.round(Math.random() * 1e9)}.webp`;
   const objectPath = `hero/${filename}`;
+  const optimizedLocalPath = path.join(os.tmpdir(), filename);
+
+  // Produce a web-optimized hero image for LCP:
+  // - webp format (better compression vs png/jpeg)
+  // - max width tuned for hero rendering while preserving quality on HiDPI
+  // - strip metadata to reduce bytes
+  await sharp(localFilePath)
+    .rotate()
+    .resize({ width: 1400, withoutEnlargement: true })
+    .webp({ quality: 72, effort: 5 })
+    .toFile(optimizedLocalPath);
 
   const storage = getStorageClient();
   const bucket = storage.bucket(cloudStorageBucket);
-  await bucket.upload(localFilePath, {
+  await bucket.upload(optimizedLocalPath, {
     destination: objectPath,
     resumable: false,
     metadata: {
-      cacheControl: 'public, max-age=3600'
+      cacheControl: 'public, max-age=31536000, immutable',
+      contentType: 'image/webp'
     }
   });
+
+  try {
+    fs.unlinkSync(optimizedLocalPath);
+  } catch (unlinkErr) {
+    console.warn('Could not remove optimized hero temp file:', unlinkErr.message);
+  }
 
   return `https://storage.googleapis.com/${cloudStorageBucket}/${objectPath}`;
 };
@@ -88,7 +107,7 @@ router.post('/heroImage/upload', (req, res) => {
       try {
         // In Cloud Run/GCP, persist hero image in GCS so deploys/revisions do not wipe it.
         if (isCloudRuntime) {
-          const cloudUrl = await uploadHeroToCloudStorage(req.file.path, req.file.originalname);
+          const cloudUrl = await uploadHeroToCloudStorage(req.file.path);
           try {
             fs.unlinkSync(req.file.path);
           } catch (unlinkErr) {

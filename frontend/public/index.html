@@ -15,10 +15,23 @@
       content="Alcohol delivery in Nairobi and its environs in under 30 minutes! Wide variety of whisky, wine, cognacs, gin etc Call 0723688108 to order."
     />
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+    <!-- Preconnect critical origins to reduce handshake latency on first requests -->
+    <link rel="dns-prefetch" href="//deliveryos-production-backend-805803410802.us-central1.run.app">
+    <link rel="preconnect" href="https://deliveryos-production-backend-805803410802.us-central1.run.app" crossorigin>
+    <link rel="dns-prefetch" href="//storage.googleapis.com">
+    <link rel="preconnect" href="https://storage.googleapis.com" crossorigin>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+    <link
+      rel="preload"
+      href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Lato:wght@300;400;700&display=swap"
+      as="style"
+      onload="this.onload=null;this.rel='stylesheet'"
+    >
+    <noscript>
+      <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=Lato:wght@300;400;700&display=swap" rel="stylesheet">
+    </noscript>
     <!--
       manifest.json provides metadata used when your web app is installed on a
       user's mobile device or desktop. See https://developers.google.com/web/fundamentals/web-app-manifest/
@@ -82,7 +95,7 @@
         }
       }
     </style>
-    <script>
+      <script>
       (function() {
         function hideLoader() {
           var loader = document.getElementById('startup-loader');
@@ -93,9 +106,11 @@
           }, 220);
         }
 
+        // Hide at DOM ready to avoid blocking LCP behind the full-window overlay.
+        document.addEventListener('DOMContentLoaded', hideLoader);
         window.addEventListener('load', hideLoader);
-        // Safety fallback in case load event is delayed.
-        setTimeout(hideLoader, 2500);
+        // Safety fallback in case browser events are delayed.
+        setTimeout(hideLoader, 900);
       })();
 
       // Handle client-side routing for all paths

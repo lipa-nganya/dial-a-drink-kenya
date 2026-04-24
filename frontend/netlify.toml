@@ -28,6 +28,18 @@
   [headers.values]
     Content-Type = "text/plain; charset=utf-8"
 
+# Cache-busted CRA bundles are content-hashed; cache aggressively for repeat visits.
+[[headers]]
+  for = "/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Keep HTML entrypoint fresh so new deploys are picked quickly.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
+
 # Redirect all other routes to index.html for client-side routing
 [[redirects]]
   from = "/*"
