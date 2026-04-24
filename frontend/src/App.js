@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -12,44 +12,45 @@ import AdminHeader from './components/AdminHeader';
 import Footer from './components/Footer';
 import FloatingHelpButton from './components/FloatingHelpButton';
 import FloatingCallButton from './components/FloatingCallButton';
-import Home from './pages/Home';
-import Menu from './pages/Menu';
-import LegacyProducts from './pages/LegacyProducts';
-import TestOffers from './pages/TestOffers';
-import Offers from './pages/Offers';
-import Cart from './pages/Cart';
-import OrderSuccess from './pages/OrderSuccess';
-import OrderTracking from './pages/OrderTracking';
-import PaymentSuccess from './pages/PaymentSuccess';
-import Profile from './pages/Profile';
-import MyOrders from './pages/MyOrders';
-import CustomerLogin from './pages/CustomerLogin';
-import VerifyEmail from './pages/VerifyEmail';
-import ProductPage from './pages/ProductPage';
-import Brands from './pages/Brands';
-import BrandDetail from './pages/BrandDetail';
-import SuggestDrink from './pages/SuggestDrink';
-import ReportProblem from './pages/ReportProblem';
-import PrivacyPolicy from './pages/PrivacyPolicy';
-import TermsOfService from './pages/TermsOfService';
-import DeliveryLocations from './pages/DeliveryLocations';
-import LocationDetails from './pages/LocationDetails';
-import Pricelist from './pages/Pricelist';
-import Sitemap from './pages/Sitemap';
-import AdminOverview from './pages/admin/AdminOverview';
-import Orders from './pages/admin/Orders';
-import Inventory from './pages/admin/Inventory';
-import Transactions from './pages/admin/Transactions';
-import Notifications from './pages/admin/Notifications';
-import Drivers from './pages/admin/Drivers';
-import Payables from './pages/admin/Payables';
-import AdminLogin from './pages/admin/AdminLogin';
 import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
 import CanonicalHead from './components/CanonicalHead';
 import SEOHead from './components/SEOHead';
 import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
 import './App.css';
+
+const Home = lazy(() => import('./pages/Home'));
+const Menu = lazy(() => import('./pages/Menu'));
+const LegacyProducts = lazy(() => import('./pages/LegacyProducts'));
+const TestOffers = lazy(() => import('./pages/TestOffers'));
+const Offers = lazy(() => import('./pages/Offers'));
+const Cart = lazy(() => import('./pages/Cart'));
+const OrderSuccess = lazy(() => import('./pages/OrderSuccess'));
+const OrderTracking = lazy(() => import('./pages/OrderTracking'));
+const PaymentSuccess = lazy(() => import('./pages/PaymentSuccess'));
+const Profile = lazy(() => import('./pages/Profile'));
+const MyOrders = lazy(() => import('./pages/MyOrders'));
+const CustomerLogin = lazy(() => import('./pages/CustomerLogin'));
+const VerifyEmail = lazy(() => import('./pages/VerifyEmail'));
+const ProductPage = lazy(() => import('./pages/ProductPage'));
+const Brands = lazy(() => import('./pages/Brands'));
+const BrandDetail = lazy(() => import('./pages/BrandDetail'));
+const SuggestDrink = lazy(() => import('./pages/SuggestDrink'));
+const ReportProblem = lazy(() => import('./pages/ReportProblem'));
+const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const TermsOfService = lazy(() => import('./pages/TermsOfService'));
+const DeliveryLocations = lazy(() => import('./pages/DeliveryLocations'));
+const LocationDetails = lazy(() => import('./pages/LocationDetails'));
+const Pricelist = lazy(() => import('./pages/Pricelist'));
+const Sitemap = lazy(() => import('./pages/Sitemap'));
+const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'));
+const Orders = lazy(() => import('./pages/admin/Orders'));
+const Inventory = lazy(() => import('./pages/admin/Inventory'));
+const Transactions = lazy(() => import('./pages/admin/Transactions'));
+const Notifications = lazy(() => import('./pages/admin/Notifications'));
+const Drivers = lazy(() => import('./pages/admin/Drivers'));
+const Payables = lazy(() => import('./pages/admin/Payables'));
+const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
 
 const getMUITheme = () => {
   // Always use light mode for customer site
@@ -227,6 +228,7 @@ function AppContent() {
             pt: { xs: 0, md: '104px' },
           }}
         >
+        <Suspense fallback={<Box sx={{ py: 6, textAlign: 'center' }}>Loading...</Box>}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
@@ -271,6 +273,7 @@ function AppContent() {
           <Route path="/admin/drivers" element={<PrivateRoute><Drivers /></PrivateRoute>} />
           <Route path="/admin/payables" element={<PrivateRoute><Payables /></PrivateRoute>} />
         </Routes>
+        </Suspense>
         </Box>
         {!isAdminRoute && location.pathname !== '/cart' && location.pathname !== '/order-tracking' && <Footer />}
         

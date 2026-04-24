@@ -14,11 +14,24 @@ import { getBackendUrl } from '../utils/backendUrl';
 import { Link } from 'react-router-dom';
 import { buildBrandPath } from '../utils/brandSlug';
 
+const HERO_IMAGE_CACHE_KEY = 'heroImageUrl:v1';
+const HERO_IMAGE_UPDATED_AT_KEY = 'heroImageUpdatedAt:v1';
+
+const getInitialHeroImage = () => {
+  try {
+    const cached = window.localStorage.getItem(HERO_IMAGE_CACHE_KEY);
+    if (cached && typeof cached === 'string') return cached;
+  } catch (_) {
+    // Ignore localStorage errors and fallback to bundled image.
+  }
+  return '/assets/images/ads/hero-ad.png';
+};
+
 const Home = () => {
   const [popularDrinks, setPopularDrinks] = useState([]);
   const [popularDrinksLoading, setPopularDrinksLoading] = useState(true);
-  /** null = not loaded yet (avoid flashing cached bundled default hero before API returns) */
-  const [heroImage, setHeroImage] = useState(null);
+  // Render hero immediately (cached URL if available) to reduce LCP resource delay.
+  const [heroImage, setHeroImage] = useState(getInitialHeroImage);
   const heroImageUrlRef = useRef(null); // Base image URL from settings (no cache-bust query)
   const heroImageUpdatedAtRef = useRef(null); // Tracks Settings.updatedAt from API
   const heroLoadAttemptRef = useRef(0); // For img onError retry with new cache-bust
@@ -77,21 +90,23 @@ const Home = () => {
         heroImageUrlRef.current = imageUrl;
         heroImageUpdatedAtRef.current = nextUpdatedAt;
 
-        // Always append a fresh cache-buster on every successful fetch so:
-        // - Same URL + replaced file still reloads
-        // - Missing/unchanged updatedAt in API still updates the img src
-        // - Per-fetch Date.now() avoids CDN/browser serving an old byte stream
+        // Use stable version token so repeat visits can cache hero image.
+        // updatedAt change invalidates cache when admins update the hero asset.
         const updatedMs = nextUpdatedAt ? new Date(nextUpdatedAt).getTime() : NaN;
         const tokenBase = Number.isFinite(updatedMs) ? updatedMs : 0;
         const separator = imageUrl.includes('?') ? '&' : '?';
-        const cacheBustedUrl = `${imageUrl}${separator}_v=${tokenBase}&_r=${Date.now()}`;
+        const cacheBustedUrl = `${imageUrl}${separator}_v=${tokenBase}`;
         setHeroImage(cacheBustedUrl);
+        try {
+          window.localStorage.setItem(HERO_IMAGE_CACHE_KEY, cacheBustedUrl);
+          window.localStorage.setItem(HERO_IMAGE_UPDATED_AT_KEY, String(nextUpdatedAt || ''));
+        } catch (_) {
+          // Ignore storage write failures (private mode, quota exceeded, etc.)
+        }
       }
     } catch (error) {
       console.error('Error fetching hero image:', error);
-      const fallback = '/assets/images/ads/hero-ad.png';
-      const separator = fallback.includes('?') ? '&' : '?';
-      setHeroImage(`${fallback}${separator}_v=fallback&_r=${Date.now()}`);
+      // Keep current hero image to avoid visual thrash and late image swaps.
     }
   };
 
@@ -101,14 +116,14 @@ const Home = () => {
     // Retry once with a new bust param (transient CDN / TLS issues)
     if (attempt <= 1) {
       const sep = base.includes('?') ? '&' : '?';
-      e.target.src = `${base}${sep}_retry=${attempt}&_r=${Date.now()}`;
+      e.target.src = `${base}${sep}_retry=${attempt}`;
       return;
     }
     // Last resort: bundled default; then detach handler to avoid infinite onError loops
     const fb = '/assets/images/ads/hero-ad.png';
     const sep = fb.includes('?') ? '&' : '?';
     e.target.onerror = null;
-    e.target.src = `${fb}${sep}_err=1&_r=${Date.now()}`;
+    e.target.src = `${fb}${sep}_err=1`;
   };
 
   const fetchHeroLinkSettings = async () => {
@@ -240,27 +255,11 @@ const Home = () => {
               display: 'flex',
               justifyContent: 'center',
               maxHeight: { xs: '250px', md: '300px' },
+              minHeight: { xs: '200px', md: '300px' },
               overflow: 'hidden'
             }}
           >
-            {heroImage == null ? (
-              <Box
-                sx={{
-                  width: '100%',
-                  maxWidth: { xs: '100%', md: '1400px' },
-                  minHeight: { xs: 200, md: 240 },
-                  mx: 'auto',
-                  borderRadius: 2,
-                  bgcolor: 'action.hover',
-                  animation: 'pulse 1.5s ease-in-out infinite',
-                  '@keyframes pulse': {
-                    '0%, 100%': { opacity: 0.6 },
-                    '50%': { opacity: 0.9 },
-                  },
-                }}
-                aria-hidden
-              />
-            ) : (heroLinkType === 'product' && heroLinkTargetId) || (heroLinkType === 'brand' && heroLinkTargetId) || heroLinkType === 'brands' ? (
+            {(heroLinkType === 'product' && heroLinkTargetId) || (heroLinkType === 'brand' && heroLinkTargetId) || heroLinkType === 'brands' ? (
               <Link
                 to={
                   heroLinkType === 'product'
@@ -278,36 +277,44 @@ const Home = () => {
                     : 'View all brands'
                 }
               >
-                <Box
-                  component="img"
+                <img
                   key={heroImage}
                   src={heroImage}
                   alt="Special Offer - Premium Drinks"
-                  sx={{
-                    maxWidth: { xs: '100%', md: '1400px' },
-                    width: { xs: '100%', md: '100%' },
-                    maxHeight: { xs: '250px', md: '300px' },
-                    height: 'auto',
+                  width={1200}
+                  height={400}
+                  loading="eager"
+                  fetchpriority="high"
+                  decoding="async"
+                  style={{
+                    maxWidth: '1400px',
+                    width: '100%',
+                    maxHeight: '300px',
                     display: 'block',
-                    objectFit: 'contain',
+                    objectFit: 'cover',
+                    aspectRatio: '3 / 1',
                     cursor: 'pointer'
                   }}
                   onError={handleHeroImgError}
                 />
               </Link>
             ) : (
-              <Box
-                component="img"
+              <img
                 key={heroImage}
                 src={heroImage}
                 alt="Special Offer - Premium Drinks"
-                sx={{
-                  maxWidth: { xs: '100%', md: '1400px' },
-                  width: { xs: '100%', md: '100%' },
-                  maxHeight: { xs: '250px', md: '300px' },
-                  height: 'auto',
+                width={1200}
+                height={400}
+                loading="eager"
+                fetchpriority="high"
+                decoding="async"
+                style={{
+                  maxWidth: '1400px',
+                  width: '100%',
+                  maxHeight: '300px',
                   display: 'block',
-                  objectFit: 'contain'
+                  objectFit: 'cover',
+                  aspectRatio: '3 / 1'
                 }}
                 onError={handleHeroImgError}
               />
@@ -386,7 +393,30 @@ const Home = () => {
             </Typography>
             
             {popularDrinksLoading ? (
-              <Typography textAlign="center">Loading popular drinks...</Typography>
+              <Box sx={{ minHeight: { xs: 420, md: 520 } }}>
+                <Box sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'repeat(2, 1fr)',
+                    sm: 'repeat(2, 1fr)',
+                    md: 'repeat(3, 1fr)',
+                    lg: 'repeat(4, 1fr)'
+                  },
+                  gap: { xs: 1, sm: 2 },
+                  width: '100%'
+                }}>
+                  {Array.from({ length: 8 }).map((_, idx) => (
+                    <Box
+                      key={`popular-skeleton-${idx}`}
+                      sx={{
+                        minHeight: { xs: 350, sm: 450, md: 500 },
+                        borderRadius: 1,
+                        backgroundColor: 'action.hover'
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
             ) : (
               (() => {
                 let sortedPopularDrinks = popularDrinks.filter(drink => drink && drink.isPopular);
@@ -413,6 +443,7 @@ const Home = () => {
                 
                 return (
                   <Box sx={{ 
+                    minHeight: { xs: 420, md: 520 },
                     display: 'grid',
                     gridTemplateColumns: {
                       xs: 'repeat(2, 1fr)',
@@ -453,7 +484,30 @@ const Home = () => {
             </Typography>
             
             {brandFocusLoading ? (
-              <Typography textAlign="center">Loading brand focus items...</Typography>
+              <Box sx={{ minHeight: { xs: 420, md: 520 } }}>
+                <Box sx={{
+                  display: 'grid',
+                  gridTemplateColumns: {
+                    xs: 'repeat(2, 1fr)',
+                    sm: 'repeat(2, 1fr)',
+                    md: 'repeat(3, 1fr)',
+                    lg: 'repeat(4, 1fr)'
+                  },
+                  gap: { xs: 1, sm: 2 },
+                  width: '100%'
+                }}>
+                  {Array.from({ length: 8 }).map((_, idx) => (
+                    <Box
+                      key={`brand-focus-skeleton-${idx}`}
+                      sx={{
+                        minHeight: { xs: 350, sm: 450, md: 500 },
+                        borderRadius: 1,
+                        backgroundColor: 'action.hover'
+                      }}
+                    />
+                  ))}
+                </Box>
+              </Box>
             ) : (
               (() => {
                 if (brandFocusDrinks.length === 0) {
@@ -478,6 +532,7 @@ const Home = () => {
                 
                 return (
                   <Box sx={{ 
+                    minHeight: { xs: 420, md: 520 },
                     display: 'grid',
                     gridTemplateColumns: {
                       xs: 'repeat(2, 1fr)',

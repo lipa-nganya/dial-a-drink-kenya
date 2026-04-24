@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Container,
   Typography,
@@ -137,11 +137,16 @@ const ProductPage = () => {
 
   // Measure full text height for the expandable "For More About" card so the
   // maxHeight transitions animate smoothly.
-  useLayoutEffect(() => {
+  useEffect(() => {
     if (descriptionLoading) return;
     if (!aboutTextRef.current) return;
-    setAboutTextMaxHeight(aboutTextRef.current.scrollHeight);
-  }, [descriptionLoading, descriptionExpanded, product?.id]);
+    const rafId = window.requestAnimationFrame(() => {
+      if (aboutTextRef.current) {
+        setAboutTextMaxHeight(aboutTextRef.current.scrollHeight);
+      }
+    });
+    return () => window.cancelAnimationFrame(rafId);
+  }, [descriptionLoading, product?.id, detailedDescription]);
 
   // Always collapse the section when switching products.
   useEffect(() => {
@@ -872,6 +877,9 @@ const ProductPage = () => {
                   component="img"
                   image={imageUrl}
                   alt={product.name}
+                  loading="eager"
+                  fetchpriority="high"
+                  decoding="async"
                   sx={{ 
                     objectFit: 'contain', 
                     width: '100%',
