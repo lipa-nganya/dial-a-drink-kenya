@@ -16,6 +16,11 @@ const CategoriesBar = () => {
 
   const isOnMenu = location.pathname === '/menu';
   const isDeliveryLocationPage = location.pathname.startsWith('/delivery-location/');
+  const pathSegments = location.pathname.split('/').filter(Boolean);
+  const pathCategorySlug =
+    !isOnMenu && !isDeliveryLocationPage && pathSegments.length >= 1
+      ? normalizeSlug(pathSegments[0])
+      : null;
   const selectedCategoryId = (isOnMenu || isDeliveryLocationPage) ? (() => {
     const cat = searchParams.get('category');
     if (cat == null || cat === '') return null;
@@ -129,7 +134,12 @@ const CategoriesBar = () => {
         </Button>
       )}
       {categories.map((category) => {
-        const isSelected = selectedCategoryId != null && category.id === selectedCategoryId;
+        const isSelectedById = selectedCategoryId != null && category.id === selectedCategoryId;
+        const isSelectedBySlug =
+          selectedCategoryId == null &&
+          pathCategorySlug != null &&
+          normalizeSlug(category?.slug || category?.name || '') === pathCategorySlug;
+        const isSelected = isSelectedById || isSelectedBySlug;
         return (
           <Button
             key={category.id}
