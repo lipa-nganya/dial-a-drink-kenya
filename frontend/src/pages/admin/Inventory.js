@@ -6,7 +6,6 @@ import {
   Card,
   CardContent,
   Button,
-  Chip,
   Grid,
   Switch,
   FormControlLabel,
@@ -42,7 +41,6 @@ import {
 } from '@mui/icons-material';
 import { api } from '../../services/api';
 import EditDrinkDialog from '../../components/EditDrinkDialog';
-import { getBackendUrl } from '../../utils/backendUrl';
 import { stripHtml } from '../../utils/stripHtml';
 
 const InventoryPage = () => {
@@ -64,25 +62,6 @@ const InventoryPage = () => {
   const [currentPage, setCurrentPage] = useState(1);
   
   const itemsPerPage = 40; // list view default
-
-  // Helper function to get full image URL
-  const getImageUrl = (imagePath) => {
-    if (!imagePath) return '';
-    
-    // If it's a base64 data URL, return as is
-    if (imagePath.startsWith('data:')) {
-      return imagePath;
-    }
-    
-    // If it's already a full URL, return as is
-    if (imagePath.startsWith('http')) {
-      return imagePath;
-    }
-    
-    // For relative paths, construct the full URL using backend URL utility
-    const backendUrl = getBackendUrl();
-    return `${backendUrl}${imagePath}`;
-  };
 
   useEffect(() => {
     fetchData();
