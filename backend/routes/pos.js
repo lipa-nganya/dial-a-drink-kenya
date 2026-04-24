@@ -284,15 +284,18 @@ router.get('/customer/:phoneNumber', async (req, res) => {
 router.get('/customers/search', async (req, res) => {
   try {
     const query = req.query.q || req.query.query || '';
-    
-    if (!query || query.trim().length < 3) {
+    const searchTerm = (query || '').trim();
+    const compactSearchTerm = searchTerm.replace(/\s+/g, '');
+    const numericSearch = /^\+?\d+$/.test(compactSearchTerm);
+    const minChars = numericSearch ? 2 : 3;
+
+    if (!searchTerm || compactSearchTerm.length < minChars) {
       return res.json({
         success: true,
         data: []
       });
     }
-    
-    const searchTerm = query.trim();
+
     console.log(`🔍 POS: Searching customers with query: ${searchTerm}`);
     
     // Build phone variants for phone number search
@@ -463,23 +466,13 @@ router.get('/drinks', async (req, res) => {
       ];
     }
     
-    // Get total count for pagination
-    const total = await db.Drink.count({ where: whereClause });
-    
-    // For POS, return all drinks (no pagination limit) to show all inventory including 0 stock items
-    // If limit is explicitly provided and > 0, use it; otherwise return all
+    // POS dropdown only needs a small result window, not a full count + joins.
     const limitNum = limit && parseInt(limit) > 0 ? parseInt(limit) : null;
     const offsetNum = parseInt(offset) || 0;
     
     const findAllOptions = {
       where: whereClause,
       attributes: ['id', 'name', 'price', 'stock', 'stockByCapacity', 'barcode', 'capacity', 'capacityPricing', 'purchasePrice', 'categoryId'],
-      include: [{
-        model: db.Category,
-        as: 'category',
-        attributes: ['id', 'name'],
-        required: false // Left join - include drinks even if category is missing
-      }],
       order: [['name', 'ASC']]
     };
     
@@ -490,44 +483,22 @@ router.get('/drinks', async (req, res) => {
     }
     
     const drinks = await db.Drink.findAll(findAllOptions);
-
-    // Map drinks to ensure categoryId is included even if category association failed
-    const drinksWithCategory = drinks.map(drink => {
+    const products = drinks.map(drink => {
       const drinkData = drink.toJSON();
-      // Ensure categoryId is present
-      if (!drinkData.categoryId && drink.categoryId) {
-        drinkData.categoryId = drink.categoryId;
-      }
       // Ensure stock is a number (default to 0 if null/undefined)
       if (drinkData.stock === null || drinkData.stock === undefined) {
         drinkData.stock = 0;
       }
-      
-      // Debug logging for first few drinks to verify capacityPricing structure
-      if (drinkData.id && drinkData.id <= 3) {
-        console.log(`[POS /drinks] Drink ${drinkData.id} (${drinkData.name}):`, {
-          hasCapacityPricing: !!drinkData.capacityPricing,
-          capacityPricingType: typeof drinkData.capacityPricing,
-          isArray: Array.isArray(drinkData.capacityPricing),
-          capacityPricingLength: Array.isArray(drinkData.capacityPricing) ? drinkData.capacityPricing.length : 'N/A',
-          capacityPricing: drinkData.capacityPricing,
-          capacity: drinkData.capacity
-        });
-      }
-      
       return drinkData;
     });
 
-    // Calculate hasMore
-    const hasMore = (offsetNum + drinksWithCategory.length) < total;
-
     // Return response in the format expected by Android app
     res.json({
-      products: drinksWithCategory,
-      total: total,
+      products,
+      total: null,
       limit: limitNum,
       offset: offsetNum,
-      hasMore: hasMore
+      hasMore: limitNum != null ? products.length === limitNum : false
     });
   } catch (error) {
     console.error('❌ Error fetching drinks for POS:', error);

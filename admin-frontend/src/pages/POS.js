@@ -120,7 +120,10 @@ const POS = () => {
 
   const fetchCustomers = async (searchTerm = '') => {
     const term = (searchTerm || '').trim();
-    if (term.length < 3) {
+    const compactTerm = term.replace(/\s+/g, '');
+    const numericSearch = /^\+?\d+$/.test(compactTerm);
+    const minChars = numericSearch ? 2 : 3;
+    if (compactTerm.length < minChars) {
       setCustomers([]);
       return;
     }
