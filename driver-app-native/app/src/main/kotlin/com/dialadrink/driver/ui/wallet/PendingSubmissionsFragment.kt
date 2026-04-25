@@ -118,73 +118,60 @@ class PendingSubmissionsFragment : Fragment() {
             val dateApprovedText = card.findViewById<TextView>(R.id.dateApprovedText)
             val receiptNumberText = card.findViewById<TextView>(R.id.receiptNumberText)
             
-            descriptionText.text = getSubmissionDescription(submission)
-            customerNameText.visibility = View.GONE
+            descriptionText.text = "Order# ${getOrderNumberDisplay(submission)}"
+            customerNameText.text = "Submission Type: ${getSubmissionTypeLabel(submission.submissionType)}"
+            customerNameText.visibility = View.VISIBLE
             amountText.text = "-${formatter.format(submission.amount)}"
             amountText.setTextColor(requireContext().getColor(android.R.color.holo_orange_light))
-            
-            try {
-                val date = try {
-                    apiDateFormat.parse(submission.createdAt)
-                } catch (e: Exception) {
-                    apiDateFormat2.parse(submission.createdAt)
-                }
-                dateText.text = "Posted: " + (date?.let { dateFormat.format(it) } ?: submission.createdAt)
-            } catch (e: Exception) {
-                dateText.text = "Posted: " + submission.createdAt
-            }
-
-            // No approved date for pending submissions
-            dateApprovedText.visibility = View.GONE
-            
-            receiptNumberText.text = "Status: Pending Approval"
+            dateText.text = "Delivery Address: ${getDeliveryAddress(submission)}"
+            dateApprovedText.text = "Posted date and time: ${formatDateTime(submission.createdAt)}"
+            dateApprovedText.visibility = View.VISIBLE
+            receiptNumberText.text = "Approved date and time: ${formatDateTime(submission.approvedAt)}"
             receiptNumberText.visibility = View.VISIBLE
             
             container.addView(card)
         }
     }
     
-    private fun getSubmissionDescription(submission: CashSubmission): String {
-        return when (submission.submissionType) {
-            "purchases" -> {
-                val supplier = submission.details?.get("supplier")?.toString() ?: "Unknown Supplier"
-                val item = submission.details?.get("item")?.toString() ?: "Unknown"
-                "Purchase: $supplier"
-            }
-            "cash" -> {
-                val recipient = submission.details?.get("recipientName")?.toString()
-                    ?: submission.details?.get("recipient")?.toString()
-                    ?: submission.details?.get("source")?.toString()
-                    ?: run {
-                        val items = submission.details?.get("items") as? List<*>
-                        if (!items.isNullOrEmpty()) {
-                            val firstItem = items[0] as? Map<*, *>
-                            firstItem?.get("item")?.toString() ?: "Unknown"
-                        } else "Unknown"
-                    }
-                "Expense: $recipient"
-            }
-            "general_expense" -> {
-                val nature = submission.details?.get("nature")?.toString()
-                    ?: submission.details?.get("description")?.toString()
-                    ?: run {
-                        val items = submission.details?.get("items") as? List<*>
-                        if (!items.isNullOrEmpty()) {
-                            val firstItem = items[0] as? Map<*, *>
-                            firstItem?.get("item")?.toString() ?: "No Description"
-                        } else "No Description"
-                    }
-                "Expense: $nature"
-            }
-            "payment_to_office" -> {
-                val sender = submission.details?.get("sender")?.toString() ?: submission.details?.get("accountType")?.toString() ?: "Unknown"
-                "Payment to Office: $sender"
-            }
-            "order_payment" -> {
-                val orderId = submission.details?.get("orderId")?.toString() ?: ""
-                if (orderId.isNotEmpty()) "Order Payment: Order #$orderId" else "Order Payment"
-            }
+    private fun getSubmissionTypeLabel(type: String?): String {
+        return when (type) {
+            "purchases" -> "Purchase"
+            "cash" -> "Expense"
+            "general_expense" -> "General Expense"
+            "payment_to_office" -> "Payment to Office"
+            "walk_in_sale" -> "Walk-in Sale"
+            "order_payment" -> "Order Payment"
             else -> "Cash Submission"
+        }
+    }
+
+    private fun getOrderNumberDisplay(submission: CashSubmission): String {
+        val raw = submission.details?.get("orderId")?.toString()
+            ?: submission.details?.get("orderNumber")?.toString()
+            ?: submission.orders?.firstOrNull()?.orderNumber?.toString()
+            ?: submission.orders?.firstOrNull()?.id?.toString()
+            ?: submission.id.toString()
+        return raw.removeSuffix(".0").trim()
+    }
+
+    private fun getDeliveryAddress(submission: CashSubmission): String {
+        return submission.details?.get("deliveryAddress")?.toString()
+            ?: submission.details?.get("delivery_address")?.toString()
+            ?: submission.orders?.firstOrNull { !it.deliveryAddress.isNullOrBlank() }?.deliveryAddress
+            ?: "N/A"
+    }
+
+    private fun formatDateTime(raw: String?): String {
+        if (raw.isNullOrBlank()) return "—"
+        return try {
+            val parsed = try {
+                apiDateFormat.parse(raw)
+            } catch (_: Exception) {
+                apiDateFormat2.parse(raw)
+            }
+            parsed?.let { dateFormat.format(it) } ?: raw
+        } catch (_: Exception) {
+            raw
         }
     }
     
