@@ -36,6 +36,10 @@ import { validateSafaricomPhone } from '../utils/mpesaPhone';
 import AddressAutocomplete from './AddressAutocomplete';
 import { useTheme } from '../contexts/ThemeContext';
 
+const PRODUCTS_CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_DROPDOWN_OPTIONS = 120;
+let productsCache = { at: 0, data: [] };
+
 const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, initialIsStop = false }) => {
   const { isDarkMode, colors } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -328,32 +332,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   };
 
   const fetchProducts = async () => {
+    const now = Date.now();
+    if (Array.isArray(productsCache.data) && productsCache.data.length > 0 && now - productsCache.at < PRODUCTS_CACHE_TTL_MS) {
+      setProducts(productsCache.data);
+      return;
+    }
     try {
       // Use admin drinks endpoint so we get purchasePrice for profit/loss calculation
       const response = await api.get('/admin/drinks');
       const raw = response.data;
       const productsData = Array.isArray(raw) ? raw : (raw?.data || raw?.drinks || []);
       setProducts(productsData);
-      console.log('Products loaded:', productsData.length);
-      // Log products with "test" or "loc" in name for debugging
-      const testLocProducts = productsData.filter(p => {
-        if (!p || !p.name) return false;
-        const name = p.name.toLowerCase();
-        return name.includes('test') || name.includes('loc');
-      });
-      if (testLocProducts.length > 0) {
-        console.log('Products with "test" or "loc" in name:', testLocProducts.map(p => ({ name: p.name, isAvailable: p.isAvailable, stock: p.stock })));
-      } else {
-        console.log('No products found with "test" or "loc" in name');
-        // Also check for exact match "test-loc"
-        const exactMatch = productsData.filter(p => {
-          if (!p || !p.name) return false;
-          return p.name.toLowerCase() === 'test-loc';
-        });
-        if (exactMatch.length > 0) {
-          console.log('Found exact match "test-loc":', exactMatch.map(p => ({ name: p.name, isAvailable: p.isAvailable, stock: p.stock })));
-        }
-      }
+      productsCache = { at: now, data: productsData };
     } catch (error) {
       console.error('Error fetching products:', error);
     }
@@ -2005,69 +1995,17 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     return option.id === value.id;
                   }}
                   filterOptions={(options, { inputValue }) => {
-                    // Return all options if no input
-                    if (!inputValue || inputValue.trim().length === 0) {
-                      return options;
-                    }
-                    
-                    const searchTerm = inputValue.toLowerCase().trim();
-                    
-                    // Split search term by spaces, hyphens, and other separators to allow partial matching
-                    // e.g., "test-loc" will match products with "test" OR "loc" in the name
-                    const searchTerms = searchTerm.split(/[\s\-_]+/).filter(term => term.length > 0);
-                    
-                    // Filter options - handle null/undefined safely
-                    const filtered = options.filter(option => {
-                      if (!option) return false;
-                      const name = option.name;
-                      if (!name || typeof name !== 'string') return false;
-                      const nameLower = name.toLowerCase();
-                      
-                      // If search term has multiple parts (e.g., "test-loc"), match if ANY part is found
-                      if (searchTerms.length > 1) {
-                        return searchTerms.some(term => nameLower.includes(term));
-                      }
-                      
-                      // Single search term - exact substring match
-                      return nameLower.includes(searchTerm);
+                    const source = Array.isArray(options) ? options : [];
+                    const term = String(inputValue || '').toLowerCase().trim();
+                    if (!term) return source.slice(0, MAX_DROPDOWN_OPTIONS);
+                    const tokens = term.split(/[\s\-_]+/).filter(Boolean);
+                    const filtered = source.filter((option) => {
+                      const name = String(option?.name || '').toLowerCase();
+                      if (!name) return false;
+                      if (tokens.length > 1) return tokens.some((t) => name.includes(t));
+                      return name.includes(term);
                     });
-                    
-                    // Debug logging - explicit values
-                    console.log('=== Product Search Debug ===');
-                    console.log('Search term:', searchTerm);
-                    console.log('Total products:', options.length);
-                    console.log('Filtered count:', filtered.length);
-                    console.log('Sample product names:', options.slice(0, 5).map(o => o?.name));
-                    if (filtered.length > 0) {
-                      console.log('Filtered product names:', filtered.slice(0, 5).map(o => o?.name));
-                    } else {
-                      console.log('No products matched!');
-                      // Check if any product contains the search term (case-insensitive)
-                      const matchingProducts = options.filter(option => {
-                        if (!option || !option.name) return false;
-                        return option.name.toLowerCase().includes(searchTerm);
-                      });
-                      console.log('Products that should match:', matchingProducts.length);
-                      if (matchingProducts.length > 0) {
-                        console.log('Matching product names:', matchingProducts.slice(0, 5).map(o => o?.name));
-                      }
-                      
-                      // If searching for "test", show all products with "test" or "loc" in name
-                      if (searchTerm.includes('test') || searchTerm.includes('loc')) {
-                        const testProducts = options.filter(option => {
-                          if (!option || !option.name) return false;
-                          const name = option.name.toLowerCase();
-                          return name.includes('test') || name.includes('loc');
-                        });
-                        console.log('Products with "test" or "loc" in name:', testProducts.length);
-                        if (testProducts.length > 0) {
-                          console.log('Product names with "test" or "loc":', testProducts.map(o => o?.name));
-                        }
-                      }
-                    }
-                    console.log('===========================');
-                    
-                    return filtered;
+                    return filtered.slice(0, MAX_DROPDOWN_OPTIONS);
                   }}
                   noOptionsText="No products found"
                   openOnFocus={true}
