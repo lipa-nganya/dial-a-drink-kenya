@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -38,6 +38,7 @@ import { useAdmin } from '../contexts/AdminContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { useMobileView } from '../contexts/MobileViewContext';
 import { getBackendUrl } from '../utils/backendUrl';
+import { ADMIN_PERF_FLAGS } from '../utils/adminPerfFlags';
 import {
   getOrderStatusChipProps,
   getPaymentMethodChipProps,
@@ -58,8 +59,11 @@ const AdminOverview = () => {
   const [latestTransactions, setLatestTransactions] = useState([]);
   const [todayCompletedOrders, setTodayCompletedOrders] = useState([]);
   const [loadingTodayOrders, setLoadingTodayOrders] = useState(false);
+  const dashboardCacheRef = useRef(new Map());
   const navigate = useNavigate();
   const { fetchPendingOrdersCount, setIsAuthenticated } = useAdmin();
+  const heavyDataEnabled = ADMIN_PERF_FLAGS.overviewHeavyDataEnabled;
+  const cacheMs = ADMIN_PERF_FLAGS.overviewCacheMs;
 
   // View date for "past 1 week" scroll (default: today). Range: today - 6 days through today.
   const toLocalDateString = (date) => {
@@ -95,6 +99,124 @@ const AdminOverview = () => {
     setViewDate(toLocalDateString(d));
   };
 
+  const fetchStats = useCallback(async () => {
+    const cacheKey = 'stats';
+    const cached = dashboardCacheRef.current.get(cacheKey);
+    if (cached && Date.now() - cached.at < cacheMs) {
+      setStats(cached.data);
+      setLoading(false);
+      return;
+    }
+    try {
+      const response = await api.get('/admin/stats');
+      setStats(response.data);
+      dashboardCacheRef.current.set(cacheKey, { at: Date.now(), data: response.data });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      setError(error.response?.data?.error || error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [cacheMs]);
+
+  const fetchLatestOrders = useCallback(async () => {
+    const cacheKey = 'latest-orders';
+    const cached = dashboardCacheRef.current.get(cacheKey);
+    if (cached && Date.now() - cached.at < cacheMs) {
+      setLatestOrders(cached.data);
+      return;
+    }
+    try {
+      const response = await api.get('/admin/latest-orders', { params: { limit: 20 } });
+      console.log('📦 Latest orders response:', response.data);
+      const next = Array.isArray(response.data) ? response.data : [];
+      setLatestOrders(next);
+      dashboardCacheRef.current.set(cacheKey, { at: Date.now(), data: next });
+    } catch (error) {
+      console.error('Error fetching latest orders:', error);
+      setLatestOrders([]);
+    }
+  }, [cacheMs]);
+
+  const fetchTopInventoryItems = useCallback(async () => {
+    const cacheKey = 'top-inventory-items';
+    const cached = dashboardCacheRef.current.get(cacheKey);
+    if (cached && Date.now() - cached.at < cacheMs) {
+      setTopInventoryItems(cached.data);
+      return;
+    }
+    try {
+      const response = await api.get('/admin/top-inventory-items', { params: { limit: 20 } });
+      const next = Array.isArray(response.data) ? response.data : [];
+      setTopInventoryItems(next);
+      dashboardCacheRef.current.set(cacheKey, { at: Date.now(), data: next });
+    } catch (error) {
+      console.error('Error fetching top inventory items:', error);
+    }
+  }, [cacheMs]);
+
+  const fetchLatestTransactions = useCallback(async () => {
+    const cacheKey = 'latest-transactions';
+    const cached = dashboardCacheRef.current.get(cacheKey);
+    if (cached && Date.now() - cached.at < cacheMs) {
+      setLatestTransactions(cached.data);
+      return;
+    }
+    try {
+      const response = await api.get('/admin/latest-transactions', { params: { limit: 30 } });
+      console.log('💰 Latest transactions response:', response.data);
+      const next = Array.isArray(response.data) ? response.data : [];
+      setLatestTransactions(next);
+      dashboardCacheRef.current.set(cacheKey, { at: Date.now(), data: next });
+    } catch (error) {
+      console.error('Error fetching latest transactions:', error);
+      setLatestTransactions([]);
+    }
+  }, [cacheMs]);
+
+  const fetchTodayCompletedOrders = useCallback(async (dateStr) => {
+    const cacheKey = `completed-orders:${dateStr}`;
+    const cached = dashboardCacheRef.current.get(cacheKey);
+    if (cached && Date.now() - cached.at < cacheMs) {
+      setTodayCompletedOrders(cached.data);
+      return;
+    }
+    try {
+      setLoadingTodayOrders(true);
+      const target = new Date(dateStr + 'T12:00:00');
+      target.setHours(0, 0, 0, 0);
+      const nextDay = new Date(target);
+      nextDay.setDate(nextDay.getDate() + 1);
+
+      const response = await api.get('/admin/orders');
+      const orders = Array.isArray(response.data) ? response.data : [];
+
+      const completedOrders = orders.filter(order => {
+        const isCompleted = order.status === 'completed' || order.status === 'delivered';
+        if (!isCompleted) return false;
+        const completedAt = new Date(order.updatedAt || order.createdAt);
+        completedAt.setHours(0, 0, 0, 0);
+        const targetTime = target.getTime();
+        const nextTime = nextDay.getTime();
+        return completedAt.getTime() >= targetTime && completedAt.getTime() < nextTime;
+      });
+
+      completedOrders.sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
+        return timeB - timeA;
+      });
+
+      setTodayCompletedOrders(completedOrders);
+      dashboardCacheRef.current.set(cacheKey, { at: Date.now(), data: completedOrders });
+    } catch (error) {
+      console.error('Error fetching completed orders:', error);
+      setTodayCompletedOrders([]);
+    } finally {
+      setLoadingTodayOrders(false);
+    }
+  }, [cacheMs]);
+
   useEffect(() => {
     // Check authentication on mount
     const token = localStorage.getItem('adminToken');
@@ -126,17 +248,20 @@ const AdminOverview = () => {
 
     setSocket(newSocket);
 
-    // Fetch initial data
+    // Fetch initial data (heavy sections are feature-flagged)
     fetchStats();
-    fetchLatestOrders();
-    fetchTopInventoryItems();
-    fetchLatestTransactions();
+    if (heavyDataEnabled) {
+      fetchLatestOrders();
+      fetchTopInventoryItems();
+      fetchLatestTransactions();
+    }
 
     return () => {
       newSocket.close();
     };
   }, [
     fetchPendingOrdersCount,
+    heavyDataEnabled,
     fetchStats,
     fetchLatestOrders,
     fetchTopInventoryItems,
@@ -144,88 +269,12 @@ const AdminOverview = () => {
   ]);
 
   useEffect(() => {
-    fetchTodayCompletedOrders(viewDate);
-  const fetchStats = useCallback(async () => {
-  }, [viewDate, fetchTodayCompletedOrders]);
-
-  const fetchStats = useCallback(async () => {
-    try {
-      const response = await api.get('/admin/stats');
-      setStats(response.data);
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-      setError(error.response?.data?.error || error.message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const fetchLatestOrders = useCallback(async () => {
-    try {
-      const response = await api.get('/admin/latest-orders');
-      console.log('📦 Latest orders response:', response.data);
-      setLatestOrders(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error('Error fetching latest orders:', error);
-      setLatestOrders([]);
-    }
-  }, []);
-
-  const fetchTopInventoryItems = useCallback(async () => {
-    try {
-      const response = await api.get('/admin/top-inventory-items');
-      setTopInventoryItems(response.data);
-    } catch (error) {
-      console.error('Error fetching top inventory items:', error);
-    }
-  }, []);
-
-  const fetchLatestTransactions = useCallback(async () => {
-    try {
-      const response = await api.get('/admin/latest-transactions');
-      console.log('💰 Latest transactions response:', response.data);
-      setLatestTransactions(Array.isArray(response.data) ? response.data : []);
-    } catch (error) {
-      console.error('Error fetching latest transactions:', error);
-      setLatestTransactions([]);
-    }
-  }, []);
-
-  const fetchTodayCompletedOrders = useCallback(async (dateStr) => {
-    try {
-      setLoadingTodayOrders(true);
-      const target = new Date(dateStr + 'T12:00:00');
-      target.setHours(0, 0, 0, 0);
-      const nextDay = new Date(target);
-      nextDay.setDate(nextDay.getDate() + 1);
-
-      const response = await api.get('/admin/orders');
-      const orders = Array.isArray(response.data) ? response.data : [];
-
-      const completedOrders = orders.filter(order => {
-        const isCompleted = order.status === 'completed' || order.status === 'delivered';
-        if (!isCompleted) return false;
-        const completedAt = new Date(order.updatedAt || order.createdAt);
-        completedAt.setHours(0, 0, 0, 0);
-        const targetTime = target.getTime();
-        const nextTime = nextDay.getTime();
-        return completedAt.getTime() >= targetTime && completedAt.getTime() < nextTime;
-      });
-
-      completedOrders.sort((a, b) => {
-        const timeA = new Date(a.updatedAt || a.createdAt).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt).getTime();
-        return timeB - timeA;
-      });
-
-      setTodayCompletedOrders(completedOrders);
-    } catch (error) {
-      console.error('Error fetching completed orders:', error);
+    if (!heavyDataEnabled) {
       setTodayCompletedOrders([]);
-    } finally {
-      setLoadingTodayOrders(false);
+      return;
     }
-  }, []);
+    fetchTodayCompletedOrders(viewDate);
+  }, [viewDate, heavyDataEnabled, fetchTodayCompletedOrders]);
 
   const playNotificationSound = () => {
     try {
@@ -425,7 +474,14 @@ const AdminOverview = () => {
             </Typography>
           </Box>
 
-          {loadingTodayOrders ? (
+          {!heavyDataEnabled ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Heavy dashboard data is disabled for performance. Enable
+                {' '}`REACT_APP_ADMIN_OVERVIEW_HEAVY_DATA=true` to load this section.
+              </Typography>
+            </Box>
+          ) : loadingTodayOrders ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
@@ -633,7 +689,7 @@ const AdminOverview = () => {
             })}
           </Grid>
 
-          {section.title === 'Orders' && (
+          {section.title === 'Orders' && heavyDataEnabled && (
             <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
@@ -716,7 +772,7 @@ const AdminOverview = () => {
             </Card>
           )}
 
-          {section.title === 'Inventory' && (
+          {section.title === 'Inventory' && heavyDataEnabled && (
             <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
@@ -753,7 +809,7 @@ const AdminOverview = () => {
             </Card>
           )}
 
-          {section.title === 'Finance' && (
+          {section.title === 'Finance' && heavyDataEnabled && (
             <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, mb: 2 }}>
