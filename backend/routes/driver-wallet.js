@@ -33,6 +33,11 @@ const formatDescriptionFromAddressNoSuffix = (deliveryAddress) => {
 router.get('/:driverId/cash-at-hand', async (req, res) => {
   try {
     const { driverId } = req.params;
+    const limitRaw = req.query.limit;
+    const offsetRaw = req.query.offset;
+    const hasPagination = limitRaw !== undefined || offsetRaw !== undefined;
+    const pageLimit = Math.min(200, Math.max(1, parseInt(limitRaw, 10) || 50));
+    const pageOffset = Math.max(0, parseInt(offsetRaw, 10) || 0);
 
     const driver = await db.Driver.findByPk(driverId);
     if (!driver) {
@@ -453,6 +458,10 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
     const cashAtHandOpeningBalance =
       openingRaw != null && openingRaw !== '' ? parseFloat(openingRaw) : null;
 
+    const totalEntries = entries.length;
+    const pagedEntries = hasPagination
+      ? entries.slice(pageOffset, pageOffset + pageLimit)
+      : entries;
     const payload = {
       totalCashAtHand: totalCashAtHand, // Synced database value from drivers.cashAtHand (Actual cash at hand)
       cashAtHand: totalCashAtHand, // Alias for consistency (some clients might use this field)
@@ -460,7 +469,11 @@ router.get('/:driverId/cash-at-hand', async (req, res) => {
         cashAtHandOpeningBalance != null && Number.isFinite(cashAtHandOpeningBalance)
           ? cashAtHandOpeningBalance
           : null,
-      entries: entries
+      entries: pagedEntries,
+      totalEntries,
+      limit: hasPagination ? pageLimit : totalEntries,
+      offset: hasPagination ? pageOffset : 0,
+      hasMore: hasPagination ? (pageOffset + pagedEntries.length < totalEntries) : false
     };
     // Always include pending cash at hand if there are any pending submissions (even if result is negative)
     if (hasPendingSubmissions) {

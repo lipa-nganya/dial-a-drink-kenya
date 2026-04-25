@@ -569,7 +569,14 @@ data class CashSubmission(
     val updatedAt: String,
     val driver: Driver? = null,
     val approver: Admin? = null,
-    val rejector: Admin? = null
+    val rejector: Admin? = null,
+    val orders: List<CashSubmissionLinkedOrder>? = null
+)
+
+data class CashSubmissionLinkedOrder(
+    val id: Int? = null,
+    val orderNumber: Int? = null,
+    val deliveryAddress: String? = null
 )
 
 data class Admin(

@@ -266,6 +266,8 @@ const RiderCashAtHandDetail = () => {
   const [confirmedPageSize, setConfirmedPageSize] = useState(25);
   const [confirmedTotal, setConfirmedTotal] = useState(0);
   const [logs, setLogs] = useState([]);
+  const [logsHasMore, setLogsHasMore] = useState(false);
+  const [logsPageOffset, setLogsPageOffset] = useState(0);
   const [totalCashAtHand, setTotalCashAtHand] = useState(0);
   const [cashAtHandOpeningBalance, setCashAtHandOpeningBalance] = useState(null);
   const [openingBalanceInput, setOpeningBalanceInput] = useState('');
@@ -372,13 +374,31 @@ const RiderCashAtHandDetail = () => {
     }
   }, [riderId, submissionsSubTab, amountExactApplied, dateFromApplied, dateToApplied, confirmedPage, confirmedPageSize]);
 
-  const fetchLogs = useCallback(async () => {
+  const fetchLogs = useCallback(async ({ reset = false } = {}) => {
     if (!riderId) return;
+    const nextOffset = reset ? 0 : logsPageOffset;
     setLogsLoading(true);
     try {
-      const res = await api.get(`/driver-wallet/${riderId}/cash-at-hand`);
+      const res = await api.get(`/driver-wallet/${riderId}/cash-at-hand`, {
+        params: { limit: 50, offset: nextOffset }
+      });
       const data = res.data?.data ?? res.data;
-      setLogs(Array.isArray(data?.entries) ? data.entries : []);
+      const chunk = Array.isArray(data?.entries) ? data.entries : [];
+      setLogs((prev) => {
+        if (reset) return chunk;
+        const base = Array.isArray(prev) ? prev : [];
+        if (base.length === 0) return chunk;
+        const seen = new Set(base.map((e) => e.entryKey || `${e.type}-${e.orderId || ''}-${e.transactionId || ''}-${e.date || ''}`));
+        const appended = chunk.filter((e) => {
+          const key = e.entryKey || `${e.type}-${e.orderId || ''}-${e.transactionId || ''}-${e.date || ''}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+        return [...base, ...appended];
+      });
+      setLogsHasMore(Boolean(data?.hasMore));
+      setLogsPageOffset(nextOffset + chunk.length);
       setTotalCashAtHand(parseFloat(data?.totalCashAtHand ?? data?.cashAtHand ?? 0) || 0);
       const ob = data?.cashAtHandOpeningBalance;
       const obParsed = ob != null && ob !== '' ? parseFloat(ob) : NaN;
@@ -390,14 +410,18 @@ const RiderCashAtHandDetail = () => {
         setOpeningBalanceInput('');
       }
     } catch {
-      setLogs([]);
+      if (reset) {
+        setLogs([]);
+        setLogsHasMore(false);
+        setLogsPageOffset(0);
+      }
       setTotalCashAtHand(0);
       setCashAtHandOpeningBalance(null);
       setOpeningBalanceInput('');
     } finally {
       setLogsLoading(false);
     }
-  }, [riderId]);
+  }, [riderId, logsPageOffset]);
 
   const fetchSavings = useCallback(async () => {
     if (!riderId) return;
@@ -465,7 +489,7 @@ const RiderCashAtHandDetail = () => {
   }, [submissionsSubTab]);
 
   useEffect(() => {
-    if (tabIndex === 1) fetchLogs();
+    if (tabIndex === 1) fetchLogs({ reset: true });
     if (tabIndex === 2) fetchSavings();
   }, [tabIndex, fetchLogs, fetchSavings]);
 
@@ -737,7 +761,7 @@ const RiderCashAtHandDetail = () => {
           delete next[entryKey];
           return next;
         });
-        await fetchLogs();
+        await fetchLogs({ reset: true });
       } catch (e) {
         alert(e.response?.data?.error || e.message || 'Failed to save');
       } finally {
@@ -786,7 +810,7 @@ const RiderCashAtHandDetail = () => {
           delete next[entryKey];
           return next;
         });
-        await fetchLogs();
+        await fetchLogs({ reset: true });
       } catch (e) {
         alert(e.response?.data?.error || e.message || 'Failed to clear');
       } finally {
@@ -814,7 +838,7 @@ const RiderCashAtHandDetail = () => {
           cashAtHandOpeningBalance: n
         });
       }
-      await fetchLogs();
+      await fetchLogs({ reset: true });
     } catch (e) {
       alert(e.response?.data?.error || e.message || 'Failed to save opening balance');
     } finally {
@@ -891,7 +915,7 @@ const RiderCashAtHandDetail = () => {
       setRejectReason('');
       setDetailsSubmission(null);
       submissionsCacheRef.current.clear();
-      await Promise.all([fetchSubmissions(), fetchLogs()]);
+      await Promise.all([fetchSubmissions(), fetchLogs({ reset: true })]);
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to reject submission');
     } finally {
@@ -933,6 +957,15 @@ const RiderCashAtHandDetail = () => {
     submissionsCacheRef.current.clear();
     setConfirmedPage(0);
   };
+
+  const handleLogsScroll = useCallback((event) => {
+    if (tabIndex !== 1 || logsLoading || !logsHasMore) return;
+    const el = event.currentTarget;
+    const nearBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 120;
+    if (nearBottom) {
+      fetchLogs();
+    }
+  }, [tabIndex, logsLoading, logsHasMore, fetchLogs]);
 
   const openDetails = (s) => setDetailsSubmission(s);
   const closeDetails = () => setDetailsSubmission(null);
@@ -1573,7 +1606,7 @@ const RiderCashAtHandDetail = () => {
                 </Button>
               )}
               <Typography variant="body2" sx={{ color: colors.textSecondary }}>
-                Showing {cashAtHandStatementRows.length} / {Array.isArray(logs) ? logs.length : 0}
+                Showing {cashAtHandStatementRows.length}{logsHasMore ? '+' : ''} log rows
               </Typography>
             </Box>
             {logsLoading ? (
@@ -1593,8 +1626,13 @@ const RiderCashAtHandDetail = () => {
                 </Typography>
               </Paper>
             ) : (
-              <TableContainer component={Paper} sx={{ backgroundColor: colors.paper }}>
-                <Table size="small">
+              <>
+                <TableContainer
+                  component={Paper}
+                  onScroll={handleLogsScroll}
+                  sx={{ backgroundColor: colors.paper, maxHeight: 620, overflowY: 'auto' }}
+                >
+                  <Table size="small">
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ fontWeight: 'bold', color: colors.accentText }}>#</TableCell>
@@ -1720,8 +1758,22 @@ const RiderCashAtHandDetail = () => {
                       );
                     })}
                   </TableBody>
-                </Table>
-              </TableContainer>
+                  </Table>
+                </TableContainer>
+                <Box sx={{ mt: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 28 }}>
+                  {logsLoading && logs.length > 0 ? (
+                    <CircularProgress size={20} sx={{ color: colors.accent }} />
+                  ) : logsHasMore ? (
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                      Scroll to load more
+                    </Typography>
+                  ) : (
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                      End of log history
+                    </Typography>
+                  )}
+                </Box>
+              </>
             )}
 
             {isSuperSuperAdmin && logs.length > 0 && (
