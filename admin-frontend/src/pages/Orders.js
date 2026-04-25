@@ -818,11 +818,18 @@ const Orders = () => {
       if (order.paymentStatus === 'failed') return 'failed';
       return 'pending'; // No transaction created yet
     }
-    // Get the most recent transaction
-    const latestTransaction = order.transactions.sort((a, b) => 
-      new Date(b.createdAt) - new Date(a.createdAt)
-    )[0];
-    return latestTransaction.status || 'pending';
+    // Avoid sorting/mutating on every filter pass; just scan once for newest tx.
+    let latestTransaction = null;
+    let latestTimestamp = -Infinity;
+    for (const tx of order.transactions) {
+      const ts = Date.parse(tx?.createdAt || '');
+      const normalizedTs = Number.isFinite(ts) ? ts : -Infinity;
+      if (normalizedTs > latestTimestamp) {
+        latestTimestamp = normalizedTs;
+        latestTransaction = tx;
+      }
+    }
+    return latestTransaction?.status || order.transactions[0]?.status || 'pending';
   };
 
   // Apply filters to orders
