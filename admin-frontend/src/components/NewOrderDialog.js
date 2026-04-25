@@ -88,6 +88,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const [territories, setTerritories] = useState([]);
   const [products, setProducts] = useState([]);
   const [productSearch, setProductSearch] = useState('');
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [productOptionsLoading, setProductOptionsLoading] = useState(false);
+  const productSearchRequestSeqRef = useRef(0);
   
   // Form state
   const [selectedCustomer, setSelectedCustomer] = useState(null);
@@ -145,6 +148,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     return () => clearTimeout(timer);
   }, [customerSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setProductSearchQuery(productSearch);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [productSearch]);
 
   // Fetch customers when search query changes
   useEffect(() => {
@@ -381,7 +391,36 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
   };
 
-  const fetchProducts = async ({ forceRefresh = false } = {}) => {
+  const fetchProducts = async ({ forceRefresh = false, query = '', limit = null } = {}) => {
+    const trimmedQuery = String(query || '').trim();
+    if (trimmedQuery.length >= 2) {
+      const reqSeq = productSearchRequestSeqRef.current + 1;
+      productSearchRequestSeqRef.current = reqSeq;
+      setProductOptionsLoading(true);
+      try {
+        const response = await api.get('/admin/drinks', {
+          params: {
+            q: trimmedQuery,
+            limit: limit || MAX_DROPDOWN_OPTIONS
+          }
+        });
+        if (reqSeq !== productSearchRequestSeqRef.current) return;
+        const raw = response.data;
+        const productsData = Array.isArray(raw) ? raw : (raw?.data || raw?.drinks || []);
+        setProducts(productsData);
+      } catch (error) {
+        if (reqSeq === productSearchRequestSeqRef.current) {
+          console.error('Error searching products:', error);
+          setProducts([]);
+        }
+      } finally {
+        if (reqSeq === productSearchRequestSeqRef.current) {
+          setProductOptionsLoading(false);
+        }
+      }
+      return;
+    }
+
     const cachedProducts = !forceRefresh ? getFreshProductsCache() : null;
     if (cachedProducts) {
       setProducts(cachedProducts);
@@ -409,6 +448,18 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       productsFetchPromise = null;
     }
   };
+
+  useEffect(() => {
+    if (!open) return;
+    const term = String(productSearchQuery || '').trim();
+    if (term.length >= 2) {
+      fetchProducts({ query: term, limit: MAX_DROPDOWN_OPTIONS, forceRefresh: true });
+      return;
+    }
+    // Revert to cached full list when query is cleared/short.
+    fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, productSearchQuery]);
 
   const handleAddToCart = () => {
     if (!currentProduct || currentQuantity < 1) {
@@ -2047,6 +2098,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     }
                   }}
                   options={products}
+                  loading={productOptionsLoading}
                   getOptionLabel={(option) => {
                     if (!option) return '';
                     return option.name || '';
@@ -2068,7 +2120,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     });
                     return filtered.slice(0, MAX_DROPDOWN_OPTIONS);
                   }}
-                  noOptionsText="No products found"
+                  noOptionsText={productOptionsLoading ? 'Loading products...' : 'No products found'}
                   openOnFocus={true}
                   disablePortal={false}
                   ListboxProps={{

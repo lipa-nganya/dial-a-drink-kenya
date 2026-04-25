@@ -1266,13 +1266,28 @@ const adminDrinkDetailIncludes = [
 // Get all drinks (admin) — slim payload + cached schema (inventory grid)
 router.get('/drinks', async (req, res) => {
   try {
+    const qRaw = String(req.query.q || '').trim();
+    const limitRaw = parseInt(req.query.limit, 10);
+    const hasQuery = qRaw.length > 0;
+    const listLimit = Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, limitRaw)) : null;
+
     const allAttrs = await getAllDrinkAttributesFromDbSchema();
     const listAttrs = allAttrs.filter((a) => !ADMIN_DRINKS_LIST_OMIT.has(a));
 
+    const where = hasQuery
+      ? {
+          name: {
+            [Op.iLike]: `%${qRaw}%`
+          }
+        }
+      : undefined;
+
     const drinks = await db.Drink.findAll({
       attributes: listAttrs,
+      ...(where ? { where } : {}),
       include: adminDrinkListIncludes,
-      order: [['name', 'ASC']]
+      order: [['name', 'ASC']],
+      ...(listLimit ? { limit: listLimit } : {})
     });
 
     res.json(drinks);
