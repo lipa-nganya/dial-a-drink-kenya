@@ -19,12 +19,13 @@ function netMoveFromEntry(entry, typeLower) {
  * Uses optional balanceAfterDisplay and debit/credit amounts from API (including display overrides).
  *
  * @param {object} [options]
- * @param {number|null|undefined} [options.openingBalance] — If set (and every entry has entryKey), balances are computed forward from this opening (before oldest transaction). Otherwise uses backward walk from totalCashAtHand.
+ * @param {number|null|undefined} [options.openingBalance] — If set (and every entry has entryKey), balances are computed forward from this opening (before oldest transaction).
+ * @param {boolean} [options.entriesAreComplete=true] — Set false when entries are paginated/partial (or otherwise incomplete), so balance math uses totalCashAtHand fallback.
  */
 export function buildCashAtHandStatementRows(rawEntries, totalCashAtHand, normalizedSearch = '', options = {}) {
   if (!Array.isArray(rawEntries) || rawEntries.length === 0) return [];
 
-  const { openingBalance } = options;
+  const { openingBalance, entriesAreComplete = true } = options;
 
   const entryType = (entry) => {
     const t = entry.type ?? entry.transaction_type ?? entry.Type;
@@ -58,7 +59,12 @@ export function buildCashAtHandStatementRows(rawEntries, totalCashAtHand, normal
 
   const openNum = openingBalance != null && openingBalance !== '' ? parseFloat(openingBalance) : NaN;
   const allHaveKeys = filtered.length > 0 && filtered.every((e) => e.entryKey);
-  const useOpening = allHaveKeys && Number.isFinite(openNum) && openNum >= 0;
+  const useOpening =
+    entriesAreComplete &&
+    !normalizedSearch &&
+    allHaveKeys &&
+    Number.isFinite(openNum) &&
+    openNum >= 0;
 
   let balanceByKey = null;
   if (useOpening) {

@@ -586,7 +586,10 @@ const RiderCashAtHandDetail = () => {
     };
 
     const base = buildCashAtHandStatementRows(filteredCashLogs, totalCashAtHand, '', {
-      openingBalance: cashAtHandOpeningBalance
+      openingBalance: cashAtHandOpeningBalance,
+      // Logs are loaded in pages and can also be filtered in-memory; only use opening-balance
+      // forward math when we have the full unfiltered dataset.
+      entriesAreComplete: !logsHasMore && !normalizedLogsSearch
     });
     return base.map((row) => ({
       ...row,
@@ -594,7 +597,7 @@ const RiderCashAtHandDetail = () => {
       typeLabel: getLogTypeLabel(row.entry, row.isCredit),
       desc: getDescriptionPlain(row.entry)
     }));
-  }, [filteredCashLogs, totalCashAtHand, cashAtHandOpeningBalance]);
+  }, [filteredCashLogs, totalCashAtHand, cashAtHandOpeningBalance, logsHasMore, normalizedLogsSearch]);
 
   const normalizedSavingsSearch = String(savingsSearch || '').trim().toLowerCase();
 
