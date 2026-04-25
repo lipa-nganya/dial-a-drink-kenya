@@ -23,7 +23,8 @@ import {
   TextField,
   Divider,
   Stack,
-  IconButton
+  IconButton,
+  TablePagination
 } from '@mui/material';
 import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import ArrowBack from '@mui/icons-material/ArrowBack';
@@ -254,6 +255,16 @@ const RiderCashAtHandDetail = () => {
   const [submissionsSubTab, setSubmissionsSubTab] = useState(initialSubmissionsSubTab);
   const [submissions, setSubmissions] = useState([]);
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [amountExactInput, setAmountExactInput] = useState('');
+  const [amountExactApplied, setAmountExactApplied] = useState(null);
+  const [dateFromInput, setDateFromInput] = useState('');
+  const [dateToInput, setDateToInput] = useState('');
+  const [dateFromApplied, setDateFromApplied] = useState('');
+  const [dateToApplied, setDateToApplied] = useState('');
+  const [confirmedPage, setConfirmedPage] = useState(0);
+  const [confirmedPageSize, setConfirmedPageSize] = useState(25);
+  const [confirmedTotal, setConfirmedTotal] = useState(0);
   const [logs, setLogs] = useState([]);
   const [totalCashAtHand, setTotalCashAtHand] = useState(0);
   const [cashAtHandOpeningBalance, setCashAtHandOpeningBalance] = useState(null);
@@ -283,6 +294,8 @@ const RiderCashAtHandDetail = () => {
   const [cashLogInlineSavingKey, setCashLogInlineSavingKey] = useState(null);
   const cashLogInlineDraftsRef = useRef({});
   const cashLogSaveTimersRef = useRef({});
+  const submissionsCacheRef = useRef(new Map());
+  const submissionsRequestSeqRef = useRef(0);
 
   useEffect(() => {
     cashLogInlineDraftsRef.current = cashLogInlineDrafts;
@@ -305,20 +318,59 @@ const RiderCashAtHandDetail = () => {
 
   const fetchSubmissions = useCallback(async () => {
     if (!riderId) return;
+    const statusMap = { 0: 'pending', 1: 'approved', 2: 'rejected' };
+    const statusParam = statusMap[submissionsSubTab];
+    const cacheKey = `${riderId}:${statusParam || 'all'}:${amountExactApplied ?? ''}:${dateFromApplied || ''}:${dateToApplied || ''}:${submissionsSubTab === 1 ? `${confirmedPage}:${confirmedPageSize}` : 'all'}`;
+    const now = Date.now();
+    const cached = submissionsCacheRef.current.get(cacheKey);
+    if (cached && now - cached.at < 30000) {
+      setSubmissions(cached.submissions);
+      setCounts(cached.counts);
+      return;
+    }
+
+    const requestSeq = submissionsRequestSeqRef.current + 1;
+    submissionsRequestSeqRef.current = requestSeq;
+    setSubmissionsLoading(true);
     try {
-      const statusMap = { 0: 'pending', 1: 'approved', 2: 'rejected' };
-      const statusParam = statusMap[submissionsSubTab];
+      const params = {
+        ...(statusParam ? { status: statusParam } : { limit: 500 }),
+        ...(amountExactApplied != null ? { minAmount: amountExactApplied, maxAmount: amountExactApplied } : {}),
+        ...(dateFromApplied ? { fromDate: dateFromApplied } : {}),
+        ...(dateToApplied ? { toDate: dateToApplied } : {}),
+        ...(submissionsSubTab === 1 ? { page: confirmedPage, pageSize: confirmedPageSize } : {})
+      };
       const res = await api.get(`/driver-wallet/${riderId}/cash-submissions`, {
-        params: statusParam ? { status: statusParam } : { limit: 500 }
+        params
       });
+      if (requestSeq !== submissionsRequestSeqRef.current) return;
       const data = res.data?.data ?? res.data;
-      setSubmissions(Array.isArray(data?.submissions) ? data.submissions : []);
-      setCounts(data?.counts ?? { pending: 0, approved: 0, rejected: 0 });
+      const nextSubmissions = Array.isArray(data?.submissions) ? data.submissions : [];
+      const nextCounts = data?.counts ?? { pending: 0, approved: 0, rejected: 0 };
+      const nextTotal = Number.isFinite(parseInt(data?.total, 10)) ? parseInt(data.total, 10) : nextSubmissions.length;
+      setSubmissions(nextSubmissions);
+      setCounts(nextCounts);
+      if (submissionsSubTab === 1) {
+        setConfirmedTotal(nextTotal);
+      } else {
+        setConfirmedTotal(0);
+      }
+      submissionsCacheRef.current.set(cacheKey, {
+        at: Date.now(),
+        submissions: nextSubmissions,
+        counts: nextCounts
+      });
     } catch (err) {
+      if (requestSeq !== submissionsRequestSeqRef.current) return;
       setSubmissions([]);
       setCounts({ pending: 0, approved: 0, rejected: 0 });
+      if (submissionsSubTab === 1) setConfirmedTotal(0);
+    } finally {
+      if (requestSeq === submissionsRequestSeqRef.current) {
+        setSubmissionsLoading(false);
+      }
     }
-  }, [riderId, submissionsSubTab]);
+  }, [riderId, submissionsSubTab, amountExactApplied, dateFromApplied, dateToApplied, confirmedPage, confirmedPageSize]);
 
   const fetchLogs = useCallback(async () => {
     if (!riderId) return;
@@ -400,6 +452,12 @@ const RiderCashAtHandDetail = () => {
       setSubmissionsSubTab(mapLegacySubmissionsSubTab(location.state.submissionsSubTab));
     }
   }, [location.state?.submissionsSubTab]);
+
+  useEffect(() => {
+    if (submissionsSubTab !== 1 && confirmedPage !== 0) {
+      setConfirmedPage(0);
+    }
+  }, [submissionsSubTab, confirmedPage]);
 
   // Only keep/allow search on the Confirmed tab.
   useEffect(() => {
@@ -832,13 +890,48 @@ const RiderCashAtHandDetail = () => {
       setRejectSubmissionId(null);
       setRejectReason('');
       setDetailsSubmission(null);
-      await fetchSubmissions();
-      await fetchLogs();
+      submissionsCacheRef.current.clear();
+      await Promise.all([fetchSubmissions(), fetchLogs()]);
     } catch (err) {
       setError(err.response?.data?.error || err.message || 'Failed to reject submission');
     } finally {
       setActionLoadingId(null);
     }
+  };
+
+  const parseAmountFilterValue = (rawValue) => {
+    const value = String(rawValue || '').trim();
+    if (!value) return null;
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
+
+  const applyFilters = () => {
+    const amountValue = parseAmountFilterValue(amountExactInput);
+    const fromValue = String(dateFromInput || '').trim();
+    const toValue = String(dateToInput || '').trim();
+    if (fromValue && toValue && fromValue > toValue) {
+      setError('From date cannot be later than To date.');
+      return;
+    }
+    setError(null);
+    submissionsCacheRef.current.clear();
+    setConfirmedPage(0);
+    setAmountExactApplied(amountValue);
+    setDateFromApplied(fromValue);
+    setDateToApplied(toValue);
+  };
+
+  const clearFilters = () => {
+    setAmountExactInput('');
+    setAmountExactApplied(null);
+    setDateFromInput('');
+    setDateToInput('');
+    setDateFromApplied('');
+    setDateToApplied('');
+    setError(null);
+    submissionsCacheRef.current.clear();
+    setConfirmedPage(0);
   };
 
   const openDetails = (s) => setDetailsSubmission(s);
@@ -1148,6 +1241,55 @@ const RiderCashAtHandDetail = () => {
                 sx={{ mb: 2 }}
               />
             )}
+            <Box sx={{ mb: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+              <TextField
+                size="small"
+                label="Amount"
+                type="number"
+                value={amountExactInput}
+                onChange={(e) => setAmountExactInput(e.target.value)}
+                inputProps={{ min: 0, step: '1' }}
+                sx={{ minWidth: 150 }}
+              />
+              <TextField
+                size="small"
+                label="From"
+                type="date"
+                value={dateFromInput}
+                onChange={(e) => setDateFromInput(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: 180 }}
+              />
+              <TextField
+                size="small"
+                label="To"
+                type="date"
+                value={dateToInput}
+                onChange={(e) => setDateToInput(e.target.value)}
+                InputLabelProps={{ shrink: true }}
+                sx={{ minWidth: 180 }}
+              />
+            </Box>
+            <Box sx={{ mb: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+              <Button size="small" variant="contained" onClick={applyFilters} disabled={submissionsLoading}>
+                Apply Filters
+              </Button>
+              <Button size="small" variant="outlined" onClick={clearFilters} disabled={submissionsLoading}>
+                Clear Filters
+              </Button>
+            </Box>
+            <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+              {amountExactApplied != null && (
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                  Active amount: {formatCurrency(amountExactApplied)}
+                </Typography>
+              )}
+              {(dateFromApplied || dateToApplied) && (
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                  Active date range: {dateFromApplied || 'Any'} - {dateToApplied || 'Any'}
+                </Typography>
+              )}
+            </Box>
             <TableContainer>
               <Table size="small">
                 <TableHead>
@@ -1164,7 +1306,16 @@ const RiderCashAtHandDetail = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {submissionsForTable.length === 0 ? (
+                  {submissionsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={submissionsSubTab !== 0 ? 9 : 7} align="center" sx={{ py: 3 }}>
+                        <CircularProgress size={22} sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        <Typography component="span" variant="body2" sx={{ color: colors.textSecondary }}>
+                          Loading submissions...
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : submissionsForTable.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={submissionsSubTab !== 0 ? 9 : 7} align="center" sx={{ color: colors.textSecondary, py: 3 }}>
                         No submissions in this category.
@@ -1273,6 +1424,21 @@ const RiderCashAtHandDetail = () => {
                 </TableBody>
               </Table>
             </TableContainer>
+            {submissionsSubTab === 1 && !submissionsLoading && (
+              <TablePagination
+                component="div"
+                count={confirmedTotal}
+                page={confirmedPage}
+                onPageChange={(_, nextPage) => setConfirmedPage(nextPage)}
+                rowsPerPage={confirmedPageSize}
+                onRowsPerPageChange={(event) => {
+                  const nextSize = parseInt(event.target.value, 10) || 25;
+                  setConfirmedPageSize(nextSize);
+                  setConfirmedPage(0);
+                }}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+              />
+            )}
             <Dialog open={rejectDialogOpen} onClose={() => setRejectDialogOpen(false)} maxWidth="sm" fullWidth>
               <DialogTitle sx={{ color: colors.textPrimary }}>Reject cash submission</DialogTitle>
               <DialogContent>
