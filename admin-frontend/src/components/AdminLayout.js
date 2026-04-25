@@ -74,6 +74,7 @@ const AdminLayout = ({ children }) => {
   useEffect(() => {
     const cleanupStaleBackdrop = () => {
       if (typeof document === 'undefined') return;
+      if (document.hidden) return;
 
       const visibleBackdropExists = Array.from(document.querySelectorAll('.MuiBackdrop-root'))
         .some((el) => {
@@ -98,7 +99,7 @@ const AdminLayout = ({ children }) => {
       }
     };
 
-    const intervalId = setInterval(cleanupStaleBackdrop, 1000);
+    const intervalId = setInterval(cleanupStaleBackdrop, 5000);
     cleanupStaleBackdrop();
     return () => clearInterval(intervalId);
   }, []);
