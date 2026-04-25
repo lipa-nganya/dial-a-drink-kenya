@@ -23,7 +23,23 @@ if (isProductionBuild && hostMatches) {
     sessionReplaySampleRate: 20,
     trackResources: true,
     trackUserInteractions: true,
-    trackLongTasks: true
+    trackLongTasks: true,
+    beforeSend: (event) => {
+      // Socket.IO long-polling can emit short-lived 400s during normal session/transport
+      // rotation (stale sid). Filter only these noisy resource events.
+      if (event?.type === 'resource') {
+        const url = String(event?.resource?.url || '');
+        const statusCode =
+          event?.resource?.status_code ??
+          event?.resource?.statusCode ??
+          event?.http?.status_code ??
+          event?.http?.statusCode;
+        if (url.includes('/socket.io/') && Number(statusCode) === 400) {
+          return false;
+        }
+      }
+      return true;
+    }
   });
 }
 
