@@ -35,6 +35,9 @@ import {
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 
+const POS_PRODUCTS_CACHE_KEY = 'pos_products_bootstrap_v1';
+const POS_PRODUCTS_CACHE_TTL_MS = 5 * 60 * 1000;
+
 const POS = () => {
   const { isDarkMode, colors } = useTheme();
   const [drinks, setDrinks] = useState([]);
@@ -42,6 +45,7 @@ const POS = () => {
   const [error, setError] = useState(null);
   const [productsLoading, setProductsLoading] = useState(false);
   const [customersLoading, setCustomersLoading] = useState(false);
+  const [bootstrapLoaded, setBootstrapLoaded] = useState(false);
   
   // Account and Customer
   const [accountId, setAccountId] = useState('');
@@ -77,9 +81,14 @@ const POS = () => {
   }, []);
 
   useEffect(() => {
+    const term = (productSearch || '').trim();
+    if (term.length < 2) {
+      return undefined;
+    }
+
     const timeoutId = setTimeout(() => {
-      fetchProducts(productSearch);
-    }, 250);
+      fetchProducts(term);
+    }, 120);
 
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -94,13 +103,41 @@ const POS = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customerSearch]);
 
-  const fetchProducts = async (searchTerm = '') => {
+  const getCachedProducts = () => {
     try {
-      setProductsLoading(true);
+      const raw = sessionStorage.getItem(POS_PRODUCTS_CACHE_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      const savedAt = Number(parsed?.savedAt || 0);
+      const products = Array.isArray(parsed?.products) ? parsed.products : [];
+      if (!products.length) return [];
+      if ((Date.now() - savedAt) > POS_PRODUCTS_CACHE_TTL_MS) return [];
+      return products;
+    } catch {
+      return [];
+    }
+  };
+
+  const setCachedProducts = (products) => {
+    try {
+      if (!Array.isArray(products) || products.length === 0) return;
+      sessionStorage.setItem(POS_PRODUCTS_CACHE_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        products
+      }));
+    } catch {
+      // Ignore cache write errors
+    }
+  };
+
+  const fetchProducts = async (searchTerm = '', options = {}) => {
+    const { silent = false } = options;
+    try {
+      if (!silent) setProductsLoading(true);
       const response = await api.get('/pos/drinks', {
         params: {
           search: searchTerm || undefined,
-          limit: searchTerm && searchTerm.trim() ? 50 : 30,
+          limit: searchTerm && searchTerm.trim() ? 60 : 120,
           offset: 0
         }
       });
@@ -110,11 +147,21 @@ const POS = () => {
         ? drinksData
         : (drinksData?.products || []);
       setDrinks(drinksArray);
+      if (!searchTerm || !searchTerm.trim()) {
+        setCachedProducts(drinksArray);
+        setBootstrapLoaded(true);
+      }
     } catch (err) {
       console.error('Error fetching POS products:', err);
       setError(err.response?.data?.error || 'Failed to load products');
     } finally {
-      setProductsLoading(false);
+      if (!silent) setProductsLoading(false);
+    }
+  };
+
+  const handleProductsDropdownOpen = () => {
+    if (!Array.isArray(drinks) || drinks.length === 0) {
+      fetchProducts('');
     }
   };
 
@@ -146,12 +193,24 @@ const POS = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      const cachedProducts = getCachedProducts();
+      if (cachedProducts.length > 0) {
+        setDrinks(cachedProducts);
+        setBootstrapLoaded(true);
+      } else {
+        setProductsLoading(true);
+      }
+
       const accountsResponse = await api.get('/admin/accounts').catch(() => ({ data: [] }));
       setAccounts(accountsResponse.data || []);
+
+      // Always refresh products in the background so cache stays fresh.
+      fetchProducts('', { silent: true });
     } catch (err) {
       console.error('Error fetching POS data:', err);
       setError(err.response?.data?.error || 'Failed to load POS data');
     } finally {
+      setProductsLoading(false);
       setLoading(false);
     }
   };
@@ -821,6 +880,7 @@ const POS = () => {
                   <Autocomplete
                     options={drinks}
                     loading={productsLoading}
+                    onOpen={handleProductsDropdownOpen}
                     getOptionLabel={(option) => option.name || ''}
                     isOptionEqualToValue={(option, value) => option?.id === value?.id}
                     value={selectedProduct}
@@ -844,7 +904,12 @@ const POS = () => {
                         return option.name.toLowerCase().includes(searchTerm);
                       });
                     }}
-                    noOptionsText={productSearch.trim().length < 2 ? 'Type at least 2 letters to search products' : 'No products found'}
+                    loadingText="Loading products..."
+                    noOptionsText={
+                      !bootstrapLoaded
+                        ? 'Loading products...'
+                        : (productSearch.trim().length < 2 ? 'Type to search products' : 'No products found')
+                    }
                     renderOption={(props, option) => {
                       const { key, ...restProps } = props;
 
