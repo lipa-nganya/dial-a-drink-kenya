@@ -1179,6 +1179,13 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
     const limit = Math.min(500, Math.max(0, parseInt(req.query.limit, 10) || 50));
     const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
     const status = req.query.status;
+    const minAmountRaw = req.query.minAmount;
+    const maxAmountRaw = req.query.maxAmount;
+    const pageRaw = req.query.page;
+    const pageSizeRaw = req.query.pageSize;
+    const dateRaw = req.query.date;
+    const fromDateRaw = req.query.fromDate;
+    const toDateRaw = req.query.toDate;
 
     // Validate driver exists
     const driver = await db.Driver.findByPk(driverId);
@@ -1191,9 +1198,47 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
     if (status && ['pending', 'approved', 'rejected'].includes(status)) {
       where.status = status;
     }
+    const minAmount = minAmountRaw !== undefined && minAmountRaw !== null && String(minAmountRaw).trim() !== ''
+      ? parseFloat(minAmountRaw)
+      : null;
+    const maxAmount = maxAmountRaw !== undefined && maxAmountRaw !== null && String(maxAmountRaw).trim() !== ''
+      ? parseFloat(maxAmountRaw)
+      : null;
+    if (Number.isFinite(minAmount) || Number.isFinite(maxAmount)) {
+      where.amount = {};
+      if (Number.isFinite(minAmount)) where.amount[Op.gte] = minAmount;
+      if (Number.isFinite(maxAmount)) where.amount[Op.lte] = maxAmount;
+    }
+    const dateField = status === 'approved'
+      ? 'approvedAt'
+      : status === 'rejected'
+      ? 'rejectedAt'
+      : 'createdAt';
+    const normalizedFromDate = fromDateRaw != null && String(fromDateRaw).trim() !== ''
+      ? String(fromDateRaw).trim()
+      : (dateRaw != null && String(dateRaw).trim() !== '' ? String(dateRaw).trim() : null);
+    const normalizedToDate = toDateRaw != null && String(toDateRaw).trim() !== ''
+      ? String(toDateRaw).trim()
+      : (dateRaw != null && String(dateRaw).trim() !== '' ? String(dateRaw).trim() : null);
+    const start = normalizedFromDate ? new Date(`${normalizedFromDate}T00:00:00.000Z`) : null;
+    const end = normalizedToDate ? new Date(`${normalizedToDate}T23:59:59.999Z`) : null;
+    if ((start && !Number.isNaN(start.getTime())) || (end && !Number.isNaN(end.getTime()))) {
+      if (start && end && !Number.isNaN(start.getTime()) && !Number.isNaN(end.getTime())) {
+        where[dateField] = { [Op.between]: [start, end] };
+      } else if (start && !Number.isNaN(start.getTime())) {
+        where[dateField] = { [Op.gte]: start };
+      } else if (end && !Number.isNaN(end.getTime())) {
+        where[dateField] = { [Op.lte]: end };
+      }
+    }
+
+    const hasPaginationParams = pageRaw !== undefined || pageSizeRaw !== undefined;
+    const pageSize = Math.min(200, Math.max(1, parseInt(pageSizeRaw, 10) || 25));
+    const page = Math.max(0, parseInt(pageRaw, 10) || 0);
+    const shouldPaginate = hasPaginationParams && status === 'approved';
 
     // Get submissions
-    const submissions = await db.CashSubmission.findAll({
+    const findOptions = {
       where,
       include: [
         { model: db.Driver, as: 'driver', attributes: ['id', 'name', 'phoneNumber'] },
@@ -1207,10 +1252,20 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
           required: false
         }
       ],
-      order: [['createdAt', 'DESC']],
-      limit,
-      offset
-    });
+      order: status === 'approved'
+        ? [['approvedAt', 'DESC'], ['createdAt', 'DESC']]
+        : [['createdAt', 'DESC']]
+    };
+    if (shouldPaginate) {
+      findOptions.limit = pageSize;
+      findOptions.offset = page * pageSize;
+    } else {
+      findOptions.limit = limit;
+      findOptions.offset = offset;
+    }
+    const submissions = await db.CashSubmission.findAll(findOptions);
+
+    const totalMatching = await db.CashSubmission.count({ where });
 
     // Get counts
     const counts = await db.CashSubmission.findAll({
@@ -1283,7 +1338,10 @@ router.get('/:driverId/cash-submissions', async (req, res) => {
     sendSuccess(res, {
       submissions: serialized,
       counts: countMap,
-      total: serialized.length
+      total: totalMatching,
+      page: shouldPaginate ? page : 0,
+      pageSize: shouldPaginate ? pageSize : serialized.length,
+      hasMore: shouldPaginate ? ((page + 1) * pageSize < totalMatching) : false
     });
   } catch (error) {
     console.error('Error fetching cash submissions:', error);
