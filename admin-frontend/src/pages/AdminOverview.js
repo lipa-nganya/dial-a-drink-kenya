@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -141,7 +141,14 @@ const AdminOverview = () => {
     return () => {
       newSocket.close();
     };
-  }, [fetchPendingOrdersCount, heavyDataEnabled]);
+  }, [
+    fetchPendingOrdersCount,
+    heavyDataEnabled,
+    fetchStats,
+    fetchLatestOrders,
+    fetchTopInventoryItems,
+    fetchLatestTransactions
+  ]);
 
   useEffect(() => {
     if (!heavyDataEnabled) {
@@ -149,9 +156,9 @@ const AdminOverview = () => {
       return;
     }
     fetchTodayCompletedOrders(viewDate);
-  }, [viewDate, heavyDataEnabled]);
+  }, [viewDate, heavyDataEnabled, fetchTodayCompletedOrders]);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     const cacheKey = 'stats';
     const cached = dashboardCacheRef.current.get(cacheKey);
     if (cached && Date.now() - cached.at < cacheMs) {
@@ -169,9 +176,9 @@ const AdminOverview = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [cacheMs]);
 
-  const fetchLatestOrders = async () => {
+  const fetchLatestOrders = useCallback(async () => {
     const cacheKey = 'latest-orders';
     const cached = dashboardCacheRef.current.get(cacheKey);
     if (cached && Date.now() - cached.at < cacheMs) {
@@ -188,9 +195,9 @@ const AdminOverview = () => {
       console.error('Error fetching latest orders:', error);
       setLatestOrders([]);
     }
-  };
+  }, [cacheMs]);
 
-  const fetchTopInventoryItems = async () => {
+  const fetchTopInventoryItems = useCallback(async () => {
     const cacheKey = 'top-inventory-items';
     const cached = dashboardCacheRef.current.get(cacheKey);
     if (cached && Date.now() - cached.at < cacheMs) {
@@ -205,9 +212,9 @@ const AdminOverview = () => {
     } catch (error) {
       console.error('Error fetching top inventory items:', error);
     }
-  };
+  }, [cacheMs]);
 
-  const fetchLatestTransactions = async () => {
+  const fetchLatestTransactions = useCallback(async () => {
     const cacheKey = 'latest-transactions';
     const cached = dashboardCacheRef.current.get(cacheKey);
     if (cached && Date.now() - cached.at < cacheMs) {
@@ -224,9 +231,9 @@ const AdminOverview = () => {
       console.error('Error fetching latest transactions:', error);
       setLatestTransactions([]);
     }
-  };
+  }, [cacheMs]);
 
-  const fetchTodayCompletedOrders = async (dateStr) => {
+  const fetchTodayCompletedOrders = useCallback(async (dateStr) => {
     const cacheKey = `completed-orders:${dateStr}`;
     const cached = dashboardCacheRef.current.get(cacheKey);
     if (cached && Date.now() - cached.at < cacheMs) {
@@ -267,7 +274,7 @@ const AdminOverview = () => {
     } finally {
       setLoadingTodayOrders(false);
     }
-  };
+  }, [cacheMs]);
 
   const playNotificationSound = () => {
     try {
