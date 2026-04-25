@@ -387,6 +387,7 @@ const Orders = () => {
       const response = await api.get('/branches?activeOnly=true');
       setBranches(Array.isArray(response.data) ? response.data : []);
     } catch (error) {
+      if (error?.response?.status === 401) return;
       console.error('Error fetching branches:', error);
     }
   };
@@ -406,6 +407,10 @@ const Orders = () => {
         setDrivers([]);
       }
     } catch (error) {
+      if (error?.response?.status === 401) {
+        setDrivers([]);
+        return;
+      }
       console.error('Error fetching drivers:', error);
       setDrivers([]);
     }
@@ -793,6 +798,10 @@ const Orders = () => {
       // Apply filters after fetching
       applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
     } catch (error) {
+      if (error?.response?.status === 401) {
+        setError(null);
+        return;
+      }
       console.error('Error fetching orders:', error);
       setError(error.response?.data?.error || error.message || 'Error loading orders');
     } finally {
