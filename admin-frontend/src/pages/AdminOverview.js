@@ -99,65 +99,6 @@ const AdminOverview = () => {
     setViewDate(toLocalDateString(d));
   };
 
-  useEffect(() => {
-    // Check authentication on mount
-    const token = localStorage.getItem('adminToken');
-    if (token) {
-      setIsAuthenticated(true);
-    } else {
-      navigate('/login');
-    }
-  }, [navigate, setIsAuthenticated]);
-
-  useEffect(() => {
-    // Initialize socket connection - use backend URL utility
-    const socketUrl = getBackendUrl();
-    const newSocket = io(socketUrl);
-    newSocket.emit('join-admin');
-    
-    newSocket.on('new-order', (data) => {
-      setNotification({
-        message: data.message,
-        order: data.order
-      });
-      // Play notification sound (handled by AdminContext)
-      playNotificationSound();
-      // Refresh stats
-      fetchStats();
-      // Refresh pending orders count in context
-      fetchPendingOrdersCount();
-    });
-
-    setSocket(newSocket);
-
-    // Fetch initial data (heavy sections are feature-flagged)
-    fetchStats();
-    if (heavyDataEnabled) {
-      fetchLatestOrders();
-      fetchTopInventoryItems();
-      fetchLatestTransactions();
-    }
-
-    return () => {
-      newSocket.close();
-    };
-  }, [
-    fetchPendingOrdersCount,
-    heavyDataEnabled,
-    fetchStats,
-    fetchLatestOrders,
-    fetchTopInventoryItems,
-    fetchLatestTransactions
-  ]);
-
-  useEffect(() => {
-    if (!heavyDataEnabled) {
-      setTodayCompletedOrders([]);
-      return;
-    }
-    fetchTodayCompletedOrders(viewDate);
-  }, [viewDate, heavyDataEnabled, fetchTodayCompletedOrders]);
-
   const fetchStats = useCallback(async () => {
     const cacheKey = 'stats';
     const cached = dashboardCacheRef.current.get(cacheKey);
@@ -275,6 +216,65 @@ const AdminOverview = () => {
       setLoadingTodayOrders(false);
     }
   }, [cacheMs]);
+
+  useEffect(() => {
+    // Check authentication on mount
+    const token = localStorage.getItem('adminToken');
+    if (token) {
+      setIsAuthenticated(true);
+    } else {
+      navigate('/login');
+    }
+  }, [navigate, setIsAuthenticated]);
+
+  useEffect(() => {
+    // Initialize socket connection - use backend URL utility
+    const socketUrl = getBackendUrl();
+    const newSocket = io(socketUrl);
+    newSocket.emit('join-admin');
+    
+    newSocket.on('new-order', (data) => {
+      setNotification({
+        message: data.message,
+        order: data.order
+      });
+      // Play notification sound (handled by AdminContext)
+      playNotificationSound();
+      // Refresh stats
+      fetchStats();
+      // Refresh pending orders count in context
+      fetchPendingOrdersCount();
+    });
+
+    setSocket(newSocket);
+
+    // Fetch initial data (heavy sections are feature-flagged)
+    fetchStats();
+    if (heavyDataEnabled) {
+      fetchLatestOrders();
+      fetchTopInventoryItems();
+      fetchLatestTransactions();
+    }
+
+    return () => {
+      newSocket.close();
+    };
+  }, [
+    fetchPendingOrdersCount,
+    heavyDataEnabled,
+    fetchStats,
+    fetchLatestOrders,
+    fetchTopInventoryItems,
+    fetchLatestTransactions
+  ]);
+
+  useEffect(() => {
+    if (!heavyDataEnabled) {
+      setTodayCompletedOrders([]);
+      return;
+    }
+    fetchTodayCompletedOrders(viewDate);
+  }, [viewDate, heavyDataEnabled, fetchTodayCompletedOrders]);
 
   const playNotificationSound = () => {
     try {
