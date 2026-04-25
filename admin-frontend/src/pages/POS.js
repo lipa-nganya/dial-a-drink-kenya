@@ -197,20 +197,17 @@ const POS = () => {
       if (cachedProducts.length > 0) {
         setDrinks(cachedProducts);
         setBootstrapLoaded(true);
-      } else {
-        setProductsLoading(true);
       }
-
-      const accountsResponse = await api.get('/admin/accounts').catch(() => ({ data: [] }));
-      setAccounts(accountsResponse.data || []);
-
-      // Always refresh products in the background so cache stays fresh.
-      fetchProducts('', { silent: true });
+      
+      // Start both calls immediately; product preload should not wait for accounts.
+      const productsPromise = fetchProducts('');
+      const accountsPromise = api.get('/admin/accounts').catch(() => ({ data: [] }));
+      const [accountsResponse] = await Promise.all([accountsPromise, productsPromise]);
+      setAccounts(accountsResponse?.data || []);
     } catch (err) {
       console.error('Error fetching POS data:', err);
       setError(err.response?.data?.error || 'Failed to load POS data');
     } finally {
-      setProductsLoading(false);
       setLoading(false);
     }
   };
@@ -912,6 +909,27 @@ const POS = () => {
                     }
                     renderOption={(props, option) => {
                       const { key, ...restProps } = props;
+                      const isDetailedSearch = productSearch.trim().length >= 2;
+
+                      if (!isDetailedSearch) {
+                        return (
+                          <li key={option.id} {...restProps}>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                {option.name}
+                              </Typography>
+                              <Typography
+                                variant="caption"
+                                color={(Number(option.stock ?? 0) <= 0) ? 'error.main' : 'text.secondary'}
+                                sx={{ display: 'block' }}
+                              >
+                                KES {Math.round(parseFloat(option.price || 0))} (Stock: {option.stock ?? 0})
+                                {(Number(option.stock ?? 0) <= 0) ? ' - Out of stock' : ''}
+                              </Typography>
+                            </Box>
+                          </li>
+                        );
+                      }
 
                       // Build capacity-level rows with price and stock (if available)
                       const rows = [];
