@@ -39,6 +39,42 @@ import { useTheme } from '../contexts/ThemeContext';
 const PRODUCTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_DROPDOWN_OPTIONS = 120;
 let productsCache = { at: 0, data: [] };
+let productsFetchPromise = null;
+const PRODUCTS_CACHE_KEY = 'adminPosProductsCache:v1';
+
+const getFreshProductsCache = () => {
+  const now = Date.now();
+  if (Array.isArray(productsCache.data) && productsCache.data.length > 0 && now - productsCache.at < PRODUCTS_CACHE_TTL_MS) {
+    return productsCache.data;
+  }
+  try {
+    const raw = localStorage.getItem(PRODUCTS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      Number.isFinite(parsed.at) &&
+      Array.isArray(parsed.data) &&
+      parsed.data.length > 0 &&
+      now - parsed.at < PRODUCTS_CACHE_TTL_MS
+    ) {
+      productsCache = { at: parsed.at, data: parsed.data };
+      return parsed.data;
+    }
+  } catch {
+    // Ignore cache parse/storage errors.
+  }
+  return null;
+};
+
+const persistProductsCache = (data, at = Date.now()) => {
+  productsCache = { at, data };
+  try {
+    localStorage.setItem(PRODUCTS_CACHE_KEY, JSON.stringify({ at, data }));
+  } catch {
+    // Ignore storage quota/errors.
+  }
+};
 
 const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, initialIsStop = false }) => {
   const { isDarkMode, colors } = useTheme();
@@ -117,7 +153,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       fetchBranches();
       fetchDrivers();
       fetchTerritories();
-      fetchProducts();
+      const cachedProducts = getFreshProductsCache();
+      if (cachedProducts) {
+        setProducts(cachedProducts);
+      }
+      fetchProducts({ forceRefresh: !cachedProducts });
       // Reset isStop based on initialIsStop prop
       setIsStop(initialIsStop);
       // Reset order type to delivery
@@ -154,6 +194,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   }, [open]);
 
   // Refetch products when tab becomes visible (e.g. after creating a purchase in another tab) so profit/loss uses latest purchase prices
+  useEffect(() => {
+    const cachedProducts = getFreshProductsCache();
+    if (cachedProducts) {
+      setProducts(cachedProducts);
+      return;
+    }
+    fetchProducts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!open) return;
     const onVisibilityChange = () => {
@@ -331,21 +381,32 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     }
   };
 
-  const fetchProducts = async () => {
-    const now = Date.now();
-    if (Array.isArray(productsCache.data) && productsCache.data.length > 0 && now - productsCache.at < PRODUCTS_CACHE_TTL_MS) {
-      setProducts(productsCache.data);
+  const fetchProducts = async ({ forceRefresh = false } = {}) => {
+    const cachedProducts = !forceRefresh ? getFreshProductsCache() : null;
+    if (cachedProducts) {
+      setProducts(cachedProducts);
+      return;
+    }
+    if (productsFetchPromise) {
+      const shared = await productsFetchPromise;
+      if (Array.isArray(shared)) setProducts(shared);
       return;
     }
     try {
-      // Use admin drinks endpoint so we get purchasePrice for profit/loss calculation
-      const response = await api.get('/admin/drinks');
-      const raw = response.data;
-      const productsData = Array.isArray(raw) ? raw : (raw?.data || raw?.drinks || []);
+      productsFetchPromise = (async () => {
+        // Use admin drinks endpoint so we get purchasePrice for profit/loss calculation
+        const response = await api.get('/admin/drinks');
+        const raw = response.data;
+        const productsData = Array.isArray(raw) ? raw : (raw?.data || raw?.drinks || []);
+        persistProductsCache(productsData);
+        return productsData;
+      })();
+      const productsData = await productsFetchPromise;
       setProducts(productsData);
-      productsCache = { at: now, data: productsData };
     } catch (error) {
       console.error('Error fetching products:', error);
+    } finally {
+      productsFetchPromise = null;
     }
   };
 
