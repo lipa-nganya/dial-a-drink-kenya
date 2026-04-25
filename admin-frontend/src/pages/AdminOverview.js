@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Container,
   Typography,
@@ -135,13 +135,20 @@ const AdminOverview = () => {
     return () => {
       newSocket.close();
     };
-  }, [fetchPendingOrdersCount]);
+  }, [
+    fetchPendingOrdersCount,
+    fetchStats,
+    fetchLatestOrders,
+    fetchTopInventoryItems,
+    fetchLatestTransactions
+  ]);
 
   useEffect(() => {
     fetchTodayCompletedOrders(viewDate);
-  }, [viewDate]);
+  const fetchStats = useCallback(async () => {
+  }, [viewDate, fetchTodayCompletedOrders]);
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const response = await api.get('/admin/stats');
       setStats(response.data);
@@ -151,9 +158,9 @@ const AdminOverview = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchLatestOrders = async () => {
+  const fetchLatestOrders = useCallback(async () => {
     try {
       const response = await api.get('/admin/latest-orders');
       console.log('📦 Latest orders response:', response.data);
@@ -162,18 +169,18 @@ const AdminOverview = () => {
       console.error('Error fetching latest orders:', error);
       setLatestOrders([]);
     }
-  };
+  }, []);
 
-  const fetchTopInventoryItems = async () => {
+  const fetchTopInventoryItems = useCallback(async () => {
     try {
       const response = await api.get('/admin/top-inventory-items');
       setTopInventoryItems(response.data);
     } catch (error) {
       console.error('Error fetching top inventory items:', error);
     }
-  };
+  }, []);
 
-  const fetchLatestTransactions = async () => {
+  const fetchLatestTransactions = useCallback(async () => {
     try {
       const response = await api.get('/admin/latest-transactions');
       console.log('💰 Latest transactions response:', response.data);
@@ -182,9 +189,9 @@ const AdminOverview = () => {
       console.error('Error fetching latest transactions:', error);
       setLatestTransactions([]);
     }
-  };
+  }, []);
 
-  const fetchTodayCompletedOrders = async (dateStr) => {
+  const fetchTodayCompletedOrders = useCallback(async (dateStr) => {
     try {
       setLoadingTodayOrders(true);
       const target = new Date(dateStr + 'T12:00:00');
@@ -218,7 +225,7 @@ const AdminOverview = () => {
     } finally {
       setLoadingTodayOrders(false);
     }
-  };
+  }, []);
 
   const playNotificationSound = () => {
     try {
