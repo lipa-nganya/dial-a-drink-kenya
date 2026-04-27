@@ -284,7 +284,7 @@ const Home = () => {
                   width={1200}
                   height={400}
                   loading="eager"
-                  fetchpriority="high"
+                  fetchPriority="high"
                   decoding="async"
                   style={{
                     maxWidth: '1400px',
@@ -306,7 +306,7 @@ const Home = () => {
                 width={1200}
                 height={400}
                 loading="eager"
-                fetchpriority="high"
+                fetchPriority="high"
                 decoding="async"
                 style={{
                   maxWidth: '1400px',

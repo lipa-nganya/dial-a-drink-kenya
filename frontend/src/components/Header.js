@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   AppBar, 
   Toolbar, 
@@ -37,8 +37,14 @@ const Header = () => {
   const { isLoggedIn } = useCustomer();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchInput, setSearchInput] = useState('');
-  const [allDrinks, setAllDrinks] = useState([]);
+  const [menuSearchInput, setMenuSearchInput] = useState('');
+  const [drinkOptions, setDrinkOptions] = useState([]);
   const [drinksLoading, setDrinksLoading] = useState(false);
+  const drinkSearchSeqRef = useRef(0);
+  const searchAbortControllerRef = useRef(null);
+  const skipNextSubmitRef = useRef(false);
+  const lastSearchQueryRef = useRef('');
+  const searchResultCacheRef = useRef(new Map());
   const muiTheme = useMUITheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down('md'));
   const { colors } = useTheme();
@@ -47,21 +53,10 @@ const Header = () => {
   const searchFromUrl = isOnMenu ? (searchParams.get('search') || '') : '';
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setDrinksLoading(true);
-      try {
-        const res = await api.get('/drinks');
-        const arr = Array.isArray(res.data) ? res.data : [];
-        if (mounted) setAllDrinks(arr);
-      } catch {
-        if (mounted) setAllDrinks([]);
-      } finally {
-        if (mounted) setDrinksLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+    if (isOnMenu) {
+      setMenuSearchInput(searchFromUrl);
+    }
+  }, [isOnMenu, searchFromUrl]);
 
   const navigateToDrink = useCallback((drink) => {
     if (!drink) return;
@@ -72,32 +67,159 @@ const Header = () => {
     }
   }, [navigate]);
 
-  const searchInputValue = isOnMenu ? searchFromUrl : searchInput;
+  const searchInputValue = isOnMenu ? menuSearchInput : searchInput;
+
+  useEffect(() => {
+    const q = String(searchInputValue || '').trim();
+    if (q.length < 2) {
+      setDrinkOptions([]);
+      setDrinksLoading(false);
+      lastSearchQueryRef.current = '';
+      return;
+    }
+
+    const cached = searchResultCacheRef.current.get(q.toLowerCase());
+    if (cached && Date.now() - cached.ts < 60 * 1000) {
+      setDrinkOptions(cached.items);
+      setDrinksLoading(false);
+      return;
+    }
+
+    if (lastSearchQueryRef.current === q.toLowerCase()) {
+      return;
+    }
+    lastSearchQueryRef.current = q.toLowerCase();
+
+    const seq = drinkSearchSeqRef.current + 1;
+    drinkSearchSeqRef.current = seq;
+    setDrinksLoading(true);
+
+    const timer = setTimeout(async () => {
+      if (searchAbortControllerRef.current) {
+        searchAbortControllerRef.current.abort();
+      }
+      const controller = new AbortController();
+      searchAbortControllerRef.current = controller;
+      try {
+        const res = await api.get('/drinks', {
+          params: {
+            search: q,
+            available_only: 'true',
+            search_in: 'name',
+            limit: 20
+          },
+          signal: controller.signal
+        });
+        if (seq !== drinkSearchSeqRef.current) return;
+        const arr = Array.isArray(res.data) ? res.data : [];
+        const items = arr.slice(0, 20);
+        searchResultCacheRef.current.set(q.toLowerCase(), { items, ts: Date.now() });
+        setDrinkOptions(items);
+      } catch (error) {
+        // Ignore abort errors; a newer query has superseded this request.
+        if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
+        if (seq !== drinkSearchSeqRef.current) return;
+        setDrinkOptions([]);
+      } finally {
+        if (searchAbortControllerRef.current === controller) {
+          searchAbortControllerRef.current = null;
+        }
+        if (seq === drinkSearchSeqRef.current) {
+          setDrinksLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchInputValue]);
 
   const handleSearchInputChange = useCallback((event, newInputValue, reason) => {
     if (reason === 'reset') return;
     const v = newInputValue ?? '';
-    if (!isOnMenu) {
-      setSearchInput(v);
-    }
-    if (isOnMenu) {
-      setSearchParams((prev) => {
-        const next = new URLSearchParams(prev);
-        if (v.trim()) next.set('search', v);
-        else next.delete('search');
-        return next;
-      });
-    }
-  }, [isOnMenu, setSearchParams]);
+    if (isOnMenu) setMenuSearchInput(v);
+    else setSearchInput(v);
+  }, [isOnMenu]);
 
-  const handleSearchSubmit = (e) => {
+  const handleSearchSubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const q = searchInputValue;
+    if (skipNextSubmitRef.current) {
+      skipNextSubmitRef.current = false;
+      return;
+    }
+    const q = String(searchInputValue || '');
     if (q.trim()) {
-      navigate(`/menu?search=${encodeURIComponent(q.trim())}`);
-      if (!isOnMenu) setSearchInput('');
+      // On non-menu routes (including product page), avoid route thrash:
+      // if suggestions are already loaded, go straight to the best match instead
+      // of navigating to /menu first.
+      if (!isOnMenu && Array.isArray(drinkOptions) && drinkOptions.length > 0) {
+        const normalizedQuery = q.trim().toLowerCase();
+        const exact = drinkOptions.find((d) => String(d?.name || '').trim().toLowerCase() === normalizedQuery);
+        const bestMatch = exact || drinkOptions[0];
+        if (bestMatch && typeof bestMatch === 'object') {
+          navigateToDrink(bestMatch);
+          setSearchInput('');
+          setDrinkOptions([]);
+          return;
+        }
+      }
+      if (!isOnMenu) {
+        // Keep product-page search on product routes only.
+        // If local suggestions are empty/stale, do one direct server lookup and
+        // navigate to the top match, instead of bouncing through /menu.
+        try {
+          if (searchAbortControllerRef.current) {
+            searchAbortControllerRef.current.abort();
+          }
+          const controller = new AbortController();
+          searchAbortControllerRef.current = controller;
+          setDrinksLoading(true);
+          const res = await api.get('/drinks', {
+            params: {
+              search: q.trim(),
+              available_only: 'true',
+              search_in: 'name',
+              limit: 1
+            },
+            signal: controller.signal
+          });
+          if (searchAbortControllerRef.current === controller) {
+            searchAbortControllerRef.current = null;
+          }
+          const arr = Array.isArray(res.data) ? res.data : [];
+          if (arr.length > 0) {
+            navigateToDrink(arr[0]);
+            setSearchInput('');
+            setDrinkOptions([]);
+          }
+        } catch (error) {
+          if (error?.name !== 'CanceledError' && error?.name !== 'AbortError') {
+            setDrinkOptions([]);
+          }
+        } finally {
+          setDrinksLoading(false);
+        }
+        return;
+      }
+      if (isOnMenu) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.set('search', q.trim());
+          return next;
+        }, { replace: true });
+      } else {
+        navigate(`/menu?search=${encodeURIComponent(q.trim())}`);
+        setSearchInput('');
+      }
     } else {
-      navigate('/menu');
+      if (isOnMenu) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete('search');
+          return next;
+        }, { replace: true });
+      } else {
+        navigate('/menu');
+      }
     }
   };
 
@@ -480,25 +602,20 @@ const Header = () => {
                 <Autocomplete
                   freeSolo
                   fullWidth
-                  options={allDrinks}
+                  options={drinkOptions}
                   loading={drinksLoading}
-                  filterOptions={(options, { inputValue }) => {
-                    const q = inputValue.trim().toLowerCase();
-                    if (!q) return [];
-                    return options
-                      .filter((o) => o && o.name && o.name.toLowerCase().includes(q))
-                      .slice(0, 20);
-                  }}
+                  filterOptions={(options) => options}
                   getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
                   isOptionEqualToValue={(a, b) => a?.id === b?.id}
                   inputValue={searchInputValue}
                   onInputChange={handleSearchInputChange}
                   onChange={(e, newValue) => {
                     if (newValue && typeof newValue === 'object') {
+                      skipNextSubmitRef.current = true;
                       navigateToDrink(newValue);
                     }
                   }}
-                  noOptionsText="No matching drink names"
+                  noOptionsText={searchInputValue.trim().length < 2 ? 'Type at least 2 letters' : 'No matching drink names'}
                   ListboxProps={{ style: { maxHeight: 280 } }}
                   renderInput={(params) => (
                     <TextField
@@ -646,25 +763,20 @@ const Header = () => {
               <Autocomplete
                 freeSolo
                 fullWidth
-                options={allDrinks}
+                options={drinkOptions}
                 loading={drinksLoading}
-                filterOptions={(options, { inputValue }) => {
-                  const q = inputValue.trim().toLowerCase();
-                  if (!q) return [];
-                  return options
-                    .filter((o) => o && o.name && o.name.toLowerCase().includes(q))
-                    .slice(0, 20);
-                }}
+                filterOptions={(options) => options}
                 getOptionLabel={(option) => (typeof option === 'string' ? option : option?.name || '')}
                 isOptionEqualToValue={(a, b) => a?.id === b?.id}
                 inputValue={searchInputValue}
                 onInputChange={handleSearchInputChange}
                 onChange={(e, newValue) => {
                   if (newValue && typeof newValue === 'object') {
+                    skipNextSubmitRef.current = true;
                     navigateToDrink(newValue);
                   }
                 }}
-                noOptionsText="No matching drink names"
+                noOptionsText={searchInputValue.trim().length < 2 ? 'Type at least 2 letters' : 'No matching drink names'}
                 ListboxProps={{ style: { maxHeight: 280 } }}
                 renderInput={(params) => (
                   <TextField
