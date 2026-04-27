@@ -54,6 +54,13 @@ import { normalizeSlug } from '../utils/slugCanonical';
 import { buildBrandPath } from '../utils/brandSlug';
 import DrinkCard from '../components/DrinkCard';
 
+const RELATED_PRODUCTS_CACHE_TTL_MS = 2 * 60 * 1000;
+const relatedProductsCache = new Map();
+const RELATED_PRODUCTS_FETCH_LIMIT = 16;
+const PRODUCT_CACHE_TTL_MS = 60 * 1000;
+const productFetchCache = new Map();
+const productFetchInFlight = new Map();
+
 const ProductPage = () => {
   // Support both URL formats:
   // New: /:categorySlug/:productSlug (e.g., /wine/1659-sauvignon-blanc-750ml)
@@ -90,12 +97,18 @@ const ProductPage = () => {
   const [aboutTextMaxHeight, setAboutTextMaxHeight] = useState(180);
   const [descriptionExpanded, setDescriptionExpanded] = useState(false);
   const [detailedDescription, setDetailedDescription] = useState(null);
-  const [descriptionLoading, setDescriptionLoading] = useState(!!initialProduct);
+  const [descriptionLoading, setDescriptionLoading] = useState(false);
   const [testingNotes, setTestingNotes] = useState(null);
-  const [testingNotesLoading, setTestingNotesLoading] = useState(!!initialProduct);
+  const [testingNotesLoading, setTestingNotesLoading] = useState(false);
   const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const productFetchSeqRef = useRef(0);
+  const relatedFetchSeqRef = useRef(0);
+  const detailedFetchSeqRef = useRef(0);
+  const testingFetchSeqRef = useRef(0);
+  const detailedCacheRef = useRef(new Map());
+  const testingCacheRef = useRef(new Map());
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -171,30 +184,9 @@ const ProductPage = () => {
     }
   }, [pendingScrollToTop, product?.id, imageLoaded, imageError]);
 
-  /** Replace stale or alternate category segments with canonical path (indexed URLs, external links). */
-  useEffect(() => {
-    if (!product || loading) return;
-    if (!isCategoryBasedUrl) return;
-    let canonPath;
-    try {
-      canonPath = normalizePathname(new URL(buildProductCanonicalUrl(product)).pathname);
-    } catch {
-      return;
-    }
-    const cur = normalizePathname(location.pathname);
-    if (canonPath === cur) return;
-    navigate(`${canonPath}${stripTrackingSearchParams(location.search)}`, {
-      replace: true,
-      state: { drink: product }
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-check when identity or route changes
-  }, [product?.id, loading, isCategoryBasedUrl, location.pathname, location.search, navigate]);
-
   useEffect(() => {
     if (product) {
-      fetchRelatedProducts();
-      fetchDetailedDescription();
-      fetchTestingNotes();
+      fetchRelatedProducts(product);
 
       // If this page was loaded via the old /product/:id or /product/:slug route
       // and we now have proper category + product slugs, redirect to the
@@ -244,7 +236,7 @@ const ProductPage = () => {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [product]);
+  }, [product?.id]);
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return '';
@@ -269,66 +261,103 @@ const ProductPage = () => {
   };
 
   const fetchProduct = async () => {
+    const requestSeq = productFetchSeqRef.current + 1;
+    productFetchSeqRef.current = requestSeq;
+    const requestKey = isCategoryBasedUrl
+      ? `cat:${String(categorySlug || '')}/${String(productSlug || '')}`
+      : isLegacyIndexedProductsUrl && productSlug
+      ? `legacy-slug:${String(productSlug)}`
+      : `id:${String(id || '')}`;
+
+    const cached = productFetchCache.get(requestKey);
+    if (cached && Date.now() - cached.ts < PRODUCT_CACHE_TTL_MS) {
+      if (requestSeq !== productFetchSeqRef.current) return;
+      setProduct(cached.data);
+      setDetailedDescription(null);
+      setTestingNotes(null);
+      setDescriptionLoading(false);
+      setTestingNotesLoading(false);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
       
-      let response;
-      if (isCategoryBasedUrl) {
-        // New format: /:categorySlug/:productSlug
-        // Fetch via API: /api/products/:categorySlug/:productSlug
-        try {
-          response = await api.get(`/products/${categorySlug}/${productSlug}`);
-        } catch (e) {
-          // Stale index / wrong category segment in URL (e.g. GSC) — resolve by slug only, then client corrects path
-          const st = e?.response?.status;
-          if (st === 404 && productSlug) {
-            let bySlug;
+      let requestPromise = productFetchInFlight.get(requestKey);
+      if (!requestPromise) {
+        requestPromise = (async () => {
+          let response;
+          if (isCategoryBasedUrl) {
+            // New format: /:categorySlug/:productSlug
+            // Fetch via API: /api/products/:categorySlug/:productSlug
             try {
-              bySlug = await api.get(`/drinks/${encodeURIComponent(productSlug)}`);
-            } catch {
-              throw e;
-            }
-            const d = bySlug.data;
-            const catSeg = normalizeSlug(d.category?.slug || d.category?.name || '');
-            const prodSeg = normalizeSlug(d.slug || '');
-            if (catSeg && prodSeg) {
-              const want = normalizePathname(`/${catSeg}/${prodSeg}`);
-              const cur = normalizePathname(location.pathname);
-              const q = stripTrackingSearchParams(location.search);
-              if (want !== cur) {
-                navigate(`${want}${q}`, { replace: true, state: { drink: d } });
-                return;
+              response = await api.get(`/products/${categorySlug}/${productSlug}`);
+            } catch (e) {
+              // Stale index / wrong category segment in URL (e.g. GSC) — resolve by slug only, then client corrects path
+              const st = e?.response?.status;
+              if (st === 404 && productSlug) {
+                let bySlug;
+                try {
+                  bySlug = await api.get(`/drinks/${encodeURIComponent(productSlug)}`);
+                } catch {
+                  throw e;
+                }
+                const d = bySlug.data;
+                const catSeg = normalizeSlug(d.category?.slug || d.category?.name || '');
+                const prodSeg = normalizeSlug(d.slug || '');
+                if (catSeg && prodSeg) {
+                  const want = normalizePathname(`/${catSeg}/${prodSeg}`);
+                  const cur = normalizePathname(location.pathname);
+                  const q = stripTrackingSearchParams(location.search);
+                  if (want !== cur) {
+                    navigate(`${want}${q}`, { replace: true, state: { drink: d } });
+                    return null;
+                  }
+                  response = { data: d };
+                } else {
+                  throw e;
+                }
+              } else {
+                throw e;
               }
-              response = { data: d };
-            } else {
-              throw e;
             }
+          } else if (
+            isLegacyIndexedProductsUrl &&
+            productSlug &&
+            /^\/products\/[^/]+$/i.test(location.pathname)
+          ) {
+            // Indexed /products/:slug — lookup by slug only (same as /product/:slug API)
+            response = await api.get(`/drinks/${encodeURIComponent(productSlug)}`);
           } else {
-            throw e;
+            // Old format: /product/:id
+            response = await api.get(`/drinks/${id}`);
           }
-        }
-      } else if (
-        isLegacyIndexedProductsUrl &&
-        productSlug &&
-        /^\/products\/[^/]+$/i.test(location.pathname)
-      ) {
-        // Indexed /products/:slug — lookup by slug only (same as /product/:slug API)
-        response = await api.get(`/drinks/${encodeURIComponent(productSlug)}`);
-      } else {
-        // Old format: /product/:id
-        response = await api.get(`/drinks/${id}`);
+          return response;
+        })();
+        productFetchInFlight.set(requestKey, requestPromise);
       }
+
+      const response = await requestPromise;
+      if (!response) return;
       
+      if (requestSeq !== productFetchSeqRef.current) return;
       const productData = response.data;
+      productFetchCache.set(requestKey, { data: productData, ts: Date.now() });
       setProduct(productData);
-      setDescriptionLoading(true);
-      setTestingNotesLoading(true);
+      setDetailedDescription(null);
+      setTestingNotes(null);
+      setDescriptionLoading(false);
+      setTestingNotesLoading(false);
     } catch (err) {
+      if (requestSeq !== productFetchSeqRef.current) return;
       console.error('Error fetching product:', err);
       setError('Product not found');
     } finally {
-      setLoading(false);
+      productFetchInFlight.delete(requestKey);
+      if (requestSeq === productFetchSeqRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -401,19 +430,48 @@ const ProductPage = () => {
     </Container>
   );
 
-  const fetchRelatedProducts = async () => {
+  const fetchRelatedProducts = async (targetProduct = product) => {
+    const requestSeq = relatedFetchSeqRef.current + 1;
+    relatedFetchSeqRef.current = requestSeq;
     try {
-      if (!product) return;
+      if (!targetProduct) return;
+      const categoryId = targetProduct.categoryId;
+      if (!categoryId) {
+        setRelatedProducts([]);
+        return;
+      }
+
+      const cacheKey = String(categoryId);
+      const cached = relatedProductsCache.get(cacheKey);
+      if (cached && Date.now() - cached.ts < RELATED_PRODUCTS_CACHE_TTL_MS) {
+        if (requestSeq !== relatedFetchSeqRef.current) return;
+        const relatedFromCache = cached.items
+          .filter(drink => drink.id !== targetProduct.id)
+          .slice(0, 4);
+        setRelatedProducts(relatedFromCache);
+        return;
+      }
       
-      // Fetch products from the same category
-      const response = await api.get('/drinks');
+      // Fetch only the current category instead of the full catalog.
+      const response = await api.get('/drinks', {
+        params: {
+          category: categoryId,
+          available_only: 'true',
+          limit: RELATED_PRODUCTS_FETCH_LIMIT
+        }
+      });
+      if (requestSeq !== relatedFetchSeqRef.current) return;
       const allProducts = Array.isArray(response.data) ? response.data : [];
+      relatedProductsCache.set(cacheKey, {
+        items: allProducts,
+        ts: Date.now()
+      });
       
       // Filter related products (same category, exclude current product, limit to 4)
       const related = allProducts
         .filter(drink => 
-          drink.id !== product.id && 
-          drink.categoryId === product.categoryId &&
+          drink.id !== targetProduct.id && 
+          drink.categoryId === targetProduct.categoryId &&
           drink.isAvailable
         )
         .slice(0, 4);
@@ -424,62 +482,84 @@ const ProductPage = () => {
     }
   };
 
-  const fetchDetailedDescription = async () => {
+  const fetchDetailedDescription = async (targetProduct = product) => {
+    const requestSeq = detailedFetchSeqRef.current + 1;
+    detailedFetchSeqRef.current = requestSeq;
+    let identifier = '';
     try {
-      if (!product) return;
+      if (!targetProduct) return;
+
+      identifier = String(targetProduct.slug || targetProduct.id || '');
+      if (!identifier) return;
+      if (detailedCacheRef.current.has(identifier)) {
+        setDetailedDescription(detailedCacheRef.current.get(identifier));
+        setDescriptionLoading(false);
+        return;
+      }
       
       setDescriptionLoading(true);
-      console.log(`Fetching detailed description for product: ${product.name} (ID: ${product.id})`);
-      
       // Use slug if available, otherwise fall back to ID
-      const identifier = product.slug || product.id;
       const response = await api.get(`/drinks/${identifier}/detailed-description`);
-      
-      console.log('Detailed description response:', response.data);
-      
+      if (requestSeq !== detailedFetchSeqRef.current) return;
+
       if (response.data && response.data.description) {
-        console.log(`Received description, length: ${response.data.description.length}`);
+        detailedCacheRef.current.set(identifier, response.data.description);
         setDetailedDescription(response.data.description);
       } else {
-        console.log('No description in response');
+        detailedCacheRef.current.set(identifier, null);
         setDetailedDescription(null);
       }
     } catch (err) {
+      if (requestSeq !== detailedFetchSeqRef.current) return;
       console.error('Error fetching detailed description:', err);
       console.error('Error details:', err.response?.data || err.message);
       // If detailed description fails, we'll use the cleaned product description
+      detailedCacheRef.current.set(identifier, null);
       setDetailedDescription(null);
     } finally {
-      setDescriptionLoading(false);
+      if (requestSeq === detailedFetchSeqRef.current) {
+        setDescriptionLoading(false);
+      }
     }
   };
 
-  const fetchTestingNotes = async () => {
+  const fetchTestingNotes = async (targetProduct = product) => {
+    const requestSeq = testingFetchSeqRef.current + 1;
+    testingFetchSeqRef.current = requestSeq;
+    let identifier = '';
     try {
-      if (!product) return;
+      if (!targetProduct) return;
+
+      identifier = String(targetProduct.slug || targetProduct.id || '');
+      if (!identifier) return;
+      if (testingCacheRef.current.has(identifier)) {
+        setTestingNotes(testingCacheRef.current.get(identifier));
+        setTestingNotesLoading(false);
+        return;
+      }
       
       setTestingNotesLoading(true);
-      console.log(`Fetching testing notes for product: ${product.name} (ID: ${product.id})`);
-      
       // Use slug if available, otherwise fall back to ID
-      const identifier = product.slug || product.id;
       const response = await api.get(`/drinks/${identifier}/testing-notes`);
-      
-      console.log('Testing notes response:', response.data);
-      
+      if (requestSeq !== testingFetchSeqRef.current) return;
+
       if (response.data && response.data.testingNotes) {
-        console.log(`Received testing notes, length: ${response.data.testingNotes.length}`);
+        testingCacheRef.current.set(identifier, response.data.testingNotes);
         setTestingNotes(response.data.testingNotes);
       } else {
-        console.log('No testing notes in response');
+        testingCacheRef.current.set(identifier, 'N/A');
         setTestingNotes('N/A');
       }
     } catch (err) {
+      if (requestSeq !== testingFetchSeqRef.current) return;
       console.error('Error fetching testing notes:', err);
       console.error('Error details:', err.response?.data || err.message);
+      testingCacheRef.current.set(identifier, 'N/A');
       setTestingNotes('N/A');
     } finally {
-      setTestingNotesLoading(false);
+      if (requestSeq === testingFetchSeqRef.current) {
+        setTestingNotesLoading(false);
+      }
     }
   };
 
@@ -681,11 +761,9 @@ const ProductPage = () => {
     // Use the full description from database (with HTML stripped) for "For More Information" section
     // Show the complete content, not the cleaned/promotional-removed version
     if (product.description && product.description.length > 0) {
-      console.log(`[ProductPage] Using full product description from database, length: ${product.description.length}`);
       // Strip HTML but keep all the content (don't remove promotional text)
       description = stripHtml(product.description);
     } else if (detailedDescription && detailedDescription.length > 0) {
-      console.log(`[ProductPage] Using detailed description, length: ${detailedDescription.length}`);
       description = detailedDescription;
     }
     
@@ -878,7 +956,7 @@ const ProductPage = () => {
                   image={imageUrl}
                   alt={product.name}
                   loading="eager"
-                  fetchpriority="high"
+                  fetchPriority="high"
                   decoding="async"
                   sx={{ 
                     objectFit: 'contain', 
@@ -1567,6 +1645,13 @@ const ProductPage = () => {
                     <Button
                       onClick={() => {
                         if (!hasMore) return;
+                        // Load heavy AI metadata only when user asks for more details.
+                        if (!descriptionExpanded && !detailedDescription && !descriptionLoading) {
+                          fetchDetailedDescription(product);
+                        }
+                        if (!descriptionExpanded && !testingNotes && !testingNotesLoading) {
+                          fetchTestingNotes(product);
+                        }
                         setDescriptionExpanded(!descriptionExpanded);
                       }}
                       sx={{

@@ -5,6 +5,12 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { normalizeSlug } from '../utils/slugCanonical';
 
+const CATEGORIES_CACHE_TTL_MS = 5 * 60 * 1000;
+let categoriesBarCache = {
+  data: null,
+  ts: 0
+};
+
 const CategoriesBar = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -31,11 +37,20 @@ const CategoriesBar = () => {
   useEffect(() => {
     let mounted = true;
     const fetchCategories = async () => {
+      const now = Date.now();
+      if (categoriesBarCache.data && now - categoriesBarCache.ts < CATEGORIES_CACHE_TTL_MS) {
+        if (mounted) setCategories(categoriesBarCache.data);
+        return;
+      }
       try {
         const response = await api.get('/categories');
         let list = Array.isArray(response.data) ? response.data : (response.data?.data || []);
         if (!Array.isArray(list)) list = [];
         list = list.filter(c => c.name && c.name.toLowerCase() !== 'test' && c.name.toLowerCase() !== 'popular');
+        categoriesBarCache = {
+          data: list,
+          ts: Date.now()
+        };
         if (mounted) setCategories(list);
       } catch (err) {
         if (mounted) setCategories([]);

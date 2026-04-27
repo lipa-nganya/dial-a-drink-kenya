@@ -19,6 +19,16 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getSimilarDrinkSuggestions, drinkNameMatchesSearch } from '../utils/drinkSearch';
 import { normalizeSlug } from '../utils/slugCanonical';
 
+const CATEGORIES_CACHE_TTL_MS = 5 * 60 * 1000;
+let menuCategoriesCache = {
+  data: null,
+  ts: 0
+};
+let menuCategoriesInFlight = null;
+const MENU_DRINKS_CACHE_TTL_MS = 60 * 1000;
+const menuDrinksCache = new Map();
+const menuDrinksInFlight = new Map();
+
 const Menu = () => {
   const { categorySlug } = useParams();
   const navigate = useNavigate();
@@ -43,6 +53,9 @@ const Menu = () => {
   // When sort by quantity is selected, filter by a specific capacity ('' = show all)
   const [quantityCapacityFilter, setQuantityCapacityFilter] = useState('');
   const categoryPathKey = (c) => (c ? normalizeSlug(c.slug || c.name) : '');
+  const searchParam = searchParams.get('search') || '';
+  const drinksRequestKeyRef = React.useRef('');
+  const drinksAbortControllerRef = React.useRef(null);
 
   // Unique capacities from drinks that pass current category/search/subcategory filter (for quantity dropdown)
   // Must be defined before any useEffect or JSX that references it
@@ -82,8 +95,15 @@ const Menu = () => {
   }, [drinks, sortBy, searchTerm, selectedCategory, selectedSubcategory]);
 
   useEffect(() => {
-    fetchData();
+    fetchCategories();
   }, []);
+
+  useEffect(() => {
+    // On category routes, wait for category resolution before fetching to avoid
+    // an initial full-catalog request.
+    if (!searchParam && categorySlug && !selectedCategory) return;
+    fetchDrinks(searchParam, selectedCategory);
+  }, [searchParam, selectedCategory, categorySlug]);
 
   // Scroll detection: infinite scroll and categories collapse no longer used (categories in header)
   useEffect(() => {
@@ -230,18 +250,71 @@ const Menu = () => {
     return getSimilarDrinkSuggestions(drinks, q, selectedCategory, { limit: 12 });
   }, [loading, searchTerm, filteredDrinks.length, drinks, selectedCategory]);
 
-  const fetchData = async () => {
+  const fetchDrinks = async (searchValue = '', categoryId = 0) => {
+    const q = String(searchValue || '').trim();
+    const normalizedCategoryId = Number.isFinite(Number(categoryId)) ? Number(categoryId) : 0;
+    const requestKey =
+      q.length >= 2
+        ? `search:${q.toLowerCase()}`
+        : normalizedCategoryId > 0
+        ? `category:${normalizedCategoryId}`
+        : 'all';
+    if (drinksRequestKeyRef.current === requestKey) return;
+    drinksRequestKeyRef.current = requestKey;
+
+    const cached = menuDrinksCache.get(requestKey);
+    if (cached && Date.now() - cached.ts < MENU_DRINKS_CACHE_TTL_MS) {
+      setDrinks(cached.items);
+      setLoading(false);
+      return;
+    }
+
+    if (drinksAbortControllerRef.current) {
+      drinksAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    drinksAbortControllerRef.current = controller;
+    setLoading(true);
     try {
-      const [drinksResponse, categoriesResponse] = await Promise.all([
-        api.get('/drinks'),
-        api.get('/categories')
-      ]);
-      
-      // Defensive: Ensure drinks is always an array
+      const params =
+        q.length >= 2
+          ? { search: q, search_in: 'name', limit: 300 }
+          : normalizedCategoryId > 0
+          ? { category: normalizedCategoryId, limit: 400 }
+          : undefined;
+      let requestPromise = menuDrinksInFlight.get(requestKey);
+      if (!requestPromise) {
+        requestPromise = api.get('/drinks', params ? { params, signal: controller.signal } : { signal: controller.signal });
+        menuDrinksInFlight.set(requestKey, requestPromise);
+      }
+      const drinksResponse = await requestPromise;
       const drinksArray = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+      menuDrinksCache.set(requestKey, { items: drinksArray, ts: Date.now() });
       setDrinks(drinksArray);
-      
-      // Defensive: Ensure categories is always an array
+    } catch (error) {
+      if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
+      console.error('Error fetching drinks:', error);
+      setDrinks([]);
+    } finally {
+      menuDrinksInFlight.delete(requestKey);
+      if (drinksAbortControllerRef.current === controller) {
+        drinksAbortControllerRef.current = null;
+      }
+      setLoading(false);
+    }
+  };
+
+  const fetchCategories = async () => {
+    const now = Date.now();
+    if (menuCategoriesCache.data && now - menuCategoriesCache.ts < CATEGORIES_CACHE_TTL_MS) {
+      setCategories(menuCategoriesCache.data);
+      return;
+    }
+    try {
+      if (!menuCategoriesInFlight) {
+        menuCategoriesInFlight = api.get('/categories');
+      }
+      const categoriesResponse = await menuCategoriesInFlight;
       let categoriesArray = [];
       if (categoriesResponse.data) {
         if (Array.isArray(categoriesResponse.data)) {
@@ -262,13 +335,16 @@ const Menu = () => {
         cat.name && cat.name.toLowerCase() !== 'test' && cat.name.toLowerCase() !== 'popular'
       );
       
+      menuCategoriesCache = {
+        data: categoriesArray,
+        ts: Date.now()
+      };
       setCategories(categoriesArray);
     } catch (error) {
-      console.error('Error fetching data:', error);
-      setDrinks([]);
+      console.error('Error fetching categories:', error);
       setCategories([]);
     } finally {
-      setLoading(false);
+      menuCategoriesInFlight = null;
     }
   };
 

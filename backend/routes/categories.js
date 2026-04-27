@@ -2,8 +2,30 @@ const express = require('express');
 const router = express.Router();
 const db = require('../models');
 
+const CATEGORIES_CACHE_TTL_MS = 5 * 60 * 1000;
+let categoriesCache = {
+  data: null,
+  expiresAt: 0,
+  inFlight: null
+};
+
 // Get all categories
 router.get('/', async (req, res) => {
+  const now = Date.now();
+  if (categoriesCache.data && categoriesCache.expiresAt > now) {
+    return res.json(categoriesCache.data);
+  }
+
+  if (categoriesCache.inFlight) {
+    try {
+      const data = await categoriesCache.inFlight;
+      return res.json(data);
+    } catch {
+      // Fall through and run a fresh query
+    }
+  }
+
+  categoriesCache.inFlight = (async () => {
   try {
     // Define the order of categories as they appear on dialadrinkkenya.com
     const categoryOrder = [
@@ -119,7 +141,9 @@ router.get('/', async (req, res) => {
       return a.name.localeCompare(b.name);
     });
 
-    res.json(sortedCategories);
+    categoriesCache.data = sortedCategories;
+    categoriesCache.expiresAt = Date.now() + CATEGORIES_CACHE_TTL_MS;
+    return sortedCategories;
   } catch (error) {
     console.error('❌ Error fetching categories:', error);
     console.error('Error stack:', error.stack);
@@ -127,17 +151,35 @@ router.get('/', async (req, res) => {
     console.error('Error code:', error.code);
     // Check if it's a database connection error
     if (error.name === 'SequelizeConnectionError' || error.name === 'SequelizeConnectionRefusedError' || error.code === 'ECONNREFUSED') {
-      res.status(503).json({ 
+      const err = new Error('Database connection failed');
+      err.statusCode = 503;
+      err.payload = { 
         error: 'Database connection failed',
         message: 'Unable to connect to database. Please try again in a moment.'
-      });
+      };
+      throw err;
     } else {
-      res.status(500).json({ 
+      const err = new Error('Failed to fetch categories');
+      err.statusCode = 500;
+      err.payload = { 
         error: 'Failed to fetch categories',
         message: error.message || 'Database query failed. Please try again in a moment.',
         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-      });
+      };
+      throw err;
     }
+  }
+  })();
+
+  try {
+    const data = await categoriesCache.inFlight;
+    res.json(data);
+  } catch (err) {
+    categoriesCache.data = null;
+    categoriesCache.expiresAt = 0;
+    res.status(err.statusCode || 500).json(err.payload || { error: 'Failed to fetch categories' });
+  } finally {
+    categoriesCache.inFlight = null;
   }
 });
 
@@ -166,12 +208,20 @@ router.post('/', async (req, res) => {
       isActive: isActive !== undefined ? isActive : true
     });
 
+    invalidateCategoriesCache();
+
     return res.status(201).json(category);
   } catch (error) {
     console.error('Error creating category:', error);
     return res.status(500).json({ error: 'Failed to create category' });
   }
 });
+
+// Invalidate categories cache whenever categories are mutated.
+const invalidateCategoriesCache = () => {
+  categoriesCache.data = null;
+  categoriesCache.expiresAt = 0;
+};
 
 // Add new categories (admin endpoint)
 router.post('/add-all', async (req, res) => {
@@ -214,6 +264,8 @@ router.post('/add-all', async (req, res) => {
         console.log(`⏭️  Category already exists: ${categoryName}`);
       }
     }
+
+    invalidateCategoriesCache();
     
     res.json({ 
       message: 'Categories processed successfully',
@@ -255,6 +307,7 @@ router.delete('/:id', async (req, res) => {
 
     // Delete the category
     await category.destroy();
+    invalidateCategoriesCache();
     
     res.json({ 
       message: `Category "${category.name}" deleted successfully`,
