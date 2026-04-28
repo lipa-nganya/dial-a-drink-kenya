@@ -236,6 +236,12 @@ const Orders = () => {
   // Route Optimisation state (kept for fetchRiderRoutes function which is still called)
   const [orderTab, setOrderTab] = useState('pending'); // 'completed', 'pending', 'unassigned', 'confirmed', 'out_for_delivery', 'cancelled'
   const [cancelledSubTab, setCancelledSubTab] = useState('cancelled'); // 'cancelled' | 'cancellation-requests'
+  const orderTabRef = useRef(orderTab);
+  const cancelledSubTabRef = useRef(cancelledSubTab);
+  const orderStatusFilterRef = useRef(orderStatusFilter);
+  const transactionStatusFilterRef = useRef(transactionStatusFilter);
+  const searchQueryRef = useRef(searchQuery);
+  const customFilterRef = useRef(customFilter);
   // eslint-disable-next-line no-unused-vars
   const [riderRoutes, setRiderRoutes] = useState([]);
   // eslint-disable-next-line no-unused-vars
@@ -779,7 +785,7 @@ const Orders = () => {
   const fetchOrders = async ({ background = false, tabOverride } = {}) => {
     try {
       if (!background) setLoading(true);
-      const effectiveTab = tabOverride || orderTab;
+      const effectiveTab = tabOverride || orderTabRef.current;
       const response = await api.get(buildOrdersSummaryQuery(effectiveTab));
       let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
 
@@ -808,7 +814,15 @@ const Orders = () => {
       console.log('📦 fetchOrders - calling applyFilters with tab:', orderTab);
       setError(null);
       // Apply filters after fetching
-      applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+      applyFilters(
+        sortedOrders,
+        orderStatusFilterRef.current,
+        transactionStatusFilterRef.current,
+        searchQueryRef.current,
+        customFilterRef.current,
+        effectiveTab,
+        cancelledSubTabRef.current
+      );
     } catch (error) {
       if (error?.response?.status === 401) {
         setError(null);
@@ -995,6 +1009,12 @@ const Orders = () => {
 
   // Update filters when filter values change
   useEffect(() => {
+    orderTabRef.current = orderTab;
+    cancelledSubTabRef.current = cancelledSubTab;
+    orderStatusFilterRef.current = orderStatusFilter;
+    transactionStatusFilterRef.current = transactionStatusFilter;
+    searchQueryRef.current = searchQuery;
+    customFilterRef.current = customFilter;
     applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderStatusFilter, transactionStatusFilter, riderFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
