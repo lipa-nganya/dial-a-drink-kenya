@@ -2759,8 +2759,23 @@ router.get('/orders', verifyAdmin, async (req, res) => {
     const orderIdFilter = parseInt(req.query.orderId, 10);
     const hasOrderIdFilter = Number.isFinite(orderIdFilter) && orderIdFilter > 0;
     const summaryMode = req.query.summary === '1' || req.query.summary === 'true';
+    const statusQuery = String(req.query.status || '').trim();
     const limit = Math.min(Math.max(parseInt(req.query.limit || '120', 10) || 120, 1), 300);
     const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+    const validStatuses = new Set(['pending', 'confirmed', 'in_progress', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order']);
+    const requestedStatuses = statusQuery
+      ? statusQuery
+          .split(',')
+          .map((s) => String(s || '').trim())
+          .filter((s) => validStatuses.has(s))
+      : [];
+    const whereClause = hasOrderIdFilter
+      ? { id: orderIdFilter }
+      : requestedStatuses.length === 1
+      ? { status: requestedStatuses[0] }
+      : requestedStatuses.length > 1
+      ? { status: { [Op.in]: requestedStatuses } }
+      : undefined;
     
     // Build includes array conditionally
     const orderIncludes = summaryMode
@@ -2843,7 +2858,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
 
     const ordersResult = await db.Order.findAndCountAll({
       attributes: orderAttributes,
-      where: hasOrderIdFilter ? { id: orderIdFilter } : undefined,
+      where: whereClause,
       include: orderIncludes,
       order: [['createdAt', 'DESC']],
       ...(summaryMode ? { limit, offset, distinct: true } : {})

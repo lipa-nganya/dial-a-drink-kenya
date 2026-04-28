@@ -68,7 +68,7 @@ import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
-const ORDERS_SUMMARY_QUERY = '/admin/orders?summary=1&limit=150';
+const ORDERS_SUMMARY_QUERY_BASE = '/admin/orders?summary=1&limit=300';
 
 /** Matches admin API: amounts editable unless cancelled, or incomplete paid/completed combos. Paid + completed is allowed (reconciliation). */
 function canEditOrderFinancialAmounts(order) {
@@ -769,10 +769,18 @@ const Orders = () => {
     });
   };
 
-  const fetchOrders = async ({ background = false } = {}) => {
+  const buildOrdersSummaryQuery = (tabValue) => {
+    if (tabValue === 'out_for_delivery') {
+      return `${ORDERS_SUMMARY_QUERY_BASE}&status=out_for_delivery`;
+    }
+    return ORDERS_SUMMARY_QUERY_BASE;
+  };
+
+  const fetchOrders = async ({ background = false, tabOverride } = {}) => {
     try {
       if (!background) setLoading(true);
-      const response = await api.get(ORDERS_SUMMARY_QUERY);
+      const effectiveTab = tabOverride || orderTab;
+      const response = await api.get(buildOrdersSummaryQuery(effectiveTab));
       let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
 
       // Filter out any undefined or null orders
@@ -854,14 +862,16 @@ const Orders = () => {
     
     let filtered = [...ordersList];
     const isWalkInOrder = (order) => {
-      const addr = String(order?.deliveryAddress || '');
+      const addr = String(order?.deliveryAddress || '').trim().toLowerCase();
+      // Treat walk-in strictly by explicit in-store address markers.
+      // POS delivery orders may still have POS customer placeholders, and should
+      // remain in normal delivery workflow tabs.
       return (
-        addr === 'In-Store Purchase' ||
-        addr.includes('In-Store Purchase') ||
-        String(order?.customerPhone || '') === 'POS' ||
-        String(order?.customerName || '') === 'POS'
+        addr === 'in-store purchase' ||
+        addr.includes('in-store purchase')
       );
     };
+    const isUnassignedOrder = (order) => !order?.driverId || order?.driver?.name === 'HOLD Driver';
 
     // Apply tab-based filtering first
     if (tabFilter === 'pending') {
@@ -877,13 +887,16 @@ const Orders = () => {
       const beforeFilter = filtered.length;
       filtered = filtered
         .filter(order => !isWalkInOrder(order))
-        .filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
+        .filter(order => isUnassignedOrder(order));
       console.log(`🔍 'unassigned' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'confirmed') {
       // "In Progress" tab should include walk-in POS orders created unpaid (status=in_progress)
       // as well as delivery orders that are confirmed/in-progress.
       const beforeFilter = filtered.length;
-      filtered = filtered.filter(order => order.status === 'confirmed' || order.status === 'in_progress');
+      filtered = filtered.filter(order =>
+        (order.status === 'confirmed' || order.status === 'in_progress') &&
+        !isUnassignedOrder(order)
+      );
       console.log(`🔍 'confirmed' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'out_for_delivery') {
       const beforeFilter = filtered.length;
@@ -1950,6 +1963,11 @@ const Orders = () => {
               setCancelledSubTab('cancelled');
             }
             setPage(0);
+            if (newValue === 'out_for_delivery') {
+              fetchOrders({ tabOverride: 'out_for_delivery' });
+            } else if (orderTab === 'out_for_delivery') {
+              fetchOrders({ tabOverride: newValue });
+            }
             applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, newValue, cancelledSubTab);
           }}
           variant={isMobile ? "scrollable" : "standard"}
@@ -4268,11 +4286,10 @@ const Orders = () => {
           fetchOrders();
           setNewOrderDialogOpen(false);
           
-          // Check if it's a POS/walk-in order
+          // Check if it's a POS walk-in order
           const order = orderResponse?.order || orderResponse?.data?.order || orderResponse;
-          const isPOS = order?.customerPhone === 'POS' || order?.customerName === 'POS' || 
-                       order?.deliveryAddress?.includes('In-Store') || 
-                       order?.deliveryAddress?.includes('POS');
+          const normalizedAddress = String(order?.deliveryAddress || '').toLowerCase();
+          const isPOS = normalizedAddress.includes('in-store');
           
           if (isPOS && order?.id) {
             // Show success toast
