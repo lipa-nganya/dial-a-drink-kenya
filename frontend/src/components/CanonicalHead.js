@@ -5,6 +5,7 @@ import {
   ensureCanonicalLink,
   removeCanonicalLink
 } from '../utils/seoCanonical';
+import { toBrandSlug } from '../utils/brandSlug';
 
 /**
  * Sets <link rel="canonical"> on every navigation so Google gets a user-selected
@@ -21,7 +22,21 @@ export default function CanonicalHead() {
 
     // Product routes: ProductPage may override with slug-based URL after load.
     // Still set pathname-based canonical immediately for crawlers (www→apex normalized).
-    const href = buildCanonicalUrl(pathname, search);
+    let href = buildCanonicalUrl(pathname, search);
+
+    // Legacy/query pages:
+    // /products?brand=<x>&sort=<y> was used by the old site. For SEO,
+    // canonical should point at the stable brand listing URL, not a query URL.
+    if (pathname === '/products') {
+      const params = new URLSearchParams(search || '');
+      const brand = params.get('brand');
+      if (brand) {
+        href = buildCanonicalUrl(`/brands/${toBrandSlug(brand)}`);
+      } else {
+        href = buildCanonicalUrl('/menu');
+      }
+    }
+
     ensureCanonicalLink(href);
   }, [pathname, search]);
 

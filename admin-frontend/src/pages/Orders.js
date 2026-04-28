@@ -782,10 +782,11 @@ const Orders = () => {
       const effectiveTab = tabOverride || orderTab;
       const response = await api.get(buildOrdersSummaryQuery(effectiveTab));
       let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
-      
+
       // Filter out any undefined or null orders
       orders = orders.filter(order => order != null);
-      
+      console.log('📦 fetchOrders after null filter:', orders.length, 'orders');
+
       // Additional sync: Check each order and ensure paymentStatus matches transaction status
       orders = orders.map(order => {
         if (!order) return null;
@@ -799,9 +800,12 @@ const Orders = () => {
         }
         return order;
       }).filter(order => order != null); // Filter out any null orders after mapping
-      
+      console.log('📦 fetchOrders after mapping:', orders.length, 'orders');
+
       const sortedOrders = sortOrdersByStatus(orders);
+      console.log('📦 fetchOrders after sorting:', sortedOrders.length, 'orders');
       setOrders(sortedOrders);
+      console.log('📦 fetchOrders - calling applyFilters with tab:', orderTab);
       setError(null);
       // Apply filters after fetching
       applyFilters(sortedOrders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
@@ -847,6 +851,15 @@ const Orders = () => {
 
   // Apply filters to orders
   const applyFilters = (ordersList, orderStatus, transactionStatus, search, customFilter, tabFilter, cancelledView = cancelledSubTab) => {
+    console.log('🔍 applyFilters called with:', { 
+      ordersCount: ordersList.length, 
+      tabFilter, 
+      orderStatus, 
+      transactionStatus, 
+      search,
+      customFilter 
+    });
+    
     let filtered = [...ordersList];
     const isWalkInOrder = (order) => {
       const addr = String(order?.deliveryAddress || '').trim().toLowerCase();
@@ -863,28 +876,40 @@ const Orders = () => {
     // Apply tab-based filtering first
     if (tabFilter === 'pending') {
       // Include in_progress so walk-in M-Pesa orders don't disappear from all tabs
+      const beforeFilter = filtered.length;
       filtered = filtered.filter(order => (order.status === 'pending' || order.status === 'confirmed' || order.status === 'in_progress') && !(order.cancellationRequested && order.cancellationApproved === null));
+      console.log(`🔍 'pending' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'completed') {
+      const beforeFilter = filtered.length;
       filtered = filtered.filter(order => order.status === 'completed');
+      console.log(`🔍 'completed' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'unassigned') {
+      const beforeFilter = filtered.length;
       filtered = filtered
         .filter(order => !isWalkInOrder(order))
         .filter(order => isUnassignedOrder(order));
+      console.log(`🔍 'unassigned' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'confirmed') {
       // "In Progress" tab should include walk-in POS orders created unpaid (status=in_progress)
       // as well as delivery orders that are confirmed/in-progress.
+      const beforeFilter = filtered.length;
       filtered = filtered.filter(order =>
         (order.status === 'confirmed' || order.status === 'in_progress') &&
         !isUnassignedOrder(order)
       );
+      console.log(`🔍 'confirmed' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'out_for_delivery') {
+      const beforeFilter = filtered.length;
       filtered = filtered.filter(order => order.status === 'out_for_delivery');
+      console.log(`🔍 'out_for_delivery' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'cancelled') {
+      const beforeFilter = filtered.length;
       if (cancelledView === 'cancellation-requests') {
         filtered = filtered.filter(order => order.cancellationRequested && order.cancellationApproved === null);
       } else {
         filtered = filtered.filter(order => order.status === 'cancelled');
       }
+      console.log(`🔍 'cancelled' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     }
 
     // Apply custom filters from URL params
@@ -936,6 +961,7 @@ const Orders = () => {
 
     // Sort filtered results
     const sorted = sortOrdersByStatus(filtered);
+    console.log(`🔍 applyFilters final result: ${sorted.length} orders`);
     setFilteredOrders(sorted);
   };
 

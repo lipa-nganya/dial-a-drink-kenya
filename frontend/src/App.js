@@ -21,6 +21,7 @@ import './App.css';
 
 const Home = lazy(() => import('./pages/Home'));
 const Menu = lazy(() => import('./pages/Menu'));
+const LegacyProducts = lazy(() => import('./pages/LegacyProducts'));
 const TestOffers = lazy(() => import('./pages/TestOffers'));
 const Offers = lazy(() => import('./pages/Offers'));
 const Cart = lazy(() => import('./pages/Cart'));
@@ -231,6 +232,8 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />
+          {/* Legacy brand listing URL compatibility */}
+          <Route path="/products" element={<LegacyProducts />} />
           <Route path="/:categorySlug" element={<Menu />} />
           <Route path="/menu/category/:categorySlug" element={<Menu />} />
           {/* Old product route - kept for backward compatibility and redirects */}
