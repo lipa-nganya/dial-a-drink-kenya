@@ -2760,8 +2760,10 @@ router.get('/orders', verifyAdmin, async (req, res) => {
     const hasOrderIdFilter = Number.isFinite(orderIdFilter) && orderIdFilter > 0;
     const summaryMode = req.query.summary === '1' || req.query.summary === 'true';
     const statusQuery = String(req.query.status || '').trim();
-    const limit = Math.min(Math.max(parseInt(req.query.limit || '120', 10) || 120, 1), 300);
-    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+    const rawLimit = String(req.query.limit ?? '').trim();
+    const hasLimit = rawLimit !== '';
+    const limit = hasLimit ? Math.min(Math.max(parseInt(rawLimit, 10) || 120, 1), 300) : null;
+    const offset = hasLimit ? Math.max(parseInt(req.query.offset || '0', 10) || 0, 0) : 0;
     const validStatuses = new Set(['pending', 'confirmed', 'in_progress', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order']);
     const requestedStatuses = statusQuery
       ? statusQuery
@@ -2861,7 +2863,12 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       where: whereClause,
       include: orderIncludes,
       order: [['createdAt', 'DESC']],
-      ...(summaryMode ? { limit, offset, distinct: true } : {})
+      ...(summaryMode
+        ? {
+            distinct: true,
+            ...(hasLimit ? { limit, offset } : {})
+          }
+        : {})
     });
     const orders = ordersResult.rows || [];
 
@@ -2878,7 +2885,7 @@ router.get('/orders', verifyAdmin, async (req, res) => {
       return res.json({
         orders: ordersWithMappedItems,
         total: ordersResult.count || 0,
-        limit,
+        limit: hasLimit ? limit : null,
         offset
       });
     }
