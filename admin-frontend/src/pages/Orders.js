@@ -68,7 +68,7 @@ import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 
 // Google Maps libraries - moved outside component to prevent performance warnings
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
-const ORDERS_SUMMARY_QUERY_BASE = '/admin/orders?summary=1&limit=300';
+const ORDERS_SUMMARY_QUERY_BASE = '/admin/orders?summary=1';
 
 /** Matches admin API: amounts editable unless cancelled, or incomplete paid/completed combos. Paid + completed is allowed (reconciliation). */
 function canEditOrderFinancialAmounts(order) {
@@ -1739,7 +1739,7 @@ const Orders = () => {
       setRoutesLoading(true);
       const [ridersResponse, ordersResponse, locationsResponse] = await Promise.all([
         api.get('/drivers'),
-        api.get('/admin/orders?summary=1&limit=300'),
+        api.get('/admin/orders?summary=1'),
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
       
