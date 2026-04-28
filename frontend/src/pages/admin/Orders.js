@@ -204,7 +204,7 @@ const Orders = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/admin/orders?summary=1&limit=150');
+      const response = await api.get('/admin/orders?summary=1');
       let orders = Array.isArray(response.data) ? response.data : (response.data?.orders || []);
       
       // Additional sync: Check each order and ensure paymentStatus matches transaction status

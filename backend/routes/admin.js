@@ -2761,7 +2761,10 @@ router.get('/orders', verifyAdmin, async (req, res) => {
     const summaryMode = req.query.summary === '1' || req.query.summary === 'true';
     const statusQuery = String(req.query.status || '').trim();
     const rawLimit = String(req.query.limit ?? '').trim();
-    const hasLimit = rawLimit !== '';
+    // Safety: do not enforce summary caps unless explicitly requested.
+    // This prevents stale frontend bundles (still sending limit=150/300) from
+    // silently dropping orders from admin tabs.
+    const hasLimit = (req.query.paginate === '1' || req.query.paginate === 'true') && rawLimit !== '';
     const limit = hasLimit ? Math.min(Math.max(parseInt(rawLimit, 10) || 120, 1), 300) : null;
     const offset = hasLimit ? Math.max(parseInt(req.query.offset || '0', 10) || 0, 0) : 0;
     const validStatuses = new Set(['pending', 'confirmed', 'in_progress', 'out_for_delivery', 'delivered', 'completed', 'cancelled', 'pos_order']);
