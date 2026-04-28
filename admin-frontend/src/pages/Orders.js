@@ -887,11 +887,15 @@ const Orders = () => {
       }
     }
 
-    // Apply custom filters from URL params
-    if (customFilter === 'no-driver') {
-      filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
-    } else if (customFilter === 'pending') {
-      filtered = filtered.filter(order => order.status === 'pending');
+    // Apply custom filters from URL params.
+    // These quick-action filters are intended for pending/unassigned workflows.
+    // Do not apply them to Out for Delivery, otherwise valid delivery orders can disappear.
+    if (tabFilter !== 'out_for_delivery') {
+      if (customFilter === 'no-driver') {
+        filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
+      } else if (customFilter === 'pending') {
+        filtered = filtered.filter(order => order.status === 'pending');
+      }
     }
 
     // Filter by search query (customer name or order number)
@@ -908,8 +912,10 @@ const Orders = () => {
       });
     }
 
-    // Filter by order status
-    if (orderStatus !== 'all') {
+    // Filter by order status.
+    // Out-for-delivery tab already has a strict status slice; keep it isolated
+    // from global status dropdown residue.
+    if (orderStatus !== 'all' && tabFilter !== 'out_for_delivery') {
       filtered = filtered.filter(order => order.status === orderStatus);
     }
 
