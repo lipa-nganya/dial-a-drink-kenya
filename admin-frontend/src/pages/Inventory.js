@@ -105,27 +105,6 @@ const InventoryPage = () => {
       const parsed = parseInt(value, 10);
       return Number.isNaN(parsed) ? 0 : parsed;
     };
-    const capacityUnitMultiplier = (capacityLabel) => {
-      const raw = String(capacityLabel || '').trim().toLowerCase();
-      if (!raw) return 1;
-      const compact = raw.replace(/\s+/g, '');
-      const match = compact.match(/^(\d+)(pack|pk).*/);
-      const n = match ? parseInt(match[1], 10) : NaN;
-      return Number.isFinite(n) && n > 0 ? n : 1;
-    };
-    const isCanPackSharedStockDrink = (item) => {
-      const values = [];
-      const c = parseJsonIfString(item?.capacity);
-      const cp = parseJsonIfString(item?.capacityPricing);
-      if (Array.isArray(c)) values.push(...c);
-      if (Array.isArray(cp)) {
-        cp.forEach((entry) => values.push(entry?.capacity || entry?.size));
-      }
-      const normalized = values.map((v) => normalizeCapacityKey(v)).filter(Boolean);
-      const hasPack = normalized.some((v) => /^\d+(pack|pk)/.test(v) || v.includes('pack') || v.includes('pk'));
-      const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
-      return hasPack && hasCan;
-    };
 
     const parsedStockByCapacity = parseJsonIfString(drink.stockByCapacity);
     const stockByCapacity =
@@ -194,23 +173,6 @@ const InventoryPage = () => {
       } catch {
         return value;
       }
-    };
-    const normalizeCapacityKey = (value) =>
-      (value || '')
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, '');
-    const isCanPackSharedStockDrink = (item) => {
-      const values = [];
-      const c = parseJsonIfString(item?.capacity);
-      const cp = parseJsonIfString(item?.capacityPricing);
-      if (Array.isArray(c)) values.push(...c);
-      if (Array.isArray(cp)) cp.forEach((entry) => values.push(entry?.capacity || entry?.size));
-      const normalized = values.map((v) => normalizeCapacityKey(v)).filter(Boolean);
-      const hasPack = normalized.some((v) => /^\d+(pack|pk)/.test(v) || v.includes('pack') || v.includes('pk'));
-      const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
-      return hasPack && hasCan;
     };
     const rows = getCapacityStockRows(drink);
     if (rows.length > 0) {

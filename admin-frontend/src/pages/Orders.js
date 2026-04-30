@@ -102,12 +102,6 @@ function computeOrderSummaryCustomerTotal(order) {
   const amounts = computeOrderDisplayAmounts(order);
   const fromLines = sumLineItemsSubtotal(order);
   const hasLineItems = Array.isArray(order?.items) && order.items.length > 0;
-  const hasStoredItemsTotal =
-    order?.itemsTotal !== null &&
-    order?.itemsTotal !== undefined &&
-    order?.itemsTotal !== '' &&
-    Number.isFinite(Number(order.itemsTotal));
-
   // Summary payloads intentionally omit line items; when lines are absent, trust totalAmount directly.
   // This avoids stale list totals when items subtotal is edited but legacy itemsTotal fields lag.
   if (!hasLineItems && Number.isFinite(Number(order.totalAmount))) {
