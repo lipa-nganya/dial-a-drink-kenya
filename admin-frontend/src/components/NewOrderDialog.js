@@ -6,7 +6,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  InputAdornment,
   FormControl,
   InputLabel,
   Select,
@@ -23,10 +22,7 @@ import {
   Checkbox,
   RadioGroup,
   Radio,
-  Chip,
-  List,
-  ListItemButton,
-  ListItemText
+  Chip
 } from '@mui/material';
 import {
   Add,
