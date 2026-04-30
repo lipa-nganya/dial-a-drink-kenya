@@ -118,12 +118,17 @@ class PendingSubmissionsFragment : Fragment() {
             val dateApprovedText = card.findViewById<TextView>(R.id.dateApprovedText)
             val receiptNumberText = card.findViewById<TextView>(R.id.receiptNumberText)
             
-            descriptionText.text = "Order# ${getOrderNumberDisplay(submission)}"
+            descriptionText.text = getSubmissionTitle(submission)
             customerNameText.text = "Submission Type: ${getSubmissionTypeLabel(submission.submissionType)}"
             customerNameText.visibility = View.VISIBLE
             amountText.text = "-${formatter.format(submission.amount)}"
             amountText.setTextColor(requireContext().getColor(android.R.color.holo_orange_light))
-            dateText.text = "Delivery Address: ${getDeliveryAddress(submission)}"
+            val paymentDate = getPaymentDateDisplay(submission)
+            dateText.text = if (paymentDate != null) {
+                "Delivery Address: ${getDeliveryAddress(submission)}\nPayment date: $paymentDate"
+            } else {
+                "Delivery Address: ${getDeliveryAddress(submission)}"
+            }
             dateApprovedText.text = "Posted date and time: ${formatDateTime(submission.createdAt)}"
             dateApprovedText.visibility = View.VISIBLE
             receiptNumberText.text = "Approved date and time: ${formatDateTime(submission.approvedAt)}"
@@ -150,8 +155,17 @@ class PendingSubmissionsFragment : Fragment() {
             ?: submission.details?.get("orderNumber")?.toString()
             ?: submission.orders?.firstOrNull()?.orderNumber?.toString()
             ?: submission.orders?.firstOrNull()?.id?.toString()
-            ?: submission.id.toString()
+            ?: ""
         return raw.removeSuffix(".0").trim()
+    }
+    
+    private fun getSubmissionTitle(submission: CashSubmission): String {
+        val orderNumber = getOrderNumberDisplay(submission)
+        return if (orderNumber.isNotEmpty()) {
+            "Order# $orderNumber"
+        } else {
+            getSubmissionTypeLabel(submission.submissionType)
+        }
     }
 
     private fun getDeliveryAddress(submission: CashSubmission): String {
@@ -159,6 +173,15 @@ class PendingSubmissionsFragment : Fragment() {
             ?: submission.details?.get("delivery_address")?.toString()
             ?: submission.orders?.firstOrNull { !it.deliveryAddress.isNullOrBlank() }?.deliveryAddress
             ?: "N/A"
+    }
+    
+    private fun getPaymentDateDisplay(submission: CashSubmission): String? {
+        val root = submission.details ?: return null
+        val direct = root["paymentDate"]?.toString()?.trim().orEmpty()
+        if (direct.isNotEmpty()) return direct
+        val supplierPayment = root["supplierPayment"] as? Map<*, *>
+        val nested = supplierPayment?.get("paymentDate")?.toString()?.trim().orEmpty()
+        return nested.ifEmpty { null }
     }
 
     private fun formatDateTime(raw: String?): String {

@@ -104,7 +104,6 @@ const Header = () => {
         const res = await api.get('/drinks', {
           params: {
             search: q,
-            available_only: 'true',
             search_in: 'name',
             limit: 20
           },
@@ -176,7 +175,6 @@ const Header = () => {
           const res = await api.get('/drinks', {
             params: {
               search: q.trim(),
-              available_only: 'true',
               search_in: 'name',
               limit: 1
             },

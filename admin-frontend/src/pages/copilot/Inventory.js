@@ -122,6 +122,7 @@ const Inventory = () => {
   const [saving, setSaving] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const CUSTOM_CAPACITY_STORAGE_KEY = 'copilot_inventory_custom_capacities';
+  const SHARED_CAPACITY_SETTINGS_KEY = 'copilotInventoryCustomCapacities';
 
   useEffect(() => {
     fetchAnalytics();
@@ -147,6 +148,41 @@ const Inventory = () => {
       console.warn('Failed to read saved custom capacities:', err);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const fetchSharedCapacities = async () => {
+      try {
+        const response = await api.get(`/settings/${SHARED_CAPACITY_SETTINGS_KEY}`);
+        const rawValue = response?.data?.value;
+        if (!rawValue) return;
+        const parsed = JSON.parse(rawValue);
+        if (!Array.isArray(parsed)) return;
+        const normalized = parsed
+          .map((value) => String(value || '').trim())
+          .filter((value) => value && !isDefaultCapacityLabel(value));
+        if (normalized.length === 0) return;
+        setCustomCapacities((prev) => {
+          const merged = Array.from(new Set([...prev, ...normalized]));
+          window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(merged));
+          return merged;
+        });
+      } catch {
+        // Settings key might not exist yet; keep local fallback.
+      }
+    };
+    fetchSharedCapacities();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const persistSharedCapacities = useCallback(async (values) => {
+    try {
+      await api.put(`/settings/${SHARED_CAPACITY_SETTINGS_KEY}`, {
+        value: JSON.stringify(values)
+      });
+    } catch (err) {
+      console.warn('Failed to persist shared capacities:', err);
+    }
   }, []);
 
   const fetchInventoryEntitySummaries = async () => {
@@ -410,6 +446,7 @@ const Inventory = () => {
     setCustomCapacities(next);
     setNewGlobalCapacity('');
     window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(next));
+    persistSharedCapacities(next);
     setSnackbar({
       open: true,
       message: 'Capacity added to inventory settings',
@@ -450,6 +487,7 @@ const Inventory = () => {
       );
       setCustomCapacities(nextCustomCapacities);
       window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(nextCustomCapacities));
+      persistSharedCapacities(nextCustomCapacities);
 
       setSnackbar({ open: true, message: 'Capacity updated successfully', severity: 'success' });
       await fetchZeroPurchasePriceItems();
@@ -485,6 +523,7 @@ const Inventory = () => {
       );
       setCustomCapacities(nextCustomCapacities);
       window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(nextCustomCapacities));
+      persistSharedCapacities(nextCustomCapacities);
 
       setCapacityTransferMap((prev) => {
         const next = { ...prev };

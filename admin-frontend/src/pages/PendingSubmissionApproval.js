@@ -52,6 +52,7 @@ const PendingSubmissionApproval = () => {
   const [accountId, setAccountId] = useState('');
   const [transactionDate, setTransactionDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [transactionCode, setTransactionCode] = useState('');
+  const [paymentDate, setPaymentDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [reference, setReference] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [rejecting, setRejecting] = useState(false);
@@ -65,6 +66,7 @@ const PendingSubmissionApproval = () => {
     setAccountId('');
     setSupplierId('');
     setTransactionCode('');
+    setPaymentDate(new Date().toISOString().slice(0, 10));
     setReference('');
     setTransactionDate(new Date().toISOString().slice(0, 10));
     setApprovalMode('account');
@@ -168,6 +170,7 @@ const PendingSubmissionApproval = () => {
       if (d.assetAccountId) setAccountId(d.assetAccountId);
       if (d.accountReference) setReference(d.accountReference);
       if (d.transactionCode) setTransactionCode(d.transactionCode);
+      if (d.paymentDate) setPaymentDate(d.paymentDate);
       if (d.transactionDate) setTransactionDate(d.transactionDate);
     }
   }, [submission]);
@@ -222,7 +225,7 @@ const PendingSubmissionApproval = () => {
             supplierId,
             supplierName: supplier?.name || null,
             reference: reference || null,
-            paymentDate: transactionDate || null
+            paymentDate: paymentDate || null
           }
         };
 
@@ -274,6 +277,7 @@ const PendingSubmissionApproval = () => {
         transactionCode: transactionCode || null,
         accountReference: reference || null,
         transactionDate: transactionDate || null,
+        paymentDate: paymentDate || null,
         recipient: existingDetails.recipient || riderName
       };
 
@@ -399,7 +403,7 @@ const PendingSubmissionApproval = () => {
               gridTemplateColumns: {
                 xs: '1fr',
                 // Wider Date/Payment Date column.
-                md: '1.1fr 1.1fr 0.9fr 1.05fr 1.6fr 1fr 1.15fr'
+                md: '1.1fr 1.1fr 0.9fr 1.05fr 1.1fr 1.1fr 1fr 1.15fr'
               },
               gap: 1
             }}
@@ -481,6 +485,16 @@ const PendingSubmissionApproval = () => {
                 if (approvalMode === 'account') setTransactionCode(e.target.value);
               }}
               InputProps={{ readOnly: approvalMode !== 'account' }}
+              size="small"
+              fullWidth
+            />
+
+            <TextField
+              label="Payment Date"
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
               size="small"
               fullWidth
             />

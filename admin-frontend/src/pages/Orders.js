@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Container,
   Typography,
@@ -125,7 +125,6 @@ const Orders = () => {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
   /** all | unassigned | driver id string */
   const [riderFilter, setRiderFilter] = useState('all');
@@ -238,7 +237,6 @@ const Orders = () => {
   const [cancelledSubTab, setCancelledSubTab] = useState('cancelled'); // 'cancelled' | 'cancellation-requests'
   const orderTabRef = useRef(orderTab);
   const cancelledSubTabRef = useRef(cancelledSubTab);
-  const orderStatusFilterRef = useRef(orderStatusFilter);
   const transactionStatusFilterRef = useRef(transactionStatusFilter);
   const searchQueryRef = useRef(searchQuery);
   const customFilterRef = useRef(customFilter);
@@ -330,9 +328,9 @@ const Orders = () => {
         // If we were viewing cancellation requests and the order is now cancelled, show cancelled orders
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && updatedOrder?.status === 'cancelled') {
           setCancelledSubTab('cancelled');
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
         } else {
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
         }
         return sorted;
       });
@@ -367,9 +365,9 @@ const Orders = () => {
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
           setOrderTab('pending');
           setCancelledSubTab('cancelled');
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'pending');
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'pending');
         } else {
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
         }
         return sorted;
       });
@@ -472,7 +470,7 @@ const Orders = () => {
             : order
         );
         const sorted = sortOrdersByStatus(updated);
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+        applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
     });
@@ -494,7 +492,7 @@ const Orders = () => {
             : order
         );
         const sorted = sortOrdersByStatus(updated);
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+        applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
       
@@ -537,7 +535,7 @@ const Orders = () => {
           });
           // Re-sort after update and apply filters to update filteredOrders immediately
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
       }
@@ -607,7 +605,7 @@ const Orders = () => {
           }
           
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
           return sorted;
         });
       } else {
@@ -631,12 +629,12 @@ const Orders = () => {
           if (data.approved && orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && data.order.status === 'cancelled') {
             setOrderTab('cancelled');
             setCancelledSubTab('cancelled');
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
+            applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
           } else if (!data.approved && orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
             // If cancellation was rejected and we're viewing cancellation requests, stay on requests view
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
+            applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
           } else {
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+            applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
           }
           return sorted;
         });
@@ -671,7 +669,7 @@ const Orders = () => {
             return order;
           });
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
       }
@@ -732,7 +730,7 @@ const Orders = () => {
           });
           // Re-sort after update and apply filters to update filteredOrders immediately
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
       }
@@ -812,7 +810,6 @@ const Orders = () => {
       // Apply filters after fetching
       applyFilters(
         sortedOrders,
-        orderStatusFilterRef.current,
         transactionStatusFilterRef.current,
         searchQueryRef.current,
         customFilterRef.current,
@@ -860,7 +857,7 @@ const Orders = () => {
   };
 
   // Apply filters to orders
-  const applyFilters = (ordersList, orderStatus, transactionStatus, search, customFilter, tabFilter, cancelledView = cancelledSubTab) => {
+  const applyFilters = (ordersList, transactionStatus, search, customFilter, tabFilter, cancelledView = cancelledSubTab) => {
     let filtered = [...ordersList];
     const isWalkInOrder = (order) => {
       const addr = String(order?.deliveryAddress || '').trim().toLowerCase();
@@ -926,13 +923,6 @@ const Orders = () => {
       });
     }
 
-    // Filter by order status.
-    // Out-for-delivery tab already has a strict status slice; keep it isolated
-    // from global status dropdown residue.
-    if (orderStatus !== 'all' && tabFilter !== 'out_for_delivery') {
-      filtered = filtered.filter(order => order.status === orderStatus);
-    }
-
     // Filter by transaction status
     if (transactionStatus !== 'all') {
       filtered = filtered.filter(order => {
@@ -967,10 +957,8 @@ const Orders = () => {
     
     if (filter === 'no-driver') {
       setCustomFilter('no-driver');
-      setOrderStatusFilter('all'); // Reset status filter when using custom filter
     } else if (filter === 'pending') {
       setCustomFilter('pending');
-      setOrderStatusFilter('pending');
     } else {
       setCustomFilter(null);
     }
@@ -991,13 +979,21 @@ const Orders = () => {
   useEffect(() => {
     orderTabRef.current = orderTab;
     cancelledSubTabRef.current = cancelledSubTab;
-    orderStatusFilterRef.current = orderStatusFilter;
     transactionStatusFilterRef.current = transactionStatusFilter;
     searchQueryRef.current = searchQuery;
     customFilterRef.current = customFilter;
-    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+    applyFilters(orders, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderStatusFilter, transactionStatusFilter, riderFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
+  }, [transactionStatusFilter, riderFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
+
+  const activeOrderCountsByDriver = useMemo(() => {
+    const counts = new Map();
+    for (const order of orders) {
+      if (!order || order.status === 'completed' || !order.driverId) continue;
+      counts.set(order.driverId, (counts.get(order.driverId) || 0) + 1);
+    }
+    return counts;
+  }, [orders]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     if (newStatus === 'cancelled') {
@@ -1968,7 +1964,7 @@ const Orders = () => {
             } else if (orderTab === 'out_for_delivery') {
               fetchOrders({ tabOverride: newValue });
             }
-            applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, newValue, cancelledSubTab);
+            applyFilters(orders, transactionStatusFilter, searchQuery, customFilter, newValue, cancelledSubTab);
           }}
           variant={isMobile ? "scrollable" : "standard"}
           scrollButtons={isMobile ? "auto" : false}
@@ -2024,7 +2020,7 @@ const Orders = () => {
             onChange={(event, newValue) => {
               setCancelledSubTab(newValue);
               setPage(0);
-              applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', newValue);
+              applyFilters(orders, transactionStatusFilter, searchQuery, customFilter, 'cancelled', newValue);
             }}
             variant="scrollable"
             scrollButtons="auto"
@@ -2108,35 +2104,6 @@ const Orders = () => {
         />
 
         <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 200, flexGrow: isMobile ? 1 : 0 }}>
-          <InputLabel>Filter by Order Status</InputLabel>
-          <Select
-            value={orderStatusFilter}
-            label="Filter by Order Status"
-            onChange={(e) => setOrderStatusFilter(e.target.value)}
-            sx={{
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: colors.accentText,
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: '#00C4A3',
-              },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderColor: colors.accentText,
-              },
-            }}
-          >
-            <MenuItem value="all">All Statuses</MenuItem>
-            <MenuItem value="pending">Pending</MenuItem>
-            <MenuItem value="confirmed">In Progress</MenuItem>
-            <MenuItem value="out_for_delivery">On the Way</MenuItem>
-            <MenuItem value="delivered">Delivered</MenuItem>
-            <MenuItem value="completed">Completed</MenuItem>
-            <MenuItem value="pos_order">POS Order</MenuItem>
-            <MenuItem value="cancelled">Cancelled</MenuItem>
-          </Select>
-        </FormControl>
-
-        <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 200, flexGrow: isMobile ? 1 : 0 }}>
           <InputLabel>Filter by Transaction Status</InputLabel>
           <Select
             value={transactionStatusFilter}
@@ -2191,21 +2158,19 @@ const Orders = () => {
               )
               .map((d) => (
                 <MenuItem key={d.id} value={String(d.id)}>
-                  {d.name || `Rider #${d.id}`}
+                  {(d.name || `Rider #${d.id}`)} ({activeOrderCountsByDriver.get(d.id) || 0})
                 </MenuItem>
               ))}
           </Select>
         </FormControl>
 
-        {(orderStatusFilter !== 'all' ||
-          transactionStatusFilter !== 'all' ||
+        {(transactionStatusFilter !== 'all' ||
           searchQuery ||
           riderFilter !== 'all') && (
           <Button
             variant="outlined"
             size="small"
             onClick={() => {
-              setOrderStatusFilter('all');
               setTransactionStatusFilter('all');
               setRiderFilter('all');
               setSearchQuery('');

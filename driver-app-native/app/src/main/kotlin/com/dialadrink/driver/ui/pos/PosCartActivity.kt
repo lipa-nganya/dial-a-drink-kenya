@@ -1,6 +1,5 @@
 package com.dialadrink.driver.ui.pos
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
@@ -15,6 +14,7 @@ import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +27,6 @@ import com.dialadrink.driver.databinding.ActivityPosCartBinding
 import com.dialadrink.driver.utils.MpesaPhoneUtils
 import com.dialadrink.driver.utils.SharedPrefs
 // Removed Google Places SDK imports - now using backend API for cost savings
-import com.google.android.material.textfield.TextInputEditText
 import kotlinx.coroutines.launch
 import retrofit2.Response
 import java.text.NumberFormat
@@ -51,6 +50,7 @@ class PosCartActivity : AppCompatActivity() {
     private val orderTypes = listOf("Walk-in", "Delivery")
     private var customerName = ""
     private var customerEmail = ""
+    private var createCustomerOnSubmit = false
     private var isSettingCustomerFromAutocomplete = false
     private var isStop = false
     private var stopDeductionAmount = 100.0
@@ -360,7 +360,16 @@ class PosCartActivity : AppCompatActivity() {
         setupCustomerPhoneAutocomplete()
 
         binding.createCustomerButton.setOnClickListener {
-            showCreateCustomerDialog()
+            val phone = binding.customerPhoneEditText.text.toString().trim()
+            if (phone.length < 9) {
+                Toast.makeText(this, "Enter a valid phone number first", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            createCustomerOnSubmit = true
+            customerName = phone
+            customerEmail = ""
+            binding.createCustomerButton.visibility = View.GONE
+            Toast.makeText(this, "Customer will be created when you submit order", Toast.LENGTH_SHORT).show()
         }
 
         // Setup territory autocomplete (replaces dialog)
@@ -408,6 +417,7 @@ class PosCartActivity : AppCompatActivity() {
                 val phone = s.toString().trim()
                 if (phone.isEmpty()) {
                     customerExists = false
+                    createCustomerOnSubmit = false
                     binding.createCustomerButton.visibility = View.GONE
                     customerPhoneAdapter?.clear()
                     customerPhoneAdapter?.notifyDataSetChanged()
@@ -415,6 +425,7 @@ class PosCartActivity : AppCompatActivity() {
                 }
                 
                 customerExists = false
+                createCustomerOnSubmit = false
                 
                 // Format phone: if starts with 0, replace with 254
                 var formattedPhone = phone
@@ -459,6 +470,7 @@ class PosCartActivity : AppCompatActivity() {
                 customerName = customer.name ?: ""
                 customerEmail = customer.email ?: ""
                 customerExists = true
+                createCustomerOnSubmit = false
                 binding.createCustomerButton.visibility = View.GONE
                 
                 // Reset flag after a short delay to allow text to be set
@@ -776,6 +788,7 @@ class PosCartActivity : AppCompatActivity() {
                             customerName = customer.name ?: ""
                             customerEmail = customer.email ?: ""
                         }
+                        createCustomerOnSubmit = false
                         binding.createCustomerButton.visibility = View.GONE
                     } else {
                         binding.createCustomerButton.visibility = View.VISIBLE
@@ -784,12 +797,14 @@ class PosCartActivity : AppCompatActivity() {
                     // Only update state if customer wasn't already confirmed to exist
                     if (!customerExists) {
                         customerExists = false
+                        createCustomerOnSubmit = false
                         binding.createCustomerButton.visibility = View.VISIBLE
                     }
                 }
             } catch (e: Exception) {
                 android.util.Log.e("PosCartActivity", "Error checking customer: ${e.message}", e)
                 customerExists = false
+                createCustomerOnSubmit = false
                 binding.createCustomerButton.visibility = View.VISIBLE
             } finally {
                 binding.loadingProgress.visibility = View.GONE
@@ -797,126 +812,26 @@ class PosCartActivity : AppCompatActivity() {
         }
     }
 
-    private fun showCreateCustomerDialog() {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_create_customer, null)
-        val nameEditText = dialogView.findViewById<TextInputEditText>(R.id.nameEditText)
-        val phoneEditText = dialogView.findViewById<TextInputEditText>(R.id.phoneEditText)
-        val emailEditText = dialogView.findViewById<TextInputEditText>(R.id.emailEditText)
-        val textColor = ContextCompat.getColor(this, R.color.text_primary_dark)
-        val hintColor = ContextCompat.getColor(this, R.color.text_secondary_dark)
-        nameEditText.setTextColor(textColor)
-        nameEditText.setHintTextColor(hintColor)
-        phoneEditText.setTextColor(textColor)
-        phoneEditText.setHintTextColor(hintColor)
-        emailEditText.setTextColor(textColor)
-        emailEditText.setHintTextColor(hintColor)
-        
-        val phone = binding.customerPhoneEditText.text.toString().trim()
-        phoneEditText.setText(phone)
-        
-        // Setup autocomplete for customer name when typing phone number
-        var phoneCheckHandler: Handler? = Handler(Looper.getMainLooper())
-        var phoneCheckRunnable: Runnable? = null
-        
-        phoneEditText.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) {
-                // Cancel previous check
-                phoneCheckRunnable?.let { phoneCheckHandler?.removeCallbacks(it) }
-                
-                val phoneNumber = s.toString().trim()
-                if (phoneNumber.length >= 9) {
-                    // Debounce phone check (wait 500ms after user stops typing)
-                    phoneCheckRunnable = Runnable {
-                        checkCustomerForAutocomplete(phoneNumber) { customer ->
-                            if (customer != null && customer.name != null) {
-                                nameEditText.setText(customer.name)
-                                if (customer.email != null && emailEditText.text.toString().isEmpty()) {
-                                    emailEditText.setText(customer.email)
-                                }
-                            }
-                        }
-                    }
-                    phoneCheckHandler?.postDelayed(phoneCheckRunnable!!, 500)
-                }
+    private suspend fun createCustomerForOrder(phone: String): Boolean {
+        return try {
+            if (!ApiClient.isInitialized()) {
+                ApiClient.init(this@PosCartActivity)
             }
-        })
-        
-        AlertDialog.Builder(this, R.style.Theme_DialADrinkDriver_AlertDialog_Black)
-            .setTitle("Create New Customer")
-            .setView(dialogView)
-            .setPositiveButton("Create") { _, _ ->
-                val name = nameEditText.text.toString().trim()
-                val phone = phoneEditText.text.toString().trim()
-                val email = emailEditText.text.toString().trim()
-                
-                if (name.isEmpty() || phone.isEmpty()) {
-                    Toast.makeText(this, "Name and phone are required", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                
-                createCustomer(name, phone, email)
+            val response = ApiClient.getApiService().createPosCustomer(
+                CreatePosCustomerRequest(name = phone, phone = phone, email = null)
+            )
+            if (response.isSuccessful && response.body()?.success == true) {
+                customerExists = true
+                customerName = phone
+                customerEmail = ""
+                createCustomerOnSubmit = false
+                true
+            } else {
+                false
             }
-            .setNegativeButton("Cancel", null)
-            .setOnDismissListener {
-                // Clean up handler
-                phoneCheckRunnable?.let { phoneCheckHandler?.removeCallbacks(it) }
-                phoneCheckHandler = null
-            }
-            .show()
-    }
-    
-    private fun checkCustomerForAutocomplete(phone: String, callback: (PosCustomer?) -> Unit) {
-        lifecycleScope.launch {
-            try {
-                if (!ApiClient.isInitialized()) {
-                    ApiClient.init(this@PosCartActivity)
-                }
-                
-                val response = ApiClient.getApiService().getPosCustomer(phone)
-                
-                if (response.isSuccessful && response.body()?.success == true) {
-                    val customer = response.body()!!.data
-                    callback(customer)
-                } else {
-                    callback(null)
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("PosCartActivity", "Error checking customer for autocomplete: ${e.message}", e)
-                callback(null)
-            }
-        }
-    }
-
-    private fun createCustomer(name: String, phone: String, email: String) {
-        binding.loadingProgress.visibility = View.VISIBLE
-        
-        lifecycleScope.launch {
-            try {
-                if (!ApiClient.isInitialized()) {
-                    ApiClient.init(this@PosCartActivity)
-                }
-                
-                val response = ApiClient.getApiService().createPosCustomer(
-                    CreatePosCustomerRequest(name = name, phone = phone, email = if (email.isNotEmpty()) email else null)
-                )
-                
-                if (response.isSuccessful && response.body()?.success == true) {
-                    customerName = name
-                    customerEmail = email
-                    customerExists = true
-                    binding.createCustomerButton.visibility = View.GONE
-                    Toast.makeText(this@PosCartActivity, "Customer created successfully", Toast.LENGTH_SHORT).show()
-                } else {
-                    Toast.makeText(this@PosCartActivity, "Failed to create customer", Toast.LENGTH_SHORT).show()
-                }
-            } catch (e: Exception) {
-                android.util.Log.e("PosCartActivity", "Error creating customer: ${e.message}", e)
-                Toast.makeText(this@PosCartActivity, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-            } finally {
-                binding.loadingProgress.visibility = View.GONE
-            }
+        } catch (e: Exception) {
+            android.util.Log.e("PosCartActivity", "Error creating customer for order: ${e.message}", e)
+            false
         }
     }
 
@@ -1472,6 +1387,16 @@ class PosCartActivity : AppCompatActivity() {
             return
         }
 
+        if (!isWalkIn && phone.isBlank()) {
+            Toast.makeText(this, "Customer phone is required for delivery orders", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (!isWalkIn && !customerExists && !createCustomerOnSubmit) {
+            Toast.makeText(this, "Tap Create New Customer to create this phone number", Toast.LENGTH_SHORT).show()
+            return
+        }
+
         // POS order creation requires an admin token (backend will reject adminOrder=true without it).
         val adminToken = com.dialadrink.driver.utils.SharedPrefs.getAdminToken(this)
         if (adminToken.isNullOrBlank()) {
@@ -1534,6 +1459,18 @@ class PosCartActivity : AppCompatActivity() {
                     try {
                         if (!ApiClient.isInitialized()) {
                             ApiClient.init(this@PosCartActivity)
+                        }
+
+                        if (!isWalkIn && !customerExists && createCustomerOnSubmit) {
+                            val created = createCustomerForOrder(phone)
+                            if (!created) {
+                                Toast.makeText(
+                                    this@PosCartActivity,
+                                    "Failed to create customer automatically",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                                return@launch
+                            }
                         }
                         
                         val orderItems = cart.map {

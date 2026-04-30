@@ -1,10 +1,12 @@
 package com.dialadrink.driver.ui.wallet
 
+import android.content.Intent
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.TextView
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
@@ -13,6 +15,7 @@ import com.dialadrink.driver.data.api.ApiClient
 import com.dialadrink.driver.data.model.CashAtHandEntry
 import com.dialadrink.driver.data.model.CashAtHandResponse
 import com.dialadrink.driver.databinding.FragmentWalletTransactionsBinding
+import com.dialadrink.driver.ui.orders.OrderDetailActivity
 import com.dialadrink.driver.utils.SharedPrefs
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.launch
@@ -151,7 +154,9 @@ class CashAtHandTransactionsFragment : Fragment() {
                     ContextCompat.getColor(requireContext(), R.color.text_primary_dark)
                 }
             )
-            cardView.findViewById<TextView>(R.id.descriptionText).text = descriptionText
+            val descriptionView = cardView.findViewById<TextView>(R.id.descriptionText)
+            val dateView = cardView.findViewById<TextView>(R.id.dateText)
+            descriptionView.text = descriptionText
             
             // Format and set date
             try {
@@ -160,12 +165,64 @@ class CashAtHandTransactionsFragment : Fragment() {
                 } catch (e: Exception) {
                     apiDateFormat2.parse(entry.date)
                 }
-                cardView.findViewById<TextView>(R.id.dateText).text = date?.let { dateFormat.format(it) } ?: entry.date
+                dateView.text = date?.let { dateFormat.format(it) } ?: entry.date
             } catch (e: Exception) {
-                cardView.findViewById<TextView>(R.id.dateText).text = entry.date
+                dateView.text = entry.date
+            }
+
+            if (isSavingsRecoveryEntry(entry)) {
+                val resolvedDate = formatDateWithoutEat(entry.date)
+                descriptionView.text = if (resolvedDate.isNotBlank()) {
+                    "Savings Recovery\n$resolvedDate"
+                } else {
+                    "Savings Recovery"
+                }
+                dateView.visibility = View.GONE
+            } else {
+                dateView.visibility = View.VISIBLE
+            }
+
+            if (entry.orderId != null) {
+                cardView.isClickable = true
+                cardView.isFocusable = true
+                cardView.setOnClickListener {
+                    openOrderDetails(entry.orderId)
+                }
+            } else {
+                cardView.isClickable = false
+                cardView.isFocusable = false
+                cardView.setOnClickListener(null)
             }
             
             binding.transactionsContainer.addView(cardView)
+        }
+    }
+
+    private fun openOrderDetails(orderId: Int) {
+        if (orderId <= 0) {
+            Toast.makeText(requireContext(), "Order details unavailable", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(requireContext(), OrderDetailActivity::class.java).apply {
+            putExtra("orderId", orderId)
+            // Prevent completed/non-delivery orders (e.g. in-store purchases)
+            // from auto-redirecting to Active Orders.
+            putExtra("fromCompletedOrders", true)
+        }
+        startActivity(intent)
+    }
+
+    private fun formatDateWithoutEat(rawDate: String?): String {
+        if (rawDate.isNullOrBlank()) return ""
+        return try {
+            val parsed = try {
+                apiDateFormat.parse(rawDate)
+            } catch (e: Exception) {
+                apiDateFormat2.parse(rawDate)
+            }
+            (if (parsed != null) dateFormat.format(parsed) else rawDate).replace(" EAT", "").trim()
+        } catch (e: Exception) {
+            rawDate.replace(" EAT", "").trim()
         }
     }
     
@@ -233,6 +290,22 @@ class CashAtHandTransactionsFragment : Fragment() {
         } else {
             parts.joinToString(" · ")
         }
+    }
+
+    private fun isSavingsRecoveryEntry(entry: CashAtHandEntry): Boolean {
+        val text = buildString {
+            append(entry.type)
+            append(' ')
+            append(entry.description ?: "")
+        }.lowercase(Locale.getDefault())
+        if (text.contains("savings recovery") || text.contains("savings withdrawal") || text.contains("withdrawal")) {
+            return true
+        }
+        // Fallback: legacy recovery rows may contain only timestamp-like text and no order linkage.
+        val looksLikeTimestampOnly = (entry.description ?: "").trim().matches(
+            Regex("^\\d{4}-\\d{2}-\\d{2}.*|^\\d{1,2}\\s+[A-Za-z]{3,9}\\s+\\d{4}.*")
+        )
+        return entry.type == "cash_sent" && entry.orderId == null && looksLikeTimestampOnly
     }
     
     private fun extractLocation(description: String?): String? {

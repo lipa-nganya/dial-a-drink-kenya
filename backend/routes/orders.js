@@ -258,57 +258,6 @@ router.post('/', async (req, res) => {
           return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
         }
 
-        // Customer-site constraint only:
-        // If a product has "can" capacity options, enforce a minimum of 6 can-equivalent units.
-        // Examples:
-        // - can/single => quantity must be >= 6
-        // - 6 pack => quantity 1 is valid
-        // - twin pack => quantity must be >= 3
-        if (!effectiveAdminOrder) {
-          const normalizeCapacity = (value) =>
-            String(value || '')
-              .trim()
-              .toLowerCase()
-              .replace(/\s+/g, '');
-
-          const capacityValuesFromPricing = Array.isArray(drink.capacityPricing)
-            ? drink.capacityPricing
-                .map((p) => (p && (p.capacity || p.size)) || null)
-                .filter(Boolean)
-            : [];
-          const capacityValuesFromDrinkCapacity = Array.isArray(drink.capacity)
-            ? drink.capacity.filter(Boolean)
-            : (drink.capacity ? [drink.capacity] : []);
-          const selectedCapacityRaw = item.selectedCapacity || '';
-          const normalizedSelectedCapacity = normalizeCapacity(selectedCapacityRaw);
-
-          const allCapacityValues = [
-            ...capacityValuesFromPricing,
-            ...capacityValuesFromDrinkCapacity,
-            selectedCapacityRaw
-          ].filter(Boolean);
-
-          const normalizedCapacityValues = allCapacityValues.map((v) => normalizeCapacity(v));
-          const hasCanCapacity = normalizedCapacityValues.some((v) => v.includes('can') || v === 'single');
-
-          if (hasCanCapacity) {
-            const packMatch = normalizedSelectedCapacity.match(/^(\d+)(pack|pk).*/);
-            const packSize = packMatch ? parseInt(packMatch[1], 10) : NaN;
-            const unitMultiplier = Number.isFinite(packSize) && packSize > 0
-              ? packSize
-              : 1;
-            const canEquivalentQty = item.quantity * unitMultiplier;
-
-            if (canEquivalentQty < 6) {
-              await transaction.rollback();
-              const suffix = selectedCapacityRaw ? ` (${selectedCapacityRaw})` : '';
-              return res.status(400).json({
-                error: `Minimum order for ${drink.name}${suffix} is 6 cans (or equivalent pack quantity).`
-              });
-            }
-          }
-        }
-
         const priceToUse =
           Number.isFinite(item.selectedPrice) && item.selectedPrice > 0
             ? item.selectedPrice

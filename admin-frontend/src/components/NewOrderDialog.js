@@ -6,6 +6,7 @@ import {
   DialogActions,
   Button,
   TextField,
+  InputAdornment,
   FormControl,
   InputLabel,
   Select,
@@ -22,7 +23,10 @@ import {
   Checkbox,
   RadioGroup,
   Radio,
-  Chip
+  Chip,
+  List,
+  ListItemButton,
+  ListItemText
 } from '@mui/material';
 import {
   Add,
@@ -134,11 +138,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   /** Matches backend/admin delivery settings (same logic as driver POS). */
   const [convenienceFeeEstimate, setConvenienceFeeEstimate] = useState(0);
 
-  // Create customer dialog state
-  const [createCustomerDialogOpen, setCreateCustomerDialogOpen] = useState(false);
-  const [newCustomerName, setNewCustomerName] = useState('');
-  const [newCustomerPhone, setNewCustomerPhone] = useState('');
-  const [creatingCustomer, setCreatingCustomer] = useState(false);
+  // Deferred customer creation state:
+  // when "Create new customer" is selected from autocomplete, we auto-create on order submit.
+  const [pendingCreateCustomerPhone, setPendingCreateCustomerPhone] = useState('');
 
   // Debounce customer search query
   useEffect(() => {
@@ -163,11 +165,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       fetchBranches();
       fetchDrivers();
       fetchTerritories();
-      const cachedProducts = getFreshProductsCache();
-      if (cachedProducts) {
-        setProducts(cachedProducts);
-      }
-      fetchProducts({ forceRefresh: !cachedProducts });
+      setProducts([]);
       // Reset isStop based on initialIsStop prop
       setIsStop(initialIsStop);
       // Reset order type to delivery
@@ -201,27 +199,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     return () => {
       cancelled = true;
     };
-  }, [open]);
-
-  // Refetch products when tab becomes visible (e.g. after creating a purchase in another tab) so profit/loss uses latest purchase prices
-  useEffect(() => {
-    const cachedProducts = getFreshProductsCache();
-    if (cachedProducts) {
-      setProducts(cachedProducts);
-      return;
-    }
-    fetchProducts();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'visible') fetchProducts();
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Keep the latest error visible without forcing the admin to scroll.
@@ -456,8 +433,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       fetchProducts({ query: term, limit: MAX_DROPDOWN_OPTIONS, forceRefresh: true });
       return;
     }
-    // Revert to cached full list when query is cleared/short.
-    fetchProducts();
+    setProducts([]);
+    setProductOptionsLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, productSearchQuery]);
 
@@ -1047,31 +1024,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       // Get final customer
       let finalCustomer = selectedCustomer;
       if (!isWalkIn && !selectedCustomer) {
-        const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
-        if (phoneMatch) {
-          const phoneNumber = phoneMatch[1];
-          try {
-            const createResponse = await api.post('/admin/customers', {
-              phone: phoneNumber,
-              customerName: 'Online Customer'
-            });
-            
-            if (createResponse.data?.success && createResponse.data?.customer) {
-              finalCustomer = createResponse.data.customer;
-              await fetchCustomers();
-            } else {
-              setError('Please select a customer or enter a valid phone number');
-              setPromptingPayment(false);
-              return;
-            }
-          } catch (error) {
-            console.error('Error creating customer:', error);
-            setError('Please select a customer or enter a valid phone number');
-            setPromptingPayment(false);
-            return;
-          }
-        } else {
-          setError('Please select a customer');
+        try {
+          finalCustomer = await resolveFinalCustomer();
+        } catch (resolveError) {
+          setError(resolveError.message || 'Please select a customer or enter a valid phone number');
           setPromptingPayment(false);
           return;
         }
@@ -1325,31 +1281,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       // Get final customer
       let finalCustomer = selectedCustomer;
       if (!isWalkIn && !selectedCustomer) {
-        const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
-        if (phoneMatch) {
-          const phoneNumber = phoneMatch[1];
-          try {
-            const createResponse = await api.post('/admin/customers', {
-              phone: phoneNumber,
-              customerName: 'Online Customer'
-            });
-            
-            if (createResponse.data?.success && createResponse.data?.customer) {
-              finalCustomer = createResponse.data.customer;
-              await fetchCustomers();
-            } else {
-              setError('Please select a customer or enter a valid phone number');
-              setPromptingPayment(false);
-              return;
-            }
-          } catch (error) {
-            console.error('Error creating customer:', error);
-            setError('Please select a customer or enter a valid phone number');
-            setPromptingPayment(false);
-            return;
-          }
-        } else {
-          setError('Please select a customer');
+        try {
+          finalCustomer = await resolveFinalCustomer();
+        } catch (resolveError) {
+          setError(resolveError.message || 'Please select a customer or enter a valid phone number');
           setPromptingPayment(false);
           return;
         }
@@ -1509,51 +1444,32 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const hasNoMatches = filteredCustomers.length === 0 && customerSearch.trim().length > 0;
   const showCreateOption = isPhoneNumber && hasNoMatches && !selectedCustomer;
 
-  const handleCreateCustomer = async () => {
-    if (!newCustomerPhone || !newCustomerPhone.trim()) {
-      setError('Phone number is required');
-      return;
+  const resolveFinalCustomer = async () => {
+    if (isWalkIn) return null;
+    if (selectedCustomer) return selectedCustomer;
+
+    const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
+    const phoneNumber = (pendingCreateCustomerPhone || phoneMatch?.[1] || '').trim();
+    if (!phoneNumber) {
+      throw new Error('Please select a customer or enter a valid phone number');
     }
 
-    setCreatingCustomer(true);
-    setError('');
+    const createResponse = await api.post('/admin/customers', {
+      phone: phoneNumber,
+      customerName: phoneNumber
+    });
 
-    try {
-      const response = await api.post('/admin/customers', {
-        phone: newCustomerPhone.trim(),
-        customerName: newCustomerName.trim() || undefined
-      });
-
-      if (response.data?.success && response.data?.customer) {
-        // Add new customer to list
-        setCustomers([...(Array.isArray(customers) ? customers : []), response.data.customer]);
-        // Select the newly created customer
-        setSelectedCustomer(response.data.customer);
-        const name = response.data.customer.customerName || response.data.customer.name || 'Unknown';
-        const phone = response.data.customer.phone || '';
-        setCustomerSearch(phone ? `${name} - ${phone}` : name);
-        // Close dialog
-        setCreateCustomerDialogOpen(false);
-        setNewCustomerName('');
-        setNewCustomerPhone('');
-        // Fetch delivery address for new customer
-        try {
-          const addressResponse = await api.get(`/admin/customers/${response.data.customer.id}/latest-address`);
-          if (addressResponse.data?.deliveryAddress) {
-            setDeliveryLocation(addressResponse.data.deliveryAddress);
-          }
-        } catch (error) {
-          console.error('Error fetching customer address:', error);
-        }
-      } else {
-        setError('Failed to create customer');
-      }
-    } catch (err) {
-      console.error('Error creating customer:', err);
-      setError(err.response?.data?.error || 'Failed to create customer');
-    } finally {
-      setCreatingCustomer(false);
+    if (!(createResponse.data?.success && createResponse.data?.customer)) {
+      throw new Error('Please select a customer or enter a valid phone number');
     }
+
+    const createdCustomer = createResponse.data.customer;
+    setSelectedCustomer(createdCustomer);
+    setPendingCreateCustomerPhone('');
+    const createdName = createdCustomer.customerName || createdCustomer.name || phoneNumber;
+    setCustomerSearch(createdCustomer.phone ? `${createdName} - ${createdCustomer.phone}` : createdName);
+    await fetchCustomers();
+    return createdCustomer;
   };
 
   const handleProcessPdqPayment = async () => {
@@ -1584,31 +1500,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       // Get final customer
       let finalCustomer = selectedCustomer;
       if (!isWalkIn && !selectedCustomer) {
-        const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
-        if (phoneMatch) {
-          const phoneNumber = phoneMatch[1];
-          try {
-            const createResponse = await api.post('/admin/customers', {
-              phone: phoneNumber,
-              customerName: 'Online Customer'
-            });
-            
-            if (createResponse.data?.success && createResponse.data?.customer) {
-              finalCustomer = createResponse.data.customer;
-              await fetchCustomers();
-            } else {
-              setError('Please select a customer or enter a valid phone number');
-              setProcessingPdqPayment(false);
-              return;
-            }
-          } catch (error) {
-            console.error('Error creating customer:', error);
-            setError('Please select a customer or enter a valid phone number');
-            setProcessingPdqPayment(false);
-            return;
-          }
-        } else {
-          setError('Please select a customer');
+        try {
+          finalCustomer = await resolveFinalCustomer();
+        } catch (resolveError) {
+          setError(resolveError.message || 'Please select a customer or enter a valid phone number');
           setProcessingPdqPayment(false);
           return;
         }
@@ -1879,11 +1774,14 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
               onChange={async (event, newValue) => {
                 // Handle create customer option
                 if (newValue && newValue.isCreateOption) {
-                  setNewCustomerPhone(newValue.phone || customerSearch);
-                  setCreateCustomerDialogOpen(true);
+                  const phone = String(newValue.phone || customerSearch || '').trim();
+                  setSelectedCustomer(null);
+                  setPendingCreateCustomerPhone(phone);
+                  setCustomerSearch(phone);
                   return;
                 }
                 
+                setPendingCreateCustomerPhone('');
                 setSelectedCustomer(newValue);
                 // When a customer is selected, update the search to show the selected value
                 if (newValue) {
@@ -1913,6 +1811,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 if (reason === 'input') {
                   // User is typing - update search and clear selection if different
                   setCustomerSearch(newInputValue);
+                  setPendingCreateCustomerPhone('');
                   if (selectedCustomer) {
                     const selectedText = selectedCustomer.customerName || selectedCustomer.name || '';
                     const selectedPhone = selectedCustomer.phone || '';
@@ -1926,10 +1825,12 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 } else if (reason === 'clear') {
                   setCustomerSearch('');
                   setSelectedCustomer(null);
+                  setPendingCreateCustomerPhone('');
                   setDeliveryLocation('');
                 } else if (reason === 'reset') {
                   setCustomerSearch('');
                   setSelectedCustomer(null);
+                  setPendingCreateCustomerPhone('');
                   setDeliveryLocation('');
                 }
               }}
@@ -2121,7 +2022,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     return filtered.slice(0, MAX_DROPDOWN_OPTIONS);
                   }}
                   noOptionsText={productOptionsLoading ? 'Loading products...' : 'No products found'}
-                  openOnFocus={true}
+                  forcePopupIcon={false}
+                  openOnFocus={false}
+                  open={String(productSearch || '').trim().length >= 2}
                   disablePortal={false}
                   ListboxProps={{
                     style: { maxHeight: '300px' }
@@ -3234,70 +3137,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
         </DialogActions>
       </Dialog>
 
-      {/* Create Customer Dialog */}
-      <Dialog
-        open={createCustomerDialogOpen}
-        onClose={() => {
-          setCreateCustomerDialogOpen(false);
-          setNewCustomerName('');
-          setNewCustomerPhone('');
-          setError('');
-        }}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Create New Customer</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            label="Phone Number *"
-            value={newCustomerPhone}
-            onChange={(e) => setNewCustomerPhone(e.target.value)}
-            margin="normal"
-            placeholder="e.g., 0712345678"
-            disabled={creatingCustomer}
-          />
-          <TextField
-            fullWidth
-            label="Customer Name (Optional)"
-            value={newCustomerName}
-            onChange={(e) => setNewCustomerName(e.target.value)}
-            margin="normal"
-            placeholder="Enter customer name"
-            disabled={creatingCustomer}
-          />
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError('')}>
-              {error}
-            </Alert>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button
-            onClick={() => {
-              setCreateCustomerDialogOpen(false);
-              setNewCustomerName('');
-              setNewCustomerPhone('');
-              setError('');
-            }}
-            disabled={creatingCustomer}
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={handleCreateCustomer}
-            variant="contained"
-            disabled={creatingCustomer || !newCustomerPhone}
-            sx={{
-              backgroundColor: colors.accentText,
-              color: '#FFFFFF',
-              '&:hover': { backgroundColor: colors.accentText, opacity: 0.9 }
-            }}
-          >
-            {creatingCustomer ? <CircularProgress size={20} /> : 'Create Customer'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      
     </>
   );
 };

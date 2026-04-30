@@ -71,34 +71,47 @@ export function buildSavingsStatementRows(rawEntries, currentSavings, normalized
     }
   }
 
-  let balanceAfter = parseFloat(currentSavings || 0);
+  const buildRows = (preferOpening) => {
+    let balanceAfter = parseFloat(currentSavings || 0);
+    return filtered.map((row) => {
+      const amt = parseFloat(row.amount || 0) || 0;
+      const debit = amt < 0 ? Math.abs(amt) : 0;
+      const credit = amt > 0 ? amt : 0;
 
-  return filtered.map((row) => {
-    const amt = parseFloat(row.amount || 0) || 0;
-    const debit = amt < 0 ? Math.abs(amt) : 0;
-    const credit = amt > 0 ? amt : 0;
+      let balance;
+      if (preferOpening) {
+        balance =
+          row.balanceAfterDisplay != null && row.balanceAfterDisplay !== ''
+            ? Math.round(Number(row.balanceAfterDisplay))
+            : balanceByKey && row.entryKey && balanceByKey.has(row.entryKey)
+            ? balanceByKey.get(row.entryKey)
+            : Math.round(balanceAfter);
+      } else {
+        // Reconcile from current wallet balance; ignore stale balanceAfterDisplay on rows.
+        balance = Math.round(balanceAfter);
+        balanceAfter -= amt;
+      }
 
-    let balance;
-    if (useOpening) {
-      balance =
-        row.balanceAfterDisplay != null && row.balanceAfterDisplay !== ''
-          ? Math.round(Number(row.balanceAfterDisplay))
-          : balanceByKey && row.entryKey && balanceByKey.has(row.entryKey)
-          ? balanceByKey.get(row.entryKey)
-          : Math.round(balanceAfter);
-    } else {
-      // Reconcile from current wallet balance; ignore stale balanceAfterDisplay on rows.
-      balance = Math.round(balanceAfter);
-      balanceAfter -= amt;
-    }
+      return {
+        row,
+        amount: amt,
+        debitDisplay: debit ? Math.round(debit) : '—',
+        creditDisplay: credit ? Math.round(credit) : '—',
+        balance
+      };
+    });
+  };
 
-    return {
-      row,
-      amount: amt,
-      debitDisplay: debit ? Math.round(debit) : '—',
-      creditDisplay: credit ? Math.round(credit) : '—',
-      balance
-    };
-  });
+  const rowsWithOpening = buildRows(useOpening);
+  if (!useOpening) return rowsWithOpening;
+
+  // Guardrail: if opening-balance forward math drifts from current top savings,
+  // fallback to current-balance reconciliation so table stays aligned with header.
+  const expectedTop = Math.round(parseFloat(currentSavings || 0));
+  const actualTop = rowsWithOpening[0]?.balance;
+  if (!Number.isFinite(actualTop) || Math.abs(actualTop - expectedTop) > 1) {
+    return buildRows(false);
+  }
+  return rowsWithOpening;
 }
 

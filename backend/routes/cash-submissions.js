@@ -1915,6 +1915,7 @@ const handleRejectSubmission = async (req, res, submissionId, driverIdParam = nu
     const id = submissionId || req.params.id;
     const driverId = driverIdParam !== null ? driverIdParam : req.params.driverId;
     const { rejectionReason } = req.body;
+    const normalizedRejectionReason = String(rejectionReason || '').trim();
     
     // Check if admin is authenticated
     if (!req.admin || !req.admin.id) {
@@ -1950,13 +1951,16 @@ const handleRejectSubmission = async (req, res, submissionId, driverIdParam = nu
     if (submission.status !== 'pending') {
       return sendError(res, `Submission is already ${submission.status}`, 400);
     }
+    if (!normalizedRejectionReason) {
+      return sendError(res, 'Rejection reason is required', 400);
+    }
 
     // Update submission
     await submission.update({
       status: 'rejected',
       rejectedBy: adminId,
       rejectedAt: new Date(),
-      rejectionReason: rejectionReason || 'No reason provided'
+      rejectionReason: normalizedRejectionReason
     });
 
     // Reload submission with all associations including rejector
@@ -1985,12 +1989,12 @@ const handleRejectSubmission = async (req, res, submissionId, driverIdParam = nu
         const message = {
           sound: 'default',
           title: '❌ Cash Submission Rejected',
-          body: `Your cash submission of KES ${submissionAmount.toFixed(2)} has been rejected. ${rejectionReason ? 'Reason: ' + rejectionReason : ''}`,
+          body: `Your cash submission of KES ${submissionAmount.toFixed(2)} has been rejected. Reason: ${normalizedRejectionReason}`,
           data: {
             type: 'cash_submission_rejected',
             submissionId: String(submission.id),
             amount: String(submissionAmount),
-            rejectionReason: rejectionReason || '',
+            rejectionReason: normalizedRejectionReason,
             channelId: 'cash-submissions'
           },
           priority: 'high',
