@@ -907,11 +907,16 @@ const RiderCashAtHandDetail = () => {
 
   const handleRejectConfirm = async () => {
     if (!riderId || rejectSubmissionId == null) return;
+    const trimmedReason = String(rejectReason || '').trim();
+    if (!trimmedReason) {
+      setError('Rejection reason is required.');
+      return;
+    }
     setActionLoadingId(rejectSubmissionId);
     setError(null);
     try {
       await api.post(`/driver-wallet/${riderId}/cash-submissions/${rejectSubmissionId}/reject`, {
-        rejectionReason: rejectReason || undefined
+        rejectionReason: trimmedReason
       });
       setRejectDialogOpen(false);
       setRejectSubmissionId(null);
@@ -1172,6 +1177,14 @@ const RiderCashAtHandDetail = () => {
             <>
               {metaLine('Approved by', s.approver?.name || s.approver?.username || '—')}
               {metaLine('Approved at', s.approvedAt ? formatDate(s.approvedAt) : '—')}
+              {metaLine(
+                'Payment date',
+                (() => {
+                  const d = s.details && typeof s.details === 'object' ? s.details : {};
+                  const pd = d.paymentDate || d.supplierPayment?.paymentDate || null;
+                  return pd ? formatDate(pd) : '—';
+                })()
+              )}
             </>
           )}
           {s.status === 'rejected' && (
@@ -1481,11 +1494,12 @@ const RiderCashAtHandDetail = () => {
                 <TextField
                   autoFocus
                   margin="dense"
-                  label="Rejection reason (optional)"
+                  label="Rejection reason"
                   fullWidth
                   multiline
                   rows={2}
                   value={rejectReason}
+                  required
                   onChange={(e) => setRejectReason(e.target.value)}
                   sx={{ mt: 1 }}
                 />
@@ -1498,7 +1512,10 @@ const RiderCashAtHandDetail = () => {
                   onClick={handleRejectConfirm}
                   color="error"
                   variant="contained"
-                  disabled={rejectSubmissionId != null && actionLoadingId === rejectSubmissionId}
+                  disabled={
+                    (rejectSubmissionId != null && actionLoadingId === rejectSubmissionId) ||
+                    !String(rejectReason || '').trim()
+                  }
                 >
                   {rejectSubmissionId != null && actionLoadingId === rejectSubmissionId ? 'Rejecting…' : 'Reject'}
                 </Button>

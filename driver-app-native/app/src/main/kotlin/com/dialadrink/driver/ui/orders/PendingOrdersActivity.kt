@@ -32,13 +32,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 class PendingOrdersActivity : AppCompatActivity() {
     private lateinit var binding: ActivityPendingOrdersBinding
     private val TAG = "PendingOrders"
     private var isLoading = false
     private var isAdminMode = false
+    private var lastRenderedOrders: List<Order> = emptyList()
+    private var hasActiveAcceptedOrder: Boolean = false
     private val orderAssignedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             refreshOrdersFromRepository()
@@ -124,6 +129,7 @@ class PendingOrdersActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             var orders = emptyList<Order>()
+            var hasActiveOrder = false
             try {
                 orders = withTimeoutOrNull(10000) {
                     try {
@@ -137,6 +143,7 @@ class PendingOrdersActivity : AppCompatActivity() {
                         emptyList()
                     }
                 } ?: emptyList()
+                hasActiveOrder = !isAdminMode && hasAnyActiveAcceptedOrder()
             } catch (e: CancellationException) {
                 Log.d(TAG, "Order loading cancelled")
                 // Ignore
@@ -152,7 +159,7 @@ class PendingOrdersActivity : AppCompatActivity() {
                         if (orders.isEmpty()) {
                             showEmptyState("No pending orders")
                         } else {
-                            displayOrders(orders)
+                            displayOrders(orders, hasActiveOrder)
                         }
                     }
                 } catch (e: Exception) {
@@ -174,6 +181,7 @@ class PendingOrdersActivity : AppCompatActivity() {
         
         lifecycleScope.launch {
             var orders = emptyList<Order>()
+            var hasActiveOrder = false
             try {
                 Log.d(TAG, "🔄 Starting refresh of pending orders...")
                 orders = withTimeoutOrNull(15000) { // Increased timeout to 15 seconds
@@ -186,6 +194,7 @@ class PendingOrdersActivity : AppCompatActivity() {
                     Log.w(TAG, "⏱️ Timeout while fetching pending orders")
                     emptyList()
                 }
+                hasActiveOrder = !isAdminMode && hasAnyActiveAcceptedOrder()
                 Log.d(TAG, "✅ Fetched ${orders.size} pending orders")
             } catch (e: CancellationException) {
                 Log.d(TAG, "🚫 Refresh cancelled")
@@ -201,7 +210,7 @@ class PendingOrdersActivity : AppCompatActivity() {
                     if (orders.isEmpty()) {
                         showEmptyState("No pending orders")
                     } else {
-                        displayOrders(orders)
+                        displayOrders(orders, hasActiveOrder)
                     }
                 }
             }
@@ -216,13 +225,19 @@ class PendingOrdersActivity : AppCompatActivity() {
         binding.emptyStateText.visibility = View.VISIBLE
     }
     
-    private fun displayOrders(orders: List<Order>) {
+    private fun displayOrders(orders: List<Order>, hasActiveOrder: Boolean) {
         binding.loadingProgress.visibility = View.GONE
         binding.swipeRefresh.isRefreshing = false
         binding.emptyStateText.visibility = View.GONE
         removeOrderCards()
-        orders.forEach { order ->
-            val card = createOrderCard(order)
+        val sortedOrders = sortOrdersOldestFirst(orders)
+        lastRenderedOrders = sortedOrders
+        hasActiveAcceptedOrder = hasActiveOrder
+
+        val oldestOrderId = sortedOrders.firstOrNull()?.id
+        sortedOrders.forEach { order ->
+            val canAcceptThisOrder = !isAdminMode && !hasActiveOrder && order.id == oldestOrderId
+            val card = createOrderCard(order, canAcceptThisOrder)
             binding.ordersContainer.addView(card)
         }
     }
@@ -239,7 +254,7 @@ class PendingOrdersActivity : AppCompatActivity() {
         }
     }
     
-    private fun createOrderCard(order: Order): View {
+    private fun createOrderCard(order: Order, canAcceptThisOrder: Boolean): View {
         try {
             val cardBinding = ItemPendingOrderBinding.inflate(LayoutInflater.from(this), binding.ordersContainer, false)
             val card = cardBinding.root as MaterialCardView
@@ -355,12 +370,31 @@ class PendingOrdersActivity : AppCompatActivity() {
             } else {
                 // Accept button
                 cardBinding.acceptButton.setOnClickListener {
+                    if (!canAcceptThisOrder) {
+                        Toast.makeText(this, "Complete active orders first", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
                     showAcceptConfirmation(order)
                 }
                 
                 // Reject button
                 cardBinding.rejectButton.setOnClickListener {
+                    if (!canAcceptThisOrder) {
+                        Toast.makeText(this, "Complete active orders first", Toast.LENGTH_SHORT).show()
+                        return@setOnClickListener
+                    }
                     showRejectConfirmation(order)
+                }
+
+                cardBinding.acceptButton.isEnabled = true
+                cardBinding.rejectButton.isEnabled = true
+                cardBinding.acceptButton.alpha = if (canAcceptThisOrder) 1f else 0.45f
+                cardBinding.rejectButton.alpha = if (canAcceptThisOrder) 1f else 0.45f
+                card.alpha = if (canAcceptThisOrder) 1f else 0.6f
+                if (!canAcceptThisOrder) {
+                    card.setOnClickListener {
+                        Toast.makeText(this, "Complete active orders first", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
             
@@ -561,10 +595,64 @@ class PendingOrdersActivity : AppCompatActivity() {
     }
     
     private fun enableAllButtons() {
-        for (i in 0 until binding.ordersContainer.childCount) {
-            val card = binding.ordersContainer.getChildAt(i) as? MaterialCardView
-            card?.findViewById<com.google.android.material.button.MaterialButton>(R.id.acceptButton)?.isEnabled = true
-            card?.findViewById<com.google.android.material.button.MaterialButton>(R.id.rejectButton)?.isEnabled = true
+        if (lastRenderedOrders.isEmpty()) return
+        displayOrders(lastRenderedOrders, hasActiveAcceptedOrder)
+    }
+
+    private fun sortOrdersOldestFirst(orders: List<Order>): List<Order> {
+        return orders.sortedWith(
+            compareBy<Order> { parseOrderDateMillis(it) }
+                .thenBy { it.id }
+        )
+    }
+
+    private fun parseOrderDateMillis(order: Order): Long {
+        val timestamps = listOf(order.createdAt, order.updatedAt)
+        for (value in timestamps) {
+            val millis = parseDateToMillis(value)
+            if (millis != null) return millis
+        }
+        return Long.MAX_VALUE
+    }
+
+    private fun parseDateToMillis(value: String?): Long? {
+        if (value.isNullOrBlank()) return null
+        try {
+            return java.time.Instant.parse(value).toEpochMilli()
+        } catch (_: Exception) {
+            // Fall through to legacy formats.
+        }
+
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            "yyyy-MM-dd'T'HH:mm:ss'Z'",
+            "yyyy-MM-dd HH:mm:ss.SSS",
+            "yyyy-MM-dd HH:mm:ss"
+        )
+        val utc = TimeZone.getTimeZone("UTC")
+        for (format in formats) {
+            try {
+                val parser = SimpleDateFormat(format, Locale.getDefault())
+                parser.timeZone = utc
+                val parsed: Date? = parser.parse(value)
+                if (parsed != null) return parsed.time
+            } catch (_: Exception) {
+                // Try next format.
+            }
+        }
+        return null
+    }
+
+    private suspend fun hasAnyActiveAcceptedOrder(): Boolean {
+        return try {
+            val activeOrders = OrderRepository.getActiveOrders(this@PendingOrdersActivity, forceRefresh = true)
+            activeOrders.any {
+                it.driverAccepted == true &&
+                    it.status != "completed" &&
+                    it.status != "cancelled"
+            }
+        } catch (_: Exception) {
+            false
         }
     }
     

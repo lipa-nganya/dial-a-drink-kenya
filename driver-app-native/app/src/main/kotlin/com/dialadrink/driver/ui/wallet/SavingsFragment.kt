@@ -414,6 +414,7 @@ class SavingsFragment : Fragment() {
                             cardView.findViewById<TextView>(R.id.amountText).setTextColor(ContextCompat.getColor(requireContext(), R.color.accent))
                         }
                         cardView.findViewById<TextView>(R.id.descriptionText).text = orderInfo
+                        cardView.findViewById<TextView>(R.id.dateText).visibility = View.VISIBLE
                         try {
                             cardView.findViewById<TextView>(R.id.dateText).text = dateFormat.format(parseDate(creditTx.date))
                         } catch (e: Exception) {
@@ -422,15 +423,20 @@ class SavingsFragment : Fragment() {
                     }
                     "withdrawal" -> {
                         val withdrawalTx = tx as WalletWithdrawal
-                        cardView.findViewById<TextView>(R.id.typeText).text = "Withdrawal"
+                        cardView.findViewById<TextView>(R.id.typeText).text = "Savings Recovery"
                         cardView.findViewById<TextView>(R.id.amountText).text = "-${formatter.format(withdrawalTx.amount)}"
                         cardView.findViewById<TextView>(R.id.amountText).setTextColor(ContextCompat.getColor(requireContext(), R.color.text_primary_dark))
-                        cardView.findViewById<TextView>(R.id.descriptionText).text = withdrawalTx.notes ?: "Savings withdrawal"
-                        try {
-                            cardView.findViewById<TextView>(R.id.dateText).text = dateFormat.format(parseDate(withdrawalTx.date))
+                        val dateLabel = try {
+                            dateFormat.format(parseDate(withdrawalTx.date))
                         } catch (e: Exception) {
-                            cardView.findViewById<TextView>(R.id.dateText).text = withdrawalTx.date
+                            withdrawalTx.date
+                        }.replace(" EAT", "").trim()
+                        cardView.findViewById<TextView>(R.id.descriptionText).text = if (dateLabel.isNotBlank()) {
+                            "Savings Recovery\n$dateLabel"
+                        } else {
+                            "Savings Recovery"
                         }
+                        cardView.findViewById<TextView>(R.id.dateText).visibility = View.GONE
                     }
                 }
                 binding.savingsCreditsContainer.addView(cardView)
@@ -572,8 +578,13 @@ class SavingsFragment : Fragment() {
                 }
                 "withdrawal" -> {
                     val withdrawalTx = tx as WalletWithdrawal
-                    deliveryAddressText.text = "Withdrawal"
-                    dateText.text = "Withdrawal"
+                    val recoveryTimestamp = formatDateTimeWithoutEat(withdrawalTx.date)
+                    deliveryAddressText.text = if (recoveryTimestamp.isNotBlank()) {
+                        "Savings Recovery\n$recoveryTimestamp"
+                    } else {
+                        "Savings Recovery"
+                    }
+                    dateText.text = "—"
                     orderNumText.text = "—"
                     
                     // Withdrawal transaction (money out, decreases savings) = Debit column
@@ -591,6 +602,15 @@ class SavingsFragment : Fragment() {
     
     private fun parseDate(dateString: String): Date {
         return parseDateOrNull(dateString) ?: Date()
+    }
+
+    private fun formatDateTimeWithoutEat(dateString: String?): String {
+        val parsed = parseDateOrNull(dateString)
+        return if (parsed != null) {
+            dateFormat.format(parsed).replace(" EAT", "").trim()
+        } else {
+            (dateString ?: "").replace(" EAT", "").trim()
+        }
     }
 
     private fun parseDateOrNull(dateString: String?): Date? {

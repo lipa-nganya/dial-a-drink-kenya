@@ -11,7 +11,11 @@ function netMoveFromEntry(entry, typeLower) {
       Number(entry.debitAmount != null ? entry.debitAmount : 0)
     );
   }
-  return parseFloat(entry.amount || 0);
+  const raw = parseFloat(entry.amount || 0);
+  if (!Number.isFinite(raw)) return 0;
+  // Normalize manual/admin adjustments and other settlement rows:
+  // for non-credit rows, movement magnitude should be treated as positive debit.
+  return isCashReceived ? raw : Math.abs(raw);
 }
 
 /**
@@ -97,69 +101,82 @@ export function buildCashAtHandStatementRows(rawEntries, totalCashAtHand, normal
     }
   }
 
-  let balanceAfter = parseFloat(totalCashAtHand || 0);
+  const buildRows = (preferOpening) => {
+    let balanceAfter = parseFloat(totalCashAtHand || 0);
+    return filtered.map((entry) => {
+      const type = entryType(entry);
+      const isCredit = type === 'cash_received';
+      const isCashReceived = type === 'cash_received';
+      const amountNet = parseFloat(entry.amount || 0);
 
-  return filtered.map((entry) => {
-    const type = entryType(entry);
-    const isCredit = type === 'cash_received';
-    const isCashReceived = type === 'cash_received';
-    const amountNet = parseFloat(entry.amount || 0);
-
-    let debitDisplay;
-    let creditDisplay;
-    if (isCashReceived) {
-      const hasD = entry.debitAmount != null && entry.debitAmount !== '';
-      const hasC = entry.creditAmount != null && entry.creditAmount !== '';
-      if (hasD || hasC) {
-        debitDisplay = hasD ? Math.round(Number(entry.debitAmount)) : '—';
-        creditDisplay = hasC ? Math.round(Number(entry.creditAmount)) : '—';
-      } else {
-        debitDisplay = '—';
-        creditDisplay = Math.round(amountNet);
-      }
-    } else {
-      const hasDebitCol = entry.debitAmount != null && entry.debitAmount !== '';
-      const hasCreditCol = entry.creditAmount != null && entry.creditAmount !== '';
-      debitDisplay = hasDebitCol
-        ? Math.round(Number(entry.debitAmount))
-        : !isCredit
-          ? Math.round(amountNet)
-          : '—';
-      creditDisplay = hasCreditCol
-        ? Math.round(Number(entry.creditAmount))
-        : isCredit
-          ? Math.round(amountNet)
-          : '—';
-    }
-
-    const balance =
-      entry.balanceAfterDisplay != null && entry.balanceAfterDisplay !== ''
-        ? Math.round(Number(entry.balanceAfterDisplay))
-        : useOpening && balanceByKey && entry.entryKey && balanceByKey.has(entry.entryKey)
-        ? balanceByKey.get(entry.entryKey)
-        : Math.round(balanceAfter);
-
-    const move = netMoveFromEntry(entry, type);
-    if (!useOpening) {
-      if (entry.balanceAfterDisplay == null || entry.balanceAfterDisplay === '') {
-        if (isCredit) {
-          balanceAfter -= move;
+      let debitDisplay;
+      let creditDisplay;
+      if (isCashReceived) {
+        const hasD = entry.debitAmount != null && entry.debitAmount !== '';
+        const hasC = entry.creditAmount != null && entry.creditAmount !== '';
+        if (hasD || hasC) {
+          debitDisplay = hasD ? Math.round(Number(entry.debitAmount)) : '—';
+          creditDisplay = hasC ? Math.round(Number(entry.creditAmount)) : '—';
         } else {
-          balanceAfter += move;
+          debitDisplay = '—';
+          creditDisplay = Math.round(amountNet);
         }
       } else {
-        balanceAfter = Number(entry.balanceAfterDisplay);
+        const hasDebitCol = entry.debitAmount != null && entry.debitAmount !== '';
+        const hasCreditCol = entry.creditAmount != null && entry.creditAmount !== '';
+        debitDisplay = hasDebitCol
+          ? Math.round(Number(entry.debitAmount))
+          : !isCredit
+            ? Math.round(Math.abs(amountNet))
+            : '—';
+        creditDisplay = hasCreditCol
+          ? Math.round(Number(entry.creditAmount))
+          : isCredit
+            ? Math.round(amountNet)
+            : '—';
       }
-    }
 
-    return {
-      entry,
-      type,
-      isCredit,
-      amount: move,
-      debitDisplay,
-      creditDisplay,
-      balance
-    };
-  });
+      const balance =
+        entry.balanceAfterDisplay != null && entry.balanceAfterDisplay !== ''
+          ? Math.round(Number(entry.balanceAfterDisplay))
+          : preferOpening && balanceByKey && entry.entryKey && balanceByKey.has(entry.entryKey)
+          ? balanceByKey.get(entry.entryKey)
+          : Math.round(balanceAfter);
+
+      const move = netMoveFromEntry(entry, type);
+      if (!preferOpening) {
+        if (entry.balanceAfterDisplay == null || entry.balanceAfterDisplay === '') {
+          if (isCredit) {
+            balanceAfter -= move;
+          } else {
+            balanceAfter += move;
+          }
+        } else {
+          balanceAfter = Number(entry.balanceAfterDisplay);
+        }
+      }
+
+      return {
+        entry,
+        type,
+        isCredit,
+        amount: move,
+        debitDisplay,
+        creditDisplay,
+        balance
+      };
+    });
+  };
+
+  const rowsWithOpening = buildRows(useOpening);
+  if (!useOpening) return rowsWithOpening;
+
+  // Guardrail: if opening-balance forward math does not reconcile with current
+  // top cash-at-hand, prefer top-balance math so logs always match the header.
+  const expectedTop = Math.round(parseFloat(totalCashAtHand || 0));
+  const actualTop = rowsWithOpening[0]?.balance;
+  if (!Number.isFinite(actualTop) || Math.abs(actualTop - expectedTop) > 1) {
+    return buildRows(false);
+  }
+  return rowsWithOpening;
 }

@@ -42,6 +42,10 @@ class CashTransactionsFragment : Fragment() {
         timeZone = TimeZone.getTimeZone("Africa/Nairobi")
         isLenient = false
     }
+    private val displayDateTimeFormat = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).apply {
+        timeZone = TimeZone.getTimeZone("Africa/Nairobi")
+        isLenient = false
+    }
     
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -194,7 +198,13 @@ class CashTransactionsFragment : Fragment() {
             } else {
                 deliveryAddress
             }
-            deliveryAddressText.text = formatDescriptionWithOrderNumber(entry.orderId, deliveryAddressForRow)
+            val isSavingsRecovery = isSavingsRecoveryEntry(entry)
+            deliveryAddressText.text = if (isSavingsRecovery) {
+                val dateLine = formatEntryDateTime(entry.date)
+                if (dateLine.isBlank()) "Savings Recovery" else "Savings Recovery\n$dateLine"
+            } else {
+                formatDescriptionWithOrderNumber(entry.orderId, deliveryAddressForRow)
+            }
             
             when (entry.type) {
                 "cash_received" -> {
@@ -271,6 +281,24 @@ class CashTransactionsFragment : Fragment() {
             "#$orderId"
         } else {
             "#$orderId • $cleaned"
+        }
+    }
+
+    private fun isSavingsRecoveryEntry(entry: CashAtHandEntry): Boolean {
+        val text = buildString {
+            append(entry.type)
+            append(' ')
+            append(entry.description)
+        }.lowercase(Locale.getDefault())
+        return text.contains("savings recovery") || text.contains("savings withdrawal") || text.contains("withdrawal")
+    }
+
+    private fun formatEntryDateTime(rawDate: String?): String {
+        val parsed = parseApiDate(rawDate)
+        return if (parsed != null) {
+            displayDateTimeFormat.format(parsed).replace(" EAT", "").trim()
+        } else {
+            (rawDate ?: "").replace(" EAT", "").trim()
         }
     }
 

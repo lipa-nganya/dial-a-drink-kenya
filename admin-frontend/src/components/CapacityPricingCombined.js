@@ -14,6 +14,7 @@ import {
 } from '@mui/material';
 import { Add, Delete, Edit, Save, Cancel } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
+import { api } from '../services/api';
 
 const CAPACITY_OPTIONS = [
   '1 litre',
@@ -59,6 +60,7 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
   // Copilot stores custom capacities locally; merge them into this dropdown
   // so Admin Inventory shows the same capacity options.
   const CUSTOM_CAPACITY_STORAGE_KEY = 'copilot_inventory_custom_capacities';
+  const SHARED_CAPACITY_SETTINGS_KEY = 'copilotInventoryCustomCapacities';
   const readCustomCapacitiesFromStorage = () => {
     try {
       const raw = window.localStorage.getItem(CUSTOM_CAPACITY_STORAGE_KEY);
@@ -82,6 +84,36 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  useEffect(() => {
+    const fetchSharedCapacities = async () => {
+      try {
+        const response = await api.get(`/settings/${SHARED_CAPACITY_SETTINGS_KEY}`);
+        const rawValue = response?.data?.value;
+        if (!rawValue) return;
+        const parsed = JSON.parse(rawValue);
+        if (!Array.isArray(parsed)) return;
+        const normalized = parsed.map((c) => String(c || '').trim()).filter(Boolean);
+        if (normalized.length === 0) return;
+        setCustomCapacities((prev) => {
+          const seen = new Set();
+          const merged = [];
+          [...prev, ...normalized].forEach((value) => {
+            const cleaned = String(value || '').trim();
+            const key = cleaned.toLowerCase();
+            if (!cleaned || seen.has(key)) return;
+            seen.add(key);
+            merged.push(cleaned);
+          });
+          window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(merged));
+          return merged;
+        });
+      } catch {
+        // Keep local storage capacities as fallback.
+      }
+    };
+    fetchSharedCapacities();
   }, []);
 
   const capacityOptions = (() => {
