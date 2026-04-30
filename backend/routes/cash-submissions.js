@@ -29,46 +29,6 @@ function addQtyToStockByCapacity(byCapInput, capacityLabel, qtyToAdd) {
   return byCap;
 }
 
-/**
- * For products sold as can/pack variants (e.g. 1 can, 6 pack, 12 pack, 24 pack),
- * aggregate stock is tracked in base units and must be incremented directly, not
- * recalculated as sum(stockByCapacity) because that can inflate totals.
- */
-function isCanPackSharedStockDrink(drink) {
-  const capacityValues = [];
-  if (Array.isArray(drink?.capacity)) {
-    capacityValues.push(...drink.capacity);
-  }
-  if (Array.isArray(drink?.capacityPricing)) {
-    drink.capacityPricing.forEach((entry) => {
-      if (entry && typeof entry === 'object') {
-        capacityValues.push(entry.capacity || entry.size);
-      }
-    });
-  }
-
-  const normalized = capacityValues
-    .map((v) => normalizeCapacityKey(v))
-    .filter(Boolean);
-
-  const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
-  const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
-  return hasPack && hasCan;
-}
-
-function findBaseCanCapacityKey(byCapInput) {
-  const byCap =
-    byCapInput && typeof byCapInput === 'object' && !Array.isArray(byCapInput)
-      ? byCapInput
-      : {};
-  const keys = Object.keys(byCap);
-  const preferred = keys.find((k) => {
-    const n = normalizeCapacityKey(k);
-    return n === '1can' || n === 'can' || n === 'single';
-  });
-  return preferred || null;
-}
-
 // Admin routes - must be defined BEFORE driver routes to avoid route conflicts
 // Admin routes - require admin authentication
 router.use('/admin', verifyAdmin);
@@ -199,10 +159,7 @@ async function applyPurchaseInventoryAndAccountSideEffects({
             const before = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
               ? { ...drink.stockByCapacity }
               : {};
-            const useSharedCanStock = isCanPackSharedStockDrink(drink);
-            const targetCapacity = useSharedCanStock
-              ? (findBaseCanCapacityKey(before) || '1 can')
-              : capacity;
+            const targetCapacity = capacity;
             const beforeKey = Object.keys(before).find(
               (k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)
             );
@@ -212,15 +169,10 @@ async function applyPurchaseInventoryAndAccountSideEffects({
               Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)) ||
               String(targetCapacity).trim();
 
-            // For can/pack shared-stock products, aggregate stock should be additive from existing stock.
-            // For true per-capacity products, aggregate stock remains sum(stockByCapacity).
-            const currentStock = parseFloat(drink.stock || 0) || 0;
-            const totalStock = useSharedCanStock
-              ? currentStock + qty
-              : Object.values(byCap).reduce((sum, value) => {
-                  const n = typeof value === 'number' ? value : parseInt(value, 10);
-                  return sum + (Number.isNaN(n) ? 0 : n);
-                }, 0);
+            const totalStock = Object.values(byCap).reduce((sum, value) => {
+              const n = typeof value === 'number' ? value : parseInt(value, 10);
+              return sum + (Number.isNaN(n) ? 0 : n);
+            }, 0);
 
             await drink.update({
               stockByCapacity: byCap,
@@ -687,10 +639,7 @@ router.post('/admin/cash-submissions', async (req, res) => {
             const before = drink.stockByCapacity && typeof drink.stockByCapacity === 'object'
                 ? { ...drink.stockByCapacity }
                 : {};
-            const useSharedCanStock = isCanPackSharedStockDrink(drink);
-            const targetCapacity = useSharedCanStock
-              ? (findBaseCanCapacityKey(before) || '1 can')
-              : capacity;
+            const targetCapacity = capacity;
             const beforeKey = Object.keys(before).find(
               (k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)
             );
@@ -700,15 +649,10 @@ router.post('/admin/cash-submissions', async (req, res) => {
               Object.keys(byCap).find((k) => normalizeCapacityKey(k) === normalizeCapacityKey(targetCapacity)) ||
               String(targetCapacity).trim();
 
-            // For can/pack shared-stock products, aggregate stock should be additive from existing stock.
-            // For true per-capacity products, aggregate stock remains sum(stockByCapacity).
-            const currentStock = parseFloat(drink.stock || 0) || 0;
-            const totalStock = useSharedCanStock
-              ? currentStock + qty
-              : Object.values(byCap).reduce((sum, value) => {
-                  const n = typeof value === 'number' ? value : parseInt(value, 10);
-                  return sum + (Number.isNaN(n) ? 0 : n);
-                }, 0);
+            const totalStock = Object.values(byCap).reduce((sum, value) => {
+              const n = typeof value === 'number' ? value : parseInt(value, 10);
+              return sum + (Number.isNaN(n) ? 0 : n);
+            }, 0);
 
               await drink.update({
                 stockByCapacity: byCap,

@@ -96,6 +96,9 @@ function sumLineItemsSubtotal(order) {
  */
 function computeOrderSummaryCustomerTotal(order) {
   if (!order) return 0;
+  if (order.__isSummaryPayload && Number.isFinite(Number(order.totalAmount))) {
+    return Number(Number(order.totalAmount).toFixed(2));
+  }
   const amounts = computeOrderDisplayAmounts(order);
   const fromLines = sumLineItemsSubtotal(order);
   const hasLineItems = Array.isArray(order?.items) && order.items.length > 0;
@@ -105,8 +108,9 @@ function computeOrderSummaryCustomerTotal(order) {
     order?.itemsTotal !== '' &&
     Number.isFinite(Number(order.itemsTotal));
 
-  // Summary payloads intentionally omit items; in that case trust totalAmount directly.
-  if (!hasLineItems && !hasStoredItemsTotal && Number.isFinite(Number(order.totalAmount))) {
+  // Summary payloads intentionally omit line items; when lines are absent, trust totalAmount directly.
+  // This avoids stale list totals when items subtotal is edited but legacy itemsTotal fields lag.
+  if (!hasLineItems && Number.isFinite(Number(order.totalAmount))) {
     return Number(Number(order.totalAmount).toFixed(2));
   }
 
@@ -793,15 +797,16 @@ const Orders = () => {
       // Additional sync: Check each order and ensure paymentStatus matches transaction status
       orders = orders.map(order => {
         if (!order) return null;
+        const withSummaryMeta = { ...order, __isSummaryPayload: true };
         if (order.transactions && order.transactions.length > 0) {
           const hasCompletedTransaction = order.transactions.some(tx => tx.status === 'completed');
           // If transaction is completed but paymentStatus is not 'paid', update it
           if (hasCompletedTransaction && order.paymentStatus !== 'paid') {
             console.log(`🔧 Frontend sync: Updating Order #${order.id} paymentStatus from ${order.paymentStatus} to 'paid'`);
-            return { ...order, paymentStatus: 'paid' };
+            return { ...withSummaryMeta, paymentStatus: 'paid' };
           }
         }
-        return order;
+        return withSummaryMeta;
       }).filter(order => order != null); // Filter out any null orders after mapping
       
       const sortedOrders = sortOrdersByStatus(orders);
@@ -1376,6 +1381,8 @@ const Orders = () => {
 
       if (response.data?.success) {
         const { order, breakdown } = response.data;
+        const nextTotalAmount = breakdown?.totalAmount ?? order?.totalAmount;
+        const nextItemsTotal = breakdown?.itemsTotal;
         setSelectedOrderForDetail((prev) => {
           const merged = {
             ...prev,
@@ -1392,10 +1399,27 @@ const Orders = () => {
             deliveryFee: Math.round(amounts.territoryDeliveryFee),
             territoryDeliveryFee:
               merged.territoryDeliveryFee ?? amounts.territoryDeliveryFee ?? prev?.territoryDeliveryFee,
-            totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? merged.totalAmount
+            totalAmount: nextTotalAmount ?? merged.totalAmount
           };
         });
-        await fetchOrders();
+        if (selectedOrderForDetail?.id) {
+          const targetOrderId = Number(selectedOrderForDetail.id);
+          const patchOrderForList = (entry) => {
+            if (!entry || Number(entry.id) !== targetOrderId) return entry;
+            return {
+              ...entry,
+              ...(order || {}),
+              __isSummaryPayload: true,
+              ...(nextItemsTotal != null ? { itemsTotal: nextItemsTotal } : {}),
+              ...(nextTotalAmount != null ? { totalAmount: nextTotalAmount } : {})
+            };
+          };
+          setOrders((prev) => prev.map(patchOrderForList));
+          setFilteredOrders((prev) => prev.map(patchOrderForList));
+        }
+        // Avoid immediate refetch race: summary endpoint can briefly return stale totals
+        // right after subtotal edits, which causes a one-step lag in the list display.
+        scheduleOrdersRefresh(1200);
         setEditItemsSubtotalDialogOpen(false);
         setNewItemsSubtotal('');
         alert('Items subtotal updated successfully');
