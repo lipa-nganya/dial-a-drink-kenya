@@ -121,6 +121,14 @@ if [ -n "$GOOGLE_MAPS_KEY" ]; then
     GOOGLE_MAPS_KEY_SOURCE="shell-env"
 fi
 if [ -z "$GOOGLE_MAPS_KEY" ]; then
+    # Accept existing uppercase secret naming used in GCP console.
+    if GOOGLE_MAPS_KEY="$(gcloud secrets versions access latest --secret=GOOGLE_MAPS_API_KEY --project="$PROJECT_ID" 2>/tmp/maps_key_err.log)"; then
+        GOOGLE_MAPS_KEY_SOURCE="secret-manager:GOOGLE_MAPS_API_KEY"
+    else
+        GOOGLE_MAPS_KEY=""
+    fi
+fi
+if [ -z "$GOOGLE_MAPS_KEY" ]; then
     # Primary: shared build-time secret in Secret Manager.
     if GOOGLE_MAPS_KEY="$(gcloud secrets versions access latest --secret=google-maps-api-key --project="$PROJECT_ID" 2>/tmp/maps_key_err.log)"; then
         GOOGLE_MAPS_KEY_SOURCE="secret-manager:google-maps-api-key"
@@ -145,6 +153,7 @@ else
     echo "   Tried:"
     echo "   - GOOGLE_MAPS_API_KEY_FOR_BUILD env var"
     echo "   - GOOGLE_MAPS_API_KEY env var"
+    echo "   - Secret Manager: GOOGLE_MAPS_API_KEY"
     echo "   - Secret Manager: google-maps-api-key"
     echo "   - Secret Manager: google-maps-api-key-for-build"
     if [ -f /tmp/maps_key_err.log ]; then
