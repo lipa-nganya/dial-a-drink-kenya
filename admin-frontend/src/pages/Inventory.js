@@ -156,11 +156,9 @@ const InventoryPage = () => {
     const uniqueCaps = Array.from(new Set(capacities));
     if (uniqueCaps.length === 0) return [];
 
-    const mainStock = toInt(drink?.stock);
     const stockByCapacityEntries = stockByCapacity
       ? Object.entries(stockByCapacity)
       : [];
-    const isSharedCanPack = isCanPackSharedStockDrink(drink);
 
     return uniqueCaps.map(cap => {
       let raw = null;
@@ -170,15 +168,9 @@ const InventoryPage = () => {
         raw = direct ? direct[1] : null;
       }
       const parsed = toInt(raw);
-      let stock;
-      if (isSharedCanPack) {
-        // Shared can stock model: capacities are availability views over the same can stock.
-        const multiplier = capacityUnitMultiplier(cap);
-        stock = multiplier > 1 ? Math.floor(mainStock / multiplier) : mainStock;
-      } else {
-        // Non-shared model: use capacity bucket, fallback to aggregate only when buckets are absent.
-        stock = stockByCapacity ? (raw == null ? 0 : parsed) : mainStock;
-      }
+      // Inventory stock source of truth is stockByCapacity.
+      // If a capacity bucket is missing, treat it as 0.
+      const stock = raw == null ? 0 : parsed;
       return { capacity: cap, stock };
     });
   };
@@ -220,21 +212,12 @@ const InventoryPage = () => {
       const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
       return hasPack && hasCan;
     };
-    if (isCanPackSharedStockDrink(drink)) {
-      const parsed = Number(drink.stock);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    }
-
     const rows = getCapacityStockRows(drink);
     if (rows.length > 0) {
       return rows.reduce((sum, r) => sum + (Number(r.stock) || 0), 0);
     }
 
-    // Fallback: if capacity stock isn't present, use the legacy `drink.stock`.
-    if (drink.stock !== undefined && drink.stock !== null) {
-      const parsed = Number(drink.stock);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    }
+    // No capacity buckets means no known stock.
     return 0;
   };
 
@@ -1173,19 +1156,17 @@ const InventoryPage = () => {
                           sx={{ fontSize: '0.7rem', height: '22px', backgroundColor: '#4CAF50', color: '#fff' }}
                         />
                       )}
-                      {drink.stock !== undefined && drink.stock !== null && (
-                        <Chip
-                          icon={<Inventory />}
-                          label={`Stock: ${getTotalStock(drink)}`}
-                          size="small"
-                          sx={{
-                            fontSize: '0.7rem',
-                            height: '22px',
-                            backgroundColor: getTotalStock(drink) > 0 ? '#2196F3' : '#F44336',
-                            color: '#fff'
-                          }}
-                        />
-                      )}
+                      <Chip
+                        icon={<Inventory />}
+                        label={`Stock: ${getTotalStock(drink)}`}
+                        size="small"
+                        sx={{
+                          fontSize: '0.7rem',
+                          height: '22px',
+                          backgroundColor: getTotalStock(drink) > 0 ? '#2196F3' : '#F44336',
+                          color: '#fff'
+                        }}
+                      />
                       {getTotalStock(drink) === 0 && (
                         <Chip
                           icon={<Cancel />}
@@ -1414,19 +1395,17 @@ const InventoryPage = () => {
                           }}
                         />
                       )}
-                      {drink.stock !== undefined && drink.stock !== null && (
-                        <Chip
-                          icon={<Inventory />}
-                          label={`Stock: ${getTotalStock(drink)}`}
-                          size="small"
-                          sx={{ 
-                            fontSize: '0.65rem', 
-                            height: '20px',
-                            backgroundColor: getTotalStock(drink) > 0 ? '#2196F3' : '#F44336',
-                            color: '#fff'
-                          }}
-                        />
-                      )}
+                      <Chip
+                        icon={<Inventory />}
+                        label={`Stock: ${getTotalStock(drink)}`}
+                        size="small"
+                        sx={{ 
+                          fontSize: '0.65rem', 
+                          height: '20px',
+                          backgroundColor: getTotalStock(drink) > 0 ? '#2196F3' : '#F44336',
+                          color: '#fff'
+                        }}
+                      />
                       {/* Show "Out of Stock" label if stock is 0 (backend automatically sets isAvailable based on stock) */}
                       {getTotalStock(drink) === 0 && (
                         <Chip
