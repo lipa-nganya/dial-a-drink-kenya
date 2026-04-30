@@ -895,7 +895,7 @@ const Orders = () => {
       console.log(`🔍 'pending' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'completed') {
       const beforeFilter = filtered.length;
-      filtered = filtered.filter(order => order.status === 'completed');
+      filtered = filtered.filter(order => order.status === 'completed' || order.status === 'delivered');
       console.log(`🔍 'completed' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'unassigned') {
       const beforeFilter = filtered.length;
