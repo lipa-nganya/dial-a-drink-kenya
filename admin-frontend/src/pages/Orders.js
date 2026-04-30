@@ -876,7 +876,7 @@ const Orders = () => {
       // Include in_progress so walk-in M-Pesa orders don't disappear from all tabs
       filtered = filtered.filter(order => (order.status === 'pending' || order.status === 'confirmed' || order.status === 'in_progress') && !(order.cancellationRequested && order.cancellationApproved === null));
     } else if (tabFilter === 'completed') {
-      filtered = filtered.filter(order => order.status === 'completed');
+      filtered = filtered.filter(order => order.status === 'completed' || order.status === 'delivered');
     } else if (tabFilter === 'unassigned') {
       filtered = filtered
         .filter(order => !isWalkInOrder(order))
