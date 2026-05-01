@@ -407,10 +407,55 @@ async function initiateSTKPush(phoneNumber, amount, accountReference, transactio
   }
 }
 
+/** Per-checkout STK Push Query throttle — avoids Safaricom "rate exceeded" when UI polls every few seconds. */
+const stkPushQueryState = new Map();
+
+function parsePositiveIntEnv(name, fallback) {
+  const n = parseInt(process.env[name] || '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+function pruneStkPushQueryState() {
+  if (stkPushQueryState.size <= 400) return;
+  const cutoff = Date.now() - 3600000;
+  for (const [k, v] of stkPushQueryState) {
+    if (!v || v.at < cutoff) stkPushQueryState.delete(k);
+  }
+}
+
 /**
- * Check M-Pesa transaction status
+ * Check M-Pesa transaction status (STK Push Query).
+ * @param {string} checkoutRequestID
+ * @param {{ bypassThrottle?: boolean }} [options] — set bypassThrottle for rare admin/manual paths
  */
-async function checkTransactionStatus(checkoutRequestID) {
+async function checkTransactionStatus(checkoutRequestID, options = {}) {
+  const bypassThrottle = options.bypassThrottle === true;
+  const id = String(checkoutRequestID || '').trim();
+  if (!id) {
+    throw new Error('CheckoutRequestID is required');
+  }
+
+  const minIntervalMs = parsePositiveIntEnv('MPESA_STK_QUERY_MIN_INTERVAL_MS', 28000);
+  const now = Date.now();
+  const prev = stkPushQueryState.get(id);
+
+  if (!bypassThrottle && prev && now - prev.at < minIntervalMs) {
+    const waitSec = Math.max(0, Math.round((minIntervalMs - (now - prev.at)) / 1000));
+    console.log(
+      `[M-Pesa] STKPushQuery throttled for CheckoutRequestID=${id.slice(0, 14)}… (${waitSec}s until live query)`
+    );
+    if (prev.body !== undefined && prev.body !== null) {
+      return prev.body;
+    }
+    return {
+      ResultCode: 49999,
+      ResultDesc: 'Query interval limited — payment may still complete via callback',
+      ThrottledByBackend: true
+    };
+  }
+
+  pruneStkPushQueryState();
+
   try {
     const token = await getAccessToken();
     const { password, timestamp } = generatePassword();
@@ -419,26 +464,31 @@ async function checkTransactionStatus(checkoutRequestID) {
       BusinessShortCode: MPESA_SHORTCODE,
       Password: password,
       Timestamp: timestamp,
-      CheckoutRequestID: checkoutRequestID
+      CheckoutRequestID: id
     };
 
     const response = await fetch(`${MPESA_BASE_URL}/mpesa/stkpushquery/v1/query`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify(payload)
     });
 
     if (!response.ok) {
+      stkPushQueryState.set(id, { at: Date.now() });
       throw new Error(`Failed to check transaction status: ${response.status}`);
     }
 
     const data = await response.json();
+    stkPushQueryState.set(id, { at: Date.now(), body: data });
     return data;
   } catch (error) {
     console.error('Error checking transaction status:', error);
+    if (!stkPushQueryState.has(id) || stkPushQueryState.get(id).body === undefined) {
+      stkPushQueryState.set(id, { at: Date.now() });
+    }
     throw error;
   }
 }

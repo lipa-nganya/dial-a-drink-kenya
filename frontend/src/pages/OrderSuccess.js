@@ -361,9 +361,11 @@ const OrderSuccess = () => {
                 }
               }
             } catch (pollError) {
-              // Don't log 429 errors - they're expected when polling too frequently
-              if (!pollError.message?.includes('429') && !pollError.response?.status === 429) {
-                console.log('M-Pesa API poll failed (will continue with regular polling):', pollError.message);
+              // Don't log 429 errors — expected when polling too frequently or infra rate limits
+              const status = pollError.response?.status;
+              const msg = pollError.message || '';
+              if (status !== 429 && !String(msg).includes('429')) {
+                console.log('M-Pesa API poll failed (will continue with regular polling):', msg);
               }
               // Continue with regular polling if M-Pesa API poll fails
             }
@@ -491,7 +493,7 @@ const OrderSuccess = () => {
         }
       };
       
-      pollInterval = setInterval(pollForPayment, 10000); // Poll every 10 seconds (reduced frequency to avoid rate limits - backend handles auto-sync)
+      pollInterval = setInterval(pollForPayment, 15000); // Softer polling — backend also queries Safaricom; avoids cumulative rate limits
 
       return () => {
         if (pollInterval) {
