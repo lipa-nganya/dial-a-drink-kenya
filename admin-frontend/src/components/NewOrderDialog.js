@@ -93,6 +93,87 @@ const getCapacityPricingArray = (product) => {
   return Array.isArray(parsed) ? parsed : [];
 };
 
+/**
+ * Normalize capacity labels so inventory keys match pricing (e.g. "750ML." vs "750ML").
+ */
+const normalizeCapacityKey = (value) =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[.,;]+$/g, '');
+
+const toStockNumber = (value) => {
+  const parsed = parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
+const isCanPackSharedStockProduct = (parsedCapacityPricing) => {
+  const values = Array.isArray(parsedCapacityPricing)
+    ? parsedCapacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
+    : [];
+  const normalized = values.map((v) => normalizeCapacityKey(v));
+  const hasPack = normalized.some(
+    (v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk')
+  );
+  const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
+  return hasPack && hasCan;
+};
+
+const countPricedCapacityTiers = (parsedCapacityPricing) => {
+  const labels = new Set();
+  if (!Array.isArray(parsedCapacityPricing)) return 0;
+  parsedCapacityPricing.forEach((pricing) => {
+    if (!pricing || typeof pricing !== 'object') return;
+    const capacity = pricing.capacity || pricing.size;
+    if (!capacity || typeof capacity !== 'string' || !capacity.trim()) return;
+    const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+    const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+    const priceField = pricing.price != null ? parseFloat(pricing.price) : null;
+    const price =
+      currentPrice != null && !Number.isNaN(currentPrice) && currentPrice > 0
+        ? currentPrice
+        : originalPrice != null && !Number.isNaN(originalPrice) && originalPrice > 0
+        ? originalPrice
+        : priceField != null && !Number.isNaN(priceField) && priceField > 0
+        ? priceField
+        : 0;
+    if (price > 0) labels.add(normalizeCapacityKey(capacity.trim()));
+  });
+  return labels.size;
+};
+
+/**
+ * Per-capacity stock from stockByCapacity vs aggregate. Never assigns aggregate to every tier when multiple buckets exist.
+ */
+const resolveCapacityStockFromBuckets = (
+  capacityLabel,
+  normalizedStockByCapacity,
+  aggregateStock,
+  parsedCapacityPricing
+) => {
+  if (!normalizedStockByCapacity || Object.keys(normalizedStockByCapacity).length === 0) {
+    return toStockNumber(aggregateStock);
+  }
+  const target = normalizeCapacityKey(capacityLabel);
+  const entry = Object.entries(normalizedStockByCapacity).find(
+    ([cap]) => normalizeCapacityKey(cap) === target
+  );
+  if (entry) {
+    return toStockNumber(entry[1]);
+  }
+  if (isCanPackSharedStockProduct(parsedCapacityPricing)) {
+    return toStockNumber(aggregateStock);
+  }
+  const agg = toStockNumber(aggregateStock);
+  const bucketSum = Object.values(normalizedStockByCapacity).reduce((s, v) => s + toStockNumber(v), 0);
+  const tierCount = countPricedCapacityTiers(parsedCapacityPricing);
+  if (tierCount === 1 && agg > 0) return agg;
+  if (bucketSum === 0 && agg > 0) return agg;
+  return 0;
+};
+
 const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, initialIsStop = false }) => {
   const { isDarkMode, colors } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -259,18 +340,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setSelectedCapacity(capacity);
     const capPricing = currentProduct ? getCapacityPricingArray(currentProduct) : [];
     if (currentProduct && capPricing.length > 0) {
-      const normalizeCapacity = (value) =>
-        (value || '')
-          .toString()
-          .trim()
-          .toLowerCase()
-          .replace(/\s+/g, '');
-
-      const target = normalizeCapacity(capacity);
+      const target = normalizeCapacityKey(capacity);
 
       const pricing = capPricing.find((p) => {
         const raw = (p && (p.capacity || p.size)) || '';
-        return normalizeCapacity(raw) === target;
+        return normalizeCapacityKey(raw) === target;
       });
 
       if (pricing) {
@@ -459,16 +533,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
-    const normalizeCapacity = (value) =>
-      (value || '')
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, '');
-    const toStockNumber = (value) => {
-      const parsed = parseInt(value, 10);
-      return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-    };
     const parseJsonIfString = (value) => {
       if (typeof value !== 'string') return value;
       const trimmed = value.trim();
@@ -495,65 +559,15 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       !Array.isArray(parsedStockByCapacity)
         ? parsedStockByCapacity
         : null;
-    const isCanPackSharedStockProduct = () => {
-      const values = Array.isArray(parsedCapacityPricing)
-        ? parsedCapacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
-        : [];
-      const normalized = values.map((v) => normalizeCapacity(v));
-      const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
-      const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
-      return hasPack && hasCan;
-    };
-
-    const pricedCapacityTierCount = (() => {
-      const labels = new Set();
-      if (!Array.isArray(parsedCapacityPricing)) return 0;
-      parsedCapacityPricing.forEach((pricing) => {
-        if (!pricing || typeof pricing !== 'object') return;
-        const capacity = pricing.capacity || pricing.size;
-        if (!capacity || typeof capacity !== 'string' || !capacity.trim()) return;
-        const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
-        const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
-        const priceField = pricing.price != null ? parseFloat(pricing.price) : null;
-        const price =
-          currentPrice != null && !Number.isNaN(currentPrice) && currentPrice > 0
-            ? currentPrice
-            : originalPrice != null && !Number.isNaN(originalPrice) && originalPrice > 0
-            ? originalPrice
-            : priceField != null && !Number.isNaN(priceField) && priceField > 0
-            ? priceField
-            : 0;
-        if (price > 0) labels.add(normalizeCapacity(capacity.trim()));
-      });
-      return labels.size;
-    })();
-
     let availableStock = toStockNumber(currentProduct.stock);
     if (normalizedStockByCapacity && Object.keys(normalizedStockByCapacity).length > 0) {
       if (selectedCapacity) {
-        const target = normalizeCapacity(selectedCapacity);
-        const entry = Object.entries(normalizedStockByCapacity).find(
-          ([cap]) => normalizeCapacity(cap) === target
+        availableStock = resolveCapacityStockFromBuckets(
+          selectedCapacity,
+          normalizedStockByCapacity,
+          currentProduct.stock,
+          parsedCapacityPricing
         );
-        if (entry) {
-          availableStock = toStockNumber(entry[1]);
-        } else if (isCanPackSharedStockProduct()) {
-          // Shared can stock model: missing pack key should still be purchasable from aggregate cans.
-          availableStock = toStockNumber(currentProduct.stock);
-        } else {
-          const agg = toStockNumber(currentProduct.stock);
-          const bucketSum = Object.values(normalizedStockByCapacity).reduce(
-            (s, v) => s + toStockNumber(v),
-            0
-          );
-          if (pricedCapacityTierCount === 1 && agg > 0) {
-            availableStock = agg;
-          } else if (bucketSum === 0 && agg > 0) {
-            availableStock = agg;
-          } else {
-            availableStock = 0;
-          }
-        }
       } else {
         availableStock = Object.values(normalizedStockByCapacity).reduce(
           (sum, qty) => sum + toStockNumber(qty),
@@ -593,11 +607,11 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       Array.isArray(parsedCapacityPricing) &&
       parsedCapacityPricing.length > 0
     ) {
-      const target = normalizeCapacity(selectedCapacity);
+      const target = normalizeCapacityKey(selectedCapacity);
 
       const match = parsedCapacityPricing.find((p) => {
         const raw = (p && (p.capacity || p.size)) || '';
-        return normalizeCapacity(raw) === target;
+        return normalizeCapacityKey(raw) === target;
       });
 
       if (match) {
@@ -746,16 +760,10 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       if (currentProduct) {
         let originalPrice = Math.round(parseFloat(currentProduct.price) || 0);
         if (selectedCapacity && getCapacityPricingArray(currentProduct).length > 0) {
-          const normalizeCapacity = (value) =>
-            (value || '')
-              .toString()
-              .trim()
-              .toLowerCase()
-              .replace(/\s+/g, '');
-          const target = normalizeCapacity(selectedCapacity);
+          const target = normalizeCapacityKey(selectedCapacity);
           const match = getCapacityPricingArray(currentProduct).find((p) => {
             const raw = (p && (p.capacity || p.size)) || '';
-            return normalizeCapacity(raw) === target;
+            return normalizeCapacityKey(raw) === target;
           });
           if (match) {
             const currentP =
@@ -2115,20 +2123,14 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                       return value;
                     }
                   };
-                  const parsedStockByCapacity = parseJsonIfString(option.stockByCapacity);
+                  const parsedStockByCapacity = parseJsonIfStringField(option.stockByCapacity);
                   const stockByCapacity =
                     parsedStockByCapacity &&
                     typeof parsedStockByCapacity === 'object' &&
                     !Array.isArray(parsedStockByCapacity)
                       ? parsedStockByCapacity
                       : null;
-                  const parsedCapacityPricing = parseJsonIfString(option.capacityPricing);
-                  const normalizeCapacity = (value) =>
-                    (value || '')
-                      .toString()
-                      .trim()
-                      .toLowerCase()
-                      .replace(/\s+/g, '');
+                  const parsedCapacityPricing = getCapacityPricingArray(option);
                   const capacityUnitMultiplier = (capacityLabel) => {
                     const raw = String(capacityLabel || '').trim().toLowerCase();
                     if (!raw) return 1;
@@ -2136,15 +2138,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     const match = compact.match(/^(\d+)(pack|pk).*/);
                     const n = match ? parseInt(match[1], 10) : NaN;
                     return Number.isFinite(n) && n > 0 ? n : 1;
-                  };
-                  const isCanPackSharedStockProduct = () => {
-                    const values = Array.isArray(parsedCapacityPricing)
-                      ? parsedCapacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
-                      : [];
-                    const normalized = values.map((v) => normalizeCapacity(v));
-                    const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
-                    const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
-                    return hasPack && hasCan;
                   };
 
                   const rows = [];
@@ -2175,17 +2168,15 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
                       if (price <= 0) return;
 
-                      let capStock =
-                        stockByCapacity && stockByCapacity[capacity] != null
-                          ? stockByCapacity[capacity]
-                          : totalStock;
-                      if (
-                        stockByCapacity &&
-                        stockByCapacity[capacity] == null &&
-                        isCanPackSharedStockProduct()
-                      ) {
-                        const multiplier = capacityUnitMultiplier(capacity);
-                        capStock = multiplier > 1 ? Math.floor(totalStock / multiplier) : totalStock;
+                      let capStock = resolveCapacityStockFromBuckets(
+                        capacity,
+                        stockByCapacity,
+                        totalStock,
+                        parsedCapacityPricing
+                      );
+                      const multiplier = capacityUnitMultiplier(capacity);
+                      if (multiplier > 1) {
+                        capStock = Math.floor(capStock / multiplier);
                       }
 
                       rows.push({
@@ -2211,7 +2202,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   // would double-count; use aggregate `stock` (e.g. total cans) as the combined total.
                   let headerStock = totalStock;
                   if (rows.length > 0) {
-                    headerStock = isCanPackSharedStockProduct()
+                    headerStock = isCanPackSharedStockProduct(parsedCapacityPricing)
                       ? Number(totalStock) || 0
                       : rows.reduce((s, r) => s + (Number(r.stock) || 0), 0);
                   }
@@ -2378,35 +2369,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     sx={{ gap: 1 }}
                   >
                     {(() => {
-                      // Debug: Log the raw capacityPricing data
-                      console.log('[NewOrderDialog] Product:', currentProduct.name);
-                      console.log('[NewOrderDialog] Raw capacityPricing:', JSON.stringify(currentProduct.capacityPricing, null, 2));
-                      console.log('[NewOrderDialog] capacityPricing length:', currentProduct.capacityPricing?.length);
-                      
-                      // Deduplicate by capacity, keeping the first occurrence, and filter by valid price
                       const seen = new Set();
-                      const normalizeCapacity = (value) =>
-                        (value || '')
-                          .toString()
-                          .trim()
-                          .toLowerCase()
-                          .replace(/\s+/g, '');
-                      const toStockNumber = (value) => {
-                        const parsed = parseInt(value, 10);
-                        return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
-                      };
-                      const parseJsonIfString = (value) => {
-                        if (typeof value !== 'string') return value;
-                        const trimmed = value.trim();
-                        if (!trimmed) return value;
-                        try {
-                          return JSON.parse(trimmed);
-                        } catch {
-                          return value;
-                        }
-                      };
                       const parsedCapacityPricing = getCapacityPricingArray(currentProduct);
-                      const parsedStockByCapacity = parseJsonIfString(currentProduct?.stockByCapacity);
+                      const parsedStockByCapacity = parseJsonIfStringField(currentProduct?.stockByCapacity);
                       const normalizedStockByCapacity =
                         parsedStockByCapacity &&
                         typeof parsedStockByCapacity === 'object' &&
@@ -2421,102 +2386,45 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                         const n = match ? parseInt(match[1], 10) : NaN;
                         return Number.isFinite(n) && n > 0 ? n : 1;
                       };
-                      const isCanPackSharedStockProduct = () => {
-                        const values = Array.isArray(parsedCapacityPricing)
-                          ? parsedCapacityPricing.map((p) => p?.capacity || p?.size).filter(Boolean)
-                          : [];
-                        const normalized = values.map((v) => normalizeCapacity(v));
-                        const hasPack = normalized.some((v) => /(^|\b)\d+(pack|pk)\b/.test(v) || v.includes('pack') || v.includes('pk'));
-                        const hasCan = normalized.some((v) => v.includes('can') || v === 'single');
-                        return hasPack && hasCan;
-                      };
                       const uniquePricingSource = Array.isArray(parsedCapacityPricing)
                         ? parsedCapacityPricing
                         : [];
-                      const uniquePricing = uniquePricingSource
-                        .filter((pricing, idx) => {
-                          console.log(`[NewOrderDialog] Processing pricing ${idx}:`, JSON.stringify(pricing));
-                          
-                          if (!pricing || typeof pricing !== 'object') {
-                            console.log(`[NewOrderDialog] Pricing ${idx}: Not an object, skipping`);
-                            return false;
-                          }
-                          
-                          // Handle both 'capacity' and 'size' field names
-                          const capacity = pricing.capacity || pricing.size;
-                          if (!capacity || typeof capacity !== 'string' || !capacity.trim()) {
-                            console.log(`[NewOrderDialog] Pricing ${idx}: Invalid capacity, skipping`);
-                            return false;
-                          }
-                          
-                          // Handle both 'currentPrice'/'originalPrice' and 'price' field names
-                          const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
-                          const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
-                          const priceField = pricing.price != null ? parseFloat(pricing.price) : null;
-                          const price = (currentPrice != null && !isNaN(currentPrice) && currentPrice > 0) 
-                            ? currentPrice 
-                            : (originalPrice != null && !isNaN(originalPrice) && originalPrice > 0) 
-                              ? originalPrice 
-                              : (priceField != null && !isNaN(priceField) && priceField > 0)
-                                ? priceField
-                                : 0;
-                          
-                          console.log(`[NewOrderDialog] Pricing ${idx}: capacity="${capacity}", currentPrice=${currentPrice}, originalPrice=${originalPrice}, finalPrice=${price}`);
-                          
-                          // Only include if price > 0
-                          if (price <= 0) {
-                            console.log(`[NewOrderDialog] Pricing ${idx}: Price is 0 or invalid, skipping`);
-                            return false;
-                          }
-                          
-                          const capacityKey = capacity.trim();
-                          if (seen.has(capacityKey)) {
-                            console.log(`[NewOrderDialog] Pricing ${idx}: Duplicate capacity "${capacityKey}", skipping`);
-                            return false;
-                          }
-                          seen.add(capacityKey);
-                          console.log(`[NewOrderDialog] Pricing ${idx}: INCLUDED`);
-                          return true;
-                        });
+                      const uniquePricing = uniquePricingSource.filter((pricing) => {
+                        if (!pricing || typeof pricing !== 'object') return false;
+                        const capacity = pricing.capacity || pricing.size;
+                        if (!capacity || typeof capacity !== 'string' || !capacity.trim()) return false;
+                        const currentPrice = pricing.currentPrice != null ? parseFloat(pricing.currentPrice) : null;
+                        const originalPrice = pricing.originalPrice != null ? parseFloat(pricing.originalPrice) : null;
+                        const priceField = pricing.price != null ? parseFloat(pricing.price) : null;
+                        const price =
+                          currentPrice != null && !Number.isNaN(currentPrice) && currentPrice > 0
+                            ? currentPrice
+                            : originalPrice != null && !Number.isNaN(originalPrice) && originalPrice > 0
+                            ? originalPrice
+                            : priceField != null && !Number.isNaN(priceField) && priceField > 0
+                            ? priceField
+                            : 0;
+                        if (price <= 0) return false;
+                        const capacityKey = normalizeCapacityKey(capacity);
+                        if (seen.has(capacityKey)) return false;
+                        seen.add(capacityKey);
+                        return true;
+                      });
 
                       const getCapacityStock = (capacity) => {
-                        let availableStock = toStockNumber(currentProduct?.stock);
-                        if (normalizedStockByCapacity && Object.keys(normalizedStockByCapacity).length > 0) {
-                          const target = normalizeCapacity(capacity);
-                          const entry = Object.entries(normalizedStockByCapacity).find(
-                            ([cap]) => normalizeCapacity(cap) === target
-                          );
-                          if (entry) {
-                            availableStock = toStockNumber(entry[1]);
-                          } else if (isCanPackSharedStockProduct()) {
-                            availableStock = toStockNumber(currentProduct?.stock);
-                          } else {
-                            const agg = toStockNumber(currentProduct?.stock);
-                            const bucketSum = Object.values(normalizedStockByCapacity).reduce(
-                              (s, v) => s + toStockNumber(v),
-                              0
-                            );
-                            // Single sellable tier but inventory key ≠ pricing label (common data drift).
-                            if (uniquePricing.length === 1 && agg > 0) {
-                              availableStock = agg;
-                            } else if (bucketSum === 0 && agg > 0) {
-                              availableStock = agg;
-                            } else {
-                              availableStock = 0;
-                            }
-                          }
-                        }
+                        let availableStock = resolveCapacityStockFromBuckets(
+                          capacity,
+                          normalizedStockByCapacity,
+                          currentProduct?.stock,
+                          parsedCapacityPricing
+                        );
                         const multiplier = capacityUnitMultiplier(capacity);
                         if (multiplier > 1) {
                           availableStock = Math.floor(availableStock / multiplier);
                         }
                         return availableStock;
                       };
-                      
-                      // Debug: Log filtered results
-                      console.log('[NewOrderDialog] Filtered uniquePricing:', JSON.stringify(uniquePricing, null, 2));
-                      console.log('[NewOrderDialog] Final count:', uniquePricing.length);
-                      
+
                       return uniquePricing.map((pricing, index) => {
                         const capacity = (pricing.capacity || pricing.size || '').trim();
                         const price = parseFloat(pricing.currentPrice) || parseFloat(pricing.originalPrice) || parseFloat(pricing.price) || 0;
