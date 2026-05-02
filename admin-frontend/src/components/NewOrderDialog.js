@@ -40,7 +40,7 @@ const PRODUCTS_CACHE_TTL_MS = 5 * 60 * 1000;
 const MAX_DROPDOWN_OPTIONS = 120;
 let productsCache = { at: 0, data: [] };
 let productsFetchPromise = null;
-const PRODUCTS_CACHE_KEY = 'adminPosProductsCache:v1';
+const PRODUCTS_CACHE_KEY = 'adminPosProductsCache:v2';
 
 const getFreshProductsCache = () => {
   const now = Date.now();
@@ -93,6 +93,16 @@ const getCapacityPricingArray = (product) => {
   return Array.isArray(parsed) ? parsed : [];
 };
 
+/** JSON column sometimes double-encoded; normalize to a plain object or null. */
+const parseStockByCapacityObject = (value) => {
+  let v = parseJsonIfStringField(value);
+  if (typeof v === 'string') {
+    v = parseJsonIfStringField(v);
+  }
+  if (v && typeof v === 'object' && !Array.isArray(v)) return v;
+  return null;
+};
+
 /**
  * Normalize capacity labels so inventory keys match pricing (e.g. "750ML." vs "750ML").
  */
@@ -103,6 +113,10 @@ const normalizeCapacityKey = (value) =>
     .toLowerCase()
     .replace(/\s+/g, '')
     .replace(/[.,;]+$/g, '');
+
+/** Map spelling variants so pricing vs inventory keys align (e.g. "1 litre" vs "1l"). */
+const normalizeCapacityKeyForMatch = (value) =>
+  normalizeCapacityKey(value).replace(/(litre|liter|ltr)/g, 'l');
 
 const toStockNumber = (value) => {
   const parsed = parseInt(value, 10);
@@ -153,22 +167,29 @@ const resolveCapacityStockFromBuckets = (
   aggregateStock,
   parsedCapacityPricing
 ) => {
+  const tierCount = countPricedCapacityTiers(parsedCapacityPricing);
+  const agg = toStockNumber(aggregateStock);
+
   if (!normalizedStockByCapacity || Object.keys(normalizedStockByCapacity).length === 0) {
-    return toStockNumber(aggregateStock);
+    // Repeating aggregate on each priced tier double-counts in dropdown totals (e.g. 22+22).
+    if (tierCount > 1) return 0;
+    return agg;
   }
+
+  const entries = Object.entries(normalizedStockByCapacity);
   const target = normalizeCapacityKey(capacityLabel);
-  const entry = Object.entries(normalizedStockByCapacity).find(
-    ([cap]) => normalizeCapacityKey(cap) === target
-  );
+  let entry = entries.find(([cap]) => normalizeCapacityKey(cap) === target);
+  if (!entry) {
+    const canon = normalizeCapacityKeyForMatch(capacityLabel);
+    entry = entries.find(([cap]) => normalizeCapacityKeyForMatch(cap) === canon);
+  }
   if (entry) {
     return toStockNumber(entry[1]);
   }
   if (isCanPackSharedStockProduct(parsedCapacityPricing)) {
-    return toStockNumber(aggregateStock);
+    return agg;
   }
-  const agg = toStockNumber(aggregateStock);
   const bucketSum = Object.values(normalizedStockByCapacity).reduce((s, v) => s + toStockNumber(v), 0);
-  const tierCount = countPricedCapacityTiers(parsedCapacityPricing);
   if (tierCount === 1 && agg > 0) return agg;
   if (bucketSum === 0 && agg > 0) return agg;
   return 0;
@@ -552,13 +573,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return Number.isFinite(n) && n > 0 ? n : 1;
     };
     const parsedCapacityPricing = getCapacityPricingArray(currentProduct);
-    const parsedStockByCapacity = parseJsonIfString(currentProduct?.stockByCapacity);
-    const normalizedStockByCapacity =
-      parsedStockByCapacity &&
-      typeof parsedStockByCapacity === 'object' &&
-      !Array.isArray(parsedStockByCapacity)
-        ? parsedStockByCapacity
-        : null;
+    const normalizedStockByCapacity = parseStockByCapacityObject(currentProduct?.stockByCapacity);
     let availableStock = toStockNumber(currentProduct.stock);
     if (normalizedStockByCapacity && Object.keys(normalizedStockByCapacity).length > 0) {
       if (selectedCapacity) {
@@ -2113,13 +2128,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   const totalStock =
                     option.stock !== undefined && option.stock !== null ? option.stock : 0;
 
-                  const parsedStockByCapacity = parseJsonIfStringField(option.stockByCapacity);
-                  const stockByCapacity =
-                    parsedStockByCapacity &&
-                    typeof parsedStockByCapacity === 'object' &&
-                    !Array.isArray(parsedStockByCapacity)
-                      ? parsedStockByCapacity
-                      : null;
+                  const stockByCapacity = parseStockByCapacityObject(option.stockByCapacity);
                   const parsedCapacityPricing = getCapacityPricingArray(option);
                   const capacityUnitMultiplier = (capacityLabel) => {
                     const raw = String(capacityLabel || '').trim().toLowerCase();
@@ -2187,14 +2196,16 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     });
                   }
 
-                  // Blue label = combined total across capacities; lines = each capacity’s count.
-                  // For can+pack “shared stock” items, rows are views of the same physical pool — sum(rows)
-                  // would double-count; use aggregate `stock` (e.g. total cans) as the combined total.
-                  let headerStock = totalStock;
+                  // Blue label = combined total; sum per-line unless can+pack shared pool.
+                  // If per-line resolved to 0 (missing buckets) but aggregate has stock, show aggregate.
+                  const rowSum = rows.reduce((s, r) => s + (Number(r.stock) || 0), 0);
+                  let headerStock = Number(totalStock) || 0;
                   if (rows.length > 0) {
                     headerStock = isCanPackSharedStockProduct(parsedCapacityPricing)
                       ? Number(totalStock) || 0
-                      : rows.reduce((s, r) => s + (Number(r.stock) || 0), 0);
+                      : rowSum > 0
+                        ? rowSum
+                        : Number(totalStock) || 0;
                   }
                   const stockColor = headerStock > 0 ? '#2196F3' : '#F44336';
 
@@ -2361,13 +2372,9 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                     {(() => {
                       const seen = new Set();
                       const parsedCapacityPricing = getCapacityPricingArray(currentProduct);
-                      const parsedStockByCapacity = parseJsonIfStringField(currentProduct?.stockByCapacity);
-                      const normalizedStockByCapacity =
-                        parsedStockByCapacity &&
-                        typeof parsedStockByCapacity === 'object' &&
-                        !Array.isArray(parsedStockByCapacity)
-                          ? parsedStockByCapacity
-                          : null;
+                      const normalizedStockByCapacity = parseStockByCapacityObject(
+                        currentProduct?.stockByCapacity
+                      );
                       const capacityUnitMultiplier = (capacityLabel) => {
                         const raw = String(capacityLabel || '').trim().toLowerCase();
                         if (!raw) return 1;
