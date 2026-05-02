@@ -164,16 +164,6 @@ const InventoryPage = () => {
   // if one capacity has stock (e.g. 750ml), the whole item should be considered "in stock".
   const getTotalStock = (drink) => {
     if (!drink) return 0;
-    const parseJsonIfString = (value) => {
-      if (typeof value !== 'string') return value;
-      const trimmed = value.trim();
-      if (!trimmed) return value;
-      try {
-        return JSON.parse(trimmed);
-      } catch {
-        return value;
-      }
-    };
     const rows = getCapacityStockRows(drink);
     if (rows.length > 0) {
       return rows.reduce((sum, r) => sum + (Number(r.stock) || 0), 0);

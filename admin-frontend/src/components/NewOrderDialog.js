@@ -2113,16 +2113,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   const totalStock =
                     option.stock !== undefined && option.stock !== null ? option.stock : 0;
 
-                  const parseJsonIfString = (value) => {
-                    if (typeof value !== 'string') return value;
-                    const trimmed = value.trim();
-                    if (!trimmed) return value;
-                    try {
-                      return JSON.parse(trimmed);
-                    } catch {
-                      return value;
-                    }
-                  };
                   const parsedStockByCapacity = parseJsonIfStringField(option.stockByCapacity);
                   const stockByCapacity =
                     parsedStockByCapacity &&
