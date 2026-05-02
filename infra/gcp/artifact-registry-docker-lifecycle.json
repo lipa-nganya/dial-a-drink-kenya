@@ -8,11 +8,11 @@
     }
   },
   {
-    "name": "delete-tagged-120d",
+    "name": "delete-tagged-90d",
     "action": { "type": "Delete" },
     "condition": {
       "tagState": "tagged",
-      "olderThan": "120d"
+      "olderThan": "90d"
     }
   }
 ]

@@ -21,6 +21,15 @@ PROD_CONNECTION="dialadrink-production:us-central1:dialadrink-db-prod"
 CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 
+# Cloud Run cost / reliability (see scripts/gcp/apply-production-cost-optimizations.sh):
+# - API stays warm (min 1); frontends scale to zero (no 24/7 static hosting bill).
+# - Backend right-sized vs prior 2 CPU — override via env before running this script if needed.
+BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-1}"
+BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
+BACKEND_CPU="${BACKEND_CPU:-1}"
+BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
+FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"
+
 echo "🚀 Deploying to Production Environment"
 echo "======================================"
 echo ""
@@ -99,7 +108,14 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$PROD_CONNECTION" \
-    --project "$PROJECT_ID" 2>&1
+    --project "$PROJECT_ID" \
+    --min-instances="$BACKEND_MIN_INSTANCES" \
+    --max-instances="$BACKEND_MAX_INSTANCES" \
+    --cpu="$BACKEND_CPU" \
+    --memory="$BACKEND_MEMORY" \
+    --cpu-throttling \
+    --quiet \
+    2>&1
 
 echo "   Finished deploy: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
@@ -181,6 +197,14 @@ CUSTOMER_FRONTEND_URL=$(gcloud run services describe "deliveryos-customer-fronte
     --project "$PROJECT_ID" \
     --format "value(status.url)" 2>/dev/null || echo "")
 echo "✅ Customer frontend deployed: $CUSTOMER_FRONTEND_URL"
+
+echo "⚙️  Customer frontend Cloud Run: scale-to-zero (cost control; cold starts acceptable)"
+gcloud run services update "$CUSTOMER_FRONTEND_SERVICE" \
+    --project "$PROJECT_ID" \
+    --region "$REGION" \
+    --min-instances="$FRONTEND_MIN_INSTANCES" \
+    --quiet 2>&1
+
 cd /Users/maria/dial-a-drink
 
 # Step 6: Deploy Admin Frontend to Cloud Run
@@ -201,6 +225,14 @@ ADMIN_FRONTEND_URL=$(gcloud run services describe "deliveryos-admin-frontend" \
     --project "$PROJECT_ID" \
     --format "value(status.url)" 2>/dev/null || echo "")
 echo "✅ Admin frontend deployed: $ADMIN_FRONTEND_URL"
+
+echo "⚙️  Admin frontend Cloud Run: scale-to-zero (cost control; cold starts acceptable)"
+gcloud run services update "$ADMIN_FRONTEND_SERVICE" \
+    --project "$PROJECT_ID" \
+    --region "$REGION" \
+    --min-instances="$FRONTEND_MIN_INSTANCES" \
+    --quiet 2>&1
+
 cd /Users/maria/dial-a-drink
 
 echo ""

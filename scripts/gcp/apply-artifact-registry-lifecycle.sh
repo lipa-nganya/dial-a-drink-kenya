@@ -3,6 +3,7 @@
 # to Docker repositories (same policy file can be reused across repos).
 #
 # Uses: gcloud artifacts repositories set-cleanup-policies (--policy JSON array format).
+# Passes --no-dry-run so deletes are enforced (omit flag only to preview impact).
 # See: https://cloud.google.com/artifact-registry/docs/repositories/cleanup-policy
 #
 # Projects still pushing only to gcr.io/$PROJECT_ID/ should run gcr-delete-untagged-digests.sh
@@ -13,6 +14,7 @@ set -euo pipefail
 REGION="${GCP_REGION:-us-central1}"
 PROJECT_ID="${GCP_PROJECT_ID:-$(gcloud config get-value project 2>/dev/null)}"
 POLICY="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/infra/gcp/artifact-registry-docker-lifecycle.json"
+DRY_RUN_ONLY="${AR_CLEANUP_DRY_RUN_ONLY:-0}"
 
 if [[ ! -f "$POLICY" ]]; then
   echo "Missing lifecycle JSON: $POLICY" >&2
@@ -49,10 +51,19 @@ if [[ -z "$REPOS" ]]; then
     [[ -z "$FULL" ]] && continue
     SHORT="${FULL##*/}"
     echo "Setting cleanup policies: repository=${SHORT}"
-    gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
-      --project="${PROJECT_ID}" \
-      --location="${REGION}" \
-      --policy="${POLICY}"
+    if [[ "${DRY_RUN_ONLY}" == "1" ]]; then
+      gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
+        --project="${PROJECT_ID}" \
+        --location="${REGION}" \
+        --policy="${POLICY}" \
+        --dry-run
+    else
+      gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
+        --project="${PROJECT_ID}" \
+        --location="${REGION}" \
+        --policy="${POLICY}" \
+        --no-dry-run
+    fi
   done <<< "$LIST_OUT"
 else
   IFS=',' read -ra LIST <<< "${REPOS}"
@@ -60,10 +71,19 @@ else
     SHORT="$(echo "${SHORT}" | xargs)"
     [[ -z "${SHORT}" ]] && continue
     echo "Setting cleanup policies: repository=${SHORT}"
-    gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
-      --project="${PROJECT_ID}" \
-      --location="${REGION}" \
-      --policy="${POLICY}"
+    if [[ "${DRY_RUN_ONLY}" == "1" ]]; then
+      gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
+        --project="${PROJECT_ID}" \
+        --location="${REGION}" \
+        --policy="${POLICY}" \
+        --dry-run
+    else
+      gcloud artifacts repositories set-cleanup-policies "${SHORT}" \
+        --project="${PROJECT_ID}" \
+        --location="${REGION}" \
+        --policy="${POLICY}" \
+        --no-dry-run
+    fi
   done
 fi
 
