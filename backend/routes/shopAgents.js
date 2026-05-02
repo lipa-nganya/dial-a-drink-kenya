@@ -33,9 +33,7 @@ const normalizePhoneNumber = (phone) => {
   return cleaned;
 };
 
-// Inventory helpers:
-// - Inventory for can/pack capacity variants is tracked in base "cans".
-// - Example: stock=10 means 10 cans; 1x "6 pack" consumes 6 cans.
+// Inventory helpers.
 const toInt = (value, fallback = 0) => {
   const n = parseInt(value, 10);
   return Number.isNaN(n) ? fallback : n;
@@ -48,30 +46,17 @@ const normalizeCapacity = (value) =>
     .toLowerCase()
     .replace(/\s+/g, '');
 
-const capacityUnitMultiplier = (capacityLabel) => {
-  const raw = (capacityLabel || '').toString().trim().toLowerCase();
-  if (!raw) return 1;
-
-  const compact = raw.replace(/\s+/g, '');
-
-  const packMatch = compact.match(/^(\d+)(pack|pk)$/) || compact.match(/^(\d+)(pack|pk).*/);
-  if (packMatch) {
-    const n = parseInt(packMatch[1], 10);
-    return Number.isFinite(n) && n > 0 ? n : 1;
+const parseStockByCapacity = (value) => {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
   }
-
-  if (compact.includes('can') || compact === 'single' || compact === '1can' || compact === '1') return 1;
-
-  return 1;
-};
-
-const findBaseUnitCapacityKey = (stockByCapacity) => {
-  const keys = Object.keys(stockByCapacity || {});
-  const candidates = keys.filter((k) => {
-    const n = normalizeCapacity(k);
-    return n === 'can' || n === '1can' || n === 'single' || n === '1';
-  });
-  return candidates[0] || null;
+  return typeof value === 'object' && !Array.isArray(value) ? value : {};
 };
 
 /**
@@ -690,22 +675,11 @@ router.post('/inventory-check', async (req, res) => {
 
           let databaseCount;
           if (capacity != null && String(capacity).trim() !== '') {
-            const byCap = drink.stockByCapacity && typeof drink.stockByCapacity === 'object' ? drink.stockByCapacity : {};
-
+            const byCap = parseStockByCapacity(drink.stockByCapacity);
             const capacityValue = String(capacity).trim();
-            const multiplier = capacityUnitMultiplier(capacityValue);
-            const baseKey = findBaseUnitCapacityKey(byCap);
-            const baseCans = baseKey ? toInt(byCap[baseKey], 0) : toInt(drink.stock, 0);
-
-            if (multiplier > 1) {
-              // Compare against pack-equivalent count shown to the shop agent.
-              databaseCount = Math.floor(baseCans / multiplier);
-            } else {
-              // Can/single capacities are compared as base can counts.
-              const normalizedCap = normalizeCapacity(capacityValue);
-              const matchingKey = Object.keys(byCap || {}).find((k) => normalizeCapacity(k) === normalizedCap);
-              databaseCount = matchingKey ? toInt(byCap[matchingKey], 0) : baseCans;
-            }
+            const normalizedCap = normalizeCapacity(capacityValue);
+            const matchingKey = Object.keys(byCap).find((k) => normalizeCapacity(k) === normalizedCap);
+            databaseCount = matchingKey ? toInt(byCap[matchingKey], 0) : 0;
           } else {
             databaseCount = drink.stock || 0;
           }

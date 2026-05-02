@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { api } from '../services/api';
 import io from 'socket.io-client';
 import { getBackendUrl } from '../utils/backendUrl';
+import { ADMIN_PERF_FLAGS } from '../utils/adminPerfFlags';
 
 const AdminContext = createContext();
 
@@ -289,21 +290,24 @@ export const AdminProvider = ({ children }) => {
     fetchPendingSubmissionsCount();
     fetchPendingInventoryChecksCount();
 
-    // Poll for pending orders count, submissions count, and inventory checks count every 30 seconds as backup
-    const pollInterval = setInterval(() => {
-      // Check token still exists before polling
-      if (localStorage.getItem('adminToken')) {
-        fetchPendingOrdersCount();
-        fetchPendingSubmissionsCount();
-        fetchPendingInventoryChecksCount();
-      } else {
-        clearInterval(pollInterval);
-      }
-    }, 30000);
+    // Optional backup polling. Keep this tunable via env to reduce DB pressure.
+    let pollInterval = null;
+    if (ADMIN_PERF_FLAGS.pollingEnabled) {
+      pollInterval = setInterval(() => {
+        // Check token still exists before polling
+        if (localStorage.getItem('adminToken')) {
+          fetchPendingOrdersCount();
+          fetchPendingSubmissionsCount();
+          fetchPendingInventoryChecksCount();
+        } else if (pollInterval) {
+          clearInterval(pollInterval);
+        }
+      }, ADMIN_PERF_FLAGS.pollingIntervalMs);
+    }
 
     return () => {
       newSocket.close();
-      clearInterval(pollInterval);
+      if (pollInterval) clearInterval(pollInterval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [isAuthenticated]);

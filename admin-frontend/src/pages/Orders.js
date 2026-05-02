@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Container,
   Typography,
@@ -96,17 +96,15 @@ function sumLineItemsSubtotal(order) {
  */
 function computeOrderSummaryCustomerTotal(order) {
   if (!order) return 0;
+  if (order.__isSummaryPayload && Number.isFinite(Number(order.totalAmount))) {
+    return Number(Number(order.totalAmount).toFixed(2));
+  }
   const amounts = computeOrderDisplayAmounts(order);
   const fromLines = sumLineItemsSubtotal(order);
   const hasLineItems = Array.isArray(order?.items) && order.items.length > 0;
-  const hasStoredItemsTotal =
-    order?.itemsTotal !== null &&
-    order?.itemsTotal !== undefined &&
-    order?.itemsTotal !== '' &&
-    Number.isFinite(Number(order.itemsTotal));
-
-  // Summary payloads intentionally omit items; in that case trust totalAmount directly.
-  if (!hasLineItems && !hasStoredItemsTotal && Number.isFinite(Number(order.totalAmount))) {
+  // Summary payloads intentionally omit line items; when lines are absent, trust totalAmount directly.
+  // This avoids stale list totals when items subtotal is edited but legacy itemsTotal fields lag.
+  if (!hasLineItems && Number.isFinite(Number(order.totalAmount))) {
     return Number(Number(order.totalAmount).toFixed(2));
   }
 
@@ -125,7 +123,6 @@ const Orders = () => {
   const [filteredOrders, setFilteredOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [transactionStatusFilter, setTransactionStatusFilter] = useState('all');
   /** all | unassigned | driver id string */
   const [riderFilter, setRiderFilter] = useState('all');
@@ -238,7 +235,6 @@ const Orders = () => {
   const [cancelledSubTab, setCancelledSubTab] = useState('cancelled'); // 'cancelled' | 'cancellation-requests'
   const orderTabRef = useRef(orderTab);
   const cancelledSubTabRef = useRef(cancelledSubTab);
-  const orderStatusFilterRef = useRef(orderStatusFilter);
   const transactionStatusFilterRef = useRef(transactionStatusFilter);
   const searchQueryRef = useRef(searchQuery);
   const customFilterRef = useRef(customFilter);
@@ -330,9 +326,9 @@ const Orders = () => {
         // If we were viewing cancellation requests and the order is now cancelled, show cancelled orders
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && updatedOrder?.status === 'cancelled') {
           setCancelledSubTab('cancelled');
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
         } else {
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
         }
         return sorted;
       });
@@ -367,9 +363,9 @@ const Orders = () => {
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
           setOrderTab('pending');
           setCancelledSubTab('cancelled');
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'pending');
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'pending');
         } else {
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
         }
         return sorted;
       });
@@ -472,7 +468,7 @@ const Orders = () => {
             : order
         );
         const sorted = sortOrdersByStatus(updated);
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+        applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
     });
@@ -494,7 +490,7 @@ const Orders = () => {
             : order
         );
         const sorted = sortOrdersByStatus(updated);
-        applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+        applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
       
@@ -537,7 +533,7 @@ const Orders = () => {
           });
           // Re-sort after update and apply filters to update filteredOrders immediately
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
       }
@@ -607,7 +603,7 @@ const Orders = () => {
           }
           
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
           return sorted;
         });
       } else {
@@ -631,12 +627,12 @@ const Orders = () => {
           if (data.approved && orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && data.order.status === 'cancelled') {
             setOrderTab('cancelled');
             setCancelledSubTab('cancelled');
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
+            applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancelled');
           } else if (!data.approved && orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
             // If cancellation was rejected and we're viewing cancellation requests, stay on requests view
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
+            applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
           } else {
-            applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+            applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
           }
           return sorted;
         });
@@ -671,7 +667,7 @@ const Orders = () => {
             return order;
           });
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
       }
@@ -732,7 +728,7 @@ const Orders = () => {
           });
           // Re-sort after update and apply filters to update filteredOrders immediately
           const sorted = sortOrdersByStatus(updated);
-          applyFilters(sorted, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab);
+          applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
       }
@@ -796,15 +792,16 @@ const Orders = () => {
       // Additional sync: Check each order and ensure paymentStatus matches transaction status
       orders = orders.map(order => {
         if (!order) return null;
+        const withSummaryMeta = { ...order, __isSummaryPayload: true };
         if (order.transactions && order.transactions.length > 0) {
           const hasCompletedTransaction = order.transactions.some(tx => tx.status === 'completed');
           // If transaction is completed but paymentStatus is not 'paid', update it
           if (hasCompletedTransaction && order.paymentStatus !== 'paid') {
             console.log(`🔧 Frontend sync: Updating Order #${order.id} paymentStatus from ${order.paymentStatus} to 'paid'`);
-            return { ...order, paymentStatus: 'paid' };
+            return { ...withSummaryMeta, paymentStatus: 'paid' };
           }
         }
-        return order;
+        return withSummaryMeta;
       }).filter(order => order != null); // Filter out any null orders after mapping
       console.log('📦 fetchOrders after mapping:', orders.length, 'orders');
 
@@ -816,7 +813,6 @@ const Orders = () => {
       // Apply filters after fetching
       applyFilters(
         sortedOrders,
-        orderStatusFilterRef.current,
         transactionStatusFilterRef.current,
         searchQueryRef.current,
         customFilterRef.current,
@@ -864,16 +860,7 @@ const Orders = () => {
   };
 
   // Apply filters to orders
-  const applyFilters = (ordersList, orderStatus, transactionStatus, search, customFilter, tabFilter, cancelledView = cancelledSubTab) => {
-    console.log('🔍 applyFilters called with:', { 
-      ordersCount: ordersList.length, 
-      tabFilter, 
-      orderStatus, 
-      transactionStatus, 
-      search,
-      customFilter 
-    });
-    
+  const applyFilters = (ordersList, transactionStatus, search, customFilter, tabFilter, cancelledView = cancelledSubTab) => {
     let filtered = [...ordersList];
     const isWalkInOrder = (order) => {
       const addr = String(order?.deliveryAddress || '').trim().toLowerCase();
@@ -894,24 +881,18 @@ const Orders = () => {
       filtered = filtered.filter(order => (order.status === 'pending' || order.status === 'confirmed' || order.status === 'in_progress') && !(order.cancellationRequested && order.cancellationApproved === null));
       console.log(`🔍 'pending' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'completed') {
-      const beforeFilter = filtered.length;
       filtered = filtered.filter(order => order.status === 'completed' || order.status === 'delivered');
-      console.log(`🔍 'completed' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'unassigned') {
-      const beforeFilter = filtered.length;
       filtered = filtered
         .filter(order => !isWalkInOrder(order))
         .filter(order => isUnassignedOrder(order));
-      console.log(`🔍 'unassigned' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'confirmed') {
       // "In Progress" tab should include walk-in POS orders created unpaid (status=in_progress)
       // as well as delivery orders that are confirmed/in-progress.
-      const beforeFilter = filtered.length;
       filtered = filtered.filter(order =>
         (order.status === 'confirmed' || order.status === 'in_progress') &&
         !isUnassignedOrder(order)
       );
-      console.log(`🔍 'confirmed' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     } else if (tabFilter === 'out_for_delivery') {
       const beforeFilter = filtered.length;
       filtered = filtered.filter(order => order.status === 'out_for_delivery');
@@ -926,11 +907,15 @@ const Orders = () => {
       console.log(`🔍 'cancelled' tab filter: ${beforeFilter} → ${filtered.length} orders`);
     }
 
-    // Apply custom filters from URL params
-    if (customFilter === 'no-driver') {
-      filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
-    } else if (customFilter === 'pending') {
-      filtered = filtered.filter(order => order.status === 'pending');
+    // Apply custom filters from URL params.
+    // These quick-action filters are intended for pending/unassigned workflows.
+    // Do not apply them to Out for Delivery, otherwise valid delivery orders can disappear.
+    if (tabFilter !== 'out_for_delivery') {
+      if (customFilter === 'no-driver') {
+        filtered = filtered.filter(order => !order.driverId || order.driver?.name === 'HOLD Driver');
+      } else if (customFilter === 'pending') {
+        filtered = filtered.filter(order => order.status === 'pending');
+      }
     }
 
     // Filter by search query (customer name or order number)
@@ -945,11 +930,6 @@ const Orders = () => {
         
         return orderNumberMatch || customerNameMatch;
       });
-    }
-
-    // Filter by order status
-    if (orderStatus !== 'all') {
-      filtered = filtered.filter(order => order.status === orderStatus);
     }
 
     // Filter by transaction status
@@ -987,10 +967,8 @@ const Orders = () => {
     
     if (filter === 'no-driver') {
       setCustomFilter('no-driver');
-      setOrderStatusFilter('all'); // Reset status filter when using custom filter
     } else if (filter === 'pending') {
       setCustomFilter('pending');
-      setOrderStatusFilter('pending');
     } else {
       setCustomFilter(null);
     }
@@ -1011,13 +989,21 @@ const Orders = () => {
   useEffect(() => {
     orderTabRef.current = orderTab;
     cancelledSubTabRef.current = cancelledSubTab;
-    orderStatusFilterRef.current = orderStatusFilter;
     transactionStatusFilterRef.current = transactionStatusFilter;
     searchQueryRef.current = searchQuery;
     customFilterRef.current = customFilter;
-    applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
+    applyFilters(orders, transactionStatusFilter, searchQuery, customFilter, orderTab, cancelledSubTab);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderStatusFilter, transactionStatusFilter, riderFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
+  }, [transactionStatusFilter, riderFilter, searchQuery, orders, customFilter, orderTab, cancelledSubTab]);
+
+  const activeOrderCountsByDriver = useMemo(() => {
+    const counts = new Map();
+    for (const order of orders) {
+      if (!order || order.status === 'completed' || !order.driverId) continue;
+      counts.set(order.driverId, (counts.get(order.driverId) || 0) + 1);
+    }
+    return counts;
+  }, [orders]);
 
   const handleStatusUpdate = async (orderId, newStatus) => {
     if (newStatus === 'cancelled') {
@@ -1400,6 +1386,8 @@ const Orders = () => {
 
       if (response.data?.success) {
         const { order, breakdown } = response.data;
+        const nextTotalAmount = breakdown?.totalAmount ?? order?.totalAmount;
+        const nextItemsTotal = breakdown?.itemsTotal;
         setSelectedOrderForDetail((prev) => {
           const merged = {
             ...prev,
@@ -1416,10 +1404,27 @@ const Orders = () => {
             deliveryFee: Math.round(amounts.territoryDeliveryFee),
             territoryDeliveryFee:
               merged.territoryDeliveryFee ?? amounts.territoryDeliveryFee ?? prev?.territoryDeliveryFee,
-            totalAmount: breakdown?.totalAmount ?? order?.totalAmount ?? merged.totalAmount
+            totalAmount: nextTotalAmount ?? merged.totalAmount
           };
         });
-        await fetchOrders();
+        if (selectedOrderForDetail?.id) {
+          const targetOrderId = Number(selectedOrderForDetail.id);
+          const patchOrderForList = (entry) => {
+            if (!entry || Number(entry.id) !== targetOrderId) return entry;
+            return {
+              ...entry,
+              ...(order || {}),
+              __isSummaryPayload: true,
+              ...(nextItemsTotal != null ? { itemsTotal: nextItemsTotal } : {}),
+              ...(nextTotalAmount != null ? { totalAmount: nextTotalAmount } : {})
+            };
+          };
+          setOrders((prev) => prev.map(patchOrderForList));
+          setFilteredOrders((prev) => prev.map(patchOrderForList));
+        }
+        // Avoid immediate refetch race: summary endpoint can briefly return stale totals
+        // right after subtotal edits, which causes a one-step lag in the list display.
+        scheduleOrdersRefresh(1200);
         setEditItemsSubtotalDialogOpen(false);
         setNewItemsSubtotal('');
         alert('Items subtotal updated successfully');
@@ -1988,7 +1993,7 @@ const Orders = () => {
             } else if (orderTab === 'out_for_delivery') {
               fetchOrders({ tabOverride: newValue });
             }
-            applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, newValue, cancelledSubTab);
+            applyFilters(orders, transactionStatusFilter, searchQuery, customFilter, newValue, cancelledSubTab);
           }}
           variant={isMobile ? "scrollable" : "standard"}
           scrollButtons={isMobile ? "auto" : false}
@@ -2044,7 +2049,7 @@ const Orders = () => {
             onChange={(event, newValue) => {
               setCancelledSubTab(newValue);
               setPage(0);
-              applyFilters(orders, orderStatusFilter, transactionStatusFilter, searchQuery, customFilter, 'cancelled', newValue);
+              applyFilters(orders, transactionStatusFilter, searchQuery, customFilter, 'cancelled', newValue);
             }}
             variant="scrollable"
             scrollButtons="auto"
@@ -2128,35 +2133,6 @@ const Orders = () => {
         />
 
         <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 200, flexGrow: isMobile ? 1 : 0 }}>
-          <InputLabel>Filter by Order Status</InputLabel>
-          <Select
-            value={orderStatusFilter}
-            label="Filter by Order Status"
-            onChange={(e) => setOrderStatusFilter(e.target.value)}
-            sx={{
-              '& .MuiOutlinedInput-notchedOutline': {
-                borderColor: colors.accentText,
-              },
-              '&:hover .MuiOutlinedInput-notchedOutline': {
-                borderColor: '#00C4A3',
-              },
-              '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                borderColor: colors.accentText,
-              },
-            }}
-          >
-            <MenuItem value="all">All Statuses</MenuItem>
-            <MenuItem value="pending">Pending</MenuItem>
-            <MenuItem value="confirmed">In Progress</MenuItem>
-            <MenuItem value="out_for_delivery">On the Way</MenuItem>
-            <MenuItem value="delivered">Delivered</MenuItem>
-            <MenuItem value="completed">Completed</MenuItem>
-            <MenuItem value="pos_order">POS Order</MenuItem>
-            <MenuItem value="cancelled">Cancelled</MenuItem>
-          </Select>
-        </FormControl>
-
-        <FormControl size="small" sx={{ minWidth: isMobile ? '100%' : 200, flexGrow: isMobile ? 1 : 0 }}>
           <InputLabel>Filter by Transaction Status</InputLabel>
           <Select
             value={transactionStatusFilter}
@@ -2211,21 +2187,19 @@ const Orders = () => {
               )
               .map((d) => (
                 <MenuItem key={d.id} value={String(d.id)}>
-                  {d.name || `Rider #${d.id}`}
+                  {(d.name || `Rider #${d.id}`)} ({activeOrderCountsByDriver.get(d.id) || 0})
                 </MenuItem>
               ))}
           </Select>
         </FormControl>
 
-        {(orderStatusFilter !== 'all' ||
-          transactionStatusFilter !== 'all' ||
+        {(transactionStatusFilter !== 'all' ||
           searchQuery ||
           riderFilter !== 'all') && (
           <Button
             variant="outlined"
             size="small"
             onClick={() => {
-              setOrderStatusFilter('all');
               setTransactionStatusFilter('all');
               setRiderFilter('all');
               setSearchQuery('');

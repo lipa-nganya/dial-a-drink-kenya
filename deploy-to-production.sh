@@ -21,6 +21,15 @@ PROD_CONNECTION="dialadrink-production:us-central1:dialadrink-db-prod"
 CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 
+# Cloud Run cost / reliability (see scripts/gcp/apply-production-cost-optimizations.sh):
+# - API stays warm (min 1); frontends scale to zero (no 24/7 static hosting bill).
+# - Backend right-sized vs prior 2 CPU — override via env before running this script if needed.
+BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-1}"
+BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
+BACKEND_CPU="${BACKEND_CPU:-1}"
+BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
+FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"
+
 echo "🚀 Deploying to Production Environment"
 echo "======================================"
 echo ""
@@ -99,7 +108,14 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --region "$REGION" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$PROD_CONNECTION" \
-    --project "$PROJECT_ID" 2>&1
+    --project "$PROJECT_ID" \
+    --min-instances="$BACKEND_MIN_INSTANCES" \
+    --max-instances="$BACKEND_MAX_INSTANCES" \
+    --cpu="$BACKEND_CPU" \
+    --memory="$BACKEND_MEMORY" \
+    --cpu-throttling \
+    --quiet \
+    2>&1
 
 echo "   Finished deploy: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
@@ -116,58 +132,108 @@ echo ""
 # Frontends need a Maps key at build time (React). Do not commit keys.
 SHORT_SHA=$(date +%s | shasum -a 256 2>/dev/null | head -c 8 || date +%s | sha256sum 2>/dev/null | head -c 8 || echo "$(date +%s)")
 GOOGLE_MAPS_KEY="${GOOGLE_MAPS_API_KEY_FOR_BUILD:-${GOOGLE_MAPS_API_KEY:-}}"
+GOOGLE_MAPS_KEY_SOURCE=""
+if [ -n "$GOOGLE_MAPS_KEY" ]; then
+    GOOGLE_MAPS_KEY_SOURCE="shell-env"
+fi
 if [ -z "$GOOGLE_MAPS_KEY" ]; then
-    GOOGLE_MAPS_KEY="$(gcloud secrets versions access latest --secret=google-maps-api-key --project="$PROJECT_ID" 2>/dev/null || true)"
+    # Accept existing uppercase secret naming used in GCP console.
+    if GOOGLE_MAPS_KEY="$(gcloud secrets versions access latest --secret=GOOGLE_MAPS_API_KEY --project="$PROJECT_ID" 2>/tmp/maps_key_err.log)"; then
+        GOOGLE_MAPS_KEY_SOURCE="secret-manager:GOOGLE_MAPS_API_KEY"
+    else
+        GOOGLE_MAPS_KEY=""
+    fi
+fi
+if [ -z "$GOOGLE_MAPS_KEY" ]; then
+    # Primary: shared build-time secret in Secret Manager.
+    if GOOGLE_MAPS_KEY="$(gcloud secrets versions access latest --secret=google-maps-api-key --project="$PROJECT_ID" 2>/tmp/maps_key_err.log)"; then
+        GOOGLE_MAPS_KEY_SOURCE="secret-manager:google-maps-api-key"
+    else
+        GOOGLE_MAPS_KEY=""
+    fi
+fi
+if [ -z "$GOOGLE_MAPS_KEY" ]; then
+    # Backward-compatible fallback secret name used in some projects.
+    if GOOGLE_MAPS_KEY="$(gcloud secrets versions access latest --secret=google-maps-api-key-for-build --project="$PROJECT_ID" 2>/tmp/maps_key_err.log)"; then
+        GOOGLE_MAPS_KEY_SOURCE="secret-manager:google-maps-api-key-for-build"
+    else
+        GOOGLE_MAPS_KEY=""
+    fi
+fi
+if [ -n "$GOOGLE_MAPS_KEY" ]; then
+    echo "✅ Frontend Maps key resolved from $GOOGLE_MAPS_KEY_SOURCE"
+    # Guard against accidental trailing newline in substitutions.
+    GOOGLE_MAPS_KEY="$(printf '%s' "$GOOGLE_MAPS_KEY")"
+else
+    echo "❌ Frontend Maps key not available for Cloud Build."
+    echo "   Tried:"
+    echo "   - GOOGLE_MAPS_API_KEY_FOR_BUILD env var"
+    echo "   - GOOGLE_MAPS_API_KEY env var"
+    echo "   - Secret Manager: GOOGLE_MAPS_API_KEY"
+    echo "   - Secret Manager: google-maps-api-key"
+    echo "   - Secret Manager: google-maps-api-key-for-build"
+    if [ -f /tmp/maps_key_err.log ]; then
+        echo "   Secret access error details:"
+        sed 's/^/   /' /tmp/maps_key_err.log | tail -n 6
+    fi
+    echo "   Frontend/admin deployment requires a build-time key. Backend service secrets are runtime-only."
+    exit 1
 fi
 
 # Step 5: Deploy Customer Frontend to Cloud Run
 echo "🌐 Step 5: Deploying Customer Frontend to Cloud Run..."
-if [ -z "$GOOGLE_MAPS_KEY" ]; then
-    echo "⚠️  No Maps API key for frontend build (set GOOGLE_MAPS_API_KEY or GOOGLE_MAPS_API_KEY_FOR_BUILD, or Secret Manager secret google-maps-api-key)."
-    echo "   Or deploy frontends via a Cloud Build trigger with _GOOGLE_MAPS_API_KEY."
-    echo "   Skipping customer frontend build."
-else
-    cd /Users/maria/dial-a-drink/frontend
-    echo "🔨 Building and deploying customer frontend..."
-    gcloud builds submit . \
-        --config cloudbuild.yaml \
-        --substitutions=SHORT_SHA="${SHORT_SHA}",_GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_KEY}" \
-        --project "$PROJECT_ID" 2>&1 || {
-        echo "❌ Customer frontend deployment failed"
-        cd /Users/maria/dial-a-drink
-        exit 1
-    }
-    CUSTOMER_FRONTEND_URL=$(gcloud run services describe "deliveryos-customer-frontend" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --format "value(status.url)" 2>/dev/null || echo "")
-    echo "✅ Customer frontend deployed: $CUSTOMER_FRONTEND_URL"
+cd /Users/maria/dial-a-drink/frontend
+echo "🔨 Building and deploying customer frontend..."
+gcloud builds submit . \
+    --config cloudbuild.yaml \
+    --substitutions=SHORT_SHA="${SHORT_SHA}",_GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_KEY}" \
+    --project "$PROJECT_ID" 2>&1 || {
+    echo "❌ Customer frontend deployment failed"
     cd /Users/maria/dial-a-drink
-fi
+    exit 1
+}
+CUSTOMER_FRONTEND_URL=$(gcloud run services describe "deliveryos-customer-frontend" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --format "value(status.url)" 2>/dev/null || echo "")
+echo "✅ Customer frontend deployed: $CUSTOMER_FRONTEND_URL"
+
+echo "⚙️  Customer frontend Cloud Run: scale-to-zero (cost control; cold starts acceptable)"
+gcloud run services update "$CUSTOMER_FRONTEND_SERVICE" \
+    --project "$PROJECT_ID" \
+    --region "$REGION" \
+    --min-instances="$FRONTEND_MIN_INSTANCES" \
+    --quiet 2>&1
+
+cd /Users/maria/dial-a-drink
 
 # Step 6: Deploy Admin Frontend to Cloud Run
 echo ""
 echo "🌐 Step 6: Deploying Admin Frontend to Cloud Run..."
-if [ -z "$GOOGLE_MAPS_KEY" ]; then
-    echo "⚠️  Skipping admin frontend (same Maps key resolution as customer frontend)."
-else
-    cd /Users/maria/dial-a-drink/admin-frontend
-    echo "🔨 Building and deploying admin frontend..."
-    gcloud builds submit . \
-        --config cloudbuild.yaml \
-        --substitutions=SHORT_SHA="${SHORT_SHA}",_GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_KEY}" \
-        --project "$PROJECT_ID" 2>&1 || {
-        echo "❌ Admin frontend deployment failed"
-        cd /Users/maria/dial-a-drink
-        exit 1
-    }
-    ADMIN_FRONTEND_URL=$(gcloud run services describe "deliveryos-admin-frontend" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --format "value(status.url)" 2>/dev/null || echo "")
-    echo "✅ Admin frontend deployed: $ADMIN_FRONTEND_URL"
+cd /Users/maria/dial-a-drink/admin-frontend
+echo "🔨 Building and deploying admin frontend..."
+gcloud builds submit . \
+    --config cloudbuild.yaml \
+    --substitutions=SHORT_SHA="${SHORT_SHA}",_GOOGLE_MAPS_API_KEY="${GOOGLE_MAPS_KEY}" \
+    --project "$PROJECT_ID" 2>&1 || {
+    echo "❌ Admin frontend deployment failed"
     cd /Users/maria/dial-a-drink
-fi
+    exit 1
+}
+ADMIN_FRONTEND_URL=$(gcloud run services describe "deliveryos-admin-frontend" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --format "value(status.url)" 2>/dev/null || echo "")
+echo "✅ Admin frontend deployed: $ADMIN_FRONTEND_URL"
+
+echo "⚙️  Admin frontend Cloud Run: scale-to-zero (cost control; cold starts acceptable)"
+gcloud run services update "$ADMIN_FRONTEND_SERVICE" \
+    --project "$PROJECT_ID" \
+    --region "$REGION" \
+    --min-instances="$FRONTEND_MIN_INSTANCES" \
+    --quiet 2>&1
+
+cd /Users/maria/dial-a-drink
 
 echo ""
 echo "📱 Step 7: Android app — build separately if needed (driver-app-native/)"
@@ -187,5 +253,5 @@ echo "🔐 Secrets: unchanged (managed in GCP only)"
 echo ""
 echo "📋 Next Steps:"
 echo "1. Test backend API: curl $SERVICE_URL/api/health"
-echo "2. Frontend builds: export GOOGLE_MAPS_API_KEY (or GOOGLE_MAPS_API_KEY_FOR_BUILD), or use Secret google-maps-api-key / Cloud Build trigger"
+echo "2. Frontends were built with Maps key source: $GOOGLE_MAPS_KEY_SOURCE"
 echo ""
