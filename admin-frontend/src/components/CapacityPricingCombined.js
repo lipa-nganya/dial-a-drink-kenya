@@ -40,7 +40,8 @@ const CAPACITY_OPTIONS = [
   '20 pouches',
   '2500 Puffs',
   '1500 Puffs',
-  '2600 Puffs'
+  '2600 Puffs',
+  '3000 Puffs'
 ];
 
 const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChange }) => {
@@ -82,8 +83,15 @@ const CapacityPricingCombined = ({ capacityPricing = [], capacities = [], onChan
       if (e.key !== CUSTOM_CAPACITY_STORAGE_KEY) return;
       setCustomCapacities(readCustomCapacitiesFromStorage());
     };
+    const onCustomListUpdated = () => {
+      setCustomCapacities(readCustomCapacitiesFromStorage());
+    };
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener('dialadrink-custom-capacities-changed', onCustomListUpdated);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('dialadrink-custom-capacities-changed', onCustomListUpdated);
+    };
   }, []);
 
   useEffect(() => {
