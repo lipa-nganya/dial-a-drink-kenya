@@ -123,6 +123,14 @@ const Inventory = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
   const CUSTOM_CAPACITY_STORAGE_KEY = 'copilot_inventory_custom_capacities';
   const SHARED_CAPACITY_SETTINGS_KEY = 'copilotInventoryCustomCapacities';
+  /** Same-tab listeners (e.g. Edit Drink) cannot rely on `storage` events; fire after local writes. */
+  const notifyCustomCapacitiesChanged = () => {
+    try {
+      window.dispatchEvent(new CustomEvent('dialadrink-custom-capacities-changed'));
+    } catch {
+      // ignore
+    }
+  };
 
   useEffect(() => {
     fetchAnalytics();
@@ -165,6 +173,7 @@ const Inventory = () => {
         setCustomCapacities((prev) => {
           const merged = Array.from(new Set([...prev, ...normalized]));
           window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(merged));
+          notifyCustomCapacitiesChanged();
           return merged;
         });
       } catch {
@@ -432,24 +441,45 @@ const Inventory = () => {
       return;
     }
 
-    const exists = availableCapacities.some((value) => String(value || '').trim().toLowerCase() === cap.toLowerCase());
-    if (exists) {
+    const capKey = cap.toLowerCase();
+    const inSharedList = customCapacities.some(
+      (value) => String(value || '').trim().toLowerCase() === capKey
+    );
+    if (inSharedList) {
       setSnackbar({
         open: true,
-        message: 'Capacity already exists',
+        message: 'This capacity is already in your shared list',
         severity: 'info'
       });
       return;
     }
+
+    const onCatalog = allDrinks.some((item) => {
+      if (Array.isArray(item.capacityPricing)) {
+        for (const entry of item.capacityPricing) {
+          const c = String(entry?.capacity || entry?.size || '').trim();
+          if (c && c.toLowerCase() === capKey) return true;
+        }
+      }
+      if (Array.isArray(item.capacity)) {
+        for (const c of item.capacity) {
+          if (String(c || '').trim().toLowerCase() === capKey) return true;
+        }
+      }
+      return false;
+    });
 
     const next = [...customCapacities, cap];
     setCustomCapacities(next);
     setNewGlobalCapacity('');
     window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(next));
     persistSharedCapacities(next);
+    notifyCustomCapacitiesChanged();
     setSnackbar({
       open: true,
-      message: 'Capacity added to inventory settings',
+      message: onCatalog
+        ? 'This label is already on the catalog; it has been added to your shared list so you can assign it on any drink.'
+        : 'Capacity added to inventory settings',
       severity: 'success'
     });
   };
@@ -488,6 +518,7 @@ const Inventory = () => {
       setCustomCapacities(nextCustomCapacities);
       window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(nextCustomCapacities));
       persistSharedCapacities(nextCustomCapacities);
+      notifyCustomCapacitiesChanged();
 
       setSnackbar({ open: true, message: 'Capacity updated successfully', severity: 'success' });
       await fetchZeroPurchasePriceItems();
@@ -524,6 +555,7 @@ const Inventory = () => {
       setCustomCapacities(nextCustomCapacities);
       window.localStorage.setItem(CUSTOM_CAPACITY_STORAGE_KEY, JSON.stringify(nextCustomCapacities));
       persistSharedCapacities(nextCustomCapacities);
+      notifyCustomCapacitiesChanged();
 
       setCapacityTransferMap((prev) => {
         const next = { ...prev };
