@@ -554,16 +554,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       return;
     }
 
-    const parseJsonIfString = (value) => {
-      if (typeof value !== 'string') return value;
-      const trimmed = value.trim();
-      if (!trimmed) return value;
-      try {
-        return JSON.parse(trimmed);
-      } catch {
-        return value;
-      }
-    };
     const capacityUnitMultiplier = (capacityLabel) => {
       const raw = String(capacityLabel || '').trim().toLowerCase();
       if (!raw) return 1;
