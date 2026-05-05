@@ -11,6 +11,8 @@ ARG REACT_APP_API_URL=https://deliveryos-production-backend-805803410802.us-cent
 ARG REACT_APP_GOOGLE_MAPS_API_KEY
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}
 ENV REACT_APP_GOOGLE_MAPS_API_KEY=${REACT_APP_GOOGLE_MAPS_API_KEY}
+# Match Netlify/GitHub Actions so lint parity cannot merge locally then fail in CI.
+ENV CI=true
 RUN npm run build
 
 FROM nginx:1.25-alpine

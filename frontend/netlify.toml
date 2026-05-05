@@ -1,6 +1,6 @@
 [build]
   publish = "build"
-  command = "npm install && npm run build"
+  command = "npm ci && CI=true npm run build"
 
 # Proxy API requests to Cloud Run backend
 [[redirects]]
