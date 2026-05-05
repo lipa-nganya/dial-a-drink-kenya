@@ -256,6 +256,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   // Deferred customer creation state:
   // when "Create new customer" is selected from autocomplete, we auto-create on order submit.
   const [pendingCreateCustomerPhone, setPendingCreateCustomerPhone] = useState('');
+  /** Sync ref so `onInputChange` reason `reset` can restore phone before React state flushes (MUI Autocomplete quirk). */
+  const pendingCreateCustomerPhoneRef = useRef('');
 
   // Debounce customer search query
   useEffect(() => {
@@ -1019,6 +1021,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const handleClose = () => {
     setSelectedCustomer(null);
     setCustomerSearch('');
+    setPendingCreateCustomerPhone('');
+    pendingCreateCustomerPhoneRef.current = '';
     setSelectedBranch('');
     setDeliveryLocation('');
     setOrderType('delivery');
@@ -1537,6 +1541,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     const createdCustomer = createResponse.data.customer;
     setSelectedCustomer(createdCustomer);
     setPendingCreateCustomerPhone('');
+    pendingCreateCustomerPhoneRef.current = '';
     const createdName = createdCustomer.customerName || createdCustomer.name || phoneNumber;
     setCustomerSearch(createdCustomer.phone ? `${createdName} - ${createdCustomer.phone}` : createdName);
     await fetchCustomers();
@@ -1751,6 +1756,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 if (newOrderType === 'walk-in') {
                   setSelectedCustomer(null);
                   setCustomerSearch('');
+                  setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   setDeliveryStatus('completed');
                   setSelectedDriver(''); // Clear driver assignment for walk-in orders
                   setIsStaffPurchase(false);
@@ -1846,6 +1853,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 // Handle create customer option
                 if (newValue && newValue.isCreateOption) {
                   const phone = String(newValue.phone || customerSearch || '').trim();
+                  pendingCreateCustomerPhoneRef.current = phone;
                   setSelectedCustomer(null);
                   setPendingCreateCustomerPhone(phone);
                   setCustomerSearch(phone);
@@ -1853,6 +1861,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 }
                 
                 setPendingCreateCustomerPhone('');
+                pendingCreateCustomerPhoneRef.current = '';
                 setSelectedCustomer(newValue);
                 // When a customer is selected, update the search to show the selected value
                 if (newValue) {
@@ -1883,6 +1892,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   // User is typing - update search and clear selection if different
                   setCustomerSearch(newInputValue);
                   setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   if (selectedCustomer) {
                     const selectedText = selectedCustomer.customerName || selectedCustomer.name || '';
                     const selectedPhone = selectedCustomer.phone || '';
@@ -1897,11 +1907,26 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   setCustomerSearch('');
                   setSelectedCustomer(null);
                   setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   setDeliveryLocation('');
                 } else if (reason === 'reset') {
+                  // After choosing an option, MUI fires `reset`. For "Create new customer",
+                  // value stays null so the input would clear and the phone disappears.
+                  const preserve = pendingCreateCustomerPhoneRef.current;
+                  if (preserve) {
+                    setCustomerSearch(preserve);
+                    setPendingCreateCustomerPhone(preserve);
+                    return;
+                  }
+                  if (selectedCustomer) {
+                    const name = selectedCustomer.customerName || selectedCustomer.name || 'Unknown';
+                    const phone = selectedCustomer.phone || '';
+                    setCustomerSearch(phone ? `${name} - ${phone}` : name);
+                    return;
+                  }
                   setCustomerSearch('');
-                  setSelectedCustomer(null);
                   setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   setDeliveryLocation('');
                 }
               }}
