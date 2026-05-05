@@ -42,6 +42,14 @@ let productsCache = { at: 0, data: [] };
 let productsFetchPromise = null;
 const PRODUCTS_CACHE_KEY = 'adminPosProductsCache:v2';
 
+/** True when both strings are the same mobile (handles 07… vs +254… and spaces). */
+const sameLocalPhone = (a, b) => {
+  const da = String(a || '').replace(/\D/g, '');
+  const db = String(b || '').replace(/\D/g, '');
+  if (da.length < 9 || db.length < 9) return false;
+  return da.slice(-9) === db.slice(-9);
+};
+
 const getFreshProductsCache = () => {
   const now = Date.now();
   if (Array.isArray(productsCache.data) && productsCache.data.length > 0 && now - productsCache.at < PRODUCTS_CACHE_TTL_MS) {
@@ -909,9 +917,12 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
       // Ensure API customer exists before POST — otherwise order shows blank / "Unknown".
       let finalCustomer = selectedCustomer;
       if (!isWalkIn && !finalCustomer) {
+        const searchDigits = String(customerSearch || '').replace(/\D/g, '');
         const digits =
           (pendingCreateCustomerPhone || '').trim() ||
-          (String(customerSearch || '').match(/(\+?\d{9,15})/)?.[1] || '').trim();
+          (pendingCreateCustomerPhoneRef.current || '').trim() ||
+          (String(customerSearch || '').match(/(\+?\d{9,15})/)?.[1] || '').trim() ||
+          (searchDigits.length >= 9 ? searchDigits : '').trim();
         if (digits) {
           try {
             finalCustomer = await resolveFinalCustomer();
@@ -1561,7 +1572,13 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     if (selectedCustomer) return selectedCustomer;
 
     const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
-    const phoneNumber = (pendingCreateCustomerPhone || phoneMatch?.[1] || '').trim();
+    const searchDigits = String(customerSearch || '').replace(/\D/g, '');
+    const phoneNumber = (
+      (pendingCreateCustomerPhone || '').trim() ||
+      (pendingCreateCustomerPhoneRef.current || '').trim() ||
+      phoneMatch?.[1] ||
+      (searchDigits.length >= 9 ? searchDigits : '')
+    ).trim();
     if (!phoneNumber) {
       throw new Error('Please select a customer or enter a valid phone number');
     }
@@ -1934,7 +1951,25 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
               onInputChange={async (event, newInputValue, reason) => {
                 // Handle different change reasons
                 if (reason === 'input') {
-                  // User is typing - update search and clear selection if different
+                  // User is typing - update search and clear selection if different.
+                  // Do NOT clear pending-create when MUI re-emits the same phone after choosing
+                  // "Create new customer" (differs by build/runtime — breaks Netlify otherwise).
+                  const pending = (pendingCreateCustomerPhoneRef.current || '').trim();
+                  if (pending && sameLocalPhone(pending, newInputValue)) {
+                    setCustomerSearch(newInputValue);
+                    setPendingCreateCustomerPhone(pending);
+                    pendingCreateCustomerPhoneRef.current = pending;
+                    if (selectedCustomer) {
+                      const selectedText = selectedCustomer.customerName || selectedCustomer.name || '';
+                      const selectedPhone = selectedCustomer.phone || '';
+                      const selectedDisplay = selectedPhone ? `${selectedText} - ${selectedPhone}` : selectedText;
+                      if (newInputValue !== selectedDisplay) {
+                        setSelectedCustomer(null);
+                        setDeliveryLocation('');
+                      }
+                    }
+                    return;
+                  }
                   setCustomerSearch(newInputValue);
                   setPendingCreateCustomerPhone('');
                   pendingCreateCustomerPhoneRef.current = '';
