@@ -256,6 +256,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   // Deferred customer creation state:
   // when "Create new customer" is selected from autocomplete, we auto-create on order submit.
   const [pendingCreateCustomerPhone, setPendingCreateCustomerPhone] = useState('');
+  /** Sync ref so `onInputChange` reason `reset` can restore phone before React state flushes (MUI Autocomplete quirk). */
+  const pendingCreateCustomerPhoneRef = useRef('');
 
   // Debounce customer search query
   useEffect(() => {
@@ -882,7 +884,6 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
     // Validation: only order type/payment and cart items are required.
     // Customer, phone, delivery location, branch, and territory are optional and can be edited after creation.
-    let finalCustomer = selectedCustomer || {};
 
     if (cartItems.length === 0) {
       setError('Please add at least one item to the cart');
@@ -905,6 +906,24 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     setLoading(true);
 
     try {
+      // Ensure API customer exists before POST — otherwise order shows blank / "Unknown".
+      let finalCustomer = selectedCustomer;
+      if (!isWalkIn && !finalCustomer) {
+        const digits =
+          (pendingCreateCustomerPhone || '').trim() ||
+          (String(customerSearch || '').match(/(\+?\d{9,15})/)?.[1] || '').trim();
+        if (digits) {
+          try {
+            finalCustomer = await resolveFinalCustomer();
+          } catch (err) {
+            setError(err.message || 'Please select a customer or enter a valid phone number');
+            setLoading(false);
+            return;
+          }
+        }
+      }
+      finalCustomer = finalCustomer || {};
+
       // Walk-in orders are not delivery; use placeholder. Delivery orders may have TBD address initially.
       let finalDeliveryAddress = isWalkIn ? 'In-Store Purchase' : (deliveryLocation && deliveryLocation.trim() ? deliveryLocation : 'TBD');
       let branchId = null;
@@ -1019,6 +1038,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const handleClose = () => {
     setSelectedCustomer(null);
     setCustomerSearch('');
+    setPendingCreateCustomerPhone('');
+    pendingCreateCustomerPhoneRef.current = '';
     setSelectedBranch('');
     setDeliveryLocation('');
     setOrderType('delivery');
@@ -1509,11 +1530,31 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   // Use customers directly from API (already filtered by backend)
   const filteredCustomers = Array.isArray(customers) ? customers : [];
 
+  /** Non-null while user chose "Create new customer" — keeps Autocomplete stable (MUI clears input when value stays null). */
+  const customerAutocompleteValue = useMemo(() => {
+    if (selectedCustomer) return selectedCustomer;
+    const pending = (pendingCreateCustomerPhone || '').trim();
+    if (pending) {
+      return {
+        id: '__pending_create__',
+        isPendingCreate: true,
+        phone: pending,
+        customerName: pending,
+        name: pending
+      };
+    }
+    return null;
+  }, [selectedCustomer, pendingCreateCustomerPhone]);
+
   // Check if customerSearch looks like a phone number and no customer matches
   const phoneMatch = customerSearch.match(/(\+?\d{9,15})/);
   const isPhoneNumber = phoneMatch && phoneMatch[1].length >= 9;
   const hasNoMatches = filteredCustomers.length === 0 && customerSearch.trim().length > 0;
-  const showCreateOption = isPhoneNumber && hasNoMatches && !selectedCustomer;
+  const showCreateOption =
+    isPhoneNumber &&
+    hasNoMatches &&
+    !selectedCustomer &&
+    !(pendingCreateCustomerPhone || '').trim();
 
   const resolveFinalCustomer = async () => {
     if (isWalkIn) return null;
@@ -1537,6 +1578,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
     const createdCustomer = createResponse.data.customer;
     setSelectedCustomer(createdCustomer);
     setPendingCreateCustomerPhone('');
+    pendingCreateCustomerPhoneRef.current = '';
     const createdName = createdCustomer.customerName || createdCustomer.name || phoneNumber;
     setCustomerSearch(createdCustomer.phone ? `${createdName} - ${createdCustomer.phone}` : createdName);
     await fetchCustomers();
@@ -1751,6 +1793,8 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 if (newOrderType === 'walk-in') {
                   setSelectedCustomer(null);
                   setCustomerSearch('');
+                  setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   setDeliveryStatus('completed');
                   setSelectedDriver(''); // Clear driver assignment for walk-in orders
                   setIsStaffPurchase(false);
@@ -1841,11 +1885,20 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
           {/* Customer Selection - Hidden when walk-in is enabled (optional for admin orders) */}
           {!isWalkIn && (
             <Autocomplete
-              value={selectedCustomer}
+              value={customerAutocompleteValue}
+              isOptionEqualToValue={(option, value) => {
+                if (!option || !value) return false;
+                if (value.isPendingCreate && option.isPendingCreate)
+                  return String(option.phone) === String(value.phone);
+                if (value.isPendingCreate || option.isPendingCreate) return false;
+                if (option.isCreateOption || value.isCreateOption) return false;
+                return option.id === value.id;
+              }}
               onChange={async (event, newValue) => {
                 // Handle create customer option
                 if (newValue && newValue.isCreateOption) {
                   const phone = String(newValue.phone || customerSearch || '').trim();
+                  pendingCreateCustomerPhoneRef.current = phone;
                   setSelectedCustomer(null);
                   setPendingCreateCustomerPhone(phone);
                   setCustomerSearch(phone);
@@ -1853,6 +1906,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                 }
                 
                 setPendingCreateCustomerPhone('');
+                pendingCreateCustomerPhoneRef.current = '';
                 setSelectedCustomer(newValue);
                 // When a customer is selected, update the search to show the selected value
                 if (newValue) {
@@ -1883,6 +1937,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   // User is typing - update search and clear selection if different
                   setCustomerSearch(newInputValue);
                   setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   if (selectedCustomer) {
                     const selectedText = selectedCustomer.customerName || selectedCustomer.name || '';
                     const selectedPhone = selectedCustomer.phone || '';
@@ -1897,17 +1952,33 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   setCustomerSearch('');
                   setSelectedCustomer(null);
                   setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   setDeliveryLocation('');
                 } else if (reason === 'reset') {
+                  // After choosing an option, MUI fires `reset`. For "Create new customer",
+                  // value stays null so the input would clear and the phone disappears.
+                  const preserve = pendingCreateCustomerPhoneRef.current;
+                  if (preserve) {
+                    setCustomerSearch(preserve);
+                    setPendingCreateCustomerPhone(preserve);
+                    return;
+                  }
+                  if (selectedCustomer) {
+                    const name = selectedCustomer.customerName || selectedCustomer.name || 'Unknown';
+                    const phone = selectedCustomer.phone || '';
+                    setCustomerSearch(phone ? `${name} - ${phone}` : name);
+                    return;
+                  }
                   setCustomerSearch('');
-                  setSelectedCustomer(null);
                   setPendingCreateCustomerPhone('');
+                  pendingCreateCustomerPhoneRef.current = '';
                   setDeliveryLocation('');
                 }
               }}
               options={showCreateOption ? [{ isCreateOption: true, phone: phoneMatch?.[1] || customerSearch }, ...filteredCustomers] : filteredCustomers}
               getOptionLabel={(option) => {
                 if (!option) return '';
+                if (option.isPendingCreate) return option.phone || '';
                 if (option.isCreateOption) {
                   return `Create new customer: ${option.phone}`;
                 }
@@ -1918,7 +1989,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
               renderInput={(params) => {
                 // Hide placeholder when customer is selected
                 const inputParams = { ...params };
-                if (selectedCustomer) {
+                if (customerAutocompleteValue) {
                   inputParams.inputProps = {
                     ...inputParams.inputProps,
                     placeholder: ''
@@ -1928,7 +1999,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
                   <TextField
                     {...inputParams}
                     label="Customer"
-                    placeholder={!selectedCustomer ? "Search by name or phone number" : undefined}
+                    placeholder={!customerAutocompleteValue ? "Search by name or phone number" : undefined}
                     sx={{
                       '& .MuiInputLabel-root': {
                         fontSize: mobileSize ? '0.9rem' : '1rem'

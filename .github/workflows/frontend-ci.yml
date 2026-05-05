@@ -1,0 +1,43 @@
+# Builds customer + admin CRA apps the same way Netlify does (CI=true → ESLint warnings fail).
+# Required branch protection: add "Frontend CI / build (admin-frontend)" and "build (frontend)" as required checks.
+
+name: Frontend CI
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+  workflow_dispatch:
+
+concurrency:
+  group: frontend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - app: admin-frontend
+          - app: frontend
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.app }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: ${{ matrix.app }}/package-lock.json
+
+      - name: Install and build
+        run: |
+          npm ci
+          CI=true npm run build
