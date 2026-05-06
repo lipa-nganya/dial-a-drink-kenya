@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Container,
   Typography,
@@ -13,6 +13,7 @@ import {
   FormControlLabel,
   Alert,
   CircularProgress,
+  LinearProgress,
   TextField,
   InputAdornment,
   Select,
@@ -32,8 +33,6 @@ import {
   Cancel,
   Edit,
   Inventory,
-  TrendingUp,
-  TrendingDown,
   Search,
   FilterList,
   Clear,
@@ -54,6 +53,72 @@ import { getBackendUrl } from '../utils/backendUrl';
 import { hasSuperAdminPrivileges } from '../utils/adminRoles';
 import { Badge } from '@mui/material';
 
+const parseJsonIfString = (value) => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  if (!trimmed) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const normalizeCapacityKey = (value) =>
+  (value || '')
+    .toString()
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '');
+
+const toInt = (value) => {
+  const parsed = parseInt(value, 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+};
+
+const computeDrinkCapacityStockRows = (drink) => {
+  if (!drink) return [];
+  const parsedStockByCapacity = parseJsonIfString(drink.stockByCapacity);
+  const stockByCapacity =
+    parsedStockByCapacity && typeof parsedStockByCapacity === 'object' && !Array.isArray(parsedStockByCapacity)
+      ? parsedStockByCapacity
+      : null;
+  const parsedCapacityPricing = parseJsonIfString(drink.capacityPricing);
+  const parsedCapacity = parseJsonIfString(drink.capacity);
+
+  let capacities = [];
+  if (Array.isArray(parsedCapacityPricing) && parsedCapacityPricing.length > 0) {
+    capacities = parsedCapacityPricing
+      .map((p) => p && (p.capacity || p.size))
+      .filter(Boolean);
+  } else if (Array.isArray(parsedCapacity) && parsedCapacity.length > 0) {
+    capacities = parsedCapacity.filter(Boolean);
+  } else if (typeof parsedCapacity === 'string' && parsedCapacity.trim()) {
+    capacities = [parsedCapacity.trim()];
+  }
+
+  if (capacities.length === 0 && stockByCapacity) {
+    capacities = Object.keys(stockByCapacity).filter(Boolean);
+  }
+
+  const uniqueCaps = Array.from(new Set(capacities));
+  if (uniqueCaps.length === 0) return [];
+
+  const stockByCapacityEntries = stockByCapacity ? Object.entries(stockByCapacity) : [];
+
+  return uniqueCaps.map((cap) => {
+    let raw = null;
+    if (stockByCapacityEntries.length > 0) {
+      const normalizedCap = normalizeCapacityKey(cap);
+      const direct = stockByCapacityEntries.find(([key]) => normalizeCapacityKey(key) === normalizedCap);
+      raw = direct ? direct[1] : null;
+    }
+    const parsed = toInt(raw);
+    const stock = raw == null ? 0 : parsed;
+    return { capacity: cap, stock };
+  });
+};
+
 const InventoryPage = () => {
   const { isDarkMode, colors } = useTheme();
   const { user, pendingInventoryChecksCount } = useAdmin();
@@ -63,6 +128,7 @@ const InventoryPage = () => {
   const [categories, setCategories] = useState([]);
   const [brands, setBrands] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [drinksLoading, setDrinksLoading] = useState(false);
   const [error, setError] = useState(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [selectedDrink, setSelectedDrink] = useState(null);
@@ -79,79 +145,26 @@ const InventoryPage = () => {
   const [offerFilter, setOfferFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [inventoryView, setInventoryView] = useState('list'); // 'grid' | 'list'
+  const [nextDrinksOffset, setNextDrinksOffset] = useState(0);
+  const [hasMoreDrinks, setHasMoreDrinks] = useState(true);
   
   const itemsPerPage = 40;
+  const fetchChunkSize = 200;
+
+  const stockMetaById = useMemo(() => {
+    const m = new Map();
+    for (const drink of drinks) {
+      const rows = computeDrinkCapacityStockRows(drink);
+      const total = rows.reduce((sum, r) => sum + (Number(r.stock) || 0), 0);
+      m.set(drink.id, { rows, total });
+    }
+    return m;
+  }, [drinks]);
 
   // Helper to build per-capacity stock rows, e.g. "Stock 6: 1.5 litre"
   const getCapacityStockRows = (drink) => {
     if (!drink) return [];
-    const parseJsonIfString = (value) => {
-      if (typeof value !== 'string') return value;
-      const trimmed = value.trim();
-      if (!trimmed) return value;
-      try {
-        return JSON.parse(trimmed);
-      } catch {
-        return value;
-      }
-    };
-    const normalizeCapacityKey = (value) =>
-      (value || '')
-        .toString()
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, '');
-    const toInt = (value) => {
-      const parsed = parseInt(value, 10);
-      return Number.isNaN(parsed) ? 0 : parsed;
-    };
-
-    const parsedStockByCapacity = parseJsonIfString(drink.stockByCapacity);
-    const stockByCapacity =
-      parsedStockByCapacity && typeof parsedStockByCapacity === 'object' && !Array.isArray(parsedStockByCapacity)
-        ? parsedStockByCapacity
-        : null;
-    const parsedCapacityPricing = parseJsonIfString(drink.capacityPricing);
-    const parsedCapacity = parseJsonIfString(drink.capacity);
-
-    // Prefer capacities from capacityPricing (they are normalized labels)
-    let capacities = [];
-    if (Array.isArray(parsedCapacityPricing) && parsedCapacityPricing.length > 0) {
-      capacities = parsedCapacityPricing
-        .map(p => p && (p.capacity || p.size))
-        .filter(Boolean);
-    } else if (Array.isArray(parsedCapacity) && parsedCapacity.length > 0) {
-      capacities = parsedCapacity.filter(Boolean);
-    } else if (typeof parsedCapacity === 'string' && parsedCapacity.trim()) {
-      // Some items store a single capacity as a string instead of an array.
-      capacities = [parsedCapacity.trim()];
-    }
-
-    // If capacities are not present but stockByCapacity exists, use its keys.
-    if (capacities.length === 0 && stockByCapacity) {
-      capacities = Object.keys(stockByCapacity).filter(Boolean);
-    }
-
-    const uniqueCaps = Array.from(new Set(capacities));
-    if (uniqueCaps.length === 0) return [];
-
-    const stockByCapacityEntries = stockByCapacity
-      ? Object.entries(stockByCapacity)
-      : [];
-
-    return uniqueCaps.map(cap => {
-      let raw = null;
-      if (stockByCapacityEntries.length > 0) {
-        const normalizedCap = normalizeCapacityKey(cap);
-        const direct = stockByCapacityEntries.find(([key]) => normalizeCapacityKey(key) === normalizedCap);
-        raw = direct ? direct[1] : null;
-      }
-      const parsed = toInt(raw);
-      // Inventory stock source of truth is stockByCapacity.
-      // If a capacity bucket is missing, treat it as 0.
-      const stock = raw == null ? 0 : parsed;
-      return { capacity: cap, stock };
-    });
+    return stockMetaById.get(drink.id)?.rows || [];
   };
 
   const shouldHideZeroPackRow = (capacity, stock) => {
@@ -164,13 +177,7 @@ const InventoryPage = () => {
   // if one capacity has stock (e.g. 750ml), the whole item should be considered "in stock".
   const getTotalStock = (drink) => {
     if (!drink) return 0;
-    const rows = getCapacityStockRows(drink);
-    if (rows.length > 0) {
-      return rows.reduce((sum, r) => sum + (Number(r.stock) || 0), 0);
-    }
-
-    // No capacity buckets means no known stock.
-    return 0;
+    return stockMetaById.get(drink.id)?.total || 0;
   };
 
   // Helper function to get full image URL
@@ -222,34 +229,33 @@ const InventoryPage = () => {
 
   const fetchData = async () => {
     try {
-      const [drinksResponse, categoriesResponse, brandsResponse] = await Promise.all([
-        api.get('/admin/drinks', { params: { light: 1 } }),
+      setLoading(true);
+      setError(null);
+      const [categoriesResponse, brandsResponse] = await Promise.all([
         api.get('/categories'),
         api.get('/brands/all')
       ]);
-      
-      // Debug: Check if purchasePrice is in the response
-      if (drinksResponse.data && drinksResponse.data.length > 0) {
-        const sampleDrink = drinksResponse.data.find(d => d.name && d.name.includes('1659'));
-        if (sampleDrink) {
-          console.log('🔍 Sample drink from API:', {
-            id: sampleDrink.id,
-            name: sampleDrink.name,
-            purchasePrice: sampleDrink.purchasePrice,
-            purchasePriceType: typeof sampleDrink.purchasePrice,
-            hasPurchasePrice: 'purchasePrice' in sampleDrink,
-            originalPrice: sampleDrink.originalPrice
-          });
-        }
-      }
-      
+
       const categoriesList = categoriesResponse.data || [];
       const brandsList = brandsResponse.data || [];
       const categoryById = new Map(categoriesList.map((c) => [Number(c.id), c]));
       const brandById = new Map(brandsList.map((b) => [Number(b.id), b]));
 
-      // /admin/drinks?light=1 skips relation joins; hydrate minimal category/brand objects from lookup lists.
-      const drinksList = (drinksResponse.data || []).map((drink) => {
+      setCategories(categoriesList);
+      setBrands(brandsList);
+      setDrinks([]);
+      setFilteredDrinks([]);
+      setCurrentPage(1);
+      setNextDrinksOffset(0);
+      setHasMoreDrinks(true);
+      // Render page structure immediately; load only first page batch.
+      setLoading(false);
+      setDrinksLoading(true);
+      const drinksResponse = await api.get('/admin/drinks', {
+        params: { light: 1, limit: fetchChunkSize, offset: 0 }
+      });
+      const chunk = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+      const hydratedChunk = chunk.map((drink) => {
         const categoryId = Number(drink.categoryId);
         const brandId = Number(drink.brandId);
         const category = categoryById.get(categoryId) || null;
@@ -260,18 +266,66 @@ const InventoryPage = () => {
           brand: drink.brand || brand
         };
       });
-
-      setDrinks(drinksList);
-      setCategories(categoriesList);
-      setBrands(brandsList);
-      console.log('Brands fetched:', brandsResponse.data?.length || 0);
+      setDrinks(hydratedChunk);
+      setNextDrinksOffset(chunk.length);
+      setHasMoreDrinks(chunk.length === fetchChunkSize);
     } catch (error) {
       console.error('Error fetching data:', error);
       console.error('Brands fetch error:', error.response?.data || error.message);
       setBrands([]); // Set empty array on error
       setError(error.response?.data?.error || error.message);
     } finally {
+      setDrinksLoading(false);
       setLoading(false);
+    }
+  };
+
+  const loadMoreDrinksIfNeeded = async (targetPage) => {
+    if (drinksLoading || !hasMoreDrinks) return;
+    const requiredItems = targetPage * itemsPerPage;
+    if (drinks.length >= requiredItems) return;
+
+    setDrinksLoading(true);
+    try {
+      let offset = nextDrinksOffset;
+      let keepLoading = hasMoreDrinks;
+      const incoming = [];
+      while (keepLoading && drinks.length + incoming.length < requiredItems) {
+        // eslint-disable-next-line no-await-in-loop
+        const drinksResponse = await api.get('/admin/drinks', {
+          params: { light: 1, limit: fetchChunkSize, offset }
+        });
+        const chunk = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+        if (chunk.length === 0) {
+          keepLoading = false;
+          break;
+        }
+        incoming.push(...chunk);
+        offset += chunk.length;
+        keepLoading = chunk.length === fetchChunkSize;
+      }
+
+      if (incoming.length > 0) {
+        const categoryById = new Map(categories.map((c) => [Number(c.id), c]));
+        const brandById = new Map(brands.map((b) => [Number(b.id), b]));
+        const hydrated = incoming.map((drink) => {
+          const categoryId = Number(drink.categoryId);
+          const brandId = Number(drink.brandId);
+          return {
+            ...drink,
+            category: drink.category || categoryById.get(categoryId) || null,
+            brand: drink.brand || brandById.get(brandId) || null
+          };
+        });
+        setDrinks((prev) => [...prev, ...hydrated]);
+      }
+
+      setNextDrinksOffset(offset);
+      setHasMoreDrinks(keepLoading);
+    } catch (error) {
+      console.error('Error loading more drinks:', error);
+    } finally {
+      setDrinksLoading(false);
     }
   };
 
@@ -404,7 +458,8 @@ const InventoryPage = () => {
     setOfferFilter('all');
   };
 
-  const handlePageChange = (event, value) => {
+  const handlePageChange = async (event, value) => {
+    await loadMoreDrinksIfNeeded(value);
     setCurrentPage(value);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -414,35 +469,6 @@ const InventoryPage = () => {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedDrinks = filteredDrinks.slice(startIndex, endIndex);
-
-  const summaryCards = [
-    {
-      icon: <Inventory sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
-      value: filteredDrinks.length,
-      label: drinks.length !== filteredDrinks.length ? 'Filtered Drinks' : 'Total Drinks',
-      sublabel: drinks.length !== filteredDrinks.length ? `of ${drinks.length} total` : null
-    },
-    {
-      icon: <TrendingUp sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
-      value: filteredDrinks.filter(drink => getTotalStock(drink) > 0).length,
-      label: 'Available'
-    },
-    {
-      icon: <TrendingDown sx={{ fontSize: 40, color: '#FF3366', mb: 1 }} />,
-      value: filteredDrinks.filter(drink => getTotalStock(drink) === 0).length,
-      label: 'Out of Stock'
-    },
-    {
-      icon: <LocalBar sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
-      value: filteredDrinks.filter(drink => drink.isPopular).length,
-      label: 'Popular Items'
-    },
-    {
-      icon: <LocalOffer sx={{ fontSize: 40, color: '#00E0B8', mb: 1 }} />,
-      value: filteredDrinks.filter(drink => drink.limitedTimeOffer).length,
-      label: 'Limited Time Items'
-    }
-  ];
 
   const handleAvailabilityToggle = async (drinkId, isAvailable) => {
     try {
@@ -535,9 +561,27 @@ const InventoryPage = () => {
 
   if (loading) {
     return (
-      <Container maxWidth="xl" sx={{ py: 4, textAlign: 'center' }}>
-        <CircularProgress />
-        <Typography variant="h6" sx={{ mt: 2 }}>Loading inventory...</Typography>
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ color: colors.accentText, fontWeight: 700 }}>
+            Inventory Management
+          </Typography>
+          <Typography variant="h6" color="text.secondary">
+            Manage inventory availability and stock status
+          </Typography>
+          <LinearProgress
+            sx={{
+              mt: 2,
+              height: 3,
+              borderRadius: 999,
+              opacity: 0.7,
+              backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+              '& .MuiLinearProgress-bar': {
+                backgroundColor: colors.accentText
+              }
+            }}
+          />
+        </Box>
       </Container>
     );
   }
@@ -560,6 +604,20 @@ const InventoryPage = () => {
           <Typography variant="h6" color="text.secondary">
             Manage inventory availability and stock status
           </Typography>
+          {(drinksLoading || loading) && (
+            <LinearProgress
+              sx={{
+                mt: 1.5,
+                height: 3,
+                borderRadius: 999,
+                opacity: 0.7,
+                backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                '& .MuiLinearProgress-bar': {
+                  backgroundColor: colors.accentText
+                }
+              }}
+            />
+          )}
         </Box>
         <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           {/* Hidden: Populate Purchase Prices button */}
@@ -661,137 +719,31 @@ const InventoryPage = () => {
             </Alert>
           )}
 
-          {/* Summary Stats */}
-          <Box sx={{ mb: 4 }}>
-        <Grid
-          container
-          spacing={2}
-          justifyContent="center"
-          alignItems="stretch"
-        >
-          {summaryCards.map((card, index) => (
-            <Grid key={index} item xs={12} sm={6} md={4} lg={2} sx={{ display: 'flex' }}>
-              {(() => {
-                const isOutOfStock = card.label === 'Out of Stock';
-                const isGreenStat = !isOutOfStock && ['Total Drinks', 'Filtered Drinks', 'Available'].includes(card.label);
-                const valueColor = isOutOfStock ? '#FF3366' : colors.accentText;
-                const bgColor = isOutOfStock
-                  ? isDarkMode
-                    ? 'rgba(255, 51, 102, 0.16)'
-                    : 'rgba(255, 51, 102, 0.10)'
-                  : isGreenStat
-                    ? isDarkMode
-                      ? 'rgba(0, 224, 184, 0.14)'
-                      : 'rgba(0, 224, 184, 0.10)'
-                    : isDarkMode
-                      ? 'rgba(158, 158, 158, 0.18)'
-                      : 'rgba(158, 158, 158, 0.16)';
-                const hoverBgColor = isOutOfStock
-                  ? isDarkMode
-                    ? 'rgba(255, 51, 102, 0.26)'
-                    : 'rgba(255, 51, 102, 0.16)'
-                  : isGreenStat
-                    ? isDarkMode
-                      ? 'rgba(0, 224, 184, 0.20)'
-                      : 'rgba(0, 224, 184, 0.14)'
-                    : isDarkMode
-                      ? 'rgba(158, 158, 158, 0.24)'
-                      : 'rgba(158, 158, 158, 0.22)';
-
-                return (
-                  <Card
-                    sx={{
-                      backgroundColor: bgColor,
-                      flexGrow: 1,
-                      height: '100%',
-                      borderRadius: 3,
-                      border: `2px solid transparent`,
-                      boxShadow: isDarkMode ? '0 4px 14px rgba(0,0,0,0.25)' : '0 2px 12px rgba(0,0,0,0.08)',
-                      transition: 'all 0.2s ease',
-                      '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: isDarkMode ? '0 8px 24px rgba(0,0,0,0.35)' : '0 6px 20px rgba(0,0,0,0.12)',
-                        borderColor: valueColor,
-                        backgroundColor: hoverBgColor
-                      }
-                    }}
-                  >
-                    <CardContent
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 1.5,
-                        p: 2
-                      }}
-                    >
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                          '& .MuiSvgIcon-root': { marginBottom: 0 }
-                        }}
-                      >
-                        {card.icon}
-                      </Box>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'flex-end',
-                          minWidth: 0
-                        }}
-                      >
-                        <Typography variant="h5" sx={{ color: valueColor, fontWeight: 800, lineHeight: 1.1 }}>
-                          {card.value}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.25 }}>
-                          {card.label}
-                        </Typography>
-                        {card.sublabel && (
-                          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.15 }}>
-                            {card.sublabel}
-                          </Typography>
-                        )}
-                      </Box>
-                    </CardContent>
-                  </Card>
-                );
-              })()}
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
-
-          {/* View toggle (grid vs list) */}
-          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-            <ToggleButtonGroup
-              exclusive
-              value={inventoryView}
-              onChange={(_, v) => {
-                if (!v) return;
-                setInventoryView(v);
-              }}
-              size="small"
-            >
-              <ToggleButton value="grid" aria-label="Grid view">
-                <ViewModule sx={{ fontSize: 18 }} />
-              </ToggleButton>
-              <ToggleButton value="list" aria-label="List view">
-                <ViewList sx={{ fontSize: 18 }} />
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
-
       {/* Search and Filter Section */}
       <Paper sx={{ p: 2, mb: 4, backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}>
-          <FilterList sx={{ color: colors.accentText, mr: 1 }} />
-          <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, fontSize: '0.95rem' }}>
-            Search & Filter
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5, gap: 1.5, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <FilterList sx={{ color: colors.accentText, mr: 1 }} />
+            <Typography variant="subtitle1" sx={{ color: colors.accentText, fontWeight: 600, fontSize: '0.95rem' }}>
+              Search & Filter
+            </Typography>
+          </Box>
+          <ToggleButtonGroup
+            exclusive
+            value={inventoryView}
+            onChange={(_, v) => {
+              if (!v) return;
+              setInventoryView(v);
+            }}
+            size="small"
+          >
+            <ToggleButton value="grid" aria-label="Grid view">
+              <ViewModule sx={{ fontSize: 18 }} />
+            </ToggleButton>
+            <ToggleButton value="list" aria-label="List view">
+              <ViewList sx={{ fontSize: 18 }} />
+            </ToggleButton>
+          </ToggleButtonGroup>
         </Box>
         
         <Grid container spacing={2} alignItems="center">
@@ -1060,7 +1012,7 @@ const InventoryPage = () => {
         </Grid>
 
         {/* Filter Results Summary */}
-        {(searchTerm || selectedCategory || availabilityFilter !== 'all' || offerFilter !== 'all') && (
+        {!drinksLoading && (searchTerm || selectedCategory || availabilityFilter !== 'all' || offerFilter !== 'all') && (
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary">
               Showing {filteredDrinks.length} of {drinks.length} drinks

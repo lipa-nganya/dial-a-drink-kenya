@@ -1325,9 +1325,11 @@ router.get('/drinks', async (req, res) => {
   try {
     const qRaw = String(req.query.q || '').trim();
     const limitRaw = parseInt(req.query.limit, 10);
+    const offsetRaw = parseInt(req.query.offset, 10);
     const light = String(req.query.light || '') === '1';
     const hasQuery = qRaw.length > 0;
     const listLimit = Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, limitRaw)) : null;
+    const listOffset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : null;
 
     const allAttrs = await getAllDrinkAttributesFromDbSchema();
     const listAttrsBase = allAttrs.filter((a) => !ADMIN_DRINKS_LIST_OMIT.has(a));
@@ -1370,7 +1372,8 @@ router.get('/drinks', async (req, res) => {
       ...(where ? { where } : {}),
       ...(light ? {} : { include: adminDrinkListIncludes }),
       order: [['name', 'ASC']],
-      ...(listLimit ? { limit: listLimit } : {})
+      ...(listLimit ? { limit: listLimit } : {}),
+      ...(listOffset ? { offset: listOffset } : {})
     });
 
     res.json(drinks);
