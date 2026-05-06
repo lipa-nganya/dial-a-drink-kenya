@@ -223,7 +223,7 @@ const InventoryPage = () => {
   const fetchData = async () => {
     try {
       const [drinksResponse, categoriesResponse, brandsResponse] = await Promise.all([
-        api.get('/admin/drinks'),
+        api.get('/admin/drinks', { params: { light: 1 } }),
         api.get('/categories'),
         api.get('/brands/all')
       ]);
@@ -243,9 +243,27 @@ const InventoryPage = () => {
         }
       }
       
-      setDrinks(drinksResponse.data);
-      setCategories(categoriesResponse.data);
-      setBrands(brandsResponse.data || []);
+      const categoriesList = categoriesResponse.data || [];
+      const brandsList = brandsResponse.data || [];
+      const categoryById = new Map(categoriesList.map((c) => [Number(c.id), c]));
+      const brandById = new Map(brandsList.map((b) => [Number(b.id), b]));
+
+      // /admin/drinks?light=1 skips relation joins; hydrate minimal category/brand objects from lookup lists.
+      const drinksList = (drinksResponse.data || []).map((drink) => {
+        const categoryId = Number(drink.categoryId);
+        const brandId = Number(drink.brandId);
+        const category = categoryById.get(categoryId) || null;
+        const brand = brandById.get(brandId) || null;
+        return {
+          ...drink,
+          category: drink.category || category,
+          brand: drink.brand || brand
+        };
+      });
+
+      setDrinks(drinksList);
+      setCategories(categoriesList);
+      setBrands(brandsList);
       console.log('Brands fetched:', brandsResponse.data?.length || 0);
     } catch (error) {
       console.error('Error fetching data:', error);

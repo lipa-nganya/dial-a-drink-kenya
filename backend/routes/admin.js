@@ -1325,11 +1325,37 @@ router.get('/drinks', async (req, res) => {
   try {
     const qRaw = String(req.query.q || '').trim();
     const limitRaw = parseInt(req.query.limit, 10);
+    const light = String(req.query.light || '') === '1';
     const hasQuery = qRaw.length > 0;
     const listLimit = Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, limitRaw)) : null;
 
     const allAttrs = await getAllDrinkAttributesFromDbSchema();
-    const listAttrs = allAttrs.filter((a) => !ADMIN_DRINKS_LIST_OMIT.has(a));
+    const listAttrsBase = allAttrs.filter((a) => !ADMIN_DRINKS_LIST_OMIT.has(a));
+    const lightAttrSet = new Set([
+      'id',
+      'name',
+      'image',
+      'categoryId',
+      'subCategoryId',
+      'brandId',
+      'isAvailable',
+      'isPublished',
+      'isPopular',
+      'isBrandFocus',
+      'isOnOffer',
+      'limitedTimeOffer',
+      'price',
+      'originalPrice',
+      'purchasePrice',
+      'capacity',
+      'capacityPricing',
+      'stock',
+      'stockByCapacity',
+      'description'
+    ]);
+    const listAttrs = light
+      ? listAttrsBase.filter((a) => lightAttrSet.has(a))
+      : listAttrsBase;
 
     const where = hasQuery
       ? {
@@ -1342,7 +1368,7 @@ router.get('/drinks', async (req, res) => {
     const drinks = await db.Drink.findAll({
       attributes: listAttrs,
       ...(where ? { where } : {}),
-      include: adminDrinkListIncludes,
+      ...(light ? {} : { include: adminDrinkListIncludes }),
       order: [['name', 'ASC']],
       ...(listLimit ? { limit: listLimit } : {})
     });
