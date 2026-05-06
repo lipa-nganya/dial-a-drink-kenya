@@ -479,6 +479,33 @@ async function addStockByCapacityAndInventoryCheckCapacity() {
   }
 }
 
+async function addInventoryDeductedAtToOrders() {
+  try {
+    console.log('📦 Running migration: add-inventory-deducted-at-to-orders');
+    const queryInterface = db.sequelize.getQueryInterface();
+    const [rows] = await db.sequelize.query(`
+      SELECT column_name FROM information_schema.columns
+      WHERE table_name = 'orders' AND column_name = 'inventoryDeductedAt'
+    `);
+    if (rows.length > 0) {
+      console.log('   ⏭️  orders.inventoryDeductedAt already exists');
+      console.log('   ✅ Migration add-inventory-deducted-at-to-orders completed\n');
+      return true;
+    }
+    await queryInterface.addColumn('orders', 'inventoryDeductedAt', {
+      type: db.Sequelize.DATE,
+      allowNull: true,
+      comment: 'When inventory was decreased for this order (idempotent deduction; cleared if restored on cancel)'
+    });
+    console.log('   ✅ inventoryDeductedAt column added to orders table');
+    console.log('   ✅ Migration add-inventory-deducted-at-to-orders completed\n');
+    return true;
+  } catch (error) {
+    console.error('   ❌ Migration add-inventory-deducted-at-to-orders failed:', error.message);
+    throw error;
+  }
+}
+
 async function runMigrations() {
   try {
     console.log('🚀 Starting Cloud SQL migrations...\n');
@@ -524,7 +551,8 @@ async function runMigrations() {
       { name: 'add-purchase-price-to-drinks', fn: addPurchasePriceToDrinks },
       { name: 'add-nbv-to-drinks', fn: addNbvToDrinks },
       { name: 'add-seo-and-tags-to-drinks', fn: addSeoAndTagsToDrinks },
-      { name: 'add-stock-by-capacity-and-inventory-check-capacity', fn: addStockByCapacityAndInventoryCheckCapacity }
+      { name: 'add-stock-by-capacity-and-inventory-check-capacity', fn: addStockByCapacityAndInventoryCheckCapacity },
+      { name: 'add-inventory-deducted-at-to-orders', fn: addInventoryDeductedAtToOrders }
     ];
 
     let successCount = 0;

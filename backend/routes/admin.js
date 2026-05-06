@@ -3627,6 +3627,8 @@ router.patch('/orders/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    const previousStatus = order.status;
+
     // CRITICAL: If order is being marked as completed or delivered and payment is paid, sync pending transactions first
     // This ensures transactions are updated even if callback wasn't received
     if ((status === 'completed' || status === 'delivered') && order.paymentStatus === 'paid') {
@@ -3699,6 +3701,16 @@ router.patch('/orders/:id/status', async (req, res) => {
       } catch (driverStatusError) {
         console.error(`❌ Error updating driver status for cancelled Order #${order.id}:`, driverStatusError);
         // Don't fail the status update if driver status update fails
+      }
+    }
+
+    if (status === 'cancelled' && previousStatus !== 'cancelled') {
+      try {
+        const { increaseInventoryForOrder } = require('../utils/inventory');
+        await increaseInventoryForOrder(order.id);
+        console.log(`📦 Inventory restored for Order #${order.id} (admin status → cancelled)`);
+      } catch (invErr) {
+        console.error(`❌ Error restoring inventory for cancelled Order #${order.id}:`, invErr);
       }
     }
 

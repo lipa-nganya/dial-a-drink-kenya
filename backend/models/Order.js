@@ -193,6 +193,11 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,
       comment: 'Road distance in kilometers from origin to delivery address'
+    },
+    inventoryDeductedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'When inventory was decreased for this order (idempotent deduction; cleared if restored on cancel)'
     }
   }, {
     tableName: 'orders',
