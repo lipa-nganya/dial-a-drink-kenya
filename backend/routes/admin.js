@@ -1721,12 +1721,18 @@ router.put('/drinks/:id', async (req, res) => {
     try {
       if (drinkAttributes.includes('stockByCapacity')) {
         const { syncStockByCapacityFromCapacity } = require('../utils/syncStockByCapacityFromCapacity');
-        const sync = syncStockByCapacityFromCapacity({
-          capacity: updatePayload.capacity,
-          capacityPricing: updatePayload.capacityPricing,
-          stock: stockValue,
-          stockByCapacity: drink.stockByCapacity
-        });
+        const sync = syncStockByCapacityFromCapacity(
+          {
+            capacity: updatePayload.capacity,
+            capacityPricing: updatePayload.capacityPricing,
+            stock: stockValue,
+            stockByCapacity: drink.stockByCapacity
+          },
+          {
+            previousCapacity: drink.capacity,
+            previousCapacityPricing: drink.capacityPricing
+          }
+        );
         if (sync.changed) {
           updatePayload.stockByCapacity = sync.stockByCapacity;
           updatePayload.stock = sync.stock;

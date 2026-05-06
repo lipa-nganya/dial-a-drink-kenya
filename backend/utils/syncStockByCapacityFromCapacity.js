@@ -1,6 +1,14 @@
 /**
  * Ensures every capacity label (capacity column + capacityPricing rows, same as deriveCapacities)
- * has an entry in stockByCapacity. Missing buckets get the current aggregate `stock` value.
+ * has an entry in stockByCapacity.
+ *
+ * - If `stockByCapacity` **already has keys**, any capacity label without a matching bucket is treated as
+ *   **new stock tracking** → **0** (do not pour aggregate `stock` into it). This fixes adds when `capacity`
+ *   / `capacityPricing` on the row already listed the new tier or snapshot detection fails.
+ * - If `stockByCapacity` is **empty**, admin PUT passes `previousCapacity` / `previousCapacityPricing`:
+ *   tiers that existed before keep aggregate `stock`; tiers only added on this save start at **0**.
+ * - Bulk / create with no snapshot and empty buckets: missing labels use aggregate `stock` (legacy).
+ *
  * Aggregate `stock` is then set to the sum of all buckets (matches inventory usage elsewhere).
  */
 
@@ -57,9 +65,12 @@ const sumBuckets = (byCap) =>
 
 /**
  * @param {object} drinkLike - capacity, capacityPricing, stock, stockByCapacity
+ * @param {object} [options]
+ * @param {unknown} [options.previousCapacity] - `capacity` before save (admin PUT only)
+ * @param {unknown} [options.previousCapacityPricing] - `capacityPricing` before save (admin PUT only)
  * @returns {{ stockByCapacity: object, stock: number, changed: boolean }}
  */
-function syncStockByCapacityFromCapacity(drinkLike) {
+function syncStockByCapacityFromCapacity(drinkLike, options = {}) {
   const labels = deriveCapacityLabels(drinkLike.capacity, drinkLike.capacityPricing);
   const baseStock = Math.max(0, parseInt(drinkLike.stock, 10) || 0);
 
@@ -71,7 +82,29 @@ function syncStockByCapacityFromCapacity(drinkLike) {
     };
   }
 
-  const byCap = parseStockByCapacity(drinkLike.stockByCapacity);
+  const initialByCap = parseStockByCapacity(drinkLike.stockByCapacity);
+  const hadPerCapacityData = Object.keys(initialByCap).length > 0;
+
+  const usePreviousSnapshot =
+    options &&
+    (Object.prototype.hasOwnProperty.call(options, 'previousCapacity') ||
+      Object.prototype.hasOwnProperty.call(options, 'previousCapacityPricing'));
+
+  let previousNormalizedLabels = null;
+  if (usePreviousSnapshot) {
+    const pricingRows = Array.isArray(options.previousCapacityPricing)
+      ? options.previousCapacityPricing
+      : [];
+    // Prefer tiers from saved pricing rows — `capacity` JSON often duplicates pricing or lists tiers early.
+    const fromPricingOnly = deriveCapacityLabels([], pricingRows);
+    const prevLabels =
+      fromPricingOnly.length > 0
+        ? fromPricingOnly
+        : deriveCapacityLabels(options.previousCapacity, pricingRows);
+    previousNormalizedLabels = new Set(prevLabels.map((l) => normalizeCapacityKey(l)));
+  }
+
+  const byCap = { ...initialByCap };
 
   const findKeyForLabel = (label) => {
     if (Object.prototype.hasOwnProperty.call(byCap, label)) return label;
@@ -89,7 +122,16 @@ function syncStockByCapacityFromCapacity(drinkLike) {
     const hasQuantity = Number.isFinite(n) && !Number.isNaN(n);
 
     if (!hasQuantity) {
-      byCap[keyToUse] = baseStock;
+      let fillValue;
+      if (hadPerCapacityData) {
+        // Already tracking per-capacity quantities: unknown bucket = newly sold format / new tier → 0.
+        fillValue = 0;
+      } else if (previousNormalizedLabels) {
+        fillValue = previousNormalizedLabels.has(normalizeCapacityKey(label)) ? baseStock : 0;
+      } else {
+        fillValue = baseStock;
+      }
+      byCap[keyToUse] = fillValue;
       touched = true;
     }
   }
