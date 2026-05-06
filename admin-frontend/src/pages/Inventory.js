@@ -465,7 +465,10 @@ const InventoryPage = () => {
   };
   
   // Calculate pagination for filtered drinks
-  const totalPages = Math.ceil(filteredDrinks.length / itemsPerPage);
+  // Keep one extra page visible while backend still has more rows,
+  // so users can continue paging beyond the currently loaded subset.
+  const loadedPages = Math.ceil(filteredDrinks.length / itemsPerPage);
+  const totalPages = Math.max(1, loadedPages + (hasMoreDrinks ? 1 : 0));
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedDrinks = filteredDrinks.slice(startIndex, endIndex);
