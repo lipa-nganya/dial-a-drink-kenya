@@ -329,6 +329,18 @@ const InventoryPage = () => {
     }
   };
 
+  // Continue prefetching next chunks in the background after initial render.
+  // This keeps the first paint fast while ensuring the full alphabet eventually appears.
+  useEffect(() => {
+    if (loading || drinksLoading || !hasMoreDrinks) return undefined;
+    const nextTargetPage = Math.ceil((drinks.length + fetchChunkSize) / itemsPerPage);
+    const timer = setTimeout(() => {
+      loadMoreDrinksIfNeeded(nextTargetPage);
+    }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, drinksLoading, hasMoreDrinks, drinks.length]);
+
   // When returning from another tab (e.g. Add Purchase) or Copilot, refresh drinks so stock levels stay current.
   useEffect(() => {
     const onVisibilityChange = () => {

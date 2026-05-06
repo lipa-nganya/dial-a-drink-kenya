@@ -1373,7 +1373,7 @@ router.get('/drinks', async (req, res) => {
       ...(light ? {} : { include: adminDrinkListIncludes }),
       order: [['name', 'ASC']],
       ...(listLimit ? { limit: listLimit } : {}),
-      ...(listOffset ? { offset: listOffset } : {})
+      ...(listOffset !== null ? { offset: listOffset } : {})
     });
 
     res.json(drinks);
