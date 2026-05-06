@@ -64,26 +64,6 @@ const getCapacityOptions = (product) => {
 /** True when this product has at least one capacity variant — purchase must specify which. */
 const productRequiresCapacity = (product) => getCapacityOptions(product).length > 0;
 
-const getCapacityStockDisplay = (product) => {
-  if (!product) return 'Stock: N/A';
-  const raw = parseJsonIfString(product.stockByCapacity);
-  const byCapacity =
-    raw && typeof raw === 'object' && !Array.isArray(raw)
-      ? raw
-      : null;
-  if (!byCapacity) {
-    const fallbackStock = Number(product.stock);
-    return `Stock: ${Number.isFinite(fallbackStock) ? fallbackStock : 0}`;
-  }
-  const parts = Object.entries(byCapacity)
-    .map(([capacity, stock]) => {
-      const parsedStock = Number(stock);
-      return `${capacity}: ${Number.isFinite(parsedStock) ? parsedStock : 0}`;
-    })
-    .filter(Boolean);
-  return parts.length > 0 ? `Stock - ${parts.join(', ')}` : 'Stock: 0';
-};
-
 const getProductOptionRows = (product) => {
   if (!product) return [];
   const pricing = parseJsonIfString(product.capacityPricing);
