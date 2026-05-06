@@ -13,7 +13,8 @@
     "import-scraped-tags": "node scripts/sync-tags-via-browser-export.js",
     "sync-tags-from-tec": "node scripts/sync-tags-from-tec-products-tags.js",
     "sync-tags-from-production-admin": "node scripts/sync-all-tags-from-production-admin.js",
-    "collect-product-ids": "node scripts/collect-ids-by-opening-each-product.js"
+    "collect-product-ids": "node scripts/collect-ids-by-opening-each-product.js",
+    "sync-stock-by-capacity": "node scripts/sync-all-drinks-stock-by-capacity.js"
   },
   "keywords": [],
   "author": "",

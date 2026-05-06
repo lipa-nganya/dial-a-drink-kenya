@@ -1479,6 +1479,19 @@ router.post('/drinks', async (req, res) => {
 
     const newDrink = await db.Drink.create(safeCreatePayload);
 
+    if (createResponseAttributes.includes('stockByCapacity')) {
+      const { syncStockByCapacityFromCapacity } = require('../utils/syncStockByCapacityFromCapacity');
+      const sync = syncStockByCapacityFromCapacity({
+        capacity: newDrink.capacity,
+        capacityPricing: newDrink.capacityPricing,
+        stock: newDrink.stock,
+        stockByCapacity: newDrink.stockByCapacity
+      });
+      if (sync.changed) {
+        await newDrink.update({ stockByCapacity: sync.stockByCapacity, stock: sync.stock });
+      }
+    }
+
     const drinkWithRelations = await db.Drink.findByPk(newDrink.id, {
       attributes: createResponseAttributes,
       include: [
@@ -1706,6 +1719,19 @@ router.put('/drinks/:id', async (req, res) => {
     }
 
     try {
+      if (drinkAttributes.includes('stockByCapacity')) {
+        const { syncStockByCapacityFromCapacity } = require('../utils/syncStockByCapacityFromCapacity');
+        const sync = syncStockByCapacityFromCapacity({
+          capacity: updatePayload.capacity,
+          capacityPricing: updatePayload.capacityPricing,
+          stock: stockValue,
+          stockByCapacity: drink.stockByCapacity
+        });
+        if (sync.changed) {
+          updatePayload.stockByCapacity = sync.stockByCapacity;
+          updatePayload.stock = sync.stock;
+        }
+      }
       await drink.update(updatePayload);
     } catch (updateErr) {
       const msg = (updateErr && updateErr.message) ? updateErr.message : '';
