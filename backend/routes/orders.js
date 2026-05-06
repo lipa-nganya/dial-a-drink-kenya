@@ -834,18 +834,15 @@ router.post('/', async (req, res) => {
       console.error('Error sending notifications:', error);
     }
     
-    // Decrease inventory stock for completed orders
-    // For walk-in orders, inventory is reduced immediately when order is placed (regardless of payment status)
-    // For delivery orders, inventory is only reduced if payment is completed
-    if (completeOrder.status === 'completed') {
-      try {
-        const { decreaseInventoryForOrder } = require('../utils/inventory');
-        await decreaseInventoryForOrder(completeOrder.id);
-        console.log(`📦 Inventory decreased for Order #${completeOrder.id} (order creation)`);
-      } catch (inventoryError) {
-        console.error(`❌ Error decreasing inventory for Order #${completeOrder.id}:`, inventoryError);
-        // Don't fail the order creation if inventory update fails
-      }
+    // Commit inventory (stock / stockByCapacity) when eligible — see utils/inventory decreaseInventoryForOrder
+    // (admin-posted orders deduct when the sale is recorded; customer delivery waits until completed+paid).
+    try {
+      const { decreaseInventoryForOrder } = require('../utils/inventory');
+      await decreaseInventoryForOrder(completeOrder.id);
+      console.log(`📦 Inventory processed for Order #${completeOrder.id} (order creation)`);
+    } catch (inventoryError) {
+      console.error(`❌ Error decreasing inventory for Order #${completeOrder.id}:`, inventoryError);
+      // Don't fail the order creation if inventory update fails
     }
     
     return res.status(201).json(completeOrder);
@@ -1188,6 +1185,8 @@ router.patch('/:id/status', async (req, res) => {
       return res.status(404).json({ error: 'Order not found' });
     }
 
+    const previousStatus = order.status;
+
     let trimmedReason = null;
     if (status === 'cancelled') {
       trimmedReason = typeof reason === 'string' ? reason.trim() : '';
@@ -1208,6 +1207,16 @@ router.patch('/:id/status', async (req, res) => {
 
     if (trimmedReason) {
       order.setDataValue('cancellationReason', trimmedReason);
+    }
+
+    if (status === 'cancelled' && previousStatus !== 'cancelled') {
+      try {
+        const { increaseInventoryForOrder } = require('../utils/inventory');
+        await increaseInventoryForOrder(order.id);
+        console.log(`📦 Inventory restored for Order #${order.id} (public status → cancelled)`);
+      } catch (invErr) {
+        console.error(`❌ Error restoring inventory for Order #${order.id}:`, invErr);
+      }
     }
     
     res.json(order);

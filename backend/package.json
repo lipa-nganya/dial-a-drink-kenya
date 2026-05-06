@@ -7,13 +7,14 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "build": "echo 'No build step required for Node.js'",
-    "test": "node --test test/slugCanonical.test.js",
+    "test": "node --test test/*.test.js",
     "postinstall": "echo 'Backend dependencies installed successfully'",
     "scrape-tags": "node scripts/scrape-tags-from-dialadrinkkenya.js",
     "import-scraped-tags": "node scripts/sync-tags-via-browser-export.js",
     "sync-tags-from-tec": "node scripts/sync-tags-from-tec-products-tags.js",
     "sync-tags-from-production-admin": "node scripts/sync-all-tags-from-production-admin.js",
-    "collect-product-ids": "node scripts/collect-ids-by-opening-each-product.js"
+    "collect-product-ids": "node scripts/collect-ids-by-opening-each-product.js",
+    "sync-stock-by-capacity": "node scripts/sync-all-drinks-stock-by-capacity.js"
   },
   "keywords": [],
   "author": "",

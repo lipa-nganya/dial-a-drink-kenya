@@ -111,15 +111,14 @@ router.post('/:orderId/respond', async (req, res) => {
       // IMPORTANT: Explicitly preserve driverId to ensure it persists after acceptance
       const newStatus = order.status === 'pending' ? 'confirmed' : order.status;
       
-      // If order was cancelled and is now being accepted, restore stock
+      // If a cancelled order is re-accepted, commit inventory again (stock was restored on cancel).
       if (oldStatus === 'cancelled' && accepted === true) {
         try {
-          const { increaseInventoryForOrder } = require('../utils/inventory');
-          await increaseInventoryForOrder(order.id);
-          console.log(`📦 Stock restored for Order #${order.id} (cancelled order accepted)`);
+          const { decreaseInventoryForOrder } = require('../utils/inventory');
+          await decreaseInventoryForOrder(order.id);
+          console.log(`📦 Inventory re-committed for Order #${order.id} (cancelled order accepted)`);
         } catch (inventoryError) {
-          console.error(`❌ Error restoring stock for Order #${order.id}:`, inventoryError);
-          // Don't fail the acceptance if stock restoration fails
+          console.error(`❌ Error committing inventory for Order #${order.id}:`, inventoryError);
         }
       }
       
@@ -367,6 +366,14 @@ router.post('/:orderId/request-cancellation', async (req, res) => {
     await order.save();
 
     console.log(`📋 Order #${order.id} cancellation requested by driver ${driverId}`);
+
+    try {
+      const { increaseInventoryForOrder } = require('../utils/inventory');
+      await increaseInventoryForOrder(order.id);
+      console.log(`📦 Inventory restored for Order #${order.id} (driver cancellation → cancelled)`);
+    } catch (invErr) {
+      console.error(`❌ Error restoring inventory for Order #${order.id}:`, invErr);
+    }
 
     // Reload order for response with full details
     const updatedOrder = await db.Order.findByPk(order.id, {

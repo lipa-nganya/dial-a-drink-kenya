@@ -120,32 +120,42 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
       throw new Error(`Order #${orderId} not found`);
     }
 
+    if (order.inventoryDeductedAt) {
+      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - already deducted at ${order.inventoryDeductedAt}`);
+      return {
+        skipped: true,
+        reason: 'already_deducted',
+        orderId
+      };
+    }
+
     // Check if this is a walk-in order (POS order)
     const isWalkInOrder = order.deliveryAddress === 'In-Store Purchase' || order.customerPhone === 'POS';
 
-    // For walk-in orders, reduce inventory immediately when order is placed (regardless of payment status)
-    // For delivery orders, only reduce inventory if order is completed and paid
-    if (order.status !== 'completed') {
-      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - status: ${order.status}`);
-      return {
-        skipped: true,
-        reason: 'order_not_completed',
-        orderId
-      };
+    /**
+     * When to commit stock / stockByCapacity:
+     * - Admin-posted orders (POS / admin web): as soon as the sale is recorded (any non-cancelled status).
+     * - Walk-in: in_progress or completed (goods leave the shop).
+     * - Customer delivery (non-admin): completed AND paid (inventory commits on delivery completion + payment).
+     */
+    let shouldDecrease = false;
+    if (order.adminOrder === true) {
+      shouldDecrease = order.status !== 'cancelled';
+    } else if (isWalkInOrder && ['in_progress', 'completed'].includes(order.status)) {
+      shouldDecrease = true;
+    } else if (!isWalkInOrder && order.status === 'completed' && order.paymentStatus === 'paid') {
+      shouldDecrease = true;
     }
 
-    if (!isWalkInOrder && order.paymentStatus !== 'paid') {
-      console.log(`ℹ️  Skipping inventory decrease for Order #${orderId} - delivery order not paid (paymentStatus: ${order.paymentStatus})`);
+    if (!shouldDecrease) {
+      console.log(
+        `ℹ️  Skipping inventory decrease for Order #${orderId} — adminOrder=${order.adminOrder}, walkIn=${isWalkInOrder}, status=${order.status}, paymentStatus=${order.paymentStatus}`
+      );
       return {
         skipped: true,
-        reason: 'delivery_order_not_paid',
+        reason: 'not_eligible_for_decrease',
         orderId
       };
-    }
-
-    // For walk-in orders, reduce inventory even if payment is pending (items are physically taken)
-    if (isWalkInOrder && order.paymentStatus !== 'paid') {
-      console.log(`📦 Reducing inventory for walk-in Order #${orderId} (paymentStatus: ${order.paymentStatus} - items physically taken)`);
     }
 
     const results = [];
@@ -305,6 +315,14 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
       }
     }
 
+    if (errors.length === 0 && results.length > 0) {
+      await db.Order.update(
+        { inventoryDeductedAt: new Date() },
+        { where: { id: orderId }, transaction }
+      );
+      console.log(`✅ Marked Order #${orderId} inventoryDeductedAt (stock committed)`);
+    }
+
     return {
       orderId,
       success: errors.length === 0,
@@ -338,6 +356,15 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
 
     if (!order) {
       throw new Error(`Order #${orderId} not found`);
+    }
+
+    if (!order.inventoryDeductedAt) {
+      console.log(`ℹ️  Skipping inventory restore for Order #${orderId} — inventory was never deducted for this order`);
+      return {
+        skipped: true,
+        reason: 'inventory_not_deducted',
+        orderId
+      };
     }
 
     const results = [];
@@ -403,7 +430,10 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
             isAvailable: newStock > 0
           }, { transaction });
         } else {
-          newStock = currentStock + quantity;
+          const matchedCapacity = resolveCapacityForOrderItem(drink, item);
+          const multiplier = capacityUnitMultiplier(matchedCapacity);
+          const unitsToRestore = quantity * multiplier;
+          newStock = currentStock + unitsToRestore;
           await drink.update({
             stock: newStock,
             isAvailable: newStock > 0
@@ -422,7 +452,7 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
           newStock: newStock
         });
 
-        console.log(`📈 Increased inventory for Drink #${item.drinkId} (${drink.name}): ${oldStock} → ${newStock} (restored ${quantity})`);
+        console.log(`📈 Increased inventory for Drink #${item.drinkId} (${drink.name}): ${oldStock} → ${newStock}`);
       } catch (itemError) {
         console.error(`❌ Error increasing inventory for Drink #${item.drinkId} in Order #${orderId}:`, itemError);
         errors.push({
@@ -430,6 +460,14 @@ const increaseInventoryForOrder = async (orderId, transaction = null) => {
           error: itemError.message
         });
       }
+    }
+
+    if (errors.length === 0 && results.length > 0) {
+      await db.Order.update(
+        { inventoryDeductedAt: null },
+        { where: { id: orderId }, transaction }
+      );
+      console.log(`✅ Cleared inventoryDeductedAt for Order #${orderId} after stock restore`);
     }
 
     return {
