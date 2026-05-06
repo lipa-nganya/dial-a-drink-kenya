@@ -32,6 +32,8 @@ const formatCurrency = (value) => {
   return `KES ${Math.round(n).toLocaleString()}`;
 };
 
+const MAX_DROPDOWN_OPTIONS = 100;
+
 const parseJsonIfString = (value) => {
   if (typeof value !== 'string') return value;
   const trimmed = value.trim();
@@ -62,24 +64,52 @@ const getCapacityOptions = (product) => {
 /** True when this product has at least one capacity variant — purchase must specify which. */
 const productRequiresCapacity = (product) => getCapacityOptions(product).length > 0;
 
-const getCapacityStockDisplay = (product) => {
-  if (!product) return 'Stock: N/A';
-  const raw = parseJsonIfString(product.stockByCapacity);
+const getProductOptionRows = (product) => {
+  if (!product) return [];
+  const pricing = parseJsonIfString(product.capacityPricing);
+  const byCapacityRaw = parseJsonIfString(product.stockByCapacity);
   const byCapacity =
-    raw && typeof raw === 'object' && !Array.isArray(raw)
-      ? raw
-      : null;
-  if (!byCapacity) {
-    const fallbackStock = Number(product.stock);
-    return `Stock: ${Number.isFinite(fallbackStock) ? fallbackStock : 0}`;
+    byCapacityRaw && typeof byCapacityRaw === 'object' && !Array.isArray(byCapacityRaw)
+      ? byCapacityRaw
+      : {};
+
+  if (Array.isArray(pricing) && pricing.length > 0) {
+    return pricing
+      .map((p) => {
+        if (!p || typeof p !== 'object') return null;
+        const capacity = String(p.capacity || p.size || p.effectiveCapacity || '').trim();
+        if (!capacity) return null;
+        const current = p.currentPrice != null ? parseFloat(p.currentPrice) : null;
+        const original = p.originalPrice != null ? parseFloat(p.originalPrice) : null;
+        const legacy = p.price != null ? parseFloat(p.price) : null;
+        const price =
+          current != null && !Number.isNaN(current) && current > 0
+            ? current
+            : original != null && !Number.isNaN(original) && original > 0
+            ? original
+            : legacy != null && !Number.isNaN(legacy) && legacy > 0
+            ? legacy
+            : parseFloat(product.price || 0) || 0;
+
+        const directStock = byCapacity[capacity];
+        const normalizedStock = Object.entries(byCapacity).find(
+          ([key]) => String(key || '').trim().toLowerCase() === capacity.toLowerCase()
+        )?.[1];
+        const stock = Number(directStock ?? normalizedStock ?? 0) || 0;
+        return { capacity, price, stock };
+      })
+      .filter(Boolean);
   }
-  const parts = Object.entries(byCapacity)
-    .map(([capacity, stock]) => {
-      const parsedStock = Number(stock);
-      return `${capacity}: ${Number.isFinite(parsedStock) ? parsedStock : 0}`;
-    })
-    .filter(Boolean);
-  return parts.length > 0 ? `Stock - ${parts.join(', ')}` : 'Stock: 0';
+
+  if (Object.keys(byCapacity).length > 0) {
+    return Object.entries(byCapacity).map(([capacity, stock]) => ({
+      capacity,
+      price: parseFloat(product.price || 0) || 0,
+      stock: Number(stock) || 0
+    }));
+  }
+
+  return [];
 };
 
 const AddPurchase = () => {
@@ -90,6 +120,7 @@ const AddPurchase = () => {
   const [accounts, setAccounts] = useState([]);
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [productsLoading, setProductsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -113,17 +144,15 @@ const AddPurchase = () => {
       try {
         setLoading(true);
         setError(null);
-        const [supRes, accRes, prodRes] = await Promise.all([
+        const [supRes, accRes] = await Promise.all([
           api.get('/suppliers'),
-          api.get('/admin/accounts'),
-          api.get('/admin/drinks')
+          api.get('/admin/accounts')
         ]);
 
         if (!isMounted) return;
 
         setSuppliers(Array.isArray(supRes.data) ? supRes.data : []);
         setAccounts(Array.isArray(accRes.data) ? accRes.data : []);
-        setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
       } catch (err) {
         if (!isMounted) return;
         console.error('Error loading purchase form data', err);
@@ -137,6 +166,21 @@ const AddPurchase = () => {
       isMounted = false;
     };
   }, []);
+
+  const ensureProductsLoaded = async () => {
+    if (productsLoading) return;
+    if (Array.isArray(products) && products.length > 0) return;
+    setProductsLoading(true);
+    try {
+      const prodRes = await api.get('/admin/drinks');
+      setProducts(Array.isArray(prodRes.data) ? prodRes.data : []);
+    } catch (err) {
+      console.error('Error loading products for purchase', err);
+      setError((prev) => prev || err.response?.data?.error || err.message || 'Failed to load products.');
+    } finally {
+      setProductsLoading(false);
+    }
+  };
 
   const productsById = useMemo(() => {
     const map = new Map();
@@ -337,40 +381,48 @@ const AddPurchase = () => {
 
       <Paper sx={{ p: 2, mb: 3, backgroundColor: colors.paper }}>
         <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth sx={{ minWidth: 260 }}>
-              <InputLabel>Supplier</InputLabel>
-              <Select
-                label="Supplier"
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-              >
-                {suppliers.map((s) => (
-                  <MenuItem key={s.id} value={s.id}>
-                    {s.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          <Grid item xs={12} sm={6} md={3}>
+            <Autocomplete
+              options={suppliers}
+              getOptionLabel={(option) => option?.name || ''}
+              isOptionEqualToValue={(option, value) => option?.id === value?.id}
+              value={suppliers.find((s) => String(s.id) === String(supplierId)) || null}
+              onChange={(_, value) => setSupplierId(value ? value.id : '')}
+              sx={{ minWidth: 240 }}
+              ListboxProps={{ style: { maxHeight: 320 } }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Supplier"
+                  placeholder="Type to search supplier…"
+                  size="small"
+                  fullWidth
+                />
+              )}
+            />
           </Grid>
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth sx={{ minWidth: 260 }}>
-              <InputLabel>Account</InputLabel>
-              <Select
-                label="Account"
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-              >
-                {accounts.map((a) => (
-                  <MenuItem key={a.id} value={a.id}>
-                    {a.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+          <Grid item xs={12} sm={6} md={3}>
+            <Autocomplete
+              options={accounts}
+              getOptionLabel={(option) => option?.name || ''}
+              isOptionEqualToValue={(option, value) => option?.id === value?.id}
+              value={accounts.find((a) => String(a.id) === String(accountId)) || null}
+              onChange={(_, value) => setAccountId(value ? value.id : '')}
+              sx={{ minWidth: 240 }}
+              ListboxProps={{ style: { maxHeight: 320 } }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Account"
+                  placeholder="Type to search account…"
+                  size="small"
+                  fullWidth
+                />
+              )}
+            />
           </Grid>
-          <Grid item xs={12} md={6}>
-            <FormControl fullWidth sx={{ minWidth: 200 }}>
+          <Grid item xs={12} sm={6} md={3}>
+            <FormControl fullWidth size="small" sx={{ minWidth: 200 }}>
               <InputLabel>Payment Method</InputLabel>
               <Select
                 label="Payment Method"
@@ -384,12 +436,13 @@ const AddPurchase = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} sm={6} md={3}>
             <TextField
               label="Reference"
               fullWidth
               value={reference}
               onChange={(e) => setReference(e.target.value)}
+              size="small"
             />
           </Grid>
         </Grid>
@@ -401,13 +454,16 @@ const AddPurchase = () => {
         </Typography>
 
         <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={12} md={5}>
+          <Grid item xs={12} md={4}>
             <Autocomplete
               options={products}
               getOptionLabel={(option) => option?.name || ''}
               isOptionEqualToValue={(option, value) => option?.id === value?.id}
               value={productsById.get(newItem.productId) || null}
               inputValue={productSearch}
+              onOpen={() => {
+                ensureProductsLoaded();
+              }}
               onInputChange={(_, newInputValue) => {
                 setProductSearch(newInputValue);
                 if (!newInputValue) {
@@ -416,28 +472,60 @@ const AddPurchase = () => {
               }}
               onChange={(_, value) => handleNewItemProductChange(value ? value.id : '')}
               filterOptions={(options, { inputValue }) => {
-                if (!inputValue || inputValue.trim().length === 0) {
-                  return options;
-                }
-                const searchTerm = inputValue.toLowerCase().trim();
-                return options.filter((option) => {
-                  if (!option || !option.name) return false;
-                  return option.name.toLowerCase().includes(searchTerm);
+                const source = Array.isArray(options) ? options : [];
+                const term = String(inputValue || '').toLowerCase().trim();
+                if (!term) return source.slice(0, MAX_DROPDOWN_OPTIONS);
+                const tokens = term.split(/[\s\-_]+/).filter(Boolean);
+                const filtered = source.filter((option) => {
+                  const name = String(option?.name || '').toLowerCase();
+                  if (!name) return false;
+                  if (tokens.length > 1) return tokens.some((t) => name.includes(t));
+                  return name.includes(term);
                 });
+                return filtered.slice(0, MAX_DROPDOWN_OPTIONS);
               }}
+              noOptionsText={productsLoading ? 'Loading products...' : 'No products found'}
+              forcePopupIcon={false}
+              openOnFocus={false}
+              open={String(productSearch || '').trim().length >= 2}
+              ListboxProps={{ style: { maxHeight: '300px' } }}
               renderOption={(props, option) => {
                 const { key, ...restProps } = props;
+                const rows = getProductOptionRows(option);
+                const totalStock = Number(option?.stock || 0);
+                const rowSum = rows.reduce((sum, row) => sum + (Number(row.stock) || 0), 0);
+                const headerStock = rows.length > 0 ? rowSum : totalStock;
+                const stockColor = headerStock > 0 ? '#2196F3' : '#F44336';
                 return (
                   <li key={option.id} {...restProps}>
-                    <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        {option.name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        KES {Math.round(parseFloat(option.purchasePrice || option.price || 0))}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        {getCapacityStockDisplay(option)}
+                    <Box
+                      sx={{
+                        width: '100%',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start'
+                      }}
+                    >
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                          {option.name}
+                        </Typography>
+                        {rows.length > 0 ? (
+                          <Box sx={{ mt: 0.5 }}>
+                            {rows.map((row, idx) => (
+                              <Typography key={`${row.capacity}-${idx}`} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                {row.capacity} - KES {Math.round(row.price)} (Stock: {row.stock})
+                              </Typography>
+                            ))}
+                          </Box>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            KES {Math.round(parseFloat(option.price || 0))} (Stock: {totalStock})
+                          </Typography>
+                        )}
+                      </Box>
+                      <Typography variant="caption" sx={{ color: stockColor, fontWeight: 600, ml: 2 }}>
+                        Stock: {headerStock}
                       </Typography>
                     </Box>
                   </li>
@@ -446,9 +534,22 @@ const AddPurchase = () => {
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  placeholder="Search product..."
+                  label="Product"
+                  placeholder="Type product name..."
                   size="small"
                   fullWidth
+                  onFocus={() => {
+                    ensureProductsLoaded();
+                  }}
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {productsLoading ? <CircularProgress color="inherit" size={18} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    )
+                  }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
@@ -489,15 +590,18 @@ const AddPurchase = () => {
             />
           </Grid>
           {getCapacityOptions(productsById.get(newItem.productId)).length > 0 && (
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={2}>
               <FormControl fullWidth size="small" required>
-                <InputLabel id="purchase-capacity-label">Capacity *</InputLabel>
+                <InputLabel id="purchase-capacity-label" shrink>
+                  Capacity *
+                </InputLabel>
                 <Select
                   labelId="purchase-capacity-label"
                   label="Capacity *"
                   value={newItem.capacity || ''}
                   onChange={(e) => setNewItem((prev) => ({ ...prev, capacity: e.target.value }))}
                   displayEmpty
+                  notched
                   renderValue={(value) => (value ? value : 'Select capacity')}
                   sx={{
                     backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
@@ -528,7 +632,7 @@ const AddPurchase = () => {
               </FormControl>
             </Grid>
           )}
-          <Grid item xs={12} md={3}>
+          <Grid item xs={12} md={2}>
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <IconButton
                 size="small"
@@ -572,7 +676,7 @@ const AddPurchase = () => {
               </IconButton>
             </Box>
           </Grid>
-          <Grid item xs={6} md={2}>
+          <Grid item xs={12} md={2}>
             <TextField
               label="Purchase price (per unit)"
               type="number"
@@ -581,6 +685,7 @@ const AddPurchase = () => {
               onChange={(e) => setNewItem((prev) => ({ ...prev, unitPrice: e.target.value }))}
               inputProps={{ min: 0, step: '0.01' }}
               helperText="Updates product cost in inventory"
+              size="small"
             />
           </Grid>
           <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center' }}>
@@ -588,11 +693,13 @@ const AddPurchase = () => {
               variant="contained"
               startIcon={<Add />}
               onClick={handleAddItem}
+              fullWidth
               sx={{
                 backgroundColor: colors.accentText,
                 color: '#FFFFFF',
                 whiteSpace: 'nowrap',
-                px: 2
+                px: 2,
+                height: 40
               }}
             >
               Add Item

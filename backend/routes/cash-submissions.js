@@ -116,6 +116,8 @@ async function applyPurchaseInventoryAndAccountSideEffects({
 
     console.log(`   Purchase inventory update: processing ${itemsArray.length} item(s) from submission #${submission.id}`);
 
+    const nextItemsArray = [];
+
     for (const item of itemsArray) {
       const unitPrice = Number(item.price ?? item.purchasePrice ?? 0);
       const productId = item.productId != null ? parseInt(item.productId, 10) : NaN;
@@ -133,6 +135,8 @@ async function applyPurchaseInventoryAndAccountSideEffects({
           console.warn(`   ⚠️ Drink not found for productId ${productId} ("${itemName}")`);
           continue;
         }
+
+        const nextItem = { ...(item && typeof item === 'object' ? item : {}) };
 
         // 1) Update purchase price when we have a positive unit price
         if (unitPrice > 0) {
@@ -182,16 +186,38 @@ async function applyPurchaseInventoryAndAccountSideEffects({
             console.log(
               `   Updated per-capacity stock for Drink #${drink.id} capacity "${mergedKey}": ${prevVal} → ${byCap[mergedKey]} (total: ${totalStock})`
             );
+
+            nextItem.prePurchaseCount = prevVal;
+            nextItem.postPurchaseCount = parseInt(byCap[mergedKey], 10) || 0;
           } else {
             const currentStock = parseFloat(drink.stock || 0);
             const newStock = currentStock + qty;
             await drink.update({ stock: newStock, isAvailable: newStock > 0 });
             console.log(`   Updated stock for Drink #${drink.id}: ${currentStock} → ${newStock}`);
+
+            nextItem.prePurchaseCount = Number.isFinite(currentStock) ? currentStock : 0;
+            nextItem.postPurchaseCount = Number.isFinite(newStock) ? newStock : (Number.isFinite(currentStock) ? currentStock : 0);
           }
         }
+
+        nextItemsArray.push(nextItem);
       } catch (invErr) {
         console.error(`   Failed to update inventory for product ${productId} ("${itemName}") from purchase submission #${submission.id}:`, invErr.message);
       }
+    }
+
+    // Persist pre/post counts for history views (best-effort; don't fail purchase on write error).
+    try {
+      if (Array.isArray(detailsForUpdates.items) && detailsForUpdates.items.length > 0 && nextItemsArray.length > 0) {
+        await submission.update({
+          details: {
+            ...(detailsForUpdates || {}),
+            items: nextItemsArray
+          }
+        });
+      }
+    } catch (detailsErr) {
+      console.error(`   Failed to persist pre/post counts on purchase submission #${submission.id}:`, detailsErr.message);
     }
   }
 }
@@ -228,6 +254,73 @@ router.get('/admin/purchases', async (req, res) => {
   } catch (error) {
     console.error('❌ Error fetching purchases:', error);
     return sendError(res, error.message || 'Failed to fetch purchases', 500);
+  }
+});
+
+/**
+ * Flattened purchase-item history list
+ * GET /api/driver-wallet/admin/purchase-history?limit=&offset=
+ */
+router.get('/admin/purchase-history', async (req, res) => {
+  try {
+    const limit = Math.min(5000, Math.max(0, parseInt(req.query.limit, 10) || 1000));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const purchases = await db.CashSubmission.findAll({
+      where: { submissionType: 'purchases' },
+      include: [
+        { model: db.Admin, as: 'admin', attributes: ['id', 'username', 'name'], required: false }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
+    });
+
+    const rows = [];
+    for (const p of purchases) {
+      const plain = p.toJSON ? p.toJSON() : p;
+      const details = plain.details || {};
+      const supplierName = details.supplier || '';
+      const doneBy = plain?.admin?.username || plain?.admin?.name || '—';
+      const items =
+        Array.isArray(details.items) && details.items.length > 0
+          ? details.items
+          : (details.item
+              ? [{
+                  item: details.item,
+                  name: details.item,
+                  quantity: details.quantity ?? 1,
+                  capacity: details.capacity ?? null,
+                  prePurchaseCount: details.prePurchaseCount ?? null,
+                  postPurchaseCount: details.postPurchaseCount ?? null
+                }]
+              : []);
+
+      for (const item of items) {
+        if (!item) continue;
+        const quantityParsed = Number(item.quantity);
+        const quantity =
+          Number.isFinite(quantityParsed) && quantityParsed > 0
+            ? quantityParsed
+            : 1;
+        rows.push({
+          purchaseNumber: plain.id,
+          productName: item.item || item.name || '',
+          capacity: item.capacity || null,
+          quantity,
+          prePurchaseCount: item.prePurchaseCount ?? null,
+          postPurchaseCount: item.postPurchaseCount ?? null,
+          purchaseDate: plain.createdAt || null,
+          supplierName,
+          doneBy
+        });
+      }
+    }
+
+    return sendSuccess(res, { rows, total: rows.length });
+  } catch (error) {
+    console.error('❌ Error fetching purchase history:', error);
+    return sendError(res, error.message || 'Failed to fetch purchase history', 500);
   }
 });
 

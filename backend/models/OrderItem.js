@@ -33,6 +33,14 @@ module.exports = (sequelize, DataTypes) => {
     selectedCapacity: {
       type: DataTypes.STRING,
       allowNull: true
+    },
+    preSaleCount: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    postSaleCount: {
+      type: DataTypes.INTEGER,
+      allowNull: true
     }
   }, {
     tableName: 'order_items',

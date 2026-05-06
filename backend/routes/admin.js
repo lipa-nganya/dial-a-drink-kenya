@@ -941,6 +941,63 @@ router.use(verifyAdmin);
 router.use(enforceAdminAccessPaywall);
 
 /**
+ * Sales history (flattened order items with pre/post counts)
+ * GET /api/admin/sales-history?limit=&offset=
+ */
+router.get('/sales-history', async (req, res) => {
+  try {
+    const limit = Math.min(5000, Math.max(0, parseInt(req.query.limit, 10) || 1000));
+    const offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+
+    const orders = await db.Order.findAll({
+      where: {
+        inventoryDeductedAt: { [Op.ne]: null },
+        status: { [Op.ne]: 'cancelled' }
+      },
+      attributes: ['id', 'createdAt', 'adminOrder', 'deliveryAddress', 'customerPhone', 'status'],
+      include: [
+        {
+          model: db.OrderItem,
+          as: 'items',
+          attributes: ['id', 'drinkId', 'quantity', 'selectedCapacity', 'preSaleCount', 'postSaleCount'],
+          include: [{ model: db.Drink, as: 'drink', attributes: ['id', 'name'], required: false }],
+          required: true
+        }
+      ],
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
+    });
+
+    const rows = [];
+    for (const o of orders) {
+      const order = o.toJSON ? o.toJSON() : o;
+      const isWalkInOrder =
+        order.deliveryAddress === 'In-Store Purchase' || order.customerPhone === 'POS';
+      const source = order.adminOrder ? (isWalkInOrder ? 'POS' : 'Admin') : 'Customer';
+
+      for (const item of order.items || []) {
+        rows.push({
+          orderDate: order.createdAt || null,
+          orderNumber: order.id,
+          source,
+          productName: item?.drink?.name || `#${item.drinkId}`,
+          capacity: item?.selectedCapacity || null,
+          quantity: item?.quantity ?? null,
+          preSaleCount: item?.preSaleCount ?? null,
+          postSaleCount: item?.postSaleCount ?? null
+        });
+      }
+    }
+
+    return res.json({ success: true, rows, total: rows.length });
+  } catch (error) {
+    console.error('Error fetching sales history:', error);
+    return res.status(500).json({ error: 'Failed to fetch sales history' });
+  }
+});
+
+/**
  * Super-super admin only: enable/disable admin web + admin mobile access for non–super_super_admin users.
  * PUT /api/admin/settings/admin-access-paywall
  * body: { enabled: true | false }
@@ -1268,11 +1325,37 @@ router.get('/drinks', async (req, res) => {
   try {
     const qRaw = String(req.query.q || '').trim();
     const limitRaw = parseInt(req.query.limit, 10);
+    const light = String(req.query.light || '') === '1';
     const hasQuery = qRaw.length > 0;
     const listLimit = Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, limitRaw)) : null;
 
     const allAttrs = await getAllDrinkAttributesFromDbSchema();
-    const listAttrs = allAttrs.filter((a) => !ADMIN_DRINKS_LIST_OMIT.has(a));
+    const listAttrsBase = allAttrs.filter((a) => !ADMIN_DRINKS_LIST_OMIT.has(a));
+    const lightAttrSet = new Set([
+      'id',
+      'name',
+      'image',
+      'categoryId',
+      'subCategoryId',
+      'brandId',
+      'isAvailable',
+      'isPublished',
+      'isPopular',
+      'isBrandFocus',
+      'isOnOffer',
+      'limitedTimeOffer',
+      'price',
+      'originalPrice',
+      'purchasePrice',
+      'capacity',
+      'capacityPricing',
+      'stock',
+      'stockByCapacity',
+      'description'
+    ]);
+    const listAttrs = light
+      ? listAttrsBase.filter((a) => lightAttrSet.has(a))
+      : listAttrsBase;
 
     const where = hasQuery
       ? {
@@ -1285,7 +1368,7 @@ router.get('/drinks', async (req, res) => {
     const drinks = await db.Drink.findAll({
       attributes: listAttrs,
       ...(where ? { where } : {}),
-      include: adminDrinkListIncludes,
+      ...(light ? {} : { include: adminDrinkListIncludes }),
       order: [['name', 'ASC']],
       ...(listLimit ? { limit: listLimit } : {})
     });

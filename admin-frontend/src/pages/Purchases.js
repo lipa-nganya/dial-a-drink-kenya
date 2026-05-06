@@ -55,11 +55,23 @@ const Purchases = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isDarkMode, colors } = useTheme();
-  const [currentTab, setCurrentTab] = useState(0); // 0: Purchases, 1: Suppliers
+  const [currentTab, setCurrentTab] = useState(0); // 0: Purchases, 1: Suppliers, 2: Purchase History
   const [suppliers, setSuppliers] = useState([]);
   const [filteredSuppliers, setFilteredSuppliers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [filteredPurchases, setFilteredPurchases] = useState([]);
+  const [purchaseHistory, setPurchaseHistory] = useState([]);
+  const [purchaseHistoryFiltered, setPurchaseHistoryFiltered] = useState([]);
+  const [purchaseHistoryLoading, setPurchaseHistoryLoading] = useState(false);
+  const [purchaseHistorySearch, setPurchaseHistorySearch] = useState('');
+  const [purchaseHistoryPage, setPurchaseHistoryPage] = useState(0);
+  const [purchaseHistoryRowsPerPage, setPurchaseHistoryRowsPerPage] = useState(25);
+  const [salesHistory, setSalesHistory] = useState([]);
+  const [salesHistoryFiltered, setSalesHistoryFiltered] = useState([]);
+  const [salesHistoryLoading, setSalesHistoryLoading] = useState(false);
+  const [salesHistorySearch, setSalesHistorySearch] = useState('');
+  const [salesHistoryPage, setSalesHistoryPage] = useState(0);
+  const [salesHistoryRowsPerPage, setSalesHistoryRowsPerPage] = useState(25);
   const [loading, setLoading] = useState(true);
   const [purchasesLoading, setPurchasesLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -102,6 +114,8 @@ const Purchases = () => {
   useEffect(() => {
     fetchPurchases();
     fetchSuppliers();
+    fetchPurchaseHistory();
+    fetchSalesHistory();
     const loadAccounts = async () => {
       try {
         const res = await api.get('/admin/accounts');
@@ -113,6 +127,42 @@ const Purchases = () => {
     loadAccounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (currentTab !== 3) return;
+    const term = String(salesHistorySearch || '').toLowerCase().trim();
+    if (!term) {
+      setSalesHistoryFiltered(salesHistory);
+      return;
+    }
+    setSalesHistoryFiltered(
+      salesHistory.filter((row) => {
+        const on = String(row.orderNumber ?? '').toLowerCase();
+        const product = String(row.productName ?? '').toLowerCase();
+        const source = String(row.source ?? '').toLowerCase();
+        return on.includes(term) || product.includes(term) || source.includes(term);
+      })
+    );
+    setSalesHistoryPage(0);
+  }, [salesHistorySearch, salesHistory, currentTab]);
+
+  useEffect(() => {
+    if (currentTab !== 2) return;
+    const term = String(purchaseHistorySearch || '').toLowerCase().trim();
+    if (!term) {
+      setPurchaseHistoryFiltered(purchaseHistory);
+      return;
+    }
+    setPurchaseHistoryFiltered(
+      purchaseHistory.filter((row) => {
+        const pn = String(row.purchaseNumber ?? '').toLowerCase();
+        const product = String(row.productName ?? '').toLowerCase();
+        const supplier = String(row.supplierName ?? '').toLowerCase();
+        return pn.includes(term) || product.includes(term) || supplier.includes(term);
+      })
+    );
+    setPurchaseHistoryPage(0);
+  }, [purchaseHistorySearch, purchaseHistory, currentTab]);
 
   useEffect(() => {
     if (currentTab === 1) {
@@ -189,6 +239,42 @@ const Purchases = () => {
       setError('Failed to fetch purchases. Please try again.');
     } finally {
       setPurchasesLoading(false);
+    }
+  };
+
+  const fetchPurchaseHistory = async () => {
+    try {
+      setPurchaseHistoryLoading(true);
+      const response = await api.get('/driver-wallet/admin/purchase-history', { params: { limit: 5000 } });
+      const rows = response.data?.data?.rows || response.data?.rows || [];
+      const sorted = Array.isArray(rows)
+        ? rows.sort((a, b) => new Date(b.purchaseDate || 0) - new Date(a.purchaseDate || 0))
+        : [];
+      setPurchaseHistory(sorted);
+      setPurchaseHistoryFiltered(sorted);
+    } catch (err) {
+      console.error('Error fetching purchase history:', err);
+      setError((prev) => prev || 'Failed to fetch purchase history. Please try again.');
+    } finally {
+      setPurchaseHistoryLoading(false);
+    }
+  };
+
+  const fetchSalesHistory = async () => {
+    try {
+      setSalesHistoryLoading(true);
+      const response = await api.get('/admin/sales-history', { params: { limit: 5000 } });
+      const rows = response.data?.rows || response.data?.data?.rows || [];
+      const sorted = Array.isArray(rows)
+        ? rows.sort((a, b) => new Date(b.orderDate || 0) - new Date(a.orderDate || 0))
+        : [];
+      setSalesHistory(sorted);
+      setSalesHistoryFiltered(sorted);
+    } catch (err) {
+      console.error('Error fetching sales history:', err);
+      setError((prev) => prev || 'Failed to fetch sales history. Please try again.');
+    } finally {
+      setSalesHistoryLoading(false);
     }
   };
 
@@ -772,6 +858,324 @@ const Purchases = () => {
     );
   };
 
+  const renderPurchaseHistoryTab = () => {
+    const paginated = purchaseHistoryFiltered.slice(
+      purchaseHistoryPage * purchaseHistoryRowsPerPage,
+      purchaseHistoryPage * purchaseHistoryRowsPerPage + purchaseHistoryRowsPerPage
+    );
+
+    const formatDateShort = (dateString) => {
+      if (!dateString) return '-';
+      try {
+        return new Date(dateString).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' });
+      } catch {
+        return String(dateString);
+      }
+    };
+
+    const getPurchaseQtyDisplay = (row) => {
+      const q = Number(row?.quantity);
+      if (Number.isFinite(q) && q > 0) return q;
+      const pre = Number(row?.prePurchaseCount);
+      const post = Number(row?.postPurchaseCount);
+      if (Number.isFinite(pre) && Number.isFinite(post)) {
+        const inferred = post - pre;
+        if (Number.isFinite(inferred) && inferred > 0) return inferred;
+      }
+      return '—';
+    };
+
+    return (
+      <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <List sx={{ color: colors.accentText, fontSize: 40 }} />
+            <Typography variant="h4" component="h1" sx={{ color: colors.accentText, fontWeight: 700 }}>
+              Purchase History
+            </Typography>
+          </Box>
+        </Box>
+
+        <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>Show</Typography>
+                <TextField
+                  select
+                  size="small"
+                  value={purchaseHistoryRowsPerPage}
+                  onChange={(e) => {
+                    setPurchaseHistoryRowsPerPage(parseInt(e.target.value, 10));
+                    setPurchaseHistoryPage(0);
+                  }}
+                  SelectProps={{ native: true }}
+                  sx={{ minWidth: 90 }}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </TextField>
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>entries</Typography>
+              </Box>
+              <TextField
+                size="small"
+                placeholder="Search purchase #, product, supplier..."
+                value={purchaseHistorySearch}
+                onChange={(e) => setPurchaseHistorySearch(e.target.value)}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: colors.textSecondary }} /></InputAdornment> }}
+                sx={{
+                  minWidth: 320,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                    '& fieldset': { borderColor: colors.border },
+                    '& .MuiInputBase-input': { color: colors.textPrimary }
+                  }
+                }}
+              />
+            </Box>
+
+            {purchaseHistoryLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+            ) : (
+              <>
+                <TableContainer component={Paper} variant="outlined" sx={{ backgroundColor: colors.paper }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.05)' }}>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Purchase #</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Product</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Capacity</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Qty</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Pre</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Post</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Date</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Supplier</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Done By</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {paginated.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={9} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                            No purchase history rows found.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        paginated.map((row, idx) => (
+                          <TableRow key={`${row.purchaseNumber}-${idx}`}>
+                            <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                              {row.purchaseNumber}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>
+                              {row.productName || '—'}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {row.capacity || '—'}
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                              {getPurchaseQtyDisplay(row)}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {row.prePurchaseCount ?? '—'}
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                              {row.postPurchaseCount ?? '—'}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {formatDateShort(row.purchaseDate)}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {row.supplierName || '—'}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {row.doneBy || '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <TablePagination
+                  component="div"
+                  count={purchaseHistoryFiltered.length}
+                  page={purchaseHistoryPage}
+                  onPageChange={(e, newPage) => setPurchaseHistoryPage(newPage)}
+                  rowsPerPage={purchaseHistoryRowsPerPage}
+                  onRowsPerPageChange={(e) => {
+                    setPurchaseHistoryRowsPerPage(parseInt(e.target.value, 10));
+                    setPurchaseHistoryPage(0);
+                  }}
+                  rowsPerPageOptions={[10, 25, 50, 100]}
+                  sx={{ color: colors.textPrimary, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { color: colors.textPrimary } }}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  };
+
+  const renderSalesHistoryTab = () => {
+    const paginated = salesHistoryFiltered.slice(
+      salesHistoryPage * salesHistoryRowsPerPage,
+      salesHistoryPage * salesHistoryRowsPerPage + salesHistoryRowsPerPage
+    );
+
+    const formatDateShort = (dateString) => {
+      if (!dateString) return '-';
+      try {
+        return new Date(dateString).toLocaleDateString('en-KE', { year: 'numeric', month: 'short', day: 'numeric' });
+      } catch {
+        return String(dateString);
+      }
+    };
+
+    const getSalesQtyDisplay = (row) => {
+      const q = Number(row?.quantity);
+      if (Number.isFinite(q) && q > 0) return q;
+      const pre = Number(row?.preSaleCount);
+      const post = Number(row?.postSaleCount);
+      if (Number.isFinite(pre) && Number.isFinite(post)) {
+        const inferred = pre - post;
+        if (Number.isFinite(inferred) && inferred > 0) return inferred;
+      }
+      return '—';
+    };
+
+    return (
+      <Box>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <List sx={{ color: colors.accentText, fontSize: 40 }} />
+            <Typography variant="h4" component="h1" sx={{ color: colors.accentText, fontWeight: 700 }}>
+              Sales History
+            </Typography>
+          </Box>
+        </Box>
+
+        <Card sx={{ backgroundColor: colors.paper, border: `1px solid ${colors.border}` }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>Show</Typography>
+                <TextField
+                  select
+                  size="small"
+                  value={salesHistoryRowsPerPage}
+                  onChange={(e) => {
+                    setSalesHistoryRowsPerPage(parseInt(e.target.value, 10));
+                    setSalesHistoryPage(0);
+                  }}
+                  SelectProps={{ native: true }}
+                  sx={{ minWidth: 90 }}
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </TextField>
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>entries</Typography>
+              </Box>
+              <TextField
+                size="small"
+                placeholder="Search order #, product, source..."
+                value={salesHistorySearch}
+                onChange={(e) => setSalesHistorySearch(e.target.value)}
+                InputProps={{ startAdornment: <InputAdornment position="start"><Search sx={{ color: colors.textSecondary }} /></InputAdornment> }}
+                sx={{
+                  minWidth: 320,
+                  '& .MuiOutlinedInput-root': {
+                    backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : colors.paper,
+                    '& fieldset': { borderColor: colors.border },
+                    '& .MuiInputBase-input': { color: colors.textPrimary }
+                  }
+                }}
+              />
+            </Box>
+
+            {salesHistoryLoading ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+            ) : (
+              <>
+                <TableContainer component={Paper} variant="outlined" sx={{ backgroundColor: colors.paper }}>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: isDarkMode ? 'rgba(0, 224, 184, 0.12)' : 'rgba(0, 0, 0, 0.05)' }}>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order Date</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Order #</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Source</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Product</TableCell>
+                        <TableCell sx={{ fontWeight: 700, color: colors.accentText }}>Capacity</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Qty</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Pre</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 700, color: colors.accentText }}>Post</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {paginated.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={8} align="center" sx={{ py: 3, color: colors.textSecondary }}>
+                            No sales history rows found.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        paginated.map((row, idx) => (
+                          <TableRow key={`${row.orderNumber}-${idx}`}>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {formatDateShort(row.orderDate)}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textPrimary, fontWeight: 600 }}>
+                              {row.orderNumber}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {row.source || '—'}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textPrimary }}>
+                              {row.productName || '—'}
+                            </TableCell>
+                            <TableCell sx={{ color: colors.textSecondary }}>
+                              {row.capacity || '—'}
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                              {getSalesQtyDisplay(row)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                              {row.preSaleCount ?? '—'}
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: colors.textPrimary }}>
+                              {row.postSaleCount ?? '—'}
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+                <TablePagination
+                  component="div"
+                  count={salesHistoryFiltered.length}
+                  page={salesHistoryPage}
+                  onPageChange={(e, newPage) => setSalesHistoryPage(newPage)}
+                  rowsPerPage={salesHistoryRowsPerPage}
+                  onRowsPerPageChange={(e) => {
+                    setSalesHistoryRowsPerPage(parseInt(e.target.value, 10));
+                    setSalesHistoryPage(0);
+                  }}
+                  rowsPerPageOptions={[10, 25, 50, 100]}
+                  sx={{ color: colors.textPrimary, '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': { color: colors.textPrimary } }}
+                />
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  };
+
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Tabs
@@ -787,9 +1191,13 @@ const Purchases = () => {
       >
         <Tab label="Purchases" />
         <Tab label="Suppliers" />
+        <Tab label="Purchase History" />
+        <Tab label="Sales History" />
       </Tabs>
       {currentTab === 0 && renderPurchasesTab()}
       {currentTab === 1 && renderSuppliersTab()}
+      {currentTab === 2 && renderPurchaseHistoryTab()}
+      {currentTab === 3 && renderSalesHistoryTab()}
 
       {/* Add/Edit Supplier Dialog */}
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>

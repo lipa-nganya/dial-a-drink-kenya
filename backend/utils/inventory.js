@@ -193,6 +193,20 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           const matchedCapacity = resolveCapacityForOrderItem(drink, item);
           const multiplier = capacityUnitMultiplier(matchedCapacity);
           let remainingToDeduct = quantity * multiplier;
+          let trackedCapacityKey = null;
+          let trackedCapacityBefore = null;
+          let trackedCapacityAfter = null;
+
+          const trackCapacityDeduction = (key, beforeValue, deducted) => {
+            if (!key || deducted <= 0) return;
+            // Track the first bucket that actually changed for this order line.
+            if (trackedCapacityKey == null) {
+              trackedCapacityKey = key;
+              trackedCapacityBefore = beforeValue;
+            }
+            trackedCapacityAfter = Math.max(0, toInt(byCap[key], 0));
+          };
+
           if (matchedCapacity) {
             // If the order item is a pack, deduct from base-unit capacity bucket if present.
             const preferredKey =
@@ -204,6 +218,7 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
               const current = Math.max(0, toInt(byCap[key], 0));
               const deduct = Math.min(current, remainingToDeduct);
               byCap[key] = current - deduct;
+              trackCapacityDeduction(key, current, deduct);
               remainingToDeduct -= deduct;
             }
           }
@@ -219,6 +234,7 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
               if (current <= 0) continue;
               const deduct = Math.min(current, remainingToDeduct);
               byCap[key] = current - deduct;
+              trackCapacityDeduction(key, current, deduct);
               remainingToDeduct -= deduct;
             }
           }
@@ -229,6 +245,13 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
             stockByCapacity: byCap,
             stock: newStock
           }, { transaction });
+
+          // For sales history, prefer the specific capacity bucket we actually updated.
+          // If no concrete bucket was matched, fall back to aggregate stock movement.
+          if (trackedCapacityKey && trackedCapacityBefore != null && trackedCapacityAfter != null) {
+            oldStock = trackedCapacityBefore;
+            newStock = trackedCapacityAfter;
+          }
         } else {
           // Calculate new stock (ensure it doesn't go below 0)
           const matchedCapacity = resolveCapacityForOrderItem(drink, item);
@@ -304,6 +327,22 @@ const decreaseInventoryForOrder = async (orderId, transaction = null) => {
           oldStock,
           newStock: newStock
         });
+
+        // Persist per-line pre/post sale counts for Sales History (best-effort).
+        // Only do this if the migration has run (column exists) to avoid prod runtime errors.
+        try {
+          if (db.OrderItem?.rawAttributes?.preSaleCount && db.OrderItem?.rawAttributes?.postSaleCount) {
+            await item.update(
+              {
+                preSaleCount: oldStock,
+                postSaleCount: newStock
+              },
+              { transaction }
+            );
+          }
+        } catch (historyErr) {
+          console.error(`❌ Failed to persist sale counts for OrderItem #${item.id} (Order #${orderId}):`, historyErr.message);
+        }
 
         console.log(`📉 Decreased inventory for Drink #${item.drinkId} (${drink.name}): ${oldStock} → ${newStock} (sold ${quantity})`);
       } catch (itemError) {
