@@ -254,6 +254,7 @@ const InventoryPage = () => {
 
   useEffect(() => {
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, []);
 
   useEffect(() => {
