@@ -22,8 +22,9 @@ RUN rm -f /etc/nginx/conf.d/default.conf
 
 # Copy nginx config (listens on port 8080)
 COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY nginx.seo-redirects.conf /etc/nginx/conf.d/nginx.seo-redirects.conf
-COPY nginx.seo-redirects-exact.conf /etc/nginx/conf.d/nginx.seo-redirects-exact.conf
+RUN mkdir -p /etc/nginx/seo
+COPY nginx.seo-redirects.conf /etc/nginx/seo/nginx.seo-redirects.conf
+COPY nginx.seo-redirects-exact.conf /etc/nginx/seo/nginx.seo-redirects-exact.conf
 
 # Copy built app
 COPY --from=builder /app/build /usr/share/nginx/html
