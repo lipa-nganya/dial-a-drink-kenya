@@ -1,0 +1,796 @@
+# Candidate 301 redirects generated from GSC coverage CSV
+# Review before deploying; place above SPA fallback rule.
+
+/Fruit Fly Mango IPA    /products/fruit-fly-mango-ipa    301
+/search/belaire    /products?search=belaire    301
+/Chita Suntory Whisky    /products/chita-suntory-whisky    301
+/William Lawson's    /products/william-lawsons    301
+/dom-p-rignon-price-in-kenya    /products    301
+/search/Lagavulin    /products?search=Lagavulin    301
+/Bavaria 0.0 Mango Passion    /products/bavaria-0-0-mango-passion    301
+/blog/cat/nairobi    /blog    301
+/Glenfiddich Reserve Cask    /products/glenfiddich-reserve-cask    301
+/Mad Chimp No.9 Gin    /products/mad-chimp-no-9-gin    301
+/Gato Negro    /products/gato-negro    301
+/Bottega Bacur Gin    /products/bottega-bacur-gin    301
+/location/ngara    /locations    301
+/brand/64830a14836f202ac62e3f49    /brands    301
+/Akso Melon Ice    /products/akso-melon-ice    301
+/Espolon Blanco Tequila    /products/espolon-blanco-tequila    301
+/Bols Vodka    /products/bols-vodka    301
+/malbec    /products    301
+/buy-bailey-s-best-price-in-kenya    /products    301
+/brand/63f0fd804a23fc3533039595    /brands    301
+/Butlers Triple Sec    /products/butlers-triple-sec    301
+/malbec-wine    /products    301
+/brand/631f373122f6047de2372a19    /brands    301
+/brand/63ecea53f0fcf6484ffee62e    /brands    301
+/fleurs-de-prairie-sparkling-brut-rose    /products    301
+/brand/61bc878cbe9a7465205651f2    /brands    301
+/Kura Pure Malt    /products/kura-pure-malt    301
+/Jura The Road    /products/jura-the-road    301
+/brand/63b2b34250f1151323f75e9c    /brands    301
+/Johnnie Walker A song of Ice    /products/johnnie-walker-a-song-of-ice    301
+/pipers-heidesieck    /products    301
+/four-cousin-s    /products    301
+/Tijuana Sweet Heat    /products/tijuana-sweet-heat    301
+/Bateleur Dirty Hairy Copper Ale    /products/bateleur-dirty-hairy-copper-ale    301
+/Fitch & Leedes Classic Lime Twist    /products/fitch-and-leedes-classic-lime-twist    301
+/Chivas Regal Ultis    /products/chivas-regal-ultis    301
+/mucho    /products    301
+/Kura Rum Cask Finish    /products/kura-rum-cask-finish    301
+/Don Montego VSOP    /products/don-montego-vsop    301
+/Curado Blanco Cupreata    /products/curado-blanco-cupreata    301
+/Monin Triple Sec Curacao Liqueur    /products/monin-triple-sec-curacao-liqueur    301
+/asconi    /products    301
+/brand/63b2a95e02921d46fd0b775e    /brands    301
+/hendrick-s    /products    301
+/Monin Almond Syrup    /products/monin-almond-syrup    301
+/products/products/61499a6558625f664d79c14f    /products/61499a6558625f664d79c14f    301
+/Reki Blended Whisky    /products/reki-blended-whisky    301
+/products/products/5b48e933bdd218570be62033    /products/5b48e933bdd218570be62033    301
+/brand/602238d026f44f16622c2ba3    /brands    301
+/La Tilica Anejo    /products/la-tilica-anejo    301
+/gilbey-s    /products    301
+/category/tequila/gold-tequila    /tequila/gold-tequila    301
+/leleshwa    /products    301
+/El Charro Silver    /products/el-charro-silver    301
+/Bunnahbhain 12 Years    /products/bunnahbhain-12-years    301
+/brand/6321dfebebf50969aa1d087c    /brands    301
+/brand/6357b53a1f76755cbceacf8f    /brands    301
+/Bols Peppermint Green Liqueur    /products/bols-peppermint-green-liqueur    301
+/Cuerpo Gold Rum Liqueur    /products/cuerpo-gold-rum-liqueur    301
+/brand/63f4b62a9b82213218257d0d    /brands    301
+/select    /products    301
+/the-famous-grouse    /products    301
+/Butlers Blue Curacao    /products/butlers-blue-curacao    301
+/brand/6325b76d300a7c2ee440920a    /brands    301
+/Zappa Sambuca Black    /products/zappa-sambuca-black    301
+/Monin Peach Liqueur    /products/monin-peach-liqueur    301
+/category/tequila/mezcal-tequila    /tequila/mezcal-tequila    301
+/location/madaraka    /locations    301
+/Grey Goose Vx    /products/grey-goose-vx    301
+/Bacardi Limited    /products/bacardi-limited    301
+/products/products/dialdrinkkenya.com/category/whisky    /products/dialdrinkkenya.com/category/whisky    301
+/T1 Tequila Blanco    /products/t1-tequila-blanco    301
+/products/products/60ed631a8a0be5532d8d1729    /products/60ed631a8a0be5532d8d1729    301
+/Whitley Neil Raspberry    /products/whitley-neil-raspberry    301
+/Casamigos Mezcal Tequila    /products/casamigos-mezcal-tequila    301
+/Monin Lemon Tea Syrup    /products/monin-lemon-tea-syrup    301
+/Mortlach Single Malt 20 Years    /products/mortlach-single-malt-20-years    301
+/Bitola Red wine    /products/bitola-red-wine    301
+/brand/63d904b06dc480557c3b908f    /brands    301
+/brand/68dbb615299308a1d29a4949    /brands    301
+/gordon-s-pink    /products    301
+/products/Boschendal-1685-chenin-blanc    /products/boschendal-1685-chenin-blanc    301
+/blog/cat/whisky    /blog    301
+/brand/61bc6256be9a746520565197    /brands    301
+/brand/63db757cf74259545bb145ff    /brands    301
+/Monin Vanilla Frappe    /products/monin-vanilla-frappe    301
+/samantha    /products    301
+/brand/procera gin    /products/procera-gin    301
+/brand/61bdb522be9a746520565270    /brands    301
+/4th Street White Sweet    /products/4th-street-white-sweet    301
+/products/products/products/5b48e933bdd218570be62044    /products/products/5b48e933bdd218570be62044    301
+/douglas-green-sunkissed-wine    /products    301
+/delush-sweet-white    /products    301
+/brand/6447749bb97ca74d7c8cb817    /brands    301
+/El Chivo Sauvignon Blanc    /products/el-chivo-sauvignon-blanc    301
+/moet    /products    301
+/Bavaria Black    /products/bavaria-black    301
+/Agavita Blanco    /products/agavita-blanco    301
+/location/south-c    /locations    301
+/amani-bay-natural-sweet-rose    /products    301
+/brand/68db9a26299308a1d29a4942    /brands    301
+/Aberlour 12 Years    /products/aberlour-12-years    301
+/cederberg-cabernet-sauvignon    /products    301
+/brand/61bc8821be9a7465205651f4    /brands    301
+/Monster Assault    /products/monster-assault    301
+/Monin Cloudy Lemonade Syrup    /products/monin-cloudy-lemonade-syrup    301
+/craft-beer    /products    301
+/Monster Energy    /products/monster-energy    301
+/ballantine    /products    301
+/Monin Blue Curacao Liqueur    /products/monin-blue-curacao-liqueur    301
+/product/hennessy-vs-cognac    /products/hennessy-vs-cognac    301
+/blog/5 Best Cognac Drinks in Kenya | Buy Premium Cognac Online – Dial A Drink Kenya    /products/5-best-cognac-drinks-in-kenya-buy-premium-cognac-online-dial-a-drink-kenya    301
+/El Jimador Anejo Tequila    /products/el-jimador-anejo-tequila    301
+/brown-forman    /products    301
+/Magic Moments Raspberry    /products/magic-moments-raspberry    301
+/Obolon Premium    /products/obolon-premium    301
+/Glenfiddich Triple Oak 12 Years    /products/glenfiddich-triple-oak-12-years    301
+/brand/6411ad171248e0781e82ef4e    /brands    301
+/Lodez Cabernet Sauvignon    /products/lodez-cabernet-sauvignon    301
+/products/tomatin-highland-Single-Malt12-years    /products/tomatin-highland-single-malt12-years    301
+/Teremana Anejo    /products/teremana-anejo    301
+/Nginious Green Gin    /products/nginious-green-gin    301
+/Whitley Neil Blood Orange    /products/whitley-neil-blood-orange    301
+/green-label    /products    301
+/coffee    /products    301
+/product/cono-sur-reserva-especial -merlot    /products/cono-sur-reserva-especial -merlot    301
+/products/Budweiser Beer    /products/budweiser-beer    301
+/Diplomatico Reserva Exclusiva Rum    /products/diplomatico-reserva-exclusiva-rum    301
+/accessories    /products    301
+/T1 Reposado    /products/t1-reposado    301
+/brand/64995dc66ef2a3162d42af86    /brands    301
+/brand/61bc60d8be9a746520565192    /brands    301
+/Mount Gay Black Barrel Barbados Rum    /products/mount-gay-black-barrel-barbados-rum    301
+/Hombo iwai Premium whisky    /products/hombo-iwai-premium-whisky    301
+/brand/64a29d6ff769510d81af0dce    /brands    301
+/Glenlivet Nadurra Peated    /products/glenlivet-nadurra-peated    301
+/brand/61bc7d2bbe9a7465205651cc    /brands    301
+/brand/641d6d1b94511a1c9ee020ae    /brands    301
+/malbec-red-wine    /products    301
+/ultra    /products    301
+/Kurayoshi Sherry Cask    /products/kurayoshi-sherry-cask    301
+/brand/63ea0422099a486cf16a546b    /brands    301
+/category/champagne/sparkling-wine    /champagne/sparkling-wine    301
+/brand/6321d93f2a25955b260c8974    /brands    301
+/greywacke-sauvignon -blanc    /products/greywacke-sauvignon-blanc    301
+/cederberg-shiraz    /products    301
+/brand/61bdb2c3be9a74652056526a    /brands    301
+/nikka    /products    301
+/Bols Vanilla    /products/bols-vanilla    301
+/Patron Citronge Mango Liqueur    /products/patron-citronge-mango-liqueur    301
+/Fitch & Leedes Pink Tonic Sugar Free    /products/fitch-and-leedes-pink-tonic-sugar-free    301
+/Glenmorangie The Tribute 16 Years    /products/glenmorangie-the-tribute-16-years    301
+/craft-beers    /products    301
+/products/products/products/belvedere vodka    /products/products/belvedere vodka    301
+/Marquis de Mons Margaux    /products/marquis-de-mons-margaux    301
+/bardinet    /products    301
+/Dalmore Valour    /products/dalmore-valour    301
+/diageo    /products    301
+/swartland-wine    /products    301
+/products/Absolute-mango    /products/absolute-mango    301
+/brand/64a2a682f769510d81af0dd4    /brands    301
+/Bufalov French Wheat Sugar Free Vodka    /products/bufalov-french-wheat-sugar-free-vodka    301
+/Buchanan's Master Whisky    /products/buchanans-master-whisky    301
+/Mumm Champagne Rouge Rose    /products/mumm-champagne-rouge-rose    301
+/Clase Azul Plata Tequila    /products/clase-azul-plata-tequila    301
+/Frontera Rose    /products/frontera-rose    301
+/Parker Favourite Son Shiraz    /products/parker-favourite-son-shiraz    301
+/category/whisky/bourbon    /whisky/bourbon    301
+/Benchmark Old No.8    /products/benchmark-old-no-8    301
+/Kamiki Blended malt whisky    /products/kamiki-blended-malt-whisky    301
+/b & g-chateau-magnol-haut-medoc    /products/b-and-g-chateau-magnol-haut-medoc    301
+/Bardinet Triple Sec Liqueur    /products/bardinet-triple-sec-liqueur    301
+/brand/621df44b0e039b7846f10f53    /brands    301
+/Remy Martin Louis XIII    /products/remy-martin-louis-xiii    301
+/products/famous- grouse- bourbon-cask-whisky    /products/famous-grouse-bourbon-cask-whisky    301
+/buy    /products    301
+/Lillet Blanc    /products/lillet-blanc    301
+/welmoed-cabernet-sauvignon    /products    301
+/products/products/5b48e933bdd218570be61ff2    /products/5b48e933bdd218570be61ff2    301
+/brand/63ca5e9c4e4d425ad36e064f    /brands    301
+/brand/63209276f797e546d042f405    /brands    301
+/Akso Strawberry Ice    /products/akso-strawberry-ice    301
+/brand/5cba1c5ad5c81f18edbc35f2    /brands    301
+/brand/6458dca42f356f65a18d784e    /brands    301
+/Gran Patron Burdeos    /products/gran-patron-burdeos    301
+/dry-gin-in-kenya    /products    301
+/KWV Cape Tawny wine    /products/kwv-cape-tawny-wine    301
+/product/sandeman-porto-founder's-reserve    /products/sandeman-porto-founder's-reserve    301
+/welmoed-merlot    /products    301
+/jd    /products    301
+/grenadine    /products    301
+/location/westlands    /locations    301
+/Atlas Ultra Strong 14    /products/atlas-ultra-strong-14    301
+/marques    /products    301
+/5-litres    /products    301
+/category/beers/craft-beer    /beers/craft-beer    301
+/liquer    /products    301
+/Bushmills whisky    /products/bushmills-whisky    301
+/Parker Favourite Son Chardonnay    /products/parker-favourite-son-chardonnay    301
+/brand/6315ee1d15fcb541c39dd03e    /brands    301
+/Glenfiddich Fire & Cane    /products/glenfiddich-fire-and-cane    301
+/kenyan-original-cider    /products    301
+/brand/63addee8d84a1b7c0ce00fc9    /brands    301
+/welmoed-chardonnay    /products    301
+/summit    /products    301
+/products/Hennessy Pure White    /products/hennessy-pure-white    301
+/brand/61b9aa69be9a7465205650f6    /brands    301
+/products/KAHBlanco    /products/kahblanco    301
+/product/macallan-select-oak    /products/macallan-select-oak    301
+/perle-noir-crémant-d'Alsace    /products/perle-noir-cr-mant-dalsace    301
+/Monin Strawberry Syrup    /products/monin-strawberry-syrup    301
+/The Macallan Select Oak    /products/the-macallan-select-oak    301
+/Tann's Gin    /products/tanns-gin    301
+/product/Tann-s-gin    /products/Tann-s-gin    301
+/Leleshwa Vodka    /products/leleshwa-vodka    301
+/brand/643918d7a56aac7983fcc45c    /brands    301
+/Fitch & Leedes Moments Shirley Temple    /products/fitch-and-leedes-moments-shirley-temple    301
+/product/4th-street-bottle    /products/4th-street-bottle    301
+/McDowell's No.1 Platinum Whisky    /products/mcdowells-no-1-platinum-whisky    301
+/Coolberg Malt 0.0 Beer    /products/coolberg-malt-0-0-beer    301
+/gordon-s-pink-gin-750ml    /products    301
+/vs    /products    301
+/Monin Pineapple Puree    /products/monin-pineapple-puree    301
+/brand/644131994383581efbbc358a    /brands    301
+/johnnie-walker-green-label    /products    301
+/5efc463857aa9921ab0a90cd    /products    301
+/brand/6929646237ef9e93e78d9bab    /brands    301
+/Butlers Crème De Banana    /products/butlers-cr-me-de-banana    301
+/brand/642bb39fb0dc485db11afb19    /brands    301
+/Whitley Neil Aloe & Cucumber Gin    /products/whitley-neil-aloe-and-cucumber-gin    301
+/Coolberg Peach 0.0 Beer    /products/coolberg-peach-0-0-beer    301
+/category/wine/sparkling-wine    /wine/sparkling-wine    301
+/brand/6321d5722a25955b260c8968    /brands    301
+/blog/cat/kenya    /blog    301
+/ch-valac-medium-sweet red    /products/ch-valac-medium-sweet-red    301
+/brand/6320904722f6047de2372af5    /brands    301
+/clan-macgregor    /products    301
+/brand/61af3bcb51cb3b4f0d6b9362    /brands    301
+/Suntory Kakubin    /products/suntory-kakubin    301
+/johnnie-walker    /products    301
+/Bavaria 0.0 Apple Beer    /products/bavaria-0-0-apple-beer    301
+/tons    /products    301
+/Bols Banana    /products/bols-banana    301
+/Haku Vodka    /products/haku-vodka    301
+/apple    /products    301
+/grey    /products    301
+/Monin Grenadine Syrup    /products/monin-grenadine-syrup    301
+/Harveys Bristol Cream Solera Sherry    /products/harveys-bristol-cream-solera-sherry    301
+/vina-maipo-wines    /products    301
+/brand/63d7b21eaaea787a40adc1bf    /brands    301
+/Monin Peach Tea Syrup    /products/monin-peach-tea-syrup    301
+/brand/61bdb400be9a74652056526d    /brands    301
+/brand/640867be05b09465122a2942    /brands    301
+/location/hurlingham    /locations    301
+/brand/64259a07e29baf230c928984    /brands    301
+/heritage-de-luze-rose    /products    301
+/brand/63ada80714f36c771061f310    /brands    301
+/Raynal Vsop Brandy    /products/raynal-vsop-brandy    301
+/b & g-cuvee-special-rose    /products/b-and-g-cuvee-special-rose    301
+/jacob-s-creek-availability-in-kenya    /products    301
+/products/Martell-blueswift    /products/martell-blueswift    301
+/Monster Energy Uber    /products/monster-energy-uber    301
+/j&B-jet-12-years    /products/j-and-b-jet-12-years    301
+/founders    /products    301
+/Monin Sugar Cane Syrup    /products/monin-sugar-cane-syrup    301
+/graham beck brut    /products/graham-beck-brut    301
+/red    /products    301
+/brand/61bdabd0be9a746520565262    /brands    301
+/Nederburg Shiraz    /products/nederburg-shiraz    301
+/Basil Haydens Whiskey    /products/basil-haydens-whiskey    301
+/Sierra Gold    /products/sierra-gold    301
+/brand/6475be613a6dd047be14353b    /brands    301
+/Jumping Goat Whisky Liqueur    /products/jumping-goat-whisky-liqueur    301
+/Monster Energy Gronk    /products/monster-energy-gronk    301
+/330ml    /products    301
+/kingsize-slim    /products    301
+/brand/60183a70a2a4245c2ad877c6    /brands    301
+/Montezuma Aztec Tequila    /products/montezuma-aztec-tequila    301
+/Glenmorangie The Accord 12 Years    /products/glenmorangie-the-accord-12-years    301
+/brand/61bdbd4bbe9a74652056527b    /brands    301
+/brand/63cf8999d6cd0807409aad23    /brands    301
+/Parker Favourite Son Cabernet Sauvignon    /products/parker-favourite-son-cabernet-sauvignon    301
+/Musgrave Gin    /products/musgrave-gin    301
+/welmoed-chenin-blanc    /products    301
+/dry-gin    /products    301
+/port-wines-in-kenya    /products    301
+/product/Belaire Luxe Rose Fantome    /products/Belaire Luxe Rose Fantome    301
+/four-cousin    /products    301
+/Jura The Sound    /products/jura-the-sound    301
+/Bloom Jasmine & Rose Gin    /products/bloom-jasmine-and-rose-gin    301
+/Oban Little Bay    /products/oban-little-bay    301
+/remy-martin    /products    301
+/Patron Xo Cafe Dark Cocoa    /products/patron-xo-cafe-dark-cocoa    301
+/Dalwhinnie Malt Winters Gold    /products/dalwhinnie-malt-winters-gold    301
+/Hakushu Distillers Reserve    /products/hakushu-distillers-reserve    301
+/Botter Prosecco Wine    /products/botter-prosecco-wine    301
+/Herradura Anejo Tequila    /products/herradura-anejo-tequila    301
+/product/de luze    /products/de luze    301
+/fanta    /products    301
+/brand/61bc6c4cbe9a7465205651a2    /brands    301
+/brand/61bdbd1dbe9a74652056527a    /brands    301
+/location/south-b    /locations    301
+/Wilderer Rose Water Gin    /products/wilderer-rose-water-gin    301
+/baron philippe-de-rothschild-pinot-noir    /products/baron-philippe-de-rothschild-pinot-noir    301
+/porto-cruz -pink-rose    /products/porto-cruz-pink-rose    301
+/Grand Marnier Raspberry Peach    /products/grand-marnier-raspberry-peach    301
+/Vazo Ice Super Mint    /products/vazo-ice-super-mint    301
+/Bertani Soave Vintage    /products/bertani-soave-vintage    301
+/brand/5f185cea32533f54c84be4bb    /brands    301
+/Balkan 176 Vodka    /products/balkan-176-vodka    301
+/alcohol-delivery-nairobi    /products    301
+/Hennessy Master Blender's Selection No.4    /products/hennessy-master-blenders-selection-no-4    301
+/chateau-belles-eaux-languedoc-les-coteaux-blanc    /products    301
+/welmoed-pinotage    /products    301
+/Sexton Single Malt    /products/sexton-single-malt    301
+/ZMR-miami-mint Vape    /products/zmr-miami-mint-vape    301
+/hennessy-vs    /products    301
+/Monin Strawberry Puree    /products/monin-strawberry-puree    301
+/fonseca-10yr-Old-tawny    /products/fonseca-10yr-old-tawny    301
+/product/tall-horse-shiraz.    /products/tall-horse-shiraz.    301
+/packet    /products    301
+/18-years-johhnie-walker    /products    301
+/brand/61bc7a87be9a7465205651c9    /brands    301
+/Kawashima Ginjo Sake    /products/kawashima-ginjo-sake    301
+/Pepe Lopez Gold Tequila    /products/pepe-lopez-gold-tequila    301
+/Veuve Clicquot Grand Dame Brut    /products/veuve-clicquot-grand-dame-brut    301
+/welmoed-shiraz    /products    301
+/mint    /products    301
+/Tequila Ley 925    /products/tequila-ley-925    301
+/Herradura Plata Tequila    /products/herradura-plata-tequila    301
+/brand/61bc77c1be9a7465205651c3    /brands    301
+/gordons    /products    301
+/amani-bay-smooth-red    /products    301
+/Olmeca Fusion    /products/olmeca-fusion    301
+/Santa Cristina Umbria IGT    /products/santa-cristina-umbria-igt    301
+/Magic Moments Original    /products/magic-moments-original    301
+/brand/61bdba3dbe9a746520565273    /brands    301
+/Sidekick Cookies & Cream    /products/sidekick-cookies-and-cream    301
+/Tequila 1800 Reposado    /products/tequila-1800-reposado    301
+/dragon    /products    301
+/brand/63b2ba5c50f1151323f75eaf    /brands    301
+/brand/68ea0dd229789f74292380d5    /brands    301
+/Tequila 1800 Anejo    /products/tequila-1800-anejo    301
+/products/Anthon-Berg-chocolate    /products/anthon-berg-chocolate    301
+/category/vapes/cigars-and-cigarettes    /vapes/cigars-and-cigarettes    301
+/Kah Reposado    /products/kah-reposado    301
+/Don Julio Double Cask Lagavulin Finish    /products/don-julio-double-cask-lagavulin-finish    301
+/atlas 12    /products/atlas-12    301
+/Schweppes Tonic Water    /products/schweppes-tonic-water    301
+/Monin Elderflower Liqueur    /products/monin-elderflower-liqueur    301
+/Billionaire Vodka    /products/billionaire-vodka    301
+/Ponchos Chilli Choc (liqueur)    /products/ponchos-chilli-choc-liqueur    301
+/Glenfiddich Project XX whisky Gift Box    /products/glenfiddich-project-xx-whisky-gift-box    301
+/Glenlivet 12 Years    /products/glenlivet-12-years    301
+/stellenbosch-vineyards-cabernet-sauvignon    /products    301
+/jameson    /products    301
+/virginia black    /products/virginia-black    301
+/product/les-hauts-de-fontey    /products/les-hauts-de-fontey    301
+/brand/63ad9bc7d6d89c76a14879e2    /brands    301
+/category/whisky/blended-scotch    /whisky/blended-scotch    301
+/four-cousin-s-white-wine    /products    301
+/brand/61bc631dbe9a746520565198    /brands    301
+/Monin Hazelnut Syrup    /products/monin-hazelnut-syrup    301
+/Sierra Silver    /products/sierra-silver    301
+/brand/5f18733e5b10545bccdc4fcf    /brands    301
+/Argento shiraz red    /products/argento-shiraz-red    301
+/greenall    /products    301
+/brand/6411bf801248e0781e82ef56    /brands    301
+/meukow vsop    /products/meukow-vsop    301
+/kenyan-craft-beer    /products    301
+/amarula    /products    301
+/stelleinrust-chenin-blanc-brut    /products    301
+/Cuerpo White Rum Liqueur    /products/cuerpo-white-rum-liqueur    301
+/Glen Deveron 30 Years Whisky    /products/glen-deveron-30-years-whisky    301
+/Remy Martin 1738 Accord Royal    /products/remy-martin-1738-accord-royal    301
+/Godet XO    /products/godet-xo    301
+/Buchanan's Two Souls Whisky    /products/buchanans-two-souls-whisky    301
+/brand/61bc74e5be9a7465205651b7    /brands    301
+/brand/61bc8af6be9a7465205651fd    /brands    301
+/william-grant-sons    /products    301
+/Sierra Antiguo Anejo Tequila    /products/sierra-antiguo-anejo-tequila    301
+/Bayou Reserve Rum    /products/bayou-reserve-rum    301
+/Mortlach Single Malt 14 Years    /products/mortlach-single-malt-14-years    301
+/500ml    /products    301
+/8PM Indian Whisky    /products/8pm-indian-whisky    301
+/location/kileleshwa    /locations    301
+/versus-wine    /products    301
+/brand/60930a46a064d21b1edaa513    /brands    301
+/Kurayoshi Pure Malt    /products/kurayoshi-pure-malt    301
+/Buchanan's 18 Years Special Reserve    /products/buchanans-18-years-special-reserve    301
+/Bleu d'Argent Gin    /products/bleu-dargent-gin    301
+/monster-assault    /products    301
+/San Felipe Caramagnola Rose De Malbec    /products/san-felipe-caramagnola-rose-de-malbec    301
+/c-roc    /products    301
+/brand/64368b7ba56aac7983fcc3bf    /brands    301
+/category/beers/malt-beer    /beers/malt-beer    301
+/Coolberg Strawberry 0.0 Beer    /products/coolberg-strawberry-0-0-beer    301
+/Tons de Duorum Red    /products/tons-de-duorum-red    301
+/Monin Caramel Syrup    /products/monin-caramel-syrup    301
+/fonseca-20yr-Old    /products/fonseca-20yr-old    301
+/mcdowell-s-no-1-whisky    /products    301
+/Monin Mojito Mint Syrup    /products/monin-mojito-mint-syrup    301
+/product/Boschendal-1685-chenin-blanc    /products/Boschendal-1685-chenin-blanc    301
+/search/JnB    /products?search=JnB    301
+/Marani Tvishi Sweet White    /products/marani-tvishi-sweet-white    301
+/brand/64b921de52df5e3d4f8cf532    /brands    301
+/Yamazaki 12 Year Old    /products/yamazaki-12-year-old    301
+/four-cousin-s-sweet-red    /products    301
+/clase-azul-mexico    /products    301
+/brand/64119b531248e0781e82ef44    /brands    301
+/amani-bay-natural-sweet-white    /products    301
+/jameson -whisky-4.5litres    /products/jameson-whisky-4-5litres    301
+/pernod-ricard    /products    301
+/product/m.chapoutier-petite-ruche-croze-hermitage-white    /products/m.chapoutier-petite-ruche-croze-hermitage-white    301
+/brand/61bdaf90be9a746520565267    /brands    301
+/calvet-celebration-sparkling-brut-white    /products    301
+/Belaire Rose Fantome    /products/belaire-rose-fantome    301
+/mandala-white-wine    /products    301
+/Jack Daniel's Sinatra    /products/jack-daniels-sinatra    301
+/Don Julio Reposado    /products/don-julio-reposado    301
+/tanqueray-no    /products    301
+/k.o tambuzi    /products/k-o-tambuzi    301
+/brand/61bc8695be9a7465205651ee    /brands    301
+/Jinro 24 Soju    /products/jinro-24-soju    301
+/cream    /products    301
+/rizla-rolling-paper    /products    301
+/Accessories    /products/accessories    301
+/Hapsburg Absinthe Cassis X.C    /products/hapsburg-absinthe-cassis-x-c    301
+/thrones    /products    301
+/Bateleur Honey Badger Blonde    /products/bateleur-honey-badger-blonde    301
+/mara-tamu-wines    /products    301
+/product/Durex-feel-ultra-thin-condoms    /products/Durex-feel-ultra-thin-condoms    301
+/brand/640729482d9ad43e1a8ba8db    /brands    301
+/Johnnie Walker Platinum Label    /products/johnnie-walker-platinum-label    301
+/mandala-wines-in-kenya    /products    301
+/pineapple    /products    301
+/Jura 16 Years Whisky    /products/jura-16-years-whisky    301
+/Macallan Rare Cask    /products/macallan-rare-cask    301
+/Zapallares Sauvignon Blanc    /products/zapallares-sauvignon-blanc    301
+/Chivas 25 Years    /products/chivas-25-years    301
+/hendrick-s-gin    /products    301
+/Chivas-royal-salute-21 yrs    /products/chivas-royal-salute-21-yrs    301
+/guinness-draught    /products    301
+/Teremana Reposado Tequila    /products/teremana-reposado-tequila    301
+/sand-trap-craft- beer    /products/sand-trap-craft-beer    301
+/sand-trap-alcohol-content    /products    301
+/product/cono-sur-reserva-especial-pinot Noir    /products/cono-sur-reserva-especial-pinot Noir    301
+/Fitch & Leedes Club Soda    /products/fitch-and-leedes-club-soda    301
+/New Grove Silver    /products/new-grove-silver    301
+/Jack Daniel's Honey Lemonade    /products/jack-daniels-honey-lemonade    301
+/brand/68db99141226e9ac17ab2522    /brands    301
+/brand/63db6c86f74259545bb145fa    /brands    301
+/fleurs-de-prairie-sparkling-brut-white    /products    301
+/1litre    /products    301
+/prosecco-wine    /products    301
+/oettinger    /products    301
+/brand    /products    301
+/8PM Fire Liqueur    /products/8pm-fire-liqueur    301
+/Rampur PX Sherry Single Malt Whisky    /products/rampur-px-sherry-single-malt-whisky    301
+/brand/61bc6117be9a746520565194    /brands    301
+/vazo-vapes    /products    301
+/grant-s-whiskey    /products    301
+/Monster Energy Import Light    /products/monster-energy-import-light    301
+/product/254 Amberseli 330ml    /products/254 Amberseli 330ml    301
+/category/whisky    /whisky    301
+/amani-bay-natural-sweet-red    /products    301
+/brand/61ab735f51cb3b4f0d6b921c    /brands    301
+/Glenmorangie The Elementa 14 Years    /products/glenmorangie-the-elementa-14-years    301
+/product-origin/South Africa    /products/south-africa    301
+/product/Fitch & Leedes Indian Tonic    /products/Fitch & Leedes Indian Tonic    301
+/Olmeca Anejo Extra Aged    /products/olmeca-anejo-extra-aged    301
+/location/along-waiyaki-way    /locations    301
+/brand/649280a6860f2b638e9b492a    /brands    301
+/blue    /products    301
+/brand/6855ac67b2d52b916b3d40fb    /brands    301
+/Lillet Rose    /products/lillet-rose    301
+/brand/645a36912f356f65a18d78a3    /brands    301
+/category/soft-drinks    /soft-drinks    301
+/brand/63f4c9d89b82213218257d28    /brands    301
+/Levantine Gin    /products/levantine-gin    301
+/jameson-whisky    /products    301
+/six-pack    /products    301
+/Highland Park Valfather    /products/highland-park-valfather    301
+/Bateleur Dire Straits Pilsen    /products/bateleur-dire-straits-pilsen    301
+/Greenall's Blueberry Gin    /products/greenalls-blueberry-gin    301
+/location/kasarani    /locations    301
+/New Grove Cafe Liqueur    /products/new-grove-cafe-liqueur    301
+/moscato    /products    301
+/brand/64476fd6b97ca74d7c8cb814    /brands    301
+/brand/64d35c06ebd2f64fc96f02af    /brands    301
+/product/Butlers Blue Curacao    /products/Butlers Blue Curacao    301
+/product/hendrick    /products/hendrick    301
+/a    /products    301
+/product/cederberg-cabernet-sauvignon    /products/cederberg-cabernet-sauvignon    301
+/xo-cognac    /products    301
+/brand/63b416d7082b4c13f49be7ce    /brands    301
+/brand/61bc7fd6be9a7465205651d6    /brands    301
+/Officer's Choice Blue Whisky    /products/officers-choice-blue-whisky    301
+/vsop    /products    301
+/blog/cat/dial-a-drink    /blog    301
+/brand/68bec93caf369e8d51274467    /brands    301
+/olmeca    /products    301
+/Johnnie Walker Explorers Club-The Spice Road    /products/johnnie-walker-explorers-club-the-spice-road    301
+/saronsberg-full-circle    /products    301
+/rupert    https://www.dialadrinkkenya.com/rupert    301
+/san-pellegrino-aranciata    /products    301
+/aranciata-can-in-kenya    /products    301
+/product/Absolute-mango    /products/Absolute-mango    301
+/Mateus Tempranillo Rose    /products/mateus-tempranillo-rose    301
+/john-bannermans-read-seal-alcohol-content    /products    301
+/San-pellegrino Aranciata can    /products/san-pellegrino-aranciata-can    301
+/brand/Rémy Martin    /products/r-my-martin    301
+/product/Greenall's Wild Berry Pink Gin    /products/Greenall's Wild Berry Pink Gin    301
+/brand/61bc7071be9a7465205651aa    /brands    301
+/garant extreme nicotine pouches    /products/garant-extreme-nicotine-pouches    301
+/category/liqueurs    /liqueurs    301
+/Fitch & Leedes Classic Ginger Beer    /products/fitch-and-leedes-classic-ginger-beer    301
+/Jaisalmer Indian Craft Gin    /products/jaisalmer-indian-craft-gin    301
+/brand/63ce6e75d6cd0807409aacea    /brands    301
+/Monster The Doctor    /products/monster-the-doctor    301
+/Sidekick Toffee Caramel    /products/sidekick-toffee-caramel    301
+/cigars-cigarettes    /products    301
+/Olmeca Tezon Blanco    /products/olmeca-tezon-blanco    301
+/prices    /products    301
+/brand/61bc85dbbe9a7465205651ec    /brands    301
+/Greenall's London Dry Gin    /products/greenalls-london-dry-gin    301
+/Courvoisier VS    /products/courvoisier-vs    301
+/Ponchos Blanco    /products/ponchos-blanco    301
+/Famous Grouse Smoky Black    /products/famous-grouse-smoky-black    301
+/Fattori Amarone Della Valpolicella    /products/fattori-amarone-della-valpolicella    301
+/brand/631b8d021d397f102c6de77e    /brands    301
+/Famous Grouse    /products/famous-grouse    301
+/vermouths    /products    301
+/Glensilver 12 Years    /products/glensilver-12-years    301
+/Meukow X.O    /products/meukow-x-o    301
+/brand/63aee803896fd720d70aec0d    /brands    301
+/Jameson Whiskey    /products/jameson-whiskey    301
+/sweet-red-wine    /products    301
+/Graham's 40 Year Old Tawny Port wine    /products/grahams-40-year-old-tawny-port-wine    301
+/brand/6314f00007de580f6ac9f51d    /brands    301
+/Martini Bianco    /products/martini-bianco    301
+/tobacco    /products    301
+/brand/64119017c523b6612df3eb3a    /brands    301
+/moet-chandon-nectar-imperial    /products    301
+/Strawberry Lips    /products/strawberry-lips    301
+/Kinross Pink Gin    /products/kinross-pink-gin    301
+/brand/61bc6053be9a746520565190    /brands    301
+/brand/61bc8c99be9a746520565200    /brands    301
+/six    /products    301
+/Brancott Letter Series Sauvignon Blanc    /products/brancott-letter-series-sauvignon-blanc    301
+/versus-red-sweet-red-wine-alcohol-content    /products    301
+/search/Brown-forman    /products?search=Brown-forman    301
+/location/loresho    /locations    301
+/pink-tonic-in-kenya    /products    301
+/buy-gilbey-s-gin-online-in-kenya    /products    301
+/johnnie-walker-black-label    /products    301
+/cigars-and-ciggarrettes    /products    301
+/red-label    /products    301
+/category/beers/cider-beer    /beers/cider-beer    301
+/Ponchos Caramel Infusion (liqueur)    /products/ponchos-caramel-infusion-liqueur    301
+/Frangelico Hazelnut Liqueur    /products/frangelico-hazelnut-liqueur    301
+/product/Louis-max-beaujolais-villages    /products/Louis-max-beaujolais-villages    301
+/Footprint Pinotage Rose    /products/footprint-pinotage-rose    301
+/blog/most-popular-cocktails-in-Kenya-dial-a-drink-Kenya    /products/most-popular-cocktails-in-kenya-dial-a-drink-kenya    301
+/Akso Aloe Grapes    /products/akso-aloe-grapes    301
+/search/Johnnie Walker    /products?search=Johnnie%20Walker    301
+/Ginebra San Miguel Gin    /products/ginebra-san-miguel-gin    301
+/Magic Moments Green Apple    /products/magic-moments-green-apple    301
+/brand/63ca9691dfb5177ca158dd43    /brands    301
+/Hennessy xo 1 litre    /products/hennessy-xo-1-litre    301
+/sande-man-wine-alcohol-content    /products    301
+/de luze    /products/de-luze    301
+/blacklabel-whisky    /products    301
+/chalk-hill-shiraz-cabernet-availability-in-kenya    /products    301
+/keny    /products    301
+/Flirt vodka strawberry    /products/flirt-vodka-strawberry    301
+/Heineken 330ml bottle    /products/heineken-330ml-bottle    301
+/Tanduay Double Rum    /products/tanduay-double-rum    301
+/guinness    /products    301
+/Bacardi Anejo Cuatro    /products/bacardi-anejo-cuatro    301
+/Imperial Blue Whiskey    /products/imperial-blue-whiskey    301
+/Budweiser Beer 355ml    /products/budweiser-beer-355ml    301
+/schweppes    /products    301
+/brand/6315f32715fcb541c39dd04a    /brands    301
+/Curado Espadin    /products/curado-espadin    301
+/Footprint Chenin Blanc Semilion    /products/footprint-chenin-blanc-semilion    301
+/rupert    /products    301
+/category/beers/lager-beer    /beers/lager-beer    301
+/Beefeater Clear Gin    /products/beefeater-clear-gin    301
+/Belvedere Pink Grapefruit    /products/belvedere-pink-grapefruit    301
+/Bardinet Curacao Liqueur    /products/bardinet-curacao-liqueur    301
+/Emperador Brandy    /products/emperador-brandy    301
+/category/liqueurs/blended-whisky    /liqueurs/blended-whisky    301
+/brand/6315c8ce840a972c4e2d9812    /brands    301
+/El Charro Gold    /products/el-charro-gold    301
+/Fitch & Leedes Lemonade    /products/fitch-and-leedes-lemonade    301
+/Simonsig Kaapse Vonkel Brut    /products/simonsig-kaapse-vonkel-brut    301
+/macallan-select-oak    /products    301
+/Atlas 16    /products/atlas-16    301
+/1-piece    /products    301
+/Butlers Ginger    /products/butlers-ginger    301
+/Zappa Sambuka White    /products/zappa-sambuka-white    301
+/Tequila 1800 Coconut    /products/tequila-1800-coconut    301
+/asconi-750ml-price-in-kenya    /products    301
+/Tequila 1800 Silver    /products/tequila-1800-silver    301
+/Lillet Rouge    /products/lillet-rouge    301
+/Four cousins sweet white    /products/four-cousins-sweet-white    301
+/pimm-s    /products    301
+/amarula-alcohol-content    /products    301
+/product/m.chapoutier-belleruche-cotes-du-rhone    /products/m.chapoutier-belleruche-cotes-du-rhone    301
+/375ml    /products    301
+/Aviation Gin    /products/aviation-gin    301
+/location/muthaiga    /locations    301
+/amarula-price-in-kenya    /products    301
+/victoria's stag    /products/victorias-stag    301
+/category/wine    /wine    301
+/Bols Elderflower    /products/bols-elderflower    301
+/Laphroaig Px Cask    /products/laphroaig-px-cask    301
+/Old Forester Bourbon    /products/old-forester-bourbon    301
+/Monin Ruby Grapefruit Puree    /products/monin-ruby-grapefruit-puree    301
+/Corralejo Tequila Reposado    /products/corralejo-tequila-reposado    301
+/Highland Park Spirit of The Bear    /products/highland-park-spirit-of-the-bear    301
+/Calvet Celebration Sparkling Brut-rose    /products/calvet-celebration-sparkling-brut-rose    301
+/dewar's-18-years whisky    /products/dewars-18-years-whisky    301
+/Fattori Classicco Ronca 36    /products/fattori-classicco-ronca-36    301
+/Graham's Late Vintage Port wine    /products/grahams-late-vintage-port-wine    301
+/search/Ballantine's    /products?search=Ballantine%27s    301
+/category/beers/strong-beer    /beers/strong-beer    301
+/Gallo Family    /products/gallo-family    301
+/Coolberg Cranberry Beer 0.0    /products/coolberg-cranberry-beer-0-0    301
+/brand/63c904c34c87c9514894e594    /brands    301
+/price-in-kenya    /products    301
+/brand/5d415cab8492f14b3c249184    /brands    301
+/KWV Cruxland Gin    /products/kwv-cruxland-gin    301
+/brand/61bc9bc4be9a746520565218    /brands    301
+/Monin Pop Corn Syrup    /products/monin-pop-corn-syrup    301
+/Tons de Duorum White    /products/tons-de-duorum-white    301
+/Monin Vanilla Syrup    /products/monin-vanilla-syrup    301
+/brand/61bc84ecbe9a7465205651ea    /brands    301
+/brand/63ad92e7433ed165926d4704    /brands    301
+/Sandeman Fine Tawny Port Wine    /products/sandeman-fine-tawny-port-wine    301
+/gordon    /products    301
+/espolo- reposado -tequila    /products/espolo-reposado-tequila    301
+/hennesy    /products    301
+/cider-beers-kenya    /products    301
+/Dewar's Founder's Reserve 18 Years    /products/dewars-founders-reserve-18-years    301
+/johhnie    /products    301
+/brand/63c8f9b24c87c9514894e585    /brands    301
+/groot-constantia-gouveneurs-reserve    /products    301
+/pinotage-wine    /products    301
+/b & g-cuvee-special-rouge    /products/b-and-g-cuvee-special-rouge    301
+/asconi-wines    /products    301
+/Hennessy Pure White    /products/hennessy-pure-white    301
+/Calvet Bordeaux Moelleux    /products/calvet-bordeaux-moelleux    301
+/blog/cat/muratina    /blog    301
+/pr    /products    301
+/58-gin    /products    301
+/location/kilimani    /locations    301
+/macallan rare cask    /products/macallan-rare-cask    301
+/Jack Daniel's Tennessee Apple    /products/jack-daniels-tennessee-apple    301
+/product/m.chapoutier-la-ciboise-luberon-rouge    /products/m.chapoutier-la-ciboise-luberon-rouge    301
+/product/Glenlivet-caribbean-reserve    /products/Glenlivet-caribbean-reserve    301
+/flavoured-gilbeys    /products    301
+/Glenlivet Caribbean Reserve    /products/glenlivet-caribbean-reserve    301
+/amarula-cream-liqueur    /products    301
+/Chivas Regal Kingsize    /products/chivas-regal-kingsize    301
+/chivas regal kingsize    /products/chivas-regal-kingsize    301
+/Belaire Gold Fantome    /products/belaire-gold-fantome    301
+/search/Baileys    /products?search=Baileys    301
+/brand/68dba1479c0badbc41be1d8c    /brands    301
+/K.O Tambuzi Gin    /products/k-o-tambuzi-gin    301
+/baron d'arignac brut    /products/baron-darignac-brut    301
+/Glenmorangie The Lasanta Whisky    /products/glenmorangie-the-lasanta-whisky    301
+/Glenlivet Captain Reserve    /products/glenlivet-captain-reserve    301
+/brand/68a4d60e443ad108fbfacac1    /brands    301
+/brand/651bce31937e4d5d5b40a0c9    /brands    301
+/Bacardi Breezer Pineapple    /products/bacardi-breezer-pineapple    301
+/durex-feel-ultra-thin    /products    301
+/j&B-15-years    /products/j-and-b-15-years    301
+/brand/670bec8152c47624b7714d3a    /brands    301
+/Budweiser Beer Can    /products/budweiser-beer-can    301
+/category/smokes/cigars-and-cigarettes    /smokes/cigars-and-cigarettes    301
+/robertson-s-winery    /products    301
+/2-litres    /products    301
+/martell    /products    301
+/amani-bay-dry-rose    /products    301
+/brand/649ab5b15ce79039fa4e5603    /brands    301
+/rosso    /products    301
+/Monin Blueberry Puree    /products/monin-blueberry-puree    301
+/kenyan-beer    /products    301
+/Officer's Choice Rare Whisky    /products/officers-choice-rare-whisky    301
+/cinnamon    /products    301
+/Kawashima Junmai Shu Sake    /products/kawashima-junmai-shu-sake    301
+/absinthe-kenya    /products    301
+/La Tilica Reposado    /products/la-tilica-reposado    301
+/category/whisky/single-malt-whiskies    https://www.dialadrinkkenya.com/category/whisky/single-malt-whiskies    301
+/isle-of-jura-the-loch-whisky    /products    301
+/Talisker Storm    /products/talisker-storm    301
+/product/rampur-pX -sherry-single-malt-whisky    /products/rampur-pX -sherry-single-malt-whisky    301
+/brand/61bc6dd3be9a7465205651a4    /brands    301
+/brand/61bc4410be9a74652056518a    /brands    301
+/rose    /products    301
+/200ml    /products    301
+/stellenbosch-wines-kenya    /products    301
+/Greenalls Blood Orange & Fig    /products/greenalls-blood-orange-and-fig    301
+/location/kenya    /locations    301
+/groot-constantia-shiraz    /products    301
+/gordon-s    /products    301
+/product    /products    301
+/leleshwa merlot shiraz    /products/leleshwa-merlot-shiraz    301
+/brand/63ca6b11dfb5177ca158dd33    /brands    301
+/Patron Citronge Orange Liqueur    /products/patron-citronge-orange-liqueur    301
+/Tequila Sauza Gold    /products/tequila-sauza-gold    301
+/Monin Apple Puree    /products/monin-apple-puree    301
+/captain-gold    /products    301
+/brands    /products    301
+/Bavaria 0.0 Ginger & Lime    /products/bavaria-0-0-ginger-and-lime    301
+/Coolberg Mint 0.0 Beer    /products/coolberg-mint-0-0-beer    301
+/pink-gin-750ml    /products    301
+/category/soft-drinks/soft-drink    /soft-drinks/soft-drink    301
+/brand/61bdab83be9a746520565261    /brands    301
+/Gautier XO Gold & Blue Cognac    /products/gautier-xo-gold-and-blue-cognac    301
+/maker-s-mark-whiskey    /products    301
+/Sauza Tequila Silver    /products/sauza-tequila-silver    301
+/Jura Seven Wood Whisky    /products/jura-seven-wood-whisky    301
+/schweppes-tonic    /products    301
+/Bloom London Dry Gin    /products/bloom-london-dry-gin    301
+/location/parklands    /locations    301
+/vermouth-martini-rosso    /products    301
+/jnb    /products    301
+/absolute-pepper    /products    301
+/glensilver-12-years    /products    301
+/fonseca-tawny-port    /products    301
+/location/mlolongo    /locations    301
+/location/roysambu    /locations    301
+/veuve-clicquot-champagne    /products    301
+/product/fonseca-ruby-port    /products/fonseca-ruby-port    301
+/product/glensilver-12-years    /products/glensilver-12-years    301
+/product/don-julio-anejo-700ml    /products/don-julio-anejo-700ml    301
+/tugboat-strawberry-watermelon    /products    301
+/product/bianco-nobile    /products/bianco-nobile    301
+/akso-strawberry-pitaya    /products    301
+/captain-morgan-white-rum    /products    301
+/fattori-pinot-grigio-valparadiso    /products    301
+/beluga-vodka    /products    301
+/tugboat-lush-ice-vape    /products    301
+/frontera-after-midnight    /products    301
+/michael-david-petite-petit    /products    301
+/stellenbosch-vineyards-bushvine-pinotage    /products    301
+/mermaid-pink-gin    /products    301
+/adelberg-simonsig-cabernet-sauvignon-merlot    /products    301
+/michel-torino-coleccion-sauvignon-blanc    /products    301
+/cono-sur-organico-sauvignon-blanc    /products    301
+/jp-chenet-sauvignon-blanc    /products    301
+/akso-aloe-grapes    /products    301
+/el-esteco-altimus    /products    301
+/don-fernando    /products    301
+/carmela-sparkling-wine    /products    301
+/savanna cider    /products/savanna-cider    301
+/finca-flichman-roble-malbec    /products    301
+/mateus-tempranillo-rose    /products    301
+/michel-torino-coleccion-cabernet-sauvignon    /products    301
+/louis-jodot-chateau-des-jacques-morgon    /products    301
+/louis-jadot-brouilly    /products    301
+/offley-10-old-tawny-porto    /products    301
+/sakurao-limited-gin    /products    301
+/el-esteco-don-david-reserve-chardonnay    /products    301
+/baileys-red-velvet    /products    301
+/hendricks    /products    301
+/Footprint Merlot    /products/footprint-merlot    301
+/diemersdal-pinotage    /products    301
+/calvet-chateauneuf-du-pape    /products    301
+/hop-house-lager-beer    /products    301
+/cantalici-baruffo-vin-santo    /products    301
+/Glenfiddich 12 Years    /products/glenfiddich-12-years    301
+/hendricks-amazonia    /products    301
+/angostura-3-years-old-reserve    /products    301
+/st-celine    /products    301
+/akso-strawberry-ice    /products    301
+/ruhr-gold    /products    301
+/cesari-bardolino-classico    /products    301
+/patron-xo-cafe    /products    301
+/smokes    /products    301
+/taittinger-prestige-rose    /products    301
+/durbanville-hills-sauvignon-blanc    /products    301
+/location/ruaka    /locations    301
+/durbanville-hills-merlot-rhinofld    /products    301
+/Simonsig Cabernet Sauvignon Merlot    /products/simonsig-cabernet-sauvignon-merlot    301
+/vermouth-60s-pimm-60s    /products    301
+/dark-rum    /products    301
+/ketel-one-vodka    /products    301
+/terra-linda-syrah-red    /products    301
+/nederburg-cuvee-brut    /products    301

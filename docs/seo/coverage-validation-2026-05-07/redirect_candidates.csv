@@ -1,0 +1,803 @@
+source_url,status,path,rule_type,suggested_target,confidence,note
+https://www.dialadrinkkenya.com/Fruit Fly Mango IPA,Pending,/Fruit Fly Mango IPA,name_to_product_slug,/products/fruit-fly-mango-ipa,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/search/belaire,Pending,/search/belaire,search_to_products_query,/products?search=belaire,high,Legacy search path.
+https://www.dialadrinkkenya.com/Chita Suntory Whisky,Pending,/Chita Suntory Whisky,name_to_product_slug,/products/chita-suntory-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/William Lawson's,Pending,/William Lawson's,name_to_product_slug,/products/william-lawsons,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/dom-p-rignon-price-in-kenya,Pending,/dom-p-rignon-price-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/search/Lagavulin,Pending,/search/Lagavulin,search_to_products_query,/products?search=Lagavulin,high,Legacy search path.
+https://www.dialadrinkkenya.com/Bavaria 0.0 Mango Passion,Pending,/Bavaria 0.0 Mango Passion,name_to_product_slug,/products/bavaria-0-0-mango-passion,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/blog/cat/nairobi,Pending,/blog/cat/nairobi,legacy_blog_category,/blog,high,Old category taxonomy path.
+https://www.dialadrinkkenya.com/Glenfiddich Reserve Cask,Pending,/Glenfiddich Reserve Cask,name_to_product_slug,/products/glenfiddich-reserve-cask,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Mad Chimp No.9 Gin,Pending,/Mad Chimp No.9 Gin,name_to_product_slug,/products/mad-chimp-no-9-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Gato Negro,Pending,/Gato Negro,name_to_product_slug,/products/gato-negro,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bottega Bacur Gin,Pending,/Bottega Bacur Gin,name_to_product_slug,/products/bottega-bacur-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/ngara,Pending,/location/ngara,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/brand/64830a14836f202ac62e3f49,Pending,/brand/64830a14836f202ac62e3f49,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Akso Melon Ice,Pending,/Akso Melon Ice,name_to_product_slug,/products/akso-melon-ice,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Espolon Blanco Tequila,Pending,/Espolon Blanco Tequila,name_to_product_slug,/products/espolon-blanco-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bols Vodka,Pending,/Bols Vodka,name_to_product_slug,/products/bols-vodka,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/malbec,Pending,/malbec,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/buy-bailey-s-best-price-in-kenya,Pending,/buy-bailey-s-best-price-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63f0fd804a23fc3533039595,Pending,/brand/63f0fd804a23fc3533039595,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Butlers Triple Sec,Pending,/Butlers Triple Sec,name_to_product_slug,/products/butlers-triple-sec,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/malbec-wine,Pending,/malbec-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/631f373122f6047de2372a19,Pending,/brand/631f373122f6047de2372a19,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/63ecea53f0fcf6484ffee62e,Pending,/brand/63ecea53f0fcf6484ffee62e,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/ fleurs-de-prairie-sparkling-brut-rose,Pending,/fleurs-de-prairie-sparkling-brut-rose,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bc878cbe9a7465205651f2,Pending,/brand/61bc878cbe9a7465205651f2,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Kura Pure Malt,Pending,/Kura Pure Malt,name_to_product_slug,/products/kura-pure-malt,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Jura The Road,Pending,/Jura The Road,name_to_product_slug,/products/jura-the-road,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63b2b34250f1151323f75e9c,Pending,/brand/63b2b34250f1151323f75e9c,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Johnnie Walker A song of Ice,Pending,/Johnnie Walker A song of Ice,name_to_product_slug,/products/johnnie-walker-a-song-of-ice,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/pipers-heidesieck,Pending,/pipers-heidesieck,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/four-cousin-s,Pending,/four-cousin-s,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Tijuana Sweet Heat,Pending,/Tijuana Sweet Heat,name_to_product_slug,/products/tijuana-sweet-heat,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bateleur Dirty Hairy Copper Ale,Pending,/Bateleur Dirty Hairy Copper Ale,name_to_product_slug,/products/bateleur-dirty-hairy-copper-ale,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Fitch & Leedes Classic Lime Twist,Pending,/Fitch & Leedes Classic Lime Twist,name_to_product_slug,/products/fitch-and-leedes-classic-lime-twist,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Chivas Regal Ultis,Pending,/Chivas Regal Ultis,name_to_product_slug,/products/chivas-regal-ultis,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/mucho,Pending,/mucho,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Kura Rum Cask Finish,Pending,/Kura Rum Cask Finish,name_to_product_slug,/products/kura-rum-cask-finish,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Don Montego VSOP,Pending,/Don Montego VSOP,name_to_product_slug,/products/don-montego-vsop,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ Curado Blanco Cupreata,Pending,/Curado Blanco Cupreata,name_to_product_slug,/products/curado-blanco-cupreata,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Triple Sec Curacao Liqueur,Pending,/Monin Triple Sec Curacao Liqueur,name_to_product_slug,/products/monin-triple-sec-curacao-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/asconi,Pending,/asconi,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63b2a95e02921d46fd0b775e,Pending,/brand/63b2a95e02921d46fd0b775e,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/hendrick-s,Pending,/hendrick-s,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Almond Syrup,Pending,/Monin Almond Syrup,name_to_product_slug,/products/monin-almond-syrup,medium,Human-readable product-like URL normalized to product slug.
+"https://www.dialadrinkkenya.com/products?brand=lyres zero 
+alcohol&sort=price_asc",Pending,/products,normalize_products_query,/products,medium,"Invalid query values (e.g., undefined/spacing)."
+https://www.dialadrinkkenya.com/products/products/61499a6558625f664d79c14f,Pending,/products/products/61499a6558625f664d79c14f,collapse_duplicate_products_segment,/products/61499a6558625f664d79c14f,high,Malformed duplicate products segment.
+https://www.dialadrinkkenya.com/Reki Blended Whisky,Pending,/Reki Blended Whisky,name_to_product_slug,/products/reki-blended-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/products/products/5b48e933bdd218570be62033,Pending,/products/products/5b48e933bdd218570be62033,collapse_duplicate_products_segment,/products/5b48e933bdd218570be62033,high,Malformed duplicate products segment.
+https://www.dialadrinkkenya.com/brand/602238d026f44f16622c2ba3,Pending,/brand/602238d026f44f16622c2ba3,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/La Tilica Anejo,Pending,/La Tilica Anejo,name_to_product_slug,/products/la-tilica-anejo,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/gilbey-s,Pending,/gilbey-s,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/category/tequila/gold-tequila,Pending,/category/tequila/gold-tequila,drop_category_prefix,/tequila/gold-tequila,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/leleshwa,Pending,/leleshwa,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/El Charro Silver,Pending,/El Charro Silver,name_to_product_slug,/products/el-charro-silver,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bunnahbhain 12 Years,Pending,/Bunnahbhain 12 Years,name_to_product_slug,/products/bunnahbhain-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/6321dfebebf50969aa1d087c,Pending,/brand/6321dfebebf50969aa1d087c,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/6357b53a1f76755cbceacf8f,Pending,/brand/6357b53a1f76755cbceacf8f,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Bols Peppermint Green Liqueur,Pending,/Bols Peppermint Green Liqueur,name_to_product_slug,/products/bols-peppermint-green-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Cuerpo Gold Rum Liqueur,Pending,/Cuerpo Gold Rum Liqueur,name_to_product_slug,/products/cuerpo-gold-rum-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63f4b62a9b82213218257d0d,Pending,/brand/63f4b62a9b82213218257d0d,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/select,Pending,/select,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products?brand=evans william,Pending,/products,normalize_products_query,/products,medium,"Invalid query values (e.g., undefined/spacing)."
+https://www.dialadrinkkenya.com/products?brand=Diemersdal Wines,Pending,/products,normalize_products_query,/products,medium,"Invalid query values (e.g., undefined/spacing)."
+https://www.dialadrinkkenya.com/the-famous-grouse,Pending,/the-famous-grouse,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Butlers Blue Curacao,Pending,/Butlers Blue Curacao,name_to_product_slug,/products/butlers-blue-curacao,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/6325b76d300a7c2ee440920a,Pending,/brand/6325b76d300a7c2ee440920a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Zappa Sambuca Black,Pending,/Zappa Sambuca Black,name_to_product_slug,/products/zappa-sambuca-black,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Peach Liqueur,Pending,/Monin Peach Liqueur,name_to_product_slug,/products/monin-peach-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/tequila/mezcal-tequila,Pending,/category/tequila/mezcal-tequila,drop_category_prefix,/tequila/mezcal-tequila,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/location/madaraka,Pending,/location/madaraka,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/Grey Goose Vx,Pending,/Grey Goose Vx,name_to_product_slug,/products/grey-goose-vx,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bacardi Limited,Pending,/Bacardi Limited,name_to_product_slug,/products/bacardi-limited,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/products/products/dialdrinkkenya.com/category/whisky,Pending,/products/products/dialdrinkkenya.com/category/whisky,collapse_duplicate_products_segment,/products/dialdrinkkenya.com/category/whisky,high,Malformed duplicate products segment.
+https://www.dialadrinkkenya.com/T1 Tequila Blanco,Pending,/T1 Tequila Blanco,name_to_product_slug,/products/t1-tequila-blanco,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/products/products/60ed631a8a0be5532d8d1729,Pending,/products/products/60ed631a8a0be5532d8d1729,collapse_duplicate_products_segment,/products/60ed631a8a0be5532d8d1729,high,Malformed duplicate products segment.
+https://www.dialadrinkkenya.com/Whitley Neil Raspberry,Pending,/Whitley Neil Raspberry,name_to_product_slug,/products/whitley-neil-raspberry,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ Casamigos Mezcal Tequila,Pending,/Casamigos Mezcal Tequila,name_to_product_slug,/products/casamigos-mezcal-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Lemon Tea Syrup,Pending,/Monin Lemon Tea Syrup,name_to_product_slug,/products/monin-lemon-tea-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Mortlach Single Malt 20 Years,Pending,/Mortlach Single Malt 20 Years,name_to_product_slug,/products/mortlach-single-malt-20-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bitola Red wine,Pending,/Bitola Red wine,name_to_product_slug,/products/bitola-red-wine,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63d904b06dc480557c3b908f,Pending,/brand/63d904b06dc480557c3b908f,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/68dbb615299308a1d29a4949,Pending,/brand/68dbb615299308a1d29a4949,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/gordon-s-pink,Pending,/gordon-s-pink,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products/Boschendal-1685-chenin-blanc,Pending,/products/Boschendal-1685-chenin-blanc,name_to_product_slug,/products/boschendal-1685-chenin-blanc,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/blog/cat/whisky,Pending,/blog/cat/whisky,legacy_blog_category,/blog,high,Old category taxonomy path.
+https://www.dialadrinkkenya.com/brand/61bc6256be9a746520565197,Pending,/brand/61bc6256be9a746520565197,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/63db757cf74259545bb145ff,Pending,/brand/63db757cf74259545bb145ff,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Monin Vanilla Frappe,Pending,/Monin Vanilla Frappe,name_to_product_slug,/products/monin-vanilla-frappe,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/samantha,Pending,/samantha,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/procera gin,Pending,/brand/procera gin,name_to_product_slug,/products/procera-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bdb522be9a746520565270,Pending,/brand/61bdb522be9a746520565270,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/4th Street White Sweet,Pending,/4th Street White Sweet,name_to_product_slug,/products/4th-street-white-sweet,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/products/products/products/5b48e933bdd218570be62044,Pending,/products/products/products/5b48e933bdd218570be62044,collapse_duplicate_products_segment,/products/products/5b48e933bdd218570be62044,high,Malformed duplicate products segment.
+https://www.dialadrinkkenya.com/ douglas-green-sunkissed-wine,Pending,/douglas-green-sunkissed-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ delush-sweet-white,Pending,/delush-sweet-white,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/6447749bb97ca74d7c8cb817,Pending,/brand/6447749bb97ca74d7c8cb817,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/El Chivo Sauvignon Blanc,Pending,/El Chivo Sauvignon Blanc,name_to_product_slug,/products/el-chivo-sauvignon-blanc,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/moet,Pending,/moet,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bavaria Black,Pending,/Bavaria Black,name_to_product_slug,/products/bavaria-black,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Agavita Blanco,Pending,/Agavita Blanco,name_to_product_slug,/products/agavita-blanco,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/south-c,Pending,/location/south-c,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/ amani-bay-natural-sweet-rose,Pending,/amani-bay-natural-sweet-rose,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/68db9a26299308a1d29a4942,Pending,/brand/68db9a26299308a1d29a4942,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Aberlour 12 Years,Pending,/Aberlour 12 Years,name_to_product_slug,/products/aberlour-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ cederberg-cabernet-sauvignon,Pending,/cederberg-cabernet-sauvignon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bc8821be9a7465205651f4,Pending,/brand/61bc8821be9a7465205651f4,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Monster Assault,Pending,/Monster Assault,name_to_product_slug,/products/monster-assault,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Cloudy Lemonade Syrup,Pending,/Monin Cloudy Lemonade Syrup,name_to_product_slug,/products/monin-cloudy-lemonade-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/craft-beer,Pending,/craft-beer,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monster Energy,Pending,/Monster Energy,name_to_product_slug,/products/monster-energy,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ballantine,Pending,/ballantine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Blue Curacao Liqueur,Pending,/Monin Blue Curacao Liqueur,name_to_product_slug,/products/monin-blue-curacao-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/hennessy-vs-cognac,Pending,/product/hennessy-vs-cognac,product_to_products,/products/hennessy-vs-cognac,high,Standardize product route.
+"https://www.dialadrinkkenya.com/blog/5 Best Cognac Drinks in Kenya | Buy 
+Premium Cognac Online – Dial A Drink Kenya",Pending,/blog/5 Best Cognac Drinks in Kenya | Buy Premium Cognac Online – Dial A Drink Kenya,name_to_product_slug,/products/5-best-cognac-drinks-in-kenya-buy-premium-cognac-online-dial-a-drink-kenya,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/El Jimador Anejo Tequila,Pending,/El Jimador Anejo Tequila,name_to_product_slug,/products/el-jimador-anejo-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brown-forman,Pending,/brown-forman,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Magic Moments Raspberry,Pending,/Magic Moments Raspberry,name_to_product_slug,/products/magic-moments-raspberry,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Obolon Premium,Pending,/Obolon Premium,name_to_product_slug,/products/obolon-premium,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glenfiddich Triple Oak 12 Years,Pending,/Glenfiddich Triple Oak 12 Years,name_to_product_slug,/products/glenfiddich-triple-oak-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/6411ad171248e0781e82ef4e,Pending,/brand/6411ad171248e0781e82ef4e,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Lodez Cabernet Sauvignon,Pending,/Lodez Cabernet Sauvignon,name_to_product_slug,/products/lodez-cabernet-sauvignon,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/products/tomatin-highland-Single-Malt12-years,Pending,/products/tomatin-highland-Single-Malt12-years,name_to_product_slug,/products/tomatin-highland-single-malt12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Teremana Anejo,Pending,/Teremana Anejo,name_to_product_slug,/products/teremana-anejo,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Nginious Green Gin,Pending,/Nginious Green Gin,name_to_product_slug,/products/nginious-green-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Whitley Neil Blood Orange,Pending,/Whitley Neil Blood Orange,name_to_product_slug,/products/whitley-neil-blood-orange,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/green-label,Pending,/green-label,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/coffee,Pending,/coffee,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/cono-sur-reserva-especial -merlot,Pending,/product/cono-sur-reserva-especial -merlot,product_to_products,/products/cono-sur-reserva-especial -merlot,high,Standardize product route.
+https://www.dialadrinkkenya.com/products/Budweiser Beer,Pending,/products/Budweiser Beer,name_to_product_slug,/products/budweiser-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Diplomatico Reserva Exclusiva Rum,Pending,/Diplomatico Reserva Exclusiva Rum,name_to_product_slug,/products/diplomatico-reserva-exclusiva-rum,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/accessories,Pending,/accessories,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/T1 Reposado,Pending,/T1 Reposado,name_to_product_slug,/products/t1-reposado,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/64995dc66ef2a3162d42af86,Pending,/brand/64995dc66ef2a3162d42af86,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/61bc60d8be9a746520565192,Pending,/brand/61bc60d8be9a746520565192,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Mount Gay Black Barrel Barbados Rum,Pending,/Mount Gay Black Barrel Barbados Rum,name_to_product_slug,/products/mount-gay-black-barrel-barbados-rum,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Hombo iwai Premium whisky,Pending,/Hombo iwai Premium whisky,name_to_product_slug,/products/hombo-iwai-premium-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/64a29d6ff769510d81af0dce,Pending,/brand/64a29d6ff769510d81af0dce,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Glenlivet Nadurra Peated,Pending,/Glenlivet Nadurra Peated,name_to_product_slug,/products/glenlivet-nadurra-peated,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc7d2bbe9a7465205651cc,Pending,/brand/61bc7d2bbe9a7465205651cc,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/641d6d1b94511a1c9ee020ae,Pending,/brand/641d6d1b94511a1c9ee020ae,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/malbec-red-wine,Pending,/malbec-red-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ultra,Pending,/ultra,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Kurayoshi Sherry Cask,Pending,/Kurayoshi Sherry Cask,name_to_product_slug,/products/kurayoshi-sherry-cask,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63ea0422099a486cf16a546b,Pending,/brand/63ea0422099a486cf16a546b,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/category/champagne/sparkling-wine,Pending,/category/champagne/sparkling-wine,drop_category_prefix,/champagne/sparkling-wine,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/brand/6321d93f2a25955b260c8974,Pending,/brand/6321d93f2a25955b260c8974,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/greywacke-sauvignon -blanc,Pending,/greywacke-sauvignon -blanc,name_to_product_slug,/products/greywacke-sauvignon-blanc,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ cederberg-shiraz,Pending,/cederberg-shiraz,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bdb2c3be9a74652056526a,Pending,/brand/61bdb2c3be9a74652056526a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/nikka,Pending,/nikka,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bols Vanilla,Pending,/Bols Vanilla,name_to_product_slug,/products/bols-vanilla,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Patron Citronge Mango Liqueur,Pending,/Patron Citronge Mango Liqueur,name_to_product_slug,/products/patron-citronge-mango-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Fitch & Leedes Pink Tonic Sugar Free,Pending,/Fitch & Leedes Pink Tonic Sugar Free,name_to_product_slug,/products/fitch-and-leedes-pink-tonic-sugar-free,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glenmorangie The Tribute 16 Years,Pending,/Glenmorangie The Tribute 16 Years,name_to_product_slug,/products/glenmorangie-the-tribute-16-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/craft-beers,Pending,/craft-beers,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products/products/products/belvedere vodka,Pending,/products/products/products/belvedere vodka,collapse_duplicate_products_segment,/products/products/belvedere vodka,high,Malformed duplicate products segment.
+https://www.dialadrinkkenya.com/Marquis de Mons Margaux,Pending,/Marquis de Mons Margaux,name_to_product_slug,/products/marquis-de-mons-margaux,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/bardinet,Pending,/bardinet,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Dalmore Valour,Pending,/Dalmore Valour,name_to_product_slug,/products/dalmore-valour,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/diageo,Pending,/diageo,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/swartland-wine,Pending,/swartland-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products/Absolute-mango,Pending,/products/Absolute-mango,name_to_product_slug,/products/absolute-mango,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/64a2a682f769510d81af0dd4,Pending,/brand/64a2a682f769510d81af0dd4,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Bufalov French Wheat Sugar Free Vodka,Pending,/Bufalov French Wheat Sugar Free Vodka,name_to_product_slug,/products/bufalov-french-wheat-sugar-free-vodka,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Buchanan's Master Whisky,Pending,/Buchanan's Master Whisky,name_to_product_slug,/products/buchanans-master-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Mumm Champagne Rouge Rose,Pending,/Mumm Champagne Rouge Rose,name_to_product_slug,/products/mumm-champagne-rouge-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Clase Azul Plata Tequila,Pending,/Clase Azul Plata Tequila,name_to_product_slug,/products/clase-azul-plata-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Frontera Rose,Pending,/Frontera Rose,name_to_product_slug,/products/frontera-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Parker Favourite Son Shiraz,Pending,/Parker Favourite Son Shiraz,name_to_product_slug,/products/parker-favourite-son-shiraz,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/whisky/bourbon,Pending,/category/whisky/bourbon,drop_category_prefix,/whisky/bourbon,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Benchmark Old No.8,Pending,/Benchmark Old No.8,name_to_product_slug,/products/benchmark-old-no-8,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Kamiki Blended malt whisky,Pending,/Kamiki Blended malt whisky,name_to_product_slug,/products/kamiki-blended-malt-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/b & g-chateau-magnol-haut-medoc,Pending,/b & g-chateau-magnol-haut-medoc,name_to_product_slug,/products/b-and-g-chateau-magnol-haut-medoc,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bardinet Triple Sec Liqueur,Pending,/Bardinet Triple Sec Liqueur,name_to_product_slug,/products/bardinet-triple-sec-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/621df44b0e039b7846f10f53,Pending,/brand/621df44b0e039b7846f10f53,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/products?brand=undefined&page=1,Pending,/products,normalize_products_query,/products,medium,"Invalid query values (e.g., undefined/spacing)."
+https://www.dialadrinkkenya.com/Remy Martin Louis XIII,Pending,/Remy Martin Louis XIII,name_to_product_slug,/products/remy-martin-louis-xiii,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/products/famous- grouse- bourbon-cask-whisky,Pending,/products/famous- grouse- bourbon-cask-whisky,name_to_product_slug,/products/famous-grouse-bourbon-cask-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/buy,Pending,/buy,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Lillet Blanc,Pending,/Lillet Blanc,name_to_product_slug,/products/lillet-blanc,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ welmoed-cabernet-sauvignon,Pending,/welmoed-cabernet-sauvignon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products/products/5b48e933bdd218570be61ff2,Pending,/products/products/5b48e933bdd218570be61ff2,collapse_duplicate_products_segment,/products/5b48e933bdd218570be61ff2,high,Malformed duplicate products segment.
+https://www.dialadrinkkenya.com/brand/63ca5e9c4e4d425ad36e064f,Pending,/brand/63ca5e9c4e4d425ad36e064f,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/63209276f797e546d042f405,Pending,/brand/63209276f797e546d042f405,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Akso Strawberry Ice,Pending,/Akso Strawberry Ice,name_to_product_slug,/products/akso-strawberry-ice,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/5cba1c5ad5c81f18edbc35f2,Pending,/brand/5cba1c5ad5c81f18edbc35f2,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/6458dca42f356f65a18d784e,Pending,/brand/6458dca42f356f65a18d784e,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Gran Patron Burdeos,Pending,/Gran Patron Burdeos,name_to_product_slug,/products/gran-patron-burdeos,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/dry-gin-in-kenya,Pending,/dry-gin-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/KWV Cape Tawny wine,Pending,/KWV Cape Tawny wine,name_to_product_slug,/products/kwv-cape-tawny-wine,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/sandeman-porto-founder's-reserve,Pending,/product/sandeman-porto-founder's-reserve,product_to_products,/products/sandeman-porto-founder's-reserve,high,Standardize product route.
+https://www.dialadrinkkenya.com/ welmoed-merlot,Pending,/welmoed-merlot,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/jd,Pending,/jd,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/grenadine,Pending,/grenadine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/location/westlands,Pending,/location/westlands,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/Atlas Ultra Strong 14,Pending,/Atlas Ultra Strong 14,name_to_product_slug,/products/atlas-ultra-strong-14,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/marques,Pending,/marques,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/5-litres,Pending,/5-litres,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/category/beers/craft-beer,Pending,/category/beers/craft-beer,drop_category_prefix,/beers/craft-beer,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/liquer,Pending,/liquer,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bushmills whisky,Pending,/Bushmills whisky,name_to_product_slug,/products/bushmills-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Parker Favourite Son Chardonnay,Pending,/Parker Favourite Son Chardonnay,name_to_product_slug,/products/parker-favourite-son-chardonnay,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/6315ee1d15fcb541c39dd03e,Pending,/brand/6315ee1d15fcb541c39dd03e,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Glenfiddich Fire & Cane,Pending,/Glenfiddich Fire & Cane,name_to_product_slug,/products/glenfiddich-fire-and-cane,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/kenyan-original-cider,Pending,/kenyan-original-cider,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63addee8d84a1b7c0ce00fc9,Pending,/brand/63addee8d84a1b7c0ce00fc9,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/ welmoed-chardonnay,Pending,/welmoed-chardonnay,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/summit,Pending,/summit,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products/Hennessy Pure White,Pending,/products/Hennessy Pure White,name_to_product_slug,/products/hennessy-pure-white,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61b9aa69be9a7465205650f6,Pending,/brand/61b9aa69be9a7465205650f6,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/products/KAHBlanco,Pending,/products/KAHBlanco,name_to_product_slug,/products/kahblanco,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/macallan-select-oak,Pending,/product/macallan-select-oak,product_to_products,/products/macallan-select-oak,high,Standardize product route.
+https://www.dialadrinkkenya.com/perle-noir-crémant-d'Alsace,Pending,/perle-noir-crémant-d'Alsace,name_to_product_slug,/products/perle-noir-cr-mant-dalsace,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Strawberry Syrup,Pending,/Monin Strawberry Syrup,name_to_product_slug,/products/monin-strawberry-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/The Macallan Select Oak,Pending,/The Macallan Select Oak,name_to_product_slug,/products/the-macallan-select-oak,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Tann's Gin,Pending,/Tann's Gin,name_to_product_slug,/products/tanns-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/Tann-s-gin,Pending,/product/Tann-s-gin,product_to_products,/products/Tann-s-gin,high,Standardize product route.
+https://www.dialadrinkkenya.com/Leleshwa Vodka,Pending,/Leleshwa Vodka,name_to_product_slug,/products/leleshwa-vodka,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/643918d7a56aac7983fcc45c,Pending,/brand/643918d7a56aac7983fcc45c,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Fitch & Leedes Moments Shirley Temple,Pending,/Fitch & Leedes Moments Shirley Temple,name_to_product_slug,/products/fitch-and-leedes-moments-shirley-temple,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/4th-street-bottle,Pending,/product/4th-street-bottle,product_to_products,/products/4th-street-bottle,high,Standardize product route.
+https://www.dialadrinkkenya.com/McDowell's No.1 Platinum Whisky,Pending,/McDowell's No.1 Platinum Whisky,name_to_product_slug,/products/mcdowells-no-1-platinum-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Coolberg Malt 0.0 Beer,Pending,/Coolberg Malt 0.0 Beer,name_to_product_slug,/products/coolberg-malt-0-0-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/gordon-s-pink-gin-750ml,Pending,/gordon-s-pink-gin-750ml,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/vs,Pending,/vs,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Pineapple Puree,Pending,/Monin Pineapple Puree,name_to_product_slug,/products/monin-pineapple-puree,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/644131994383581efbbc358a,Pending,/brand/644131994383581efbbc358a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/johnnie-walker-green-label,Pending,/johnnie-walker-green-label,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/5efc463857aa9921ab0a90cd,Pending,/5efc463857aa9921ab0a90cd,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/6929646237ef9e93e78d9bab,Pending,/brand/6929646237ef9e93e78d9bab,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Butlers Crème De Banana,Pending,/Butlers Crème De Banana,name_to_product_slug,/products/butlers-cr-me-de-banana,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/642bb39fb0dc485db11afb19,Pending,/brand/642bb39fb0dc485db11afb19,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Whitley Neil Aloe & Cucumber Gin,Pending,/Whitley Neil Aloe & Cucumber Gin,name_to_product_slug,/products/whitley-neil-aloe-and-cucumber-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Coolberg Peach 0.0 Beer,Pending,/Coolberg Peach 0.0 Beer,name_to_product_slug,/products/coolberg-peach-0-0-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/wine/sparkling-wine,Pending,/category/wine/sparkling-wine,drop_category_prefix,/wine/sparkling-wine,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/brand/6321d5722a25955b260c8968,Pending,/brand/6321d5722a25955b260c8968,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/blog/cat/kenya,Pending,/blog/cat/kenya,legacy_blog_category,/blog,high,Old category taxonomy path.
+https://www.dialadrinkkenya.com/ch-valac-medium-sweet red,Pending,/ch-valac-medium-sweet red,name_to_product_slug,/products/ch-valac-medium-sweet-red,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/6320904722f6047de2372af5,Pending,/brand/6320904722f6047de2372af5,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/ clan-macgregor,Pending,/clan-macgregor,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61af3bcb51cb3b4f0d6b9362,Pending,/brand/61af3bcb51cb3b4f0d6b9362,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Suntory Kakubin,Pending,/Suntory Kakubin,name_to_product_slug,/products/suntory-kakubin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/johnnie-walker,Pending,/johnnie-walker,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bavaria 0.0 Apple Beer,Pending,/Bavaria 0.0 Apple Beer,name_to_product_slug,/products/bavaria-0-0-apple-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/tons,Pending,/tons,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bols Banana,Pending,/Bols Banana,name_to_product_slug,/products/bols-banana,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Haku Vodka,Pending,/Haku Vodka,name_to_product_slug,/products/haku-vodka,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/apple,Pending,/apple,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/grey,Pending,/grey,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Grenadine Syrup,Pending,/Monin Grenadine Syrup,name_to_product_slug,/products/monin-grenadine-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Harveys Bristol Cream Solera Sherry,Pending,/Harveys Bristol Cream Solera Sherry,name_to_product_slug,/products/harveys-bristol-cream-solera-sherry,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/vina-maipo-wines,Pending,/vina-maipo-wines,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63d7b21eaaea787a40adc1bf,Pending,/brand/63d7b21eaaea787a40adc1bf,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Monin Peach Tea Syrup,Pending,/Monin Peach Tea Syrup,name_to_product_slug,/products/monin-peach-tea-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bdb400be9a74652056526d,Pending,/brand/61bdb400be9a74652056526d,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/640867be05b09465122a2942,Pending,/brand/640867be05b09465122a2942,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/location/hurlingham,Pending,/location/hurlingham,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/brand/64259a07e29baf230c928984,Pending,/brand/64259a07e29baf230c928984,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/heritage-de-luze-rose,Pending,/heritage-de-luze-rose,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63ada80714f36c771061f310,Pending,/brand/63ada80714f36c771061f310,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Raynal Vsop Brandy,Pending,/Raynal Vsop Brandy,name_to_product_slug,/products/raynal-vsop-brandy,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/b & g-cuvee-special-rose,Pending,/b & g-cuvee-special-rose,name_to_product_slug,/products/b-and-g-cuvee-special-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/jacob-s-creek-availability-in-kenya,Pending,/jacob-s-creek-availability-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products/Martell-blueswift,Pending,/products/Martell-blueswift,name_to_product_slug,/products/martell-blueswift,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monster Energy Uber,Pending,/Monster Energy Uber,name_to_product_slug,/products/monster-energy-uber,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/j&B-jet-12-years,Pending,/j&B-jet-12-years,name_to_product_slug,/products/j-and-b-jet-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/founders,Pending,/founders,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Sugar Cane Syrup,Pending,/Monin Sugar Cane Syrup,name_to_product_slug,/products/monin-sugar-cane-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/graham beck brut,Pending,/graham beck brut,name_to_product_slug,/products/graham-beck-brut,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/red,Pending,/red,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bdabd0be9a746520565262,Pending,/brand/61bdabd0be9a746520565262,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Nederburg Shiraz,Pending,/Nederburg Shiraz,name_to_product_slug,/products/nederburg-shiraz,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Basil Haydens Whiskey,Pending,/Basil Haydens Whiskey,name_to_product_slug,/products/basil-haydens-whiskey,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Sierra Gold,Pending,/Sierra Gold,name_to_product_slug,/products/sierra-gold,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/6475be613a6dd047be14353b,Pending,/brand/6475be613a6dd047be14353b,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Jumping Goat Whisky Liqueur,Pending,/Jumping Goat Whisky Liqueur,name_to_product_slug,/products/jumping-goat-whisky-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monster Energy Gronk,Pending,/Monster Energy Gronk,name_to_product_slug,/products/monster-energy-gronk,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/330ml,Pending,/330ml,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/kingsize-slim,Pending,/kingsize-slim,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/60183a70a2a4245c2ad877c6,Pending,/brand/60183a70a2a4245c2ad877c6,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Montezuma Aztec Tequila,Pending,/Montezuma Aztec Tequila,name_to_product_slug,/products/montezuma-aztec-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glenmorangie The Accord 12 Years,Pending,/Glenmorangie The Accord 12 Years,name_to_product_slug,/products/glenmorangie-the-accord-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bdbd4bbe9a74652056527b,Pending,/brand/61bdbd4bbe9a74652056527b,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/63cf8999d6cd0807409aad23,Pending,/brand/63cf8999d6cd0807409aad23,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Parker Favourite Son Cabernet Sauvignon,Pending,/Parker Favourite Son Cabernet Sauvignon,name_to_product_slug,/products/parker-favourite-son-cabernet-sauvignon,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Musgrave Gin,Pending,/Musgrave Gin,name_to_product_slug,/products/musgrave-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ welmoed-chenin-blanc,Pending,/welmoed-chenin-blanc,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/dry-gin,Pending,/dry-gin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/port-wines-in-kenya,Pending,/port-wines-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/Belaire Luxe Rose Fantome,Pending,/product/Belaire Luxe Rose Fantome,product_to_products,/products/Belaire Luxe Rose Fantome,high,Standardize product route.
+https://www.dialadrinkkenya.com/four-cousin,Pending,/four-cousin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Jura The Sound,Pending,/Jura The Sound,name_to_product_slug,/products/jura-the-sound,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bloom Jasmine & Rose Gin,Pending,/Bloom Jasmine & Rose Gin,name_to_product_slug,/products/bloom-jasmine-and-rose-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Oban Little Bay,Pending,/Oban Little Bay,name_to_product_slug,/products/oban-little-bay,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/remy-martin,Pending,/remy-martin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Patron Xo Cafe Dark Cocoa,Pending,/Patron Xo Cafe Dark Cocoa,name_to_product_slug,/products/patron-xo-cafe-dark-cocoa,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Dalwhinnie Malt Winters Gold,Pending,/Dalwhinnie Malt Winters Gold,name_to_product_slug,/products/dalwhinnie-malt-winters-gold,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Hakushu Distillers Reserve,Pending,/Hakushu Distillers Reserve,name_to_product_slug,/products/hakushu-distillers-reserve,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Botter Prosecco Wine,Pending,/Botter Prosecco Wine,name_to_product_slug,/products/botter-prosecco-wine,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Herradura Anejo Tequila,Pending,/Herradura Anejo Tequila,name_to_product_slug,/products/herradura-anejo-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/de luze,Pending,/product/de luze,product_to_products,/products/de luze,high,Standardize product route.
+https://www.dialadrinkkenya.com/fanta,Pending,/fanta,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bc6c4cbe9a7465205651a2,Pending,/brand/61bc6c4cbe9a7465205651a2,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/61bdbd1dbe9a74652056527a,Pending,/brand/61bdbd1dbe9a74652056527a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/location/south-b,Pending,/location/south-b,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/Wilderer Rose Water Gin,Pending,/Wilderer Rose Water Gin,name_to_product_slug,/products/wilderer-rose-water-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/baron philippe-de-rothschild-pinot-noir,Pending,/baron philippe-de-rothschild-pinot-noir,name_to_product_slug,/products/baron-philippe-de-rothschild-pinot-noir,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/porto-cruz -pink-rose,Pending,/porto-cruz -pink-rose,name_to_product_slug,/products/porto-cruz-pink-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Grand Marnier Raspberry Peach,Pending,/Grand Marnier Raspberry Peach,name_to_product_slug,/products/grand-marnier-raspberry-peach,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Vazo Ice Super Mint,Pending,/Vazo Ice Super Mint,name_to_product_slug,/products/vazo-ice-super-mint,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bertani Soave Vintage,Pending,/Bertani Soave Vintage,name_to_product_slug,/products/bertani-soave-vintage,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/5f185cea32533f54c84be4bb,Pending,/brand/5f185cea32533f54c84be4bb,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Balkan 176 Vodka,Pending,/Balkan 176 Vodka,name_to_product_slug,/products/balkan-176-vodka,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/alcohol-delivery-nairobi,Pending,/alcohol-delivery-nairobi,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Hennessy Master Blender's Selection No.4,Pending,/Hennessy Master Blender's Selection No.4,name_to_product_slug,/products/hennessy-master-blenders-selection-no-4,medium,Human-readable product-like URL normalized to product slug.
+"https://www.dialadrinkkenya.com/ 
+chateau-belles-eaux-languedoc-les-coteaux-blanc",Pending,/chateau-belles-eaux-languedoc-les-coteaux-blanc,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ welmoed-pinotage,Pending,/welmoed-pinotage,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Sexton Single Malt,Pending,/Sexton Single Malt,name_to_product_slug,/products/sexton-single-malt,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ZMR-miami-mint Vape,Pending,/ZMR-miami-mint Vape,name_to_product_slug,/products/zmr-miami-mint-vape,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/hennessy-vs,Pending,/hennessy-vs,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Strawberry Puree,Pending,/Monin Strawberry Puree,name_to_product_slug,/products/monin-strawberry-puree,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ fonseca-10yr-Old-tawny,Pending,/fonseca-10yr-Old-tawny,name_to_product_slug,/products/fonseca-10yr-old-tawny,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/tall-horse-shiraz.,Pending,/product/tall-horse-shiraz.,product_to_products,/products/tall-horse-shiraz.,high,Standardize product route.
+https://www.dialadrinkkenya.com/packet,Pending,/packet,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/18-years-johhnie-walker,Pending,/18-years-johhnie-walker,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bc7a87be9a7465205651c9,Pending,/brand/61bc7a87be9a7465205651c9,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Kawashima Ginjo Sake,Pending,/Kawashima Ginjo Sake,name_to_product_slug,/products/kawashima-ginjo-sake,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Pepe Lopez Gold Tequila,Pending,/Pepe Lopez Gold Tequila,name_to_product_slug,/products/pepe-lopez-gold-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Veuve Clicquot Grand Dame Brut,Pending,/Veuve Clicquot Grand Dame Brut,name_to_product_slug,/products/veuve-clicquot-grand-dame-brut,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ welmoed-shiraz,Pending,/welmoed-shiraz,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/mint,Pending,/mint,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Tequila Ley 925,Pending,/Tequila Ley 925,name_to_product_slug,/products/tequila-ley-925,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Herradura Plata Tequila,Pending,/Herradura Plata Tequila,name_to_product_slug,/products/herradura-plata-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc77c1be9a7465205651c3,Pending,/brand/61bc77c1be9a7465205651c3,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/gordons,Pending,/gordons,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ amani-bay-smooth-red,Pending,/amani-bay-smooth-red,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Olmeca Fusion,Pending,/Olmeca Fusion,name_to_product_slug,/products/olmeca-fusion,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Santa Cristina Umbria IGT,Pending,/Santa Cristina Umbria IGT,name_to_product_slug,/products/santa-cristina-umbria-igt,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Magic Moments Original,Pending,/Magic Moments Original,name_to_product_slug,/products/magic-moments-original,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bdba3dbe9a746520565273,Pending,/brand/61bdba3dbe9a746520565273,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Sidekick Cookies & Cream,Pending,/Sidekick Cookies & Cream,name_to_product_slug,/products/sidekick-cookies-and-cream,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Tequila 1800 Reposado,Pending,/Tequila 1800 Reposado,name_to_product_slug,/products/tequila-1800-reposado,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/dragon,Pending,/dragon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63b2ba5c50f1151323f75eaf,Pending,/brand/63b2ba5c50f1151323f75eaf,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/68ea0dd229789f74292380d5,Pending,/brand/68ea0dd229789f74292380d5,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Tequila 1800 Anejo,Pending,/Tequila 1800 Anejo,name_to_product_slug,/products/tequila-1800-anejo,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/products/Anthon-Berg-chocolate,Pending,/products/Anthon-Berg-chocolate,name_to_product_slug,/products/anthon-berg-chocolate,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/vapes/cigars-and-cigarettes,Pending,/category/vapes/cigars-and-cigarettes,drop_category_prefix,/vapes/cigars-and-cigarettes,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Kah Reposado,Pending,/Kah Reposado,name_to_product_slug,/products/kah-reposado,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Don Julio Double Cask Lagavulin Finish,Pending,/Don Julio Double Cask Lagavulin Finish,name_to_product_slug,/products/don-julio-double-cask-lagavulin-finish,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/atlas 12,Pending,/atlas 12,name_to_product_slug,/products/atlas-12,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Schweppes Tonic Water,Pending,/Schweppes Tonic Water,name_to_product_slug,/products/schweppes-tonic-water,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Elderflower Liqueur,Pending,/Monin Elderflower Liqueur,name_to_product_slug,/products/monin-elderflower-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Billionaire Vodka,Pending,/Billionaire Vodka,name_to_product_slug,/products/billionaire-vodka,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Ponchos Chilli Choc (liqueur),Pending,/Ponchos Chilli Choc (liqueur),name_to_product_slug,/products/ponchos-chilli-choc-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glenfiddich Project XX whisky Gift Box,Pending,/Glenfiddich Project XX whisky Gift Box,name_to_product_slug,/products/glenfiddich-project-xx-whisky-gift-box,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glenlivet 12 Years,Pending,/Glenlivet 12 Years,name_to_product_slug,/products/glenlivet-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ stellenbosch-vineyards-cabernet-sauvignon,Pending,/stellenbosch-vineyards-cabernet-sauvignon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/jameson,Pending,/jameson,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/virginia black,Pending,/virginia black,name_to_product_slug,/products/virginia-black,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/les-hauts-de-fontey,Pending,/product/les-hauts-de-fontey,product_to_products,/products/les-hauts-de-fontey,high,Standardize product route.
+https://www.dialadrinkkenya.com/brand/63ad9bc7d6d89c76a14879e2,Pending,/brand/63ad9bc7d6d89c76a14879e2,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/category/whisky/blended-scotch,Pending,/category/whisky/blended-scotch,drop_category_prefix,/whisky/blended-scotch,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/four-cousin-s-white-wine,Pending,/four-cousin-s-white-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bc631dbe9a746520565198,Pending,/brand/61bc631dbe9a746520565198,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Monin Hazelnut Syrup,Pending,/Monin Hazelnut Syrup,name_to_product_slug,/products/monin-hazelnut-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Sierra Silver,Pending,/Sierra Silver,name_to_product_slug,/products/sierra-silver,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/5f18733e5b10545bccdc4fcf,Pending,/brand/5f18733e5b10545bccdc4fcf,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Argento shiraz red,Pending,/Argento shiraz red,name_to_product_slug,/products/argento-shiraz-red,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/greenall,Pending,/greenall,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/6411bf801248e0781e82ef56,Pending,/brand/6411bf801248e0781e82ef56,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/meukow vsop,Pending,/meukow vsop,name_to_product_slug,/products/meukow-vsop,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/kenyan-craft-beer,Pending,/kenyan-craft-beer,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/amarula,Pending,/amarula,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ stelleinrust-chenin-blanc-brut,Pending,/stelleinrust-chenin-blanc-brut,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Cuerpo White Rum Liqueur,Pending,/Cuerpo White Rum Liqueur,name_to_product_slug,/products/cuerpo-white-rum-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glen Deveron 30 Years Whisky,Pending,/Glen Deveron 30 Years Whisky,name_to_product_slug,/products/glen-deveron-30-years-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Remy Martin 1738 Accord Royal,Pending,/Remy Martin 1738 Accord Royal,name_to_product_slug,/products/remy-martin-1738-accord-royal,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Godet XO,Pending,/Godet XO,name_to_product_slug,/products/godet-xo,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Buchanan's Two Souls Whisky,Pending,/Buchanan's Two Souls Whisky,name_to_product_slug,/products/buchanans-two-souls-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc74e5be9a7465205651b7,Pending,/brand/61bc74e5be9a7465205651b7,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/61bc8af6be9a7465205651fd,Pending,/brand/61bc8af6be9a7465205651fd,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/william-grant-sons,Pending,/william-grant-sons,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Sierra Antiguo Anejo Tequila,Pending,/Sierra Antiguo Anejo Tequila,name_to_product_slug,/products/sierra-antiguo-anejo-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bayou Reserve Rum,Pending,/Bayou Reserve Rum,name_to_product_slug,/products/bayou-reserve-rum,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Mortlach Single Malt 14 Years,Pending,/Mortlach Single Malt 14 Years,name_to_product_slug,/products/mortlach-single-malt-14-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/500ml,Pending,/500ml,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/8PM Indian Whisky,Pending,/8PM Indian Whisky,name_to_product_slug,/products/8pm-indian-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/kileleshwa,Pending,/location/kileleshwa,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/versus-wine,Pending,/versus-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/60930a46a064d21b1edaa513,Pending,/brand/60930a46a064d21b1edaa513,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Kurayoshi Pure Malt,Pending,/Kurayoshi Pure Malt,name_to_product_slug,/products/kurayoshi-pure-malt,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Buchanan's 18 Years Special Reserve,Pending,/Buchanan's 18 Years Special Reserve,name_to_product_slug,/products/buchanans-18-years-special-reserve,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bleu d'Argent Gin,Pending,/Bleu d'Argent Gin,name_to_product_slug,/products/bleu-dargent-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/monster-assault,Pending,/monster-assault,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/San Felipe Caramagnola Rose De Malbec,Pending,/San Felipe Caramagnola Rose De Malbec,name_to_product_slug,/products/san-felipe-caramagnola-rose-de-malbec,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/c-roc,Pending,/c-roc,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/64368b7ba56aac7983fcc3bf,Pending,/brand/64368b7ba56aac7983fcc3bf,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/category/beers/malt-beer,Pending,/category/beers/malt-beer,drop_category_prefix,/beers/malt-beer,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Coolberg Strawberry 0.0 Beer,Pending,/Coolberg Strawberry 0.0 Beer,name_to_product_slug,/products/coolberg-strawberry-0-0-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Tons de Duorum Red,Pending,/Tons de Duorum Red,name_to_product_slug,/products/tons-de-duorum-red,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Caramel Syrup,Pending,/Monin Caramel Syrup,name_to_product_slug,/products/monin-caramel-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ fonseca-20yr-Old,Pending,/fonseca-20yr-Old,name_to_product_slug,/products/fonseca-20yr-old,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/mcdowell-s-no-1-whisky,Pending,/mcdowell-s-no-1-whisky,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Mojito Mint Syrup,Pending,/Monin Mojito Mint Syrup,name_to_product_slug,/products/monin-mojito-mint-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/Boschendal-1685-chenin-blanc,Pending,/product/Boschendal-1685-chenin-blanc,product_to_products,/products/Boschendal-1685-chenin-blanc,high,Standardize product route.
+https://www.dialadrinkkenya.com/search/JnB,Pending,/search/JnB,search_to_products_query,/products?search=JnB,high,Legacy search path.
+https://www.dialadrinkkenya.com/Marani Tvishi Sweet White,Pending,/Marani Tvishi Sweet White,name_to_product_slug,/products/marani-tvishi-sweet-white,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/64b921de52df5e3d4f8cf532,Pending,/brand/64b921de52df5e3d4f8cf532,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Yamazaki 12 Year Old,Pending,/Yamazaki 12 Year Old,name_to_product_slug,/products/yamazaki-12-year-old,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/four-cousin-s-sweet-red,Pending,/four-cousin-s-sweet-red,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/clase-azul-mexico,Pending,/clase-azul-mexico,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/64119b531248e0781e82ef44,Pending,/brand/64119b531248e0781e82ef44,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/ amani-bay-natural-sweet-white,Pending,/amani-bay-natural-sweet-white,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/jameson -whisky-4.5litres,Pending,/jameson -whisky-4.5litres,name_to_product_slug,/products/jameson-whisky-4-5litres,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/pernod-ricard,Pending,/pernod-ricard,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/m.chapoutier-petite-ruche-croze-hermitage-white,Pending,/product/m.chapoutier-petite-ruche-croze-hermitage-white,product_to_products,/products/m.chapoutier-petite-ruche-croze-hermitage-white,high,Standardize product route.
+https://www.dialadrinkkenya.com/brand/61bdaf90be9a746520565267,Pending,/brand/61bdaf90be9a746520565267,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/ calvet-celebration-sparkling-brut-white,Pending,/calvet-celebration-sparkling-brut-white,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Belaire Rose Fantome,Pending,/Belaire Rose Fantome,name_to_product_slug,/products/belaire-rose-fantome,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/mandala-white-wine,Pending,/mandala-white-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Jack Daniel's Sinatra,Pending,/Jack Daniel's Sinatra,name_to_product_slug,/products/jack-daniels-sinatra,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Don Julio Reposado,Pending,/Don Julio Reposado,name_to_product_slug,/products/don-julio-reposado,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/tanqueray-no,Pending,/tanqueray-no,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/k.o tambuzi,Pending,/k.o tambuzi,name_to_product_slug,/products/k-o-tambuzi,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc8695be9a7465205651ee,Pending,/brand/61bc8695be9a7465205651ee,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Jinro 24 Soju,Pending,/Jinro 24 Soju,name_to_product_slug,/products/jinro-24-soju,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/cream,Pending,/cream,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/rizla-rolling-paper,Pending,/rizla-rolling-paper,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Accessories,Pending,/Accessories,name_to_product_slug,/products/accessories,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Hapsburg Absinthe Cassis X.C,Pending,/Hapsburg Absinthe Cassis X.C,name_to_product_slug,/products/hapsburg-absinthe-cassis-x-c,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/thrones,Pending,/thrones,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bateleur Honey Badger Blonde,Pending,/Bateleur Honey Badger Blonde,name_to_product_slug,/products/bateleur-honey-badger-blonde,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/mara-tamu-wines,Pending,/mara-tamu-wines,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/Durex-feel-ultra-thin-condoms,Pending,/product/Durex-feel-ultra-thin-condoms,product_to_products,/products/Durex-feel-ultra-thin-condoms,high,Standardize product route.
+https://www.dialadrinkkenya.com/brand/640729482d9ad43e1a8ba8db,Pending,/brand/640729482d9ad43e1a8ba8db,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Johnnie Walker Platinum Label,Pending,/Johnnie Walker Platinum Label,name_to_product_slug,/products/johnnie-walker-platinum-label,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/mandala-wines-in-kenya,Pending,/mandala-wines-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/pineapple,Pending,/pineapple,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Jura 16 Years Whisky,Pending,/Jura 16 Years Whisky,name_to_product_slug,/products/jura-16-years-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Macallan Rare Cask,Pending,/Macallan Rare Cask,name_to_product_slug,/products/macallan-rare-cask,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Zapallares Sauvignon Blanc,Pending,/Zapallares Sauvignon Blanc,name_to_product_slug,/products/zapallares-sauvignon-blanc,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Chivas 25 Years,Pending,/Chivas 25 Years,name_to_product_slug,/products/chivas-25-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/hendrick-s-gin,Pending,/hendrick-s-gin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Chivas-royal-salute-21 yrs,Pending,/Chivas-royal-salute-21 yrs,name_to_product_slug,/products/chivas-royal-salute-21-yrs,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/guinness-draught,Pending,/guinness-draught,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Teremana Reposado Tequila,Pending,/Teremana Reposado Tequila,name_to_product_slug,/products/teremana-reposado-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/sand-trap-craft- beer,Pending,/sand-trap-craft- beer,name_to_product_slug,/products/sand-trap-craft-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/sand-trap-alcohol-content,Pending,/sand-trap-alcohol-content,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/cono-sur-reserva-especial-pinot Noir,Pending,/product/cono-sur-reserva-especial-pinot Noir,product_to_products,/products/cono-sur-reserva-especial-pinot Noir,high,Standardize product route.
+https://www.dialadrinkkenya.com/Fitch & Leedes Club Soda,Pending,/Fitch & Leedes Club Soda,name_to_product_slug,/products/fitch-and-leedes-club-soda,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/New Grove Silver,Pending,/New Grove Silver,name_to_product_slug,/products/new-grove-silver,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Jack Daniel's Honey Lemonade,Pending,/Jack Daniel's Honey Lemonade,name_to_product_slug,/products/jack-daniels-honey-lemonade,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/68db99141226e9ac17ab2522,Pending,/brand/68db99141226e9ac17ab2522,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/63db6c86f74259545bb145fa,Pending,/brand/63db6c86f74259545bb145fa,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/ fleurs-de-prairie-sparkling-brut-white,Pending,/fleurs-de-prairie-sparkling-brut-white,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/1litre,Pending,/1litre,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/prosecco-wine,Pending,/prosecco-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/oettinger,Pending,/oettinger,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand,Pending,/brand,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/8PM Fire Liqueur,Pending,/8PM Fire Liqueur,name_to_product_slug,/products/8pm-fire-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Rampur PX Sherry Single Malt Whisky,Pending,/Rampur PX Sherry Single Malt Whisky,name_to_product_slug,/products/rampur-px-sherry-single-malt-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc6117be9a746520565194,Pending,/brand/61bc6117be9a746520565194,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/vazo-vapes,Pending,/vazo-vapes,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/grant-s-whiskey,Pending,/grant-s-whiskey,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monster Energy Import Light,Pending,/Monster Energy Import Light,name_to_product_slug,/products/monster-energy-import-light,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/254 Amberseli 330ml,Pending,/product/254 Amberseli 330ml,product_to_products,/products/254 Amberseli 330ml,high,Standardize product route.
+https://www.dialadrinkkenya.com/category/whisky,Pending,/category/whisky,drop_category_prefix,/whisky,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/ amani-bay-natural-sweet-red,Pending,/amani-bay-natural-sweet-red,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61ab735f51cb3b4f0d6b921c,Pending,/brand/61ab735f51cb3b4f0d6b921c,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Glenmorangie The Elementa 14 Years,Pending,/Glenmorangie The Elementa 14 Years,name_to_product_slug,/products/glenmorangie-the-elementa-14-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product-origin/South Africa,Pending,/product-origin/South Africa,name_to_product_slug,/products/south-africa,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/Fitch & Leedes Indian Tonic,Pending,/product/Fitch & Leedes Indian Tonic,product_to_products,/products/Fitch & Leedes Indian Tonic,high,Standardize product route.
+https://www.dialadrinkkenya.com/Olmeca Anejo Extra Aged,Pending,/Olmeca Anejo Extra Aged,name_to_product_slug,/products/olmeca-anejo-extra-aged,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/along-waiyaki-way,Pending,/location/along-waiyaki-way,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/brand/649280a6860f2b638e9b492a,Pending,/brand/649280a6860f2b638e9b492a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/blue,Pending,/blue,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/6855ac67b2d52b916b3d40fb,Pending,/brand/6855ac67b2d52b916b3d40fb,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Lillet Rose,Pending,/Lillet Rose,name_to_product_slug,/products/lillet-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/645a36912f356f65a18d78a3,Pending,/brand/645a36912f356f65a18d78a3,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/category/soft-drinks,Pending,/category/soft-drinks,drop_category_prefix,/soft-drinks,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/brand/63f4c9d89b82213218257d28,Pending,/brand/63f4c9d89b82213218257d28,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Levantine Gin,Pending,/Levantine Gin,name_to_product_slug,/products/levantine-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/jameson-whisky,Pending,/jameson-whisky,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/six-pack,Pending,/six-pack,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Highland Park Valfather,Pending,/Highland Park Valfather,name_to_product_slug,/products/highland-park-valfather,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bateleur Dire Straits Pilsen,Pending,/Bateleur Dire Straits Pilsen,name_to_product_slug,/products/bateleur-dire-straits-pilsen,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Greenall's Blueberry Gin,Pending,/Greenall's Blueberry Gin,name_to_product_slug,/products/greenalls-blueberry-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/kasarani,Pending,/location/kasarani,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/New Grove Cafe Liqueur,Pending,/New Grove Cafe Liqueur,name_to_product_slug,/products/new-grove-cafe-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/moscato,Pending,/moscato,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/64476fd6b97ca74d7c8cb814,Pending,/brand/64476fd6b97ca74d7c8cb814,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/64d35c06ebd2f64fc96f02af,Pending,/brand/64d35c06ebd2f64fc96f02af,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/product/Butlers Blue Curacao,Pending,/product/Butlers Blue Curacao,product_to_products,/products/Butlers Blue Curacao,high,Standardize product route.
+https://www.dialadrinkkenya.com/product/hendrick,Pending,/product/hendrick,product_to_products,/products/hendrick,high,Standardize product route.
+https://www.dialadrinkkenya.com/a,Pending,/a,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/ cederberg-cabernet-sauvignon,Pending,/product/cederberg-cabernet-sauvignon,product_to_products,/products/cederberg-cabernet-sauvignon,high,Standardize product route.
+https://www.dialadrinkkenya.com/xo-cognac,Pending,/xo-cognac,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63b416d7082b4c13f49be7ce,Pending,/brand/63b416d7082b4c13f49be7ce,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/61bc7fd6be9a7465205651d6,Pending,/brand/61bc7fd6be9a7465205651d6,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Officer's Choice Blue Whisky,Pending,/Officer's Choice Blue Whisky,name_to_product_slug,/products/officers-choice-blue-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/vsop,Pending,/vsop,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/blog/cat/dial-a-drink,Pending,/blog/cat/dial-a-drink,legacy_blog_category,/blog,high,Old category taxonomy path.
+https://www.dialadrinkkenya.com/brand/68bec93caf369e8d51274467,Pending,/brand/68bec93caf369e8d51274467,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/olmeca,Pending,/olmeca,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Johnnie Walker Explorers Club-The Spice Road,Pending,/Johnnie Walker Explorers Club-The Spice Road,name_to_product_slug,/products/johnnie-walker-explorers-club-the-spice-road,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ saronsberg-full-circle,Pending,/saronsberg-full-circle,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+http://www.dialadrinkkenya.com/rupert,Pending,/rupert,scheme_canonical,https://www.dialadrinkkenya.com/rupert,high,Force https.
+https://www.dialadrinkkenya.com/san-pellegrino-aranciata,Pending,/san-pellegrino-aranciata,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/aranciata-can-in-kenya,Pending,/aranciata-can-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/Absolute-mango,Pending,/product/Absolute-mango,product_to_products,/products/Absolute-mango,high,Standardize product route.
+https://www.dialadrinkkenya.com/Mateus Tempranillo Rose,Pending,/Mateus Tempranillo Rose,name_to_product_slug,/products/mateus-tempranillo-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/john-bannermans-read-seal-alcohol-content,Pending,/john-bannermans-read-seal-alcohol-content,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/San-pellegrino Aranciata can,Pending,/San-pellegrino Aranciata can,name_to_product_slug,/products/san-pellegrino-aranciata-can,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/Rémy Martin,Pending,/brand/Rémy Martin,name_to_product_slug,/products/r-my-martin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/Greenall's Wild Berry Pink Gin,Pending,/product/Greenall's Wild Berry Pink Gin,product_to_products,/products/Greenall's Wild Berry Pink Gin,high,Standardize product route.
+https://www.dialadrinkkenya.com/brand/61bc7071be9a7465205651aa,Pending,/brand/61bc7071be9a7465205651aa,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/garant extreme nicotine pouches,Pending,/garant extreme nicotine pouches,name_to_product_slug,/products/garant-extreme-nicotine-pouches,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/liqueurs,Pending,/category/liqueurs,drop_category_prefix,/liqueurs,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Fitch & Leedes Classic Ginger Beer,Pending,/Fitch & Leedes Classic Ginger Beer,name_to_product_slug,/products/fitch-and-leedes-classic-ginger-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Jaisalmer Indian Craft Gin,Pending,/Jaisalmer Indian Craft Gin,name_to_product_slug,/products/jaisalmer-indian-craft-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63ce6e75d6cd0807409aacea,Pending,/brand/63ce6e75d6cd0807409aacea,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Monster The Doctor,Pending,/Monster The Doctor,name_to_product_slug,/products/monster-the-doctor,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Sidekick Toffee Caramel,Pending,/Sidekick Toffee Caramel,name_to_product_slug,/products/sidekick-toffee-caramel,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/cigars-cigarettes,Pending,/cigars-cigarettes,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Olmeca Tezon Blanco,Pending,/Olmeca Tezon Blanco,name_to_product_slug,/products/olmeca-tezon-blanco,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/prices,Pending,/prices,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/61bc85dbbe9a7465205651ec,Pending,/brand/61bc85dbbe9a7465205651ec,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Greenall's London Dry Gin,Pending,/Greenall's London Dry Gin,name_to_product_slug,/products/greenalls-london-dry-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Courvoisier VS,Pending,/Courvoisier VS,name_to_product_slug,/products/courvoisier-vs,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Ponchos Blanco,Pending,/Ponchos Blanco,name_to_product_slug,/products/ponchos-blanco,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Famous Grouse Smoky Black,Pending,/Famous Grouse Smoky Black,name_to_product_slug,/products/famous-grouse-smoky-black,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Fattori Amarone Della Valpolicella,Pending,/Fattori Amarone Della Valpolicella,name_to_product_slug,/products/fattori-amarone-della-valpolicella,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/631b8d021d397f102c6de77e,Pending,/brand/631b8d021d397f102c6de77e,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Famous Grouse,Pending,/Famous Grouse,name_to_product_slug,/products/famous-grouse,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/vermouths,Pending,/vermouths,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Glensilver 12 Years,Pending,/Glensilver 12 Years,name_to_product_slug,/products/glensilver-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Meukow X.O,Pending,/Meukow X.O,name_to_product_slug,/products/meukow-x-o,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63aee803896fd720d70aec0d,Pending,/brand/63aee803896fd720d70aec0d,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Jameson Whiskey,Pending,/Jameson Whiskey,name_to_product_slug,/products/jameson-whiskey,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/sweet-red-wine,Pending,/sweet-red-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Graham's 40 Year Old Tawny Port wine,Pending,/Graham's 40 Year Old Tawny Port wine,name_to_product_slug,/products/grahams-40-year-old-tawny-port-wine,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/6314f00007de580f6ac9f51d,Pending,/brand/6314f00007de580f6ac9f51d,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Martini Bianco,Pending,/Martini Bianco,name_to_product_slug,/products/martini-bianco,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/tobacco,Pending,/tobacco,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/64119017c523b6612df3eb3a,Pending,/brand/64119017c523b6612df3eb3a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/moet-chandon-nectar-imperial,Pending,/moet-chandon-nectar-imperial,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Strawberry Lips,Pending,/Strawberry Lips,name_to_product_slug,/products/strawberry-lips,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Kinross Pink Gin,Pending,/Kinross Pink Gin,name_to_product_slug,/products/kinross-pink-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc6053be9a746520565190,Pending,/brand/61bc6053be9a746520565190,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/61bc8c99be9a746520565200,Pending,/brand/61bc8c99be9a746520565200,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/six,Pending,/six,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Brancott Letter Series Sauvignon Blanc,Pending,/Brancott Letter Series Sauvignon Blanc,name_to_product_slug,/products/brancott-letter-series-sauvignon-blanc,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/versus-red-sweet-red-wine-alcohol-content,Pending,/versus-red-sweet-red-wine-alcohol-content,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/search/Brown-forman,Pending,/search/Brown-forman,search_to_products_query,/products?search=Brown-forman,high,Legacy search path.
+https://www.dialadrinkkenya.com/location/loresho,Pending,/location/loresho,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/pink-tonic-in-kenya,Pending,/pink-tonic-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/buy-gilbey-s-gin-online-in-kenya,Pending,/buy-gilbey-s-gin-online-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/johnnie-walker-black-label,Pending,/johnnie-walker-black-label,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/cigars-and-ciggarrettes,Pending,/cigars-and-ciggarrettes,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/red-label,Pending,/red-label,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/category/beers/cider-beer,Pending,/category/beers/cider-beer,drop_category_prefix,/beers/cider-beer,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Ponchos Caramel Infusion (liqueur),Pending,/Ponchos Caramel Infusion (liqueur),name_to_product_slug,/products/ponchos-caramel-infusion-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Frangelico Hazelnut Liqueur,Pending,/Frangelico Hazelnut Liqueur,name_to_product_slug,/products/frangelico-hazelnut-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/Louis-max-beaujolais-villages,Pending,/product/Louis-max-beaujolais-villages,product_to_products,/products/Louis-max-beaujolais-villages,high,Standardize product route.
+https://www.dialadrinkkenya.com/Footprint Pinotage Rose,Pending,/Footprint Pinotage Rose,name_to_product_slug,/products/footprint-pinotage-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/blog/most-popular-cocktails-in-Kenya-dial-a-drink-Kenya,Pending,/blog/most-popular-cocktails-in-Kenya-dial-a-drink-Kenya,name_to_product_slug,/products/most-popular-cocktails-in-kenya-dial-a-drink-kenya,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Akso Aloe Grapes,Pending,/Akso Aloe Grapes,name_to_product_slug,/products/akso-aloe-grapes,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/search/Johnnie Walker,Pending,/search/Johnnie Walker,search_to_products_query,/products?search=Johnnie%20Walker,high,Legacy search path.
+https://www.dialadrinkkenya.com/Ginebra San Miguel Gin,Pending,/Ginebra San Miguel Gin,name_to_product_slug,/products/ginebra-san-miguel-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Magic Moments Green Apple,Pending,/Magic Moments Green Apple,name_to_product_slug,/products/magic-moments-green-apple,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63ca9691dfb5177ca158dd43,Pending,/brand/63ca9691dfb5177ca158dd43,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Hennessy xo 1 litre,Pending,/Hennessy xo 1 litre,name_to_product_slug,/products/hennessy-xo-1-litre,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/sande-man-wine-alcohol-content,Pending,/sande-man-wine-alcohol-content,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/de luze,Pending,/de luze,name_to_product_slug,/products/de-luze,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/blacklabel-whisky,Pending,/blacklabel-whisky,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/chalk-hill-shiraz-cabernet-availability-in-kenya,Pending,/chalk-hill-shiraz-cabernet-availability-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/keny,Pending,/keny,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Flirt vodka strawberry,Pending,/Flirt vodka strawberry,name_to_product_slug,/products/flirt-vodka-strawberry,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Heineken 330ml bottle,Pending,/Heineken 330ml bottle,name_to_product_slug,/products/heineken-330ml-bottle,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Tanduay Double Rum,Pending,/Tanduay Double Rum,name_to_product_slug,/products/tanduay-double-rum,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/guinness,Pending,/guinness,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bacardi Anejo Cuatro,Pending,/Bacardi Anejo Cuatro,name_to_product_slug,/products/bacardi-anejo-cuatro,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Imperial Blue Whiskey,Pending,/Imperial Blue Whiskey,name_to_product_slug,/products/imperial-blue-whiskey,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Budweiser Beer 355ml,Pending,/Budweiser Beer 355ml,name_to_product_slug,/products/budweiser-beer-355ml,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/schweppes,Pending,/schweppes,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/6315f32715fcb541c39dd04a,Pending,/brand/6315f32715fcb541c39dd04a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Curado Espadin,Pending,/Curado Espadin,name_to_product_slug,/products/curado-espadin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Footprint Chenin Blanc Semilion,Pending,/Footprint Chenin Blanc Semilion,name_to_product_slug,/products/footprint-chenin-blanc-semilion,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/rupert,Pending,/rupert,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/category/beers/lager-beer,Pending,/category/beers/lager-beer,drop_category_prefix,/beers/lager-beer,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Beefeater Clear Gin,Pending,/Beefeater Clear Gin,name_to_product_slug,/products/beefeater-clear-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Belvedere Pink Grapefruit,Pending,/Belvedere Pink Grapefruit,name_to_product_slug,/products/belvedere-pink-grapefruit,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Bardinet Curacao Liqueur,Pending,/Bardinet Curacao Liqueur,name_to_product_slug,/products/bardinet-curacao-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Emperador Brandy,Pending,/Emperador Brandy,name_to_product_slug,/products/emperador-brandy,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/liqueurs/blended-whisky,Pending,/category/liqueurs/blended-whisky,drop_category_prefix,/liqueurs/blended-whisky,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/brand/6315c8ce840a972c4e2d9812,Pending,/brand/6315c8ce840a972c4e2d9812,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/El Charro Gold,Pending,/El Charro Gold,name_to_product_slug,/products/el-charro-gold,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Fitch & Leedes Lemonade,Pending,/Fitch & Leedes Lemonade,name_to_product_slug,/products/fitch-and-leedes-lemonade,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Simonsig Kaapse Vonkel Brut,Pending,/Simonsig Kaapse Vonkel Brut,name_to_product_slug,/products/simonsig-kaapse-vonkel-brut,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/macallan-select-oak,Pending,/macallan-select-oak,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Atlas 16,Pending,/Atlas 16,name_to_product_slug,/products/atlas-16,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/1-piece,Pending,/1-piece,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Butlers Ginger,Pending,/Butlers Ginger,name_to_product_slug,/products/butlers-ginger,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Zappa Sambuka White,Pending,/Zappa Sambuka White,name_to_product_slug,/products/zappa-sambuka-white,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Tequila 1800 Coconut,Pending,/Tequila 1800 Coconut,name_to_product_slug,/products/tequila-1800-coconut,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/asconi-750ml-price-in-kenya,Pending,/asconi-750ml-price-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Tequila 1800 Silver,Pending,/Tequila 1800 Silver,name_to_product_slug,/products/tequila-1800-silver,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Lillet Rouge,Pending,/Lillet Rouge,name_to_product_slug,/products/lillet-rouge,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Four cousins sweet white,Pending,/Four cousins sweet white,name_to_product_slug,/products/four-cousins-sweet-white,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/pimm-s,Pending,/pimm-s,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/amarula-alcohol-content,Pending,/amarula-alcohol-content,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product/m.chapoutier-belleruche-cotes-du-rhone,Pending,/product/m.chapoutier-belleruche-cotes-du-rhone,product_to_products,/products/m.chapoutier-belleruche-cotes-du-rhone,high,Standardize product route.
+https://www.dialadrinkkenya.com/375ml,Pending,/375ml,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Aviation Gin,Pending,/Aviation Gin,name_to_product_slug,/products/aviation-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/muthaiga,Pending,/location/muthaiga,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/amarula-price-in-kenya,Pending,/amarula-price-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/victoria's stag,Pending,/victoria's stag,name_to_product_slug,/products/victorias-stag,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/wine,Pending,/category/wine,drop_category_prefix,/wine,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Bols Elderflower,Pending,/Bols Elderflower,name_to_product_slug,/products/bols-elderflower,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Laphroaig Px Cask,Pending,/Laphroaig Px Cask,name_to_product_slug,/products/laphroaig-px-cask,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Old Forester Bourbon,Pending,/Old Forester Bourbon,name_to_product_slug,/products/old-forester-bourbon,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Ruby Grapefruit Puree,Pending,/Monin Ruby Grapefruit Puree,name_to_product_slug,/products/monin-ruby-grapefruit-puree,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Corralejo Tequila Reposado,Pending,/Corralejo Tequila Reposado,name_to_product_slug,/products/corralejo-tequila-reposado,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Highland Park Spirit of The Bear,Pending,/Highland Park Spirit of The Bear,name_to_product_slug,/products/highland-park-spirit-of-the-bear,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/ Calvet Celebration Sparkling Brut-rose,Pending,/Calvet Celebration Sparkling Brut-rose,name_to_product_slug,/products/calvet-celebration-sparkling-brut-rose,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/dewar's-18-years whisky,Pending,/dewar's-18-years whisky,name_to_product_slug,/products/dewars-18-years-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Fattori Classicco Ronca 36,Pending,/Fattori Classicco Ronca 36,name_to_product_slug,/products/fattori-classicco-ronca-36,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Graham's Late Vintage Port wine,Pending,/Graham's Late Vintage Port wine,name_to_product_slug,/products/grahams-late-vintage-port-wine,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/search/Ballantine's,Pending,/search/Ballantine's,search_to_products_query,/products?search=Ballantine%27s,high,Legacy search path.
+https://www.dialadrinkkenya.com/category/beers/strong-beer,Pending,/category/beers/strong-beer,drop_category_prefix,/beers/strong-beer,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/Gallo Family,Pending,/Gallo Family,name_to_product_slug,/products/gallo-family,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Coolberg Cranberry Beer 0.0,Pending,/Coolberg Cranberry Beer 0.0,name_to_product_slug,/products/coolberg-cranberry-beer-0-0,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63c904c34c87c9514894e594,Pending,/brand/63c904c34c87c9514894e594,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/price-in-kenya,Pending,/price-in-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/5d415cab8492f14b3c249184,Pending,/brand/5d415cab8492f14b3c249184,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/KWV Cruxland Gin,Pending,/KWV Cruxland Gin,name_to_product_slug,/products/kwv-cruxland-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc9bc4be9a746520565218,Pending,/brand/61bc9bc4be9a746520565218,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Monin Pop Corn Syrup,Pending,/Monin Pop Corn Syrup,name_to_product_slug,/products/monin-pop-corn-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Tons de Duorum White,Pending,/Tons de Duorum White,name_to_product_slug,/products/tons-de-duorum-white,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Vanilla Syrup,Pending,/Monin Vanilla Syrup,name_to_product_slug,/products/monin-vanilla-syrup,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/61bc84ecbe9a7465205651ea,Pending,/brand/61bc84ecbe9a7465205651ea,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/63ad92e7433ed165926d4704,Pending,/brand/63ad92e7433ed165926d4704,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Sandeman Fine Tawny Port Wine,Pending,/Sandeman Fine Tawny Port Wine,name_to_product_slug,/products/sandeman-fine-tawny-port-wine,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/gordon,Pending,/gordon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/espolo- reposado -tequila,Pending,/espolo- reposado -tequila,name_to_product_slug,/products/espolo-reposado-tequila,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/hennesy,Pending,/hennesy,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/cider-beers-kenya,Pending,/cider-beers-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Dewar's Founder's Reserve 18 Years,Pending,/Dewar's Founder's Reserve 18 Years,name_to_product_slug,/products/dewars-founders-reserve-18-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/johhnie,Pending,/johhnie,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/63c8f9b24c87c9514894e585,Pending,/brand/63c8f9b24c87c9514894e585,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/ groot-constantia-gouveneurs-reserve,Pending,/groot-constantia-gouveneurs-reserve,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/pinotage-wine,Pending,/pinotage-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/b & g-cuvee-special-rouge,Pending,/b & g-cuvee-special-rouge,name_to_product_slug,/products/b-and-g-cuvee-special-rouge,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/asconi-wines,Pending,/asconi-wines,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Hennessy Pure White,Pending,/Hennessy Pure White,name_to_product_slug,/products/hennessy-pure-white,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Calvet Bordeaux Moelleux,Pending,/Calvet Bordeaux Moelleux,name_to_product_slug,/products/calvet-bordeaux-moelleux,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/blog/cat/muratina,Pending,/blog/cat/muratina,legacy_blog_category,/blog,high,Old category taxonomy path.
+https://www.dialadrinkkenya.com/pr,Pending,/pr,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/58-gin,Pending,/58-gin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/location/kilimani,Pending,/location/kilimani,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/macallan rare cask,Pending,/macallan rare cask,name_to_product_slug,/products/macallan-rare-cask,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Jack Daniel's Tennessee Apple,Pending,/Jack Daniel's Tennessee Apple,name_to_product_slug,/products/jack-daniels-tennessee-apple,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/m.chapoutier-la-ciboise-luberon-rouge,Pending,/product/m.chapoutier-la-ciboise-luberon-rouge,product_to_products,/products/m.chapoutier-la-ciboise-luberon-rouge,high,Standardize product route.
+https://www.dialadrinkkenya.com/product/Glenlivet-caribbean-reserve,Pending,/product/Glenlivet-caribbean-reserve,product_to_products,/products/Glenlivet-caribbean-reserve,high,Standardize product route.
+https://www.dialadrinkkenya.com/flavoured-gilbeys,Pending,/flavoured-gilbeys,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Glenlivet Caribbean Reserve,Pending,/Glenlivet Caribbean Reserve,name_to_product_slug,/products/glenlivet-caribbean-reserve,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/amarula-cream-liqueur,Pending,/amarula-cream-liqueur,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Chivas Regal Kingsize,Pending,/Chivas Regal Kingsize,name_to_product_slug,/products/chivas-regal-kingsize,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/chivas regal kingsize,Pending,/chivas regal kingsize,name_to_product_slug,/products/chivas-regal-kingsize,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Belaire Gold Fantome,Pending,/Belaire Gold Fantome,name_to_product_slug,/products/belaire-gold-fantome,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/search/Baileys,Pending,/search/Baileys,search_to_products_query,/products?search=Baileys,high,Legacy search path.
+https://www.dialadrinkkenya.com/brand/68dba1479c0badbc41be1d8c,Pending,/brand/68dba1479c0badbc41be1d8c,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/K.O Tambuzi Gin,Pending,/K.O Tambuzi Gin,name_to_product_slug,/products/k-o-tambuzi-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/baron d'arignac brut,Pending,/baron d'arignac brut,name_to_product_slug,/products/baron-darignac-brut,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glenmorangie The Lasanta Whisky,Pending,/Glenmorangie The Lasanta Whisky,name_to_product_slug,/products/glenmorangie-the-lasanta-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Glenlivet Captain Reserve,Pending,/Glenlivet Captain Reserve,name_to_product_slug,/products/glenlivet-captain-reserve,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/68a4d60e443ad108fbfacac1,Pending,/brand/68a4d60e443ad108fbfacac1,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/651bce31937e4d5d5b40a0c9,Pending,/brand/651bce31937e4d5d5b40a0c9,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Bacardi Breezer Pineapple,Pending,/Bacardi Breezer Pineapple,name_to_product_slug,/products/bacardi-breezer-pineapple,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/durex-feel-ultra-thin,Pending,/durex-feel-ultra-thin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/j&B-15-years,Pending,/j&B-15-years,name_to_product_slug,/products/j-and-b-15-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/670bec8152c47624b7714d3a,Pending,/brand/670bec8152c47624b7714d3a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Budweiser Beer Can,Pending,/Budweiser Beer Can,name_to_product_slug,/products/budweiser-beer-can,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/category/smokes/cigars-and-cigarettes,Pending,/category/smokes/cigars-and-cigarettes,drop_category_prefix,/smokes/cigars-and-cigarettes,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/robertson-s-winery,Pending,/robertson-s-winery,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/2-litres,Pending,/2-litres,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/martell,Pending,/martell,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ amani-bay-dry-rose,Pending,/amani-bay-dry-rose,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brand/649ab5b15ce79039fa4e5603,Pending,/brand/649ab5b15ce79039fa4e5603,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/rosso,Pending,/rosso,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Monin Blueberry Puree,Pending,/Monin Blueberry Puree,name_to_product_slug,/products/monin-blueberry-puree,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/kenyan-beer,Pending,/kenyan-beer,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Officer's Choice Rare Whisky,Pending,/Officer's Choice Rare Whisky,name_to_product_slug,/products/officers-choice-rare-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/cinnamon,Pending,/cinnamon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Kawashima Junmai Shu Sake,Pending,/Kawashima Junmai Shu Sake,name_to_product_slug,/products/kawashima-junmai-shu-sake,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/blog/cat/black-friday-alcohol-offers?page=2,Pending,/blog/cat/black-friday-alcohol-offers,legacy_blog_category,/blog,high,Old category taxonomy path.
+https://www.dialadrinkkenya.com/absinthe-kenya,Pending,/absinthe-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/La Tilica Reposado,Pending,/La Tilica Reposado,name_to_product_slug,/products/la-tilica-reposado,medium,Human-readable product-like URL normalized to product slug.
+http://www.dialadrinkkenya.com/category/whisky/single-malt-whiskies,Pending,/category/whisky/single-malt-whiskies,scheme_canonical,https://www.dialadrinkkenya.com/category/whisky/single-malt-whiskies,high,Force https.
+https://www.dialadrinkkenya.com/isle-of-jura-the-loch-whisky,Pending,/isle-of-jura-the-loch-whisky,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Talisker Storm,Pending,/Talisker Storm,name_to_product_slug,/products/talisker-storm,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/product/rampur-pX -sherry-single-malt-whisky,Pending,/product/rampur-pX -sherry-single-malt-whisky,product_to_products,/products/rampur-pX -sherry-single-malt-whisky,high,Standardize product route.
+https://www.dialadrinkkenya.com/brand/61bc6dd3be9a7465205651a4,Pending,/brand/61bc6dd3be9a7465205651a4,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/brand/61bc4410be9a74652056518a,Pending,/brand/61bc4410be9a74652056518a,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/rose,Pending,/rose,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/200ml,Pending,/200ml,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/stellenbosch-wines-kenya,Pending,/stellenbosch-wines-kenya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Greenalls Blood Orange & Fig,Pending,/Greenalls Blood Orange & Fig,name_to_product_slug,/products/greenalls-blood-orange-and-fig,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/kenya,Pending,/location/kenya,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/ groot-constantia-shiraz,Pending,/groot-constantia-shiraz,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/gordon-s,Pending,/gordon-s,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/product,Pending,/product,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/leleshwa merlot shiraz,Pending,/leleshwa merlot shiraz,name_to_product_slug,/products/leleshwa-merlot-shiraz,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/brand/63ca6b11dfb5177ca158dd33,Pending,/brand/63ca6b11dfb5177ca158dd33,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Patron Citronge Orange Liqueur,Pending,/Patron Citronge Orange Liqueur,name_to_product_slug,/products/patron-citronge-orange-liqueur,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Tequila Sauza Gold,Pending,/Tequila Sauza Gold,name_to_product_slug,/products/tequila-sauza-gold,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Monin Apple Puree,Pending,/Monin Apple Puree,name_to_product_slug,/products/monin-apple-puree,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/captain-gold,Pending,/captain-gold,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/brands,Pending,/brands,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bavaria 0.0 Ginger & Lime,Pending,/Bavaria 0.0 Ginger & Lime,name_to_product_slug,/products/bavaria-0-0-ginger-and-lime,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Coolberg Mint 0.0 Beer,Pending,/Coolberg Mint 0.0 Beer,name_to_product_slug,/products/coolberg-mint-0-0-beer,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/pink-gin-750ml,Pending,/pink-gin-750ml,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/category/soft-drinks/soft-drink,Pending,/category/soft-drinks/soft-drink,drop_category_prefix,/soft-drinks/soft-drink,medium,Try canonical category URL without /category prefix.
+https://www.dialadrinkkenya.com/brand/61bdab83be9a746520565261,Pending,/brand/61bdab83be9a746520565261,legacy_brand_objectid,/brands,medium,Brand ObjectId URL; map to brand slug if possible.
+https://www.dialadrinkkenya.com/Gautier XO Gold & Blue Cognac,Pending,/Gautier XO Gold & Blue Cognac,name_to_product_slug,/products/gautier-xo-gold-and-blue-cognac,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/maker-s-mark-whiskey,Pending,/maker-s-mark-whiskey,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Sauza Tequila Silver,Pending,/Sauza Tequila Silver,name_to_product_slug,/products/sauza-tequila-silver,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/Jura Seven Wood Whisky,Pending,/Jura Seven Wood Whisky,name_to_product_slug,/products/jura-seven-wood-whisky,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/schweppes-tonic,Pending,/schweppes-tonic,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Bloom London Dry Gin,Pending,/Bloom London Dry Gin,name_to_product_slug,/products/bloom-london-dry-gin,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/location/parklands,Pending,/location/parklands,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/vermouth-martini-rosso,Failed,/vermouth-martini-rosso,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/jnb,Failed,/jnb,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/absolute-pepper,Failed,/absolute-pepper,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/glensilver-12-years,Failed,/glensilver-12-years,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/fonseca-tawny-port,Failed,/fonseca-tawny-port,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/location/mlolongo,Failed,/location/mlolongo,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/location/roysambu,Failed,/location/roysambu,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/veuve-clicquot-champagne,Failed,/veuve-clicquot-champagne,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://dialadrinkkenya.com/product/fonseca-ruby-port,Failed,/product/fonseca-ruby-port,product_to_products,/products/fonseca-ruby-port,high,Standardize product route.
+https://dialadrinkkenya.com/product/glensilver-12-years,Failed,/product/glensilver-12-years,product_to_products,/products/glensilver-12-years,high,Standardize product route.
+https://dialadrinkkenya.com/product/don-julio-anejo-700ml,Failed,/product/don-julio-anejo-700ml,product_to_products,/products/don-julio-anejo-700ml,high,Standardize product route.
+https://www.dialadrinkkenya.com/tugboat-strawberry-watermelon,Failed,/tugboat-strawberry-watermelon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://dialadrinkkenya.com/product/bianco-nobile,Failed,/product/bianco-nobile,product_to_products,/products/bianco-nobile,high,Standardize product route.
+https://www.dialadrinkkenya.com/akso-strawberry-pitaya,Failed,/akso-strawberry-pitaya,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/products?brand=velo-kenya,Failed,/products,normalize_products_query,/products,medium,"Invalid query values (e.g., undefined/spacing)."
+https://www.dialadrinkkenya.com/captain-morgan-white-rum,Failed,/captain-morgan-white-rum,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/fattori-pinot-grigio-valparadiso,Failed,/fattori-pinot-grigio-valparadiso,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/beluga-vodka,Failed,/beluga-vodka,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/tugboat-lush-ice-vape,Failed,/tugboat-lush-ice-vape,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/frontera-after-midnight,Failed,/frontera-after-midnight,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/michael-david-petite-petit,Failed,/michael-david-petite-petit,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/stellenbosch-vineyards-bushvine-pinotage,Failed,/stellenbosch-vineyards-bushvine-pinotage,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/mermaid-pink-gin,Failed,/mermaid-pink-gin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/adelberg-simonsig-cabernet-sauvignon-merlot,Failed,/adelberg-simonsig-cabernet-sauvignon-merlot,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/michel-torino-coleccion-sauvignon-blanc,Failed,/michel-torino-coleccion-sauvignon-blanc,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/cono-sur-organico-sauvignon-blanc,Failed,/cono-sur-organico-sauvignon-blanc,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/jp-chenet-sauvignon-blanc,Failed,/jp-chenet-sauvignon-blanc,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/akso-aloe-grapes,Failed,/akso-aloe-grapes,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/el-esteco-altimus,Failed,/el-esteco-altimus,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/don-fernando,Failed,/don-fernando,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/carmela-sparkling-wine,Failed,/carmela-sparkling-wine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/savanna cider,Failed,/savanna cider,name_to_product_slug,/products/savanna-cider,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/finca-flichman-roble-malbec,Failed,/finca-flichman-roble-malbec,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/mateus-tempranillo-rose,Failed,/mateus-tempranillo-rose,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/michel-torino-coleccion-cabernet-sauvignon,Failed,/michel-torino-coleccion-cabernet-sauvignon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/louis-jodot-chateau-des-jacques-morgon,Failed,/louis-jodot-chateau-des-jacques-morgon,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/louis-jadot-brouilly,Failed,/louis-jadot-brouilly,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/offley-10-old-tawny-porto,Failed,/offley-10-old-tawny-porto,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/sakurao-limited-gin,Failed,/sakurao-limited-gin,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/el-esteco-don-david-reserve-chardonnay,Failed,/el-esteco-don-david-reserve-chardonnay,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/baileys-red-velvet,Failed,/baileys-red-velvet,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/hendricks,Failed,/hendricks,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Footprint Merlot,Failed,/Footprint Merlot,name_to_product_slug,/products/footprint-merlot,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/diemersdal-pinotage,Failed,/diemersdal-pinotage,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/calvet-chateauneuf-du-pape,Failed,/calvet-chateauneuf-du-pape,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/hop-house-lager-beer,Failed,/hop-house-lager-beer,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/cantalici-baruffo-vin-santo,Failed,/cantalici-baruffo-vin-santo,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Glenfiddich 12 Years,Failed,/Glenfiddich 12 Years,name_to_product_slug,/products/glenfiddich-12-years,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/hendricks-amazonia,Failed,/hendricks-amazonia,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/angostura-3-years-old-reserve,Failed,/angostura-3-years-old-reserve,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/st-celine,Failed,/st-celine,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/akso-strawberry-ice,Failed,/akso-strawberry-ice,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ruhr-gold,Failed,/ruhr-gold,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/cesari-bardolino-classico,Failed,/cesari-bardolino-classico,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/patron-xo-cafe,Failed,/patron-xo-cafe,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/smokes,Failed,/smokes,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/taittinger-prestige-rose,Failed,/taittinger-prestige-rose,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/durbanville-hills-sauvignon-blanc,Failed,/durbanville-hills-sauvignon-blanc,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/location/ruaka,Failed,/location/ruaka,legacy_location,/locations,medium,Location page missing; send to locations hub.
+https://www.dialadrinkkenya.com/durbanville-hills-merlot-rhinofld,Failed,/durbanville-hills-merlot-rhinofld,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/Simonsig Cabernet Sauvignon Merlot,Failed,/Simonsig Cabernet Sauvignon Merlot,name_to_product_slug,/products/simonsig-cabernet-sauvignon-merlot,medium,Human-readable product-like URL normalized to product slug.
+https://www.dialadrinkkenya.com/vermouth-60s-pimm-60s,Failed,/vermouth-60s-pimm-60s,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/dark-rum,Failed,/dark-rum,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/ketel-one-vodka,Failed,/ketel-one-vodka,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/terra-linda-syrah-red,Failed,/terra-linda-syrah-red,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
+https://www.dialadrinkkenya.com/nederburg-cuvee-brut,Failed,/nederburg-cuvee-brut,short_legacy_alias,/products,low,Short alias path likely legacy keyword.
