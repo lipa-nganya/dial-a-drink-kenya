@@ -28,6 +28,7 @@ let menuCategoriesInFlight = null;
 const MENU_DRINKS_CACHE_TTL_MS = 60 * 1000;
 const menuDrinksCache = new Map();
 const menuDrinksInFlight = new Map();
+const MENU_CHUNK_SIZE = 200;
 
 const Menu = () => {
   const { categorySlug } = useParams();
@@ -99,11 +100,12 @@ const Menu = () => {
   }, []);
 
   useEffect(() => {
-    // On category routes, wait for category resolution before fetching to avoid
-    // an initial full-catalog request.
-    if (!searchParam && categorySlug && !selectedCategory) return;
+    // On category-like routes, wait until categories are loaded so we can try
+    // to resolve the slug first. If it does not resolve, still fetch drinks so
+    // the page does not stay stuck on "Loading drinks...".
+    if (!searchParam && categorySlug && categories.length === 0) return;
     fetchDrinks(searchParam, selectedCategory);
-  }, [searchParam, selectedCategory, categorySlug]);
+  }, [searchParam, selectedCategory, categorySlug, categories.length]);
 
   // Scroll detection: infinite scroll and categories collapse no longer used (categories in header)
   useEffect(() => {
@@ -276,21 +278,51 @@ const Menu = () => {
     drinksAbortControllerRef.current = controller;
     setLoading(true);
     try {
-      const params =
-        q.length >= 2
-          ? { search: q, search_in: 'name', limit: 300 }
-          : normalizedCategoryId > 0
-          ? { category: normalizedCategoryId, limit: 400 }
-          : undefined;
-      let requestPromise = menuDrinksInFlight.get(requestKey);
-      if (!requestPromise) {
-        requestPromise = api.get('/drinks', params ? { params, signal: controller.signal } : { signal: controller.signal });
-        menuDrinksInFlight.set(requestKey, requestPromise);
+      // Full menu is large: render first chunk immediately, then stream remaining chunks.
+      if (q.length < 2 && normalizedCategoryId === 0) {
+        const firstResponse = await api.get('/drinks', {
+          params: { limit: MENU_CHUNK_SIZE, offset: 0 },
+          signal: controller.signal
+        });
+        const firstChunk = Array.isArray(firstResponse.data) ? firstResponse.data : [];
+        setDrinks(firstChunk);
+        setLoading(false);
+
+        let allItems = [...firstChunk];
+        let offset = firstChunk.length;
+        while (!controller.signal.aborted && firstChunk.length > 0 && offset > 0) {
+          const nextResponse = await api.get('/drinks', {
+            params: { limit: MENU_CHUNK_SIZE, offset },
+            signal: controller.signal
+          });
+          const nextChunk = Array.isArray(nextResponse.data) ? nextResponse.data : [];
+          if (nextChunk.length === 0) break;
+          allItems = [...allItems, ...nextChunk];
+          offset += nextChunk.length;
+          setDrinks((prev) => {
+            const prevIds = new Set(prev.map((d) => d?.id));
+            const uniqueNext = nextChunk.filter((d) => d && !prevIds.has(d.id));
+            return uniqueNext.length > 0 ? [...prev, ...uniqueNext] : prev;
+          });
+          if (nextChunk.length < MENU_CHUNK_SIZE) break;
+        }
+
+        menuDrinksCache.set(requestKey, { items: allItems, ts: Date.now() });
+      } else {
+        const params =
+          q.length >= 2
+            ? { search: q, search_in: 'name', limit: 300 }
+            : { category: normalizedCategoryId, limit: 400 };
+        let requestPromise = menuDrinksInFlight.get(requestKey);
+        if (!requestPromise) {
+          requestPromise = api.get('/drinks', { params, signal: controller.signal });
+          menuDrinksInFlight.set(requestKey, requestPromise);
+        }
+        const drinksResponse = await requestPromise;
+        const drinksArray = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+        menuDrinksCache.set(requestKey, { items: drinksArray, ts: Date.now() });
+        setDrinks(drinksArray);
       }
-      const drinksResponse = await requestPromise;
-      const drinksArray = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
-      menuDrinksCache.set(requestKey, { items: drinksArray, ts: Date.now() });
-      setDrinks(drinksArray);
     } catch (error) {
       if (error?.name === 'CanceledError' || error?.name === 'AbortError') return;
       console.error('Error fetching drinks:', error);

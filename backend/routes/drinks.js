@@ -15,7 +15,9 @@ router.get('/', async (req, res) => {
     const { category, search, popular, available_only, brandId, brandFocus } = req.query;
     const searchIn = String(req.query.search_in || 'all').toLowerCase();
     const limitRaw = parseInt(req.query.limit, 10);
+    const offsetRaw = parseInt(req.query.offset, 10);
     const queryLimit = Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, limitRaw)) : null;
+    const queryOffset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : null;
     let whereClause = {};
 
     // Customer site should only show published drinks
@@ -106,7 +108,8 @@ router.get('/', async (req, res) => {
               ['isAvailable', 'DESC'], // Available items first (true = 1, false = 0)
               ['name', 'ASC']
             ],
-            ...(queryLimit ? { limit: queryLimit } : {})
+            ...(queryLimit ? { limit: queryLimit } : {}),
+            ...(queryOffset !== null ? { offset: queryOffset } : {})
           }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Query timeout')), 10000)
@@ -141,7 +144,8 @@ router.get('/', async (req, res) => {
                 ['isAvailable', 'DESC'],
                 ['name', 'ASC']
               ],
-              ...(queryLimit ? { limit: queryLimit } : {})
+              ...(queryLimit ? { limit: queryLimit } : {}),
+              ...(queryOffset !== null ? { offset: queryOffset } : {})
             }),
             new Promise((_, reject) => 
               setTimeout(() => reject(new Error('Query timeout')), 10000)
