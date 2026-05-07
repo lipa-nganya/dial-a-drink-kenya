@@ -878,21 +878,6 @@ class OrderDetailActivity : AppCompatActivity() {
                 if (response.isSuccessful) {
                     Toast.makeText(this@OrderDetailActivity, "Status updated to Out for Delivery", Toast.LENGTH_SHORT).show()
                     
-                    // After status is updated, check if payment prompt is needed
-                    currentOrder?.let { order ->
-                        val paymentType = order.paymentType?.lowercase() ?: "pay_on_delivery"
-                        val paymentStatus = order.paymentStatus.lowercase()
-                        
-                        if (paymentType == "pay_on_delivery" && paymentStatus != "paid") {
-                            // Show payment reminder (non-blocking)
-                            AlertDialog.Builder(this@OrderDetailActivity, R.style.Theme_DialADrinkDriver_AlertDialog)
-                                .setTitle("Payment Reminder")
-                                .setMessage("This order requires payment on delivery. Please collect payment from the customer when you arrive.")
-                                .setPositiveButton("Got it", null)
-                                .show()
-                        }
-                    }
-                    
                     loadOrderDetails() // Reload to show updated status
                 } else {
                     val errorBody = response.errorBody()?.string()
