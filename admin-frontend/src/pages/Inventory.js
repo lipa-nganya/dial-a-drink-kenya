@@ -155,6 +155,7 @@ const InventoryPage = () => {
   const itemsPerPage = 40;
   const fetchChunkSize = 200;
   const lastFetchedAtRef = React.useRef(0);
+  const searchModeRef = React.useRef(false);
 
   const discoverTotalDrinkCount = async () => {
     const hasAnyAtOffset = async (offset) => {
@@ -267,6 +268,62 @@ const InventoryPage = () => {
     setCurrentPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
+
+  // Inventory name search should query backend so results are not limited to the currently loaded subset.
+  useEffect(() => {
+    const q = String(searchTerm || '').trim();
+    if (q.length < 2) {
+      if (searchModeRef.current) {
+        searchModeRef.current = false;
+        fetchData({ resetList: true, showPageLoading: false });
+      }
+      return undefined;
+    }
+
+    searchModeRef.current = true;
+    const timer = setTimeout(async () => {
+      try {
+        setDrinksLoading(true);
+        const [drinksResponse, categoriesResponse, brandsResponse] = await Promise.all([
+          api.get('/admin/drinks', {
+            params: { light: 1, q, limit: 1000, offset: 0 }
+          }),
+          categories.length ? Promise.resolve({ data: categories }) : api.get('/categories'),
+          brands.length ? Promise.resolve({ data: brands }) : api.get('/brands/all')
+        ]);
+
+        const categoriesList = categoriesResponse.data || [];
+        const brandsList = brandsResponse.data || [];
+        if (!categories.length) setCategories(categoriesList);
+        if (!brands.length) setBrands(brandsList);
+
+        const categoryById = new Map(categoriesList.map((c) => [Number(c.id), c]));
+        const brandById = new Map(brandsList.map((b) => [Number(b.id), b]));
+        const rows = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
+        const hydrated = rows.map((drink) => {
+          const categoryId = Number(drink.categoryId);
+          const brandId = Number(drink.brandId);
+          return {
+            ...drink,
+            category: drink.category || categoryById.get(categoryId) || null,
+            brand: drink.brand || brandById.get(brandId) || null
+          };
+        });
+
+        setDrinks(hydrated);
+        setNextDrinksOffset(rows.length);
+        setHasMoreDrinks(rows.length === 1000);
+        setCurrentPage(1);
+      } catch (error) {
+        console.error('Error searching drinks:', error);
+      } finally {
+        setDrinksLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   const fetchData = async (options = {}) => {
     const {

@@ -40,6 +40,18 @@ const allowedOrigins = [
   process.env.ADMIN_URL,
   process.env.ZEUS_URL,
   process.env.SHOP_AGENT_URL,
+  // Production customer sites
+  'https://dialadrinkkenya.com',
+  'https://www.dialadrinkkenya.com',
+  'https://drinksdeliverykenya.com',
+  'https://www.drinksdeliverykenya.com',
+  'https://ruakadrinksdelivery.co.ke',
+  'https://www.ruakadrinksdelivery.co.ke',
+  // Production admin sites
+  'https://admin.dialadrinkkenya.com',
+  'https://www.admin.dialadrinkkenya.com',
+  'https://admin.ruakadrinksdelivery.co.ke',
+  'https://www.admin.ruakadrinksdelivery.co.ke',
 ].filter(Boolean);
 
 minimalApp.use((req, res, next) => {
@@ -52,6 +64,7 @@ minimalApp.use((req, res, next) => {
       originToCheck.includes('.netlify.app') ||
       originToCheck.includes('.thewolfgang.tech') ||
       originToCheck.includes('.ruakadrinksdelivery.co.ke') ||
+      originToCheck.includes('.dialadrinkkenya.com') ||
       originToCheck.includes('.drinksdeliverykenya.com') ||
       originToCheck.includes('.run.app') ||
       originToCheck === 'https://thewolfgang.tech'
