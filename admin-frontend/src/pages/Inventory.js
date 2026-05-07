@@ -119,6 +119,8 @@ const computeDrinkCapacityStockRows = (drink) => {
   });
 };
 
+const VISIBILITY_REFRESH_MIN_INTERVAL_MS = 2 * 60 * 1000;
+
 const InventoryPage = () => {
   const { isDarkMode, colors } = useTheme();
   const { user, pendingInventoryChecksCount } = useAdmin();
@@ -147,9 +149,47 @@ const InventoryPage = () => {
   const [inventoryView, setInventoryView] = useState('list'); // 'grid' | 'list'
   const [nextDrinksOffset, setNextDrinksOffset] = useState(0);
   const [hasMoreDrinks, setHasMoreDrinks] = useState(true);
+  const [totalDrinkCount, setTotalDrinkCount] = useState(0);
+  const [hasInitialized, setHasInitialized] = useState(false);
   
   const itemsPerPage = 40;
   const fetchChunkSize = 200;
+  const lastFetchedAtRef = React.useRef(0);
+
+  const discoverTotalDrinkCount = async () => {
+    const hasAnyAtOffset = async (offset) => {
+      const response = await api.get('/admin/drinks', {
+        params: { light: 1, limit: 1, offset }
+      });
+      const rows = Array.isArray(response.data) ? response.data : [];
+      return rows.length > 0;
+    };
+
+    if (!(await hasAnyAtOffset(0))) return 0;
+
+    let low = 0;
+    let high = 1;
+    while (await hasAnyAtOffset(high - 1)) {
+      low = high;
+      high *= 2;
+      if (high > 200000) break;
+    }
+
+    let left = low;
+    let right = high;
+    while (left < right) {
+      const mid = Math.floor((left + right) / 2);
+      // mid is 0-based offset; row exists => total > mid
+      // eslint-disable-next-line no-await-in-loop
+      const exists = await hasAnyAtOffset(mid);
+      if (exists) {
+        left = mid + 1;
+      } else {
+        right = mid;
+      }
+    }
+    return left;
+  };
 
   const stockMetaById = useMemo(() => {
     const m = new Map();
@@ -227,32 +267,56 @@ const InventoryPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
 
-  const fetchData = async () => {
+  const fetchData = async (options = {}) => {
+    const {
+      resetList = true,
+      showPageLoading = true
+    } = options;
     try {
-      setLoading(true);
+      if (showPageLoading) {
+        setLoading(true);
+      }
       setError(null);
-      const [categoriesResponse, brandsResponse] = await Promise.all([
+      const [categoriesResponse, brandsResponse, drinksMetaResponse] = await Promise.all([
         api.get('/categories'),
-        api.get('/brands/all')
+        api.get('/brands/all'),
+        api.get('/admin/drinks/meta').catch(() => null)
       ]);
 
       const categoriesList = categoriesResponse.data || [];
       const brandsList = brandsResponse.data || [];
+      const drinksMeta = drinksMetaResponse?.data || {};
+      const parsedTotalCount = Number(drinksMeta.total);
+      if (Number.isFinite(parsedTotalCount) && parsedTotalCount >= 0) {
+        setTotalDrinkCount(parsedTotalCount);
+      } else {
+        // Fallback for environments where /admin/drinks/meta isn't yet available.
+        const discoveredTotal = await discoverTotalDrinkCount();
+        setTotalDrinkCount(discoveredTotal);
+      }
       const categoryById = new Map(categoriesList.map((c) => [Number(c.id), c]));
       const brandById = new Map(brandsList.map((b) => [Number(b.id), b]));
 
       setCategories(categoriesList);
       setBrands(brandsList);
-      setDrinks([]);
-      setFilteredDrinks([]);
-      setCurrentPage(1);
-      setNextDrinksOffset(0);
-      setHasMoreDrinks(true);
+      if (resetList) {
+        setDrinks([]);
+        setFilteredDrinks([]);
+        setCurrentPage(1);
+        setNextDrinksOffset(0);
+        setHasMoreDrinks(true);
+      }
       // Render page structure immediately; load only first page batch.
-      setLoading(false);
+      if (showPageLoading) {
+        setLoading(false);
+      }
       setDrinksLoading(true);
+      const alreadyLoadedCount = resetList ? 0 : drinks.length;
+      const refreshLimit = resetList
+        ? fetchChunkSize
+        : Math.max(fetchChunkSize, alreadyLoadedCount || fetchChunkSize);
       const drinksResponse = await api.get('/admin/drinks', {
-        params: { light: 1, limit: fetchChunkSize, offset: 0 }
+        params: { light: 1, limit: refreshLimit, offset: 0 }
       });
       const chunk = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
       const hydratedChunk = chunk.map((drink) => {
@@ -268,7 +332,12 @@ const InventoryPage = () => {
       });
       setDrinks(hydratedChunk);
       setNextDrinksOffset(chunk.length);
-      setHasMoreDrinks(chunk.length === fetchChunkSize);
+      // Keep pagination open until we receive an actual empty page.
+      // Some environments can return underfilled chunks before the final page.
+      const hasMore = chunk.length > 0;
+      setHasMoreDrinks(hasMore);
+      setHasInitialized(true);
+      lastFetchedAtRef.current = Date.now();
     } catch (error) {
       console.error('Error fetching data:', error);
       console.error('Brands fetch error:', error.response?.data || error.message);
@@ -302,7 +371,7 @@ const InventoryPage = () => {
         }
         incoming.push(...chunk);
         offset += chunk.length;
-        keepLoading = chunk.length === fetchChunkSize;
+        keepLoading = true;
       }
 
       if (incoming.length > 0) {
@@ -329,29 +398,21 @@ const InventoryPage = () => {
     }
   };
 
-  // Continue prefetching next chunks in the background after initial render.
-  // This keeps the first paint fast while ensuring the full alphabet eventually appears.
-  useEffect(() => {
-    if (loading || drinksLoading || !hasMoreDrinks) return undefined;
-    const nextTargetPage = Math.ceil((drinks.length + fetchChunkSize) / itemsPerPage);
-    const timer = setTimeout(() => {
-      loadMoreDrinksIfNeeded(nextTargetPage);
-    }, 0);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, drinksLoading, hasMoreDrinks, drinks.length]);
-
   // When returning from another tab (e.g. Add Purchase) or Copilot, refresh drinks so stock levels stay current.
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
-      fetchData();
+      // Keep user context stable and avoid unnecessary refresh churn.
+      if (editDialogOpen) return;
+      const now = Date.now();
+      if (now - lastFetchedAtRef.current < VISIBILITY_REFRESH_MIN_INTERVAL_MS) return;
+      fetchData({ resetList: false, showPageLoading: false });
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [editDialogOpen]);
 
   // Helper function to check if a drink is on offer
   const isDrinkOnOffer = (drink) => {
@@ -476,11 +537,24 @@ const InventoryPage = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
   
-  // Calculate pagination for filtered drinks
-  // Keep one extra page visible while backend still has more rows,
-  // so users can continue paging beyond the currently loaded subset.
+  const hasClientFilters =
+    Boolean(searchTerm) ||
+    Boolean(selectedCategory) ||
+    Boolean(selectedBrand) ||
+    showBrandFocusOnly ||
+    availabilityFilter !== 'all' ||
+    offerFilter !== 'all';
+
+  // Calculate pagination for filtered drinks.
+  // For unfiltered view, use backend total count so page controls never get capped by loaded chunks.
+  const backendTotalPages = Math.max(1, Math.ceil(totalDrinkCount / itemsPerPage));
   const loadedPages = Math.ceil(filteredDrinks.length / itemsPerPage);
-  const totalPages = Math.max(1, loadedPages + (hasMoreDrinks ? 1 : 0));
+  const fallbackLoadedPages = Math.max(1, loadedPages + (hasMoreDrinks ? 1 : 0));
+  const totalPages = hasClientFilters
+    ? Math.max(1, loadedPages + (hasMoreDrinks ? 1 : 0))
+    : totalDrinkCount > 0
+      ? Math.max(backendTotalPages, loadedPages)
+      : fallbackLoadedPages;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const paginatedDrinks = filteredDrinks.slice(startIndex, endIndex);
@@ -574,7 +648,7 @@ const InventoryPage = () => {
     }
   };
 
-  if (loading) {
+  if (loading && !hasInitialized) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <Box sx={{ mb: 4 }}>

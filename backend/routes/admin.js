@@ -1371,7 +1371,7 @@ router.get('/drinks', async (req, res) => {
       attributes: listAttrs,
       ...(where ? { where } : {}),
       ...(light ? {} : { include: adminDrinkListIncludes }),
-      order: [['name', 'ASC']],
+      order: [['name', 'ASC'], ['id', 'ASC']],
       ...(listLimit ? { limit: listLimit } : {}),
       ...(listOffset !== null ? { offset: listOffset } : {})
     });
@@ -1385,8 +1385,21 @@ router.get('/drinks', async (req, res) => {
   }
 });
 
+// Drinks total count (admin) — used by inventory pagination controls
+router.get('/drinks/meta', async (req, res) => {
+  try {
+    const total = await db.Drink.count();
+    res.json({ total });
+  } catch (error) {
+    console.error('Error fetching drinks meta:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+});
+
 // Single drink (admin) — full columns for edit dialog
-router.get('/drinks/:id', async (req, res) => {
+router.get('/drinks/:id(\\d+)', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
