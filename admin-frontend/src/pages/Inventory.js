@@ -119,8 +119,6 @@ const computeDrinkCapacityStockRows = (drink) => {
   });
 };
 
-const VISIBILITY_REFRESH_MIN_INTERVAL_MS = 2 * 60 * 1000;
-
 const InventoryPage = () => {
   const { isDarkMode, colors } = useTheme();
   const { user, pendingInventoryChecksCount } = useAdmin();
@@ -149,11 +147,9 @@ const InventoryPage = () => {
   const [inventoryView, setInventoryView] = useState('list'); // 'grid' | 'list'
   const [nextDrinksOffset, setNextDrinksOffset] = useState(0);
   const [hasMoreDrinks, setHasMoreDrinks] = useState(true);
-  const [hasInitialized, setHasInitialized] = useState(false);
   
   const itemsPerPage = 40;
   const fetchChunkSize = 200;
-  const lastFetchedAtRef = React.useRef(0);
 
   const stockMetaById = useMemo(() => {
     const m = new Map();
@@ -231,15 +227,9 @@ const InventoryPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps, no-use-before-define
   }, [searchTerm, selectedCategory, selectedBrand, showBrandFocusOnly, availabilityFilter, offerFilter]);
 
-  const fetchData = async (options = {}) => {
-    const {
-      resetList = true,
-      showPageLoading = true
-    } = options;
+  const fetchData = async () => {
     try {
-      if (showPageLoading) {
-        setLoading(true);
-      }
+      setLoading(true);
       setError(null);
       const [categoriesResponse, brandsResponse] = await Promise.all([
         api.get('/categories'),
@@ -253,17 +243,13 @@ const InventoryPage = () => {
 
       setCategories(categoriesList);
       setBrands(brandsList);
-      if (resetList) {
-        setDrinks([]);
-        setFilteredDrinks([]);
-        setCurrentPage(1);
-        setNextDrinksOffset(0);
-        setHasMoreDrinks(true);
-      }
-      // Render page structure immediately; load first batch in background.
-      if (showPageLoading) {
-        setLoading(false);
-      }
+      setDrinks([]);
+      setFilteredDrinks([]);
+      setCurrentPage(1);
+      setNextDrinksOffset(0);
+      setHasMoreDrinks(true);
+      // Render page structure immediately; load only first page batch.
+      setLoading(false);
       setDrinksLoading(true);
       const drinksResponse = await api.get('/admin/drinks', {
         params: { light: 1, limit: fetchChunkSize, offset: 0 }
@@ -283,8 +269,6 @@ const InventoryPage = () => {
       setDrinks(hydratedChunk);
       setNextDrinksOffset(chunk.length);
       setHasMoreDrinks(chunk.length === fetchChunkSize);
-      setHasInitialized(true);
-      lastFetchedAtRef.current = Date.now();
     } catch (error) {
       console.error('Error fetching data:', error);
       console.error('Brands fetch error:', error.response?.data || error.message);
@@ -345,22 +329,29 @@ const InventoryPage = () => {
     }
   };
 
+  // Continue prefetching next chunks in the background after initial render.
+  // This keeps the first paint fast while ensuring the full alphabet eventually appears.
+  useEffect(() => {
+    if (loading || drinksLoading || !hasMoreDrinks) return undefined;
+    const nextTargetPage = Math.ceil((drinks.length + fetchChunkSize) / itemsPerPage);
+    const timer = setTimeout(() => {
+      loadMoreDrinksIfNeeded(nextTargetPage);
+    }, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, drinksLoading, hasMoreDrinks, drinks.length]);
+
   // When returning from another tab (e.g. Add Purchase) or Copilot, refresh drinks so stock levels stay current.
   useEffect(() => {
     const onVisibilityChange = () => {
       if (document.visibilityState !== 'visible') return;
-      // Keep form state stable while dialogs are open, and avoid over-refreshing.
-      if (editDialogOpen) return;
-      const now = Date.now();
-      const isFresh = now - lastFetchedAtRef.current < VISIBILITY_REFRESH_MIN_INTERVAL_MS;
-      if (isFresh) return;
-      fetchData({ resetList: false, showPageLoading: false });
+      fetchData();
     };
 
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editDialogOpen]);
+  }, []);
 
   // Helper function to check if a drink is on offer
   const isDrinkOnOffer = (drink) => {
@@ -583,7 +574,7 @@ const InventoryPage = () => {
     }
   };
 
-  if (loading && !hasInitialized) {
+  if (loading) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
         <Box sx={{ mb: 4 }}>
