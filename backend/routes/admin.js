@@ -1399,7 +1399,7 @@ router.get('/drinks/meta', async (req, res) => {
 });
 
 // Single drink (admin) — full columns for edit dialog
-router.get('/drinks/:id(\\d+)', async (req, res) => {
+router.get('/drinks/:id', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (Number.isNaN(id)) {
