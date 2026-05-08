@@ -49,6 +49,13 @@ run_gcloud() {
 echo "Project=$PROJECT_ID  Region=$REGION  DRY_RUN=$DRY_RUN"
 echo ""
 
+# Cloud Run constraint: cpu < 1 requires concurrency = 1.
+if [[ "$FRONTEND_CPU" =~ ^0(\.[0-9]+)?$ ]] && [[ "${FRONTEND_CONCURRENCY}" -gt 1 ]]; then
+  echo "Adjusting FRONTEND_CONCURRENCY from ${FRONTEND_CONCURRENCY} to 1 because FRONTEND_CPU=${FRONTEND_CPU}."
+  FRONTEND_CONCURRENCY=1
+  echo ""
+fi
+
 update_frontend() {
   local name="$1"
   echo "=== $name (nginx/static) ==="
