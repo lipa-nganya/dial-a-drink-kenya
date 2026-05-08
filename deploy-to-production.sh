@@ -236,10 +236,29 @@ gcloud run services update "$ADMIN_FRONTEND_SERVICE" \
 cd /Users/maria/dial-a-drink
 
 echo ""
-echo "📱 Step 7: Android app — build separately if needed (driver-app-native/)"
+echo "💸 Step 7: Re-applying Cloud Run cost controls (idempotent)..."
+# This re-applies tuned production defaults (safe to run after every deployment).
+export GCP_PROJECT_ID="$PROJECT_ID"
+export GCP_REGION="$REGION"
+export BACKEND_CPU="$BACKEND_CPU"
+export BACKEND_MEMORY="$BACKEND_MEMORY"
+export BACKEND_MIN_INSTANCES="$BACKEND_MIN_INSTANCES"
+export BACKEND_MAX_INSTANCES="$BACKEND_MAX_INSTANCES"
+chmod +x ./scripts/gcp/tune-cloud-run-dialadrink-production.sh
+./scripts/gcp/tune-cloud-run-dialadrink-production.sh
+
+echo ""
+echo "🧹 Step 8: Pruning GCR images (keep latest 5; delete tagged + untagged)..."
+# Keeps the newest 5 digests (plus any digest still tagged 'latest') for each image below.
+chmod +x ./scripts/gcp/gcr-prune-keep-latest-n.sh
+GCP_PROJECT_ID="$PROJECT_ID" KEEP_N=5 IMAGES="deliveryos-production-backend dialadrink-frontend dialadrink-admin" \
+  ./scripts/gcp/gcr-prune-keep-latest-n.sh
+
+echo ""
+echo "📱 Step 9: Android app — build separately if needed (driver-app-native/)"
 echo ""
 
-echo "✅ Step 8: Verifying backend health..."
+echo "✅ Step 10: Verifying backend health..."
 # Bound wait so a wedged service does not stall the script forever.
 HEALTH_RESPONSE=$(curl -sS --connect-timeout 15 --max-time 45 "$SERVICE_URL/api/health" || echo "Failed")
 echo "   Backend health check returned: $HEALTH_RESPONSE"

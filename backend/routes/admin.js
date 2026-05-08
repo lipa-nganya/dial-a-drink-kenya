@@ -1103,47 +1103,24 @@ router.get('/stats', async (req, res) => {
 // Get all transactions (admin)
 router.get('/transactions', async (req, res) => {
   try {
-    // Get actual columns that exist in the database for Order
-    let validOrderAttributes;
-    try {
-      const [existingOrderColumns] = await db.sequelize.query(
-        "SELECT column_name FROM information_schema.columns WHERE table_name = 'orders' ORDER BY column_name"
-      );
-      const orderColumnNames = new Set(existingOrderColumns.map(col => col.column_name.toLowerCase()));
-      
-      // Map model attributes to database column names and filter to only existing columns
-      validOrderAttributes = [];
-      for (const [attrName, attrDef] of Object.entries(db.Order.rawAttributes)) {
-        const dbColumnName = attrDef.field || attrName;
-        // Check if the database column exists (case-insensitive)
-        if (orderColumnNames.has(dbColumnName.toLowerCase())) {
-          validOrderAttributes.push(attrName);
-        }
-      }
-    } catch (schemaError) {
-      // Fallback: use a safe default set of attributes if schema query fails
-      console.warn('⚠️ Could not query information_schema for orders, using default attributes:', schemaError.message);
-      validOrderAttributes = ['id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress', 'totalAmount', 'convenienceFee', 'territoryDeliveryFee', 'tipAmount', 'status', 'paymentStatus', 'paymentType', 'paymentMethod', 'driverId', 'staffPurchaseDriverId', 'notes', 'createdAt', 'updatedAt'];
-    }
-    
-    // Build includes array conditionally
+    const detailed = String(req.query.detailed || '') === '1';
+    const orderAttributes = [
+      'id',
+      'customerName',
+      'customerPhone',
+      'customerEmail',
+      'deliveryAddress',
+      'totalAmount',
+      'status',
+      'paymentStatus',
+      'paymentType',
+      'paymentMethod',
+      'driverId',
+      'notes',
+      'createdAt',
+      'updatedAt'
+    ];
     const orderIncludes = [
-      {
-        model: db.OrderItem,
-        as: 'items',
-        required: false,
-        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
-        include: [{
-          model: db.Drink,
-            as: 'drink',
-            required: false,
-            attributes: [
-              'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
-              'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
-              'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
-            ]
-          }]
-      },
       {
         model: db.Driver,
         as: 'driver',
@@ -1151,6 +1128,24 @@ router.get('/transactions', async (req, res) => {
         attributes: ['id', 'name', 'phoneNumber', 'status']
       }
     ];
+    if (detailed) {
+      orderIncludes.unshift({
+        model: db.OrderItem,
+        as: 'items',
+        required: false,
+        attributes: ['id', 'orderId', 'drinkId', 'quantity', 'price', 'selectedCapacity', 'createdAt', 'updatedAt'],
+        include: [{
+          model: db.Drink,
+          as: 'drink',
+          required: false,
+          attributes: [
+            'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+            'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice',
+            'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'createdAt', 'updatedAt'
+          ]
+        }]
+      });
+    }
     
     // Branch association removed - no longer relevant/displayed
     
@@ -1160,7 +1155,7 @@ router.get('/transactions', async (req, res) => {
         model: db.Order,
         as: 'order',
         required: false,
-        attributes: validOrderAttributes,
+        attributes: orderAttributes,
         include: orderIncludes
       }, {
         model: db.Driver,
@@ -1327,6 +1322,7 @@ router.get('/drinks', async (req, res) => {
     const limitRaw = parseInt(req.query.limit, 10);
     const offsetRaw = parseInt(req.query.offset, 10);
     const light = String(req.query.light || '') === '1';
+    const summary = String(req.query.summary || '') === '1';
     const hasQuery = qRaw.length > 0;
     const listLimit = Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, limitRaw)) : null;
     const listOffset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : null;
@@ -1355,9 +1351,12 @@ router.get('/drinks', async (req, res) => {
       'stockByCapacity',
       'description'
     ]);
-    const listAttrs = light
-      ? listAttrsBase.filter((a) => lightAttrSet.has(a))
-      : listAttrsBase;
+    const summaryAttrSet = new Set(['id', 'name', 'capacity', 'capacityPricing', 'stockByCapacity', 'updatedAt']);
+    const listAttrs = summary
+      ? listAttrsBase.filter((a) => summaryAttrSet.has(a))
+      : (light
+        ? listAttrsBase.filter((a) => lightAttrSet.has(a))
+        : listAttrsBase);
 
     const where = hasQuery
       ? {
@@ -1370,7 +1369,7 @@ router.get('/drinks', async (req, res) => {
     const drinks = await db.Drink.findAll({
       attributes: listAttrs,
       ...(where ? { where } : {}),
-      ...(light ? {} : { include: adminDrinkListIncludes }),
+      ...((light || summary) ? {} : { include: adminDrinkListIncludes }),
       order: [['name', 'ASC'], ['id', 'ASC']],
       ...(listLimit ? { limit: listLimit } : {}),
       ...(listOffset !== null ? { offset: listOffset } : {})

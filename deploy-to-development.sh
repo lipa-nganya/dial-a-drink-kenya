@@ -23,6 +23,14 @@ SERVICE_NAME="deliveryos-development-backend"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-dev"
 GCLOUD_ACCOUNT="dialadrinkkenya254@gmail.com"
 
+# Dev-only Cloud Run cost controls (single QC user).
+# Override via env vars when needed.
+DEV_BACKEND_MIN_INSTANCES="${DEV_BACKEND_MIN_INSTANCES:-0}"
+DEV_BACKEND_MAX_INSTANCES="${DEV_BACKEND_MAX_INSTANCES:-3}"
+DEV_BACKEND_CPU="${DEV_BACKEND_CPU:-1}"
+DEV_BACKEND_MEMORY="${DEV_BACKEND_MEMORY:-512Mi}"
+DEV_BACKEND_CONCURRENCY="${DEV_BACKEND_CONCURRENCY:-20}"
+
 echo "🚀 Deploy to Development"
 echo "========================"
 echo ""
@@ -149,7 +157,28 @@ echo "   ✅ Backend URL: $SERVICE_URL"
 cd ..
 echo ""
 
-# Step 5: CORS and summary
+# Step 5: Apply dev-only Cloud Run cost controls (backend only)
+echo "💸 Step 5: Applying development Cloud Run cost controls (backend only)..."
+chmod +x ./scripts/gcp/tune-cloud-run-dialadrink-development.sh
+GCP_PROJECT_ID="$PROJECT_ID" \
+GCP_REGION="$REGION" \
+BACKEND_SERVICE="$SERVICE_NAME" \
+BACKEND_MIN_INSTANCES="$DEV_BACKEND_MIN_INSTANCES" \
+BACKEND_MAX_INSTANCES="$DEV_BACKEND_MAX_INSTANCES" \
+BACKEND_CPU="$DEV_BACKEND_CPU" \
+BACKEND_MEMORY="$DEV_BACKEND_MEMORY" \
+BACKEND_CONCURRENCY="$DEV_BACKEND_CONCURRENCY" \
+  ./scripts/gcp/tune-cloud-run-dialadrink-development.sh
+echo ""
+
+# Step 6: Prune dev backend images (keep latest 3; delete tagged + untagged)
+echo "🧹 Step 6: Pruning dev backend images (keep latest 3)..."
+chmod +x ./scripts/gcp/gcr-prune-keep-latest-n.sh
+GCP_PROJECT_ID="$PROJECT_ID" KEEP_N=3 IMAGES="deliveryos-backend-dev" \
+  ./scripts/gcp/gcr-prune-keep-latest-n.sh
+echo ""
+
+# Step 7: CORS and summary
 echo "🔒 CORS: Maintained (backend/app.js uses FRONTEND_URL, ADMIN_URL)"
 echo ""
 echo "=========================================="

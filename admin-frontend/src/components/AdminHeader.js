@@ -10,7 +10,6 @@ import {
 import {
   Dashboard,
   Logout,
-  Receipt,
   Settings as SettingsIcon,
   LocalShipping,
   LocalFlorist,
@@ -44,9 +43,7 @@ const AdminHeader = () => {
   };
 
   const isActive = (path) => {
-    if (path === '/dashboard' && location.pathname === '/dashboard') return true;
-    if (path !== '/dashboard' && location.pathname.startsWith(path)) return true;
-    return false;
+    return location.pathname.startsWith(path);
   };
 
   const buttonStyle = (path) => ({
@@ -68,19 +65,12 @@ const AdminHeader = () => {
           variant="h6" 
           component="div" 
           sx={{ flexGrow: 1, color: isDarkMode ? colors.accentText : colors.textPrimary, fontWeight: 700, cursor: 'pointer' }}
-          onClick={() => navigate('/dashboard')}
+          onClick={() => navigate('/orders')}
         >
           Dial a Drink Kenya Admin
         </Typography>
         
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Button
-            color="inherit"
-            onClick={() => navigate('/dashboard')}
-            sx={buttonStyle('/dashboard')}
-          >
-            Dashboard
-          </Button>
           <Button
             color="inherit"
             onClick={() => navigate('/orders')}
@@ -89,14 +79,6 @@ const AdminHeader = () => {
             <Badge badgeContent={pendingOrdersCount} color="error" max={99} sx={{ '& .MuiBadge-badge': { right: -8, top: -8 } }}>
               Orders
             </Badge>
-          </Button>
-          <Button
-            color="inherit"
-            onClick={() => navigate('/transactions')}
-            startIcon={<Receipt />}
-            sx={buttonStyle('/transactions')}
-          >
-            Transactions
           </Button>
           <Button
             color="inherit"

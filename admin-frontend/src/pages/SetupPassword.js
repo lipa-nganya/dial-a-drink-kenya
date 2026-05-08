@@ -92,9 +92,9 @@ const SetupPassword = () => {
         
         setSuccess(true);
         
-        // Redirect to dashboard after 2 seconds
+        // Redirect to orders after 2 seconds (dashboard removed)
         setTimeout(() => {
-          navigate('/dashboard');
+          navigate('/orders');
         }, 2000);
       } else {
         setError(response.data.error || 'Failed to set password');
@@ -142,7 +142,7 @@ const SetupPassword = () => {
             Password Set Successfully!
           </Typography>
           <Typography variant="body1" sx={{ color: colors.textSecondary, mb: 3 }}>
-            You are now logged in. Redirecting to dashboard...
+            You are now logged in. Redirecting to orders...
           </Typography>
           <CircularProgress size={24} />
         </Paper>

@@ -12,10 +12,8 @@ import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
 import SetupPassword from './pages/SetupPassword';
 import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
-import AdminOverview from './pages/AdminOverview';
 import Orders from './pages/Orders';
 import Inventory from './pages/Inventory';
-import Transactions from './pages/Transactions';
 import OrderNotifications from './pages/OrderNotifications';
 import Drivers from './pages/Drivers';
 import Branches from './pages/Branches';
@@ -33,14 +31,8 @@ import Purchases from './pages/Purchases';
 import AddPurchase from './pages/AddPurchase';
 import EditPurchase from './pages/EditPurchase';
 import PayablesDashboard from './pages/PayablesDashboard';
-import Sales from './pages/Sales';
-import RiderProfits from './pages/RiderProfits';
-import RiderSales from './pages/RiderSales';
-import RiderSalesSummary from './pages/RiderSalesSummary';
-import SalesSummary from './pages/SalesSummary';
 import SupplierInvoices from './pages/SupplierInvoices';
 import Copilot from './pages/Copilot';
-import SalesDateDetails from './pages/copilot/SalesDateDetails';
 import RiderDetailsPage from './pages/RiderDetails';
 import CashAtHand from './pages/CashAtHand';
 import PendingSubmissionApproval from './pages/PendingSubmissionApproval';
@@ -50,8 +42,6 @@ import ResetPasswordRequest from './pages/ResetPasswordRequest';
 import ResupplyCart from './pages/ResupplyCart';
 import Accounts from './pages/Accounts';
 import AccountDetail from './pages/AccountDetail';
-import AdminCashAtHand from './pages/AdminCashAtHand';
-import AdminSubmissionApproval from './pages/AdminSubmissionApproval';
 import './App.css';
 
 const getMUITheme = (isDarkMode) => {
@@ -276,16 +266,7 @@ function AppContent() {
               <Route path="/login" element={<Login />} />
               <Route path="/reset-password" element={<ResetPasswordRequest />} />
               <Route path="/setup-password" element={<SetupPassword />} />
-              <Route
-                path="/dashboard"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <AdminOverview />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
+              <Route path="/dashboard" element={<Navigate to="/orders" replace />} />
               <Route
                 path="/orders"
                 element={
@@ -322,16 +303,7 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
-              <Route
-                path="/transactions"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <Transactions />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
+              <Route path="/transactions" element={<Navigate to="/orders" replace />} />
               <Route
                 path="/drivers"
                 element={
@@ -382,56 +354,11 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
-              <Route
-                path="/sales"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <Sales />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/sales/rider-profits"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <RiderProfits />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/sales/rider-profits/:riderId/sales"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <RiderSales />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/sales/rider-profits/:riderId/summary"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <RiderSalesSummary />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/sales/summary"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <SalesSummary />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
+              <Route path="/sales" element={<Navigate to="/orders" replace />} />
+              <Route path="/sales/rider-profits" element={<Navigate to="/orders" replace />} />
+              <Route path="/sales/rider-profits/:riderId/sales" element={<Navigate to="/orders" replace />} />
+              <Route path="/sales/rider-profits/:riderId/summary" element={<Navigate to="/orders" replace />} />
+              <Route path="/sales/summary" element={<Navigate to="/orders" replace />} />
               <Route
                 path="/payables/manage"
                 element={
@@ -492,26 +419,8 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
-              <Route
-                path="/admin-cash-at-hand"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <AdminCashAtHand />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/admin-cash-at-hand/submissions/:submissionId/approve"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <AdminSubmissionApproval />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
+              <Route path="/admin-cash-at-hand" element={<Navigate to="/orders" replace />} />
+              <Route path="/admin-cash-at-hand/submissions/:submissionId/approve" element={<Navigate to="/orders" replace />} />
               <Route
                 path="/cash-at-hand/submissions/:submissionId/approve"
                 element={
@@ -635,26 +544,8 @@ function AppContent() {
               />
               <Route path="/customers" element={<Navigate to="/admin/customers" replace />} />
               <Route path="/admin/notifications" element={<PrivateRoute><OrderNotifications /></PrivateRoute>} />
-              <Route
-                path="/copilot/reports/date/:date"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <SalesDateDetails />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
-              <Route
-                path="/copilot/reports/rider/:riderId"
-                element={
-                  <PrivateRoute>
-                    <AdminLayout>
-                      <RiderDetailsPage />
-                    </AdminLayout>
-                  </PrivateRoute>
-                }
-              />
+              <Route path="/copilot/reports/date/:date" element={<Navigate to="/copilot/seo" replace />} />
+              <Route path="/copilot/reports/rider/:riderId" element={<Navigate to="/copilot/seo" replace />} />
               <Route
                 path="/resupply-cart"
                 element={
@@ -665,7 +556,7 @@ function AppContent() {
                   </PrivateRoute>
                 }
               />
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={<Navigate to="/orders" replace />} />
             </Routes>
             </Router>
           </ResupplyCartProvider>

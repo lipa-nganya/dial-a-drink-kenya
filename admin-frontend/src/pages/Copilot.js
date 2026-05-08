@@ -9,22 +9,12 @@ import {
   Paper
 } from '@mui/material';
 import {
-  Assessment,
-  Analytics,
-  TrendingUp,
   Search,
-  AccountBalanceWallet,
-  Inventory,
-  ShoppingCart
+  Inventory
 } from '@mui/icons-material';
 import { useTheme } from '../contexts/ThemeContext';
-import Reports from './copilot/Reports';
-import Analysis from './copilot/Analysis';
-import Predictions from './copilot/Predictions';
 import SEO from './copilot/SEO';
-import CashSubmissions from './copilot/CashSubmissions';
 import InventoryAnalytics from './copilot/Inventory';
-import Sales from './copilot/Sales';
 
 const Copilot = () => {
   const location = useLocation();
@@ -34,25 +24,14 @@ const Copilot = () => {
   // Determine current tab based on pathname
   const getCurrentTab = () => {
     const path = location.pathname;
-    if (path.includes('/reports')) return 0;
-    if (path.includes('/analysis')) return 1;
-    if (path.includes('/predictions')) return 2;
-    if (path.includes('/seo')) return 3;
-    if (path.includes('/cash-submissions')) return 4;
-    if (path.includes('/inventory')) return 5;
-    if (path.includes('/sales')) return 6;
-    return 0; // Default to reports
+    if (path.includes('/inventory')) return 1;
+    return 0; // Default to SEO
   };
 
   const handleTabChange = (event, newValue) => {
     const routes = [
-      '/copilot/reports',
-      '/copilot/analysis',
-      '/copilot/predictions',
       '/copilot/seo',
-      '/copilot/cash-submissions',
-      '/copilot/inventory',
-      '/copilot/sales'
+      '/copilot/inventory'
     ];
     navigate(routes[newValue]);
   };
@@ -91,26 +70,21 @@ const Copilot = () => {
             }
           }}
         >
-          <Tab icon={<Assessment />} iconPosition="start" label="Reports" />
-          <Tab icon={<Analytics />} iconPosition="start" label="Analysis" />
-          <Tab icon={<TrendingUp />} iconPosition="start" label="Predictions" />
           <Tab icon={<Search />} iconPosition="start" label="SEO" />
-          <Tab icon={<AccountBalanceWallet />} iconPosition="start" label="Cash Submissions" />
           <Tab icon={<Inventory />} iconPosition="start" label="Inventory" />
-          <Tab icon={<ShoppingCart />} iconPosition="start" label="Sales" />
         </Tabs>
       </Paper>
 
       <Box>
         <Routes>
-          <Route path="reports" element={<Reports />} />
-          <Route path="analysis" element={<Analysis />} />
-          <Route path="predictions" element={<Predictions />} />
           <Route path="seo" element={<SEO />} />
-          <Route path="cash-submissions" element={<CashSubmissions />} />
           <Route path="inventory" element={<InventoryAnalytics />} />
-          <Route path="sales" element={<Sales />} />
-          <Route index element={<Navigate to="reports" replace />} />
+          <Route path="reports" element={<Navigate to="/copilot/seo" replace />} />
+          <Route path="analysis" element={<Navigate to="/copilot/seo" replace />} />
+          <Route path="predictions" element={<Navigate to="/copilot/seo" replace />} />
+          <Route path="cash-submissions" element={<Navigate to="/copilot/seo" replace />} />
+          <Route path="sales" element={<Navigate to="/copilot/seo" replace />} />
+          <Route index element={<Navigate to="seo" replace />} />
         </Routes>
       </Box>
     </Container>
