@@ -30,6 +30,36 @@ DEV_BACKEND_MAX_INSTANCES="${DEV_BACKEND_MAX_INSTANCES:-3}"
 DEV_BACKEND_CPU="${DEV_BACKEND_CPU:-1}"
 DEV_BACKEND_MEMORY="${DEV_BACKEND_MEMORY:-512Mi}"
 DEV_BACKEND_CONCURRENCY="${DEV_BACKEND_CONCURRENCY:-20}"
+REVISION_KEEP_COUNT="${REVISION_KEEP_COUNT:-10}"
+
+prune_service_revisions() {
+  local service_name="$1"
+  local keep_count="$2"
+  echo "   Service: $service_name (keep newest $keep_count)"
+  local to_delete
+  to_delete="$(gcloud run revisions list \
+    --service "$service_name" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --sort-by="~metadata.creationTimestamp" \
+    --format="value(metadata.name)" | tail -n +"$((keep_count + 1))")"
+
+  if [ -z "$to_delete" ]; then
+    echo "   No old revisions to delete."
+    return 0
+  fi
+
+  while IFS= read -r revision; do
+    [ -z "$revision" ] && continue
+    echo "   Deleting revision: $revision"
+    if ! gcloud run revisions delete "$revision" \
+      --region "$REGION" \
+      --project "$PROJECT_ID" \
+      --quiet >/dev/null 2>&1; then
+      echo "   ⚠️  Could not delete revision: $revision"
+    fi
+  done <<< "$to_delete"
+}
 
 echo "🚀 Deploy to Development"
 echo "========================"
@@ -178,7 +208,12 @@ GCP_PROJECT_ID="$PROJECT_ID" KEEP_N=3 IMAGES="deliveryos-backend-dev" \
   ./scripts/gcp/gcr-prune-keep-latest-n.sh
 echo ""
 
-# Step 7: CORS and summary
+# Step 7: Prune Cloud Run revisions (keep newest 10)
+echo "🗂️  Step 7: Pruning Cloud Run revisions (keep newest $REVISION_KEEP_COUNT)..."
+prune_service_revisions "$SERVICE_NAME" "$REVISION_KEEP_COUNT"
+echo ""
+
+# Step 8: CORS and summary
 echo "🔒 CORS: Maintained (backend/app.js uses FRONTEND_URL, ADMIN_URL)"
 echo ""
 echo "=========================================="

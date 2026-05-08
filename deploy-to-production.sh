@@ -29,6 +29,36 @@ BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
 BACKEND_CPU="${BACKEND_CPU:-1}"
 BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
 FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"
+REVISION_KEEP_COUNT="${REVISION_KEEP_COUNT:-10}"
+
+prune_service_revisions() {
+  local service_name="$1"
+  local keep_count="$2"
+  echo "   Service: $service_name (keep newest $keep_count)"
+  local to_delete
+  to_delete="$(gcloud run revisions list \
+    --service "$service_name" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --sort-by="~metadata.creationTimestamp" \
+    --format="value(metadata.name)" | tail -n +"$((keep_count + 1))")"
+
+  if [ -z "$to_delete" ]; then
+    echo "   No old revisions to delete."
+    return 0
+  fi
+
+  while IFS= read -r revision; do
+    [ -z "$revision" ] && continue
+    echo "   Deleting revision: $revision"
+    if ! gcloud run revisions delete "$revision" \
+      --region "$REGION" \
+      --project "$PROJECT_ID" \
+      --quiet >/dev/null 2>&1; then
+      echo "   ⚠️  Could not delete revision: $revision"
+    fi
+  done <<< "$to_delete"
+}
 
 echo "🚀 Deploying to Production Environment"
 echo "======================================"
@@ -255,10 +285,16 @@ GCP_PROJECT_ID="$PROJECT_ID" KEEP_N=5 IMAGES="deliveryos-production-backend dial
   ./scripts/gcp/gcr-prune-keep-latest-n.sh
 
 echo ""
-echo "📱 Step 9: Android app — build separately if needed (driver-app-native/)"
+echo "🗂️  Step 9: Pruning Cloud Run revisions (keep newest $REVISION_KEEP_COUNT per service)..."
+prune_service_revisions "$BACKEND_SERVICE" "$REVISION_KEEP_COUNT"
+prune_service_revisions "$CUSTOMER_FRONTEND_SERVICE" "$REVISION_KEEP_COUNT"
+prune_service_revisions "$ADMIN_FRONTEND_SERVICE" "$REVISION_KEEP_COUNT"
 echo ""
 
-echo "✅ Step 10: Verifying backend health..."
+echo "📱 Step 10: Android app — build separately if needed (driver-app-native/)"
+echo ""
+
+echo "✅ Step 11: Verifying backend health..."
 # Bound wait so a wedged service does not stall the script forever.
 HEALTH_RESPONSE=$(curl -sS --connect-timeout 15 --max-time 45 "$SERVICE_URL/api/health" || echo "Failed")
 echo "   Backend health check returned: $HEALTH_RESPONSE"
