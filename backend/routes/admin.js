@@ -73,7 +73,11 @@ const ADMIN_ORDER_SAFE_ATTRIBUTES = [
   'id', 'customerName', 'customerPhone', 'customerEmail', 'deliveryAddress',
   'totalAmount', 'convenienceFee', 'territoryDeliveryFee', 'tipAmount',
   'status', 'paymentStatus', 'paymentType', 'paymentMethod',
-  'driverId', 'staffPurchaseDriverId', 'notes', 'createdAt', 'updatedAt'
+  'driverId', 'staffPurchaseDriverId',
+  // Needed by Orders cancellation-requests tab in summary mode.
+  'cancellationRequested', 'cancellationReason', 'cancellationRequestedAt',
+  'cancellationApproved', 'cancellationApprovedAt',
+  'notes', 'createdAt', 'updatedAt'
 ];
 const ADMIN_ORDER_ITEM_DRINK_ATTRIBUTES = [
   'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId',
