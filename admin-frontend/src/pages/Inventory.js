@@ -154,6 +154,7 @@ const InventoryPage = () => {
   
   const itemsPerPage = 40;
   const fetchChunkSize = 200;
+  const summaryOnlyMode = true;
   const lastFetchedAtRef = React.useRef(0);
   const searchModeRef = React.useRef(false);
 
@@ -286,7 +287,7 @@ const InventoryPage = () => {
         setDrinksLoading(true);
         const [drinksResponse, categoriesResponse, brandsResponse] = await Promise.all([
           api.get('/admin/drinks', {
-            params: { light: 1, q, limit: 1000, offset: 0 }
+            params: { light: 1, summary: 1, q, limit: 1000, offset: 0 }
           }),
           categories.length ? Promise.resolve({ data: categories }) : api.get('/categories'),
           brands.length ? Promise.resolve({ data: brands }) : api.get('/brands/all')
@@ -374,7 +375,7 @@ const InventoryPage = () => {
         ? fetchChunkSize
         : Math.max(fetchChunkSize, alreadyLoadedCount || fetchChunkSize);
       const drinksResponse = await api.get('/admin/drinks', {
-        params: { light: 1, limit: refreshLimit, offset: 0 }
+        params: { light: 1, summary: 1, limit: refreshLimit, offset: 0 }
       });
       const chunk = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
       const hydratedChunk = chunk.map((drink) => {
@@ -420,7 +421,7 @@ const InventoryPage = () => {
       while (keepLoading && drinks.length + incoming.length < requiredItems) {
         // eslint-disable-next-line no-await-in-loop
         const drinksResponse = await api.get('/admin/drinks', {
-          params: { light: 1, limit: fetchChunkSize, offset }
+          params: { light: 1, summary: 1, limit: fetchChunkSize, offset }
         });
         const chunk = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
         if (chunk.length === 0) {
@@ -1199,7 +1200,63 @@ const InventoryPage = () => {
         </Card>
       ) : (
         <>
-          {inventoryView === 'list' ? (
+          {summaryOnlyMode ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+              {paginatedDrinks.map((drink) => {
+                const rows = getCapacityStockRows(drink).filter(({ capacity, stock }) => !shouldHideZeroPackRow(capacity, stock));
+                return (
+                  <Paper
+                    key={drink.id}
+                    sx={{
+                      p: 1.5,
+                      border: `1px solid ${colors.border}`,
+                      borderRadius: 1.5,
+                      backgroundColor: colors.paper,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      justifyContent: 'space-between',
+                      gap: 2
+                    }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 700, color: colors.textPrimary, mb: 0.5 }}>
+                        {drink.name}
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+                        {rows.length > 0 ? (
+                          rows.map(({ capacity, stock }, idx) => (
+                            <Typography key={`${capacity}-${idx}`} variant="caption" sx={{ color: colors.textSecondary }}>
+                              {capacity}: {stock}
+                            </Typography>
+                          ))
+                        ) : (
+                          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+                            No capacity stock set
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                    <Button
+                      variant="contained"
+                      startIcon={<Edit />}
+                      onClick={() => handleEditDrink(drink)}
+                      size="small"
+                      sx={{
+                        backgroundColor: colors.accentText,
+                        color: isDarkMode ? '#0D0D0D' : '#FFFFFF',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap',
+                        '&:hover': { backgroundColor: '#00C4A3' }
+                      }}
+                    >
+                      Edit
+                    </Button>
+                  </Paper>
+                );
+              })}
+            </Box>
+          ) : (
+          inventoryView === 'list' ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {paginatedDrinks.map((drink) => (
                 <Paper
@@ -1779,6 +1836,7 @@ const InventoryPage = () => {
                 </Card>
               ))}
             </Box>
+          )
           )}
           {totalPages > 1 && (
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>

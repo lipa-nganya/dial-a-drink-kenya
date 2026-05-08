@@ -178,7 +178,9 @@ const Transactions = () => {
 
   const fetchTransactions = async () => {
     try {
-      const response = await api.get('/admin/transactions');
+      const response = await api.get('/admin/transactions', {
+        params: { detailed: 0 }
+      });
       // Normalize transactions on the frontend as well (double safety)
       const normalizedTransactions = response.data.map(transaction => {
         // Ensure transactionType is always present

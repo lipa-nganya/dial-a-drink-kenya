@@ -60,8 +60,8 @@ const Login = () => {
         // Update context
         setUserInfo(response.data.user);
         
-        // Redirect to dashboard
-        navigate('/dashboard');
+        // Redirect to orders (dashboard removed)
+        navigate('/orders');
       } else {
         setError(response.data.message || 'Invalid credentials');
       }

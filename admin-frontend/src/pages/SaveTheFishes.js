@@ -34,10 +34,10 @@ const SaveTheFishes = () => {
   const { isEasterEggActive } = useEasterEgg();
   const navigate = useNavigate();
 
-  // Redirect to dashboard if easter egg is deactivated
+  // Redirect to orders if easter egg is deactivated
   useEffect(() => {
     if (!isEasterEggActive) {
-      navigate('/dashboard', { replace: true });
+      navigate('/orders', { replace: true });
     }
   }, [isEasterEggActive, navigate]);
 

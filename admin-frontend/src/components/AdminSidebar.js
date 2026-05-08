@@ -13,7 +13,6 @@ import {
   IconButton
 } from '@mui/material';
 import {
-  Dashboard,
   Inventory,
   Logout,
   Receipt,
@@ -48,21 +47,15 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
   };
 
   const isActive = (path) => {
-    if (path === '/dashboard' && location.pathname === '/dashboard') return true;
-    if (path !== '/dashboard' && location.pathname.startsWith(path)) return true;
-    return false;
+    return location.pathname.startsWith(path);
   };
 
   const menuItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: Dashboard },
     { path: '/orders', label: 'Orders', icon: Receipt },
-    { path: '/transactions', label: 'Transactions', icon: Receipt },
     { path: '/inventory', label: 'Inventory', icon: Inventory, badge: pendingInventoryChecksCount },
     { path: '/payables', label: 'Payables', icon: AccountBalance },
-    { path: '/sales', label: 'Sales', icon: AttachMoney },
     { path: '/payables/purchases', label: 'Purchases', icon: AccountBalance },
     { path: '/accounts', label: 'Accounts', icon: AccountBalance },
-    { path: '/admin-cash-at-hand', label: 'Admin Cash At Hand', icon: AttachMoney },
     // { path: '/pos', label: 'POS', icon: PointOfSale }, // Removed
     { path: '/admin/customers', label: 'Customers', icon: People },
     { path: '/riders', label: 'Riders', icon: LocalShipping, badge: pendingRiderCashSubmissionsCount },
@@ -87,7 +80,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Dashboard sx={{ color: colors.accentText, fontSize: 28 }} />
+          <Receipt sx={{ color: colors.accentText, fontSize: 28 }} />
           <Typography
             variant="h6"
             sx={{
@@ -96,7 +89,7 @@ const AdminSidebar = ({ open, onClose, mobileOpen, onMobileClose }) => {
               fontSize: '1.1rem',
               cursor: 'pointer'
             }}
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate('/orders')}
           >
             Dial a Drink
           </Typography>
