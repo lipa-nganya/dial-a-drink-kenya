@@ -459,7 +459,7 @@ function AppContent() {
                     </AdminLayout>
                   </PrivateRoute>
                 }
-              />}
+              />
               <Route
                 path="/quick-actions"
                 element={
