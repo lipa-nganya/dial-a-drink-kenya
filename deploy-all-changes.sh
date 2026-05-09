@@ -1,9 +1,8 @@
 #!/bin/bash
 # Deploy All Changes
 # 1. Backend to GCloud dev
-# 2. Driver app to develop build
-# 3. Admin mobile app to develop build
-# 4. Frontend changes to GitHub
+# 2. Driver app (development) — includes rider + shop agent flows
+# 3. Frontend changes to GitHub
 
 set -e
 
@@ -40,27 +39,8 @@ fi
 cd ..
 echo ""
 
-# Step 3: Build Admin Mobile App (RetailScanner) - Development
-echo "📱 Step 3: Building Admin Mobile App (RetailScanner) - Development..."
-echo "---------------------------------------------------------------------"
-cd RetailScanner
-if command -v eas >/dev/null 2>&1; then
-    eas build --profile cloud-dev --platform android || {
-        echo "❌ Admin app build failed"
-        exit 1
-    }
-    echo "✅ Admin app build started!"
-    echo "   Check status: eas build:list"
-    echo "   Download when ready: eas build:download"
-else
-    echo "⚠️  EAS CLI not found. Please install: npm install -g eas-cli"
-    echo "   Then run: eas build --profile cloud-dev --platform android"
-fi
-cd ..
-echo ""
-
-# Step 4: Commit and Push Frontend Changes to GitHub
-echo "📤 Step 4: Committing and Pushing Frontend Changes to GitHub..."
+# Step 3: Commit and Push Frontend Changes to GitHub
+echo "📤 Step 3: Committing and Pushing Frontend Changes to GitHub..."
 echo "-----------------------------------------------------------------"
 git add frontend/ admin-frontend/
 if git diff --staged --quiet; then
@@ -84,5 +64,4 @@ echo ""
 echo "📋 Summary:"
 echo "   ✅ Backend deployed to GCloud dev"
 echo "   ✅ Driver app built (development)"
-echo "   ✅ Admin app build started (development)"
 echo "   ✅ Frontend changes pushed to GitHub"

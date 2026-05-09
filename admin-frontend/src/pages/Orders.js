@@ -174,6 +174,7 @@ const Orders = () => {
   const [recentlyUpdatedInOrderDetail, setRecentlyUpdatedInOrderDetail] = useState({ customer: false, deliveryFee: false, territory: false });
   const updatedFeeTimeoutRef = useRef(null);
   const ordersRefreshTimeoutRef = useRef(null);
+  const notificationPermissionRequestedRef = useRef(false);
   const [savingOrderDetails, setSavingOrderDetails] = useState(false);
   const originalOrderDetailRef = useRef(null);
   
@@ -444,13 +445,18 @@ const Orders = () => {
     socket.on('driver-order-response', async (data) => {
       console.log('✅ Driver responded to order:', data);
       
-      // Show notification to admin about driver response
+      // Show non-blocking notification to admin about driver response
+      const driverName = data.order?.driver?.name || 'Driver';
       if (data.accepted) {
-        const driverName = data.order?.driver?.name || 'Driver';
-        alert(`✅ Driver Response: ${driverName} accepted Order #${data.orderId}. Order is now in progress.`);
+        notifyAdminEvent(
+          'Driver Accepted Order',
+          `${driverName} accepted Order #${data.orderId}.`
+        );
       } else {
-        const driverName = data.order?.driver?.name || 'Driver';
-        alert(`⚠️ Driver Response: ${driverName} rejected Order #${data.orderId}. Order is now unassigned.`);
+        notifyAdminEvent(
+          'Driver Rejected Order',
+          `${driverName} rejected Order #${data.orderId}. The order is now unassigned.`
+        );
       }
       
       // Update the specific order in the list - prioritize driver response data
@@ -477,9 +483,12 @@ const Orders = () => {
     socket.on('order-rejected-by-driver', async (data) => {
       console.log('⚠️ Order rejected by driver:', data);
       
-      // Show alert to admin
+      // Show non-blocking notification to admin
       if (data.requiresAction) {
-        alert(`⚠️ ALERT: Driver rejected Order #${data.orderId}. The order is now unassigned and needs to be reassigned.`);
+        notifyAdminEvent(
+          'Order Needs Reassignment',
+          `Driver rejected Order #${data.orderId}. Please reassign it.`
+        );
       }
       
       // Update the order - remove driver assignment
@@ -581,9 +590,11 @@ const Orders = () => {
     socket.on('order-cancellation-requested', async (data) => {
       console.log('⚠️ Cancellation requested for order:', data);
       
-      // Show alert to admin
       const driverName = data.order?.driver?.name || 'Driver';
-      alert(`⚠️ CANCELLATION REQUEST: ${driverName} has requested cancellation for Order #${data.orderId}.\nReason: ${data.reason || 'N/A'}\n\nPlease review and approve or reject the request.`);
+      notifyAdminEvent(
+        'Cancellation Request',
+        `${driverName} requested cancellation for Order #${data.orderId}. Reason: ${data.reason || 'N/A'}`
+      );
       
       // Switch to Cancelled tab + Cancellation Requests sub-tab to show the new request
       setOrderTab('cancelled');
@@ -836,6 +847,29 @@ const Orders = () => {
     ordersRefreshTimeoutRef.current = setTimeout(() => {
       fetchOrders({ background: true });
     }, delayMs);
+  };
+
+  const notifyAdminEvent = (title, body) => {
+    setToastMessage(body);
+    setToastOpen(true);
+
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+
+    if (Notification.permission === 'granted') {
+      new Notification(title, { body });
+      return;
+    }
+
+    if (Notification.permission === 'default' && !notificationPermissionRequestedRef.current) {
+      notificationPermissionRequestedRef.current = true;
+      Notification.requestPermission()
+        .then((permission) => {
+          if (permission === 'granted') {
+            new Notification(title, { body });
+          }
+        })
+        .catch(() => {});
+    }
   };
 
   // Get transaction status for an order

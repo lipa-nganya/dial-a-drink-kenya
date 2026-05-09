@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -11,7 +11,6 @@ import AdminLayout from './components/AdminLayout';
 import PrivateRoute from './components/PrivateRoute';
 import Login from './pages/Login';
 import SetupPassword from './pages/SetupPassword';
-import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
 import Orders from './pages/Orders';
 import Inventory from './pages/Inventory';
 import OrderNotifications from './pages/OrderNotifications';
@@ -244,16 +243,6 @@ function AppContent() {
   const { isEasterEggActive } = useEasterEgg();
   const muiTheme = getMUITheme(false);
 
-  // Start health check service to keep backend warm
-  useEffect(() => {
-    startHealthCheck();
-    
-    // Cleanup on unmount
-    return () => {
-      stopHealthCheck();
-    };
-  }, []);
-
   return (
     <MUIThemeProvider theme={muiTheme}>
       <CssBaseline />
@@ -470,7 +459,7 @@ function AppContent() {
                     </AdminLayout>
                   </PrivateRoute>
                 }
-              />}
+              />
               <Route
                 path="/quick-actions"
                 element={

@@ -16,6 +16,9 @@ import { useParams, useSearchParams } from 'react-router-dom';
 import DrinkCard from '../components/DrinkCard';
 import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
+
+const LOCATION_DRINKS_CHUNK = 200;
 
 const LocationDetails = () => {
   const { locationName } = useParams();
@@ -107,14 +110,32 @@ const LocationDetails = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [drinksResponse, categoriesResponse] = await Promise.all([
-        api.get('/drinks'),
-        api.get('/categories')
-      ]);
-      
-      // Defensive: Ensure drinks is always an array
-      const drinksArray = Array.isArray(drinksResponse.data) ? drinksResponse.data : [];
-      setDrinks(drinksArray);
+      const categoriesPromise = api.get('/categories');
+
+      const firstDrinksResponse = await api.get('/drinks', {
+        params: { ...CUSTOMER_DRINKS_LIST_PARAMS, limit: LOCATION_DRINKS_CHUNK, offset: 0 }
+      });
+      let allDrinks = Array.isArray(firstDrinksResponse.data) ? firstDrinksResponse.data : [];
+      setDrinks(allDrinks);
+
+      let offset = allDrinks.length;
+      while (allDrinks.length > 0 && offset > 0) {
+        const nextResponse = await api.get('/drinks', {
+          params: { ...CUSTOMER_DRINKS_LIST_PARAMS, limit: LOCATION_DRINKS_CHUNK, offset }
+        });
+        const nextChunk = Array.isArray(nextResponse.data) ? nextResponse.data : [];
+        if (nextChunk.length === 0) break;
+        offset += nextChunk.length;
+        allDrinks = [...allDrinks, ...nextChunk];
+        setDrinks((prev) => {
+          const prevIds = new Set(prev.map((d) => d?.id));
+          const uniqueNext = nextChunk.filter((d) => d && !prevIds.has(d.id));
+          return uniqueNext.length > 0 ? [...prev, ...uniqueNext] : prev;
+        });
+        if (nextChunk.length < LOCATION_DRINKS_CHUNK) break;
+      }
+
+      const categoriesResponse = await categoriesPromise;
       
       // Defensive: Ensure categories is always an array
       let categoriesArray = [];

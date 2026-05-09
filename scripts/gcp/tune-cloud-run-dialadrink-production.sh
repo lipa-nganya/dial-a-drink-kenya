@@ -22,12 +22,12 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-deliveryos-production-backend}"
 CUSTOMER_FE="${CUSTOMER_FE:-deliveryos-customer-frontend}"
 ADMIN_FE="${ADMIN_FE:-deliveryos-admin-frontend}"
 
-# Default sizing matches deploy-to-production.sh (cost control + one warm API instance).
+# Default sizing matches deploy-to-production.sh (cost control; API min 0 unless overridden).
 BACKEND_CPU="${BACKEND_CPU:-1}"
 BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
 
 BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-60}"
-BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-1}"
+BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
 BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
 
 FRONTEND_CPU="${FRONTEND_CPU:-0.5}"
@@ -48,6 +48,13 @@ run_gcloud() {
 
 echo "Project=$PROJECT_ID  Region=$REGION  DRY_RUN=$DRY_RUN"
 echo ""
+
+# Cloud Run constraint: cpu < 1 requires concurrency = 1.
+if [[ "$FRONTEND_CPU" =~ ^0(\.[0-9]+)?$ ]] && [[ "${FRONTEND_CONCURRENCY}" -gt 1 ]]; then
+  echo "Adjusting FRONTEND_CONCURRENCY from ${FRONTEND_CONCURRENCY} to 1 because FRONTEND_CPU=${FRONTEND_CPU}."
+  FRONTEND_CONCURRENCY=1
+  echo ""
+fi
 
 update_frontend() {
   local name="$1"

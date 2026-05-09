@@ -10,6 +10,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import DrinkCard from '../components/DrinkCard';
 import CountdownTimer from '../components/CountdownTimer';
 import { api } from '../services/api';
+import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
 import { getBackendUrl } from '../utils/backendUrl';
 import { Link } from 'react-router-dom';
 import { buildBrandPath } from '../utils/brandSlug';
@@ -155,7 +156,7 @@ const Home = () => {
   const fetchPopularDrinks = async () => {
     try {
       const response = await api.get('/drinks', {
-        params: { popular: 'true' }
+        params: { ...CUSTOMER_DRINKS_LIST_PARAMS, popular: 'true' }
       });
       const drinks = Array.isArray(response.data) ? response.data : [];
       setPopularDrinks(drinks);
@@ -178,7 +179,8 @@ const Home = () => {
         // Use backend filtering to get only brand focus drinks for this brand
         const brandFocusIdNum = parseInt(brandFocusId);
         const drinksResponse = await api.get('/drinks', {
-          params: { 
+          params: {
+            ...CUSTOMER_DRINKS_LIST_PARAMS,
             brandId: brandFocusIdNum,
             brandFocus: 'true'
           }

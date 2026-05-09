@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import { Search, AttachMoney } from '@mui/icons-material';
 import { api } from '../services/api';
+import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Pricelist = () => {
@@ -48,7 +49,7 @@ const Pricelist = () => {
     try {
       setLoading(true);
       setError('');
-      const response = await api.get('/drinks');
+      const response = await api.get('/drinks', { params: CUSTOMER_DRINKS_LIST_PARAMS });
       // Filter only available drinks and sort by category and name
       const availableDrinks = response.data
         .filter(drink => drink.isAvailable !== false)

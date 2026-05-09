@@ -28,6 +28,7 @@ import { useCustomer } from '../contexts/CustomerContext';
 import CategoriesBar from './CategoriesBar';
 import { api } from '../services/api';
 import { normalizeSlug } from '../utils/slugCanonical';
+import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
 
 const Header = () => {
   const navigate = useNavigate();
@@ -103,6 +104,7 @@ const Header = () => {
       try {
         const res = await api.get('/drinks', {
           params: {
+            ...CUSTOMER_DRINKS_LIST_PARAMS,
             search: q,
             search_in: 'name',
             limit: 20
@@ -174,6 +176,7 @@ const Header = () => {
           setDrinksLoading(true);
           const res = await api.get('/drinks', {
             params: {
+              ...CUSTOMER_DRINKS_LIST_PARAMS,
               search: q.trim(),
               search_in: 'name',
               limit: 1

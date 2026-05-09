@@ -76,23 +76,6 @@ echo -e "${GREEN}✅ Admin Frontend started (PID: $ADMIN_PID)${NC}"
 cd - > /dev/null
 sleep 3
 
-# Start Valkyrie Console on port 3002
-echo -e "${YELLOW}🛡️  Starting Valkyrie Console (port 3002)...${NC}"
-cd valkyrie-console
-PORT=3002 npm start > /tmp/valkyrie-console.log 2>&1 &
-VALKYRIE_PID=$!
-echo -e "${GREEN}✅ Valkyrie Console started (PID: $VALKYRIE_PID)${NC}"
-cd - > /dev/null
-sleep 3
-
-# Start Zeus Console on port 3003
-echo -e "${YELLOW}⚡ Starting Zeus Console (port 3003)...${NC}"
-cd zeus-console
-PORT=3003 npm start > /tmp/zeus-console.log 2>&1 &
-ZEUS_PID=$!
-echo -e "${GREEN}✅ Zeus Console started (PID: $ZEUS_PID)${NC}"
-cd - > /dev/null
-
 echo ""
 echo -e "${GREEN}═══════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}✅ All servers started successfully!${NC}"
@@ -102,8 +85,6 @@ echo -e "${BLUE}📋 Server URLs:${NC}"
 echo -e "   Backend:        http://localhost:5001"
 echo -e "   Customer Site:  http://localhost:3000"
 echo -e "   Admin Panel:    http://localhost:3001"
-echo -e "   Valkyrie:       http://localhost:3002"
-echo -e "   Zeus:           http://localhost:3003"
 if [ -n "$NGROK_URL" ]; then
     echo -e "   ngrok:          ${NGROK_URL}"
 fi
@@ -112,8 +93,6 @@ echo -e "${BLUE}📊 Process IDs:${NC}"
 echo -e "   Backend:        ${BACKEND_PID}"
 echo -e "   Customer:       ${FRONTEND_PID}"
 echo -e "   Admin:          ${ADMIN_PID}"
-echo -e "   Valkyrie:       ${VALKYRIE_PID}"
-echo -e "   Zeus:           ${ZEUS_PID}"
 if [ -n "$NGROK_PID" ]; then
     echo -e "   ngrok:          ${NGROK_PID}"
 fi
@@ -122,16 +101,12 @@ echo -e "${YELLOW}💡 Logs are available in /tmp/:${NC}"
 echo -e "   Backend:        /tmp/backend.log"
 echo -e "   Customer:       /tmp/frontend.log"
 echo -e "   Admin:          /tmp/admin-frontend.log"
-echo -e "   Valkyrie:       /tmp/valkyrie-console.log"
-echo -e "   Zeus:           /tmp/zeus-console.log"
 if [ -n "$NGROK_PID" ]; then
     echo -e "   ngrok:          /tmp/ngrok.log"
 fi
 echo ""
 echo -e "${YELLOW}🔐 Login Credentials:${NC}"
 echo -e "   Admin Panel:    admin / admin123"
-echo -e "   Valkyrie:       admin@demopartner.com / admin123"
-echo -e "   Zeus:           zeus@deliveryos.com / zeus123"
 echo ""
 echo -e "${YELLOW}🛑 To stop all servers, run:${NC}"
 echo -e "   pkill -f 'node.*server.js'; pkill -f 'react-scripts'; pkill -f 'ngrok'"

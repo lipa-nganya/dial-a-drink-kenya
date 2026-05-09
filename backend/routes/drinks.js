@@ -4,6 +4,67 @@ const db = require('../models');
 const { Op } = require('sequelize');
 const { generateCategorySlugFromName, generateSlug } = require('../utils/slugGenerator');
 
+/** Cached drink table columns — avoids information_schema on every catalog request. */
+let drinkColumnsMetaCache = null;
+
+async function loadDrinkColumnsMeta() {
+  if (drinkColumnsMetaCache) return drinkColumnsMetaCache;
+  const [cols] = await db.sequelize.query(
+    "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
+  );
+  const colSet = new Set((cols || []).map((c) => c.column_name.toLowerCase()));
+  drinkColumnsMetaCache = {
+    hasNbv: colSet.has('nbv'),
+    hasClicks: colSet.has('clicks'),
+    hasSlug: colSet.has('slug'),
+  };
+  return drinkColumnsMetaCache;
+}
+
+function parseCatalogLiteFlag(query) {
+  const raw = query.lite ?? query.list;
+  if (raw === undefined || raw === null || raw === '') return false;
+  const s = String(raw).toLowerCase();
+  return s === '1' || s === 'true' || s === 'yes';
+}
+
+function fullCatalogDrinkAttributes(colMeta) {
+  let drinkAttributes = [
+    'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+    'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer',
+    'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt',
+  ];
+  if (colMeta.hasNbv) {
+    drinkAttributes = [
+      'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+      'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer',
+      'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt',
+    ];
+  }
+  if (colMeta.hasClicks) {
+    drinkAttributes = drinkAttributes.concat(['clicks']);
+  }
+  return drinkAttributes;
+}
+
+/** List/catalog responses: optional lite payload (no long description; slimmer category embeds). */
+function catalogDrinkAttributes(colMeta, lite) {
+  const full = fullCatalogDrinkAttributes(colMeta);
+  if (!lite) return full;
+  return full.filter((a) => a !== 'description' && a !== 'createdAt');
+}
+
+function catalogListIncludes(lite) {
+  const categoryAttrs = lite
+    ? ['id', 'name', 'slug']
+    : ['id', 'name', 'slug', 'description', 'image', 'isActive'];
+  return [
+    { model: db.Category, as: 'category', required: false, attributes: categoryAttrs },
+    { model: db.SubCategory, as: 'subCategory', required: false, attributes: ['id', 'name', 'categoryId'] },
+    { model: db.Brand, as: 'brand', required: false, attributes: ['id', 'name'] },
+  ];
+}
+
 // Get all drinks
 router.get('/', async (req, res) => {
   // Set request timeout to prevent hanging
@@ -66,20 +127,10 @@ router.get('/', async (req, res) => {
     }, 10000); // 10 second timeout
     
     try {
-      // Resolve drink attributes so we include nbv only when the column exists
-      let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
-      try {
-        const [cols] = await db.sequelize.query(
-          "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
-        );
-        const colSet = new Set((cols || []).map(c => c.column_name.toLowerCase()));
-        if (colSet.has('nbv')) {
-          drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
-        }
-        if (colSet.has('clicks')) {
-          drinkAttributes = drinkAttributes.concat(['clicks']);
-        }
-      } catch (_) { /* use default without nbv */ }
+      const lite = parseCatalogLiteFlag(req.query);
+      const colMeta = await loadDrinkColumnsMeta();
+      let drinkAttributes = catalogDrinkAttributes(colMeta, lite);
+      const includes = catalogListIncludes(lite);
 
       // Query drinks, handling missing slug column gracefully
       let drinks;
@@ -88,22 +139,7 @@ router.get('/', async (req, res) => {
           db.Drink.findAll({
             where: whereClause,
             attributes: drinkAttributes,
-            include: [{
-              model: db.Category,
-              as: 'category',
-              required: false,
-              attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive']
-            }, {
-              model: db.SubCategory,
-              as: 'subCategory',
-              required: false,
-              attributes: ['id', 'name', 'categoryId']
-            }, {
-              model: db.Brand,
-              as: 'brand',
-              required: false,
-              attributes: ['id', 'name']
-            }],
+            include: includes,
             order: [
               ['isAvailable', 'DESC'], // Available items first (true = 1, false = 0)
               ['name', 'ASC']
@@ -111,7 +147,7 @@ router.get('/', async (req, res) => {
             ...(queryLimit ? { limit: queryLimit } : {}),
             ...(queryOffset !== null ? { offset: queryOffset } : {})
           }),
-          new Promise((_, reject) => 
+          new Promise((_, reject) =>
             setTimeout(() => reject(new Error('Query timeout')), 10000)
           )
         ]);
@@ -120,26 +156,14 @@ router.get('/', async (req, res) => {
         if (error.message && (error.message.includes('column') && error.message.includes('slug'))) {
           console.log('⚠️  slug column not found in drinks table, querying without it...');
           const fallbackAttrs = drinkAttributes.filter(a => a !== 'slug');
+          const fb = fallbackAttrs.length
+            ? fallbackAttrs
+            : ['id', 'name', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'];
           drinks = await Promise.race([
             db.Drink.findAll({
               where: whereClause,
-              attributes: fallbackAttrs.length ? fallbackAttrs : ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'],
-              include: [{
-                model: db.Category,
-                as: 'category',
-                required: false,
-                attributes: ['id', 'name', 'slug', 'description', 'image', 'isActive']
-              }, {
-                model: db.SubCategory,
-                as: 'subCategory',
-                required: false,
-                attributes: ['id', 'name', 'categoryId']
-              }, {
-                model: db.Brand,
-                as: 'brand',
-                required: false,
-                attributes: ['id', 'name']
-              }],
+              attributes: fb,
+              include: includes,
               order: [
                 ['isAvailable', 'DESC'],
                 ['name', 'ASC']
@@ -147,7 +171,7 @@ router.get('/', async (req, res) => {
               ...(queryLimit ? { limit: queryLimit } : {}),
               ...(queryOffset !== null ? { offset: queryOffset } : {})
             }),
-            new Promise((_, reject) => 
+            new Promise((_, reject) =>
               setTimeout(() => reject(new Error('Query timeout')), 10000)
             )
           ]);
@@ -155,7 +179,7 @@ router.get('/', async (req, res) => {
           throw error;
         }
       }
-      
+
       if (queryTimeout) {
         clearTimeout(queryTimeout);
         queryTimeout = null;
@@ -164,12 +188,15 @@ router.get('/', async (req, res) => {
       for (const d of drinks) {
         ensureCategorySlug(d);
       }
-      
-      console.log(`✅ Returning ${drinks.length} drinks`);
-      
+
+      console.log(`✅ Returning ${drinks.length} drinks (lite=${lite})`);
+
       if (!res.headersSent) {
-        // Add cache headers to reduce database load (5 minutes)
-        res.set('Cache-Control', 'public, max-age=300, s-maxage=300');
+        if (lite) {
+          res.set('Cache-Control', 'public, max-age=120, s-maxage=120, stale-while-revalidate=600');
+        } else {
+          res.set('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=900');
+        }
         res.json(drinks);
       }
     } catch (queryError) {
@@ -225,24 +252,27 @@ router.get('/offers', async (req, res) => {
       return res.json([]);
     }
 
+    const colMeta = await loadDrinkColumnsMeta();
+    const offerAttrs = catalogDrinkAttributes(colMeta, true);
     const offers = await db.Drink.findAll({
       where: {
-        limitedTimeOffer: true
+        limitedTimeOffer: true,
+        isPublished: true,
       },
-      include: [{
-        model: db.Category,
-        as: 'category'
-      }, {
-        model: db.SubCategory,
-        as: 'subCategory'
-      }],
+      attributes: offerAttrs,
+      include: catalogListIncludes(true),
       order: [
         ['isAvailable', 'DESC'],
         ['name', 'ASC']
       ]
     });
 
+    for (const d of offers) {
+      ensureCategorySlug(d);
+    }
+
     console.log('Limited time offers found:', offers.length);
+    res.set('Cache-Control', 'public, max-age=60, s-maxage=60, stale-while-revalidate=300');
     res.json(offers);
   } catch (error) {
     console.error('Error fetching offers:', error);
@@ -439,20 +469,8 @@ router.get('/:id', async (req, res) => {
     const identifier = req.params.id;
     const isNumeric = /^\d+$/.test(identifier);
 
-    // Resolve attributes so we include nbv only when the column exists
-    let drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
-    try {
-      const [cols] = await db.sequelize.query(
-        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' ORDER BY column_name"
-      );
-      const colSet = new Set((cols || []).map(c => c.column_name.toLowerCase()));
-      if (colSet.has('nbv')) {
-        drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt'];
-      }
-      if (colSet.has('clicks')) {
-        drinkAttributes = drinkAttributes.concat(['clicks']);
-      }
-    } catch (_) { /* use default */ }
+    const colMeta = await loadDrinkColumnsMeta();
+    const drinkAttributes = catalogDrinkAttributes(colMeta, false);
     
     let drink;
     
@@ -490,10 +508,7 @@ router.get('/:id', async (req, res) => {
       const drinkIdForClicks = drink.id;
       Promise.resolve().then(async () => {
         try {
-          const [cols] = await db.sequelize.query(
-            "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' AND column_name = 'clicks'"
-          );
-          if (cols && cols.length > 0) {
+          if (colMeta.hasClicks) {
             await db.sequelize.query(
               'UPDATE drinks SET clicks = COALESCE(clicks, 0) + 1 WHERE id = :id',
               { replacements: { id: drinkIdForClicks } }
@@ -540,10 +555,7 @@ router.get('/:id', async (req, res) => {
       const drinkIdForClicksSlug = drink.id;
       Promise.resolve().then(async () => {
         try {
-          const [cols] = await db.sequelize.query(
-            "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'drinks' AND column_name = 'clicks'"
-          );
-          if (cols && cols.length > 0) {
+          if (colMeta.hasClicks) {
             await db.sequelize.query(
               'UPDATE drinks SET clicks = COALESCE(clicks, 0) + 1 WHERE id = :id',
               { replacements: { id: drinkIdForClicksSlug } }
