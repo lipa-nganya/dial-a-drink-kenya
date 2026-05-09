@@ -116,6 +116,12 @@ update_backend() {
       --max-instances="$BACKEND_MAX_INSTANCES" \
       --concurrency="$BACKEND_CONCURRENCY"
   fi
+  # `services update` can create a new revision that receives 0% if a traffic split was ever set on the service.
+  run_gcloud gcloud run services update-traffic "$BACKEND_SERVICE" \
+    --project="$PROJECT_ID" \
+    --region="$REGION" \
+    --quiet \
+    --to-latest
   echo ""
 }
 

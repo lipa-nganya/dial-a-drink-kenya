@@ -147,6 +147,15 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --quiet \
     2>&1
 
+# If the service ever had a manual/canary traffic split, new revisions can stay at 0%.
+# Force 100% traffic to the revision we just deployed before long frontend builds.
+echo "🔗 Routing backend traffic to the new revision..."
+gcloud run services update-traffic "$BACKEND_SERVICE" \
+    --project "$PROJECT_ID" \
+    --region "$REGION" \
+    --to-latest \
+    --quiet 2>&1
+
 echo "   Finished deploy: $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 
 SERVICE_URL=$(gcloud run services describe "$BACKEND_SERVICE" \
@@ -276,6 +285,14 @@ export BACKEND_MIN_INSTANCES="$BACKEND_MIN_INSTANCES"
 export BACKEND_MAX_INSTANCES="$BACKEND_MAX_INSTANCES"
 chmod +x ./scripts/gcp/tune-cloud-run-dialadrink-production.sh
 ./scripts/gcp/tune-cloud-run-dialadrink-production.sh
+
+# tune script runs `services update` on the backend → another new revision possible at 0% traffic.
+echo "🔗 Routing backend traffic to latest revision (post cost-tuning)..."
+gcloud run services update-traffic "$BACKEND_SERVICE" \
+    --project "$PROJECT_ID" \
+    --region "$REGION" \
+    --to-latest \
+    --quiet 2>&1
 
 echo ""
 echo "🧹 Step 8: Pruning GCR images (keep latest 5; delete tagged + untagged)..."
