@@ -23,8 +23,7 @@ SERVICE_NAME="deliveryos-development-backend"
 CONNECTION_NAME="dialadrink-production:us-central1:dialadrink-db-dev"
 GCLOUD_ACCOUNT="dialadrinkkenya254@gmail.com"
 
-# Dev-only Cloud Run cost controls (single QC user).
-# Override via env vars when needed.
+# Dev-only Cloud Run cost controls (single QC user). Backend min instances 0 unless overridden.
 DEV_BACKEND_MIN_INSTANCES="${DEV_BACKEND_MIN_INSTANCES:-0}"
 DEV_BACKEND_MAX_INSTANCES="${DEV_BACKEND_MAX_INSTANCES:-3}"
 DEV_BACKEND_CPU="${DEV_BACKEND_CPU:-1}"
@@ -170,6 +169,7 @@ echo "   Building image: $IMAGE_TAG"
 gcloud builds submit --tag "$IMAGE_TAG" . 2>&1
 
 echo "   Deploying to $SERVICE_NAME (existing service)..."
+echo "   Cloud Run: min-instances=$DEV_BACKEND_MIN_INSTANCES max-instances=$DEV_BACKEND_MAX_INSTANCES (CPU/memory/concurrency applied in tuning step)"
 gcloud run deploy "$SERVICE_NAME" \
     --image "$IMAGE_TAG" \
     --platform managed \
@@ -177,6 +177,8 @@ gcloud run deploy "$SERVICE_NAME" \
     --allow-unauthenticated \
     --add-cloudsql-instances "$CONNECTION_NAME" \
     --update-env-vars "$UPDATE_ENV_VARS" \
+    --min-instances="$DEV_BACKEND_MIN_INSTANCES" \
+    --max-instances="$DEV_BACKEND_MAX_INSTANCES" \
     --project "$PROJECT_ID" 2>&1
 
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" \

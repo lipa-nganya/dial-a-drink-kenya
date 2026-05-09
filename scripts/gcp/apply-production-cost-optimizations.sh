@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Applies production cost-control defaults (safe to re-run):
-#   1) Cloud Run: backend 1 vCPU / 1Gi, min 1 / max 30, CPU throttling; frontends min 0.
+#   1) Cloud Run: backend 1 vCPU / 1Gi, min 0 / max 30, CPU throttling; frontends min 0.
 #   2) Artifact Registry: cleanup policies from infra/gcp/artifact-registry-docker-lifecycle.json
 #   3) Prints next step for BigQuery billing export (setup-billing-export-bigquery.sh + Console link).
 #
@@ -21,10 +21,10 @@ REGION="${GCP_REGION:-us-central1}"
 export GCP_PROJECT_ID="${PROJECT_ID}"
 export GCP_REGION="${REGION}"
 
-echo "=== 1) Cloud Run (tune script: warm API only, scale-to-zero frontends, right-size CPU/RAM) ==="
+echo "=== 1) Cloud Run (tune script: scale-to-zero backend & frontends by default; right-size CPU/RAM) ==="
 export BACKEND_CPU="${BACKEND_CPU:-1}"
 export BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
-export BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-1}"
+export BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
 export BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
 export BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-60}"
 export FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"

@@ -91,8 +91,7 @@ async function importRiders(riderData) {
         const driver = await db.Driver.create({
           name: rider.name.trim(),
           phoneNumber: normalizedPhone,
-          status: status,
-          valkyrieEligible: rider.valkyrieEligible || false
+          status: status
         });
         
         console.log(`✅ Imported driver: ${driver.name} (${driver.phoneNumber}) - ID: ${driver.id}`);

@@ -3,7 +3,7 @@
 # or when you suspect Cloud Run / Artifact Registry settings drifted in the console).
 #
 # What runs (see scripts/gcp/apply-production-cost-optimizations.sh):
-#   1) Cloud Run — backend warm (min 1), scale-to-zero frontends, CPU throttling, tuned limits
+#   1) Cloud Run — backend min 0 (scale-to-zero) unless overridden, frontends scale-to-zero, CPU throttling, tuned limits
 #   2) Artifact Registry — Docker image lifecycle / cleanup policies
 #   3) BigQuery billing export dataset (no-op if already present; may print Console follow-up)
 #

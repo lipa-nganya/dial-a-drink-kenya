@@ -10,6 +10,7 @@ import {
 import { ArrowBack } from '@mui/icons-material';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
+import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
 import { useTheme } from '../contexts/ThemeContext';
 import { buildBrandPath } from '../utils/brandSlug';
 import DrinkCard from '../components/DrinkCard';
@@ -41,7 +42,9 @@ const BrandDetail = () => {
         navigate(canonicalPath, { replace: true });
       }
 
-      const drinksResponse = await api.get(`/drinks?brandId=${brandData.id}`);
+      const drinksResponse = await api.get('/drinks', {
+        params: { ...CUSTOMER_DRINKS_LIST_PARAMS, brandId: brandData.id }
+      });
       setDrinks(drinksResponse.data);
     } catch (err) {
       console.error('Error fetching brand:', err);

@@ -1,4 +1,4 @@
-import React, { useEffect, lazy, Suspense } from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { ThemeProvider as MUIThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
@@ -16,7 +16,7 @@ import PrivateRoute from './components/PrivateRoute';
 import CustomerPrivateRoute from './components/CustomerPrivateRoute';
 import CanonicalHead from './components/CanonicalHead';
 import SEOHead from './components/SEOHead';
-import { startHealthCheck, stopHealthCheck } from './services/healthCheck';
+import RoutePageSkeleton from './components/RoutePageSkeleton';
 import './App.css';
 
 const Home = lazy(() => import('./pages/Home'));
@@ -190,17 +190,7 @@ function AppContent() {
   const isAdminLogin = location.pathname === '/admin/login';
   const { snackbarOpen, setSnackbarOpen, snackbarMessage } = useCart();
   const muiTheme = getMUITheme();
-  
-  // Start health check service to keep backend warm
-  useEffect(() => {
-    startHealthCheck();
-    
-    // Cleanup on unmount
-    return () => {
-      stopHealthCheck();
-    };
-  }, []);
-  
+
   return (
     <MUIThemeProvider theme={muiTheme}>
       <SEOHead />
@@ -227,7 +217,7 @@ function AppContent() {
             pt: { xs: 0, md: '104px' },
           }}
         >
-        <Suspense fallback={<Box sx={{ py: 6, textAlign: 'center' }}>Loading...</Box>}>
+        <Suspense fallback={<RoutePageSkeleton />}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/menu" element={<Menu />} />

@@ -31,12 +31,6 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true
     },
-    valkyrieEligible: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      allowNull: false,
-      comment: 'Whether this driver can be assigned to Valkyrie partner orders'
-    },
     cashAtHand: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,

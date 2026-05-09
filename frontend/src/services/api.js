@@ -90,6 +90,12 @@ const getApiBaseUrl = () => {
   return url;
 };
 
+const SERVER_STARTING_CODE = 'SERVER_STARTING';
+const MAX_SERVER_STARTING_RETRIES = 6;
+const BASE_SERVER_STARTING_RETRY_MS = 500;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // Create axios instance with empty baseURL - we'll set it in the interceptor
 // This prevents baseURL from being evaluated at build time
 const api = axios.create({
@@ -146,7 +152,22 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
+    const status = error?.response?.status;
+    const code = error?.response?.data?.code;
+    const requestConfig = error?.config || {};
+
+    if (status === 503 && code === SERVER_STARTING_CODE) {
+      const attempt = Number(requestConfig.__serverStartingRetryCount || 0);
+      if (attempt < MAX_SERVER_STARTING_RETRIES) {
+        const nextAttempt = attempt + 1;
+        const delayMs = BASE_SERVER_STARTING_RETRY_MS * 2 ** attempt;
+        requestConfig.__serverStartingRetryCount = nextAttempt;
+        await sleep(delayMs);
+        return api(requestConfig);
+      }
+    }
+
     if (error.response?.status === 401) {
       if (error.config?.url?.includes('/admin/')) {
         console.error('Unauthorized access - admin token may be invalid');

@@ -245,13 +245,6 @@ This document defines test criteria for every product in the Dial-a-Drink suite.
 | Transactions | List and filters correct. |
 | Branches / territories | CRUD and associations correct. |
 
-### 3.11 Partner APIs (Valkyrie / Zeus)
-| Feature | Test criteria |
-|--------|----------------|
-| Partner routes | When enabled: auth and feature endpoints return expected responses. |
-
----
-
 ## 4. Android App (Native) – 3 user types
 
 **Product:** Native Android app (`driver-app-native/`).  

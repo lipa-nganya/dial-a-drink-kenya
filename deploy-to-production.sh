@@ -22,9 +22,9 @@ CUSTOMER_FRONTEND_SERVICE="deliveryos-customer-frontend"
 ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 
 # Cloud Run cost / reliability (see scripts/gcp/apply-production-cost-optimizations.sh):
-# - API stays warm (min 1); frontends scale to zero (no 24/7 static hosting bill).
-# - Backend right-sized vs prior 2 CPU — override via env before running this script if needed.
-BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-1}"
+# - API scale-to-zero (min 0); occasional cold starts — frontends also scale to zero.
+# - Override BACKEND_MIN_INSTANCES=1 before deploy if you need a 24/7 warm API instance.
+BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
 BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
 BACKEND_CPU="${BACKEND_CPU:-1}"
 BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"

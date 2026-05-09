@@ -22,10 +22,11 @@ try {
 const app = express();
 
 // Middleware
-// CRITICAL: Log environment variables for CORS debugging
-console.log('🌐 CORS Configuration:');
-console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET (using default)');
-console.log('   ADMIN_URL:', process.env.ADMIN_URL || 'NOT SET (using default)');
+if (process.env.NODE_ENV !== 'production' || process.env.API_DEBUG_CORS === '1') {
+  console.log('🌐 CORS Configuration:');
+  console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET (using default)');
+  console.log('   ADMIN_URL:', process.env.ADMIN_URL || 'NOT SET (using default)');
+}
 
 // Always include local development origins, even if env vars are set
 // This ensures localhost admin/customer work regardless of FRONTEND_URL / ADMIN_URL
@@ -33,12 +34,10 @@ const allowedOrigins = [
   'http://localhost:3000', // Customer local
   'http://localhost:3001', // Admin local
   'http://localhost:3002', // Shop agent / consoles local
-  'http://localhost:3003', // Zeus local
   'http://localhost:8080', // Wolfgang website (local dev)
   // Env-configured URLs (may point to Netlify / Cloud Run)
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
-  process.env.ZEUS_URL,
   process.env.SHOP_AGENT_URL,
   // Old service URLs (kept for backward compatibility)
   'https://drink-suite-customer-910510650031.us-central1.run.app',
@@ -305,22 +304,6 @@ app.use('/api/driver-wallet', require('./routes/cash-submissions'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/territories', require('./routes/territories'));
 app.use('/api/developers', require('./routes/developers'));
-
-// Valkyrie Partner API (feature flag controlled)
-if (process.env.ENABLE_VALKYRIE === 'true' || process.env.ENABLE_VALKYRIE === '1') {
-  app.use('/api/valkyrie/v1', require('./routes/valkyrie'));
-  console.log('✅ Valkyrie Partner API enabled at /api/valkyrie/v1');
-} else {
-  console.log('ℹ️  Valkyrie Partner API disabled (set ENABLE_VALKYRIE=true to enable)');
-}
-
-// Zeus Super Admin API (feature flag controlled)
-if (process.env.ENABLE_ZEUS === 'true' || process.env.ENABLE_ZEUS === '1') {
-  app.use('/api/zeus/v1', require('./routes/zeus'));
-  console.log('✅ Zeus Super Admin API enabled at /api/zeus/v1');
-} else {
-  console.log('ℹ️  Zeus Super Admin API disabled (set ENABLE_ZEUS=true to enable)');
-}
 
 // Root endpoint
 app.get('/', (req, res) => {

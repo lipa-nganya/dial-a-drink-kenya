@@ -6,6 +6,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { normalizeSlug } from '../utils/slugCanonical';
 
 const CATEGORIES_CACHE_TTL_MS = 5 * 60 * 1000;
+/** Horizontal category tabs (header bar) — keep compact vs default body text */
+const CATEGORY_MENU_FONT_SIZE = '0.72rem';
+
 let categoriesBarCache = {
   data: null,
   ts: 0
@@ -89,7 +92,7 @@ const CategoriesBar = () => {
       sx={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'flex-start',
+        justifyContent: 'center',
         gap: 0,
         overflowX: 'auto',
         overflowY: 'hidden',
@@ -131,7 +134,7 @@ const CategoriesBar = () => {
           onClick={handleAllCategoriesClick}
           sx={{
             textTransform: 'uppercase',
-            fontSize: '0.8rem',
+            fontSize: CATEGORY_MENU_FONT_SIZE,
             fontWeight: 600,
             color: selectedCategoryId == null ? '#000000' : (colors.textPrimary || '#000000'),
             backgroundColor: selectedCategoryId == null ? (colors.accent || '#00E0B8') : 'transparent',
@@ -161,7 +164,7 @@ const CategoriesBar = () => {
             onClick={() => handleCategoryClick(category)}
             sx={{
               textTransform: 'uppercase',
-              fontSize: '0.8rem',
+              fontSize: CATEGORY_MENU_FONT_SIZE,
               fontWeight: 600,
               color: isSelected ? '#000000' : (colors.textPrimary || '#000000'),
               backgroundColor: isSelected ? (colors.accent || '#00E0B8') : 'transparent',

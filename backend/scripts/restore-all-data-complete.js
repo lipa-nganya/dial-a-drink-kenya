@@ -143,7 +143,7 @@ async function restoreAllData() {
     console.log(`   ✅ Customers: ${results.customers.inserted} inserted, ${results.customers.updated} updated\n`);
     
     console.log('   Drivers...');
-    results.drivers = await restoreTable('drivers', ['id', 'name', 'phoneNumber', 'status', 'pinHash', 'pushToken', 'lastActivity', 'valkyrieEligible', 'cashAtHand', 'creditLimit', 'locationLatitude', 'locationLongitude', 'createdAt', 'updatedAt'], 'id', true);
+    results.drivers = await restoreTable('drivers', ['id', 'name', 'phoneNumber', 'status', 'pinHash', 'pushToken', 'lastActivity', 'cashAtHand', 'creditLimit', 'locationLatitude', 'locationLongitude', 'createdAt', 'updatedAt'], 'id', true);
     console.log(`   ✅ Drivers: ${results.drivers.inserted} inserted, ${results.drivers.updated} updated\n`);
     
     // 3. Wallets

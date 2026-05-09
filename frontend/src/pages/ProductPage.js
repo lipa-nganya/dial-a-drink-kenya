@@ -40,6 +40,7 @@ import { useParams, useNavigate, Link as RouterLink, useLocation } from 'react-r
 import { useCart } from '../contexts/CartContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { api } from '../services/api';
+import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
 import { getBackendUrl } from '../utils/backendUrl';
 import { stripHtml } from '../utils/stripHtml';
 import {
@@ -114,8 +115,13 @@ const ProductPage = () => {
   useEffect(() => {
     // Skip refetch only when state has everything needed for canonical URL + redirect.
     // (List API used to omit category.slug — then we must fetch /drinks/:id to redirect off /product/:id.)
-    const canSkipFetch =
+    const hasFullProductRowPayload =
       initialProduct &&
+      // GET /drinks?lite=1 omits description; never skip fetch for that navigational payload.
+      Object.prototype.hasOwnProperty.call(initialProduct, 'description');
+
+    const canSkipFetch =
+      !!hasFullProductRowPayload &&
       ((isCategoryBasedUrl &&
         initialProduct.slug === productSlug &&
         initialProduct.category?.slug === categorySlug) ||
@@ -455,6 +461,7 @@ const ProductPage = () => {
       // Fetch only the current category instead of the full catalog.
       const response = await api.get('/drinks', {
         params: {
+          ...CUSTOMER_DRINKS_LIST_PARAMS,
           category: categoryId,
           available_only: 'true',
           limit: RELATED_PRODUCTS_FETCH_LIMIT

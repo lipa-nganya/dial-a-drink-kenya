@@ -18,6 +18,7 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { getSimilarDrinkSuggestions, drinkNameMatchesSearch } from '../utils/drinkSearch';
 import { normalizeSlug } from '../utils/slugCanonical';
+import { CUSTOMER_DRINKS_LIST_PARAMS } from '../constants/customerCatalog';
 
 const CATEGORIES_CACHE_TTL_MS = 5 * 60 * 1000;
 let menuCategoriesCache = {
@@ -281,7 +282,7 @@ const Menu = () => {
       // Full menu is large: render first chunk immediately, then stream remaining chunks.
       if (q.length < 2 && normalizedCategoryId === 0) {
         const firstResponse = await api.get('/drinks', {
-          params: { limit: MENU_CHUNK_SIZE, offset: 0 },
+          params: { ...CUSTOMER_DRINKS_LIST_PARAMS, limit: MENU_CHUNK_SIZE, offset: 0 },
           signal: controller.signal
         });
         const firstChunk = Array.isArray(firstResponse.data) ? firstResponse.data : [];
@@ -292,7 +293,7 @@ const Menu = () => {
         let offset = firstChunk.length;
         while (!controller.signal.aborted && firstChunk.length > 0 && offset > 0) {
           const nextResponse = await api.get('/drinks', {
-            params: { limit: MENU_CHUNK_SIZE, offset },
+            params: { ...CUSTOMER_DRINKS_LIST_PARAMS, limit: MENU_CHUNK_SIZE, offset },
             signal: controller.signal
           });
           const nextChunk = Array.isArray(nextResponse.data) ? nextResponse.data : [];
@@ -311,8 +312,8 @@ const Menu = () => {
       } else {
         const params =
           q.length >= 2
-            ? { search: q, search_in: 'name', limit: 300 }
-            : { category: normalizedCategoryId, limit: 400 };
+            ? { ...CUSTOMER_DRINKS_LIST_PARAMS, search: q, search_in: 'name', limit: 300 }
+            : { ...CUSTOMER_DRINKS_LIST_PARAMS, category: normalizedCategoryId, limit: 400 };
         let requestPromise = menuDrinksInFlight.get(requestKey);
         if (!requestPromise) {
           requestPromise = api.get('/drinks', { params, signal: controller.signal });

@@ -34,11 +34,9 @@ const allowedOrigins = [
   'http://localhost:3000', // Customer local
   'http://localhost:3001', // Admin local
   'http://localhost:3002', // Shop agent / consoles local
-  'http://localhost:3003', // Zeus local
   'http://localhost:8080', // Wolfgang website (local dev)
   process.env.FRONTEND_URL,
   process.env.ADMIN_URL,
-  process.env.ZEUS_URL,
   process.env.SHOP_AGENT_URL,
   // Production customer sites
   'https://dialadrinkkenya.com',
@@ -196,11 +194,10 @@ async function loadFullApplication() {
       'http://localhost:3000',
       'http://localhost:3001',
       'http://localhost:3002',
-      'http://localhost:3003',
       'http://localhost:8080',
       process.env.FRONTEND_URL,
       process.env.ADMIN_URL,
-      process.env.ZEUS_URL,
+      process.env.SHOP_AGENT_URL,
     ].filter(Boolean);
 
     const io = new Server(server, {
@@ -342,18 +339,26 @@ async function loadFullApplication() {
       });
     });
     
-    // Initialize database asynchronously (non-blocking)
-    initializeDatabase(db, seedData);
-    
-    // Start background job to auto-sync pending M-Pesa transactions
-    startTransactionSyncJob();
-    
-    // Start background job to check for inactive drivers and set them to offline
-    startDriverActivityCheckJob(app);
-    
-    // Start background job to process loan deductions (every 15 minutes)
-    startLoanDeductionJob();
-    
+    // Defer DB bootstrap so the process can finish wiring HTTP/Socket.IO before heavy I/O.
+    setImmediate(() => {
+      initializeDatabase(db, seedData);
+    });
+
+    // Background jobs compete with first API requests during cold start — delay slightly.
+    const backgroundJobDelayMs = Math.max(
+      0,
+      parseInt(process.env.BACKGROUND_JOBS_START_DELAY_MS || '2500', 10) || 0
+    );
+    setTimeout(() => {
+      try {
+        startTransactionSyncJob();
+        startDriverActivityCheckJob(app);
+        startLoanDeductionJob();
+      } catch (jobErr) {
+        console.warn('⚠️ Failed to start background jobs:', jobErr.message);
+      }
+    }, backgroundJobDelayMs);
+
     console.log('✅ Full application loaded successfully');
   } catch (appError) {
     console.error('⚠️ Error loading full application:', appError.message);
@@ -362,15 +367,50 @@ async function loadFullApplication() {
   }
 }
 
+/** Legacy sequelize.sync + ALTER helpers on boot — expensive on every Cloud Run cold start; use migrations + opt-in bootstrap. */
+function shouldRunHeavyDatabaseBootstrap() {
+  if (process.env.ALLOW_DB_BOOTSTRAP_ON_START === '1' || process.env.ALLOW_DB_BOOTSTRAP_ON_START === 'true') {
+    return true;
+  }
+  if (process.env.SKIP_DB_BOOTSTRAP_ON_START === '1' || process.env.SKIP_DB_BOOTSTRAP_ON_START === 'true') {
+    return false;
+  }
+  // Default: skip on Cloud Run — set ALLOW_DB_BOOTSTRAP_ON_START=1 for recovery / empty DB only.
+  return !process.env.K_SERVICE;
+}
+
 // Function to initialize database (non-blocking)
 async function initializeDatabase(db, seedData) {
   const { withDbRetry } = require('./utils/dbRetry');
+  const runHeavyBootstrap = shouldRunHeavyDatabaseBootstrap();
+
+  const warmupConnectionDeferred = () => {
+    setImmediate(async () => {
+      try {
+        await withDbRetry(() => db.sequelize.authenticate(), { retries: 3, baseDelayMs: 200 });
+        console.log('✅ Database connection established successfully.');
+      } catch (dbError) {
+        console.warn('⚠️ Database connection failed:', dbError.message);
+        console.warn('⚠️ First queries will retry when the DB is reachable.');
+      }
+    });
+  };
+
   try {
+    if (!runHeavyBootstrap) {
+      console.log(
+        'ℹ️ Skipping sequelize.sync and legacy column bootstrap (Cloud Run). ' +
+          'Set ALLOW_DB_BOOTSTRAP_ON_START=1 to run on next deploy if needed.'
+      );
+      warmupConnectionDeferred();
+      return;
+    }
+
     // Test database connection with timeout
     const dbTimeout = setTimeout(() => {
       console.log('⚠️ Database connection timeout - continuing');
     }, 10000);
-    
+
     try {
       await withDbRetry(() => db.sequelize.authenticate(), { retries: 5, baseDelayMs: 100 });
       console.log('✅ Database connection established successfully.');
@@ -381,7 +421,7 @@ async function initializeDatabase(db, seedData) {
       clearTimeout(dbTimeout);
       return; // Don't continue with sync if auth fails
     }
-    
+
     // Sync database (create tables if they don't exist) - non-blocking
     db.sequelize.sync({ force: false })
       .then(() => {
