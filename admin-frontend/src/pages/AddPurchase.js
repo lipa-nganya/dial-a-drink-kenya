@@ -137,6 +137,8 @@ const AddPurchase = () => {
     capacity: ''
   });
   const [productSearch, setProductSearch] = useState('');
+  /** Separate from filter length so the list closes after pick (controlled open + long query would stay open). */
+  const [productMenuOpen, setProductMenuOpen] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -199,15 +201,16 @@ const AddPurchase = () => {
   );
 
   const handleNewItemProductChange = (value) => {
+    const product = value ? productsById.get(value) : null;
+    setProductSearch(product ? String(product.name || '') : '');
     setNewItem((prev) => {
-      const product = productsById.get(value);
-      const options = getCapacityOptions(product);
+      const options = getCapacityOptions(product || null);
       // Single capacity: pre-select so stock updates the correct bucket without an extra click.
       // Multiple capacities: user must choose explicitly.
       const capacity =
         options.length === 1 ? options[0] : '';
       const next = { ...prev, productId: value, capacity };
-      if (product) {
+      if (product && value) {
         const defaultPrice =
           product.purchasePrice != null
             ? Number(product.purchasePrice)
@@ -270,6 +273,8 @@ const AddPurchase = () => {
       unitPrice: '',
       capacity: ''
     });
+    setProductSearch('');
+    setProductMenuOpen(false);
   };
 
   const handleRemoveItem = (index) => {
@@ -463,14 +468,35 @@ const AddPurchase = () => {
               inputValue={productSearch}
               onOpen={() => {
                 ensureProductsLoaded();
+                setProductMenuOpen(true);
               }}
-              onInputChange={(_, newInputValue) => {
+              onClose={() => setProductMenuOpen(false)}
+              onInputChange={(event, newInputValue, reason) => {
+                if (reason === 'reset') {
+                  setProductSearch(newInputValue);
+                  setProductMenuOpen(false);
+                  return;
+                }
+                if (reason === 'input' && newItem.productId) {
+                  const selected = productsById.get(newItem.productId);
+                  const label = String(selected?.name || '');
+                  if (newInputValue !== label) {
+                    handleNewItemProductChange('');
+                    setProductSearch(newInputValue);
+                    setProductMenuOpen(String(newInputValue || '').trim().length >= 2);
+                    return;
+                  }
+                }
                 setProductSearch(newInputValue);
                 if (!newInputValue) {
                   handleNewItemProductChange('');
+                  setProductMenuOpen(false);
                 }
               }}
-              onChange={(_, value) => handleNewItemProductChange(value ? value.id : '')}
+              onChange={(_, value) => {
+                handleNewItemProductChange(value ? value.id : '');
+                setProductMenuOpen(false);
+              }}
               filterOptions={(options, { inputValue }) => {
                 const source = Array.isArray(options) ? options : [];
                 const term = String(inputValue || '').toLowerCase().trim();
@@ -487,7 +513,9 @@ const AddPurchase = () => {
               noOptionsText={productsLoading ? 'Loading products...' : 'No products found'}
               forcePopupIcon={false}
               openOnFocus={false}
-              open={String(productSearch || '').trim().length >= 2}
+              open={
+                productMenuOpen && String(productSearch || '').trim().length >= 2
+              }
               ListboxProps={{ style: { maxHeight: '300px' } }}
               renderOption={(props, option) => {
                 const { key, ...restProps } = props;
