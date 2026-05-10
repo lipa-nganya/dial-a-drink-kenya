@@ -89,10 +89,15 @@ router.get('/', async (req, res) => {
   
   try {
     const { category, search, popular, available_only, brandId, brandFocus } = req.query;
+    const lite = parseCatalogLiteFlag(req.query);
     const searchIn = String(req.query.search_in || 'all').toLowerCase();
     const limitRaw = parseInt(req.query.limit, 10);
     const offsetRaw = parseInt(req.query.offset, 10);
-    const queryLimit = Number.isFinite(limitRaw) ? Math.min(1000, Math.max(1, limitRaw)) : null;
+    // Safety guard: some catalog callers omit limit, which can exceed Cloud Run response size.
+    // Keep explicit limits unchanged; apply a conservative default for lite list responses.
+    const queryLimit = Number.isFinite(limitRaw)
+      ? Math.min(1000, Math.max(1, limitRaw))
+      : (lite ? 500 : null);
     const queryOffset = Number.isFinite(offsetRaw) ? Math.max(0, offsetRaw) : null;
     let whereClause = {};
 
@@ -150,7 +155,6 @@ router.get('/', async (req, res) => {
     }, 10000); // 10 second timeout
     
     try {
-      const lite = parseCatalogLiteFlag(req.query);
       const colMeta = await loadDrinkColumnsMeta();
       let drinkAttributes = catalogDrinkAttributes(colMeta, lite);
       const includes = catalogListIncludes(lite);
