@@ -9125,6 +9125,24 @@ router.get('/drivers/locations', verifyAdmin, async (req, res) => {
 });
 
 /**
+ * Lightweight driver rows for assign-dropdowns (admin UI).
+ * Avoids GET /api/drivers which runs heavy per-driver financial rollups and often times out.
+ * GET /api/admin/drivers/assign-dropdown
+ */
+router.get('/drivers/assign-dropdown', verifyAdmin, async (req, res) => {
+  try {
+    const drivers = await db.Driver.findAll({
+      attributes: ['id', 'name', 'phoneNumber', 'status', 'cashAtHand'],
+      order: [['name', 'ASC']]
+    });
+    res.json(drivers);
+  } catch (error) {
+    console.error('Error fetching drivers (assign-dropdown):', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch drivers' });
+  }
+});
+
+/**
  * Update order delivery sequence
  * PATCH /api/admin/orders/:id/sequence
  */

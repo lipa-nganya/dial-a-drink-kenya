@@ -203,6 +203,13 @@ const resolveCapacityStockFromBuckets = (
   return 0;
 };
 
+function formatDriverAssignLabel(driver) {
+  if (!driver) return '';
+  const name = String(driver.name || '').trim() || `Driver #${driver.id}`;
+  const phone = driver.phoneNumber ? ` · ${driver.phoneNumber}` : '';
+  return `${name}${phone}`;
+}
+
 const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, initialIsStop = false }) => {
   const { isDarkMode, colors } = useTheme();
   const [loading, setLoading] = useState(false);
@@ -461,7 +468,7 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
 
   const fetchDrivers = async () => {
     try {
-      const response = await api.get('/drivers');
+      const response = await api.get('/admin/drivers/assign-dropdown');
       // Ensure response.data is an array
       const driversData = response.data;
       if (Array.isArray(driversData)) {
@@ -1857,17 +1864,23 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             <FormControl fullWidth>
               <InputLabel>Select Rider</InputLabel>
               <Select
-                value={selectedDriver}
+                value={selectedDriver === '' ? '' : String(selectedDriver)}
                 label="Select Rider"
                 onChange={(e) => setSelectedDriver(e.target.value)}
                 MenuProps={selectMenuProps}
+                renderValue={(value) => {
+                  if (value === '') return <em>Select rider</em>;
+                  const idStr = String(value);
+                  const d = drivers.find((x) => String(x?.id) === idStr);
+                  return d ? formatDriverAssignLabel(d) : `#${value}`;
+                }}
               >
                 <MenuItem value="">
                   <em>Select rider</em>
                 </MenuItem>
                 {drivers.map((driver) => (
-                  <MenuItem key={driver.id} value={driver.id}>
-                    {driver.name}
+                  <MenuItem key={driver.id} value={String(driver.id)}>
+                    {formatDriverAssignLabel(driver)}
                   </MenuItem>
                 ))}
               </Select>
@@ -3036,15 +3049,21 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
             <FormControl fullWidth>
               <InputLabel>Assign Driver</InputLabel>
               <Select
-                value={selectedDriver}
+                value={selectedDriver === '' ? '' : String(selectedDriver)}
                 label="Assign Driver"
                 onChange={(e) => setSelectedDriver(e.target.value)}
                 MenuProps={selectMenuProps}
+                renderValue={(value) => {
+                  if (value === '') return 'None';
+                  const idStr = String(value);
+                  const d = drivers.find((x) => String(x?.id) === idStr);
+                  return d ? formatDriverAssignLabel(d) : `#${value}`;
+                }}
               >
                 <MenuItem value="">None</MenuItem>
                 {drivers.map((driver) => (
-                  <MenuItem key={driver.id} value={driver.id}>
-                    {driver.name} - {driver.phoneNumber}
+                  <MenuItem key={driver.id} value={String(driver.id)}>
+                    {formatDriverAssignLabel(driver)}
                   </MenuItem>
                 ))}
               </Select>

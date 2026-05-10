@@ -70,6 +70,13 @@ import { computeOrderDisplayAmounts } from '../utils/orderFinancials';
 const GOOGLE_MAPS_LIBRARIES = ['places', 'geometry'];
 const ORDERS_SUMMARY_QUERY_BASE = '/admin/orders?summary=1';
 
+function formatDriverAssignLabel(driver) {
+  if (!driver) return '';
+  const name = String(driver.name || '').trim() || `Driver #${driver.id}`;
+  const phone = driver.phoneNumber ? ` · ${driver.phoneNumber}` : '';
+  return `${name}${phone}`;
+}
+
 /** Matches admin API: amounts editable unless cancelled, or incomplete paid/completed combos. Paid + completed is allowed (reconciliation). */
 function canEditOrderFinancialAmounts(order) {
   if (!order || order.status === 'cancelled') return false;
@@ -323,7 +330,7 @@ const Orders = () => {
         const updated = prevOrders.map((order) =>
           order.id === orderId ? { ...order, ...updatedOrder } : order
         );
-        const sorted = sortOrdersByStatus(updated);
+        const sorted = sortOrdersByNewest(updated);
         // If we were viewing cancellation requests and the order is now cancelled, show cancelled orders
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && updatedOrder?.status === 'cancelled') {
           setCancelledSubTab('cancelled');
@@ -359,7 +366,7 @@ const Orders = () => {
         const updated = prevOrders.map((order) =>
           order.id === orderId ? { ...order, ...updatedOrder } : order
         );
-        const sorted = sortOrdersByStatus(updated);
+        const sorted = sortOrdersByNewest(updated);
         // If we were viewing cancellation requests and it was rejected, send back to pending (original behavior)
         if (orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests') {
           setOrderTab('pending');
@@ -397,7 +404,7 @@ const Orders = () => {
 
   const fetchDrivers = async () => {
     try {
-      const response = await api.get('/drivers');
+      const response = await api.get('/admin/drivers/assign-dropdown');
       // Ensure response.data is an array
       const driversData = response.data;
       if (Array.isArray(driversData)) {
@@ -473,7 +480,7 @@ const Orders = () => {
               }
             : order
         );
-        const sorted = sortOrdersByStatus(updated);
+        const sorted = sortOrdersByNewest(updated);
         applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
@@ -498,7 +505,7 @@ const Orders = () => {
             ? { ...order, driverId: null, driver: null, driverAccepted: false }
             : order
         );
-        const sorted = sortOrdersByStatus(updated);
+        const sorted = sortOrdersByNewest(updated);
         applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
         return sorted;
       });
@@ -541,7 +548,7 @@ const Orders = () => {
             return order;
           });
           // Re-sort after update and apply filters to update filteredOrders immediately
-          const sorted = sortOrdersByStatus(updated);
+          const sorted = sortOrdersByNewest(updated);
           applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
@@ -613,7 +620,7 @@ const Orders = () => {
             updated = [data.order, ...prevOrders];
           }
           
-          const sorted = sortOrdersByStatus(updated);
+          const sorted = sortOrdersByNewest(updated);
           applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, 'cancelled', 'cancellation-requests');
           return sorted;
         });
@@ -632,7 +639,7 @@ const Orders = () => {
           const updated = prevOrders.map(order => 
             order.id === data.orderId ? { ...order, ...data.order } : order
           );
-          const sorted = sortOrdersByStatus(updated);
+          const sorted = sortOrdersByNewest(updated);
           
           // If cancellation was approved and we're viewing cancellation requests, switch to cancelled orders
           if (data.approved && orderTab === 'cancelled' && cancelledSubTab === 'cancellation-requests' && data.order.status === 'cancelled') {
@@ -677,7 +684,7 @@ const Orders = () => {
             }
             return order;
           });
-          const sorted = sortOrdersByStatus(updated);
+          const sorted = sortOrdersByNewest(updated);
           applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
@@ -738,7 +745,7 @@ const Orders = () => {
             return order;
           });
           // Re-sort after update and apply filters to update filteredOrders immediately
-          const sorted = sortOrdersByStatus(updated);
+          const sorted = sortOrdersByNewest(updated);
           applyFilters(sorted, transactionStatusFilter, searchQuery, customFilter, orderTab);
           return sorted;
         });
@@ -751,34 +758,13 @@ const Orders = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Order status priority for sorting
-  const getStatusPriority = (status) => {
-    const priorityMap = {
-      'pending': 1,
-      // Used for walk-in POS orders that are created unpaid (e.g. M-Pesa prompt initiated)
-      'in_progress': 2,
-      'confirmed': 2,
-      'out_for_delivery': 3,
-      'delivered': 5,
-      'completed': 6,
-      'cancelled': 7
-    };
-    return priorityMap[status] || 999;
-  };
-
-  // Sort orders by status priority, then by creation date (newest first within same status)
-  const sortOrdersByStatus = (ordersList) => {
+  // Newest orders first (createdAt desc), then id desc — avoids burying fresh "confirmed" POS orders under old "pending" rows.
+  const sortOrdersByNewest = (ordersList) => {
     return [...ordersList].sort((a, b) => {
-      const priorityA = getStatusPriority(a.status);
-      const priorityB = getStatusPriority(b.status);
-      
-      // First sort by status priority
-      if (priorityA !== priorityB) {
-        return priorityA - priorityB;
-      }
-      
-      // If same status, sort by creation date (newest first)
-      return new Date(b.createdAt) - new Date(a.createdAt);
+      const ta = new Date(a?.createdAt || 0).getTime();
+      const tb = new Date(b?.createdAt || 0).getTime();
+      if (tb !== ta) return tb - ta;
+      return (b?.id || 0) - (a?.id || 0);
     });
   };
 
@@ -816,7 +802,7 @@ const Orders = () => {
       }).filter(order => order != null); // Filter out any null orders after mapping
       console.log('📦 fetchOrders after mapping:', orders.length, 'orders');
 
-      const sortedOrders = sortOrdersByStatus(orders);
+      const sortedOrders = sortOrdersByNewest(orders);
       console.log('📦 fetchOrders after sorting:', sortedOrders.length, 'orders');
       setOrders(sortedOrders);
       console.log('📦 fetchOrders - calling applyFilters with tab:', orderTab);
@@ -988,7 +974,7 @@ const Orders = () => {
     }
 
     // Sort filtered results
-    const sorted = sortOrdersByStatus(filtered);
+    const sorted = sortOrdersByNewest(filtered);
     console.log(`🔍 applyFilters final result: ${sorted.length} orders`);
     setFilteredOrders(sorted);
   };
@@ -1058,7 +1044,7 @@ const Orders = () => {
           order.id === orderId ? { ...order, status: newStatus, paymentStatus: response.data.paymentStatus } : order
         );
         // Re-sort after status update
-        return sortOrdersByStatus(updated);
+        return sortOrdersByNewest(updated);
       });
 
       // Update currently viewed order details if it matches
@@ -1106,7 +1092,7 @@ const Orders = () => {
         const updated = prevOrders.map((order) =>
           order.id === cancelTargetOrder.id ? { ...order, status: 'cancelled', ...response.data } : order
         );
-        return sortOrdersByStatus(updated);
+        return sortOrdersByNewest(updated);
       });
 
       handleCloseCancelDialog();
@@ -1777,7 +1763,7 @@ const Orders = () => {
     try {
       setRoutesLoading(true);
       const [ridersResponse, ordersResponse, locationsResponse] = await Promise.all([
-        api.get('/drivers'),
+        api.get('/admin/drivers/assign-dropdown'),
         api.get('/admin/orders?summary=1'),
         api.get('/admin/drivers/locations').catch(() => ({ data: { locations: [] } }))
       ]);
@@ -2915,9 +2901,15 @@ const Orders = () => {
             <FormControl fullWidth>
               <InputLabel>Select Driver</InputLabel>
               <Select
-                value={selectedDriverId}
+                value={selectedDriverId === '' || selectedDriverId == null ? '' : String(selectedDriverId)}
                 label="Select Driver"
                 onChange={(e) => setSelectedDriverId(e.target.value)}
+                renderValue={(value) => {
+                  if (value === '') return <em>No Driver (Unassign)</em>;
+                  const idStr = String(value);
+                  const d = drivers.find((x) => String(x?.id) === idStr);
+                  return d ? formatDriverAssignLabel(d) : `#${value}`;
+                }}
               >
                 <MenuItem value="">
                   <em>No Driver (Unassign)</em>
@@ -2929,11 +2921,11 @@ const Orders = () => {
                                      driver.status || 'Unknown';
                   const cashAtHand = Math.round(parseFloat(driver.cashAtHand || 0));
                   return (
-                    <MenuItem key={driver.id} value={driver.id}>
+                    <MenuItem key={driver.id} value={String(driver.id)}>
                       <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                            {driver.name} - {driver.phoneNumber}
+                            {formatDriverAssignLabel(driver)}
                           </Typography>
                           <Chip 
                             label={statusLabel}
@@ -3138,12 +3130,18 @@ const Orders = () => {
                           <InputLabel>Driver</InputLabel>
                           <Select
                             label="Driver"
-                            value={selectedOrderForDetail.driverId || ''}
+                            value={
+                              selectedOrderForDetail.driverId != null &&
+                              selectedOrderForDetail.driverId !== ''
+                                ? String(selectedOrderForDetail.driverId)
+                                : ''
+                            }
                             onChange={(e) => {
                               const value = e.target.value;
                               const driverId = value === '' ? null : parseInt(value, 10);
                               const driver =
-                                driverId && drivers.find((d) => d.id === driverId);
+                                driverId != null &&
+                                drivers.find((d) => Number(d.id) === Number(driverId));
                               setSelectedOrderForDetail((prev) =>
                                 prev
                                   ? {
@@ -3155,6 +3153,12 @@ const Orders = () => {
                                     }
                                   : prev
                               );
+                            }}
+                            renderValue={(value) => {
+                              if (value === '') return <em>No Driver (Unassign)</em>;
+                              const idStr = String(value);
+                              const d = drivers.find((x) => String(x?.id) === idStr);
+                              return d ? formatDriverAssignLabel(d) : `#${value}`;
                             }}
                           >
                             <MenuItem value="">
@@ -3173,7 +3177,7 @@ const Orders = () => {
                                 parseFloat(driver.cashAtHand || 0)
                               );
                               return (
-                                <MenuItem key={driver.id} value={driver.id}>
+                                <MenuItem key={driver.id} value={String(driver.id)}>
                                   <Box
                                     sx={{
                                       display: 'flex',
@@ -3192,7 +3196,7 @@ const Orders = () => {
                                         variant="body2"
                                         sx={{ fontWeight: 600 }}
                                       >
-                                        {driver.name}
+                                        {formatDriverAssignLabel(driver)}
                                       </Typography>
                                       <Typography
                                         variant="caption"
