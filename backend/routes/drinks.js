@@ -181,7 +181,7 @@ router.get('/', async (req, res) => {
           const fallbackAttrs = drinkAttributes.filter(a => a !== 'slug');
           const fb = fallbackAttrs.length
             ? fallbackAttrs
-            : ['id', 'name', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isSoldOut', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'];
+            : ['id', 'name', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'];
           drinks = await Promise.race([
             db.Drink.findAll({
               where: whereClause,
