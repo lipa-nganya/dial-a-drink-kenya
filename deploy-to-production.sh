@@ -25,10 +25,16 @@ ADMIN_FRONTEND_SERVICE="deliveryos-admin-frontend"
 # - API scale-to-zero (min 0); occasional cold starts — frontends also scale to zero.
 # - Override BACKEND_MIN_INSTANCES=1 before deploy if you need a 24/7 warm API instance.
 BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
-BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
+BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-8}"
 BACKEND_CPU="${BACKEND_CPU:-1}"
-BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
+BACKEND_MEMORY="${BACKEND_MEMORY:-512Mi}"
+BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-120}"
+BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-80}"
 FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"
+FRONTEND_MAX_INSTANCES="${FRONTEND_MAX_INSTANCES:-3}"
+FRONTEND_CPU="${FRONTEND_CPU:-1}"
+FRONTEND_MEMORY="${FRONTEND_MEMORY:-256Mi}"
+FRONTEND_CONCURRENCY="${FRONTEND_CONCURRENCY:-80}"
 REVISION_KEEP_COUNT="${REVISION_KEEP_COUNT:-10}"
 
 prune_service_revisions() {
@@ -143,6 +149,8 @@ gcloud run deploy "$BACKEND_SERVICE" \
     --max-instances="$BACKEND_MAX_INSTANCES" \
     --cpu="$BACKEND_CPU" \
     --memory="$BACKEND_MEMORY" \
+    --timeout="$BACKEND_TIMEOUT" \
+    --concurrency="$BACKEND_CONCURRENCY" \
     --cpu-throttling \
     --quiet \
     2>&1
@@ -241,7 +249,13 @@ echo "⚙️  Customer frontend Cloud Run: scale-to-zero (cost control; cold sta
 gcloud run services update "$CUSTOMER_FRONTEND_SERVICE" \
     --project "$PROJECT_ID" \
     --region "$REGION" \
+    --cpu="$FRONTEND_CPU" \
+    --memory="$FRONTEND_MEMORY" \
+    --timeout=120 \
+    --concurrency="$FRONTEND_CONCURRENCY" \
     --min-instances="$FRONTEND_MIN_INSTANCES" \
+    --max-instances="$FRONTEND_MAX_INSTANCES" \
+    --cpu-throttling \
     --quiet 2>&1
 
 cd /Users/maria/dial-a-drink
@@ -269,7 +283,13 @@ echo "⚙️  Admin frontend Cloud Run: scale-to-zero (cost control; cold starts
 gcloud run services update "$ADMIN_FRONTEND_SERVICE" \
     --project "$PROJECT_ID" \
     --region "$REGION" \
+    --cpu="$FRONTEND_CPU" \
+    --memory="$FRONTEND_MEMORY" \
+    --timeout=120 \
+    --concurrency="$FRONTEND_CONCURRENCY" \
     --min-instances="$FRONTEND_MIN_INSTANCES" \
+    --max-instances="$FRONTEND_MAX_INSTANCES" \
+    --cpu-throttling \
     --quiet 2>&1
 
 cd /Users/maria/dial-a-drink
@@ -281,8 +301,15 @@ export GCP_PROJECT_ID="$PROJECT_ID"
 export GCP_REGION="$REGION"
 export BACKEND_CPU="$BACKEND_CPU"
 export BACKEND_MEMORY="$BACKEND_MEMORY"
+export BACKEND_TIMEOUT="$BACKEND_TIMEOUT"
+export BACKEND_CONCURRENCY="$BACKEND_CONCURRENCY"
 export BACKEND_MIN_INSTANCES="$BACKEND_MIN_INSTANCES"
 export BACKEND_MAX_INSTANCES="$BACKEND_MAX_INSTANCES"
+export FRONTEND_CPU="$FRONTEND_CPU"
+export FRONTEND_MEMORY="$FRONTEND_MEMORY"
+export FRONTEND_CONCURRENCY="$FRONTEND_CONCURRENCY"
+export FRONTEND_MIN_INSTANCES="$FRONTEND_MIN_INSTANCES"
+export FRONTEND_MAX_INSTANCES="$FRONTEND_MAX_INSTANCES"
 chmod +x ./scripts/gcp/tune-cloud-run-dialadrink-production.sh
 ./scripts/gcp/tune-cloud-run-dialadrink-production.sh
 

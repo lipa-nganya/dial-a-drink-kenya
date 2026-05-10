@@ -10,7 +10,7 @@
 #   ./scripts/gcp/tune-cloud-run-dialadrink-development.sh
 #
 # Optional overrides:
-#   BACKEND_MIN_INSTANCES=0 BACKEND_MAX_INSTANCES=3 BACKEND_CPU=1 BACKEND_MEMORY=512Mi BACKEND_CONCURRENCY=20
+#   BACKEND_MIN_INSTANCES=0 BACKEND_MAX_INSTANCES=1 BACKEND_CPU=0.5 BACKEND_MEMORY=256Mi BACKEND_CONCURRENCY=1 BACKEND_TIMEOUT=90
 #   DRY_RUN=1 ... (prints commands)
 #
 set -euo pipefail
@@ -20,12 +20,13 @@ REGION="${GCP_REGION:-us-central1}"
 
 BACKEND_SERVICE="${BACKEND_SERVICE:-deliveryos-development-backend}"
 
-# Dev sizing defaults (lower than production; single user).
-BACKEND_CPU="${BACKEND_CPU:-1}"
-BACKEND_MEMORY="${BACKEND_MEMORY:-512Mi}"
-BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-20}"
+# Dev sizing defaults (very aggressive cost mode; single user).
+BACKEND_CPU="${BACKEND_CPU:-0.5}"
+BACKEND_MEMORY="${BACKEND_MEMORY:-256Mi}"
+BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-90}"
+BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-1}"
 BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
-BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-3}"
+BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-1}"
 
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -38,7 +39,7 @@ run_gcloud() {
 }
 
 echo "Project=$PROJECT_ID  Region=$REGION  Service=$BACKEND_SERVICE  DRY_RUN=$DRY_RUN"
-echo "Dev controls: cpu=$BACKEND_CPU mem=$BACKEND_MEMORY min=$BACKEND_MIN_INSTANCES max=$BACKEND_MAX_INSTANCES conc=$BACKEND_CONCURRENCY"
+echo "Dev controls: cpu=$BACKEND_CPU mem=$BACKEND_MEMORY timeout=$BACKEND_TIMEOUT min=$BACKEND_MIN_INSTANCES max=$BACKEND_MAX_INSTANCES conc=$BACKEND_CONCURRENCY"
 echo ""
 
 run_gcloud gcloud run services update "$BACKEND_SERVICE" \
@@ -47,6 +48,7 @@ run_gcloud gcloud run services update "$BACKEND_SERVICE" \
   --quiet \
   --cpu="$BACKEND_CPU" \
   --memory="$BACKEND_MEMORY" \
+  --timeout="$BACKEND_TIMEOUT" \
   --cpu-throttling \
   --min-instances="$BACKEND_MIN_INSTANCES" \
   --max-instances="$BACKEND_MAX_INSTANCES" \

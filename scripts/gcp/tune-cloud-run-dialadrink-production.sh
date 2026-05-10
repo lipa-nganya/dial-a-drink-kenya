@@ -22,19 +22,19 @@ BACKEND_SERVICE="${BACKEND_SERVICE:-deliveryos-production-backend}"
 CUSTOMER_FE="${CUSTOMER_FE:-deliveryos-customer-frontend}"
 ADMIN_FE="${ADMIN_FE:-deliveryos-admin-frontend}"
 
-# Default sizing matches deploy-to-production.sh (cost control; API min 0 unless overridden).
+# Default sizing matches deploy-to-production.sh (aggressive Cloud Run cost controls).
 BACKEND_CPU="${BACKEND_CPU:-1}"
-BACKEND_MEMORY="${BACKEND_MEMORY:-1Gi}"
-
-BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-60}"
+BACKEND_MEMORY="${BACKEND_MEMORY:-512Mi}"
+BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-120}"
+BACKEND_CONCURRENCY="${BACKEND_CONCURRENCY:-80}"
 BACKEND_MIN_INSTANCES="${BACKEND_MIN_INSTANCES:-0}"
-BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-30}"
+BACKEND_MAX_INSTANCES="${BACKEND_MAX_INSTANCES:-8}"
 
-FRONTEND_CPU="${FRONTEND_CPU:-0.5}"
-FRONTEND_MEMORY="${FRONTEND_MEMORY:-512Mi}"
-FRONTEND_CONCURRENCY="${FRONTEND_CONCURRENCY:-100}"
+FRONTEND_CPU="${FRONTEND_CPU:-1}"
+FRONTEND_MEMORY="${FRONTEND_MEMORY:-256Mi}"
+FRONTEND_CONCURRENCY="${FRONTEND_CONCURRENCY:-80}"
 FRONTEND_MIN_INSTANCES="${FRONTEND_MIN_INSTANCES:-0}"
-FRONTEND_MAX_INSTANCES="${FRONTEND_MAX_INSTANCES:-10}"
+FRONTEND_MAX_INSTANCES="${FRONTEND_MAX_INSTANCES:-3}"
 
 DRY_RUN="${DRY_RUN:-0}"
 
@@ -66,6 +66,7 @@ update_frontend() {
     --cpu="$FRONTEND_CPU" \
     --memory="$FRONTEND_MEMORY" \
     --cpu-throttling \
+    --timeout=120 \
     --min-instances="$FRONTEND_MIN_INSTANCES" \
     --max-instances="$FRONTEND_MAX_INSTANCES" \
     --concurrency="$FRONTEND_CONCURRENCY"
@@ -83,6 +84,7 @@ update_backend() {
       --cpu="$BACKEND_CPU" \
       --memory="$BACKEND_MEMORY" \
       --cpu-throttling \
+      --timeout="$BACKEND_TIMEOUT" \
       --min-instances="$BACKEND_MIN_INSTANCES" \
       --max-instances="$BACKEND_MAX_INSTANCES" \
       --concurrency="$BACKEND_CONCURRENCY"
@@ -93,6 +95,7 @@ update_backend() {
       --quiet \
       --cpu="$BACKEND_CPU" \
       --cpu-throttling \
+      --timeout="$BACKEND_TIMEOUT" \
       --min-instances="$BACKEND_MIN_INSTANCES" \
       --max-instances="$BACKEND_MAX_INSTANCES" \
       --concurrency="$BACKEND_CONCURRENCY"
@@ -103,6 +106,7 @@ update_backend() {
       --quiet \
       --memory="$BACKEND_MEMORY" \
       --cpu-throttling \
+      --timeout="$BACKEND_TIMEOUT" \
       --min-instances="$BACKEND_MIN_INSTANCES" \
       --max-instances="$BACKEND_MAX_INSTANCES" \
       --concurrency="$BACKEND_CONCURRENCY"
@@ -112,6 +116,7 @@ update_backend() {
       --region="$REGION" \
       --quiet \
       --cpu-throttling \
+      --timeout="$BACKEND_TIMEOUT" \
       --min-instances="$BACKEND_MIN_INSTANCES" \
       --max-instances="$BACKEND_MAX_INSTANCES" \
       --concurrency="$BACKEND_CONCURRENCY"
