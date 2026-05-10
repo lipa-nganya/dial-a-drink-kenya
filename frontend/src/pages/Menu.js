@@ -420,10 +420,10 @@ const Menu = () => {
       }
     }
 
-    // For price sort: exclude out of stock and Test category (per requirement)
+    // For price sort: exclude Test category only.
+    // Sold-out items remain visible on catalog pages, but checkout blocks ordering.
     if (sortBy === 'price_asc' || sortBy === 'price_desc') {
       filtered = filtered.filter(drink => {
-        if (!drink.isAvailable) return false;
         const catName = (drink.category && drink.category.name) ? drink.category.name.toLowerCase() : '';
         if (catName === 'test') return false;
         return true;

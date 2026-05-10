@@ -551,9 +551,10 @@ const InventoryPage = () => {
     }
 
     // Availability filter
-    // - "available": only items with stock > 0
-    // - "out-of-stock": only items with stock === 0
-    // - "all": no stock-based filtering
+    // - "available": items with stock > 0
+    // - "out-of-stock": items with stock === 0
+    // - "sold-out": items manually marked sold out (isSoldOut === true)
+    // - "all": no availability filtering
     if (availabilityFilter !== 'all') {
       filtered = filtered.filter(drink => {
         const stock = getTotalStock(drink);
@@ -562,6 +563,9 @@ const InventoryPage = () => {
         }
         if (availabilityFilter === 'out-of-stock') {
           return stock === 0;
+        }
+        if (availabilityFilter === 'sold-out') {
+          return drink.isSoldOut === true;
         }
         return true;
       });
@@ -1096,6 +1100,7 @@ const InventoryPage = () => {
                 <MenuItem value="all">All Items</MenuItem>
                 <MenuItem value="available">Available Only</MenuItem>
                 <MenuItem value="out-of-stock">Out of Stock Only</MenuItem>
+                <MenuItem value="sold-out">Sold Out Only</MenuItem>
               </Select>
             </FormControl>
           </Grid>
@@ -1166,7 +1171,7 @@ const InventoryPage = () => {
               Showing {filteredDrinks.length} of {drinks.length} drinks
               {searchTerm && ` matching "${searchTerm}"`}
               {selectedCategory && ` in ${selectedCategory}`}
-              {availabilityFilter !== 'all' && ` (${availabilityFilter === 'available' ? 'Available' : 'Out of Stock'})`}
+              {availabilityFilter !== 'all' && ` (${availabilityFilter === 'available' ? 'Available' : availabilityFilter === 'sold-out' ? 'Sold Out' : 'Out of Stock'})`}
               {offerFilter !== 'all' && ` (${offerFilter === 'on-offer' ? 'On Offer' : offerFilter === 'limited' ? 'Limited Time' : 'Not On Offer'})`}
             </Typography>
           </Box>

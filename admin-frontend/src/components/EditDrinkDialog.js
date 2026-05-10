@@ -32,10 +32,32 @@ import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 import CapacityPricingCombined from './CapacityPricingCombined';
 
+// Stable fallbacks — avoid passing a fresh [] each render (would reset CapacityPricingCombined local state).
+const EMPTY_CAPACITY_PRICING = [];
+const EMPTY_CAPACITY_LABELS = [];
+
+function parseJsonIfString(value) {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'string') return value;
+  const s = value.trim();
+  if (!s) return value;
+  if (
+    (s.startsWith('[') && s.endsWith(']')) ||
+    (s.startsWith('{') && s.endsWith('}'))
+  ) {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
 // Normalize capacityPricing from API (may have price only, or originalPrice/currentPrice)
 function normalizeCapacityPricingForForm(capacityPricing) {
-  const raw = capacityPricing ?? null;
-  if (!raw) return [];
+  const raw = parseJsonIfString(capacityPricing ?? null);
+  if (raw === null || raw === undefined || raw === '') return [];
   const arr = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && !Array.isArray(raw) ? [raw] : []);
   return arr.filter(Boolean).map((entry) => {
     const capacity = (entry.capacity ?? entry.size ?? '').toString().trim();
@@ -53,10 +75,10 @@ function normalizeCapacityPricingForForm(capacityPricing) {
 
 // Derive capacity array from drink (capacity or capacityPricing)
 function deriveCapacitiesForForm(drink) {
-  const cap = drink.capacity;
+  const cap = parseJsonIfString(drink.capacity);
   if (Array.isArray(cap) && cap.length > 0) return cap.map(c => (c != null ? String(c).trim() : '')).filter(Boolean);
   if (cap != null && cap !== '') return [String(cap).trim()];
-  const pricing = drink.capacityPricing ?? drink.capacity_pricing;
+  const pricing = parseJsonIfString(drink.capacityPricing ?? drink.capacity_pricing);
   if (Array.isArray(pricing) && pricing.length > 0) {
     return pricing.map(p => (p?.capacity ?? p?.size ?? '').toString().trim()).filter(Boolean);
   }
@@ -69,6 +91,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     name: '',
     description: '',
     isAvailable: true,
+    isPublished: true,
+    isSoldOut: false,
     isPopular: false,
     isBrandFocus: false,
     limitedTimeOffer: false,
@@ -101,7 +125,9 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
     const purchasePriceValue =
       d.purchasePrice !== undefined && d.purchasePrice !== null ? String(d.purchasePrice).trim() : '';
 
-    const capacityPricingRaw = d.capacityPricing ?? d.capacity_pricing ?? null;
+    const capacityPricingRaw = parseJsonIfString(
+      d.capacityPricing ?? d.capacity_pricing ?? null
+    );
     let capacityPricingNormalized = normalizeCapacityPricingForForm(capacityPricingRaw);
     let capacityDerived = deriveCapacitiesForForm(d);
     if (capacityPricingNormalized.length === 0 && (d.price != null || d.originalPrice != null)) {
@@ -114,6 +140,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
       name: d.name || '',
       description: d.description || '',
       isAvailable: d.isAvailable !== undefined ? d.isAvailable : true,
+      isPublished: d.isPublished !== undefined ? d.isPublished : true,
+      isSoldOut: d.isSoldOut === true,
       isPopular: d.isPopular || false,
       isBrandFocus: d.isBrandFocus || false,
       limitedTimeOffer: d.limitedTimeOffer || false,
@@ -147,6 +175,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         name: '',
         description: '',
         isAvailable: true,
+        isPublished: true,
+        isSoldOut: false,
         isPopular: false,
         isBrandFocus: false,
         limitedTimeOffer: false,
@@ -349,6 +379,8 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
         price: lowestPrice, // Use lowest price from capacities
         originalPrice: lowestOriginalPrice, // Use lowest original price from capacities
         isAvailable: formData.isAvailable,
+        isPublished: !!formData.isPublished,
+        isSoldOut: !!formData.isSoldOut,
         isPopular: formData.isPopular,
         isBrandFocus: !!formData.isBrandFocus,
         limitedTimeOffer: !!formData.limitedTimeOffer,
@@ -839,8 +871,10 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
 
           <Box sx={{ mb: 2 }}>
             <CapacityPricingCombined
-              capacityPricing={formData.capacityPricing || []}
-              capacities={formData.capacity || []}
+              capacityPricing={
+                Array.isArray(formData.capacityPricing) ? formData.capacityPricing : EMPTY_CAPACITY_PRICING
+              }
+              capacities={Array.isArray(formData.capacity) ? formData.capacity : EMPTY_CAPACITY_LABELS}
               onChange={(pricing, capacities) => {
                 handleInputChange('capacityPricing', pricing);
                 handleInputChange('capacity', capacities);
@@ -866,17 +900,41 @@ const EditDrinkDialog = ({ open, onClose, drink, onSave }) => {
                 <Switch
                   checked={formData.isAvailable}
                   onChange={(e) => handleInputChange('isAvailable', e.target.checked)}
+                />
+              }
+              label="Available"
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.isPublished}
+                  onChange={(e) => handleInputChange('isPublished', e.target.checked)}
+                />
+              }
+              label="Published"
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={4}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formData.isSoldOut}
+                  onChange={(e) => handleInputChange('isSoldOut', e.target.checked)}
                   sx={{
                     '& .MuiSwitch-switchBase.Mui-checked': {
-                      color: colors.accent,
+                      color: colors.error,
                     },
                     '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                      backgroundColor: colors.accent,
+                      backgroundColor: colors.error,
                     },
                   }}
                 />
               }
-              label="Available"
+              label="Sold Out"
             />
           </Grid>
 

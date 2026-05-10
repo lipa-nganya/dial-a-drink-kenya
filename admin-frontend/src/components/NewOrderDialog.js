@@ -50,6 +50,8 @@ const sameLocalPhone = (a, b) => {
   return da.slice(-9) === db.slice(-9);
 };
 
+const extractDigits = (value) => String(value || '').replace(/\D/g, '');
+
 const getFreshProductsCache = () => {
   const now = Date.now();
   if (Array.isArray(productsCache.data) && productsCache.data.length > 0 && now - productsCache.at < PRODUCTS_CACHE_TTL_MS) {
@@ -433,23 +435,46 @@ const NewOrderDialog = ({ open, onClose, onOrderCreated, mobileSize = false, ini
   const fetchCustomers = async () => {
     try {
       const params = {};
+      const rawSearch = customerSearchQuery ? customerSearchQuery.trim() : '';
       // Add search query if provided
-      if (customerSearchQuery && customerSearchQuery.trim() !== '') {
-        params.search = customerSearchQuery.trim();
+      if (rawSearch !== '') {
+        params.search = rawSearch;
       }
       
+      const toArray = (payload) => {
+        if (Array.isArray(payload)) return payload;
+        if (payload && Array.isArray(payload.customers)) return payload.customers;
+        if (payload && payload.data && Array.isArray(payload.data)) return payload.data;
+        return [];
+      };
+
       const response = await api.get('/admin/customers', { params });
-      // Ensure we always set an array
-      const customersData = response.data;
-      if (Array.isArray(customersData)) {
-        setCustomers(customersData);
-      } else if (customersData && Array.isArray(customersData.customers)) {
-        setCustomers(customersData.customers);
-      } else if (customersData && customersData.data && Array.isArray(customersData.data)) {
-        setCustomers(customersData.data);
-      } else {
-        setCustomers([]);
+      let nextCustomers = toArray(response.data);
+
+      // Fallback for phone lookups:
+      // if formatted/partial input returns no rows, retry with digits-only and local-number variants.
+      if (nextCustomers.length === 0 && rawSearch) {
+        const digits = extractDigits(rawSearch);
+        if (digits.length >= 9) {
+          const candidates = Array.from(new Set([
+            digits,
+            digits.slice(-9),
+            digits.slice(-10)
+          ].filter((v) => v && v.length >= 9)));
+
+          for (const candidate of candidates) {
+            // eslint-disable-next-line no-await-in-loop
+            const retryRes = await api.get('/admin/customers', { params: { search: candidate } });
+            const retryRows = toArray(retryRes.data);
+            if (retryRows.length > 0) {
+              nextCustomers = retryRows;
+              break;
+            }
+          }
+        }
       }
+
+      setCustomers(nextCustomers);
     } catch (error) {
       console.error('Error fetching customers:', error);
       setCustomers([]);

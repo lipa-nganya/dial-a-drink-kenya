@@ -165,22 +165,46 @@ const toNumber = (value) => {
   return parsed;
 };
 
-const normalizeCapacityPricing = (input = []) => {
-  if (!Array.isArray(input)) {
-    return [];
+/** JSON columns are usually parsed by Sequelize; some paths still return a JSON string. */
+const parseJsonIfString = (value) => {
+  if (value === null || value === undefined) return value;
+  if (typeof value !== 'string') return value;
+  const s = value.trim();
+  if (!s) return value;
+  if (
+    (s.startsWith('[') && s.endsWith(']')) ||
+    (s.startsWith('{') && s.endsWith('}'))
+  ) {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return value;
+    }
   }
+  return value;
+};
 
-  return input
+const normalizeCapacityPricing = (input = []) => {
+  const parsedRoot = parseJsonIfString(input);
+  const rows = Array.isArray(parsedRoot)
+    ? parsedRoot
+    : parsedRoot && typeof parsedRoot === 'object' && !Array.isArray(parsedRoot)
+    ? [parsedRoot]
+    : [];
+
+  return rows
     .map((entry) => {
-      if (!entry) {
+      const row = entry && typeof entry === 'object' ? parseJsonIfString(entry) : entry;
+      if (!row || typeof row !== 'object') {
         return null;
       }
 
+      const capRaw = row.capacity !== undefined && row.capacity !== null ? row.capacity : row.size;
       const capacity =
-        typeof entry.capacity === 'string'
-          ? entry.capacity.trim()
-          : entry.capacity !== undefined && entry.capacity !== null
-          ? String(entry.capacity).trim()
+        typeof capRaw === 'string'
+          ? capRaw.trim()
+          : capRaw !== undefined && capRaw !== null
+          ? String(capRaw).trim()
           : '';
 
       if (!capacity) {
@@ -188,9 +212,9 @@ const normalizeCapacityPricing = (input = []) => {
       }
 
       const originalPriceCandidate =
-        entry.originalPrice ?? entry.price ?? entry.currentPrice;
+        row.originalPrice ?? row.price ?? row.currentPrice;
       const currentPriceCandidate =
-        entry.currentPrice ?? entry.price ?? entry.originalPrice;
+        row.currentPrice ?? row.price ?? row.originalPrice;
 
       const originalPrice = toNumber(originalPriceCandidate);
       const currentPrice = toNumber(currentPriceCandidate);
@@ -241,6 +265,16 @@ const deriveCapacities = (explicitCapacities, pricing) => {
   });
 
   return Array.from(set);
+};
+
+/** Coerce request/DB `capacity` (array or JSON string) for deriveCapacities. */
+const toExplicitCapacityListForDerive = (value) => {
+  if (value === undefined) return undefined;
+  const v = parseJsonIfString(value);
+  if (Array.isArray(v)) return v;
+  if (v === null || v === '') return [];
+  const s = String(v).trim();
+  return s ? [s] : [];
 };
 
 const summarisePricing = (pricing, fallbackPrice, fallbackOriginalPrice) => {
@@ -1341,6 +1375,7 @@ router.get('/drinks', async (req, res) => {
       'subCategoryId',
       'brandId',
       'isAvailable',
+      'isSoldOut',
       'isPublished',
       'isPopular',
       'isBrandFocus',
@@ -1355,7 +1390,7 @@ router.get('/drinks', async (req, res) => {
       'stockByCapacity',
       'description'
     ]);
-    const summaryAttrSet = new Set(['id', 'name', 'capacity', 'capacityPricing', 'stockByCapacity', 'updatedAt']);
+    const summaryAttrSet = new Set(['id', 'name', 'isAvailable', 'isSoldOut', 'capacity', 'capacityPricing', 'stockByCapacity', 'updatedAt']);
     const listAttrs = summary
       ? listAttrsBase.filter((a) => summaryAttrSet.has(a))
       : (light
@@ -1438,6 +1473,8 @@ router.post('/drinks', async (req, res) => {
       subCategoryId,
       brandId,
       isAvailable,
+      isPublished,
+      isSoldOut,
       isPopular,
       isBrandFocus,
       limitedTimeOffer,
@@ -1505,7 +1542,10 @@ router.post('/drinks', async (req, res) => {
     }
 
     const normalizedPricing = normalizeCapacityPricing(capacityPricing);
-    const capacities = deriveCapacities(capacity, normalizedPricing);
+    const capacities = deriveCapacities(
+      toExplicitCapacityListForDerive(capacity),
+      normalizedPricing
+    );
     const summary = summarisePricing(normalizedPricing, finalPrice, originalPrice);
     const limitedTimeFlag = typeof limitedTimeOffer === 'boolean' ? limitedTimeOffer : false;
 
@@ -1526,7 +1566,7 @@ router.post('/drinks', async (req, res) => {
       }
     } catch (_) {
       // Fallback if information_schema query fails - assume a conservative attribute list.
-      createResponseAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'slug', 'pageTitle', 'keywords', 'youtubeUrl', 'tags', 'createdAt', 'updatedAt'];
+      createResponseAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'slug', 'pageTitle', 'keywords', 'youtubeUrl', 'tags', 'createdAt', 'updatedAt'];
     }
 
     let drinksHasNbv = createResponseAttributes && createResponseAttributes.includes('nbv');
@@ -1546,6 +1586,9 @@ router.post('/drinks', async (req, res) => {
       brandId: parsedBrandId,
       isAvailable:
         typeof isAvailable === 'boolean' ? isAvailable : true,
+      isPublished:
+        typeof isPublished === 'boolean' ? isPublished : true,
+      isSoldOut: typeof isSoldOut === 'boolean' ? isSoldOut : false,
       isPopular: typeof isPopular === 'boolean' ? isPopular : false,
       isBrandFocus: typeof isBrandFocus === 'boolean' ? isBrandFocus : false,
       limitedTimeOffer: limitedTimeFlag,
@@ -1631,7 +1674,7 @@ router.put('/drinks/:id', async (req, res) => {
       }
     } catch (_) {
       // Fallback: safe list without nbv so SELECT works before migration
-      drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'slug', 'pageTitle', 'keywords', 'youtubeUrl', 'tags', 'createdAt', 'updatedAt'];
+      drinkAttributes = ['id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'purchasePrice', 'slug', 'pageTitle', 'keywords', 'youtubeUrl', 'tags', 'createdAt', 'updatedAt'];
     }
 
     const drink = await db.Drink.findByPk(id, drinkAttributes ? { attributes: drinkAttributes } : {});
@@ -1650,6 +1693,8 @@ router.put('/drinks/:id', async (req, res) => {
       subCategoryId,
       brandId,
       isAvailable,
+      isPublished,
+      isSoldOut,
       isPopular,
       isBrandFocus,
       limitedTimeOffer,
@@ -1725,12 +1770,28 @@ router.put('/drinks/:id', async (req, res) => {
     // Only normalize capacityPricing if it's provided in the request
     // If not provided, keep the existing capacityPricing from the drink
     const shouldUpdateCapacityPricing = capacityPricing !== undefined;
-    const normalizedPricing = shouldUpdateCapacityPricing 
+    const persistedNormalized = drink.capacityPricing
+      ? normalizeCapacityPricing(drink.capacityPricing)
+      : [];
+
+    let normalizedPricing = shouldUpdateCapacityPricing
       ? normalizeCapacityPricing(capacityPricing)
-      : (drink.capacityPricing ? normalizeCapacityPricing(drink.capacityPricing) : []);
-    
+      : persistedNormalized;
+
+    // Client bug / shape mismatch must not wipe tiers (e.g. only isAvailable flipped but rows used `size` not `capacity`).
+    const requestHadPricingRows =
+      shouldUpdateCapacityPricing &&
+      Array.isArray(capacityPricing) &&
+      capacityPricing.length > 0;
+
+    if (requestHadPricingRows && normalizedPricing.length === 0 && persistedNormalized.length > 0) {
+      normalizedPricing = persistedNormalized;
+    }
+
     const capacities = deriveCapacities(
-      capacity !== undefined ? capacity : drink.capacity,
+      capacity !== undefined
+        ? toExplicitCapacityListForDerive(capacity)
+        : toExplicitCapacityListForDerive(drink.capacity),
       normalizedPricing
     );
     
@@ -1765,8 +1826,9 @@ router.put('/drinks/:id', async (req, res) => {
     const currentStock = parseInt(drink.stock) || 0;
     const isStockBeingUpdated = false;
 
-    // Only set nbv if the drinks table has the column (use same attribute list we used to load the drink)
+    // Only set special fields if the drinks table has the columns (use same attribute list we used to load the drink)
     const drinksHasNbv = drinkAttributes && drinkAttributes.includes('nbv');
+    const drinksHasSoldOut = drinkAttributes && drinkAttributes.includes('isSoldOut');
 
     const updatePayload = {
       name: normalizedName,
@@ -1785,6 +1847,8 @@ router.put('/drinks/:id', async (req, res) => {
         autoAvailable !== undefined 
           ? autoAvailable 
           : (typeof isAvailable === 'boolean' ? isAvailable : drink.isAvailable),
+      isPublished:
+        typeof isPublished === 'boolean' ? isPublished : drink.isPublished,
       isPopular:
         typeof isPopular === 'boolean' ? isPopular : drink.isPopular,
       isBrandFocus:
@@ -1818,6 +1882,10 @@ router.put('/drinks/:id', async (req, res) => {
       updatePayload.nbv = toNumber(nbv);
     } else if (drinksHasNbv) {
       updatePayload.nbv = drink.nbv;
+    }
+    if (drinksHasSoldOut) {
+      updatePayload.isSoldOut =
+        typeof isSoldOut === 'boolean' ? isSoldOut : (drink.isSoldOut === true);
     }
 
     try {

@@ -17,6 +17,7 @@ async function loadDrinkColumnsMeta() {
     hasNbv: colSet.has('nbv'),
     hasClicks: colSet.has('clicks'),
     hasSlug: colSet.has('slug'),
+    hasIsSoldOut: colSet.has('issoldout'),
   };
   return drinkColumnsMetaCache;
 }
@@ -34,12 +35,26 @@ function fullCatalogDrinkAttributes(colMeta) {
     'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer',
     'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt',
   ];
-  if (colMeta.hasNbv) {
+  if (colMeta.hasIsSoldOut) {
     drinkAttributes = [
+      'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+      'isAvailable', 'isPublished', 'isSoldOut', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer',
+      'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt',
+    ];
+  }
+  if (colMeta.hasNbv) {
+    const baseWithNvb = [
       'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
       'isAvailable', 'isPublished', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer',
       'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt',
     ];
+    drinkAttributes = colMeta.hasIsSoldOut
+      ? [
+          'id', 'name', 'description', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId',
+          'isAvailable', 'isPublished', 'isSoldOut', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer',
+          'originalPrice', 'capacity', 'capacityPricing', 'abv', 'nbv', 'barcode', 'stock', 'slug', 'createdAt', 'updatedAt',
+        ]
+      : baseWithNvb;
   }
   if (colMeta.hasClicks) {
     drinkAttributes = drinkAttributes.concat(['clicks']);
@@ -166,7 +181,7 @@ router.get('/', async (req, res) => {
           const fallbackAttrs = drinkAttributes.filter(a => a !== 'slug');
           const fb = fallbackAttrs.length
             ? fallbackAttrs
-            : ['id', 'name', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'];
+            : ['id', 'name', 'price', 'image', 'categoryId', 'subCategoryId', 'brandId', 'isAvailable', 'isPublished', 'isSoldOut', 'isPopular', 'isBrandFocus', 'isOnOffer', 'limitedTimeOffer', 'originalPrice', 'capacity', 'capacityPricing', 'abv', 'barcode', 'stock', 'createdAt', 'updatedAt'];
           drinks = await Promise.race([
             db.Drink.findAll({
               where: whereClause,

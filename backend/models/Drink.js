@@ -54,6 +54,11 @@ module.exports = (sequelize, DataTypes) => {
       defaultValue: true,
       comment: 'When false, drink is hidden from the customer site (admin can still see it).'
     },
+    isSoldOut: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'When true, item remains visible but cannot be ordered by customers.'
+    },
     isPopular: {
       type: DataTypes.BOOLEAN,
       defaultValue: false

@@ -50,16 +50,15 @@ const Pricelist = () => {
       setLoading(true);
       setError('');
       const response = await api.get('/drinks', { params: CUSTOMER_DRINKS_LIST_PARAMS });
-      // Filter only available drinks and sort by category and name
-      const availableDrinks = response.data
-        .filter(drink => drink.isAvailable !== false)
+      // Keep sold-out items visible; ordering is blocked at checkout.
+      const catalogDrinks = response.data
         .sort((a, b) => {
           const categoryCompare = (a.category?.name || '').localeCompare(b.category?.name || '');
           if (categoryCompare !== 0) return categoryCompare;
           return a.name.localeCompare(b.name);
         });
-      setDrinks(availableDrinks);
-      setFilteredDrinks(availableDrinks);
+      setDrinks(catalogDrinks);
+      setFilteredDrinks(catalogDrinks);
     } catch (err) {
       console.error('Error fetching drinks:', err);
       setError('Failed to load pricelist. Please try again later.');

@@ -47,6 +47,7 @@ const DrinkCard = ({ drink }) => {
   const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const isSoldOut = drink?.isSoldOut === true;
 
   // Helper function to get full image URL
   const getImageUrl = (imagePath) => {
@@ -126,6 +127,11 @@ const DrinkCard = ({ drink }) => {
 
   const handleAddToCart = (e) => {
     e.stopPropagation(); // Prevent card click when clicking add to cart
+    if (isSoldOut) {
+      setSnackbarMessage('This item is sold out');
+      setSnackbarOpen(true);
+      return;
+    }
     if (availableCapacities.length > 0 && !selectedCapacity) {
       alert('Please select a capacity first');
       return;
@@ -303,6 +309,14 @@ const DrinkCard = ({ drink }) => {
       }}>
         {/* Status Label Above Name */}
         <Box sx={{ mb: 0.5, display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap' }}>
+          {isSoldOut && (
+            <Chip
+              label="Sold Out"
+              size="small"
+              color="error"
+              sx={{ fontSize: '0.65rem', height: '20px' }}
+            />
+          )}
           {drink.isAvailable && drink.isPopular && (
             <Chip
               icon={<Star />}
@@ -545,6 +559,7 @@ const DrinkCard = ({ drink }) => {
           size="small"
           startIcon={<AddShoppingCart />}
           onClick={handleAddToCart}
+          disabled={isSoldOut}
           sx={{
             backgroundColor: '#FF6B6B',
             fontSize: '0.75rem',
@@ -559,7 +574,7 @@ const DrinkCard = ({ drink }) => {
             }
           }}
         >
-          Buy Now
+          {isSoldOut ? 'Sold Out' : 'Buy Now'}
         </Button>
       </CardActions>
 

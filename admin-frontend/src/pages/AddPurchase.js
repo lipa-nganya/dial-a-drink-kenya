@@ -483,14 +483,14 @@ const AddPurchase = () => {
                   if (newInputValue !== label) {
                     handleNewItemProductChange('');
                     setProductSearch(newInputValue);
-                    setProductMenuOpen(String(newInputValue || '').trim().length >= 2);
+                    setProductMenuOpen(true);
                     return;
                   }
                 }
                 setProductSearch(newInputValue);
                 if (!newInputValue) {
                   handleNewItemProductChange('');
-                  setProductMenuOpen(false);
+                  setProductMenuOpen(true);
                 }
               }}
               onChange={(_, value) => {
@@ -512,10 +512,8 @@ const AddPurchase = () => {
               }}
               noOptionsText={productsLoading ? 'Loading products...' : 'No products found'}
               forcePopupIcon={false}
-              openOnFocus={false}
-              open={
-                productMenuOpen && String(productSearch || '').trim().length >= 2
-              }
+              openOnFocus
+              open={productMenuOpen}
               ListboxProps={{ style: { maxHeight: '300px' } }}
               renderOption={(props, option) => {
                 const { key, ...restProps } = props;

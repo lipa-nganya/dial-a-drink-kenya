@@ -240,7 +240,7 @@ router.post('/', async (req, res) => {
       }
       
       // Build attributes list - exclude purchasePrice if it doesn't exist
-      const drinkAttributes = ['id', 'name', 'price', 'image', 'isAvailable', 'categoryId', 'subCategoryId', 'brandId', 'originalPrice', 'capacity', 'capacityPricing', 'stock', 'stockByCapacity', 'isOnOffer', 'limitedTimeOffer'];
+      const drinkAttributes = ['id', 'name', 'price', 'image', 'isAvailable', 'isSoldOut', 'categoryId', 'subCategoryId', 'brandId', 'originalPrice', 'capacity', 'capacityPricing', 'stock', 'stockByCapacity', 'isOnOffer', 'limitedTimeOffer'];
       if (hasPurchasePrice) {
         drinkAttributes.push('purchasePrice');
       }
@@ -256,6 +256,12 @@ router.post('/', async (req, res) => {
         if (!drink) {
           await transaction.rollback();
           return res.status(400).json({ error: `Drink with ID ${item.drinkId} not found` });
+        }
+        if (drink.isSoldOut === true) {
+          await transaction.rollback();
+          return res.status(400).json({
+            error: `${drink.name || 'This item'} is sold out and cannot be ordered right now`
+          });
         }
 
         const priceToUse =

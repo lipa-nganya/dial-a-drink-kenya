@@ -463,7 +463,6 @@ const ProductPage = () => {
         params: {
           ...CUSTOMER_DRINKS_LIST_PARAMS,
           category: categoryId,
-          available_only: 'true',
           limit: RELATED_PRODUCTS_FETCH_LIMIT
         }
       });
@@ -478,8 +477,7 @@ const ProductPage = () => {
       const related = allProducts
         .filter(drink => 
           drink.id !== targetProduct.id && 
-          drink.categoryId === targetProduct.categoryId &&
-          drink.isAvailable
+          drink.categoryId === targetProduct.categoryId
         )
         .slice(0, 4);
       
@@ -591,6 +589,10 @@ const ProductPage = () => {
 
   const handleAddToCart = () => {
     if (!product) return;
+    if (product.isSoldOut === true) {
+      alert('This item is sold out');
+      return;
+    }
     
     const availableCapacities = getAvailableCapacities();
     if (availableCapacities.length > 0 && !selectedCapacity) {
@@ -840,7 +842,8 @@ const ProductPage = () => {
   const resolvedPrice = selectedCapacity
     ? getPriceForCapacity(selectedCapacity)
     : parseFloat(product.price) || 0;
-  const inStock = Boolean(product.isAvailable);
+  const isSoldOut = product.isSoldOut === true;
+  const inStock = !isSoldOut;
   const brandName = typeof product.brand === 'object' && product.brand !== null
     ? product.brand.name
     : product.brand;
@@ -1167,6 +1170,7 @@ const ProductPage = () => {
               size="medium"
               startIcon={<AddShoppingCart />}
               onClick={handleAddToCart}
+              disabled={!inStock}
               sx={{
                 backgroundColor: '#FF6B6B',
                 py: 1,
@@ -1183,7 +1187,7 @@ const ProductPage = () => {
                 }
               }}
             >
-              Buy Now
+              {inStock ? 'Buy Now' : 'Sold Out'}
             </Button>
           </Box>
         </Grid>
@@ -1496,6 +1500,7 @@ const ProductPage = () => {
                 size="medium"
                 startIcon={<AddShoppingCart />}
                 onClick={handleAddToCart}
+                disabled={!inStock}
                 sx={{
                   backgroundColor: '#FF6B6B',
                   py: 1,
@@ -1512,7 +1517,7 @@ const ProductPage = () => {
                   }
                 }}
               >
-                Buy Now
+                {inStock ? 'Buy Now' : 'Sold Out'}
               </Button>
             </Box>
         </Grid>
